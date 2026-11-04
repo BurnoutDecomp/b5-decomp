@@ -17,87 +17,6 @@
 
 namespace CgsModule
 {
-    template <typename TDest, typename TSource>
-    inline void LockBuffersForIO( TDest* lpDestBuffer, TSource* lpSourceBuffer )
-    {
-        lpDestBuffer->LockForWrite();
-        lpSourceBuffer->LockForRead();
-    }
-
-    template <typename TDest, typename TSource>
-    inline void UnlockBuffersForIO( TDest* lpDestBuffer, TSource* lpSourceBuffer )
-    {
-        lpSourceBuffer->UnlockForRead();
-        lpDestBuffer->UnlockForWrite();
-    }
-
-    // Multi-source overloads (X360 sub_823B70E0/sub_823B7190 = 2 sources,
-    // sub_823B7240/sub_823B7320 = 3 sources): one destination locked for write,
-    // each source for read; released in reverse.
-    template <typename TDest, typename TSourceA, typename TSourceB>
-    inline void LockBuffersForIO( TDest* lpDestBuffer, TSourceA* lpSourceA, TSourceB* lpSourceB )
-    {
-        lpDestBuffer->LockForWrite();
-        lpSourceA->LockForRead();
-        lpSourceB->LockForRead();
-    }
-
-    template <typename TDest, typename TSourceA, typename TSourceB>
-    inline void UnlockBuffersForIO( TDest* lpDestBuffer, TSourceA* lpSourceA, TSourceB* lpSourceB )
-    {
-        lpSourceB->UnlockForRead();
-        lpSourceA->UnlockForRead();
-        lpDestBuffer->UnlockForWrite();
-    }
-
-    // three-source variant
-    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC>
-    inline void LockBuffersForIO( TDest* lpDestBuffer, TSourceA* lpSourceA,
-                                  TSourceB* lpSourceB, TSourceC* lpSourceC )
-    {
-        lpDestBuffer->LockForWrite();
-        lpSourceA->LockForRead();
-        lpSourceB->LockForRead();
-        lpSourceC->LockForRead();
-    }
-
-    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC>
-    inline void UnlockBuffersForIO( TDest* lpDestBuffer, TSourceA* lpSourceA,
-                                    TSourceB* lpSourceB, TSourceC* lpSourceC )
-    {
-        lpSourceC->UnlockForRead();
-        lpSourceB->UnlockForRead();
-        lpSourceA->UnlockForRead();
-        lpDestBuffer->UnlockForWrite();
-    }
-
-    // four-source variant (X360 sub_823B7400 / sub_823B7510)
-    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
-              typename TSourceD>
-    inline void LockBuffersForIO( TDest* lpDestBuffer, TSourceA* lpSourceA,
-                                  TSourceB* lpSourceB, TSourceC* lpSourceC,
-                                  TSourceD* lpSourceD )
-    {
-        lpDestBuffer->LockForWrite();
-        lpSourceA->LockForRead();
-        lpSourceB->LockForRead();
-        lpSourceC->LockForRead();
-        lpSourceD->LockForRead();
-    }
-
-    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC,
-              typename TSourceD>
-    inline void UnlockBuffersForIO( TDest* lpDestBuffer, TSourceA* lpSourceA,
-                                    TSourceB* lpSourceB, TSourceC* lpSourceC,
-                                    TSourceD* lpSourceD )
-    {
-        lpSourceD->UnlockForRead();
-        lpSourceC->UnlockForRead();
-        lpSourceB->UnlockForRead();
-        lpSourceA->UnlockForRead();
-        lpDestBuffer->UnlockForWrite();
-    }
-
     static __forceinline void AssertIOBuffer(const void* lpBuffer,
                                                      const char* lpcExpression, int liLine)
     {
@@ -108,6 +27,120 @@ namespace CgsModule
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", liLine);
             CgsDev::Assert::EndAssert();
         }
+    }
+
+    // ARTIST 823B6FE0 / 823B7060
+    template <typename TDest, typename TSourceA>
+    inline void LockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0)
+    {
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 259);
+        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 260);
+
+        lpInputBuffer->LockForWrite();
+        lpOutputBuffer0->LockForRead();
+    }
+
+    template <typename TDest, typename TSourceA>
+    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0)
+    {
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 272);
+        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 273);
+
+        lpOutputBuffer0->UnlockForRead();
+        lpInputBuffer->UnlockForWrite();
+    }
+
+    // ARTIST 823B70E0 / 823B7190
+    template <typename TDest, typename TSourceA, typename TSourceB>
+    inline void LockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0,
+        TSourceB* lpOutputBuffer1)
+    {
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 286);
+        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 287);
+        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 288);
+
+        lpInputBuffer->LockForWrite();
+        lpOutputBuffer0->LockForRead();
+        lpOutputBuffer1->LockForRead();
+    }
+
+    template <typename TDest, typename TSourceA, typename TSourceB>
+    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0,
+        TSourceB* lpOutputBuffer1)
+    {
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 302);
+        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 303);
+        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 304);
+
+        lpOutputBuffer1->UnlockForRead();
+        lpOutputBuffer0->UnlockForRead();
+        lpInputBuffer->UnlockForWrite();
+    }
+
+    // ARTIST 823B7240 / 823B7320
+    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC>
+    inline void LockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0, TSourceB* lpOutputBuffer1,
+        TSourceC* lpOutputBuffer2)
+    {
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 319);
+        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 320);
+        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 321);
+        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 322);
+
+        lpInputBuffer->LockForWrite();
+        lpOutputBuffer0->LockForRead();
+        lpOutputBuffer1->LockForRead();
+        lpOutputBuffer2->LockForRead();
+    }
+
+    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC>
+    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0, TSourceB* lpOutputBuffer1,
+        TSourceC* lpOutputBuffer2)
+    {
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 338);
+        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 339);
+        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 340);
+        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 341);
+
+        lpOutputBuffer2->UnlockForRead();
+        lpOutputBuffer1->UnlockForRead();
+        lpOutputBuffer0->UnlockForRead();
+        lpInputBuffer->UnlockForWrite();
+    }
+
+    // ARTIST 823B7400 / 823B7510
+    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC, typename TSourceD>
+    inline void LockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0, TSourceB* lpOutputBuffer1,
+        TSourceC* lpOutputBuffer2, TSourceD* lpOutputBuffer3)
+    {
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 358);
+        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 359);
+        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 360);
+        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 361);
+        AssertIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 362);
+
+        lpInputBuffer->LockForWrite();
+        lpOutputBuffer0->LockForRead();
+        lpOutputBuffer1->LockForRead();
+        lpOutputBuffer2->LockForRead();
+        lpOutputBuffer3->LockForRead();
+    }
+
+    template <typename TDest, typename TSourceA, typename TSourceB, typename TSourceC, typename TSourceD>
+    inline void UnlockBuffersForIO(TDest* lpInputBuffer, TSourceA* lpOutputBuffer0, TSourceB* lpOutputBuffer1,
+        TSourceC* lpOutputBuffer2, TSourceD* lpOutputBuffer3)
+    {
+        AssertIOBuffer(lpInputBuffer, "lpInputBuffer", 380);
+        AssertIOBuffer(lpOutputBuffer0, "lpOutputBuffer0", 381);
+        AssertIOBuffer(lpOutputBuffer1, "lpOutputBuffer1", 382);
+        AssertIOBuffer(lpOutputBuffer2, "lpOutputBuffer2", 383);
+        AssertIOBuffer(lpOutputBuffer3, "lpOutputBuffer3", 384);
+
+        lpOutputBuffer3->UnlockForRead();
+        lpOutputBuffer2->UnlockForRead();
+        lpOutputBuffer1->UnlockForRead();
+        lpOutputBuffer0->UnlockForRead();
+        lpInputBuffer->UnlockForWrite();
     }
 
     // ARTIST 823B7620 / 823B7760 checks every buffer before locking or unlocking.
