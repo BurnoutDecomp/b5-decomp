@@ -1380,6 +1380,38 @@ namespace BrnResource
         return leResult;
     }
 
+    // Keep reply dispatch separate from the queue loop for the native emulator build.
+    __declspec(noinline) void GameDataModule::DispatchInternalResourceResponse(s32 liType,
+        const CgsModule::Event* lpEvent, CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+        CgsAttribSys::AttribSysIO::InputBuffer* lpAttribInput)
+    {
+        switch (liType)
+        {
+        case 2:
+            ProcessInternalLoadBundleResponse(lpResourceInput,
+                reinterpret_cast<const CgsResource::Events::LoadBundleResponse*>(lpEvent));
+            break;
+        case 3:
+            ProcessInternalUnloadResponse(lpResourceInput,
+                reinterpret_cast<const CgsResource::Events::UnloadBundleResponse*>(lpEvent));
+            break;
+        case 4:
+            ProcessInternalAcquireResponse(lpResourceInput,
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent),
+                lpAttribInput);
+            break;
+        case 7:
+            ProcessInternalInvalidateResponse(lpResourceInput, lpEvent);
+            break;
+        case 8:
+            ProcessInternalValidateResponse(lpResourceInput, lpEvent);
+            break;
+        default:
+            CGS_ASSERT(false, "Invalid request received\n");   // X360 line 1904
+            break;
+        }
+    }
+
     // @ 0x82674670 -- the per-frame pump. Reconstructed slice: the GameData request drain
     // (raw CgsResource requests forward verbatim into the embedded ResourceModule's input;
     // GameData-level requests route through ProcessGameDataEvent), the drained-input clear,
@@ -1485,31 +1517,7 @@ namespace BrnResource
             s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
             while (lpEvent != 0)
             {
-                switch (liType)
-                {
-                case 2:
-                    ProcessInternalLoadBundleResponse(lpResourceInput,
-                        reinterpret_cast<const CgsResource::Events::LoadBundleResponse*>(lpEvent));
-                    break;
-                case 3:
-                    ProcessInternalUnloadResponse(lpResourceInput,
-                        reinterpret_cast<const CgsResource::Events::UnloadBundleResponse*>(lpEvent));
-                    break;
-                case 4:
-                    ProcessInternalAcquireResponse(lpResourceInput,
-                        reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent),
-                        lpAttribInput);
-                    break;
-                case 7:
-                    ProcessInternalInvalidateResponse(lpResourceInput, lpEvent);
-                    break;
-                case 8:
-                    ProcessInternalValidateResponse(lpResourceInput, lpEvent);
-                    break;
-                default:
-                    CGS_ASSERT(false, "Invalid request received\n");   // X360 line 1904
-                    break;
-                }
+                DispatchInternalResourceResponse(liType, lpEvent, lpResourceInput, lpAttribInput);
                 liType = mReceiverQueue.GetNextEvent(lpEvent, &lpEvent, &liSize);
             }
             // X360 ring-rewinds the queue in place for the next frame; the committed

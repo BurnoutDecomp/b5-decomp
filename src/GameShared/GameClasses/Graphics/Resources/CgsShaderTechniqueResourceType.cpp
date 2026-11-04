@@ -1,5 +1,6 @@
 #include "GameShared/GameClasses/Graphics/Resources/CgsShaderTechniqueResourceType.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Graphics/CgsShaderTechnique.h"  // signed sampler count
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"          // ShaderConstantsInternal/External::FixUp
 #include "GameShared/GameClasses/Graphics/CgsShaderConstantHashTable.h"  // CgsGraphics::ShaderConstantHashTable::FixUp
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"  // CgsResource::GetLoadBase
@@ -81,7 +82,7 @@ namespace CgsResource
     // calls because Hex-Rays lost the live-range name; it is the same load-base delta on
     // every call, confirmed by the hash-array rebase below adding that same delta.)
     //
-    // After the sub-block FixUps, the technique's sampler table is rebased: word @ +144 is the
+    // After the sub-block FixUps, the technique's sampler table is rebased: signed byte @ +144 is the
     // sampler count, word @ +140 is the sampler-array pointer (rebased by the load base), and
     // each 8-byte sampler entry's leading word is itself a pointer that is rebased; finally
     // word @ +148 is rebased -- that word is the technique NAME pointer (`mpacName` on
@@ -112,17 +113,20 @@ namespace CgsResource
         // Relocate the constant hash table.
         reinterpret_cast<CgsGraphics::ShaderConstantHashTable*>(lpBlob + 128)->FixUp(lpBase);
 
-        // Rebase the sampler table: pointer @ +140, count @ +144, each entry's leading
+        // Rebase the sampler table: pointer @ +140, signed byte count @ +144, each entry's leading
         // pointer (8-byte stride), then the sampler-state-block pointer @ +148.
-        u32 luSamplerCount = *reinterpret_cast<u32*>(lpBlob + 144);
+        volatile const CgsGraphics::ShaderTechnique* lpTechnique =
+            reinterpret_cast<const CgsGraphics::ShaderTechnique*>(lpBlob);
         *reinterpret_cast<u32*>(lpBlob + 140) += luDelta;
-        if (static_cast<s32>(luSamplerCount) > 0)
+        if (lpTechnique->miNumSamplers > 0)
         {
             u8* lpSamplers = reinterpret_cast<u8*>(*reinterpret_cast<u32*>(lpBlob + 140));
-            for (u32 luI = 0; luI < luSamplerCount; ++luI)
+            s8 liI = 0;
+            do
             {
-                *reinterpret_cast<u32*>(lpSamplers + 8 * luI) += luDelta;
-            }
+                *reinterpret_cast<u32*>(lpSamplers + 8 * liI) += luDelta;
+                liI = static_cast<s8>(liI + 1);
+            } while (liI < lpTechnique->miNumSamplers);
         }
         *reinterpret_cast<u32*>(lpBlob + 148) += luDelta;
     }
