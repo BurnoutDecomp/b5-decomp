@@ -50,6 +50,12 @@ namespace CgsGraphics
         return mpcBuffer + mauChunkOffsets[luIndex] + sizeof(EacChunkDef);
     }
 
+    void MoviePlayerCoreAllocator::Construct(rw::IResourceAllocator* lpAllocator)
+    {
+        mpAllocator = lpAllocator;
+        miAllocations = 0;
+    }
+
     // MoviePlayerCoreAllocator::'vector deleting destructor' @ 0x827DBAC0. The X360
     // emits the MSVC deleting-destructor thunk: re-install this allocator's vtable
     // (off_8200F5B4), run the destructor, and -- when the low bit of the flag arg is set
