@@ -2,6 +2,7 @@
 
 #include "GameSource/World/AI/BrnAIModule.h"                                      // BrnAI::AIModule (member-pointer completeness)
 #include "GameSource/World/AI/BrnAICar.h"
+#include "GameSource/World/AI/BrnAICar_Constants.h"
 #include "GameSource/World/AI/BrnAIDriver.h"
 #include "GameSource/World/AI/BrnAIAggression.h"
 #include "GameSource/World/AI/BrnAIBuzzBy.h"
@@ -10,7 +11,9 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                       // CgsDev::SimpleStrStream
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
 #include "GameSource/World/AI/Route/BrnRoute.h"                                    // Route / RouteNode (state table)
+#include "SharedClasses/AI/AISectionsResourceType.h"
 #include "rw/math/vpu/vector3_operation.h"                                         // Magnitude / operator-
 
 void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
@@ -24,11 +27,11 @@ void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcTex
 // DrawDriftingDebug, DrawAIStatesTable and its StateTable* cursor helpers) and DrawAIStatesOnCar.
 // Their member reads are on the homed AICar / AIDriver / AIAggression records, and the toggle each
 // one reads is pinned by its byte offset in this object (+0x18 mbDrawCarUnderSection .. +0x39
-// mbDrawDriftingDebug, +0x40/+0x44 the state-table cursor). RenderWorld, OnActivate and the 3D
+// mbDrawDriftingDebug, +0x40/+0x44 the state-table cursor). RenderWorld and the 3D
 // per-car draw helpers (DrawAICarRoute / DrawAICarSection / DrawCarControlData /
 // DrawAggressiveTargetPoints / DrawAggressiveWarning / DrawCarIndices / DrawChevrons /
-// DrawPortalTargets / DrawDirectDestinationVector / DrawResetOnTrackAISection / DrawAISectionEdge /
-// DeactiveateDriversCallback) are not bodied here.
+// DrawPortalTargets / DrawDirectDestinationVector / DrawResetOnTrackAISection / DrawAISectionEdge)
+// are not bodied here.
 
 namespace BrnAI
 {
@@ -108,6 +111,114 @@ const char* AIDebugComponent::GetName() const
 const char* AIDebugComponent::GetPath() const
 {
     return "AI";
+}
+
+// ARTIST 0x82767428.
+void AIDebugComponent::DeactiveateDriversCallback(void* lpUserData)
+{
+    AIModule& lrModule = *static_cast<AIModule*>(lpUserData);
+    for (s32 liDriver = 0; liDriver < KI_MAX_ACTIVE_RACE_CARS; ++liDriver)
+    {
+        AIDriver& lrDriver = lrModule.maAIDrivers[liDriver];
+        lrDriver.mbIsActive = !lrDriver.mbIsActive;
+    }
+}
+
+// ARTIST 0x8277E578.
+void AIDebugComponent::OnActivate()
+{
+    CgsResource::ResourcePtr<AISectionsData> lSections(mpAIModule->mMapDataHandle);
+    mpAISectionsData = lSections.GetMemoryResource();
+
+    const char* const lpcStatesTable = "AI Car States Table";
+    RegisterVariable(&mbDrawAICarStatesTable, lpcStatesTable, "Draw AI car states table");
+    RegisterVariable(&mbDrawSpeedCalculationStateOnTable, lpcStatesTable, "Draw speed calculation state");
+    RegisterVariable(&mbDrawrPersonalityOnTable, lpcStatesTable, "Draw personality");
+    RegisterVariable(&mbDrawBuzzTime, lpcStatesTable, "Show Buzz Timer");
+
+    const char* const lpcStatesOnCar = "AI Car States On Car";
+    RegisterVariable(&mbDrawAICarStatesOnCar, lpcStatesOnCar, "Draw AI car states on car");
+    RegisterVariable(&mbDrawFanModeOnCar, lpcStatesOnCar, "Draw fan mode");
+    RegisterVariable(&mbDrawBehaviourOnCar, lpcStatesOnCar, "Draw behaviour");
+    RegisterVariable(&mbDrawProximityOnCar, lpcStatesOnCar, "Draw proximity");
+    RegisterVariable(&mbDrawSpeedOnCar, lpcStatesOnCar, "Draw speed");
+    RegisterVariable(&mbDrawAggressionStateOnCar, lpcStatesOnCar, "Draw aggression state");
+    RegisterVariable(&mbDrawAggressionLevelOnCar, lpcStatesOnCar, "Draw aggression level on car");
+    RegisterVariable(&mbDrawPersonalityTypeOnCar, lpcStatesOnCar, "Draw personality type on car");
+    RegisterVariable(&mbDrawScheduleOffsetOnCar, lpcStatesOnCar, "Draw schedule offset on car");
+    RegisterVariable(&mbDrawInvulnerabilityOnCar, lpcStatesOnCar, "Draw invulnerability on car");
+    RegisterVariable(&mbDrawPlayerSlowSpeedTimeOnCar, lpcStatesOnCar, "Draw player slow speed time on car");
+
+    const char* const lpcMarkedMan = "Marked man tweaks";
+    RegisterVariable(&gfMarkedManMinOvertakeSpeed, lpcMarkedMan, "Min overtake speed");
+    RegisterVariable(&gfMarkedManMaxOvertakeSpeed, lpcMarkedMan, "Max overtake speed");
+    RegisterVariable(&gfMarkedManMinAggression, lpcMarkedMan, "Min aggression");
+    RegisterVariable(&gfMarkedManMaxAggression, lpcMarkedMan, "Max aggression");
+    SetStep(&gfMarkedManMinAggression, 0.05f);
+    SetStep(&gfMarkedManMaxAggression, 0.05f);
+    SetRange(&gfMarkedManMinAggression, 0.0f, 1.0f);
+    SetRange(&gfMarkedManMaxAggression, 0.0f, 1.0f);
+
+    static bool sbDriversStayStill;      // ARTIST 0x8300D604
+    static bool sbDriversMaxAggression;  // ARTIST 0x8300D605
+    static bool sbDrawAvoidanceDebug;    // ARTIST 0x8300D606
+    RegisterVariable(&mpAIModule->mbHighTakenDownPenalty, "Easy mode");
+    RegisterVariable(&mbDrawCarUnderSection, "Draw section under car");
+    RegisterFunction(&DeactiveateDriversCallback, mpAIModule, "Turn Drivers On / Off");
+    RegisterVariable(&sbDriversStayStill, "Drivers stay still");
+    RegisterVariable(&sbDriversMaxAggression, "Drivers Max Aggression");
+    RegisterVariable(&mbDrawDestinationVector, "Draw vector to destination");
+    RegisterVariable(&mbDrawAggressiveTargetPoints, "Draw aggression target pos");
+    RegisterVariable(&mbDrawAggressiveWarning, "Draw aggression warning");
+    RegisterVariable(&mbDrawAICarRoute, "Draw current route");
+    RegisterVariable(&mbDrawCurrentSection, "Draw current section");
+    RegisterVariable(&mbDrawResetOnTrackSection, "Draw reset on track section");
+    RegisterVariable(&miCurrentAICar, "Current AI Car");
+    RegisterVariable(&mbDrawRacingLines, "Draw Racing Lines");
+    RegisterVariable(&mbDrawHNGMap, "Draw Hard No Go Map");
+    RegisterVariable(&mbDrawPortalTargets, "Draw Portal Targets");
+    RegisterVariable(&mbDrawDirectVector, "Draw Direct Driving Vector");
+    RegisterVariable(&mbDrawControlData, "Draw car control data");
+    RegisterVariable(&mbDrawNearbyVehicles, "Draw nearby traffic");
+    RegisterVariable(&mbDrawCarIndices, "Draw car indices");
+    RegisterVariable(&mbDrawFinishDebugData, "Draw finsih debug data");
+    RegisterVariable(&mbDrawDriftingDebug, "Draw drifting debug");
+    RegisterVariable(&mbAlwaysWantToDrift, "Always want to drift");
+    RegisterVariable(&mbShowDriftTarget, "Show driving fan");
+    RegisterVariable(&mfCruisingSpeed, "Crusing Speed");
+
+    const char* const lpcFeatures = "Feature switches";
+    RegisterVariable(&mpAIModule->mbDoAggressiveDriving, lpcFeatures, "Aggressive Driving");
+    RegisterVariable(&mpAIModule->mbDoInRangeCatchup, lpcFeatures, "In range catchup");
+    RegisterVariable(&mpAIModule->mbDoOutOfRangeCatchup, lpcFeatures, "Out of range catchup");
+
+    const char* const lpcPID = "PID";
+    mPIDCoefficientsGraph.Prepare();
+    RegisterVariable(&mPIDDebugData.mfPCoefficient, lpcPID, "Coeff P");
+    RegisterVariable(&mPIDDebugData.mfICoefficient, lpcPID, "Coeff I");
+    RegisterVariable(&mPIDDebugData.mfDCoefficient, lpcPID, "Coeff D");
+    AddMenuItem("PID/Coefficient Graph", &mPIDCoefficientsGraph);
+    mPIDCoefficientsGraph.AddFloat(&mPIDDebugData.mfPCoefficient);
+    mPIDCoefficientsGraph.AddFloat(&mPIDDebugData.mfICoefficient);
+    mPIDCoefficientsGraph.AddFloat(&mPIDDebugData.mfDCoefficient);
+
+    static f32 sfGraphZero;             // ARTIST 0x8300D608
+    static f32 sfGraphNegativeOne = -1.0f; // ARTIST 0x82F30180
+    static f32 sfGraphPositiveOne = 1.0f;  // ARTIST 0x82F30184
+    AIDriver& lrDriver = mpAIModule->maAIDrivers[0];
+    mSteerAngleVsPIDOutputGraph.Prepare();
+    RegisterVariable(&lrDriver.mfCalculatedSteeringAngle, lpcPID, "Error (steer)");
+    RegisterVariable(&lrDriver.mfPIDOutput, lpcPID, "PID Output 1");
+    AddMenuItem("PID/SteerAngle vs PID Graph", &mSteerAngleVsPIDOutputGraph);
+    mSteerAngleVsPIDOutputGraph.AddFloat(&sfGraphZero);
+    mSteerAngleVsPIDOutputGraph.AddFloat(&sfGraphNegativeOne);
+    mSteerAngleVsPIDOutputGraph.AddFloat(&sfGraphPositiveOne);
+    mSteerAngleVsPIDOutputGraph.AddFloat(&lrDriver.mfCalculatedSteeringAngle);
+    mSteerAngleVsPIDOutputGraph.AddFloat(&mPIDDebugData.mfPCoefficient);
+
+    SetRange(&miCurrentAICar, 0, KI_MAX_OUT_OF_RANGE_RACE_CARS - 1);
+    RegisterVariable(&mbDrawChevrons, "Legacy", "Draw chevrons");
+    RegisterVariable(&sbDrawAvoidanceDebug, "Legacy", "Draw avoidance debug");
 }
 
 namespace

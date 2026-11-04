@@ -1554,30 +1554,10 @@ bool EnvironmentManager::SetupSeasonsBlend( BlendFrame& lrBlendFrame,
 //   RequestNextSeason          @ 0x827C4EA0   (HOLES_DUMP.md)
 //   ReadJunkyardLightingData   @ 0x827BEBD8   (JSON)
 //
-// All five are switch-per-frame stage machines over the DWARF enums now declared in the header
-// (EPrepareStage / EStreamInStage / EStreamOutStage), except ReadJunkyardLightingData which is a
-// straight text parser. Each stage does ONE step under the output buffer's write lock and the
-// function returns; the caller (WorldModule::Prepare stage 5 / SetupTimeOfDayBlend /
-// SetupSeasonsBlend) re-enters next frame until the terminal stage returns true.
-//
-// The four resource-request ids the machines assert on -- 2 (LoadBundle reply), 3 (UnloadBundle
-// reply), 4 (AcquireResource reply) -- are the X360 immediates AND the ids the committed PC
-// resource pipe posts, so this whole chain is live on PC without a translation layer:
-//   CgsResourceBundleLoaderModule.cpp:159   AddEvent(&LoadBundleResponse,   2, ...)
-//   CgsResourceBundleLoaderModule.cpp:197   AddEvent(&UnloadBundleResponse, 3, ...)
-//   CgsResourceModule.cpp:204               pool tag 6 -> receiver id 4 (acquire reply)
-//
-// PC BRING-UP SEAMS (both banner-flagged at their definitions, nothing else deviates):
-//   * PCBringUpWaitForResources -- a BOUNDED wait. The console waits forever for a reply it is
-//     guaranteed to get; on PC a pool id that does not exist, or a bundle the converter has not
-//     produced yet, would hang WorldModule::Prepare stage 5 forever (= a black screen, no
-//     assert). Times the wait out, logs once, and lets the machine finish so the boot proceeds.
-//   * PCBringUpJunkyardFile -- stands in for rw::core::filesys::AsyncOp Open/GetStatus/Read/
-//     GetResultHandle/GetResultSize/Close, which Prepare stages 11..14 drive. That layer is not
-//     initialised on this build: nothing calls rw::core::filesys::Manager::CreateInstance, so
-//     gpFileSysManager stays null, and AsyncOp::Open -> Device::GetInstance (device.cpp)
-//     dereferences it unconditionally -- so calling it is an immediate AV, not a degraded read.
-//     The four console stages are kept intact around a synchronous std::fopen.
+// Prepare, StreamIn and StreamOut advance through consecutive stages in the same call
+// until an asynchronous reply is pending. RequestNextSeason and the lighting parser
+// remain separate existing owners. Queue response tags are 2 (load), 3 (unload),
+// and 4 (acquire), as in the ARTIST request and receiver paths.
 // =============================================================================================
 
 namespace
@@ -1685,6 +1665,270 @@ namespace
 
 
 
+
+// ARTIST827D2EB0: unload the current season and its optional colour cubes.
+bool EnvironmentManager::StreamOut(BrnWorldIO::UpdateOutputBuffer* lpOutput)
+{
+    switch (meStreamOutStage)
+    {
+    case E_STREAMOUT_START:
+    case E_STREAMOUT_DISCARD_SEASON:
+        meStreamOutStage = E_STREAMOUT_DISCARD_SEASON;
+        {
+            CgsResource::ResourcePtr<TimeLine> lEmpty;
+            maSeasonPtrs[muStreamOutTarget] = lEmpty;
+        }
+    case E_STREAMOUT_UNLOAD_SEASON:
+        meStreamOutStage = E_STREAMOUT_UNLOAD_SEASON;
+        lpOutput->LockForWrite();
+        miResourceCnt = 0;
+        {
+            const Dictionary::SeasonData& lrSeason = mDictionaryPtr.GetMemoryResource()->mpSeasonDatii[maiSeasons[muStreamOutTarget]];
+            const s32 liEventId = miResourceCnt++;
+            lpOutput->GetResourceRequestResourceInterface()->UnloadBundle(&mReceiverQueue, liEventId, KI_POOL_ENVIRONMENT, lrSeason.macBundle);
+        }
+        mReceiverQueue.Clear();
+        lpOutput->UnlockForWrite();
+    case E_STREAMOUT_WF_UNLOAD_SEASON:
+        meStreamOutStage = E_STREAMOUT_WF_UNLOAD_SEASON;
+        if (mReceiverQueue.GetLength() < miResourceCnt) return false;
+        CGS_ASSERT(miResourceCnt <= 0 || (mReceiverQueue.GetLength() > 0 && FirstEventId(mReceiverQueue) == KI_EVENT_UNLOAD_BUNDLE_RESPONSE), "Invalid event id received\n");
+    case E_STREAMOUT_UNLOAD_SEASON_COLOURCUBES:
+        meStreamOutStage = E_STREAMOUT_UNLOAD_SEASON_COLOURCUBES;
+        lpOutput->LockForWrite();
+        miResourceCnt = 0;
+        {
+            const Dictionary::SeasonData& lrSeason = mDictionaryPtr.GetMemoryResource()->mpSeasonDatii[maiSeasons[muStreamOutTarget]];
+            if (lrSeason.macColourCubesBundle[0])
+            {
+                const s32 liEventId = miResourceCnt++;
+                lpOutput->GetResourceRequestResourceInterface()->UnloadBundle(&mReceiverQueue, liEventId, KI_POOL_ENVIRONMENT, lrSeason.macColourCubesBundle);
+            }
+        }
+        mReceiverQueue.Clear();
+        lpOutput->UnlockForWrite();
+    case E_STREAMOUT_WF_UNLOAD_SEASON_COLOURCUBES:
+        meStreamOutStage = E_STREAMOUT_WF_UNLOAD_SEASON_COLOURCUBES;
+        if (mReceiverQueue.GetLength() < miResourceCnt) return false;
+        CGS_ASSERT(miResourceCnt <= 0 || (mReceiverQueue.GetLength() > 0 && FirstEventId(mReceiverQueue) == KI_EVENT_UNLOAD_BUNDLE_RESPONSE), "Invalid event id received\n");
+    case E_STREAMOUT_REQUEST_NEXT_SEASON:
+        meStreamOutStage = E_STREAMOUT_REQUEST_NEXT_SEASON;
+        RequestNextSeason();
+    case E_STREAMOUT_DONE:
+        meStreamOutStage = E_STREAMOUT_DONE;
+        return true;
+    default:
+        return false;
+    }
+}
+
+// ARTIST827D31E8: load colour cubes and the season bundle, then bind its timeline.
+bool EnvironmentManager::StreamIn(BrnWorldIO::UpdateOutputBuffer* lpOutput)
+{
+    switch (meStreamInStage)
+    {
+    case E_STREAMIN_START:
+    case E_STREAMIN_LOAD_SEASON_COLOURCUBES:
+        meStreamInStage = E_STREAMIN_LOAD_SEASON_COLOURCUBES;
+        lpOutput->LockForWrite();
+        miResourceCnt = 0;
+        {
+            const Dictionary::SeasonData& lrSeason = mDictionaryPtr.GetMemoryResource()->mpSeasonDatii[maiSeasons[muStreamInTarget]];
+            if (lrSeason.macColourCubesBundle[0])
+            {
+                const s32 liEventId = miResourceCnt++;
+                lpOutput->GetResourceRequestResourceInterface()->LoadBundle(&mReceiverQueue, liEventId, KI_POOL_ENVIRONMENT, lrSeason.macColourCubesBundle, false);
+            }
+        }
+        mReceiverQueue.Clear();
+        lpOutput->UnlockForWrite();
+    case E_STREAMIN_WF_LOAD_SEASON_COLOURCUBES:
+        meStreamInStage = E_STREAMIN_WF_LOAD_SEASON_COLOURCUBES;
+        if (mReceiverQueue.GetLength() < miResourceCnt) return false;
+        CGS_ASSERT(miResourceCnt <= 0 || (mReceiverQueue.GetLength() > 0 && FirstEventId(mReceiverQueue) == KI_EVENT_LOAD_BUNDLE_RESPONSE), "Invalid event id received\n");
+    case E_STREAMIN_LOAD_SEASON:
+        meStreamInStage = E_STREAMIN_LOAD_SEASON;
+        lpOutput->LockForWrite();
+        miResourceCnt = 0;
+        {
+            const Dictionary::SeasonData& lrSeason = mDictionaryPtr.GetMemoryResource()->mpSeasonDatii[maiSeasons[muStreamInTarget]];
+            const s32 liEventId = miResourceCnt++;
+            lpOutput->GetResourceRequestResourceInterface()->LoadBundle(&mReceiverQueue, liEventId, KI_POOL_ENVIRONMENT, lrSeason.macBundle, false);
+        }
+        mReceiverQueue.Clear();
+        lpOutput->UnlockForWrite();
+    case E_STREAMIN_WF_LOAD_SEASON:
+        meStreamInStage = E_STREAMIN_WF_LOAD_SEASON;
+        if (mReceiverQueue.GetLength() < miResourceCnt) return false;
+        CGS_ASSERT(miResourceCnt <= 0 || (mReceiverQueue.GetLength() > 0 && FirstEventId(mReceiverQueue) == KI_EVENT_LOAD_BUNDLE_RESPONSE), "Invalid event id received\n");
+    case E_STREAMIN_ACQUIRE_SEASON:
+        meStreamInStage = E_STREAMIN_ACQUIRE_SEASON;
+        lpOutput->LockForWrite();
+        miResourceCnt = 0;
+        {
+            const Dictionary::SeasonData& lrSeason = mDictionaryPtr.GetMemoryResource()->mpSeasonDatii[maiSeasons[muStreamInTarget]];
+            CgsResource::Events::AcquireResourceRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = miResourceCnt++;
+            lRequest.miPoolId = KI_POOL_ENVIRONMENT;
+            lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(reinterpret_cast<const u8*>(lrSeason.macResourceName)))));
+            lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(&lRequest, KI_REQUEST_ACQUIRE_RESOURCE);
+        }
+        mReceiverQueue.Clear();
+        lpOutput->UnlockForWrite();
+    case E_STREAMIN_WF_ACQUIRE_SEASON:
+        meStreamInStage = E_STREAMIN_WF_ACQUIRE_SEASON;
+        if (mReceiverQueue.GetLength() < miResourceCnt) return false;
+        {
+            const CgsModule::Event* lpPayload = 0;
+            s32 liSize = 0;
+            const s32 liEvent = mReceiverQueue.GetFirstEvent(&lpPayload, &liSize);
+            CGS_ASSERT(lpPayload != 0 && liEvent == KI_EVENT_ACQUIRE_RESOURCE_RESPONSE, "Invalid event id received\n");
+            const CgsResource::Events::AcquireResourceResponse* lpResponse = reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpPayload);
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+            lHandle.mpSourceEntry = lpResponse->mpSourceEntry;
+            maSeasonPtrs[muStreamInTarget] = lHandle;
+        }
+    case E_STREAMIN_DONE:
+        meStreamInStage = E_STREAMIN_DONE;
+        return true;
+    default:
+        return false;
+    }
+}
+
+// ARTIST827D49A8: original asynchronous dependency and junkyard file state machine.
+bool EnvironmentManager::Prepare(BrnWorldIO::UpdateOutputBuffer* lpOutput)
+{
+    switch (mePrepareStage)
+    {
+    case E_PREPARE_START:
+    case E_PREPARE_LOAD_DEPENDENCIES:
+        mePrepareStage = E_PREPARE_LOAD_DEPENDENCIES;
+        mbJunkyardLightingSetup = false;
+        mbOverrideKeyLightDirection = false;
+        lpOutput->LockForWrite();
+        miResourceCnt = 1;
+        lpOutput->GetResourceRequestResourceInterface()->LoadBundle(&mReceiverQueue, 0, KI_POOL_POSTFX, KAC_COLOUR_CUBE_DICTIONARY_BUNDLE, false);
+        mReceiverQueue.Clear();
+        lpOutput->UnlockForWrite();
+    case E_PREPARE_WF_LOAD_DEPENDENCIES:
+        mePrepareStage = E_PREPARE_WF_LOAD_DEPENDENCIES;
+        if (mReceiverQueue.GetLength() < miResourceCnt) return PrepareNotFinished(mGlobalIrradianceManager);
+        CGS_ASSERT(mReceiverQueue.GetLength() > 0 && FirstEventId(mReceiverQueue) == KI_EVENT_LOAD_BUNDLE_RESPONSE, "Invalid event id received\n");
+    case E_PREPARE_ACQUIRE_DEPENDENCIES:
+        mePrepareStage = E_PREPARE_ACQUIRE_DEPENDENCIES;
+        lpOutput->LockForWrite();
+        miResourceCnt = 1;
+        {
+            CgsResource::Events::AcquireResourceRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.miPoolId = KI_POOL_POSTFX;
+            lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(reinterpret_cast<const u8*>(KAC_DEFAULT_COLOUR_CUBE_RESOURCE)))));
+            lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(&lRequest, KI_REQUEST_ACQUIRE_RESOURCE);
+        }
+        mReceiverQueue.Clear();
+        lpOutput->UnlockForWrite();
+    case E_PREPARE_WF_ACQUIRE_DEPENDENCIES:
+        mePrepareStage = E_PREPARE_WF_ACQUIRE_DEPENDENCIES;
+        if (mReceiverQueue.GetLength() < miResourceCnt) return PrepareNotFinished(mGlobalIrradianceManager);
+        {
+            const CgsModule::Event* lpPayload = 0;
+            s32 liSize = 0;
+            const s32 liEvent = mReceiverQueue.GetFirstEvent(&lpPayload, &liSize);
+            CGS_ASSERT(lpPayload != 0 && liEvent == KI_EVENT_ACQUIRE_RESOURCE_RESPONSE, "Invalid event id received\n");
+            const CgsResource::Events::AcquireResourceResponse* lpResponse = reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpPayload);
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+            lHandle.mpSourceEntry = lpResponse->mpSourceEntry;
+            mDefColourCubePtr = lHandle;
+            mpDefTintData = mDefColourCubePtr.GetMemoryResource();
+        }
+    case E_PREPARE_LOAD_DICTIONARY:
+        mePrepareStage = E_PREPARE_LOAD_DICTIONARY;
+        lpOutput->LockForWrite();
+        miResourceCnt = 1;
+        lpOutput->GetResourceRequestResourceInterface()->LoadBundle(&mReceiverQueue, 0, KI_POOL_ENVIRONMENT, KAC_ENVIRONMENT_DICTIONARY_BUNDLE, false);
+        mReceiverQueue.Clear();
+        lpOutput->UnlockForWrite();
+    case E_PREPARE_WF_LOAD_DICTIONARY:
+        mePrepareStage = E_PREPARE_WF_LOAD_DICTIONARY;
+        if (mReceiverQueue.GetLength() < miResourceCnt) return PrepareNotFinished(mGlobalIrradianceManager);
+        CGS_ASSERT(mReceiverQueue.GetLength() > 0 && FirstEventId(mReceiverQueue) == KI_EVENT_LOAD_BUNDLE_RESPONSE, "Invalid event id received\n");
+    case E_PREPARE_ACQUIRE_DICTIONARY:
+        mePrepareStage = E_PREPARE_ACQUIRE_DICTIONARY;
+        lpOutput->LockForWrite();
+        {
+            char lacResourceName[KI_ENV_RESOURCE_NAME_MAX];
+            Dictionary::BuildResourceName(lacResourceName);
+            miResourceCnt = 1;
+            CgsResource::Events::AcquireResourceRequest lRequest;
+            lRequest.mpUser = &mReceiverQueue;
+            lRequest.miEventId = 0;
+            lRequest.miPoolId = KI_POOL_ENVIRONMENT;
+            lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacResourceName)))));
+            lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(&lRequest, KI_REQUEST_ACQUIRE_RESOURCE);
+        }
+        mReceiverQueue.Clear();
+        lpOutput->UnlockForWrite();
+    case E_PREPARE_WF_ACQUIRE_DICTIONARY:
+        mePrepareStage = E_PREPARE_WF_ACQUIRE_DICTIONARY;
+        if (mReceiverQueue.GetLength() < miResourceCnt) return PrepareNotFinished(mGlobalIrradianceManager);
+        {
+            const CgsModule::Event* lpPayload = 0;
+            s32 liSize = 0;
+            const s32 liEvent = mReceiverQueue.GetFirstEvent(&lpPayload, &liSize);
+            CGS_ASSERT(lpPayload != 0 && liEvent == KI_EVENT_ACQUIRE_RESOURCE_RESPONSE, "Invalid event id received\n");
+            const CgsResource::Events::AcquireResourceResponse* lpResponse = reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpPayload);
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lpResponse->mpResourceMemory;
+            lHandle.mpSourceEntry = lpResponse->mpSourceEntry;
+            mDictionaryPtr = lHandle;
+        }
+    case E_PREPARE_STREAMIN:
+        mePrepareStage = E_PREPARE_STREAMIN;
+        maiSeasons[miCurrSeason] = miSeasonCurrentlyPlaying;
+        if (mbOverrideSeason) maiSeasons[miCurrSeason] = miOverrideCurrentSeason - 1;
+        meStreamInStage = E_STREAMIN_START;
+        muStreamInTarget = static_cast<u8>(miCurrSeason);
+    case E_PREPARE_WF_STREAMIN:
+        mePrepareStage = E_PREPARE_WF_STREAMIN;
+        if (!StreamIn(lpOutput)) return PrepareNotFinished(mGlobalIrradianceManager);
+        RequestNextSeason();
+    case E_PREPARE_OPEN_JUNKYARD_LIGHTING_DATA:
+        mePrepareStage = E_PREPARE_OPEN_JUNKYARD_LIGHTING_DATA;
+        mAsyncOp.Open(KAC_JUNKYARD_LIGHTING_DATA_PATH, 0, 0, 0, 0);
+    case E_PREPARE_WF_OPEN_JUNKYARD_LIGHTING_DATA:
+        mePrepareStage = E_PREPARE_WF_OPEN_JUNKYARD_LIGHTING_DATA;
+        if (!mAsyncOp.GetStatus(EA::Thread::kTimeoutImmediate)) return PrepareNotFinished(mGlobalIrradianceManager);
+        CGS_ASSERT(mAsyncOp.GetStatus(EA::Thread::kTimeoutImmediate) == 1, "mAsyncOp.GetStatus() == rw::core::filesys::AsyncOp::OPSTATUS_COMPLETE");
+        mpFileHandle = static_cast<rw::core::filesys::Handle*>(mAsyncOp.GetResultHandle());
+        CGS_ASSERT(static_cast<u32>(rw::core::filesys::GetSize(mpFileHandle)) < K_JUNKYARD_LIGHTING_DATA_BUFFER_SIZE - 1, "(uint32_t)rw::core::filesys::GetSize(mpFileHandle) < K_JUNKYARD_LIGHTING_DATA_BUFFER_SIZE-1");
+    case E_PREPARE_READ_JUNKYARD_LIGHTING_DATA:
+        mePrepareStage = E_PREPARE_READ_JUNKYARD_LIGHTING_DATA;
+        mAsyncOp.Read(mpFileHandle, macJunkyardLightingBuffer, 0, K_JUNKYARD_LIGHTING_DATA_BUFFER_SIZE - 1, 0, 0, 0);
+    case E_PREPARE_WF_READ_JUNKYARD_LIGHTING_DATA:
+        mePrepareStage = E_PREPARE_WF_READ_JUNKYARD_LIGHTING_DATA;
+        if (!mAsyncOp.GetStatus(EA::Thread::kTimeoutImmediate)) return PrepareNotFinished(mGlobalIrradianceManager);
+        CGS_ASSERT(mAsyncOp.GetStatus(EA::Thread::kTimeoutImmediate) == 1, "mAsyncOp.GetStatus() == rw::core::filesys::AsyncOp::OPSTATUS_COMPLETE");
+        {
+            const u32 luSize = static_cast<u32>(mAsyncOp.GetResultSize());
+            mAsyncOp.Close(mpFileHandle, 0, 0, 0);
+            macJunkyardLightingBuffer[luSize] = '\0';
+            ReadJunkyardLightingData(macJunkyardLightingBuffer, luSize);
+            mfTimeOfDayLowerBound = KF_DEF_TIME_OF_DAY_LOWER_BOUND;
+            mfTimeOfDayUpperBound = KF_DEF_TIME_OF_DAY_UPPER_BOUND;
+        }
+    case E_PREPARE_DONE:
+        mePrepareStage = E_PREPARE_LOAD_DICTIONARY;
+        meReleaseStage = E_RELEASE_START;
+        return true;
+    default:
+        return PrepareNotFinished(mGlobalIrradianceManager);
+    }
+}
 
 // ---------------------------------------------------------------------------------------------
 // @ 0x827C4EA0 (HOLES_DUMP.md).  void RequestNextSeason()   [DWARF BrnEnvironmentManager.h:189]

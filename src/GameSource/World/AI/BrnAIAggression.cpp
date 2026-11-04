@@ -28,6 +28,9 @@ namespace BrnAI
 {
     namespace vpu = rw::math::vpu;
 
+    f32 gfMarkedManMaxOvertakeSpeed = 89.4079971f; // ARTIST initializer 0x82C68D40
+    f32 gfMarkedManMinOvertakeSpeed = 71.5263977f; // ARTIST initializer 0x82C68D60
+
 // =================================================================================================
 // [DIAG] NOT IN THE X360 BINARY -- the MARKED-MAN aggression witness (issue #24), opt-in via
 // BRN_MM_DIAG=1.  It measures, once per second PER AI CAR, exactly the quantities the report is
@@ -565,8 +568,8 @@ f32 AIAggression::GetMaxOvertakeSpeed() const
     f32 lfLo;
     if (mpCar->meRouteFindingStyle == E_ROUTE_FINDING_MARKED_MAN)   // == 6
     {
-        lfHi = KF_MAX_OVERTAKE_SPEED_MARKED_MAN_HI;
-        lfLo = KF_MAX_OVERTAKE_SPEED_MARKED_MAN_LO;
+        lfHi = gfMarkedManMaxOvertakeSpeed;
+        lfLo = gfMarkedManMinOvertakeSpeed;
     }
     else
     {
