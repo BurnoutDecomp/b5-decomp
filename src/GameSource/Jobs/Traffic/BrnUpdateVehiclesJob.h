@@ -83,9 +83,8 @@ public:
         E_TUNE_VECTOR_COUNT = 8
     };
 
-    // @0x8291DCC8. The console passes a third argument in r5 (TrafficJob + 0x300); neither
-    // Execute nor Initialise reads it, so it is not modelled.
-    void Execute(UpdateVehiclesJobParams* lpParams);
+    // ARTIST 0x8291DCC8 receives the workspace in r5.
+    void Execute(UpdateVehiclesJobParams* lpParams, void* lpWorkspace);
 
     // @0x829177A0 (:54) / @0x829178A8 (:94)
     Hull* GetHull(u32 luHull) const;

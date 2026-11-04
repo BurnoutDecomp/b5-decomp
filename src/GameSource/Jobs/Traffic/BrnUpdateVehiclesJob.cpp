@@ -430,7 +430,7 @@ void UpdateVehiclesJob::WriteBackCurrentVehicle()
 }
 
 // @0x8291DCC8. The whole job: Initialise, then walk the slice.
-void UpdateVehiclesJob::Execute(UpdateVehiclesJobParams* lpParams)
+void UpdateVehiclesJob::Execute(UpdateVehiclesJobParams* lpParams, void* /*lpWorkspace*/)
 {
     Initialise(lpParams);
 

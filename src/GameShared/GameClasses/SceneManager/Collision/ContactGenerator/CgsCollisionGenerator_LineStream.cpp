@@ -3,7 +3,7 @@
 //
 // ⭐ THE FLOOR OF THE VEHICLE TRACTION-LINE CHAIN (ground wave, 2026-08-10).
 //   BaseCollisionGenerator::CreateLineWithTriangleListStream @0x82810B98 (96 insns)  -- REAL
-//   BaseCollisionGenerator::RunLineWithTriangleListStream    @0x82810E80 (90 insns)  -- boot gate
+//   BaseCollisionGenerator::RunLineWithTriangleListStream    @0x82810E80 (90 insns)
 //
 // A Burnout car does not rest on contacts -- contacts are the body-shell/crash path. It rests on
 // TRACTION LINE TESTS, and this producer is the stream those tests are posted into:
@@ -12,64 +12,31 @@
 //   LineTestJobs -> RunLineWithTriangleListStream -> the job tree; EndVehicleTractionLineTests
 //   harvests 192-byte results and feeds RaceCarPhysics::AddTractionPoint.
 //
-// ⚠️ NEITHER FUNCTION CARRIES AN IDA SYMBOL, AND THE TWO ABSENCES ARE DIFFERENT KINDS.
-//  * Create is exported as the unnamed `sub_82810B98`. Identity is not guessed: its two asserts
-//    are `CgsCollisionGenerator.cpp` :533 "Failed to allocate stream producer\n" and :550
-//    "Failed to allocate stream buffers\n" (the same pair CreateFillTriangleCacheStream carries
-//    at its own lines), its only caller is VehicleManager::DoVehicleTractionLineAllocations, and
-//    its result is stored straight into mpTractionLineStreamProducer.
-//  * Run @0x82810E80 is a GENUINE export-set hole -- the export dir goes 0x82810D38
-//    (RunFillTriangleCacheStream, last insn 0x82810E7C) -> 0x82810FE8 with nothing between.
-//    Proved the brief's way rather than assumed: the `bl` word at the call site 0x825B5248 is
-//    0x4825BC39, which decodes to 0x82810E80, and the same decoder was proved in the same run on
-//    four independently-named neighbours (0x825B5228 -> DataStreamCommandPoster::Begin @0x82867AE8,
-//    0x825B51E0 -> PerfMonCpu::StartMonitor @0x821F1198, 0x82810E6C -> JobScheduler::AddTree
-//    @0x82BCB540, 0x82633DAC -> ReadRaceCarTractionLineTestResults @0x82618058).
-//
-// ⛔ WHY Run IS A GATE AND NOT A BODY. Its 90 instructions were read out of the image and are the
-// exact call sequence of its exported twin RunFillTriangleCacheStream @0x82810D38 -- AllocateJob,
-// then per batch { CreateNewBatch, Job::Clear, EntryPoint::SetName, EntryPoint::SetCode(<entry>),
-// Job::SetData, Job::DependsOn }, then JobScheduler::AddTree. What it installs is a JOB ENTRY
-// POINT, and the worker behind it (ContactGeneratorJob::ExecuteLineWithTriangleListStream
-// @0x82921968, 589 insns, on top of CgsGeometric::IntersectLinePolygonSoupNearestSingleSided 575 /
-// PolygonSoupListSpatialMap::RunQuery 261 / the PolygonSoupTesterJob family) is not in this tree.
-// Writing the dispatcher without the worker would produce a job that returns silently empty
-// results, which the harvest would then read as "no wheel touched anything" -- a silent-drop stub
-// of exactly the class this project keeps getting burned by. It is a LOUD one-shot gate instead.
-// =================================================================================================
+// The native dispatchers submit the existing PolygonSoupTester and ContactGenerator
+// workers through the hardware job scheduler. ARTIST 0x82810D38 and 0x82810E80.
 
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/CgsCollisionGenerator.h"
 
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint (boot gate)
 
 #include "SDKs/EATech/eajobs/job.h"                         // EA::Jobs::Job (return type)
 #include "SDKs/EATech/eajobs/job_types.h"                   // EA::Jobs::Param / JOB_ENVIRONMENT_LOCAL
+#include "SDKs/EATech/eajobs/job_scheduler.h"
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsFillTriangleCacheStreamJobDesc.h" // the descriptor RunFillTriangleCacheStream prepares
 #include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithTriangleListStreamJobDesc.h" // the descriptor RunLineWithTriangleListStream prepares
-#include "GameShared/GameClasses/SceneManager/Collision/ContactGenerator/JobDescription/CgsLineWithPolySoupListJobDesc.h" // the descriptor RunCollideLineAgainstPolySoupStream prepares
 #include "GameShared/GameClasses/Geometric/Intersection/CgsPolygonSoupTests.h"   // PolySoupLineNearestResult (the stream's 112-byte record)
 
 // The polygon-soup tester job entry every fill batch is wired to
 // (GameShared/Jobs/PolygonSoupTester/PolygonSoupTester.cpp; X360 rodata PolygonSoupTesterEntry).
 void PolygonSoupTesterEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);
 
-// The contact-generator job entry every COLLISION batch is wired to -- the traction-line worker
-// lives behind it (GameShared/Jobs/ContactGenerator/ContactGenerator.cpp; X360 0x82920F10, an
-// export-set hole named from ContactGeneratorJob::Execute's xrefs_to).
-void ContactGeneratorEntry(EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param, EA::Jobs::Param);
-
 namespace CgsSceneManager
 {
 namespace CgsCollision
 {
-    // dword_82F310B4 -- the perf-monitor id RunFillTriangleCacheStream brackets its per-batch
-    // wiring with (0x82810DE4 StartMonitor / 0x82810E4C StopMonitor). Same shape and same
-    // "-1 means unregistered" convention as CgsTriangleCacheManager_Update.cpp's three ids.
-    static s32 s_miFillTriangleCacheStreamPerfMon = -1;   // dword_82F310B4
-
     // The stream's fixed record geometry, read out of the X360 asm at 0x82810C5C..0x82810D1C
     // (`li r4, 0xB0` / `li r6, 0xC0` into GetRequiredBufferSizes, then `li r5, 0xB0` / `li r8, 0xC0`
     // into Construct). Both are DATA-LAYOUT constants of the line-test command/result records, not
@@ -167,6 +134,64 @@ namespace CgsCollision
 
         mCollisionResultsAllocator.SetAlignment(lnSavedAlignment);
         return lpProducer;
+    }
+
+    EA::Jobs::Job* BaseCollisionGenerator::RunFillTriangleCacheStream(
+        const CgsGeometric::PolygonSoupListSpatialMap* lpSpatialMap,
+        CgsMemory::SimpleDataStreamProducer* lpStream)
+    {
+        const s32 liCommandCount = lpStream->GetNumCommands();
+        if (liCommandCount == 0)
+            return 0;
+
+        const s32 liBatchCount = liCommandCount > 3 ? 3 : liCommandCount;
+        EA::Jobs::Job* lpRootJob = AllocateJob();
+        for (s32 liBatch = 0; liBatch < liBatchCount; ++liBatch)
+        {
+            CollisionBatch& lrBatch = maCollisionBatches[CreateNewBatch()];
+            FillTriangleCacheStreamJobDesc* lpDescription =
+                static_cast<FillTriangleCacheStreamJobDesc*>(lrBatch.GetJobDescription().GetBuffer());
+            lpDescription->Prepare(lpSpatialMap, lpStream);
+
+            CgsDev::PerfMonCpu::StartMonitor(_miStartJobsPerfMon);
+            EA::Jobs::Job* lpJob = lrBatch.GetJob();
+            lpJob->Clear();
+            lpJob->SetName("CollisionBatch");
+            lpJob->SetCode(EA::Jobs::JOB_ENVIRONMENT_LOCAL,
+                           reinterpret_cast<const void*>(&PolygonSoupTesterEntry), 0);
+            lpJob->SetData(lpDescription, CollisionJobDescriptionStorage::KU_CONSOLE_BYTES);
+            lpJob->SetCodeRecycle(EA::Jobs::EntryPoint::CODE_RECYCLE_ON);
+            lpRootJob->DependsOn(*lpJob, EA::Jobs::Event::EVENT_WHEN_JOB_END);
+            CgsDev::PerfMonCpu::StopMonitor(_miStartJobsPerfMon);
+        }
+
+        CgsSystem::JobManager()->AddTree(lpRootJob);
+        return lpRootJob;
+    }
+
+    EA::Jobs::Job* BaseCollisionGenerator::RunLineWithTriangleListStream(
+        CgsMemory::SimpleDataStreamProducer* lpStream)
+    {
+        CGS_ASSERT(lpStream != 0, "lpStream != NULL");
+        const s32 liCommandCount = lpStream->GetNumCommands();
+        if (liCommandCount == 0)
+            return 0;
+
+        const s32 liBatchCount = liCommandCount > 3 ? 3 : liCommandCount;
+        EA::Jobs::Job* lpRootJob = AllocateJob();
+        for (s32 liBatch = 0; liBatch < liBatchCount; ++liBatch)
+        {
+            const u16 luBatchIndex = CreateNewBatch();
+            CollisionBatch& lrBatch = maCollisionBatches[luBatchIndex];
+            LineWithTriangleListStreamJobDesc* lpDescription =
+                static_cast<LineWithTriangleListStreamJobDesc*>(lrBatch.GetJobDescription().GetBuffer());
+            lpDescription->Prepare(lpStream);
+            lpRootJob->DependsOn(*lrBatch.SetupJob(), EA::Jobs::Event::EVENT_WHEN_JOB_END);
+            mabUsedBatches[luBatchIndex] = true;
+        }
+
+        CgsSystem::JobManager()->AddTree(lpRootJob);
+        return lpRootJob;
     }
 
 }

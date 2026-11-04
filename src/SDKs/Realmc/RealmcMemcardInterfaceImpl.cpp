@@ -13,6 +13,9 @@
 #include "SDKs/Realmc/RealmcIfaceSetActiveCardTask.h"
 #include "SDKs/Realmc/RealmcIfaceSaveCheckTask.h"
 #include "SDKs/Realmc/RealmcIfaceSetAutosaveTask.h"
+#include "SDKs/Realmc/RealmcIfaceBootupCheckTask.h"
+#include "SDKs/Realmc/RealmcIfaceSaveTask.h"
+#include "SDKs/Realmc/RealmcIfaceLoadTask.h"
 #include "SDKs/EATech/eathread/BrnEAThreadX360.h"   // EA::Thread::ThreadParameters
 
 #include <new>   // placement new -- the impl is constructed in the block CreateInstance allocates.
@@ -236,6 +239,54 @@ int MemcardInterfaceImpl::SetAutosave(int liEnabled, SaveCheckParams* lpParams)
         ? new (lpMemory) SetAutosaveTask(&mMessageQueue, &mMemcardState,
                                         &maStates[gSignedUserIndex], &mGameInfo,
                                         liEnabled, *lpParams)
+        : 0;
+    return RunAsync(lpTask);
+}
+
+// @0x82B52E90. The native wrapper allocates 0x15C bytes, passes the queue,
+// MemcardState, signed user's Xenon state, GameInfo, SaveInfo, count, entries
+// and TitleInfo to BootupCheckTask, then submits the task through RunAsync.
+int MemcardInterfaceImpl::BootupCheck(SaveInfo* lpSaveInfo, int liNumEntries,
+                                      LoadEntryInfo* lpEntries, TitleInfo* lpTitleInfo)
+{
+    void* const lpMemory = RealmcCore::AllocateMem(0, sizeof(BootupCheckTask));
+    BootupCheckTask* const lpTask = lpMemory
+        ? new (lpMemory) BootupCheckTask(&mMessageQueue, &mMemcardState,
+                                        &maStates[gSignedUserIndex], &mGameInfo,
+                                        *lpSaveInfo, liNumEntries, lpEntries,
+                                        *lpTitleInfo)
+        : 0;
+    return RunAsync(lpTask);
+}
+
+// @0x82B52FA0. Pass the caller's complete flags word into SaveTask; the task
+// owns the SaveInfo, TitleInfo and LoadEntryInfo copies as in ARTIST.
+int MemcardInterfaceImpl::Save(SaveInfo* lpSaveInfo, int liCount,
+                               LoadEntryInfo* lpEntries, int liFlags,
+                               TitleInfo* lpTitleInfo)
+{
+    void* const lpMemory = RealmcCore::AllocateMem(0, sizeof(SaveTask));
+    SaveTask* const lpTask = lpMemory
+        ? new (lpMemory) SaveTask(&mMessageQueue, &mMemcardState,
+                                  &maStates[gSignedUserIndex], &mGameInfo,
+                                  *lpSaveInfo, liCount, lpEntries, liFlags,
+                                  *lpTitleInfo)
+        : 0;
+    return RunAsync(lpTask);
+}
+
+// @0x82B530A8. Pass the caller's entry name, count, entry array, complete flags
+// word and title into LoadTask, then hand the task to the shared RunAsync path.
+int MemcardInterfaceImpl::Load(EntryContentName* lpEntryContentName,
+                               int liNumEntries, LoadEntryInfo* lpEntries,
+                               int liFlags, TitleInfo* lpTitleInfo)
+{
+    void* const lpMemory = RealmcCore::AllocateMem(0, sizeof(LoadTask));
+    LoadTask* const lpTask = lpMemory
+        ? new (lpMemory) LoadTask(&mMessageQueue, &mMemcardState,
+                                  &maStates[gSignedUserIndex], &mGameInfo,
+                                  *lpEntryContentName, liNumEntries, lpEntries,
+                                  liFlags, *lpTitleInfo)
         : 0;
     return RunAsync(lpTask);
 }
