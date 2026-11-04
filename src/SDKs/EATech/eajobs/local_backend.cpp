@@ -575,6 +575,7 @@ namespace LocalBackend
             ? &mpJobInstances[index] : 0;
         u32* location=0;u32 value=0;
         GetEnabler(uSubmissionId,uHandleQword,location,value);
+        ++instance->mStatus;
         return Event(Event::EVENT_TYPE_WRITE,value,location,&instance->mStatus);
     }
 
