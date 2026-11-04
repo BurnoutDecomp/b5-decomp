@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include <math.h>
 #include <cstring>
@@ -127,10 +128,20 @@ namespace CgsDev
     // X360 Begin: open the render block, set the debug render states, reset the vertex batch.
     void Debug2DImmediateRender::Begin()
     {
+#if defined(_XBOX)
+        miIm2dVertsHead = 0;
+        CGS_ASSERT(mpRenderBuffer && !mpRenderBuffer->IsInARenderingBlock(),
+                   "mpRenderBuffer && !mpRenderBuffer->IsInARenderingBlock()");
+        if (mpRenderBuffer)
+            mpRenderBuffer->BeginRendering();
+        SetDebugRenderStates();
+        meDrawingMode = E_DRAWING_COUNT;
+#else
         mpRenderBuffer->BeginRendering();
         SetDebugRenderStates();
         miIm2dVertsHead = 0;
         meDrawingMode   = E_DRAWING_COUNT;
+#endif
     }
 
     // X360 End: flush any batched verts, then close the render block.
@@ -144,6 +155,22 @@ namespace CgsDev
     // an untextured coloured quad. The full debug state set (depth/raster/sampler) is the follow-on.
     void Debug2DImmediateRender::SetDebugRenderStates()
     {
+#if defined(_XBOX)
+        if (mpRenderBuffer)
+        {
+            CgsGraphics::Im2dTransform transform;
+            transform.mOriginXYZ = rw::math::vpu::Vector4(-1.0f, 1.0f, 0.0f, 0.0f);
+            transform.mRightUp = rw::math::vpu::Vector4(2.0f / mfVirtualScreenWidth, 0.0f,
+                                                        0.0f, -2.0f / mfVirtualScreenHeight);
+            transform.mColourShift = rw::math::vpu::Vector4(0.0f, 0.0f, 0.0f, 0.0f);
+            transform.mColourScale = rw::math::vpu::Vector4(1.0f, 1.0f, 1.0f, 1.0f);
+            mpRenderBuffer->SetTransform(transform);
+            const CgsGraphics::ImRendererBase::StateLibrary& states = CgsGraphics::ImRendererBase::GetStateLibrary();
+            mpRenderBuffer->SetState(states.mpBlendState_Standard);
+            mpRenderBuffer->SetState(states.mpRasterizerState_CullNone);
+            mpRenderBuffer->SetState(states.mpDepthStencilState_ZBufferOff);
+        }
+#else
         mpRenderBuffer->SetState(static_cast<const renderengine::BlendState*>(0));
 
         // CRITICAL: the debug prims are solid-coloured, but the Im2d stage modulates texture x diffuse
@@ -151,6 +178,7 @@ namespace CgsDev
         // that texture at UV(0,0) instead of drawing their colour (the squares were invisible). Drop the
         // texture; an unbound D3D stage defaults to white, leaving pure vertex colour.
         mpRenderBuffer->SetTexture(0);
+#endif
     }
 
     void Debug2DImmediateRender::DispatchVertices()
@@ -161,6 +189,9 @@ namespace CgsDev
             {
                 // ARTIST 8281B718..8281B740: restore the shared untextured state
                 // before copying the batch; preserve the selected drawing mode.
+#if defined(_XBOX)
+                mpRenderBuffer->SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpTextureState_Untextured);
+#endif
                 mpRenderBuffer->Render(mePrimitiveType, maIm2dVertsArray, static_cast<u32>(miIm2dVertsHead));
             }
             miIm2dVertsHead = 0;
