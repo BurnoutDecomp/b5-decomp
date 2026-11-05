@@ -41,6 +41,7 @@
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
+#include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"       // AptString::Create / GetInternalString (TypeOf)
 #include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h" // the tag-33 boxed-string form (extern-arm keys)
 #include "SDKs/EATech/include/Apt/AptArray.h"              // AptArray::get/set + gpUndefinedValue
@@ -324,7 +325,7 @@ void AptActionInterpreter::_FunctionAptActionEnumerate2(AptActionInterpreter* pI
 
 // ---------------------------------------------------------------------------
 // _FunctionAptActionCastOp @0x82AEA818 (0x2B) -- AS `(Class) obj`. Stack:
-// [object, class] (class on top). When `object instanceof class`, collapse both
+// [class, object] (object on top). When `object instanceof class`, collapse both
 // operands to the object (an in-place downcast); otherwise (or when fewer than two
 // operands are present) collapse to `undefined`.
 // ---------------------------------------------------------------------------
@@ -340,7 +341,7 @@ void AptActionInterpreter::_FunctionAptActionCastOp(AptActionInterpreter* pInter
     AptValue* pObject = pInterp->mpStack[pInterp->mnStackTop - 1];   // TOS = the object to cast
     AptValue* pClass  = pInterp->mpStack[pInterp->mnStackTop - 2];   // under-top = the class
 
-    if (pInterp->isObjectOfType(pObject, pClass))
+    if (static_cast<unsigned char>(isObjectOfType(pObject, pClass)) != 0)
     {
         pInterp->stackPopAndPush(2, pObject);   // the cast succeeds -> keep the object
         return;
@@ -350,6 +351,22 @@ void AptActionInterpreter::_FunctionAptActionCastOp(AptActionInterpreter* pInter
     // The no-match push stores the `undefined` singleton WITHOUT an AddRef
     // (faithful to the console: no refcount bump on this collapse path).
     pInterp->mpStack[pInterp->mnStackTop++] = gpUndefinedValue;   // inlined stackPush
+}
+
+// ARTIST 82AEA788 (0x54). Unlike CastOp, the class is on top.
+void AptActionInterpreter::_FunctionAptActionInstanceOf(AptActionInterpreter* pInterp, LocalContextT*)
+{
+    const int nStackTop = pInterp->mnStackTop;
+    if (nStackTop < 2)
+    {
+        pInterp->stackPopAndPush(nStackTop, gpUndefinedValue);
+        return;
+    }
+
+    AptValue* pObject = pInterp->mpStack[nStackTop - 2];
+    AptValue* pClass = pInterp->mpStack[nStackTop - 1];
+    const bool bMatches = static_cast<unsigned char>(isObjectOfType(pObject, pClass)) == 1;
+    pInterp->stackPopAndPush(2, AptBoolean::Create(bMatches));
 }
 
 // ---------------------------------------------------------------------------

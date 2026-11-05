@@ -87,23 +87,22 @@ AptObject::~AptObject()
 
 // SetImplementedObjects @0x82AF5868 -- record the implements-set: store the
 // AptArray of implemented objects under the (verbatim, lowercase-'s') key the
-// X360 build uses, then stash the count in the low byte of mClassFlags.
+// X360 build uses, then store the count in the first byte of the class word.
 void AptObject::SetImplementedObjects(AptValue* pImplementedArray, char nCount)
 {
     // EAStringC key("__INTERFACEs__") = InitFromBuffer; ~EAStringC =
     // DecreaseInternalRefCount (the ctor/dtor pair the asm inlines around Set).
     EAStringC key("__INTERFACEs__");
     mHash.Set(key, pImplementedArray);
-    // stb r29, 0x1C(r31): the count overwrites the low byte of mClassFlags.
-    mClassFlags = (mClassFlags & 0xFFFFFF00u) | (uint32_t)(uint8_t)nCount;
+    reinterpret_cast<unsigned char&>(mClassFlags) = static_cast<unsigned char>(nCount);
 }
 
-// GetImplementedObjects @0x82AE68F0 -- return the implemented count (low byte of
-// mClassFlags) via *pnCountOut, and the "__INTERFACES__" AptArray as the result;
+// GetImplementedObjects @0x82AE68F0 -- return the implemented count via
+// *pnCountOut and the "__INTERFACES__" AptArray as the result;
 // null/0 when this object implements nothing.
 AptValue* AptObject::GetImplementedObjects(int* pnCountOut) const
 {
-    const uint8_t nCount = (uint8_t)mClassFlags;   // lbz r11, 0x1C(r31)
+    const uint8_t nCount = reinterpret_cast<const unsigned char&>(mClassFlags);
     *pnCountOut = nCount;
     if (nCount == 0)
         return 0;
@@ -130,7 +129,7 @@ bool AptObject::DoesImplementObject(AptValue* pTarget) const
     }
 
     // ---- implemented-interfaces scan ----------------------------------------
-    const uint8_t nCount = (uint8_t)mClassFlags;   // lbz 0x1C
+    const uint8_t nCount = reinterpret_cast<const unsigned char&>(mClassFlags);
     if (nCount == 0)
         return false;
 
@@ -138,7 +137,7 @@ bool AptObject::DoesImplementObject(AptValue* pTarget) const
     AptArray* pInterfaces = static_cast<AptArray*>(mHash.Lookup(key));
 
     // The X360 re-reads the count after the Lookup; if it went to zero, bail.
-    const uint8_t nCount2 = (uint8_t)mClassFlags;
+    const uint8_t nCount2 = reinterpret_cast<const unsigned char&>(mClassFlags);
     if (nCount2 == 0)
         return false;   // LABEL_14: DecreaseInternalRefCount + return 0
 

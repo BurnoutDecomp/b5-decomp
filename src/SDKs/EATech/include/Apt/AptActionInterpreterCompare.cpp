@@ -138,6 +138,56 @@ namespace
     inline float IntToFloat(int n) { return static_cast<float>(n); }
 }
 
+// ARTIST @0x82ADDEE8 (0x66). StrictEquals resolves destroyed CIHs to undefined,
+// applies the SWF-v7 undefined rule, then compares matching tags or numeric values.
+void AptActionInterpreter::_FunctionAptActionStrictEquals(AptActionInterpreter* pInterp, LocalContextT*)
+{
+    AptValue* pTop = ResolveCIHToUndefined(pInterp->mpStack[pInterp->mnStackTop - 1]);
+    AptValue* pUnder = ResolveCIHToUndefined(pInterp->mpStack[pInterp->mnStackTop - 2]);
+
+    if (AptGetSwfVersion() == 7 && (!pTop->getIsDefined() || !pUnder->getIsDefined()))
+    {
+        pInterp->stackPopAndPush(2, AptBoolean::Create(!pTop->getIsDefined() && !pUnder->getIsDefined()));
+        return;
+    }
+
+    const AptVirtualFunctionTable_Indices eTop = pTop->getVtblIndex();
+    const AptVirtualFunctionTable_Indices eUnder = pUnder->getVtblIndex();
+    bool bEqual = false;
+    if (eTop == eUnder ||
+        ((pTop->isInteger() || pTop->isFloat()) && (pUnder->isInteger() || pUnder->isFloat())))
+    {
+        switch (eTop)
+        {
+        case AptVFT_Float:
+        {
+            const float fTop = pTop->toFloat();
+            const float fUnder = pUnder->isInteger() ? IntToFloat(pUnder->toInteger()) : pUnder->toFloat();
+            bEqual = fabsf(fTop - fUnder) < 0.001f;
+            break;
+        }
+        case AptVFT_Integer:
+        case AptVFT_Boolean:
+        {
+            const int nTop = pTop->toInteger();
+            if (pUnder->isInteger())
+                bEqual = nTop == pUnder->toInteger();
+            else
+                bEqual = fabsf(IntToFloat(nTop) - pUnder->toFloat()) < 0.001f;
+            break;
+        }
+        case AptVFT_StringValue:
+        case AptVFT_StringObject:
+            bEqual = pUnder->c_string()->GetInternalString()->EqualNoCase(*pTop->c_string()->GetInternalString());
+            break;
+        default:
+            bEqual = pTop == pUnder;
+            break;
+        }
+    }
+    pInterp->stackPopAndPush(2, AptBoolean::Create(bEqual));
+}
+
 // ---------------------------------------------------------------------------
 // _FunctionAptActionEquals @0x7FD938 -- under == top.
 // ---------------------------------------------------------------------------

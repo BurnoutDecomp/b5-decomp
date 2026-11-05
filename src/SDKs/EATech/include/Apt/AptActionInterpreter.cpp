@@ -328,82 +328,47 @@ AptValue* AptActionInterpreter::getObject(AptValue* pScope, AptValue* pTarget, c
 }
 
 // ---------------------------------------------------------------------------
-// isObjectOfType @0x82AEA5B8 -- AS `instanceof`: is pObject an instance of pClass?
-// When both are objects, fetch pClass's prototype and walk pObject's prototype /
-// interface chain looking for it (instanceOfChainWalk below, over the NAMED
-// AptNativeHash::mpPrototype/mp__Proto__ links); otherwise fall back to a type-tag
-// comparison (a defined Object value of the same value-type matches).
-// ---------------------------------------------------------------------------
-// AptActionInterpreter_InstanceOfChainWalk -- isObjectOfType's object arm.
-// The needle is pClass's prototype: GetNativeHashVirtual()->mpPrototype (+0xC;
-// the asm reads it unguarded -- the caller's is-object gate guarantees a hash).
-// Three arms:
-//   * a CIH-family pObject (vtbl 12 defined / 37): walk the ENTIRE hash
-//     __proto__ (+8) chain, latching result=1 on a needle match WITHOUT early
-//     exit (the shipped loop keeps walking);
-//   * a defined Object (vtbl 19): AptObject::DoesImplementObject(needle) --
-//     the own-prototype + interface-table reachability test;
-//   * anything else: an identity walk down the __proto__ chain (step first --
-//     the object itself is never compared), bailing when a hop is not a
-//     defined object (the in-loop vtbl[+0xC] predicate) or the chain ends.
-int AptActionInterpreter::instanceOfChainWalk(AptValue* pObject, AptValue* pClass)
+// ARTIST 82AEA5B8. Values carrying native hashes use the class's prototype.
+// The other values use a raw type comparison, with two defined-type exclusions.
+int AptActionInterpreter::isObjectOfType(AptValue* pObject, AptValue* pClass)
 {
-    int nResult = 0;
+    if (!pObject->ContainsNativeHashVirtual() || !pClass->ContainsNativeHashVirtual())
+    {
+        const AptVirtualFunctionTable_Indices eType = pObject->getVtblIndex();
+        if (pObject->isScriptFunction() || (eType == AptVFT_Object && pObject->getIsDefined()))
+            return 0;
+        return eType == pClass->getVtblIndex();
+    }
 
-    AptNativeHash* const pClassHash = pClass->GetNativeHashVirtual();   // vtbl[2]
-    AptValue* const pNeedle = pClassHash->mpPrototype;                  // +0xC
+    AptValue* const pPrototype = pClass->GetNativeHashVirtual()->mpPrototype;
 
     const AptVirtualFunctionTable_Indices eType = pObject->getVtblIndex();
     if ((eType == AptVFT_CharacterInstHandle && pObject->getIsDefined())
         || eType == AptVFT_CIHNone)
     {
-        // CIH-family chain walk (no early exit on a match).
-        AptValue* p = pObject;
-        for (;;)
+        // CIH values keep walking even after a match.
+        int nResult = 0;
+        for (AptValue* pLink = pObject->GetNativeHashVirtual()->mp__Proto__; pLink;
+             pLink = pLink->GetNativeHashVirtual()->mp__Proto__)
         {
-            AptNativeHash* const pHash = p->GetNativeHashVirtual();
-            p = pHash ? pHash->mp__Proto__ : 0;                   // +8
-            if (p == 0)
-                break;
-            if (p == pNeedle)
+            if (pLink == pPrototype)
                 nResult = 1;
         }
         return nResult;
     }
 
     if (eType == AptVFT_Object && pObject->getIsDefined())
-        return static_cast<AptObject*>(pObject)->DoesImplementObject(pNeedle) ? 1 : 0;
+        return static_cast<AptObject*>(pObject)->DoesImplementObject(pPrototype);
 
-    // Generic identity walk (step, then compare).
-    for (AptValue* p = pObject;;)
+    // Compare the current link before checking whether it can supply the next.
+    for (AptValue* pLink = pObject->GetNativeHashVirtual()->mp__Proto__; pLink;
+         pLink = pLink->GetNativeHashVirtual()->mp__Proto__)
     {
-        AptNativeHash* const pHash = p->GetNativeHashVirtual();
-        p = pHash ? pHash->mp__Proto__ : 0;
-        if (p == 0)
-            return 0;
-        if (p == pNeedle)
+        if (pLink == pPrototype)
             return 1;
-        if (!(p->getIsDefined() && p->isObject()))   // the in-loop object predicate
-            return 0;
+        if (!pLink->ContainsNativeHashVirtual())
+            break;
     }
-}
-
-int AptActionInterpreter::isObjectOfType(AptValue* pObject, AptValue* pClass)
-{
-    const bool bBothObjects = pObject->getIsDefined() && pObject->isObject()
-                           && pClass->getIsDefined()  && pClass->isObject();
-    if (bBothObjects)
-        return instanceOfChainWalk(pObject, pClass);  // the proto/interface chain walk (isObjectOfType's object arm)
-
-    // Non-object fallback (console LABEL_36 path): a script-function-typed pObject
-    // never matches; otherwise a defined Object value of the same value-type matches.
-    const AptVirtualFunctionTable_Indices eType = pObject->getVtblIndex();
-    if (pObject->isScriptFunction())
-        return 0;
-    if (eType == AptVFT_Object && pObject->getIsDefined())
-        return 0;   // an undefined-class object cannot be an instanceof in this branch
-    if (eType == pClass->getVtblIndex())
-        return 1;
     return 0;
 }
 
