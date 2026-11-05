@@ -1102,8 +1102,8 @@ namespace BrnGame
         // (X360 BOOL == int; the returned bool widens faithfully.)
         int HasGameBeenRebootedDueToInvite();
 
-        // X360 0x823C0278 -- the soft-reboot flag (reads mHardware.mPad94, the launch-data
-        // flag byte at mHardware + 0x94 == game-module + 0x9A1254).
+        // X360 0x823C0278 -- the soft-reboot flag (reads mHardware.mLaunchData.mbIsLocalUserChange,
+        // at mHardware + 0x94 == game-module + 0x9A1254).
         int HasGameBeenSoftRebooted();
         // X360 0x823A9030 -- GameTalk "StopRenderMetrics" receiver: walk the message keys
         // and clear miRenderMetricsRequested on the StopRenderMetrics key. Static (the

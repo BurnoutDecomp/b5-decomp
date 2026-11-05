@@ -703,9 +703,9 @@ namespace BrnGame
         lpDispatch->UnlockForWrite();
         if (mbGameOver)
         {
-            XGetLaunchData(&mHardware, 0x98);
-            mHardware.mPad94 = 1;
-            XSetLaunchData(&mHardware, 0x98);
+            XGetLaunchData(&mHardware.mLaunchData, sizeof(mHardware.mLaunchData));
+            mHardware.mLaunchData.mbIsLocalUserChange = 1;
+            XSetLaunchData(&mHardware.mLaunchData, sizeof(mHardware.mLaunchData));
             XLaunchNewImage(mHardware.macCommandLine, 0);
         }
     }
@@ -3018,7 +3018,7 @@ namespace BrnGame
                         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModuleUpdateFunctions.cpp", 71);
                     CgsDev::Assert::EndAssert();
                 }
-                liStartPressedPort = lpLaunchData->mdwUserIndex;
+                liStartPressedPort = static_cast<s32>(lpLaunchData->mLaunchData.mdwUserIndex);
                 miInputModuleState = E_INPUTBINDSTATE_START_PRESSED;
             }
             else
@@ -3512,10 +3512,10 @@ namespace BrnGame
     }
 
     // @ X360 0x823C0278 - the soft-reboot flag. Reads a single byte at game-module + 0x9A1254,
-    // which is mHardware + 0x94 (the launch-data flag byte BrnHW::System360HW::mPad94).
+    // which is mHardware + 0x94 (the launch-data flag byte BrnHW::LaunchData::mbIsLocalUserChange).
     int BrnGameModule::HasGameBeenSoftRebooted()
     {
-        return mHardware.mPad94;
+        return mHardware.mLaunchData.mbIsLocalUserChange;
     }
 
     // @ X360 0x823A9030 - the game module's GameTalk "StopRenderMetrics" receiver. Walks

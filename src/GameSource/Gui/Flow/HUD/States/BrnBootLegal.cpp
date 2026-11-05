@@ -619,7 +619,8 @@ namespace BrnGui
             {
                 const BrnHW::System360HW* lpSoftRebootData = gpBurnoutGame->GetSoftRebootData();
                 CGS_ASSERT(lpSoftRebootData != 0, "lpLaunchData");
-                SetPlayer0ControllerPortPayload lPort(lpSoftRebootData->mdwUserIndex);
+                SetPlayer0ControllerPortPayload lPort(
+                    static_cast<s32>(lpSoftRebootData->mLaunchData.mdwUserIndex));
                 SetPlayer0ControllerPortRecord40 lPortRecord(lPort);
                 mpStateInterface->GetOutputEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lPortRecord), 40,
