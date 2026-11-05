@@ -181,9 +181,15 @@ void Vehicle::SetSpeed(VecFloat lfSpeed)
 
 Vector3 Vehicle::CalcTowBarPos(Matrix44Affine lTransform, const VehicleTypeRuntime* lpTypeRuntime) const
 {
-    (void)lTransform;
-    (void)lpTypeRuntime;
-    { const Vector3 lResult(0.0f, 0.0f, 0.0f); return lResult; }
+    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(lpTypeRuntime != 0, "lpVehicleTypeRuntime");
+    CGS_ASSERT(rw::math::vpu::IsValid(lTransform), "RwMath::IsValid( lTransform )");
+
+    // ARTIST 8270FBE8..8270FC04: pivot lane 0 * At + Pos, including W.
+    Vector3 lResult;
+    lResult.mV = __vmaddfp(lTransform.At().mV, lpTypeRuntime->GetCabPivotDistance().mV,
+                           lTransform.Pos().mV);
+    return lResult;
 }
 
 void VehicleAxles::UpdateRearAxleForRoadCollision(const Param* lpParam, Hull** lpapHulls)

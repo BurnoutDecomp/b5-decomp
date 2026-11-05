@@ -16,7 +16,7 @@
 //
 //   countdown branch:
 //     f0 = this->mfTimer - lfTimeDelta                lfs/fsubs/stfs 0(this)
-//     if (f0 <= 0.0f) {                               fcmpu f0,0.0 ; bgt end
+//     if (!(f0 > 0.0f)) {                             fcmpu f0,0.0 ; bgt end
 //        flags = this[+5]                             lbz r11, 5(this)
 //        this->mfTimer = 0.0f                         stfs f31, 0(this)
 //        this->muState = 0                            stb 0, 4(this)
@@ -41,7 +41,7 @@ void TrafficLightRuntimeState::Update(f32 lfTimeDelta)
     if (muState == E_STATE_COUNTDOWN)
     {
         mfTimer = mfTimer - lfTimeDelta;
-        if (mfTimer <= 0.0f)
+        if (!(mfTimer > 0.0f))
         {
             mfTimer = 0.0f;
             muState = E_STATE_IDLE;
@@ -72,9 +72,7 @@ void TrafficLightRuntimeState::Update(f32 lfTimeDelta)
 //
 // Caller: TrafficEntityModule::UpdateJunctions @0x82723EA0, once per active hull after its junction loop, with
 // mfSimTimeSinceLastDecision (0x827244A4 `lfs f1, 0(r16)`, r16 == +0x713F8): an AMBER light runs down to RED.
-// NOTE: Update above keeps the PC's `mfTimer <= 0.0f` test, where the console's `bgt` (0x827516D4) lets a NaN
-// timer fall through to RED. That line is Niaz's; its fix is a HANDOFF entry (scratch/CRASHPARITY_0922/fixes/
-// FX-NET.wip/HANDOFF.md, FX-TRAFFICLIGHTS), so this caller inherits the PC polarity until it lands.
+// The countdown expires for unordered timers too: the original bgt does not branch on NaN.
 // ============================================================================
 void TrafficLightManager::UpdateHull(const Hull* lpHull, f32 lfTimeDelta)
 {
