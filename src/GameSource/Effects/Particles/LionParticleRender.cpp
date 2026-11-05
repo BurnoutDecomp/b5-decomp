@@ -44,29 +44,6 @@ namespace renderengine
 // file-scope pointer the platform layer fills; on PC it resolves to the active device.
 
 
-// -------------------------------------------------------------------------------------------
-// dword_83010F20 -- the process-wide DEFAULT blend-state template. Its console .data home is
-// THIS translation unit (the LionParticleRender TU), which is why BrnLionBlendRenderer.cpp
-// externs it rather than owning it; BrnGraphics::LionBlendRenderer::EndRendering @0x8227E610
-// binds it at every batch end (`bl ImRendererBase::SetState` @0x82276D08 with r4 == this word).
-//
-// ⛔ IT READS NULL ON THIS BUILD, AND THAT IS A MEASURED FACT ABOUT THE STATE LIBRARY, NOT A
-// PLACEHOLDER FOR THIS PATH. The entry belongs to the console's render-state table, and nothing
-// on this build populates that table: shadowingdevice.cpp:614-628 records the same thing for
-// its sibling (CgsBlendStateFactory::Construct has a body but no caller), which is exactly why
-// shadow::Device::Xbox2SetStateLowLevelShadowed carries a null guard the console does not have.
-// A null bind there invalidates the shadow cache and binds nothing -- the console's own
-// semantics for an unset state -- so this is inert rather than wrong.
-//
-// ⛔⛔ DO NOT POINT IT AT CgsGui::gpGuiBlendStateStandard, which names the SAME console word
-// (dword_83010F20) for the 2D GUI path. That one is an opaque four-word SENTINEL over static
-// storage whose own banner says "nothing may dereference them" -- the GUI dispatch only compares
-// its identity. The blend applier here DOES dereference (eighteen words), so adopting it would
-// read past a 16-byte array and bind garbage.
-// DELETE-WHEN a caller fills the render-state table.
-// -------------------------------------------------------------------------------------------
-renderengine::BlendMaterialState* dword_83010F20 = 0;
-
 namespace BrnParticle
 {
 namespace
@@ -237,13 +214,10 @@ namespace
 
     // The BlendStateParameters block the console default-constructs on the stack before it
     // reads the shared template. Every value is from the X360 prologue @0x82280CA4..0x82280D14.
-    // ⭐ IT IS ALSO, EXACTLY, THE TEMPLATE. dword_83010F20 is built by
-    // ImRendererBase::ConstructOnceOnly @0x827F1C20 as ConstructBlendState(alloc, 6, 7, 0), and
-    // that builder's own word is (6 & 0x1F) | (32*((7*8) & 0x7F8)) & 0xFFE0 | 0x07060000 ==
-    // 0x07060706 with the same colour-write / alpha-func / blend-factor tail
-    // (CgsImRendererBlendState.cpp). So the GetParameters read below overwrites this block with
-    // its own contents, which is why skipping it when the state library is unbuilt is provably
-    // inert rather than a silent default.
+    // The standard state-library entry is built by ImRendererBase::ConstructOnceOnly @0x827F1C20
+    // as ConstructBlendState(alloc, 6, 7, 0), and its first blend word is
+    // (6 & 0x1F) | (32*((7*8) & 0x7F8)) & 0xFFE0 | 0x07060000 == 0x07060706. These local defaults
+    // reproduce that standard template before the material-specific overrides below.
     const u32 KU_TEMPLATE_BLEND_WORD = 0x07060706u;   // SRC_ALPHA / INV_SRC_ALPHA, add, both halves
 
     void DefaultConstructBlendParameters(renderengine::BlendStateParameters& arParams)
