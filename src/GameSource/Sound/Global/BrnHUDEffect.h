@@ -29,6 +29,8 @@
 //   Attach()                          @ 0x8269C3C8
 //   Detach()                          @ 0x826F5EF0
 //   ProcessUpdate()                   @ 0x826E7220
+//   UpdateParams(f32)                 @ 0x827037E0 (export hole; raw ARTIST PPC)
+//   UpdateSlipStreaming(f32)          @ 0x82701BA8
 //   Notify(const MessageHeader*)      @ 0x826F5F68
 //   FindEventMapping(...)             @ 0x82686928
 //   IsReTrigger(const GuiAudioEvent*) @ 0x82686858
@@ -38,14 +40,9 @@
 //   GameModeData::GameModeData        @ 0x826AFE88
 //   GameModeData::Reset               @ 0x826977D8
 //
-// DEFERRED (declared, NOT bodied -- they hang off UpdateGameModeHud @0x82702670,
-// which reads the RootInputBuffer::ScoringOutputInterface; that interface is not
-// reached by this slice): UpdateGameModeHud, UpdateStuntRun @0x82701598,
-// UpdateShowtime @0x82701830, UpdateRoadRage @0x82701AA0, UpdateBurningRoute,
-// UpdateEventTimeRemaining @0x826FE400, UpdateSlipStreaming @0x82701BA8,
-// PlaySound(ePresentationSampleTags, u8), FindPauseEventMapping. They are the
-// score-tick / countdown / stunt / showtime / road-rage lane; the message-driven
-// GUI sting lane (Notify -> FindEventMapping -> maVoices) is complete here.
+// The message-driven GUI sting lane (Notify -> FindEventMapping -> maVoices),
+// convoy slipstream lane (UpdateParams -> UpdateSlipStreaming), and score/countdown
+// lane (UpdateParams -> UpdateGameModeHud) are reconstructed here.
 //
 // LAYOUT (X360 byte offsets, all cross-checked between FOUR functions at once --
 // the virtuals receive the EffectBase sub-object pointer, which the asm shows as
@@ -56,7 +53,8 @@
 //     +0x228 ( 552)  mau8MixerOutputs[3]    (Attach `*(v6 - 3) = 3`)
 //     +0x22B ( 555)  mau8ChokeGroups[3]     (Attach `*v6++ = 0`)
 //     +0x230 ( 560)  maGameModeVoices[4]    (Detach `a1 + 556`, stride 92)
-//     +0x3A0 ( 928)  mMusicStream           (Attach LP 96000.0 / priority 2)
+//     +0x3A0 ( 928)  mMusicStream           (0x60 bytes; Attach LP 96000 / priority 2)
+//     +0x400 (1024)  mSlipstreamAverage     (0x30 bytes; samples/cursor/mean)
 //     +0x430 (1072)  mGameModeData          (Reset @0x8270275C `addi r3, r26, 0x430`;
 //                                           every member below lines up with the
 //                                           console's a1+1072.. cursors, e.g.
@@ -187,15 +185,15 @@ struct HUDEffect : public BrnSound::Logic::BrnEffectObject
     virtual void ProcessUpdate();
     // @ 0x826F5F68 -- the GUI audio event (sound message 5) entry point.
     virtual void Notify(const CgsSound::Io::MessageHeader* apMessageHeader);
-    // Advance mfTimeSinceLastTrigger (the re-trigger guard IsReTrigger tests).
+    // Advance the re-trigger timer and update the slipstream/game-mode HUD lanes.
     virtual void UpdateParams(f32 af32DeltaTime);
 
-    // @ 0x82686BA8. Slipstream-audio proximity/alignment weight for the car in front.
-    // The three Vector3 args arrive in vector registers (v1/v2/v3); `this` (r3) is
+    // @ 0x82686BA8. Slipstream-audio weight from player position, predicted front-car
+    // position, and negated normalized front-car direction in v1/v2/v3. `this` (r3) is
     // unused by the body. DWARF renders the return as `double`.
-    f64 GetSlipstreamAmount( Vector3 lCarInFrontVelocity,
-                             Vector3 lOwnWeightedVelocity,
-                             Vector3 lNegatedDirection );
+    f64 GetSlipstreamAmount(Vector3 lPlayerPosition,
+                            Vector3 lFrontPredictedPosition,
+                            Vector3 lNegatedFrontDirection);
 
 private:
     // @ 0x82686928 (DWARF BrnHUDEffect.cpp:402).
@@ -205,11 +203,12 @@ private:
     // @ 0x82686858 (DWARF BrnHUDEffect.cpp:351).
     bool IsReTrigger(const GuiAudioEventRecord* apAudioEvent) const;
 
-    // ---- the game-mode HUD audio lane (landed 2026-09-16) ----------------------
-    // Reached ONLY from UpdateParams @0x827037E0 -> UpdateGameModeHud, which is why
-    // none of it ran while that function was one statement short. See the banner over
-    // UpdateParams in the .cpp.
+    // ---- the game-mode HUD audio lane ------------------------------------------
+    // Called from UpdateParams after the convoy slipstream update.
     void UpdateGameModeHud(Module::SoundLogicModule* apModule);   // @0x82702670
+    // ARTIST @0x82701BA8. The member type/extent is fixed by constructor, Attach,
+    // and Record accesses; DecFIGS does not supply the original member identifier.
+    void UpdateSlipStreaming(f32 afDeltaTime);
     void UpdateShowtime();                                        // @0x82701830
     void UpdateRoadRage(const Module::Io::RootInputBuffer::ScoringOutputInterface* apScoring);   // @0x82701AA0
     void UpdateStuntRun(const Module::Io::RootInputBuffer::ScoringOutputInterface* apScoring);   // @0x82701598
@@ -234,12 +233,15 @@ public:
     u8                            mau8MixerOutputs[E_NUM_VOICES];     // :333
     u8                            mau8ChokeGroups[E_NUM_VOICES];      // :334
     CustomHudVoice                maGameModeVoices[E_NUM_GAME_MODE_VOICES]; // :336
-    // FLAG (not in the PS3 DWARF member list, but ATTESTED by the X360): a 96-byte
-    // MusicStream sits between maGameModeVoices and mGameModeData -- Attach writes
-    // its low-pass 96000.0f / priority 2 / cleared queue exactly like
-    // MusicStream::Prepare does, and ProcessUpdate writes its volume from the DMix
-    // output slot. Materialised by name from the committed BrnMusicStream home.
+    // ARTIST constructor/Attach and MusicStream::Update prove this 0x60-byte
+    // subobject begins at +0x3A0. The following 0x30-byte average is a separate
+    // HUDEffect region, not part of MusicStream.
     MusicStream                   mMusicStream;
+    // ARTIST UpdateSlipStreaming records at this+0x400 and reads the mean at
+    // +0x42C; ctor and Attach clear the same 10 samples, cursor and mean. The
+    // original member name is absent from the DecFIGS HUDEffect declaration, so
+    // this is a descriptive name for the attested Average<10,f32> owner/span.
+    CgsSound::Utils::Average<10, f32> mSlipstreamAverage;
     GameModeData                  mGameModeData;                      // :338
     Attrib::Gen::presentationcomponent mHudMessageData;               // :339
     GuiAudioEventRecord           mLastPlayedEvent;                   // :340
@@ -247,10 +249,6 @@ public:
     f32                           mfTimeSinceLastTrigger;             // :342
     u32                           muRoundRobin;                       // :343
 
-    // [DIAG] NOT IN THE X360 BINARY -- last observed wrapper stage per GUI voice,
-    // so the [hud-sound-voice] witness can fire on the TRANSITION into PLAYING
-    // instead of once per frame. Costs 3 bytes and is never read by game logic.
-    u8                            mauLastVoiceState[E_NUM_VOICES];
 };
 
 } // namespace Logic

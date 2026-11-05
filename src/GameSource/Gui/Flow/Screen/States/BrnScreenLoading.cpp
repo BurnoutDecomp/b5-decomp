@@ -144,9 +144,15 @@ namespace BrnGui
         // ---- GuiCache boundary (X360 members past the committed layout tail; same
         //      FLAG'd discipline as BrnBootProfile.cpp / BrnInGame.cpp) ----------------
 
-        bool CacheIsPerformInviteReceived(const GuiCache* /*lpCache*/) { return false; }
+        bool CacheIsPerformInviteReceived(const GuiCache* lpCache)
+        {
+            return lpCache->IsPerformInviteReceived();
+        }
 
-        bool CacheIsStartingGameDueToPlayerJoin(const GuiCache* /*lpCache*/) { return false; }
+        bool CacheIsStartingGameDueToPlayerJoin(const GuiCache* lpCache)
+        {
+            return lpCache->IsStartingGameDueToPlayerJoin();
+        }
     }
 
     // @ 0x820666FC (.rdata, read from the image): the two observed ids, in table order.

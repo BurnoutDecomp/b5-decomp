@@ -14,7 +14,7 @@
 // CgsCommon.h (DWARF CgsCommon.h:25-729) is large: typedef Ident,
 // KU32_DEFAULT_ALIGNMENT, the reserved-Ident constants (K_MIN_RESERVED_IDENT /
 // K_INIT_SND9_SUBMIX_IDENT = 0xFFFFFFF0), K_NULL_NAME, the remaining Name ctors
-// (Name() / Name(uintptr_t) / Name(const Name&)) / operators / GetValue /
+// (Name() / Name(uintptr_t)) / operators / GetValue /
 // GetCString / IsGenuine / Dump / TraverseHashTable / PointerToName / EndianSwap,
 // HashNode::HashNode / Clear / Dump / Traverse, and HashTable::Retrieve / Dump /
 // Traverse, plus the whole Playback subsystem (Entity, ContentClass, Slot,
@@ -46,6 +46,9 @@ public:
     // inlined static-init pseudocode (mHash = MakeHash(...)). FLAG: home-grow added
     // for the AEMS param-index TUs (BrnAutoGenAemsParameterIndexes.*).
     explicit Name(const char* lkpacName) { mHash = MakeHash(lkpacName); }
+
+    // CgsCommon.h:140; a named copy preserves the X360 by-value pointer ABI.
+    Name(const Name& lkrOther) : mHash(lkrOther.mHash) {}
 
     // CgsCommon.h. Construct a Name directly from a raw interned value (a 32-bit
     // Ident). FLAG: ADDITIVE home-grow for the sound-playback Module CreateVoice TU,
