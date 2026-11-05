@@ -222,7 +222,9 @@ void AptActionInterpreter::InitDispatchTable()
     sGlobalTable[0x44] = &_FunctionAptActionTypeOf;
     sGlobalTable[0x46] = &_FunctionAptActionEnumerate;
     sGlobalTable[0x49] = &_FunctionAptActionEquals2;
+    sGlobalTable[0x54] = &_FunctionAptActionInstanceOf;
     sGlobalTable[0x55] = &_FunctionAptActionEnumerate2;
+    sGlobalTable[0x66] = &_FunctionAptActionStrictEquals;
 
     // -- calls / construction --
     sGlobalTable[0x3D] = &_FunctionAptActionCallFunction;

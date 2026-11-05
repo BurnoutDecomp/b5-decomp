@@ -296,12 +296,8 @@ public:
     // isObjectOfType @0x82AEA5B8 -- AS `instanceof`: walk pObject's prototype /
     // interface chain looking for pClass's prototype; type-aware fallback for the
     // non-object cases. Returns 1 on a match.
-    int isObjectOfType(AptValue* pObject, AptValue* pClass);
+    static int isObjectOfType(AptValue* pObject, AptValue* pClass);
 
-    // instanceOfChainWalk -- isObjectOfType @0x82AEA5B8's object arm: the prototype /
-    // interface chain walk that latches on pClass's prototype (the needle). Static:
-    // it reads only the two value arguments, no interpreter state.
-    static int instanceOfChainWalk(AptValue* pObject, AptValue* pClass);
     // GetNodeFrameContextHash -- setVariable @0x82B03374's node branch: a node's frame-
     // context is its DISPLAY PARENT's char-inst property hash (an AS timeline variable
     // lives on the enclosing clip); null when the chain breaks. Static: reads only the
@@ -618,6 +614,7 @@ public:
     static void _FunctionAptActionEnumerate            (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionEnumerate2           (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionCastOp               (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionInstanceOf           (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionTypeOf               (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
     // URL / trace / equality opcodes:
@@ -625,6 +622,7 @@ public:
     static void _FunctionAptActionGetUrl2              (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionTraceStart           (AptActionInterpreter* pInterp, LocalContextT* pContext);
     static void _FunctionAptActionEquals2              (AptActionInterpreter* pInterp, LocalContextT* pContext);
+    static void _FunctionAptActionStrictEquals         (AptActionInterpreter* pInterp, LocalContextT* pContext);
 
     // ---- state ------------------------------------------------------------
     // Full layout mapped from initialize() @0x7F29D4: the interpreter owns five
