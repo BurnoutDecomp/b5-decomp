@@ -131,26 +131,6 @@ namespace BrnGui
         typedef CgsGui::GuiEventPlayMusicOnMenuStream MusicOnMenuStreamEvent;
     }
 
-    // ---- the GuiCache boundary this state touches (X360 far members; same FLAG'd
-    // pending the native cache methods) ------------------------------------------------
-    namespace
-    {
-        void CacheSetPostTitlePhase(GuiCache* /*lpCache*/) {}
-
-        // ⭐⭐ [profile-save 2026-08-27] X360 `lbz r11, 0x4B78(r11)` @0x8247E408 --
-        // *(cache+19320), the "play the post-title intro video" gate, NOW A REAL MEMBER
-        // (GuiCache::mbPlayIntroVideo). It is not a constant on the console: GuiCache::Construct
-        // @0x82505AF0 seeds it 1, and ProfileManager::ReportTaskCompleted @0x82514024 overwrites
-        // it with BrnProgression::Profile::mbIsNewProfile every time a profile LOADS -- so a
-        // returning player's boot clears it and this state posts phase-complete instead of
-        // playing "intro". The old `return true` leaf is what made the montage replay on every
-        // boot regardless of the save.
-        bool CacheShouldPlayIntroVideo(const GuiCache* lpCache)
-        {
-            return lpCache == 0 || lpCache->ShouldPlayIntroVideo();   // X360 unconditional read
-        }
-    }
-
     // @ 0x8247E2B8 -- consume this frame's events, then walk the post-title phases:
     //   E_IDLE: mark the cache's post-title phase; if the intro video is enabled, drop
     //     the loading screen (command 20), post the empty-name hash (zero: silence), and
@@ -171,8 +151,8 @@ namespace BrnGui
         {
             if (mpGuiCache == 0)
                 break;
-            CacheSetPostTitlePhase(mpGuiCache);
-            if (CacheShouldPlayIntroVideo(mpGuiCache))
+            mpGuiCache->SetAllowingSignInOutEvents(true); // ARTIST 0x8247E400
+            if (mpGuiCache->ShouldPlayIntroVideo())
             {
                 BrnGui::GuiEventPlayVideo lPlayEvent;
                 lPlayEvent.mVideo.Prepare();

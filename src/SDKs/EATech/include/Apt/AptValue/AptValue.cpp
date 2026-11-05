@@ -278,9 +278,9 @@ void AptValue::AddRef()
 // Release @0x82AE31D0 -- drop one reference; on the last release tear the value
 // down. Faithful to the X360 control flow:
 //   * decrement mnReferenceCount; only the last release (old count == 1) proceeds;
-//   * while AptGC::CleanAll runs (sbSuspendRefcountDeletions): call the scalar-
-//     deleting-destructor virtual (vtbl +0x30) and, if it consumed the value
-//     (non-null `this` return), stop -- otherwise fall through to the normal path;
+//   * during GC teardown (sbSuspendRefcountDeletions), leave GC values for the
+//     sweep. IsGarbageCollected (vtbl +0x30) returns false for non-GC values,
+//     which continue through the normal release path.
 //   * a max-hit value (mnMaxRefCountHit, bit 24) is permanent: re-pin its count to
 //     MAX_REFCOUNT and stop (never deleted);
 //   * if the value does NOT allow delayed deletion (mbAllowsDelayedDeletion, bit
@@ -290,9 +290,7 @@ void AptValue::AddRef()
 //     (vtbl +0x2C); when running OFF the GC thread -> queue into the deferred-
 //     release vector if it has room (SetReleaseAtEnd + push), and only if it is
 //     full roll the queue back (ClearReleaseAtEnd) and tear down now (vtbl +0x2C).
-// X360 vtbl: slot +0x30 = the scalar-deleting destructor (suspend path); slot
-// +0x2C = the normal teardown == ForceDelete, NOT a bare `delete this`: the shipped
-// slot body (X360 0x82AD4DF8; XB1 slot +88 = sub_140837DE0, byte-identical shape)
+// X360 vtbl: slot +0x2C is ForceDelete. Its body at 0x82AD4DF8
 // is the composite `vtbl[PreDestroy](this); vtbl[DestroyGCPointers](this);
 // vtbl[deleting-dtor](this, 1)`. Every refcount death therefore runs the full GC
 // teardown (parent release + char-inst/render-item destruction), which a bare
@@ -307,17 +305,9 @@ void AptValue::Release()
     if (lnOldCount != 1u)
         return;
 
-    // During a GC CleanAll the collector drives destruction via the scalar-deleting
-    // destructor (vtbl +0x30). X360: `if (DeleteThis(this) != 0) return;` -- a
-    // scalar-deleting destructor always returns its (non-null) receiver, so the
-    // console's null test is vestigial codegen and the branch is always taken; the
-    // void DeleteThis + unconditional return is behaviour-identical. (CleanAll is
-    // live -- AptGC.cpp @0x82AE4A40 -- and drives this path at shutdown.)
-    if (sbSuspendRefcountDeletions)
-    {
-        DeleteThis();   // X360 `result = (*(*this+0x30))(this)`; non-null -> return
+    // ARTIST 0x82AE3210–24 tests the boolean result of IsGarbageCollected.
+    if (sbSuspendRefcountDeletions && IsGarbageCollected())
         return;
-    }
 
     // A value that hit MAX_REFCOUNT is permanent -- re-pin its count, never delete.
     if (GetMaxRefCountHit())           // X360 ((v3 >> 24/bit) & 1) != 0 (the 0x80 bit)

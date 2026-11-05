@@ -316,6 +316,8 @@ namespace BrnGui
         // GameState->Gui bridge lands (RecEvent's case 77 already consumes it).
         meCarSelectType = 1;   // BrnGameState::GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD
 
+        mbIsAllowingSignInOutEvents = false; // ARTIST 0x82505AC0
+
         // [profile-save] X360 GuiCache::Construct @0x82505AF0: `stb r11, 0x4B78(r31)` with
         // r11 == 1 -- the post-title intro video plays by default, and only a LOADED profile
         // whose mbIsNewProfile is clear turns it off (ProfileManager::ReportTaskCompleted's
@@ -2595,6 +2597,14 @@ namespace BrnGui
             // Event 81 (table index 77) reaches 0x8250EE20 and copies payload word 0 to
             // this+0x4B70 (meCarSelectType).
             meCarSelectType = *reinterpret_cast<const s32*>(lpEvent);
+            break;
+        case 86:
+            // ARTIST table index 82 reaches 0x8250F24C and stores 1 at this+0x12F0B.
+            mbPlayerSignOutReported = true;
+            break;
+        case 87:
+            // ARTIST table index 83 reaches 0x8250F230 and stores 1 at this+0x12F0A.
+            mbPlayerSignInReported = true;
             break;
         case 396:
         {
