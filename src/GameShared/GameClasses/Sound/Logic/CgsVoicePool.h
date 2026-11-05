@@ -10,7 +10,7 @@
 // SetParameter), ages/retires idle slots each frame (Update), and binds/unbinds its
 // slot array (Prepare / Release). Used by sound effect leaves (e.g.
 // BrnSound::Vehicles::Wheels::InAirEffect). VoicePool<N> is the concrete pool that
-// embeds the N-slot array and forwards Prepare/Release to the base.
+// embeds the N-slot array and forwards explicit Prepare/Release to the base.
 //
 // NOTE: the previously-committed CgsVoicePool.cpp carried an INLINE anonymous
 // VoicePoolBase{mPad[8]; mpVoices; muVoiceCount} + IsPlaying only. This header
@@ -123,9 +123,8 @@ protected:
 };
 
 // -----------------------------------------------------------------------------
-// VoicePool<N> -- the concrete pool: it embeds the N-slot PooledVoice array and,
-// on construction, binds it into the base (Prepare), tearing it down (Release) at
-// destruction. The X360 emits VoicePool<4>::VoicePool<4> @ 0x826E5328 and
+// VoicePool<N> embeds the slots and binds them on explicit Prepare.
+// The X360 emits VoicePool<4>::VoicePool<4> @ 0x826E5328 and
 // ~VoicePool<4> @ 0x826E5370 (embedded by BrnSound::Vehicles::Wheels::InAirEffect).
 // The ctor/dtor bodies live in CgsVoicePool.cpp (explicit N==4 instantiation).
 // -----------------------------------------------------------------------------
@@ -133,8 +132,8 @@ template <u32 N>
 class VoicePool : public VoicePoolBase
 {
 public:
-    VoicePool();            // @ 0x826E5328 for N==4  (binds maVoices via Prepare)
-    virtual ~VoicePool();   // @ 0x826E5370 for N==4  (Release + per-slot teardown)
+    VoicePool();            // @ 0x826E5328 for N==4
+    virtual ~VoicePool();   // @ 0x826E5370 for N==4
 
     // InAirEffect::Attach supplies the owning logic module after the effect has
     // been prepared.  The console stores that pointer in VoicePoolBase and then
@@ -142,6 +141,8 @@ public:
     bool Prepare(Module* apLogicModule)
     {
         mpLogicModule = apLogicModule;
+        muPooledVoiceCount = 0;
+        muDebugFrameIndex = 0;
         return VoicePoolBase::Prepare(maVoices, N);
     }
 

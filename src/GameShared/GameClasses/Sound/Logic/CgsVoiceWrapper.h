@@ -135,7 +135,14 @@ public:
     const CreateParams& GetCreateParams() const { return mCreateParams; }
     u32 GetOptionalParam() const { return mu32OptionalPlayParam; }
 
-    void ResetDeferredState() { Release(); mCreateParams.Clear(); }
+    // ARTIST VoicePoolBase::Prepare resets these fields without releasing handles.
+    void ResetDeferredState()
+    {
+        mbPlay = false;
+        mu32OptionalPlayParam = 0;
+        meUpdateStage = E_UPDATE_STAGE_IDLE;
+        mCreateParams.Clear();
+    }
 
 private:
     CreateParams mCreateParams;             // X360 +0x04

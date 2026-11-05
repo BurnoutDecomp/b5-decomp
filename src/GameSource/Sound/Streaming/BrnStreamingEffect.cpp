@@ -54,14 +54,10 @@ namespace Streaming
 // GetRequest() asserts non-null); the tail effects are the embedded VoiceWrapper
 // sub-object construction and the embedded streamsettings sub-object construction.
 //
-// FLAG (un-homed leaf members): the additional inlined leaf scalar zero-inits (the
-// two f32 @ +0x1C/+0x20, the two s16 @ +0x10/+0x12, the word/byte fields @
-// +0x08/+0x24/+0x28/+0x30/+0x34, and the word run @ +0x38..+0x60 plus the -1
-// sentinel @ +0x64) target un-homed leaf members between mpState and mVoiceWrapper;
-// their names/types are un-homed (no DWARF, no Feb-2007 source for this TU). Per the
-// project anti-fabrication rule they are NOT invented as named fields and NOT
-// raw-offset-hacked: only the base construction, mpState's nullptr-init, the
-// VoiceWrapper construction and the streamsettings construction are bodied.
+// The inlined stores through +0x34 are BrnEffectObject base state; +0x38..+0x64
+// initializes the twelve words of mCreateParams (including miSendIndex = -1).
+// The typed base and mCreateParams constructors below reproduce them. ARTIST makes
+// no stores to the streaming tail after constructing streamsettings at +0xB8.
 //
 // The tail `Attrib::Gen::streamsettings::streamsettings(this+0xB8, 0, 0)` is the
 // AttribSys-generated ctor (@0x82697400, homed in Generated/classes/streamsettings.h)
@@ -73,13 +69,6 @@ StreamingEffect::StreamingEffect()
     , mCreateParams()
     , mVoice()
     , mStreamSettings()
-    , mfElapsedTime(0.0f)
-    , mfTimeThroughFade(0.0f)
-    , mfGain(0.0f)
-    , mfGainPreFade(0.0f)
-    , mVoiceId(static_cast<CgsSound::Logic::Command::QueueElement>(-1))
-    , mbBufferReleased(false)
-    , meDiagLastStage(CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_IDLE)  // [DIAG]
 {
 }
 
@@ -220,16 +209,6 @@ void StreamingEffect::ProcessUpdate()
 
     mVoice.Update();
     const CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE leStage = mVoice.GetUpdateStage();
-
-    // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). EDGE-TRIGGERED: one line per
-    // VoiceWrapper stage transition for this effect. Names the stage number, so a
-    // stream stuck at 4 (E_UPDATE_STAGE_WAIT, content never IsLoaded) is visible as a
-    // stage that stops advancing, not as an absence of sound.
-    if (leStage != meDiagLastStage)
-    {
-        meDiagLastStage = leStage;
-
-    }
 
     if (leStage != CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_IDLE &&
         leStage != CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_FINISHED)

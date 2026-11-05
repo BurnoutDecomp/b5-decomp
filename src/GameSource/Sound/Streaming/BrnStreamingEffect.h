@@ -37,13 +37,9 @@
 // ExplosionEffect). mpState (the +0x0C member GetRequest() asserts non-null) is
 // nulled by the ctor and read by name in GetRequest().
 //
-// FLAG (un-homed leaf members): the ctor's remaining inlined leaf scalar zero-inits
-// (the two f32 @ +0x1C/+0x20, the two s16 @ +0x10/+0x12, the word/byte fields @
-// +0x08/+0x24/+0x28/+0x30/+0x34, and the run of words @ +0x38..+0x60 plus the
-// sentinel -1 @ +0x64) land in the un-homed gap between mpState (+0x0C) and
-// mVoiceWrapper (+0x68); they have no DWARF / no Feb-2007 source for this TU and are
-// DECLARATION-ONLY / DEFERRED per the project anti-fabrication rule -- identical
-// treatment to the committed ExplosionEffect sibling.
+// The ctor's stores through +0x34 belong to the BrnEffectObject base; +0x38..+0x64
+// is the twelve-word mCreateParams (DWARF CgsVoice::VoiceWrapper::CreateParams).
+// The base and mCreateParams constructors below account for those stores by name.
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): the X360 ctor/accessor reach members by
 // absolute byte offset; on the 64-bit host pointer/vptr widths differ, so members
@@ -104,18 +100,15 @@ protected:
     CgsSound::Logic::VoiceWrapper::CreateParams mCreateParams;
     CgsSound::Logic::VoiceWrapper mVoice;
     Attrib::Gen::streamsettings mStreamSettings;
+    // ARTIST tail after the 0x10-byte streamsettings instance:
+    //   +0xC8 elapsed, +0xCC fade time, +0xD0 gain, +0xD4 pre-fade gain,
+    //   +0xD8 voice id, +0xDC buffer-release flag; object size is 0xE0.
     f32 mfElapsedTime;
     f32 mfTimeThroughFade;
     f32 mfGain;
     f32 mfGainPreFade;
     CgsSound::Logic::Command::QueueElement mVoiceId;
     bool mbBufferReleased;
-
-    // [DIAG] NOT IN THE X360 BINARY. Edge-detector for the opt-in BRN_STREAM_DIAG
-    // stage witness in ProcessUpdate -- the last VoiceWrapper stage this effect
-    // reported, so the log carries one line per TRANSITION instead of one per frame.
-    // Never read by any behavioural arm.
-    CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE meDiagLastStage;
 };
 
 } // namespace Streaming
