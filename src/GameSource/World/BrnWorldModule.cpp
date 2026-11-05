@@ -2291,6 +2291,11 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_TotalUpdate );
     PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_World );
 
+    lpUpdateOutputBuffer->LockForWrite();
+    lpUpdateOutputBuffer->SetPlayerVehicleControls(
+        lpUpdateInputBuffer->GetPlayerVehicleControls());
+    lpUpdateOutputBuffer->UnlockForWrite();
+
     // ---- input bridges ------------------------------------------------------
     CGS_ASSERT( lpPhysicsInput != 0, "lpInputBuffer" );   // X360 CgsModuleUtils.h:238
     lpPhysicsInput->LockForWrite();
