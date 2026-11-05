@@ -755,12 +755,11 @@ bool AptCIH::IsVisible() const
 
 // ---------------------------------------------------------------------------
 // SetGeneralizedProcessDirtyState @0x82ADCA50 -- mark/clear this node's
-// generalized-process-dirty state (mFlagsA bit 7 = self, bit 8 = subtree; x64
-// positions -- the old bit24/bit23 were the X360 big-endian reversal).
+// generalized-process-dirty state (mFlagsA self = 0x01000000, subtree = 0x00800000).
 //
-// SET (bDirty): set bit 7 on this node, then walk up mpDisplayListParent setting
-//   each ancestor's bit 8 until one already has it. CLEAR: clear bit 7; if the
-//   subtree bit (bit 8) is not set, scan this node's children for one still flagged
+// SET (bDirty): set self on this node, then walk up mpDisplayListParent setting
+//   each ancestor's subtree bit until one already has it. CLEAR: clear self; if the
+//   subtree bit is not set, scan this node's children for one still flagged
 //   dirty and return it (the X360's outer parent-walk re-scans the same child list,
 //   so it is a single scan gated on having a parent). The return is `this` on every
 //   path except a found dirty child; the sole callers (SetMask/InsertChild) discard
@@ -772,26 +771,26 @@ AptCIH* AptCIH::SetGeneralizedProcessDirtyState(bool bDirty)
 {
     if (bDirty)
     {
-        mFlagsA |= 0x80u;   // self generalized-process-dirty (bit 7)
+        mFlagsA |= 0x01000000u;   // self generalized-process-dirty
         for (AptCIH* pAncestor = mpDisplayListParent; pAncestor; )
         {
-            if (pAncestor->mFlagsA & 0x100u)   // subtree bit already set -> stop
+            if (pAncestor->mFlagsA & 0x00800000u)   // subtree bit already set -> stop
                 break;
             AptCIH* pNext = pAncestor->mpDisplayListParent;
-            pAncestor->mFlagsA |= 0x100u;       // propagate subtree dirty (bit 8)
+            pAncestor->mFlagsA |= 0x00800000u;       // propagate subtree dirty
             pAncestor = pNext;
         }
         return this;
     }
 
-    mFlagsA &= ~0x80u;   // clear the self bit (bit 7)
-    if (!(mFlagsA & 0x100u))
+    mFlagsA &= ~0x01000000u;   // clear the self bit
+    if (!(mFlagsA & 0x00800000u))
     {
         for (AptCIH* pAncestor = mpDisplayListParent; pAncestor; pAncestor = pAncestor->mpDisplayListParent)
         {
             for (AptCIH* pChild = GetFirstChild(); pChild; pChild = pChild->mpDisplayListNext)
             {
-                if (pChild->mFlagsA & 0x180u)   // child still dirty (bit 8 | bit 7)
+                if (pChild->mFlagsA & 0x01800000u)   // child still dirty
                     return pChild;
             }
         }
@@ -976,7 +975,7 @@ bool AptCIH::ProcessMaskMatricies(AptCIH* /*pRoot*/)
 // 12-entry jump table (word_82145258); the selectors decoded from that table are:
 //   0 _x   1 _y   2 _xscale   3 _yscale   4 _width   5 _height   6 _rotation
 //   7 _alpha   8 colour-translate Red   9 Green   10 Blue   11 _visible
-// Every arm first stamps the AS-changed flag (mFlagsA bit 0; x64 position) from bASChanged, then
+// Every arm first stamps the AS-changed flag (mFlagsA 0x80000000) from bASChanged, then
 // writes through the char inst's WRITABLE position/colour matrix (or SetIsVisible).
 //
 // The console float constants (read from the decrypted XEX rodata):
@@ -1013,7 +1012,7 @@ void AptCIH::SetProceduralProperty(uint32_t nSelector, float fValue, bool bASCha
     if (nSelector > 11u)
         return;
 
-    // Stamp the AS-changed flag (mFlagsA bit 0; x64 position) from bASChanged on every arm.
+    // Stamp the AS-changed flag (mFlagsA 0x80000000) from bASChanged on every arm.
     float f31 = fValue;
 
     switch (nSelector)
@@ -1670,10 +1669,10 @@ AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDe
 //
 // When the early-return gate is armed (AptCIH::sbGeneralisedProcessEarlyReturn) the node
 // is skipped unless it is a defined, non-dead (CIHState != 3), subtree-or-self-dirty
-// (mFlagsA bits 8/7; x64 positions) node whose render item is flagged dirty (mFlags bit31
+// (mFlagsA bits 0x01800000) node whose render item is flagged dirty (mFlags bit31
 // set, or the 0x40000000 process bit). The registered process callbacks (sCIHProcessCb[0..2])
 // run and their results are OR'd; a sprite(5)/animation(9) recurses its child display list.
-// The fold is written back into the subtree-dirty bit (mFlagsA bit 8) and returned (0/1).
+// The fold is written back into the subtree-dirty bit (mFlagsA 0x00800000) and returned (0/1).
 // ---------------------------------------------------------------------------
 
 // The Apt-runtime generalised-process state (console AptCIH::bEarlyReturn /
@@ -1694,9 +1693,9 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
     {
         if (!getIsDefined())
             return 0;
-        if (((mFlagsA >> 1) & 3u) == 3u)          // CIHState 3 == dead (x64 bits 1-2)
+        if (((mFlagsA >> 29) & 3u) == 3u)          // CIHState 3 == dead
             return 0;
-        if ((mFlagsA & 0x180u) == 0u)             // neither subtree (bit 8) nor self (bit 7) dirty
+        if ((mFlagsA & 0x01800000u) == 0u)             // neither subtree nor self dirty
             return 0;
         const uint32_t nItemFlags = mpCharacterInst->GetRenderItem()->mFlags;
         // X360: v5 >= 0 && (v5 & 0x40000000) == 0  ->  skip  (a non-dirty render item).
@@ -1729,17 +1728,17 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
         --AptCIH_snGeneralisedProcessTreeDepth;
     }
 
-    // Fold the OR'd result into the subtree-dirty bit (mFlagsA bit 8), leaving every
+    // Fold the OR'd result into the subtree-dirty bit (mFlagsA 0x00800000), leaving every
     // other bit untouched (the X360 rotate-mask idiom).
-    mFlagsA = (mFlagsA & ~0x100u) | ((nResult << 8) & 0x100u);
-    return (mFlagsA >> 8) & 1u;
+    mFlagsA = (mFlagsA & ~0x00800000u) | ((nResult << 23) & 0x00800000u);
+    return (mFlagsA >> 23) & 1u;
 }
 
 // ===========================================================================
 // ClearCIH @0x82AF6020 -- tear down this node's placed character state.
 //
 // FAITHFUL (from the X360 ARTIST.XEX + PS3 DWARF): early-out on a transitioning
-// (CIHState == 1) or never-constructed (mFlagsA bit 4 / IsInCtor clear) node. Clear the dirty
+// (CIHState == 1) or undefined (AptValue flag) node. Clear the dirty
 // bit, drop the node from the animation director's pending action/new-instance tables
 // and the input-target's drag/focus slots, drop its per-frame timer functions when it
 // is an animation (type tag 9), then -- when it is a mask master or slave -- unwire the
@@ -1842,9 +1841,9 @@ int AptClearCIHDrainQueuesAndZombie(AptCIH* pNode, bool /*bClearGCRoots*/)
 void AptCIH::ClearCIH(bool bClearGCRoots)
 {
     // Transitioning (CIHState == 1) or not defined -> no-op. NB the second test reads the
-    // AptValue base bitfield at +8 (x64: mbIsDefined = bit 4), NOT mFlagsA.
+    // AptValue base bitfield at +4, NOT mFlagsA.
     // console @0x82AF6020: `lwz r11,0xC` CIHState==1, then `lwz r11,4; extrwi. r11,r11,1,4`.
-    if (((mFlagsA & 0x6u) == 0x2u) || !getIsDefined())
+    if (((mFlagsA & 0x60000000u) == 0x20000000u) || !getIsDefined())
         return;
 
     SetDirtyState(false, false);
@@ -1995,7 +1994,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
 
             if (GetZombieCount() > 0)   // re-check: the scrub may have drained it
             {
-                mFlagsA &= ~0x80000000u;   // AS-changed clear (x64 bit 0; the X360 rlwinm 1,31)
+                mFlagsA &= ~0x80000000u;   // AS-changed clear (ARTIST rlwinm 1,31)
                 SetHasClass(0);            // vtable slot 5
                 SetReleaseAtEnd();
                 // Push onto the zombie vector (family-(B): count == mnCapacity,
@@ -2031,7 +2030,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
     AptCharacterInst* pOld = mpCharacterInst;
     if (pOld == 0)
     {
-        // X360/XB1 tail: clear the AS-changed flag inline (x64 mFlagsA bit 0, the
+        // ARTIST tail: clear the AS-changed flag inline (mFlagsA 0x80000000, the
         // X360 `rlwinm 1,31`), then tail-call vtable slot 5 == SetHasClass(0)
         // (X360 0x82AD7418 `insrwi ..,1,3`; XB1 sub_140841530 mask 0x8, the
         // same slot on the LE flag layout). The previous transcription mislabeled

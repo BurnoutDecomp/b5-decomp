@@ -9,20 +9,12 @@
 // AptCharacterInst (which owns the renderable AptRenderItem). The spine is:
 //   AptCIH (scene node) -> AptCharacterInst -> AptRenderItem (renderable).
 //
-// SHAPE + BODIES from the PS3 EXTERNAL ELF (6AptCIH, ~80 methods). LAYOUT
-// pinned against the x64 XB1 build (the Apt rung-1 authority; accessors read the
-// offsets directly): AptValueGC base {vptr@0x00, value bitfield@0x08}, then
-//   +0x10 mInstanceName          EAStringC
-//   +0x18 mFlagsA                asChanged@0 / CIHState@1-2 / hasClass@3 / inCtor@4 /
-//                                inRemList@5 / dirty@6 / genProcDirty self@7 subtree@8 /
-//                                zombieCount@9-24 (signed 16)
-//   +0x1C mFlagsB                createdOnFrame@0-13 (signed 14; ctor inits -1)
-//   +0x20 mpDisplayListPrevious  AptCIH*
-//   +0x28 mpDisplayListNext      AptCIH*
-//   +0x30 mpDisplayListParent    AptCIH*   (the parent node; ref-counted)
-//   +0x38 mpCharacterInst        AptCharacterInst*
-//   +0x40 mpAssetString          lazily-allocated asset-name string (freed by dtor)
-// sizeof == 0x48 (x64: GC-pool alloc of 72 before the ctor, sub_140834A90).
+// ARTIST 32-bit layout: AptValueGC (8 bytes), instance name at +0x08,
+// mFlagsA at +0x0C, mFlagsB at +0x10, followed by the links and instance.
+// mFlagsA: AS changed 0x80000000, state 0x60000000, has class 0x10000000,
+// in constructor 0x08000000, in removal list 0x04000000, dirty 0x02000000,
+// generalized self 0x01000000, subtree 0x00800000, signed zombie count
+// 0x007FFF80. mFlagsB: signed created-on-frame 0xFFFC0000.
 //
 // SCOPE: the node core -- ctor/dtor, the GC virtuals, and the state/flag/link/
 // name accessors. The ~60 behavioural methods (tick / Process* / render /
@@ -52,19 +44,20 @@ static const unsigned int KU_AptEmbeddedMovieOff = 0x10u;
 
 struct AptCIH : public AptValueGC
 {
-    EAStringC         mInstanceName;          // +0x10
-    uint32_t          mFlagsA;                // +0x18
-    uint32_t          mFlagsB;                // +0x1C
-    AptCIH*           mpDisplayListPrevious;  // +0x20
-    AptCIH*           mpDisplayListNext;      // +0x28
-    AptCIH*           mpDisplayListParent;    // +0x30
-    AptCharacterInst* mpCharacterInst;        // +0x38
-    void*             mpAssetString;          // +0x40
+    EAStringC         mInstanceName;          // +0x08
+    uint32_t          mFlagsA;                // +0x0C
+    uint32_t          mFlagsB;                // +0x10
+    AptCIH*           mpDisplayListPrevious;  // +0x14
+    AptCIH*           mpDisplayListNext;      // +0x18
+    AptCIH*           mpDisplayListParent;    // +0x1C
+    AptCharacterInst* mpCharacterInst;        // +0x20
+    void*             mpAssetString;          // +0x24
 
-    // Layout pinned against the x64 XB1 accessors (never called; member body gives
-    // complete-class offsetof context).
+    // ARTIST layout checks.
     static void _AssertLayout()
     {
+        CGS_STATIC_ASSERT(offsetof(AptCIH, mFlagsA) == 0x0C, "ARTIST CIH flags A");
+        CGS_STATIC_ASSERT(offsetof(AptCIH, mFlagsB) == 0x10, "ARTIST CIH flags B");
     }
 
     AptCIH(AptCharacter* pCharacter, AptCIH* pParent);   // @0x824C7C
@@ -215,7 +208,7 @@ struct AptCIH : public AptValueGC
 
     // ---- movie-clip play-head (the per-frame timeline driver) -------------
     // tick @0x82B0BED8 -- advance a sprite(5)/animation(9) movie-clip node one frame
-    // when its dirty bit (mFlagsA bit 6) is set: optionally step the play-head
+    // when its dirty bit (mFlagsA 0x02000000) is set: optionally step the play-head
     // (auto-play, unless stopped or the recorder gate is shut), run the new frame's
     // place/remove commands (doFrameControls) and queue its frame actions
     // (queueFrameActions), fire the enterFrame / construct clip events, recurse the
@@ -242,25 +235,23 @@ struct AptCIH : public AptValueGC
     bool     IsInCtor() const;          void SetInCtor(uint32_t b);           // @0x7DF0E8/0x7DF0F4
     int      GetCreatedOnFrame() const; void SetCreatedOnFrame(int nFrame);   // @0x7DF1D4/0x7DF1E4
 
-    // ActionScript-changed flag (bit 0; x64 GetASChanged @0x140838000 `and eax,1`).
-    // The old bit-31 form was the X360 big-endian bitfield reversal. @0x82AD50E8/0x82AD50C8
+    // ActionScript-changed flag, ARTIST @0x82AD50E8/0x82AD50C8.
     bool GetASChanged() const  { return (mFlagsA & 0x80000000u) != 0; }
     void SetASChanged(bool b)  { mFlagsA = (mFlagsA & ~0x80000000u) | (b ? 0x80000000u : 0u); }
-    // Dirty-state flag (bit 6; x64 GetDirtyState @0x140838870 mask 0x40). @0x82AD5C10 / @0x82AD76B8
-    bool GetDirtyState() const { return (mFlagsA & 0x40u) != 0; }
+    // Dirty-state flag, ARTIST @0x82AD5C10 / @0x82AD76B8.
+    bool GetDirtyState() const { return (mFlagsA & 0x02000000u) != 0; }
     // SetDirtyState @0x82AD76B8 -- set/clear the dirty bit; container/leaf types
     // (shape/dyn-text/static-text) and the empty placeholder never carry it. When
     // dirtying with bPropagate, mark up the parent chain to the first dirty ancestor.
     void SetDirtyState(bool bDirty, bool bPropagate);
-    // "In remove list" flag (bit 5; x64 GetInRemList @0x140838F70 mask 0x20). @0x82AD5188/0x82AD5170
-    bool GetInRemList() const  { return (mFlagsA & 0x20u) != 0; }
-    void SetInRemList(bool b)  { mFlagsA = (mFlagsA & ~0x20u) | (b ? 0x20u : 0u); }
+    // In-remove-list flag, ARTIST @0x82AD5188/0x82AD5170.
+    bool GetInRemList() const  { return (mFlagsA & 0x04000000u) != 0; }
+    void SetInRemList(bool b)  { mFlagsA = (mFlagsA & ~0x04000000u) | (b ? 0x04000000u : 0u); }
 
-    // ---- AptValue object-model overrides (mFlagsA bit 3) ------------------
+    // ---- AptValue object-model overrides ---------------------------------
     // @0x82AD7438/0x82AD7418 -- whether this CIH has an attached AS class.
-    // (x64 sub_140838D50/sub_140841530: mask 0x8.)
-    virtual bool GetHasClass() const  { return (mFlagsA & 0x8u) != 0; }
-    virtual void SetHasClass(int b)   { mFlagsA = (mFlagsA & ~0x8u) | (b ? 0x8u : 0u); }
+    virtual bool GetHasClass() const  { return (mFlagsA & 0x10000000u) != 0; }
+    virtual void SetHasClass(int b)   { mFlagsA = (mFlagsA & ~0x10000000u) | (b ? 0x10000000u : 0u); }
 
     // ---- behavioural batch 2: delegated transform / flag / native-hash ops -
     // All forward through the char inst's (writable) render item or its property
@@ -321,12 +312,12 @@ struct AptCIH : public AptValueGC
     // GeneralisedProcess @0x82AE01B0(per-node) -- the per-node generalised-process pass
     // (the deferred dirty-state / mask-matrix / AS-process callback flush). Runs the
     // registered process callbacks, recurses sprite/animation child lists, and folds the
-    // results into this node's subtree-dirty bit (mFlagsA bit 8). Returns that bit (0/1).
+    // results into this node's subtree-dirty bit (mFlagsA 0x00800000). Returns that bit (0/1).
     // Body in AptCIHBehaviour.cpp.
     unsigned int GeneralisedProcess(AptCIH* pRoot, void* pContext);   // @0x82B...
 
     // SetGeneralizedProcessDirtyState @0x82ADCA50 -- mark this node's generalized-
-    // process-dirty state. When dirtying: set the self bit (mFlagsA bit 7) and
+    // process-dirty state. When dirtying: set the self bit (mFlagsA 0x01000000) and
     // propagate the subtree bit (bit 8) up the parent chain to the first marked
     // ancestor. When clearing: clear the self bit, then (if the subtree bit is clear)
     // scan for a still-dirty child. Returns the offending child, else `this`.
@@ -336,7 +327,7 @@ struct AptCIH : public AptValueGC
     // (the AS setProperty writer, mirror of GetProceduralProperty) by selector. The
     // selector order is the X360 jump table (word_82145258): 0 _x / 1 _y / 2 _xscale /
     // 3 _yscale / 4 _width / 5 _height / 6 _rotation / 7 _alpha / 8 colour-translate R /
-    // 9 G / 10 B / 11 _visible. bASChanged stamps the AS-changed flag (mFlagsA bit 0).
+    // 9 G / 10 B / 11 _visible. bASChanged stamps the AS-changed flag (mFlagsA 0x80000000).
     // Writes through the char inst's writable position/colour matrix (or SetIsVisible),
     // then re-marks the generalized-process dirty state for _visible.
     void SetProceduralProperty(uint32_t nSelector, float fValue, bool bASChanged);   // @0x82AE73C0

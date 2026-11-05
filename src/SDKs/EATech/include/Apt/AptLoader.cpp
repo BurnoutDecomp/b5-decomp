@@ -269,6 +269,8 @@ void AptLoader::CompleteLoad(AptFilePtr filePtr, void* pBase, AptConstFile* pCon
 
     if (pConstFile->mnDataRootOffset != 0)
         pConstFile->mnDataRootOffset -= reinterpret_cast<uintptr_t>(pBase);
+
+    gAptFuncs.pfnFreeConstantTable(pConstFile);
 }
 
 // ---------------------------------------------------------------------------

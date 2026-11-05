@@ -294,7 +294,7 @@ AptRect* AptDisplayList::GetBoundingRect(int nMode, const AptMatrix* pTransform,
 // (the per-frame movie-clip update walk). For each listed AptCIH:
 //   * gate: when bUseDepthLayerMask, only nodes whose render-item depth layer is
 //     set in nDepthLayerMask ((1 << GetDepth()) & nDepthLayerMask); otherwise
-//     skip nodes whose CIHState == 3 (mFlagsA bits 1-2 both set, x64: a fully
+//     skip nodes whose CIHState == 3 (mFlagsA ARTIST bits 1-2 both set: a fully
 //     removed / dead node);
 //   * type gate: only sprite (5) / animation (9) / button (4) character instances
 //     actually tick (those are the only AS-driven container/interactive types);
@@ -316,8 +316,8 @@ int AptDisplayList::tick(int nDepthLayerMask, uint8_t bUseDepthLayerMask)
             if (((1 << pNode->GetCharacterInst()->GetRenderItem()->GetDepth()) & nDepthLayerMask) == 0)
                 continue;
         }
-        // (mFlagsA bits 1-2, x64) == CIHState 3 == a dead/removed node -> skip.
-        else if ((pNode->mFlagsA & 0x6u) == 0x6u)
+        // (ARTIST mFlagsA bits 1-2) == CIHState 3 == a dead/removed node -> skip.
+        else if ((pNode->mFlagsA & 0x60000000u) == 0x60000000u)
         {
             continue;
         }
@@ -513,7 +513,7 @@ AptCIH* AptDisplayList::ReplaceDisplyListItem(AptNativeHash* pParentHash, AptCIH
     }
 
     // No new character: keep the existing node, merge its visual state. An AS write
-    // (mFlagsA bit 0, ASChanged; x64 position) owns the transform -- never clobber it from a frame.
+    // (mFlagsA 0x80000000, ASChanged) owns the transform -- never clobber it from a frame.
     if (pExisting->GetASChanged())
         return 0;
 

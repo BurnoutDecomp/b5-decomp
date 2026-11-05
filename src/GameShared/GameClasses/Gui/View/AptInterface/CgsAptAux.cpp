@@ -195,6 +195,7 @@ namespace CgsGui
         gAptFuncs.pfnDebugSetScreenGrabPending = &AptCallbackDebug::SetScreenGrabPending;
         gAptFuncs.pfnLoadAnimation          = &AptCallbackFile::LoadAnimation;
         gAptFuncs.pfnFreeAnimation          = &AptCallbackFile::FreeAnimation;
+        gAptFuncs.pfnFreeConstantTable      = &AptCallbackFile::FreeConstantTable;
         gAptFuncs.pfnLoadAnimationCompleted = &AptCallbackFile::LoadAnimationCompleted;
         gAptFuncs.pfnGetBytesTotal          = &AptCallbackFile::GetBytesTotal;
         gAptFuncs.pfnGetBytesLoaded         = &AptCallbackFile::GetBytesLoaded;
@@ -210,7 +211,6 @@ namespace CgsGui
 
         // FLAG: the remaining gAptFuncs slots ConstructApt @0x5BA0F8 also installs --
         //   Debug       (pfnAssertFail -- its host body is not in the ARTIST export set)
-        //   File        (pfnFreeConstantTable)
         //   Custom      (pfnCustomControlUpdate / the Zid family -- pfnCustomControlRender
         //                IS installed now, see above)
         //   Deprecated  (pfnUninitializedVarAccess / pfnCustomSavedInputHandler /
@@ -571,6 +571,11 @@ namespace CgsGui
     {
         static_cast<AptDataHeader*>(lpDataBlock)->meCurrentState =
             AptDataHeader::E_APTDATASTATE_LOADED;
+    }
+
+    // ARTIST ConstructApt installs 0x8284CB38, a single blr.
+    void AptCallbackFile::FreeConstantTable(void* /*lpConstTable*/)
+    {
     }
 
     // X360 0x828540E0 (CgsGui::AptCallbackFile::OnUnload). Assert the AptAux singleton
