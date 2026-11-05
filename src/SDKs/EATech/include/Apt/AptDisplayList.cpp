@@ -1428,9 +1428,9 @@ int AptCIH::AssociateInstToClass()
     pNode->AddRef();
     gAptActionInterpreter.mpCallStackE[gAptActionInterpreter.mnCallStackE_Count++] = pNode;
     pNode->AddRef();
-    pNode->mFlagsA |= 0x10u;    // IsInCtor (x64 bit 4; X360 reversed form 0x8000000)
+    pNode->mFlagsA |= 0x08000000u;    // ARTIST sets IsInCtor before the class call.
     gAptActionInterpreter.callFunction(static_cast<AptValue*>(pNode), pClass, 0, 0, 0);
-    pNode->mFlagsA &= ~0x10u;
+    pNode->mFlagsA &= ~0x08000000u;
 
     if (gAptActionInterpreter.mnCallStackE_Count > 0)
     {

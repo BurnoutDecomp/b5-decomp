@@ -20,17 +20,12 @@
 //     AptNativeFunction::operator delete          @ 0x82AF01E8
 //     AptNativeFunction::`vector deleting destructor' @ 0x82AF0240 (compiler thunk; dropped)
 //
-// BASE: the ctor forwards directly to AptValueWithHash::AptValueWithHash(eType=9,
-// nHashCapacity=8) -- NOT to AptObject::AptObject -- so AptNativeFunction derives
-// from AptValueWithHash (a property-bearing AptValueGC), with its own two trailing
-// members. (The deleting-destructor thunk's `bl AptObject::~AptObject` is ICF
-// folding: AptObject adds only a POD mClassFlags, so its destructor body is
-// byte-identical to ~AptValueWithHash and the linker folded the two; the real base
-// teardown here is ~AptValueWithHash, run automatically.)
+// The ARTIST table at 0x82145A14 inherits the class methods from AptObject.
+// The constructor inlines the AptObject base constructor, and the deleting
+// destructor calls AptObject::~AptObject.
 //
 // LAYOUT (sizeof = 36 / 0x24, pinned by `operator delete(this, 36)` in the thunk):
-//   AptValueWithHash base ............ 28 bytes (vtable + bitfield + AptNativeHash)
-//   mClassFlags  uint32_t ............ +0x1C   (class / implemented-object flags)
+//   AptObject base ................... 32 bytes
 //   mpFunction   AptExtFunctionPtr ... +0x20   (the wrapped native callback)
 //
 // vtable object-type index = AptVFT_NativeFunction (9), confirmed by the ctor's
@@ -45,7 +40,7 @@
 #include <cstddef>   // size_t
 #include "types.hpp"
 
-#include "SDKs/EATech/include/Apt/AptValueWithHash.h"            // AptValueWithHash base + AptVFT_NativeFunction
+#include "SDKs/EATech/include/Apt/AptObject.h"
 #include "SDKs/EATech/include/Apt/AptDefine.h"                    // gpGCPoolManager
 #include "SDKs/EATech/Apt/AptValueGCPoolManager.h"                // AptValueGC_PoolManager + gAptValueGCSizeOffset
 #include "SDKs/EATech/Apt/AptValueGCAllocator.h"                  // AptValueGC_MemItem (alloc bookkeeping)
@@ -55,7 +50,7 @@
 // concrete call signature at invocation time.
 typedef void* AptExtFunctionPtr;
 
-class AptNativeFunction : public AptValueWithHash
+class AptNativeFunction : public AptObject
 {
 public:
     // ---- GC pool new / delete (X360 operator new @0x82AE60D8 / delete @0x82AF01E8)
@@ -72,22 +67,10 @@ public:
     AptExtFunctionPtr GetFunction() const { return mpFunction; }
 
 protected:
-    // ~AptNativeFunction has no work of its own: the embedded AptNativeHash (in the
-    // AptValueWithHash base) destroys itself, and the two trailing members are POD.
-    // The X360 emits only the standard deleting-destructor thunk (restore vtable ->
-    // ~AptValueWithHash -> conditional operator delete); that thunk is compiler-
-    // generated and intentionally not hand-written.
+    // The deleting destructor calls the AptObject base destructor.
     virtual ~AptNativeFunction() {}
 
 private:
-    // +0x1C -- class / implemented-object flags (the same bitfield family as
-    // AptObject::mClassFlags). The ctor starts it cleared. The X360 ctor only
-    // partially clears the word (zero the low byte, clear bits 22-23 via
-    // `rlwinm 0,10,7`) rather than zeroing it whole -- that is the optimizer's
-    // codegen of a logical flags-zero-init on freshly pooled memory; modelled here
-    // as the honest `mClassFlags = 0`, matching the committed AptObject precedent.
-    uint32_t          mClassFlags;   // +0x1C
-
     // +0x20 -- the wrapped native callback (ctor arg a2).
     AptExtFunctionPtr mpFunction;    // +0x20
 

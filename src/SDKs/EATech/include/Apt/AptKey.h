@@ -3,10 +3,8 @@
 // ===========================================================================
 // EATech Apt -- AptKey: the ActionScript "Key" object (keyboard / pad input).
 //
-// AptKey : AptValueWithHash -- the AS `Key` singleton value. Like the other
-// scriptable input/value objects it is a property-bearing, garbage-collected
-// value (AptValueGC base via AptValueWithHash) with a trailing class-flags word,
-// and it lives as a GC root for the life of the VM (the ctor pins setGCRoot(1)).
+// AptKey derives from AptObject and lives as a GC root for the life of the VM.
+// Its ARTIST table at 0x82145B10 inherits AptObject's class methods.
 //
 // It overrides objectMemberLookup so that resolving a member of `Key` returns
 // either an integer key-code constant (Key.ENTER / Key.LEFT / ... ) or one of
@@ -33,9 +31,7 @@
 //
 // LAYOUT (sizeof = 32 / 0x20, pinned by the deleting-dtor thunk's
 // `AptKey::operator delete(this, 32)`):
-//   AptValueWithHash base ... 28 bytes (vtable + bitfield + AptNativeHash)
-//   mClassFlags  uint32_t .... +0x1C   (class / implemented-object flags; the
-//                                       same family as AptObject::mClassFlags)
+//   AptObject base ... 32 bytes
 //
 // vtable object-type index = AptVFT_Key (16), confirmed by the ctor's
 // `li r4, 0x10` argument to the AptValueWithHash base.
@@ -51,12 +47,12 @@
 #include <cstddef>   // size_t
 #include "types.hpp"
 
-#include "SDKs/EATech/include/Apt/AptValueWithHash.h"   // AptValueWithHash base + AptVFT_Key
+#include "SDKs/EATech/include/Apt/AptObject.h"
 
 class AptNativeFunction;   // SDKs/EATech/include/Apt/AptNativeFunction.h (the cached
                            // method singletons; held by pointer only)
 
-class AptKey : public AptValueWithHash
+class AptKey : public AptObject
 {
 public:
     // ---- GC pool new / delete (X360 operator new @0x82AE6800 / delete @0x82AF09E0)
@@ -108,14 +104,6 @@ public:
     static AptValue* sMethod_getAscii();
 
 private:
-    // +0x1C -- class / implemented-object flags (the same bitfield family as
-    // AptObject::mClassFlags). The ctor starts it cleared. Note: the X360 ctor only
-    // partially clears the word (zero the low byte, clear bits 22-23 via
-    // `rlwinm 0,10,7`) rather than zeroing it whole -- that is the optimizer's
-    // codegen of a logical flags-zero-init on freshly pooled memory; modelled here
-    // as the honest `mClassFlags = 0`, matching the committed AptObject precedent.
-    uint32_t mClassFlags;   // +0x1C
-
     // Reserve room for this many native members in the base property hash. The
     // X360 ctor passes `8` (li r5, 8) to AptValueWithHash.
     static const int32_t KI_HASH_CAPACITY = 8;

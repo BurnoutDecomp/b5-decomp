@@ -248,11 +248,11 @@ void AptCIH::DecZombieCount()
         AptUpdateZombieVector(0);
 }
 
-// x64 IsInCtor @0x14083B140 / SetInCtor @0x1408417C0: bit 4 (mask 0x10).
-bool AptCIH::IsInCtor() const { return (mFlagsA & 0x10u) != 0; }
+// ARTIST IsInCtor @0x82AD50F8 / SetInCtor @0x82AD5108 use mask 0x08000000.
+bool AptCIH::IsInCtor() const { return (mFlagsA & 0x08000000u) != 0; }
 void AptCIH::SetInCtor(uint32_t b)
 {
-    mFlagsA = (mFlagsA & ~0x10u) | (b ? 0x10u : 0u);
+    mFlagsA = (mFlagsA & ~0x08000000u) | ((b & 1u) << 27);
 }
 
 // ---- packed state / flags (mFlagsB) ---------------------------------------

@@ -9,8 +9,8 @@
 //
 // SHAPE + BODIES from the PS3 EXTERNAL ELF (9AptObject): GetHasClass @0x7DF374 /
 // SetHasClass @0x7DF34C / objectMemberLookup @0x7FC7E8 / Set/Get__Proto__/
-// Prototype thunks (delegate to the hash). LAYOUT: AptValueWithHash (28 bytes) +
-// mClassFlags (x64 +0x38; hasClass @ bit 8, count in bits 0-7).
+// Prototype thunks (delegate to the hash). The native AptValueWithHash base
+// occupies 28 bytes, followed by the class word at +0x1C.
 //
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
@@ -28,9 +28,13 @@ extern AptValue* gpObjRegistrationFunc;
 struct AptObject : public AptValueWithHash
 {
 protected:
-    uint32_t mClassFlags;   // x64 +0x38 -- implemented-objects count bits 0-7 /
-                            // hasClass bit 8 (B4 mbHasClass) / isInMainInst bit 9
-                            // (the old bit-23 reading was the X360 BE reversal)
+    enum
+    {
+        HAS_CLASS = 0x00800000u,
+        IS_IN_MAIN_INST = 0x00400000u
+    };
+
+    uint32_t mClassFlags;
 
     AptObject(AptVirtualFunctionTable_Indices eType, int nHashCapacity)
         : AptValueWithHash(eType, nHashCapacity), mClassFlags(0)
@@ -64,18 +68,24 @@ public:
     // Returns null if the GC pool is exhausted. Defined in AptObject.cpp.
     static AptObject* Create(int nHashCapacity = 8);
 
-    virtual bool GetHasClass() const;                    // @0x7DF374
-    virtual void SetHasClass(int bHasClass);             // @0x7DF34C
+    virtual bool GetHasClass() const;                    // @0x82AF0068
+    virtual void SetHasClass(int bHasClass);             // @0x82AF0048
     virtual AptValue* objectMemberLookup(AptValue* const pThis,
                                          const AptNativeString* const pName) const;  // @0x7FC7E8
 
+    bool GetIsInMainInst() const { return (mClassFlags & IS_IN_MAIN_INST) != 0; }
+    void SetIsInMainInst(bool bInMainInst)
+    {
+        mClassFlags = (mClassFlags & ~IS_IN_MAIN_INST) | (bInMainInst ? IS_IN_MAIN_INST : 0u);
+    }
+
     // ---- the implemented-interfaces set (AS `implements`) -------------------
-    // mClassFlags' low byte is the count of objects this one implements; the set
+    // The first byte of mClassFlags is the count of objects this one implements; the set
     // itself lives in the property hash under the "__INTERFACES__" key as an
     // AptArray of the implemented prototype/object values.
 
     // SetImplementedObjects @0x82AF5868 -- store pImplementedArray under the
-    // "__INTERFACES__" key and record nCount in the low byte of mClassFlags.
+    // "__INTERFACES__" key and record nCount in the first byte of mClassFlags.
     void SetImplementedObjects(AptValue* pImplementedArray, char nCount);  // @0x82AF5868
     // GetImplementedObjects @0x82AE68F0 -- hand back the implemented count (via
     // *pnCountOut) and the "__INTERFACES__" AptArray (return), or null/0 when none.
