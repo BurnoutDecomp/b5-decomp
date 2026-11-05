@@ -15,17 +15,8 @@
 //                         scrollbar, and each visible cell (text, or an icon for
 //                         the "<ICON>" marker).
 //
-// The geometry is data-driven by a per-style table family keyed on miStyle: row
-// count, visible-line count, column count, a selectable flag, and a per-column
-// width array. Those tables live in the ICE data segment reached only through the
-// style index; they are modelled here as file-local statics keyed by style.
-//
-// FLAG: there is no source and no layout reference for this widget. The struct
-//       layout, the table family, the box colours/sizes, and the cell-draw wiring
-//       are all DERIVED from the function bodies. The per-style table CONTENTS
-//       (counts, widths, selectable flags) are NOT recoverable -- they are modelled
-//       as a single placeholder style row so the bodies compile and exercise the
-//       same arithmetic; see KA*_ICE_MENU_*.
+// ARTIST 8207ABB8: seven menu styles supply row and column counts, selection,
+// and column widths. ConstructMenus passes each style index once.
 // ============================================================================
 
 #include "SDKs/Packages/ICE/ICEWidget/ICEWidgetMenu.hpp"
@@ -71,35 +62,30 @@ namespace ICE
         const char* const KPC_ICE_MENU_BAD_COL  = "<Invalid colume ID>";
         const char* const KPC_ICE_MENU_TOO_LONG = "<Menu String is too long!>";
 
-        // ====================================================================
-        // The per-style table family, keyed on miStyle. These five tables drive
-        // every menu's geometry. PLACEHOLDER: the real table CONTENTS are not
-        // recoverable, so a single style (index 0) is modelled with self-consistent
-        // values. The accessors clamp the style to this one row, preserving the
-        // table-lookup arithmetic the bodies perform.
-        // FLAG: KI_ICE_MENU_NUM_STYLES and every value below are placeholders.
-        // ====================================================================
-        const s32 KI_ICE_MENU_NUM_STYLES = 1;
-
-        const s32 KAI_ICE_MENU_NUM_ROWS[KI_ICE_MENU_NUM_STYLES]     = { 4 };
-        const s32 KAI_ICE_MENU_NUM_VISIBLE[KI_ICE_MENU_NUM_STYLES]  = { 4 };
-        const s32 KAI_ICE_MENU_NUM_COLUMNS[KI_ICE_MENU_NUM_STYLES]  = { 1 };
-        const u8  KAB_ICE_MENU_SELECTABLE[KI_ICE_MENU_NUM_STYLES]   = { 1 };
-
-        // Per-style column widths: KI_ICE_MENU_MAX_ITEMS entries per style. GetWidth
-        // sums the first miNumColumns of the style's row.
-        const f32 KAF_ICE_MENU_COLUMN_WIDTH[KI_ICE_MENU_NUM_STYLES][KI_ICE_MENU_MAX_ITEMS] =
+        struct MenuStyle
         {
-            { 200.0f, 0.0f, 0.0f, 0.0f }
+            s32 miNumRows;
+            s32 miMaxVisibleRows;
+            s32 miNumColumns;
+            u8  mbSelectable;
+            f32 mafColumnWidths[KI_ICE_MENU_MAX_ITEMS];
         };
 
-        // Clamp a style index into the modelled table range.
-        inline s32 ClampStyle(s32 liStyle)
+        CGS_STATIC_ASSERT((offsetof(MenuStyle, mbSelectable) == 0x0C), "ARTIST menu selection byte");
+        CGS_STATIC_ASSERT((offsetof(MenuStyle, mafColumnWidths) == 0x10), "ARTIST menu column widths");
+        CGS_STATIC_ASSERT((sizeof(MenuStyle) == 0x20), "ARTIST menu style stride");
+        CGS_STATIC_ASSERT((sizeof(ICEWidgetMenuItem) == 0xA4), "ARTIST menu row stride");
+
+        const MenuStyle kaMenuStyles[] =
         {
-            if (liStyle < 0)                     { return 0; }
-            if (liStyle >= KI_ICE_MENU_NUM_STYLES) { return KI_ICE_MENU_NUM_STYLES - 1; }
-            return liStyle;
-        }
+            {  8,  8, 3, 1, { 110.0f, 180.0f, 50.0f, 0.0f } },
+            { 10,  5, 2, 1, { 170.0f, 120.0f,  0.0f, 0.0f } },
+            { 20,  5, 1, 1, { 100.0f,   0.0f,  0.0f, 0.0f } },
+            { 20, 20, 2, 1, { 180.0f,  25.0f,  0.0f, 0.0f } },
+            {  3,  3, 1, 1, { 310.0f,   0.0f,  0.0f, 0.0f } },
+            {  2,  2, 1, 1, {  50.0f,   0.0f,  0.0f, 0.0f } },
+            { 17, 17, 2, 0, { 250.0f, 250.0f,  0.0f, 0.0f } },
+        };
 
         // Draw a flat 2D box (left,top)-(right,bottom) at depth lfZ in colour
         // (r,g,b,a), per-channel in [0,255]. Mirrors the ICEWidgetIcon quad-build /
@@ -130,21 +116,19 @@ namespace ICE
     // ------------------------------------------------------------------------
     void ICEWidgetMenu::Construct(ICEMemory* lpMemory, s32 liStyle, f32 lfX, f32 lfY)
     {
-        const s32 liClampedStyle = ClampStyle(liStyle);
+        const MenuStyle& lrStyle = kaMenuStyles[liStyle];
 
         // Position + style key.
         mfX     = lfX;
         mfY     = lfY;
         miStyle = liStyle;
 
-        // Seed the counts from the per-style tables (the asm reads the same style
-        // row from three parallel tables).
-        miNumRows        = KAI_ICE_MENU_NUM_ROWS[liClampedStyle];
-        miMaxVisibleRows = KAI_ICE_MENU_NUM_VISIBLE[liClampedStyle];
-        miNumColumns     = KAI_ICE_MENU_NUM_COLUMNS[liClampedStyle];
+        miNumRows        = lrStyle.miNumRows;
+        miMaxVisibleRows = lrStyle.miMaxVisibleRows;
+        miNumColumns     = lrStyle.miNumColumns;
 
         // Selectable menus start at row 0; non-selectable menus carry -1.
-        if (KAB_ICE_MENU_SELECTABLE[liClampedStyle])
+        if (lrStyle.mbSelectable)
         {
             miSelectedRow = 0;
         }
@@ -213,14 +197,14 @@ namespace ICE
     // ------------------------------------------------------------------------
     f32 ICEWidgetMenu::GetWidth() const
     {
-        const s32 liClampedStyle = ClampStyle(miStyle);
+        const MenuStyle& lrStyle = kaMenuStyles[miStyle];
 
         // Left margin + the sum of the per-style column widths + right margin. The
         // asm unrolls the sum by four; de-strength-reduced to the plain loop.
         f32 lfWidth = KF_ICE_MENU_MARGIN;
         for (s32 liCol = 0; liCol < miNumColumns; ++liCol)
         {
-            lfWidth += KAF_ICE_MENU_COLUMN_WIDTH[liClampedStyle][liCol];
+            lfWidth += lrStyle.mafColumnWidths[liCol];
         }
         return lfWidth + KF_ICE_MENU_MARGIN;
     }
@@ -395,7 +379,7 @@ namespace ICE
         // running X starts at the menu's left + margin and advances by the style's
         // column width per column. Each visible row's Y is its on-screen offset
         // times the row pitch, below the top text pad.
-        const s32 liClampedStyle = ClampStyle(miStyle);
+        const MenuStyle& lrStyle = kaMenuStyles[miStyle];
         f32 lfColumnX = mfX + KF_ICE_MENU_MARGIN;
         for (s32 liCol = 0; liCol < miNumColumns; ++liCol)
         {
@@ -450,7 +434,7 @@ namespace ICE
             }
 
             // Advance the running X by this column's width.
-            lfColumnX += KAF_ICE_MENU_COLUMN_WIDTH[liClampedStyle][liCol];
+            lfColumnX += lrStyle.mafColumnWidths[liCol];
         }
     }
 }
