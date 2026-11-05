@@ -6,13 +6,15 @@
 //     AptNativeFunction::operator new        @ 0x82AE60D8
 //     AptNativeFunction::operator delete     @ 0x82AF01E8
 // The `vector deleting destructor' @ 0x82AF0240 is a compiler thunk (restore
-// vtable -> ~AptValueWithHash -> conditional operator delete) and is dropped, not
+// vtable -> ~AptObject -> conditional operator delete) and is dropped, not
 // hand-written; the implicit ~AptNativeFunction in the header covers it.
 //
 // See AptNativeFunction.h for the layout / base-class derivation.
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptNativeFunction.h"
+
+CGS_STATIC_ASSERT(sizeof(AptNativeFunction) == 0x24, "ARTIST native function size");
 
 // ---------------------------------------------------------------------------
 // ctor @ 0x82AF0178
@@ -22,8 +24,7 @@
 // SetAllowDelayedDeletion(false) (the `li r4, 0` argument).
 // ---------------------------------------------------------------------------
 AptNativeFunction::AptNativeFunction(AptExtFunctionPtr pFunction)
-    : AptValueWithHash(AptVFT_NativeFunction, KI_HASH_CAPACITY)
-    , mClassFlags(0)
+    : AptObject(AptVFT_NativeFunction, KI_HASH_CAPACITY)
     , mpFunction(pFunction)
 {
     // X360 @0x82AF01CC: AptValue::SetAllowDelayedDeletion(this, 0).

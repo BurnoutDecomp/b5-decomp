@@ -174,15 +174,14 @@ void AptKey::operator delete(void* p, size_t size)
 // then pins the object as a GC root.
 // ---------------------------------------------------------------------------
 AptKey::AptKey()
-    : AptValueWithHash(AptVFT_Key, KI_HASH_CAPACITY)
-    , mClassFlags(0)
+    : AptObject(AptVFT_Key, KI_HASH_CAPACITY)
 {
     setGCRoot(1);
 }
 
 // ---------------------------------------------------------------------------
 // dtor @ 0x82AF0A38 -- empty: the X360 stores the vtable then tail-calls the base
-// teardown (~AptValueWithHash, which the linker ICF-folded with ~AptObject). The
+// teardown (~AptObject). The
 // embedded property hash destroys itself.
 // ---------------------------------------------------------------------------
 AptKey::~AptKey()

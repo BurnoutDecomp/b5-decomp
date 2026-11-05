@@ -932,9 +932,9 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
         if (bBindThis)
         {
             bPushedFrame = true;   // console v11 = 1
-            // mark a defined object class-bearing (console: tag 0x13 (19) -> set 0x400000).
+            // Mark the bound object for super lookup during this call.
             if (pBoundThis->getVtblIndex() == AptVFT_Object && pBoundThis->getIsDefined())
-                pBoundThis->SetHasClass(1);   // console *(v41+7) |= 0x400000 (the class flag word)
+                static_cast<AptObject*>(pBoundThis)->SetIsInMainInst(true);
             // console *(4*a1[3]++ + a1[5]) -- a1[3] is call-frame stack B (+0x0C ==
             // mnCallStackB_Count), PAIRED with the AptApt_PopCIHStack pop below. (The
             // old recon pushed onto the CIH/target stack -- the same cross-stack
@@ -1030,14 +1030,14 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
     }
 
     // ---- per-op cleanup ----------------------------------------------------
-    // clear the class flag on the bound `this` we pushed, then pop the call-frame
+    // Clear the main-instance flag on the bound `this`, then pop the call-frame
     // register stack (console a1+3 / AptValue_::pop).
     if (bPushedFrame)
     {
         AptValue* const pBound = reinterpret_cast<AptValue*>(
             pInterp->mpCallStackB[pInterp->mnCallStackB_Count - 1]);   // console v64 = *(4*a1[3]+a1[5]-4) (stack B top)
         if (pBound->getVtblIndex() == AptVFT_Object && pBound->getIsDefined())
-            pBound->SetHasClass(0);   // console *(v64+28) &= ~0x400000
+            static_cast<AptObject*>(pBound)->SetIsInMainInst(false);
         // console AptValue_::pop(a1 + 3): the call-frame-register {count,cap,array} triple punned
         // as an AptValueVector -> the real pop() (Release top, --count). Unguarded like the console
         // (bPushedFrame above guarantees a live, non-null top).
@@ -1298,7 +1298,7 @@ AptValue* AptActionInterpreter::_createObject(AptValue* pScope, AptValue* pTarge
                                               const EAStringC* pClassName,
                                               int nArgs, char bConstruct)
 {
-    AptValue* pNew = 0;                                          // console v11
+    AptObject* pNew = 0;                                         // console v11
 
     // Resolve the class value: getVariable(scope, target, name, bRead=1, ..., 0).
     AptValue* pClass = getVariable(pScope, pTarget, pClassName, 1, 1, 0);   // console Variable / r16
@@ -1497,7 +1497,7 @@ AptValue* AptActionInterpreter::_createObject(AptValue* pScope, AptValue* pTarge
     }
 
     pNew->SetHasClass(1);                                       // console (*(*v11+0x14))(v11, 1)
-    pNew->SetHasClass(1);                                       // console *(v11+7) |= 0x400000 (open the class-flag bracket)
+    pNew->SetIsInMainInst(true);
     pNew->GetNativeHashVirtual()->Set__Proto__(pProto);        // console AptNativeHash::Set__Proto__(v11+8, v45)
 
     // Copy the class's implemented interfaces when the class is an Object (tag 19) or
@@ -1515,7 +1515,7 @@ AptValue* AptActionInterpreter::_createObject(AptValue* pScope, AptValue* pTarge
         int nImpls = 0;                                        // console v54[0]
         AptValue* pImpls = static_cast<AptObject*>(pClass)->GetImplementedObjects(&nImpls);
         if (nImpls > 0)
-            static_cast<AptObject*>(pNew)->SetImplementedObjects(pImpls, static_cast<char>(nImpls));
+            pNew->SetImplementedObjects(pImpls, static_cast<char>(nImpls));
     }
 
     if (bConstruct)
@@ -1541,7 +1541,7 @@ AptValue* AptActionInterpreter::_createObject(AptValue* pScope, AptValue* pTarge
         reinterpret_cast<AptValueVector*>(&mnCIHStackTop)->pop();        // console AptValue_::pop(a1 + 9)
     }
 
-    pNew->SetHasClass(0);                                       // console *(v11+7) &= ~0x400000 (close the bracket)
+    pNew->SetIsInMainInst(false);
     return pNew;
 }
 

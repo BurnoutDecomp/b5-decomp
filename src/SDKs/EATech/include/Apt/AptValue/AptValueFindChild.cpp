@@ -32,6 +32,7 @@
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
 #include "SDKs/EATech/include/Apt/AptObject.h"   // AptValueWithHash (the live _global symbol type)
+#include "SDKs/EATech/include/Apt/AptPrototype.h"
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 #include "SDKs/EATech/Apt/AptObjectIndex.h"
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"   // gAptActionInterpreter (the AS target stacks)
@@ -270,55 +271,58 @@ AptValue* AptResolveSpecialName(int nObjectTypeId, AptValue* pScope,
     // ----- 18 == super ------------------------------------------------------
     case 18:
     {
-        // loc_82B01520: resolve `super` for the current AS call. The console walks the
-        // interpreter target state (top CIH/target stack entry), takes that value's
-        // prototype (its native hash's __proto__), and -- depending on whether the
-        // target is a CharacterInstHandle in the current MC-parent chain (loc_82B015A0
-        // isMCInParentChain), a defined Object (tag 0x13), or a Prototype (tag 0x14) --
-        // returns either that prototype (loc_82B01370) or its own proto's hash member
-        // (loc_82B016D4), falling back to `undefined` (loc_82B01744) when no native
-        // hash / proto exists. The full per-tag branch lattice is reproduced below
-        // from the asm through the recovered gAptActionInterpreter members; the AS
-        // call-method/inheritance opcodes that exercise this arm are live in the
-        // interpreter TUs.
-        AptValue* pTopTarget = CurrentTargetCIH();           // r31
+        AptValue* pTopTarget = CurrentTargetCIH();
 
-        AptNativeHash* pHash = pTopTarget->GetNativeHashVirtual();   // vtbl[2]
+        AptNativeHash* pHash = pTopTarget->GetNativeHashVirtual();
         if (!pHash)
-            return gpUndefinedValue;   // loc_82B01744
-        AptValue* pProto = pHash->mp__Proto__;               // r29 = 8(hash)
+            return gpUndefinedValue;
+        AptValue* pProto = pHash->mp__Proto__;
         if (!pProto)
-            return gpUndefinedValue;   // loc_82B01744
+            return gpUndefinedValue;
 
-        // loc_82B01564: a CharacterInstHandle target whose MC-parent-chain hosts the
-        // current target steps one prototype link before returning it.
-        if (pTopTarget != pScope &&
-            pTopTarget->getVtblIndex() == AptVFT_CharacterInstHandle &&
-            pTopTarget->getIsDefined() &&
-            static_cast<AptValue*>(pTopTarget)->isMCInParentChain())
+        // ARTIST 0x82B01564: the non-CIH target path steps one link only
+        // while the object is marked as the main instance.
+        const bool bTargetIsCIH = IsCIHLike(pTopTarget);
+        const bool bTargetIsObject = pTopTarget->getVtblIndex() == AptVFT_Object
+            && pTopTarget->getIsDefined();
+        if (pTopTarget != pScope && !bTargetIsCIH && pTopTarget->isMCInParentChain())
         {
-            // loc_82B015B0: the console gates the extra proto-step on BIT 22 (0x00400000)
-            // of the 32-bit word at pTopTarget+0x1C (`lwz r11,0x1C(r31); rlwinm. r11,r11,0,9,9;
-            // beq loc_82B01370`), AFTER an Object(0x13)+defined test.
-            // FLAG (dead path, not runtime-verified): the +0x1C word read as flags here does
-            // NOT correspond to AptCIH::mpDisplayListParent (a pointer -- bit 22 would be
-            // address bits); it is a flags field in this target's own (un-named on x64)
-            // layout. The proto-step gate is therefore left UNIMPLEMENTED pending that
-            // layout's recovery; we return pProto unstepped, which is the console's result
-            // whenever the 0x00400000 bit is clear (the common case). The Object re-test as
-            // written is itself unreachable under the outer CharacterInstHandle condition.
-            return pProto;   // loc_82B01370 (r29)
+            if (bTargetIsObject && static_cast<AptObject*>(pTopTarget)->GetIsInMainInst())
+            {
+                AptNativeHash* pProtoHash = pProto->GetNativeHashVirtual();
+                if (pProtoHash)
+                    return pProtoHash->mp__Proto__;
+            }
+            return pProto;
         }
 
-        // loc_82B01608 .. loc_82B0171C: the Prototype/Object branch -- a defined
-        // Prototype (tag 0x14) target with a Prototype proto, sitting at the top of
-        // the call-frame stack, returns the proto's hash member; otherwise the proto
-        // (or `undefined`) is returned. Reproduced as the proto-or-undefined fold the
-        // asm collapses to for every non-MC-parent path.
+        if (pTopTarget->getVtblIndex() == AptVFT_Prototype && pTopTarget->getIsDefined())
+            return pProto;
+
+        if (pProto->getVtblIndex() == AptVFT_Prototype && pProto->getIsDefined()
+            && static_cast<AptPrototype*>(pProto)->GetSuperConstructor())
+        {
+            // ARTIST 0x82B01668: use the frame stack and the persistent class
+            // flag on an Object. A CIH uses its own constructor state.
+            const int nFrameCount = gAptActionInterpreter.mnCallStackB_Count;
+            if (nFrameCount <= 0 || gAptActionInterpreter.mpCallStackB[nFrameCount - 1] != pTopTarget)
+                return pProto;
+            if (bTargetIsCIH)
+            {
+                if (static_cast<AptCIH*>(pTopTarget)->IsInCtor())
+                    return pProto;
+            }
+            else if (!bTargetIsObject || !pTopTarget->GetHasClass())
+            {
+                return pProto;
+            }
+            return pProto->GetNativeHashVirtual()->mp__Proto__;
+        }
+
         AptNativeHash* pProtoHash = pProto->GetNativeHashVirtual();
         if (pProtoHash && pProtoHash->mp__Proto__)
-            return pProtoHash->mp__Proto__;   // loc_82B016D4 / loc_82B01738
-        return gpUndefinedValue;   // loc_82B01744
+            return pProtoHash->mp__Proto__;
+        return gpUndefinedValue;
     }
 
     // ----- 19 == _global ----------------------------------------------------
