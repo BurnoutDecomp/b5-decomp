@@ -84,23 +84,21 @@ AptCIH::AptCIH(AptCharacter* pCharacter, AptCIH* pParent)
     : AptValueGC(AptVFT_CharacterInstHandle, CO_CIH)
     // mInstanceName default-constructs to the shared empty string.
 {
-    // x64 ctor sub_140825520: mFlagsA masked (`and [rbx+18h],0FE0001D0h` -- the
-    // deterministic bits then applied), mFlagsB createdOnFrame inited to -1 via
-    // `or [rbx+1Ch],3FFFh` (LOW 14 bits). Zero-initialised here, then the
-    // deterministic bits applied.
-    mFlagsA = 0;
-    mFlagsB = 0x3FFFu;
-
+    // ARTIST 0x82B00638 preserves the unnamed bits in both packed words.
+    mpCharacterInst = 0;
     mpDisplayListParent = pParent;
     if (pParent)
         pParent->AddRef();
 
+    mFlagsA &= 0x0B80007Fu;
     setGCRoot(1);
+    mFlagsB |= 0xFFFC0000u;
     SetAllowDelayedDeletion(false);
 
-    mpDisplayListPrevious = 0;
-    mpDisplayListNext     = 0;
     mpAssetString         = 0;
+    mpDisplayListNext     = 0;
+    mpDisplayListPrevious = 0;
+    mFlagsA &= ~0x08000000u;
 
     mpCharacterInst = AptCharacterInst::CreateCharacterInst(pCharacter);
 
@@ -109,11 +107,11 @@ AptCIH::AptCIH(AptCharacter* pCharacter, AptCIH* pParent)
     //   SetDirtyState(bDirty, bDirty)  -- bDirty when the character is a sprite(5) /
     //     button(4) / morph(8) / animation(9) / custom-control(16), or is null. Both
     //     the dirty and propagate args carry the SAME value (asm sets r4==r5). This
-    //     sets the tick-dirty bit 6 and pushes it up the display-list parent chain, so
+    //     sets the tick-dirty bit and pushes it up the display-list parent chain, so
     //     a freshly-placed sprite/animation child is BORN dirty and ticks on its own
     //     placement frame (SetDirtyState's internal shape/text/None gate still applies).
     //   SetGeneralizedProcessDirtyState(bGenDirty) -- bGenDirty when the character is a
-    //     text(2) / button(4) / sprite(5); sets bit 7 (self) + propagates bit 8 up.
+    //     text(2) / button(4) / sprite(5); sets the self bit and propagates the subtree bit up.
     // This is the real mechanism that composes nested content -- NOT a later render-tree
     // propagation pass. (Replaces the deferred hard-set stand-in, which both hard-set
     // the self bit unconditionally and omitted the tick-dirty bit fresh children need.)
@@ -219,50 +217,40 @@ void AptCIH::PreDestroy()
 // ---- delegated visual read ------------------------------------------------
 int16_t AptCIH::GetDepth() const { return mpCharacterInst->GetDepth(); }
 
-// ---- packed state / flags (mFlagsA) ---------------------------------------
-// x64 GetCIHState @0x140838580: `shr eax,1; and eax,3` -- bits 1-2.
-uint32_t AptCIH::GetCIHState() const { return (mFlagsA >> 1) & 3u; }
+// ---- packed state / flags (ARTIST CIH+0x0C and +0x10) ----------------------
+uint32_t AptCIH::GetCIHState() const { return (mFlagsA >> 29) & 3u; }
 void AptCIH::SetCIHState(uint32_t eState)
 {
-    // x64 SetCIHState @0x140840FD0: `and [rcx+18h],0FFFFFFF9h; add edx,edx`.
-    mFlagsA = (mFlagsA & ~0x6u) | ((eState << 1) & 0x6u);
+    mFlagsA = (mFlagsA & ~0x60000000u) | ((eState & 3u) << 29);
 }
 
-// x64 GetZombieCount @0x140839E80: `shl eax,7; sar eax,10h` -- SIGNED 16-bit
-// field in bits 9-24 (mask 0x01FFFE00).
-int16_t AptCIH::GetZombieCount() const { return static_cast<int16_t>(static_cast<uint16_t>(mFlagsA >> 9)); }
+// ARTIST 0x82AD5138: signed 16-bit field at bits 7..22.
+int16_t AptCIH::GetZombieCount() const { return static_cast<int16_t>(static_cast<uint16_t>(mFlagsA >> 7)); }
 void AptCIH::IncZombieCount()
 {
-    // x64 IncZombieCount @0x14083A630: mask 0x1FFFE00, +0x200.
-    const int16_t n = static_cast<int16_t>(GetZombieCount() + 1);
-    mFlagsA = (mFlagsA & ~0x01FFFE00u) | ((static_cast<uint32_t>(static_cast<uint16_t>(n)) << 9) & 0x01FFFE00u);
+    const uint16_t n = static_cast<uint16_t>(GetZombieCount() + 1);
+    mFlagsA = (mFlagsA & ~0x007FFF80u) | (static_cast<uint32_t>(n) << 7);
 }
 void AptCIH::DecZombieCount()
 {
-    const int16_t n = static_cast<int16_t>(GetZombieCount() - 1);
-    mFlagsA = (mFlagsA & ~0x01FFFE00u) | ((static_cast<uint32_t>(static_cast<uint16_t>(n)) << 9) & 0x01FFFE00u);
-    // XB1 sub_140835B50 (the arbiter's DecZombieCount): when the count reaches
-    // zero, reap the dead zombies immediately -- AptUpdateZombieVector(0)
-    // (HOMED in AptGC.cpp; AptInit builds gpAptZombieVector).
-    if ((mFlagsA & 0x01FFFE00u) == 0u)
+    const uint16_t n = static_cast<uint16_t>(GetZombieCount() - 1);
+    mFlagsA = (mFlagsA & ~0x007FFF80u) | (static_cast<uint32_t>(n) << 7);
+    if ((mFlagsA & 0x007FFF80u) == 0u)
         AptUpdateZombieVector(0);
 }
 
-// ARTIST IsInCtor @0x82AD50F8 / SetInCtor @0x82AD5108 use mask 0x08000000.
+// ARTIST IsInCtor @0x82AD50F8 / SetInCtor @0x82AD5108.
 bool AptCIH::IsInCtor() const { return (mFlagsA & 0x08000000u) != 0; }
 void AptCIH::SetInCtor(uint32_t b)
 {
     mFlagsA = (mFlagsA & ~0x08000000u) | ((b & 1u) << 27);
 }
 
-// ---- packed state / flags (mFlagsB) ---------------------------------------
-// x64 GetCreatedOnFrame @0x1408387E0: `shl eax,12h; sar eax,12h` -- SIGNED
-// 14-bit field in the LOW bits (mask 0x3FFF); SetCreatedOnFrame @0x140841220
-// clears with `and [rcx+1Ch],0FFFFC000h`.
-int  AptCIH::GetCreatedOnFrame() const { return (static_cast<int32_t>(mFlagsB << 18)) >> 18; }
+// ARTIST 0x82AD5198/0x82AD51A8: signed high 14 bits, low 18 preserved.
+int AptCIH::GetCreatedOnFrame() const { return static_cast<int32_t>(mFlagsB) >> 18; }
 void AptCIH::SetCreatedOnFrame(int nFrame)
 {
-    mFlagsB = (mFlagsB & ~0x3FFFu) | (static_cast<uint32_t>(nFrame) & 0x3FFFu);
+    mFlagsB = (mFlagsB & 0x0003FFFFu) | (static_cast<uint32_t>(nFrame) << 18);
 }
 
 // ---------------------------------------------------------------------------
@@ -334,10 +322,7 @@ AptCIH* AptCIH::GetRootAnimation()
 }
 
 // ---------------------------------------------------------------------------
-// SetDirtyState @0x82AD76B8 -- set/clear the per-node dirty bit (x64 mFlagsA bit 6,
-// mask 0x40 -- x64 GetDirtyState @0x140838870 `shr eax,6`, XB1 ctor 0x140825520
-// propagates `|= 0x40`; the console `oris 0x200` = 0x02000000 was the same field's
-// X360 big-endian position). Clearing, or a non-renderable character type (shape 1 /
+// SetDirtyState @0x82AD76B8 -- set/clear ARTIST mFlagsA dirty bit 0x02000000. Clearing, or a non-renderable character type (shape 1 /
 // dynamic-text 2 / static-text 10) or the empty AptCIHNone placeholder, leaves it
 // clear. When a renderable node is dirtied with bPropagate, the dirty bit is pushed
 // up the display-list parent chain, stopping at the first already-dirty ancestor.
@@ -346,26 +331,26 @@ void AptCIH::SetDirtyState(bool bDirty, bool bPropagate)
 {
     if (!bDirty)
     {
-        mFlagsA &= ~0x40u;
+        mFlagsA &= ~0x02000000u;
         return;
     }
 
     const uint32_t nType = mpCharacterInst->GetTypeTag();
     if (nType == 1 || nType == 2 || nType == 10 || IsNone())
     {
-        mFlagsA &= ~0x40u;
+        mFlagsA &= ~0x02000000u;
         return;
     }
 
-    mFlagsA |= 0x40u;
+    mFlagsA |= 0x02000000u;
     if (bPropagate)
     {
         for (AptCIH* pAncestor = mpDisplayListParent; pAncestor; )
         {
-            if ((pAncestor->mFlagsA & 0x40u) != 0)
+            if ((pAncestor->mFlagsA & 0x02000000u) != 0)
                 break;
             AptCIH* pNext = pAncestor->mpDisplayListParent;
-            pAncestor->mFlagsA |= 0x40u;
+            pAncestor->mFlagsA |= 0x02000000u;
             pAncestor = pNext;
         }
     }
@@ -488,10 +473,8 @@ int AptCIH::jumpToFrame(int nFrame)
 
 int AptCIH::tick()
 {
-    // Only a dirtied node ticks (the dirty bit, x64 mFlagsA bit 6 -- XB1 tick
-    // sub_14085D620 `(*(a1+24) & 0x40) == 0`; the console 0x02000000 was the same
-    // field's X360 big-endian position).
-    if ((mFlagsA & 0x40u) == 0)
+    // Only a dirtied node ticks (ARTIST mFlagsA mask 0x02000000).
+    if ((mFlagsA & 0x02000000u) == 0)
         return 0;
 
     AptCharacterSpriteInstBase* pInst =
@@ -500,7 +483,7 @@ int AptCIH::tick()
     // Only sprite(5)/animation(9) clips have a play-head (v6[2] >> 26 == 5 or 9).
     const uint32_t nType = pInst->GetTypeTag();
     if (nType != 5 && nType != 9)
-        return (mFlagsA >> 6) & 1u;   // LABEL_44 (dirty bit; x64 bit 6)
+        return (mFlagsA >> 25) & 1u;   // LABEL_44 (ARTIST dirty bit)
 
     const uint32_t nFlags = pInst->mnClipActionFlags;   // v11 = v6[5]
     pInst->mnLastActionFrame = 0;                        // v6[8] = 0
@@ -590,26 +573,26 @@ label_27:
     const int nChildTick = pInst->mDisplayList.tick(-1, 0);
 
     // ---- (6) recompute the dirty bit --------------------------------------
-    // The node stays dirty (forces the x64 bit-6 dirty flag) when it carries an
+    // The node stays dirty (forces the ARTIST dirty flag) when it carries an
     // enterFrame handler; otherwise it inherits the child-list tick result --
     // unless it is a playing multi-frame clip (bIsPlaying set, frame count != 1),
     // which leaves the dirty bit untouched.
     if (((pInst->mnClipActionFlags & 0x2u) != 0) || HasEventMember(2))
     {
-        mFlagsA |= 0x40u;
+        mFlagsA |= 0x02000000u;
     }
     else
     {
         if ((pInst->mnClipActionFlags & 0x2000000u) != 0 &&
             AptGetClipMovie(pInst)->mnFrameCount != 1)
         {
-            return (mFlagsA >> 6) & 1u;
+            return (mFlagsA >> 25) & 1u;
         }
-        mFlagsA = (mFlagsA & ~0x40u) |
-                  ((static_cast<uint32_t>(nChildTick) << 6) & 0x40u);
+        mFlagsA = (mFlagsA & ~0x02000000u) |
+                  ((static_cast<uint32_t>(nChildTick) << 25) & 0x02000000u);
     }
 
-    return (mFlagsA >> 6) & 1u;   // dirty bit; x64 bit 6
+    return (mFlagsA >> 25) & 1u;   // ARTIST dirty bit
 }
 
 // (AptCIH::_gotoAndX @0x82B0D2F0 -- the AS gotoAndPlay/gotoAndStop core -- is the

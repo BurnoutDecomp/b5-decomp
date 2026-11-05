@@ -182,7 +182,7 @@ void* AptUpdateZombieVector(char bClear)
         AptCIH* pZombie = reinterpret_cast<AptCIH*>(pVec->mppItems[i]);
         if (pZombie->GetCIHState() != 1u)
             continue;
-        if (!bClear && pZombie->GetZombieCount() > 0)
+        if (!bClear && pZombie->GetZombieCount() != 0)
             continue;
 
         // Compact the vector (shift the tail down one; clear the vacated top).

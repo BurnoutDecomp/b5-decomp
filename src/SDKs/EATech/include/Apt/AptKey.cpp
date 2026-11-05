@@ -407,7 +407,7 @@ AptValue* AptKey::sMethod_addListener(AptKey* /*pThis*/, int nArgCount)
             // value skips the marker test entirely (the X360 flag is 0) and proceeds to
             // the membership scan / add. So: add unless it is a marked CIH.
             const bool bRejected =
-                bIsCIH && (static_cast<AptCIH*>(pListener)->mFlagsA & 0x6u) != 0;
+                bIsCIH && (static_cast<AptCIH*>(pListener)->mFlagsA & 0x60000000u) != 0;
 
             if (!bRejected)
             {

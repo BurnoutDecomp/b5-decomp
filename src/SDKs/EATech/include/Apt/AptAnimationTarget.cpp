@@ -369,7 +369,7 @@ bool AptAnimationTargetSet::remove(AptValue* pValue)
 // ---------------------------------------------------------------------------
 // AptAnimationTarget::AddToRemList -- queue a
 // CIH on the shared delayed-release table:
-//   * a node already queued (the InRemList flag, x64 mFlagsA bit 5) is a no-op;
+//   * a node already queued (the InRemList flag, ARTIST mFlagsA 0x04000000) is a no-op;
 //   * a full table (size >= the table element count) flushes via CleanRemList;
 //   * find the first FREE (null) slot within the current fill run (else append);
 //   * AddRef the node, mark it queued (InRemList), store it; appending bumps the fill.
@@ -378,7 +378,7 @@ bool AptAnimationTargetSet::remove(AptValue* pValue)
 void AptAnimationTargetAddToRemList(AptAnimationTarget* /*pAnim (console r3, unread)*/,
                                     AptCIH* pItem)
 {
-    if (pItem->GetInRemList())                        // x64 bit 5 (X360 lwz 0xC(r30); extrwi 1,5)
+    if (pItem->GetInRemList())                        // ARTIST lwz 0xC(r30); extrwi 1,5
         return;                                       // already queued
 
     if (snDelayedReleaseListSize >= snMaxNewMovieClips)   // dword_8324E550 >= dword_8324E540
@@ -394,7 +394,7 @@ void AptAnimationTargetAddToRemList(AptAnimationTarget* /*pAnim (console r3, unr
     }
 
     pItem->AddRef();                                  // vtbl[0]
-    pItem->SetInRemList(true);                        // x64 bit 5 (X360 oris 0x400, reversed bit26)
+    pItem->SetInRemList(true);                        // ARTIST oris 0x400
     static_cast<AptValue**>(spDelayedReleaseList)[liSlot] = static_cast<AptValue*>(pItem);
     if (liSlot == snDelayedReleaseListSize)
         ++snDelayedReleaseListSize;                   // appended past the fill run
@@ -805,12 +805,12 @@ void AptAnimationTarget::CleanRemList()
         }
 
         // Only act on a defined CIH / CIH-none value that is not a "None" (type 3) and
-        // whose CIH state (x64 mFlagsA bits 1-2) is not the protected transitioning (1) form.
+        // whose CIH state (ARTIST mFlagsA bits 1-2) is not the protected transitioning (1) form.
         const AptVirtualFunctionTable_Indices leType = lpValue->getVtblIndex();
         const bool lbIsCIH =
             (leType == AptVFT_CharacterInstHandle || leType == AptVFT_CIHNone);
         if (!lbIsCIH
-            || (reinterpret_cast<AptCIH*>(lpValue)->mFlagsA & 0x6u) == 0x2u  // *(v4+12)
+            || (reinterpret_cast<AptCIH*>(lpValue)->mFlagsA & 0x60000000u) == 0x20000000u  // *(v4+12)
             || leType == AptVFT_None)
         {
             continue;
@@ -1579,13 +1579,13 @@ int AptAnimationTarget::RunActions()
                 // Named members (2026-07-01; were the console raw offsets on x64
                 // objects): the bound character instance (CIH +0x38) must not be
                 // the "empty" type-15 form (x64 tag = LOW 6 bits of mTypeFlags),
-                // and the CIH state (x64 mFlagsA bits 1-2) must not be dead (3).
+                // and the CIH state (ARTIST mFlagsA bits 1-2) must not be dead (3).
                 AptCharacterInst* lpCharInst = lpNode->mpCharacterInst;   // v5 = v4[8]
                 const u32 lnCharType = (lpCharInst != 0)
                     ? (lpCharInst->mTypeFlags & 0x3Fu) : 0xFu;
-                const u32 lnCIHState = lpNode->mFlagsA & 0x6u;            // v4[3]
+                const u32 lnCIHState = lpNode->mFlagsA & 0x60000000u;            // v4[3]
 
-                if (lnCharType != 0xFu && lnCIHState != 0x6u)
+                if (lnCharType != 0xFu && lnCIHState != 0x60000000u)
                 {
                     // The queued instance depth gate: a non-negative depth always runs;
                     // a negative depth runs only when the char inst is absent or its

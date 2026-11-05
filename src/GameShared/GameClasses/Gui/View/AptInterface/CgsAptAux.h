@@ -247,6 +247,9 @@ namespace CgsGui
         // loaded/free again: the binary stores 1 to the header state word at +0x14.
         void FreeAnimation(void* lpDataBlock);
 
+        // ARTIST 0x8284CB38: the host retains the constant table.
+        void FreeConstantTable(void* lpConstTable);
+
         // X360 0x828540E0 (gAptFuncs pfnOnUnload). Assert the AptAux singleton exists,
         // then ask AptCommunicator to remove the expired component registration.
         void OnUnload(AptValue* lpValue);
