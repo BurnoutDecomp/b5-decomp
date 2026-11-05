@@ -4282,7 +4282,7 @@ bool RaceCarEntityModule::IsCarColourInUse( s32 liPaletteIndex, s32 liColourInde
 //   5. the per-GLOBAL-slot loop (0..34) -> RaceCar::FillInOutputInterface
 //   6/7. the replay read/write legs against RaceCarEntitySerialiser::GetStaticLayout.
 //
-// REPRODUCED HERE: 2, 3, 4 (minus the deformation-ptr publish -- see below), 5.
+// REPRODUCED HERE: 1, 2, 3, 4 (minus the deformation-ptr publish -- see below), 5.
 //
 //
 // ⚠️ The console asserts "This car should be inactive" for muType == E_RACE_CAR_TYPE_INACTIVE
@@ -4295,8 +4295,11 @@ void RaceCarEntityModule::UpdateOutputInterfaces(
         RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpReplayActiveCarInterface,
         RaceCarEntityModuleIO::RCEntityGlobalRaceCarOutputInterface* lpReplayGlobalCarInterface )
 {
-    (void)lpReplayActiveCarInterface;    // [FLAG] steps 1 + 6/7 only
     (void)lpReplayGlobalCarInterface;    // [FLAG] steps 6/7 only
+
+    // ARTIST 0x822F5D30..0x822F5D88 copies the map into both outputs.
+    lpActiveCarInterface->SetWorldMap2D( &mWorldMap2D );
+    lpReplayActiveCarInterface->SetWorldMap2D( &mWorldMap2D );
 
     CGS_ASSERT( lpGlobalCarInterface != 0, "lpGlobalCarInterface != NULL" );   // X360 :4900
 

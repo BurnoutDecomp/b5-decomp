@@ -926,5 +926,10 @@ EActiveRaceCarIndex RCEntityActiveRaceCarOutputInterface::GetActiveRaceCarIndex(
                "lePlayerScoringIndex < E_PLAYER_SCORING_INDEX_COUNT");
     return maeActiveRaceCarIndex[lePlayerScoringIndex];
 }
+
+void RCEntityActiveRaceCarOutputInterface::SetWorldMap2D(const CgsWorld::WorldMap2D* lpWorldMap2D)
+{
+    mWorldMap2D = *lpWorldMap2D;
+}
 }
 }

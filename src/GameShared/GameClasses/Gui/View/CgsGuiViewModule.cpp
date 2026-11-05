@@ -794,10 +794,7 @@ namespace CgsGui
         {
             AptDataHeader* lpHeader = *static_cast<AptDataHeader* const*>(
                 lpNotification->mResourceHandle.mpResourceMemory);
-            // The PC bank emits resident registrations again when another bundle
-            // arrives. Preserve an already active movie during that transport replay.
-            if (lpHeader->meCurrentState != AptDataHeader::E_APTDATASTATE_ACTIVE)
-                lpHeader->meCurrentState = AptDataHeader::E_APTDATASTATE_LOADED;
+            lpHeader->meCurrentState = AptDataHeader::E_APTDATASTATE_LOADED;
             mAptAux.mAptDataHandler.AddAptData(lpHeader);
             break;
         }

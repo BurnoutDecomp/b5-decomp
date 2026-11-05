@@ -215,29 +215,22 @@ void VoicePoolBase::SetParameter(s32 liSendNameHash, f32 lfValue, s32 liReserved
 
 // ----------------------------------------------------------------------------
 // VoicePool<4>::VoicePool<4>  @ 0x826E5328
-//   The concrete pool ctor: the embedded PooledVoice array (maVoices) is bound into
-//   the base and reset to a clean free state via VoicePoolBase::Prepare(maVoices, N).
-//   (On X360 the compiler default-constructs the four embedded wrapper sub-objects
-//   and installs the pool vtable; the observable state-machine seed is the Prepare.)
+//   The compiler constructs the embedded wrappers and installs the pool vtable.
+//   The array is bound later by Prepare, as in InAirEffect::Attach.
 // ----------------------------------------------------------------------------
 template <u32 N>
 VoicePool<N>::VoicePool()
 {
-    VoicePoolBase::Prepare(maVoices, N);
 }
 
 // ----------------------------------------------------------------------------
 // VoicePool<4>::~VoicePool<4>  @ 0x826E5370
-//   The concrete pool dtor: Release() the bound slot array (per-slot wrapper teardown
-//   + unbind). On X360 the four embedded VoiceWrapper sub-objects are destroyed in
-//   reverse; that per-element teardown is the wrapper's own ~VoiceWrapper (reached
-//   through Release here). The compiler-emitted vtable installs + operator-delete
-//   tail are the deleting-destructor synthesis.
+//   The compiler destroys the embedded wrappers in reverse order. Explicit pool
+//   Release belongs to the caller's detach path, not the pool destructor.
 // ----------------------------------------------------------------------------
 template <u32 N>
 VoicePool<N>::~VoicePool()
 {
-    Release();
 }
 
 // Explicit instantiation: emits VoicePool<4>::VoicePool<4> @ 0x826E5328 and
