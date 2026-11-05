@@ -1,5 +1,5 @@
-// ICE menu construction and refresh. Timebar and color-picker containment
-// is recovered; existing menu content/geometry placeholders remain separate debt.
+// ICE menu construction and refresh. The per-state content tables are separate
+// from the menu styles and startup geometry.
 
 #include "SDKs/Packages/ICE/ICEController.hpp"                 // ICE::ICEController layout + widget members
 #include "SDKs/Packages/ICE/ICEAuthor.hpp"                     // ICE::ICEAuthor (the take-authoring base)
@@ -35,27 +35,20 @@ static const s32 KI_ICE_MENU_STYLE_ASSEMBLY      = 4;   // 0xF90
 static const s32 KI_ICE_MENU_STYLE_CANCEL        = 5;   // 0xF94
 static const s32 KI_ICE_MENU_STYLE_ICON          = 6;   // 0xF98
 
-// The per-widget menu sizes (width, height). The slot->size GROUPING is recovered:
-// mpMenuIntervalMain (0xF84) + mpMenuCopy (0xF88) share one pair (PAIR_A); mpMenuMain
-// (0xF80) + mpMenuAssembly (0xF90) share a different pair (PAIR_B); the remaining three
-// each have their own pair.
-// FLAG (placeholder pixels): the exact pixel sizes are ICE data-segment floats with no
-// symbol/reference, so the literal values below are PLACEHOLDERS; only the slot->size
-// grouping (the shared pairs) is recovered and faithful.
-static const f32 KF_ICE_MENU_PAIR_A_W = 150.0f;   // 0xF84 + 0xF88 width   (placeholder pixels)
-static const f32 KF_ICE_MENU_PAIR_A_H = 195.0f;   // 0xF84 + 0xF88 height  (placeholder pixels)
-static const f32 KF_ICE_MENU_PAIR_B_W = 130.0f;   // 0xF80 + 0xF90 width   (placeholder pixels)
-static const f32 KF_ICE_MENU_PAIR_B_H = 235.0f;   // 0xF80 + 0xF90 height  (placeholder pixels)
-static const f32 KF_ICE_MENU_COMMIT_W = 220.0f;   // 0xF8C width           (placeholder pixels)
-static const f32 KF_ICE_MENU_COMMIT_H = 130.0f;   // 0xF8C height          (placeholder pixels)
-static const f32 KF_ICE_MENU_CANCEL_W = 32.0f;    // 0xF94 width/height    (placeholder pixels)
-static const f32 KF_ICE_MENU_CANCEL_H = 32.0f;    // 0xF94 (same float)    (placeholder pixels)
-static const f32 KF_ICE_MENU_ICON_W   = 50.0f;    // 0xF98 width           (placeholder pixels)
-static const f32 KF_ICE_MENU_ICON_H   = 10.0f;    // 0xF98 height          (placeholder pixels)
+// ARTIST 82531F80..825320C0 loads these initial menu origins into f1/f2.
+static const f32 KF_ICE_MENU_PAIR_A_X = 150.0f;
+static const f32 KF_ICE_MENU_PAIR_A_Y = 195.0f;
+static const f32 KF_ICE_MENU_PAIR_B_X = 130.0f;
+static const f32 KF_ICE_MENU_PAIR_B_Y = 235.0f;
+static const f32 KF_ICE_MENU_COMMIT_X = 220.0f;
+static const f32 KF_ICE_MENU_COMMIT_Y = 130.0f;
+static const f32 KF_ICE_MENU_CANCEL_X = 32.0f;
+static const f32 KF_ICE_MENU_CANCEL_Y = 32.0f;
+static const f32 KF_ICE_MENU_ICON_X   = 50.0f;
+static const f32 KF_ICE_MENU_ICON_Y   = 10.0f;
 
-// The vertical offset added to mpMenuIntervalMain's mfY when anchoring the copy menu.
-// FLAG (placeholder pixels): a data-segment float with no symbol; value is a placeholder.
-static const f32 KF_ICE_COPY_MENU_Y_OFFSET = 0.0f;
+// ARTIST 82004FD8 supplies both the copy-menu offset and info-list inset.
+static const f32 KF_ICE_MENU_Y_SPACING = 25.0f;
 
 // ARTIST 825320C8/825320EC seed r7 after the three float arguments.
 static const u8  KU_ICE_TIMEBAR_FLAG_MAIN = 0;
@@ -134,15 +127,15 @@ static void WriteMenuCell(char* lpcCell, const char* lpcLabel)
 // ConstructMenus
 //
 // Allocate the editor's seven menu widgets from the ICE memory manager and build
-// each with its per-widget style index + size pair (mpMenuIntervalMain + mpMenuCopy
-// share one size pair; mpMenuMain + mpMenuAssembly share another), build the two
+// each with its per-widget style and origin (mpMenuIntervalMain + mpMenuCopy
+// share one origin; mpMenuMain + mpMenuAssembly share another), build the two
 // embedded time bars (trailing flag 0 then 1), then seed the logo / wide-screen-marker
 // / info-list geometry the editor HUD draws.
 //
 // Each widget is heap-allocated through the ICE memory manager's edit heap
 // (mpMenuC->GetMemory(64)) and then Construct()ed in place. The committed widget
 // Construct takes the edit-heap pointer + a style index (the per-style geometry key) +
-// the (width, height) size, so each call threads mpMenuC + the per-widget style + size.
+// the screen origin.
 // ---------------------------------------------------------------------------
 void ICEController::ConstructMenus()
 {
@@ -150,15 +143,15 @@ void ICEController::ConstructMenus()
     // built in place, in the order the body constructs them: interval-main (0xF84),
     // copy (0xF88), main (0xF80), assembly (0xF90), commit (0xF8C), cancel (0xF94),
     // icon (0xF98). Each call threads mpMenuC + the per-widget style index + the
-    // (width, height) pair. mpMenuIntervalMain + mpMenuCopy share size PAIR_A; mpMenuMain
-    // + mpMenuAssembly share size PAIR_B (see the size constants).
+    // screen origin. mpMenuIntervalMain + mpMenuCopy share PAIR_A; mpMenuMain
+    // + mpMenuAssembly share PAIR_B.
     mpMenuIntervalMain = static_cast<ICEWidgetMenu*>(mpMenuC->GetMemory(64));
     mpMenuIntervalMain->Construct(mpMenuC, KI_ICE_MENU_STYLE_INTERVAL_MAIN,
-                                  KF_ICE_MENU_PAIR_A_W, KF_ICE_MENU_PAIR_A_H);
+                                  KF_ICE_MENU_PAIR_A_X, KF_ICE_MENU_PAIR_A_Y);
 
     mpMenuCopy = static_cast<ICEWidgetMenu*>(mpMenuC->GetMemory(64));
     mpMenuCopy->Construct(mpMenuC, KI_ICE_MENU_STYLE_COPY,
-                          KF_ICE_MENU_PAIR_A_W, KF_ICE_MENU_PAIR_A_H);
+                          KF_ICE_MENU_PAIR_A_X, KF_ICE_MENU_PAIR_A_Y);
 
     // Position the copy menu to the right of the interval-main menu: its left edge =
     // interval-main left + interval-main width, and its top = interval-main top + a
@@ -166,27 +159,27 @@ void ICEController::ConstructMenus()
     // the mfX/mfY stores (+0x34/+0x38 == +52/+56) are the copy menu's screen position.
     const f32 lfIntervalMainWidth = mpMenuIntervalMain->GetWidth();
     mpMenuCopy->mfX = lfIntervalMainWidth + mpMenuIntervalMain->mfX;
-    mpMenuCopy->mfY = mpMenuIntervalMain->mfY + KF_ICE_COPY_MENU_Y_OFFSET;
+    mpMenuCopy->mfY = mpMenuIntervalMain->mfY + KF_ICE_MENU_Y_SPACING;
 
     mpMenuMain = static_cast<ICEWidgetMenu*>(mpMenuC->GetMemory(64));
     mpMenuMain->Construct(mpMenuC, KI_ICE_MENU_STYLE_MAIN,
-                          KF_ICE_MENU_PAIR_B_W, KF_ICE_MENU_PAIR_B_H);
+                          KF_ICE_MENU_PAIR_B_X, KF_ICE_MENU_PAIR_B_Y);
 
     mpMenuAssembly = static_cast<ICEWidgetMenu*>(mpMenuC->GetMemory(64));
     mpMenuAssembly->Construct(mpMenuC, KI_ICE_MENU_STYLE_ASSEMBLY,
-                              KF_ICE_MENU_PAIR_B_W, KF_ICE_MENU_PAIR_B_H);
+                              KF_ICE_MENU_PAIR_B_X, KF_ICE_MENU_PAIR_B_Y);
 
     mpMenuCommit = static_cast<ICEWidgetMenu*>(mpMenuC->GetMemory(64));
     mpMenuCommit->Construct(mpMenuC, KI_ICE_MENU_STYLE_COMMIT,
-                            KF_ICE_MENU_COMMIT_W, KF_ICE_MENU_COMMIT_H);
+                            KF_ICE_MENU_COMMIT_X, KF_ICE_MENU_COMMIT_Y);
 
     mpMenuCancel = static_cast<ICEWidgetMenu*>(mpMenuC->GetMemory(64));
     mpMenuCancel->Construct(mpMenuC, KI_ICE_MENU_STYLE_CANCEL,
-                            KF_ICE_MENU_CANCEL_W, KF_ICE_MENU_CANCEL_H);
+                            KF_ICE_MENU_CANCEL_X, KF_ICE_MENU_CANCEL_Y);
 
     mpMenuIcon = static_cast<ICEWidgetMenu*>(mpMenuC->GetMemory(64));
     mpMenuIcon->Construct(mpMenuC, KI_ICE_MENU_STYLE_ICON,
-                          KF_ICE_MENU_ICON_W, KF_ICE_MENU_ICON_H);
+                          KF_ICE_MENU_ICON_X, KF_ICE_MENU_ICON_Y);
 
     // The two embedded time bars (built in place, NOT heap-allocated -- they live by
     // value inside the controller). The main bar takes the fixed HUD origin + start;
@@ -199,6 +192,11 @@ void ICEController::ConstructMenus()
     mTimeBar2.Construct(KF_ICE_TIMEBAR_X, KF_ICE_TIMEBAR_Y + KF_ICE_TIMEBAR2_Y_STEP,
                         KF_ICE_TIMEBAR_START, KU_ICE_TIMEBAR_FLAG_2);
 
+    // ARTIST 82532108/1C/20 initializes the info-list fields.
+    mInfoList.mfFirstLineY = KF_ICE_TIMEBAR_Y - KF_ICE_MENU_Y_SPACING;
+    mInfoList.miItemCount = 0;
+    mInfoList.mfBaseY = KF_ICE_TIMEBAR_X + 415.0f;
+
     // ARTIST 82532124..8253216C: the contained color picker at7144.
     // X/Y globals82FB6910/82FB643C are zero in the calibrated native image.
     mColorPicker.Construct(0.0f, 0.0f, 50.0f);
@@ -209,16 +207,10 @@ void ICEController::ConstructMenus()
     mfHudRectWidth = 28.0f;
     mfHudRectHeight = 28.0f;
 
-    // Seed the logo / wide-screen-marker / info-list geometry the editor HUD draws.
-    // The source spine writes a block of fixed layout floats into the target-box /
-    // logo / info-list head region (the +0x713C..+0x71E4 lanes). Those lanes live
-    // inside the embedded widgets' reserved heads (see ICEController.hpp's mTargetBox
-    // note); they are the editor's fixed on-screen HUD-element placement.
-    // FLAG (HUD geometry): the exact split of these fixed layout floats between the
-    // logo, the wide-screen marker, the info-list and the target box is summarised in
-    // the widget reserved heads; ConstructMenus seeds them as the fixed editor HUD
-    // layout. They are not driven by named members here (the widgets own those
-    // lanes); the seeding is a fixed-layout init the Render path consumes.
+    // ARTIST 825321B0..B8 starts the logo at its fixed origin and phase.
+    mLogo.miTimer = 0;
+    mLogo.mfX = 600.0f;
+    mLogo.mfY = -85.0f;
 }
 
 // ---------------------------------------------------------------------------

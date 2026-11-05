@@ -151,8 +151,11 @@ bool PresentationEffect::Attach()
     mStreamParams.mpLogicModule = lpModule;
     mStreamParams.mFactoryName = static_cast<u32>(
         CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+    // ARTIST 0x826F7958 routes splice 65534 through 0x8269E418, which
+    // sets the stream create params to MusicVoiceSpec. Splice 65535 uses
+    // StereoWavVoiceSpec in Play's resident-WAV arm below.
     mStreamParams.mVoiceSpecName = static_cast<u32>(
-        CgsSound::Playback::Name::MakeHash("StereoWavVoiceSpec"));
+        CgsSound::Playback::Name::MakeHash("MusicVoiceSpec"));
     mStreamParams.mSlotName = static_cast<u32>(
         CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
     mStreamParams.mSendName = static_cast<u32>(
