@@ -877,10 +877,7 @@ MainGameFlowStateInitialLoadingScreen::MainGameFlowStateInitialLoadingScreen()
 {
 }
 
-// @ 0x823AA950 - park the scripted world load, reset the load stages to START and raise
-// the renderer's loading-screen signal (Option B bridge for the game-module global the
-// X360 writes). Store order is the console's: park=0, assert stage==START, park=1,
-// pending-GUI-FSM-stage=0, then the per-instance resets.
+// ARTIST 0x823AA950 parks the scripted load and resets the initial loading state.
 void MainGameFlowStateInitialLoadingScreen::OnEnter()
 {
     // The pre-title park triplet (@0x823AA96C / assert :0xC3 / @0x823AA9B4).
@@ -889,23 +886,11 @@ void MainGameFlowStateInitialLoadingScreen::OnEnter()
                "meLoadingStateStage == E_LOADINGSTATESTAGE_START");
     gBrnScriptedLoadPaused = true;
 
-    // @0x823AA9C0 -- the pending-GUI-FSM-stage slot (gm+0x9A0644) is stamped 0 here; the
-    // PC models that slot as RequestGuiFsmStage (BrnGameModule.hpp:483).
     gpBurnoutGame->RequestGuiFsmStage(0);
-
+    mpInputModuleAllocator = 0;
     meLoadingScreenStage = E_LOADINGSTAGE_START;
-    mbGuiPreloadDone     = false;
-
-    // @0x823AA9D8 -- mbSaveLoadState = 1. NB the console never EXECUTES this body (SendEvent
-    // never targets state 0; Construct seeds it raw), so the initial-load update set stays
-    // 0x80 there. The PC no longer calls OnEnter at boot either -- see the removed SetState
-    // in BrnGameModule::Construct -- but the body is reproduced faithfully for re-entry.
-        gpBurnoutGame->GetMainFlowStateMachine().SetSaveLoadState(true);
-    // The show command posts from Update each tick (the X360 writes the dispatch write
-    // buffer's command every Update @0x823EF688; Update runs this same frame).
-
-    if (CgsDev::Message::gxMessageFilterFlags & 1)
-        *CgsDev::Log::gpDebugPrint << "InitialLoadingScreen: OnEnter - loading screen shown\n";
+    mbGuiPreloadDone = false;
+    gpBurnoutGame->GetMainFlowStateMachine().SetSaveLoadState(true);
 }
 
 // @ 0x823AA9E8 - clear the loading-screen signal on exit (unless the GUI BF_LOADING state owns it,
@@ -1292,20 +1277,14 @@ void MainGameFlowStateMemoryCard::Render() { LoadingScriptedState::Render(); }
 // --- MainGameFlowStateCompleteLoading (the post-title / compound-load phase) -------------
 MainGameFlowStateCompleteLoading::MainGameFlowStateCompleteLoading() {}
 
-// @ 0x823AABD0 -- request the BF_COMPLOAD GUI FSM stage (BrnCmpLdFsm; pending-stage
-// byte = 3) and reset the settle latch (X360 this+4 = 0).
+// ARTIST 0x823AABD0: unpark loading, request BF_COMPLOAD, mark the video phase,
+// then reset the collision preparation latch.
 void MainGameFlowStateCompleteLoading::OnEnter()
 {
-    // @0x823AABF0 -- CLEAR ONLY (see MemoryCard::OnEnter).
     gBrnScriptedLoadPaused = false;
-
     gpBurnoutGame->RequestGuiFsmStage(3);
+    gpBurnoutGame->GetMainFlowStateMachine().SetVideoState(true);
     mbIsCollisionWorldPrepared = false;
-
-    // @0x823AAC04 -- mbVideoState = 1 (the post-title intro is a video phase).
-        gpBurnoutGame->GetMainFlowStateMachine().SetVideoState(true);
-    if (CgsDev::Message::gxMessageFilterFlags & 1)
-        *CgsDev::Log::gpDebugPrint << "CompleteLoading: OnEnter -> GUI FSM stage 3 (BrnCmpLdFsm)\n";
 }
 // ARTIST823AAC18: clear the flow's video byte, then leave GUI boot-movie mode.
 // game+0x70A65D == GUI base0x6EAA20 + mbBootMovieMode0x1FC3D; the same byte

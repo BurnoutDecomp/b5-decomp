@@ -725,29 +725,9 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
 // +0x6740 += module +0x18398), then RaceCarStreamer::UpdateDesiredCars. Written here as
 // the one call the inline came from.
 //
-// The tail is a sweep of the eight active-car slots:
-//     if (GetActiveRaceCar(i)->muState == 1 /* waiting for load */) {
-//         if (mRaceCarStreamer.IsRaceCarLoaded(i) &&
-//             (car->IsPlayer() || !car->IsOnRaceStartState(0)))
-//                  OnRaceCarResourcesLoaded(i, lpOutput->GetVehicleInputInterface());
-//         else     lbAllLoaded = false;
-//     }
-// followed by the car-select wait latches (this+99168..99175, gated on
-// mbInCarSelectScreen at +0x186C9), the readiness publish
-// (GetActiveRaceCarOutputInterface()->SetAllActiveCarsReady(lbAllLoaded), the pseudocode's
-// `result[10337]`) and the "streaming finished" edge (this[99144] -> this[99185]).
-//
-// The RESOURCE-COMPLETE sweep IS reproduced now that the ActiveRaceCar interior is homed
-// (pose wave 2026-07-31). What still is not, and is FLAGGED rather than paraphrased:
-//   * OnRaceCarResourcesLoaded @0x822FEBF8 -- it needs ActiveRaceCar::OnResourcesLoaded
-//     (which dereferences the vehicle's PHYSICS def for the centre-of-mass transform),
-//     SetupCarColour and PlaceRaceCarOnLoad. It is UNREACHABLE on this build anyway:
-//     IsRaceCarLoaded() demands all five resource bits and VEH_<id>_AT.bin (attributes +
-//     physics) is not ported, so the predicate is constant-false. Left as an explicit
-//     call site guarded by the console's own condition so the moment the data lands the
-//     only missing piece is that one function.
-//   * (both since landed: the car-select wait latches, and -- crash parity 2026-09-24, reviewer
-//     C -- the readiness publish, below.)
+// ARTIST 0x822FF098..0x822FF144 checks the eight active slots before the
+// car-select waits. A slot waiting for load can withhold readiness until its
+// resources are resident and its race-start state permits activation.
 void RaceCarEntityModule::UpdateStreaming(
         const RaceCarEntityModuleIO::InputBuffer_PreScene* lpInput,
         RaceCarEntityModuleIO::OutputBuffer_PreScene* lpOutput )
@@ -770,14 +750,29 @@ void RaceCarEntityModule::UpdateStreaming(
 
     for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
     {
-        ActiveRaceCar* lpActiveRaceCar =
-            GetActiveRaceCar( static_cast<EActiveRaceCarIndex>( liCar ) );
+        const EActiveRaceCarIndex leCar = static_cast<EActiveRaceCarIndex>( liCar );
+        ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leCar );
 
         if( !lpActiveRaceCar->IsWaitingForLoad() )
         {
             continue;
         }
 
+        if( !mRaceCarStreamer.IsRaceCarLoaded( liCar ) ||
+            ( !lpActiveRaceCar->IsPlayer() &&
+              lpActiveRaceCar->IsOnRaceStartState( ActiveRaceCar::E_RACE_START_STATE_ON_START_LINE ) ) )
+        {
+            lbAllLoaded = false;
+            continue;
+        }
+
+        RaceCarEntityModuleIO::OutputBuffer_PreScene::SceneInputInterface* const lpSceneInput =
+            lpOutput->GetSceneInputInterface();
+        RaceCarEntityModuleIO::OutputBuffer_PreScene::RaceCarAIInterface* const lpRaceCarAI =
+            lpOutput->GetRaceCarAIInterface();
+        RaceCarEntityModuleIO::OutputBuffer_PreScene::VehicleInputInterface* const lpVehicleInput =
+            lpOutput->GetVehicleInputInterface();
+        OnRaceCarResourcesLoaded( leCar, lpVehicleInput, lpRaceCarAI, lpSceneInput );
     }
     // ARTIST UpdateStreaming: required junkyard prefetch slots participate in the
     // same completion edge as active cars; audio-only waits remain in their own lane.
@@ -829,9 +824,7 @@ void RaceCarEntityModule::UpdateStreaming(
         const s32 liPublished = lbAllLoaded ? 1 : 0;
     }
 
-    // ARTIST UpdateStreaming's completion edge. Retains the existing PC resource
-    // readiness predicate above (the one bring-up relaxation); the car-select prefetch and
-    // junkyard-exit audio waits above are the console's own.
+    // ARTIST 0x822FF214..0x822FF240 publishes one completion per wait.
     if (lbAllLoaded && mbWaitingForStreaming)
     {
         mbWaitingForStreaming = false;
@@ -860,7 +853,9 @@ void RaceCarEntityModule::UpdateStreaming(
 //
 void RaceCarEntityModule::OnRaceCarResourcesLoaded(
         EActiveRaceCarIndex leActiveRaceCarIndex,
-        BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface )
+        BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface,
+        BrnAI::AIModuleIO::RaceCarAIInterface*,
+        CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* )
 {
     ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( leActiveRaceCarIndex );
 
@@ -870,10 +865,6 @@ void RaceCarEntityModule::OnRaceCarResourcesLoaded(
 
     RaceCar* lpRaceCar = lpActiveRaceCar->GetGlobalRaceCar();
     CGS_ASSERT( lpRaceCar != 0, "lpRaceCar" );                                 // X360 :2204
-    if( lpRaceCar == 0 || mpVehicleList == 0 )
-    {
-        return;
-    }
 
     const s32 liModelIndex = mpVehicleList->GetVehicleIndex( lpRaceCar->GetModelId() );
     CGS_ASSERT( liModelIndex >= 0, "liModelIndex >= 0" );                      // X360 :2213
@@ -882,13 +873,22 @@ void RaceCarEntityModule::OnRaceCarResourcesLoaded(
         mpVehicleList->GetVehicleData( liModelIndex );
     CGS_ASSERT( lpListEntry != 0, "lpListEntry != NULL" );                     // X360 :2217
 
-    const rw::math::vpu::VectorIntrinsic lInitialVelocityIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lInitialVelocity(lInitialVelocityIntrinsic);
+    const u64 luCarAssetAttribKey = lpListEntry->GetAttribCollectionKeyHash();
+    Vector3 lInitialVelocity;
+    lInitialVelocity.SetZero();
+    if( lpRaceCar == DEBUG_mpDebugRaceCar )
+        lInitialVelocity = rw::math::vpu::Mult( DEBUG_mDebugRaceCarDirection, DEBUG_mfDebugRaceCarVelocity );
+
+    const RaceCarStreamer::GraphicsResourcePtr& lrGraphicsResource =
+        mRaceCarStreamer.GetGraphicsResource( static_cast<s32>( leActiveRaceCarIndex ) );
+    const RaceCarStreamer::PhysicsResourcePtr& lrPhysicsResource =
+        mRaceCarStreamer.GetPhysicsResource( static_cast<s32>( leActiveRaceCarIndex ) );
 
     lpActiveRaceCar->OnResourcesLoaded(
-        mRaceCarStreamer.GetPhysicsResource( static_cast<s32>( leActiveRaceCarIndex ) ),
-        mRaceCarStreamer.GetGraphicsResource( static_cast<s32>( leActiveRaceCarIndex ) ),
+        lrPhysicsResource,
+        lrGraphicsResource,
         lpVehicleInputInterface,
-        ( lpListEntry != 0 ) ? lpListEntry->GetAttribCollectionKeyHash() : 0ull,
+        luCarAssetAttribKey,
         lInitialVelocity );
 
     SetupCarColour( leActiveRaceCarIndex );              // bl @0x822FEDD0
@@ -897,17 +897,6 @@ void RaceCarEntityModule::OnRaceCarResourcesLoaded(
 
     lpActiveRaceCar->SetComingInRange( false );          // +0x775 (1909)
     lpActiveRaceCar->SetJoiningGameMode( false );        // +0x776 (1910)
-
-    if( CgsDev::Log::gpDebugPrint != 0 )
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[PLACEONTRACK] race car " << static_cast<s32>( leActiveRaceCarIndex )
-            << " resources loaded -> E_STATE_WAITING\n";
-    }
-
-    (void)lpVehicleInputInterface;   // the console passes it straight through to
-                                     // ActiveRaceCar::OnResourcesLoaded's caller chain;
-                                     // AddHandlingModel is what actually consumes it.
 }
 
 // ============================================================================
