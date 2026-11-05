@@ -14,7 +14,7 @@ namespace Logic
 void VoiceWrapper::Create(const CreateParams& arCreateParams)
 {
     mCreateParams = arCreateParams;
-    CGS_ASSERT(!mContent.IsCreated(), "!mContent");
+    CGS_ASSERT(mContent.GetObject() == 0, "!mContent");
     CGS_ASSERT(mCreateParams.mpLogicModule != 0,
                "mCreateParams.mpLogicModule");
 
@@ -33,24 +33,21 @@ void VoiceWrapper::Create(const CreateParams& arCreateParams)
             Playback::Name(static_cast<uintptr_t>(mCreateParams.mFactoryName)),
             Playback::Name(static_cast<uintptr_t>(mCreateParams.mContentSpecName)));
 
-        if (lpContent)
-            lpContent->Acquire();
-        mContent.Adopt(lpContent, mCreateParams.mpLogicModule);
+        Playback::Handle<Playback::Content> lhContent(lpContent);
+        mContent = lhContent;
         if (lpContent)
             lpContent->Release();
     }
     else
     {
         CGS_ASSERT(mCreateParams.mpContent != 0, "mCreateParams.mpContent");
-        Playback::Content* lpContent =
-            mCreateParams.mpContent->GetContent().GetObject();
-        CGS_ASSERT(lpContent != 0, "Content not yet created!");
-        if (lpContent)
-            lpContent->Acquire();
-        mContent.Adopt(lpContent, mCreateParams.mpLogicModule);
+        const Content::ContentHandle& lrContent =
+            mCreateParams.mpContent->GetContent();
+        CGS_ASSERT(lrContent.GetObject() != 0, "Content not yet created!");
+        mContent = lrContent;
     }
 
-    CGS_ASSERT(mContent.IsCreated(), "mContent");
+    CGS_ASSERT(mContent.GetObject() != 0, "mContent");
     meUpdateStage = E_UPDATE_STAGE_CREATE;
 }
 
@@ -128,7 +125,7 @@ void VoiceWrapper::Update()
                                mCreateParams.mReverbSubMixVoiceID);
             }
 
-            Playback::Content* lpContent = mContent.GetContent().GetObject();
+            Playback::Content* lpContent = mContent.GetObject();
             Playback::Handle<Playback::Content> lhContent(lpContent);
             if (lpContent)
                 lpContent->Acquire();
@@ -137,7 +134,8 @@ void VoiceWrapper::Update()
             // ARTIST checks the content state immediately after attachment.
         }
         case E_UPDATE_STAGE_WAIT:
-            if (!mContent.IsLoaded())
+            if (mContent->GetContentState() !=
+                Playback::E_CONTENT_STATE_LOADED)
                 break;
             meUpdateStage = E_UPDATE_STAGE_START;
             // ARTIST @ 0x826DC5E0 starts ready content in this update.
@@ -182,12 +180,12 @@ void VoiceWrapper::Release()
         mVoice.Destruct();
     }
 
-    Playback::Content* lpContent = mContent.GetContent().GetObject();
+    Playback::Content* lpContent = mContent.GetObject();
     if (mCreateParams.mContentSpecName && lpContent)
         lpContent->BeginRemove();
     if (lpContent)
         lpContent->Release();
-    mContent.Adopt(0, 0);
+    mContent.SetObject(0);
 
     mbPlay = false;
     mu32OptionalPlayParam = 0;

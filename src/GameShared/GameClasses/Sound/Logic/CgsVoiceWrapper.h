@@ -140,7 +140,7 @@ public:
 private:
     CreateParams mCreateParams;             // X360 +0x04
     Voice mVoice;                           // X360 +0x34
-    Content mContent;                       // X360 +0x40
+    Content::ContentHandle mContent;        // X360 +0x40 (one Playback::Content pointer)
     u32 mu32OptionalPlayParam;              // X360 +0x44
     E_UPDATE_STAGE meUpdateStage;           // X360 +0x48
     bool mbPlay;                            // X360 +0x4c
