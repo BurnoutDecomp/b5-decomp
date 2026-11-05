@@ -31,9 +31,8 @@
 //     the GameData input (AppendRequestInterface<256>); UnlockForRead;
 //   * DestroyIOBuffer, return prepared.
 //
-// FLAG: BrnHW::System360HW has no typed launch-data accessor yet. Its first 0x98 bytes ARE the
-// buffer XGetLaunchData fills (see System360HW's header), which is the address the console hands
-// Prepare, so the object pointer is reinterpreted as the incomplete BrnHW::LaunchData.
+// GetSoftRebootData exposes System360HW's typed LaunchData subobject at +0, the same 0x98-byte
+// region XGetLaunchData fills and ARTIST passes to BrnNetworkModule::Prepare.
 bool LoadingScriptedState::LoadNetworkModule(BrnResource::GameDataIO::InputBuffer* lpGameDataInputBuffer,
                                              const BrnResource::GameDataIO::OutputBuffer* lpGameDataOutputBuffer)
 {
@@ -51,7 +50,7 @@ bool LoadingScriptedState::LoadNetworkModule(BrnResource::GameDataIO::InputBuffe
     lpUpdateOutputStack->CreateIOBuffer<BrnNetwork::BrnNetworkModuleIO::OutputBuffer>(&lpNetworkOutputBuffer, "Network");
 
     const BrnHW::LaunchData* lpLaunchData =
-        reinterpret_cast<const BrnHW::LaunchData*>(lpGameModule->GetSoftRebootData());
+        &lpGameModule->GetSoftRebootData()->mLaunchData;
 
     const bool lbPrepared = lpGameModule->GetNetworkModule().Prepare(
         lpNetworkOutputBuffer, leFrameRate, lpLaunchData, lpGameDataOutputBuffer->GetAllocatorList());

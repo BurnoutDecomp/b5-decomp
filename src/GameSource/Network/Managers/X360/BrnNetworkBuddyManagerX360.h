@@ -45,23 +45,11 @@
 #include "GameSource/Network/Managers/BrnNetworkBuddyManagerBase.h"  // BrnNetwork::BuddyManagerBase (real base)
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"          // PlayerName, BrnNetworkModuleIO::InviteOrJoinParams
 
-namespace BrnHW { struct LaunchData; }   // Prepare param (pointer only; no class home yet)
+namespace BrnHW { struct LaunchData; }   // Prepare param (pointer-only; home BrnSystemHWX360.h)
 
 namespace BrnNetwork
 {
     namespace BrnNetworkModuleIO { struct PostSimulationInputBuffer; struct NetworkEventQueue; }
-
-    // The two fields of the launch data (BrnHW::LaunchData, handed to BrnNetworkManager::Prepare
-    // and on to Prepare unchanged) that Prepare reads: the requesting controller port @ +0x00
-    // and the session-ID string @ +0x14. FLAG: BrnHW::LaunchData has no class home yet, so
-    // Prepare reads it through this view; retire the view once LaunchData is homed with these
-    // two members.
-    struct BuddySoftRebootData
-    {
-        s32  miUserControllerPort;   // +0x00 (Prepare: this->miPendingInviteUserPort = lpData[0])
-        u8   maPad04[0x14 - 0x04];   // +0x04 .. +0x14 (opaque)
-        char macSessionID[128];      // +0x14 (Prepare: strncpy(macPendingSessionID, &lpData[0x14], 128))
-    };
 
     class BrnServerInterface;
 
@@ -79,8 +67,8 @@ namespace BrnNetwork
         void Destruct();
 
         // X360 0x8254C818 -- chain the game base Prepare; on success latch the soft-reboot
-        // invite (controller port + session ID) out of the launch data so the next Update can
-        // re-issue it. Returns the base Prepare result. Called by BrnNetworkManager::Prepare.
+        // invite (controller port + session ID) from the typed launch data so the next Update
+        // can re-issue it. Returns the base Prepare result. Called by BrnNetworkManager::Prepare.
         bool Prepare(const BrnHW::LaunchData* lpSoftRebootData);
 
         // X360 0x8254C978 -- chain the game base Release. Called by BrnNetworkManager::Release.

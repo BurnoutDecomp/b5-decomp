@@ -33,7 +33,7 @@ static const unsigned int KU_CONTROLFP_MASK_A     = 0x00030000u;
 static const unsigned int KU_CONTROLFP_NEWVALUE_B = 0x01000000u;
 static const unsigned int KU_CONTROLFP_MASK_B     = 0x03000000u;
 
-// XGetLaunchData fills the first 0x98 bytes of the object (dwBufferSize literal).
+// XGetLaunchData fills the typed mLaunchData subobject (dwBufferSize literal).
 static const unsigned int KU_LAUNCHDATA_SIZE = 0x98u;
 
 // CgsStringUtils.h:65 caps the launched command line at 64 bytes (the `>= 0x40` test).
@@ -102,7 +102,7 @@ namespace BrnHW
                     << " *****************************************\n";
             }
 
-            XGetLaunchData(this, KU_LAUNCHDATA_SIZE);
+            XGetLaunchData(&mLaunchData, KU_LAUNCHDATA_SIZE);
             mePrepareStage++;
             meReleaseStage = E_PREPARESTAGE_START;
             return true;
@@ -157,16 +157,16 @@ namespace BrnHW
     // in, and the live profile name matches the snapshot taken at launch.
     bool System360HW::HasGameBeenRebootedDueToInvite()
     {
-        if (mPad94 == 0)
+        if (mLaunchData.mbIsLocalUserChange == 0)
             return false;
-        if (mPad14 == 0)
+        if (mLaunchData.macSessionID[0] == 0)
             return false;
-        if (XUserGetSigninState(mdwUserIndex) == 0)
+        if (XUserGetSigninState(mLaunchData.mdwUserIndex) == 0)
             return false;
 
         char lacLiveName[16];
-        XUserGetName(mdwUserIndex, lacLiveName, 16);
-        if (strnicmp(lacLiveName, macUserName, 16) != 0)
+        XUserGetName(mLaunchData.mdwUserIndex, lacLiveName, 16);
+        if (strnicmp(lacLiveName, mLaunchData.macUserName, 16) != 0)
             return false;
 
         return true;

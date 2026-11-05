@@ -89,7 +89,7 @@ namespace CgsMemory
 
 namespace BrnHW
 {
-    struct LaunchData;                   // pointer-only (Prepare); no class home yet
+    struct LaunchData;                   // pointer-only (Prepare); defined in BrnSystemHWX360.h
 }
 
 namespace BrnNetwork

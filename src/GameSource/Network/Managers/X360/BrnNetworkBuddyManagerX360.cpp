@@ -12,6 +12,7 @@
 #include "GameSource/Network/BrnServerInterface.h"                      // BrnNetwork::BrnServerInterface::GetGameComponent
 #include "GameSource/Network/BrnNetworkModuleIO.h"                      // BrnNetworkModuleIO::PostSimulationInputBuffer
 #include "GameSource/Network/BrnNetworkGameParams.h"                    // BrnNetwork::GameParams
+#include "GameSource/Game/X360/BrnSystemHWX360.h"                       // BrnHW::LaunchData
 
 // ---- XDK / Xbox-LIVE entry points -------------------------------------------
 // Real prototypes live in the Xbox 360 XDK (<xapi.h>/<xonline.h>/<winbase.h>); declared here
@@ -136,15 +137,12 @@ namespace BrnNetwork
 
         CGS_ASSERT(lpSoftRebootData, "lpSoftRebootData");
 
-        // FLAG: view of the launch data's two read fields (see BuddySoftRebootData).
-        const BuddySoftRebootData* lpRebootData = reinterpret_cast<const BuddySoftRebootData*>(lpSoftRebootData);
-
         // Length-guard the soft-reboot session id (the X360 inlined CgsString length check that
         // fires "String too long: " if the id is >= 128 bytes before the strncpy).
-        CGS_ASSERT(strlen(lpRebootData->macSessionID) < KU_SESSION_ID_LENGTH, "String too long: ");
+        CGS_ASSERT(strlen(lpSoftRebootData->macSessionID) < KU_SESSION_ID_LENGTH, "String too long: ");
 
-        strncpy(macPendingSessionID, lpRebootData->macSessionID, KU_SESSION_ID_LENGTH);
-        miPendingInviteUserPort = lpRebootData->miUserControllerPort;
+        strncpy(macPendingSessionID, lpSoftRebootData->macSessionID, KU_SESSION_ID_LENGTH);
+        miPendingInviteUserPort = static_cast<s32>(lpSoftRebootData->mdwUserIndex);
         return true;
     }
 
@@ -225,24 +223,16 @@ namespace BrnNetwork
                 // Build the Guide soft-reboot launch data (0x98 bytes) and relaunch the title into
                 // the joined session. Offsets are X360-authoritative (XSetLaunchData(&var_C0, 0x98)
                 // with the named stores at var_C0 + 0x00 / +0x04 / +0x14 / +0x94):
-                //   +0x00 miUserControllerPort  (the requesting user port)
+                //   +0x00 mdwUserIndex         (the requesting controller/user port)
                 //   +0x04 macUserName[16]       (XUserGetName for that port; the gamertag)
                 //   +0x14 macSessionID[128]     (strncpy of the invite session id, 128)
                 //   +0x94 mbIsLocalUserChange   (stb 1)
-                struct BuddyLaunchData
-                {
-                    s32  miUserControllerPort;  // +0x00
-                    char macUserName[16];       // +0x04
-                    char macSessionID[128];     // +0x14
-                    u8   mbIsLocalUserChange;   // +0x94 (X360 stb 1)
-                    u8   maPad95[0x98 - 0x95];  // -> +0x98
-                } lLaunchData;
-
-                lLaunchData.miUserControllerPort = lInviteOrJoinParams.miUserControllerPort;
+                BrnHW::LaunchData lLaunchData;
+                lLaunchData.mdwUserIndex = static_cast<u32>(lInviteOrJoinParams.miUserControllerPort);
                 XUserGetName(lInviteOrJoinParams.miUserControllerPort, lLaunchData.macUserName, 16);
                 strncpy(lLaunchData.macSessionID, lInviteOrJoinParams.macSessionID, KU_SESSION_ID_LENGTH);
                 lLaunchData.mbIsLocalUserChange = 1;
-                XSetLaunchData(&lLaunchData, 0x98);
+                XSetLaunchData(&lLaunchData, sizeof(lLaunchData));
             }
 
             BuddyManagerBase::StartInvite(lInviteOrJoinParams);

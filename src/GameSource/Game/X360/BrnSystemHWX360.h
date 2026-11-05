@@ -16,15 +16,15 @@ namespace MassiveAdClient3 { class CMassiveClientCore; }
 //
 // Layout is recovered store-for-store from the X360 asm of Prepare/Release/
 // HasGameBeenRebootedDueToInvite:
-//   +0x00  user index          (XUserGetSigninState / XUserGetName dwUserIndex)
+//   +0x00  launch-data user index (XUserGetSigninState / XUserGetName dwUserIndex)
 //   +0x04  signed-in user name (16 bytes; strnicmp'd against the live profile name)
-//   +0x14  byte flag gating HasGameBeenRebootedDueToInvite
-//   +0x94  byte flag gating HasGameBeenRebootedDueToInvite
+//   +0x14  session ID (128 bytes; non-empty gates the invite-reboot query)
+//   +0x94  local-user-change flag (gates the invite-reboot query)
 //   +0x98  prepare-stage enum (Prepare advances it via operator++)
 //   +0x9C  release-stage enum (Release advances it via operator++)
 //   +0xA0  embedded Massive sub-system (System360HWMassive)
 //   +0xAC  late-load flag; command-line buffer at +0xAD
-// The first 0x98 bytes are the buffer XGetLaunchData fills (dwBufferSize = 0x98).
+// XGetLaunchData fills the typed LaunchData member at +0 for exactly 0x98 bytes.
 
 namespace BrnMassive
 {
@@ -102,6 +102,23 @@ namespace BrnMassive
 
 namespace BrnHW
 {
+    // The exact 0x98-byte payload written by XGetLaunchData and consumed by the
+    // network invite path. XSetLaunchData uses the same layout when relaunching
+    // into a session.
+    struct LaunchData
+    {
+        u32 mdwUserIndex;                 // +0x00
+        char macUserName[16];             // +0x04
+        char macSessionID[128];           // +0x14
+        u8 mbIsLocalUserChange;           // +0x94
+        u8 maPad95[3];                    // +0x95..+0x97
+    };
+
+    CGS_STATIC_ASSERT(sizeof(LaunchData) == 0x98, "ARTIST launch-data extent");
+    CGS_STATIC_ASSERT(offsetof(LaunchData, macUserName) == 0x04, "ARTIST launch user name");
+    CGS_STATIC_ASSERT(offsetof(LaunchData, macSessionID) == 0x14, "ARTIST launch session ID");
+    CGS_STATIC_ASSERT(offsetof(LaunchData, mbIsLocalUserChange) == 0x94, "ARTIST launch flag");
+
     struct System360HW
     {
         // Single-step prepare/release state machine. START is the initial state and
@@ -113,13 +130,7 @@ namespace BrnHW
             E_PREPARESTAGE_DONE  = 1
         };
 
-        // Launch-data sized window the platform fills (XGetLaunchData dwBufferSize = 0x98).
-        u32  mdwUserIndex;          // +0x00
-        char macUserName[16];       // +0x04  signed-in profile name snapshot
-        u8   mPad14;                // +0x14  flag gating HasGameBeenRebootedDueToInvite
-        u8   mPad15[0x7F];          // +0x15..+0x93
-        u8   mPad94;                // +0x94  flag gating HasGameBeenRebootedDueToInvite
-        u8   mPad95[3];             // +0x95..+0x97 (pad to the 0x98 launch-data extent)
+        LaunchData mLaunchData;     // +0x00; XGetLaunchData writes exactly this subobject
 
         EPrepareStage mePrepareStage;   // +0x98
         EPrepareStage meReleaseStage;   // +0x9C
@@ -140,6 +151,7 @@ namespace BrnHW
         bool HasGameBeenRebootedDueToInvite();
     };
 
+    CGS_STATIC_ASSERT(offsetof(System360HW, mLaunchData) == 0x00, "ARTIST launch-data base");
     CGS_STATIC_ASSERT(sizeof(BrnMassive::System360HWMassive) == 0xC, "ARTIST Massive state");
     CGS_STATIC_ASSERT(offsetof(System360HW, mePrepareStage) == 0x98, "ARTIST hardware prepare stage");
     CGS_STATIC_ASSERT(offsetof(System360HW, mMassive) == 0xA0, "ARTIST Massive member");
