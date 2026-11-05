@@ -132,8 +132,12 @@ SoundLogicModule::SoundLogicModule()
 {
 }
 
+// ARTIST 0x826978D0. The registrar calls this through the requester vtable.
 void SoundLogicModule::ResourcesAreReady()
 {
+    CGS_ASSERT(meBrnPrepareStage == E_PREPSTAGE_BRIDGE,
+               "mePrepareStage == E_PREPARESTAGE_LOADING_GLOBAL_DATA");
+    meBrnPrepareStage = E_PREPSTAGE_STATEMANAGERS;
     const bool lbResolved = mBurnoutGlobalData.ResolveLoadedCollection();
     CGS_ASSERT(lbResolved, "mBurnoutGlobalData.IsValid()");
 
@@ -275,7 +279,8 @@ void SoundLogicModule::Construct()
 //     2 against the GenericRwacFactory name + their VoiceSpec names) and returns false; the
 //     re-entry Connects Submix+Reverb to "Send01" and LoadAssets BurnoutGlobalData, then
 //     falls into
-//   case 3: ResourceBridging under the output buffer's write lock -> DetachBuffers + false.
+//   case 3: bridge resources under the output write lock and return false.
+//     ResourcesAreReady advances to case 4 when BurnoutGlobalData is ready.
 //   case 4: CreateStateManagers ->
 //   case 5: LockForWrite(out); PrepareStateManagersOnBoot(4) -- not ready -> ResourceBridging
 //     + unlock + detach + false (retry); ready -> unlock ->
@@ -313,6 +318,7 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
                                              CgsSound::Logic::ModuleParams::DEFAULT))
         {
             meBrnPrepareStage = E_PREPSTAGE_VOICES;
+            meBrnReleaseStage = E_BRN_RELEASE_SELF;
         }
         break;   // one chunk per call (console LABEL_20: detach + return 0)
     case E_PREPSTAGE_VOICES:
@@ -337,6 +343,7 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
                 CgsSound::Playback::Name::MakeHash("Send01"));
             mSubmixVoice.Connect(luSend01, 1);
             mGlobalReverbVoice.Connect(luSend01, 1);
+            meBrnReleaseStage = E_BRN_RELEASE_MASTER_VOICE;
             LoadAsset("Sound\\BurnoutGlobalData.bin", "BurnoutGlobalData",
                       BrnSound::Logic::ResourceRegistrar::E_ATTRIBSYS);
         }
@@ -347,8 +354,7 @@ bool SoundLogicModule::Prepare(rw::IResourceAllocator* apAllocator,
         apOutputBuffer->LockForWrite();
         ResourceBridging();
         apOutputBuffer->UnlockForWrite();
-        meBrnPrepareStage = E_PREPSTAGE_STATEMANAGERS;
-        break;   // console: detach + return 0 after the bridge chunk
+        break;   // ResourcesAreReady advances the stage.
     case E_PREPSTAGE_STATEMANAGERS:
         meBrnPrepareStage = E_PREPSTAGE_STATEMANAGERS;
         // X360 case 4: create the 9 managers + register them into the ENGINE base's

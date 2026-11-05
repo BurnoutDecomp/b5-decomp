@@ -149,11 +149,6 @@ namespace
 
     // ---- CgsGui::SystemUserProfile boundary (private members the X360 pokes) -------
 
-    u32 SystemUserProfile_GetUserIndex(const CgsGui::SystemUserProfile* /*lpProfile*/)
-    {
-        return 0;
-    }
-
     void SystemUserProfile_ClearSignedInUser(CgsGui::SystemUserProfile* /*lpProfile*/)
     {
     }
@@ -162,11 +157,6 @@ namespace
 
     void GuiCache_SetAutosaveIconVisible(GuiCache* /*lpGuiCache*/, bool /*lbVisible*/)
     {
-    }
-
-    bool GuiCache_SignedInEventWanted(const GuiCache* /*lpGuiCache*/)
-    {
-        return false;
     }
 
     void GuiCache_MirrorIsNewProfileToIntroVideoGate(GuiCache* lpGuiCache,
@@ -706,7 +696,7 @@ void ProfileManager::ProfileSettingsChanged(const CgsGui::SystemUserProfile::Pro
 
 // ---------------------------------------------------------------------------
 // ProfileManager::SigninStateChanged  @ 0x827E2F40  (BrnGuiProfile.h:732)
-//   Sign-in: hand the user index to the save/load system + notify the GUI (87).
+//   Sign-in: bind the selected user and notify the GUI (87) once post-title loading starts.
 //   Sign-out (only if a user was bound): drop autosave, unbind the save/load
 //   system's user, notify the GUI (86), reset the profile watcher.
 // ---------------------------------------------------------------------------
@@ -723,9 +713,9 @@ void ProfileManager::SigninStateChanged(CgsGui::SystemUserProfile::EUserSigninSt
     if (leState == CgsGui::SystemUserProfile::E_USERSIGNINSTATE_SIGNEDIN)
     {
         SaveLoadSystem_SetSignedInUserIndex(
-            mSaveLoadSystem, static_cast<s32>(SystemUserProfile_GetUserIndex(mpSystemUserProfile)));
+            mSaveLoadSystem, static_cast<s32>(mpSystemUserProfile->GetUserIndex()));
 
-        if (GuiCache_SignedInEventWanted(mpGuiCache))
+        if (mpGuiCache->IsAllowingSignInOutEvents())
         {
             PostByteEvent(mEventQueue, KI_EVENT_USER_SIGNED_IN);
         }

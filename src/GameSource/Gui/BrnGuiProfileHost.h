@@ -7,7 +7,7 @@ namespace BrnGui
     class GuiModule;
 
     // DecFIGS BrnGuiModule.h:133/187; ARTIST host vtable820D03DC and manager+10.
-    // The real manager is contained by value; host pointer/layout follows normal native C++.
+    // ARTIST constructs the manager at +0x10 within its host (827E5CE8..827E5D08).
     struct ProfileHost : public ProfileTaskResultHandler
     {
     public:
@@ -24,6 +24,6 @@ namespace BrnGui
         // Preserve the module's existing const manager getter without a new host API.
         friend class GuiModule;
         void HandleProfileTaskResult() ;
-        ProfileManager mProfileManager;
+        CGS_ALIGN(16) ProfileManager mProfileManager;
     };
 }

@@ -977,6 +977,9 @@ namespace BrnGui
             return meCarSelectType;
         }
         bool IsJunkyardCarUnlockPending() const          { return mbJunkyardCarUnlockPending; }  // +0x4B74 (19316)
+        bool IsAllowingSignInOutEvents() const           { return mbIsAllowingSignInOutEvents; }
+        void SetAllowingSignInOutEvents(bool lbAllow)    { mbIsAllowingSignInOutEvents = lbAllow; }
+
         // [profile-save] the post-title intro-video gate (+0x4B78 -- see the member's carve
         // note). Console read site: PostTitleScreenLoad::Update; console write sites:
         // GuiCache::Construct (1) and ProfileManager::ReportTaskCompleted (= mbIsNewProfile).
@@ -1762,7 +1765,7 @@ namespace BrnGui
         // two bytes' producers are not yet recovered (FLAG: consumer-named). GuiCache::Construct
         // @0x82505AB8-D8 zeroes all three.
         bool mbGameplayUpdateActive;                     // +0x4B54 (19284) update-set bit 8
-        u8   mPad_4B55[1];                               // +0x4B55 (set by PostTitleScreenLoad::Update)
+        bool mbIsAllowingSignInOutEvents;                // +0x4B55 (DecFIGS h:1673)
         bool mbGameplayHudReadyB;                        // +0x4B56 (19286) FLAG consumer-named
         // ADDITIVE CARVE (OnlineGameRoomPlayerInfo keystone, wave H): the free-burn
         // input gate bytes the game-room screen reads (lbz, X360-attested widths).
