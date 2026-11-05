@@ -127,18 +127,8 @@ namespace BrnGui
 
         const s32 KI_CHANNEL_GUI_OUT = 40;   // GuiEventOut
 
-        // The menu-music request record (hash @+0x0C; 0 == stop). Same 155-keyed record
-        // BrnBootLegal.cpp posts -- the module-out consumer dispatches on id 155.
-        struct MusicOnMenuStreamEvent : public CgsGui::GuiEvent<155>
-        {
-            s32 miHash;     // +0x0C (the MakeHash result, or gCurrentMenuMusicHash)
-            u8  mu8FlagA;   // +0x10
-            u8  mu8FlagB;   // +0x11
-            u8  maPad[2];
-            explicit MusicOnMenuStreamEvent(s32 liHash)
-                : CgsGui::GuiEvent<155>(0, 12), miHash(liHash), mu8FlagA(0), mu8FlagB(0)
-            { maPad[0] = maPad[1] = 0; }
-        };
+        // ARTIST 0x8247E474..490 calls OutputGuiEvent<GuiEventPlayMusicOnMenuStream>.
+        typedef CgsGui::GuiEventPlayMusicOnMenuStream MusicOnMenuStreamEvent;
     }
 
     // ---- the GuiCache boundary this state touches (X360 far members; same FLAG'd

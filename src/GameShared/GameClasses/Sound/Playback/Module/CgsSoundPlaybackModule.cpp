@@ -257,7 +257,7 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
             lAemsSpec.mu32StringTableSize = 0;
             Handle<AemsFactory> lhAemsFactory =
                 AemsFactory::Create(*mhEnvironment, lAemsSpec);
-            mhAemsFactory = Handle<Factory>(lhAemsFactory.GetObject());
+            mhAemsFactory = lhAemsFactory;
             if (lhAemsFactory.GetObject())
                 lhAemsFactory.GetObject()->Release();
             CGS_ASSERT(!!mhAemsFactory, "mhAemsFactory");
@@ -386,10 +386,9 @@ bool Module::Release()
         meReleaseStage++;
         // fall through
     case 2:
-        // Null-assign the three factory handles through Handle::operator= (drops
-        // the owned reference, then stores null).
+        // The AEMS handle releases through the sample-player factory interface.
         mhRwacFactory    = Handle<Factory>();
-        mhAemsFactory    = Handle<Factory>();
+        mhAemsFactory    = Handle<AemsFactory>();
         mhSplicerFactory = Handle<Factory>();
         meReleaseStage++;
         // fall through
@@ -478,9 +477,9 @@ void Module::DumpRegistries()
     CGS_ASSERT(lpRwacFactory, "mpObject");
     GetRwacFactoryRegistry(lpRwacFactory)->Dump();
 
-    Factory* lpAemsFactory = mhAemsFactory.GetObject();
+    AemsFactory* lpAemsFactory = mhAemsFactory.GetObject();
     CGS_ASSERT(lpAemsFactory, "mpObject");
-    GetAemsFactoryRegistry(lpAemsFactory)->Dump();
+    lpAemsFactory->GetRegistry()->Dump();
 }
 
 // ---------------------------------------------------------------------------
@@ -557,9 +556,9 @@ void Module::AddRegistry(Registry& arRegistry, u32 au32RegistryId)
     }
     case 2:
     {
-        Factory* lpFactory = mhAemsFactory.GetObject();
+        AemsFactory* lpFactory = mhAemsFactory.GetObject();
         CGS_ASSERT(lpFactory != 0, "mpObject");
-        Registry* lpRegistry = GetAemsFactoryRegistry(lpFactory);
+        Registry* lpRegistry = lpFactory->GetRegistry();
         CGS_ASSERT(lpRegistry != 0, "mpRegistry");
         *lpRegistry += arRegistry;
         break;

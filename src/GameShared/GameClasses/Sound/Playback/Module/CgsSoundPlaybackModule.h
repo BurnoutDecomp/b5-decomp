@@ -90,14 +90,8 @@ namespace CgsSound
 namespace Playback
 {
 
-// FLAG (DEFER): the RWAC + AEMS factories each own their own registry, but at
-// DIFFERENT offsets from the generic Factory's (DumpRegistries reads the RWAC
-// factory's registry at X360 +0x401C and the AEMS factory's at +0x60). Modelled as
-// free accessors keyed on the generic Factory pointer so the single Handle<Factory>
-// member type stays uniform; each returns the factory's registry by NAME. Bodied in
-// the respective factory TU (CgsGenericRwacFactory / CgsAemsFactory).
+class AemsFactory;
 Registry* GetRwacFactoryRegistry(Factory* lpRwacFactory);  // X360 +0x401C
-Registry* GetAemsFactoryRegistry(Factory* lpAemsFactory);  // X360 +0x60
 
 // GenericRwacFactory::SK_NAME, by name -- the reserved factory name the init-submix
 // path asserts the request matches. Bodied in the GenericRwacFactory TU.
@@ -426,7 +420,7 @@ private:
     Io::OutputBuffer*    mpOutputBuffer;    // X360 +0x2254 (DWARF h:360)
     Handle<Environment>  mhEnvironment;     // X360 +0x2258 (DWARF h:362)
     Handle<Factory>      mhRwacFactory;     // X360 +0x225C (DWARF h:367, Handle<GenericRwacFactory>)
-    Handle<Factory>      mhAemsFactory;     // X360 +0x2260 (DWARF h:370, Handle<AemsFactory>)
+    Handle<AemsFactory>  mhAemsFactory;     // X360 +0x2260 (IAems primary pointer)
     Handle<Factory>      mhSplicerFactory;  // X360 +0x2264 (DWARF h:374, Handle<SplicerFactory>)
     EA::Thread::Mutex    mStreamMutex;      // X360 +0x2268 (DWARF h:379)
     CgsModule::VariableEventQueue<1024, 16>

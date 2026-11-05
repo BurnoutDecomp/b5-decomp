@@ -2569,9 +2569,8 @@ namespace BrnGui
         }
 
         case 79:
-            // GuiEnteredJunkyard: the payload byte is the in-junkyard flag (+0x4B57, the pause
-            // gate IsInJunkyard reads).
-            mbFreeBurnMenuLocked = *reinterpret_cast<const u8*>(lpEvent) != 0;
+            // ARTIST 0x8250EE0C copies GuiEnteredJunkyard's bool to +0x4B57.
+            mbFreeBurnMenuLocked = *reinterpret_cast<const bool*>(lpEvent);
             break;
 
         case 201:
@@ -2592,14 +2591,9 @@ namespace BrnGui
             break;
         }
 
-        case 77:
-            // ADDITIVE (car-select wave 2026-08-02). The X360 switch (rebased by -4) reaches
-            // `jumptable 8250DE3C case 77` at 0x8250EE20 and does exactly this: one
-            // `lwz r11, 0(payload)` / `stw r11, 0x4B70(this)`. +0x4B70 is meCarSelectType,
-            // which CarSelectMain::OnEnter and CarSelectVehicle read through
-            // GetCurrentCarSelectType(). No producer for this event exists on PC yet -- see
-            // the FLAG stand-in in Construct() above -- but wiring the consumer now means the
-            // real producer needs no further change here.
+        case 81:
+            // Event 81 (table index 77) reaches 0x8250EE20 and copies payload word 0 to
+            // this+0x4B70 (meCarSelectType).
             meCarSelectType = *reinterpret_cast<const s32*>(lpEvent);
             break;
         case 396:
