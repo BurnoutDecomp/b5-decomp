@@ -5,6 +5,8 @@
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"   // committed BrnEffectObject dual base (@+0/+4) BY NAME
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"             // BrnSound::Logic::Streaming::IStreamUser (third base @+0x38)
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"    // CgsSound::Logic::VoiceWrapper (embedded in AgingVoice)
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"             // CgsSound::Utils::DataPoint<T>
+#include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"           // RootInputBuffer::GameModeOutputInterface
 #include "GameSource/AttribSys/Generated/classes/presentationactionlist.h"
 
 // =============================================================================
@@ -35,12 +37,8 @@
 // AgingVoice::mDataEntry) BY NAME (2026-08-25 wave 4; the u8*-cursor walk is
 // retired) and call CgsSound::Logic::VoiceWrapper::Release.
 //
-// FLAG (shape vs full surface): the full DWARF member set (mau8DataOffsets[14],
-// mau8DataEnds[14], mStreamParams (VoiceWrapper::CreateParams), mActions
-// (Attrib::Gen::presentationactionlist @ +0x28C), mMode (DataPoint<eMode>),
-// mu8StreamOutput) uses un-homed types and is DEFERRED / declaration-only -- NOT
-// fabricated here. Only the attested maVoices[4] AgingVoice array (each slot: mu16Age +
-// embedded VoiceWrapper) is materialised BY NAME.
+// The leaf stream state is typed by name: ARTIST places mStreamParams at +0x25C,
+// mActions at +0x28C, DataPoint<eMode> mMode at +0x29C, and mu8StreamOutput at +0x2A4.
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): members are pinned BY NAME + SEQUENCE;
 // absolute offsets are NOT static_asserted across pointer members on the 64-bit host.
@@ -56,6 +54,12 @@ extern bool KB_SPEW_PRESENTATION_MESSAGES;
 struct PresentationEffect : public BrnEffectObject,
                             public BrnSound::Logic::Streaming::IStreamUser
 {
+    enum eMode
+    {
+        E_MODE_NONE = 0,
+        E_MODE_ONLINE_ENTRANCE = 1
+    };
+
     // DWARF BrnPresentationEffect.h:132 (struct PresentationEntry). The per-voice
     // resolved presentation request; the parameter type of FindOrStealAVoice. Field
     // NAMES + order are DWARF-authoritative; the Find* compare loop reaches them at the
@@ -127,19 +131,16 @@ struct PresentationEffect : public BrnEffectObject,
     u8 mau8DataEnds[14];
     CgsSound::Logic::VoiceWrapper::CreateParams mStreamParams;
     Attrib::Gen::presentationactionlist mActions;
+    CgsSound::Utils::DataPoint<eMode> mMode;
     u8 mu8StreamOutput;
-
-    // FLAG: mau8DataOffsets[14] (:287), mau8DataEnds[14] (:288), mStreamParams
-    // (VoiceWrapper::CreateParams, :289), mActions (Attrib::Gen::presentationactionlist,
-    // :290; X360 this+0x28C), mMode (DataPoint<eMode>, :292), mu8StreamOutput (:293) are
-    // DWARF-ordered but their concrete types have NO committed home -> DECLARATION-ONLY /
-    // DEFERRED (NOT emitted as concrete members; same treatment as
-    // StreamingEffect::streamsettings).
 
 private:
     bool Resolve(s32 aiAction, u64 auStringId, u64 auScreenId,
                  PresentationEntry& arEntry) const;
     void Play(const PresentationEntry& arEntry);
+    eMode GetMode(
+        const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface* apGameMode) const;
+    void PlayStream(CgsSound::Logic::Command::QueueElement auContentSpec);
     // @ 0x82687D68 (DWARF BrnPresentationEffect.cpp:554). First maVoices[] slot whose
     // per-VoiceWrapper state word (slot+0x4C) is 0 (unused) or 7 (idle), else null.
     AgingVoice* FindFreeVoice();

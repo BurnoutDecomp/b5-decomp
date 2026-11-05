@@ -60,16 +60,10 @@ bool KB_SPEW_PRESENTATION_MESSAGES = false; // ARTIST82FFB8D3, DecFIGS :23
 // hand-written tail effect is the attested maVoices[] AgingVoice array (each slot zeroes
 // mu16Age and default-constructs its embedded VoiceWrapper).
 //
-// FLAG (un-homed leaf members): the inlined leaf scalar zero-inits (+0x08..+0x34) and the
-// words in the +0x25C..+0x2A0 span (all zero except the single -1 @ +0x288) target
-// PresentationEffect's OWN un-homed leaf members (mau8DataOffsets/mau8DataEnds/
-// mStreamParams/mMode/mu8StreamOutput). They are DECLARATION-ONLY / DEFERRED per the
-// anti-fabrication rule -- NOT re-emitted as raw-offset stores or invented fields.
+// The constructor clears mStreamParams (including its -1 send index) and both
+// mMode samples. Attach resets mMode and selects stream output 9; it does not
+// initialize the stream voice parameters.
 //
-// FLAG (Attrib::Gen::presentationactionlist mActions DEFERRED): the tail
-// `presentationactionlist(this+0x28C, 0, 0)` is an AttribSys-generated table ctor with
-// the SAME (ptr,0,0) shape as the committed StreamingEffect::streamsettings sibling; no
-// generated-class home exists for it, so it is DEFERRED (not materialised, not fabricated).
 // ---------------------------------------------------------------------------
 PresentationEffect::PresentationEffect()
     : BrnEffectObject()                       // primary vptr @+0 + IResourceRequester vptr @+4, base zero-init (BY NAME)
@@ -79,11 +73,9 @@ PresentationEffect::PresentationEffect()
     , mau8DataEnds()
     , mStreamParams()
     , mActions()
-    , mu8StreamOutput(9)
+    , mMode()
 {
-    // The inlined leaf scalar zero-inits (mau8DataOffsets/mau8DataEnds/mStreamParams/
-    // mMode/mu8StreamOutput region) and the Attrib::Gen::presentationactionlist mActions
-    // tail construction are DECLARATION-ONLY / DEFERRED (see FLAGs); NOT fabricated here.
+    // DataPoint<eMode>'s default constructor emits the two attested zero stores.
 }
 
 // ---------------------------------------------------------------------------
@@ -145,23 +137,8 @@ bool PresentationEffect::Attach()
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
     mActions.ChangeWithDefault(lpModule->GetGlobalData().PresentationActions());
+    mMode.Flush(E_MODE_NONE);
     mu8StreamOutput = 9;
-
-    mStreamParams.Clear();
-    mStreamParams.mpLogicModule = lpModule;
-    mStreamParams.mFactoryName = static_cast<u32>(
-        CgsSound::Playback::GenericRwacFactorySkName().GetValue());
-    // ARTIST 0x826F7958 routes splice 65534 through 0x8269E418, which
-    // sets the stream create params to MusicVoiceSpec. Splice 65535 uses
-    // StereoWavVoiceSpec in Play's resident-WAV arm below.
-    mStreamParams.mVoiceSpecName = static_cast<u32>(
-        CgsSound::Playback::Name::MakeHash("MusicVoiceSpec"));
-    mStreamParams.mSlotName = static_cast<u32>(
-        CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
-    mStreamParams.mSendName = static_cast<u32>(
-        CgsSound::Playback::Name::MakeHash("Send01"));
-    mStreamParams.mSubMixVoiceID = 1;
-    mStreamParams.miSendIndex = 0;
     return true;
 }
 
@@ -181,6 +158,50 @@ void PresentationEffect::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoic
 void PresentationEffect::StreamStopped()
 {
     mu8StreamOutput = 9;
+}
+
+PresentationEffect::eMode PresentationEffect::GetMode(
+    const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface* apGameMode) const
+{
+    using namespace BrnGameState::GameStateModuleIO;
+
+    if (apGameMode->miCurrentGameModeType == E_MODE_ONLINE_FREE_BURN_LOBBY &&
+        (apGameMode->miCurrentGameModeState == E_GMS_ONLINE_LOADING ||
+         apGameMode->miCurrentGameModeState == E_GMS_INTRO))
+    {
+        return E_MODE_ONLINE_ENTRANCE;
+    }
+    return E_MODE_NONE;
+}
+
+void PresentationEffect::PlayStream(CgsSound::Logic::Command::QueueElement auContentSpec)
+{
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    Streaming::StreamingStateManager* lpStreamingStateMan =
+        static_cast<Streaming::StreamingStateManager*>(
+            lpModule->GetEnvironment().GetStateManager(6));
+    CGS_ASSERT(lpStreamingStateMan != 0, "lpStreamingStateMan");
+
+    // ARTIST 0x8269E418 initializes only the live fields in CreateParams, in this
+    // order. Its constructor's cleared post-init/content/reverb fields remain intact.
+    mStreamParams.mpLogicModule = lpModule;
+    mStreamParams.mFactoryName = static_cast<u32>(
+        CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+    mStreamParams.mVoiceSpecName = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("MusicVoiceSpec"));
+    mStreamParams.mContentSpecName = auContentSpec;
+    mStreamParams.mSlotName = static_cast<u32>(
+        CgsSound::Playback::PlayerVoice::SK_PLAYER_SLOT_NAME.GetValue());
+    mStreamParams.mSubMixVoiceID = 1;
+    mStreamParams.miSendIndex = 0;
+    mStreamParams.mSendName = static_cast<u32>(
+        CgsSound::Playback::Name::MakeHash("Send01"));
+
+    lpStreamingStateMan->PostStreamRequest(
+        Streaming::StreamStopRequest(this, 0.25f));
+    lpStreamingStateMan->PostStreamRequest(
+        Streaming::StreamRequest(this, 4, 0.1f));
 }
 
 bool PresentationEffect::Resolve(s32 aiAction, u64 auStringId, u64 auScreenId,
@@ -204,17 +225,8 @@ void PresentationEffect::Play(const PresentationEntry& arEntry)
 {
     if (arEntry.mu16Splice == PresentationEntry::KU16_SPECIAL_SPLICE_STREAM)
     {
-        BrnSound::Module::SoundLogicModule* lpModule =
-            static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
-        Streaming::StreamingStateManager* lpStreaming =
-            static_cast<Streaming::StreamingStateManager*>(
-                lpModule->GetEnvironment().GetStateManager(6));
-        CGS_ASSERT(lpStreaming != 0, "lpStreamingStateManager");
-        mStreamParams.mContentSpecName = arEntry.mu32ContentSpec;
-        // ARTIST 0x8269E4FC queues the 16-byte stop request before the
-        // 24-byte play request at 0x8269E508, both for this IStreamUser.
-        lpStreaming->PostStreamRequest(Streaming::StreamStopRequest(this, 0.25f));
-        lpStreaming->PostStreamRequest(Streaming::StreamRequest(this, 4, 0.1f));
+        PlayStream(arEntry.mu32ContentSpec);
+        // ARTIST 0x826F7964 writes the output after PlayStream returns.
         mu8StreamOutput = arEntry.mu8MixerOutput;
         return;
     }
@@ -307,11 +319,28 @@ void PresentationEffect::UpdateParams(f32 afDeltaTime)
         AgingVoice& lrVoice = maVoices[liVoice];
         if (!lrVoice.mVoice.IsAlive())
             continue;
-        ++lrVoice.mu16Age;
         lrVoice.mfTimeSinceLastTick += afDeltaTime;
         if (lrVoice.mDataEntry.mu8Behaviour == 1 &&
-            lrVoice.mfTimeSinceLastTick >= 1.25f)
+            lrVoice.mfTimeSinceLastTick > 1.25f)
             lrVoice.mVoice.Release();
+    }
+
+    BrnSound::Module::SoundLogicModule* lpModule =
+        static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
+    BrnSound::Module::Io::RootInputBuffer* lpInput =
+        lpModule->GetBrnInputStructure();
+    const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface* lpGameMode =
+        lpInput->GetGameModeInterface();
+    CGS_ASSERT(lpGameMode != 0, "lpGameModeInterface");
+
+    const eMode leOldMode = mMode.GetCurrent();
+    mMode.mCurrentValue = GetMode(lpGameMode);
+    mMode.mPreviousValue = leOldMode;
+    if (mMode.HasChangedTo(E_MODE_ONLINE_ENTRANCE))
+    {
+        PlayStream(static_cast<CgsSound::Logic::Command::QueueElement>(
+            CgsSound::Playback::Name::MakeHash("OnlineEntry")));
+        mu8StreamOutput = 9;
     }
 }
 
