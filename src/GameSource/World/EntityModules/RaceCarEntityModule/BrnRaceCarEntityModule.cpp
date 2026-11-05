@@ -4852,6 +4852,10 @@ void RaceCarEntityModule::PreSceneUpdate(
     // UpdateInAndOutOfRangeCars, with r4 == the pre-scene OUTPUT buffer (r29).
     if( ( lUpdateSet & 1 ) == 0 )
     {
+        // ARTIST 0x8230E234–0x8230E278 latches Payback and controls before the car pass.
+        meActivePaybackType = lpInput->GetActivePaybackType();
+        meActivePaybackAggressor = lpInput->GetActivePaybackAggressor();
+        mPlayerVehicleControls = *lpInput->GetPlayerVehicleControls();
         UpdateRaceCars_PreScene( lpOutput );
     }
 
@@ -4886,31 +4890,6 @@ void RaceCarEntityModule::PreSceneUpdate(
 
     // ---- step 11: pump the five component streamers -------------------------
     UpdateStreaming( lpInput, lpOutput );
-
-    // ---- step 12: LATCH THIS FRAME'S PAD STATE ------------------------------
-    // ⚠️ Load-bearing: ProcessPlayerVehicleInput reads mPlayerVehicleControls by name at
-    // fifteen sites, so dropping this latch serves a zero-initialised control set for ever and
-    // throws away every control the player (or the harness) pressed one hop before it is used.
-    //
-    // The console's three consecutive stores, verbatim from PreSceneUpdate @0x8230D928:
-    //     *(a1 + 99300) = InputBuffer_PreScene::GetActivePaybackType(v5);
-    //     *(a1 + 99304) = InputBuffer_PreScene::GetActivePaybackAggressor(v5);
-    //     v56 = sub_822B4B88(v5);            // == GetPlayerVehicleControls: its "Not locked
-    //                                        //    for reading" assert cites
-    //                                        //    BrnRaceCarEntityModuleIO.h:160, which is the
-    //                                        //    line this tree annotates that getter with
-    //     memcpy(a1 + 99240, v56, 60);       // -> mPlayerVehicleControls
-    // reached by NAME here; +99240/+99300/+99304 are quoted only as the console's own proof of
-    // which member each store lands in (see the member banners in the header).
-    meActivePaybackType       = lpInput->GetActivePaybackType();
-    meActivePaybackAggressor  = lpInput->GetActivePaybackAggressor();
-    {
-        const BrnWorld::PlayerVehicleControls* lpPlayerControls =
-            lpInput->GetPlayerVehicleControls();
-        if( lpPlayerControls != 0 )
-        {
-        }
-    }
 
     // ---- step 13: the PRE-SCENE output publish ------------------------------
     // ⭐⭐ ADDED 2026-08-01 (car-select hand-off wave). The console runs UpdateOutputInterfaces
@@ -4978,6 +4957,18 @@ void RaceCarEntityModule::PreSceneUpdate(
         if (lpInput->IsCarSelectStatusValid(leActivateSlot))
         {
             lpActivateCar->UpdateCarSelectStateOnline(lpInput->GetCarSelectStatus(leActivateSlot));
+        }
+    }
+
+    // ARTIST 0x8230E30C–0x8230E3EC drains the render-side flags during replay playback.
+    if (mReplaySerialiser.IsPlaying())
+    {
+        for (EActiveRaceCarIndex leIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+             leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leIndex++)
+        {
+            if (mabRaceCarsRendered[leIndex])
+                lpOutput->SetReplayRaceCarRendered(leIndex);
+            mabRaceCarsRendered[leIndex] = false;
         }
     }
 

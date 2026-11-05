@@ -514,6 +514,13 @@ namespace RaceCarEntityModuleIO
             mabReplayRaceCarRendered[leIndex] = true;
         }
 
+        bool IsReplayRaceCarRendered(EActiveRaceCarIndex leIndex) const
+        {
+            CGS_ASSERT(leIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            return mabReplayRaceCarRendered[leIndex];
+        }
+
         AudioCarLoadedDataQueue*       GetAudioCarLoadedDataQueue();                         // :306
         const AudioCarLoadedDataQueue* GetAudioCarLoadedDataQueue() const;                  // :307
     private:

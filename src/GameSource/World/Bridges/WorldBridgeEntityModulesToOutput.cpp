@@ -710,6 +710,19 @@ void BridgeRaceCarEntityInfoToOutput_PreScene(
 
     lpOutputBuffer->GetAudioCarLoadedDataQueue()->Append(
         *lpRaceCarOutput_PreScene->GetAudioCarLoadedDataQueue());
+
+    // ARTIST 0x827AF384–0x827AF450 posts the active index of each rendered replay car.
+    BrnWorldIO::UpdateOutputBuffer::GuiEventInputQueue* lpGuiEvents = lpOutputBuffer->GetGuiEventQueue();
+    for (EActiveRaceCarIndex leIndex = E_ACTIVE_RACE_CAR_INDEX_0;
+         leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leIndex++)
+    {
+        if (lpRaceCarOutput_PreScene->IsReplayRaceCarRendered(leIndex))
+        {
+            const s32 liIndex = leIndex;
+            lpGuiEvents->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liIndex),
+                                  592, sizeof(liIndex));
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
