@@ -1,23 +1,24 @@
 #include "GameSource/Network/Managers/X360/BrnNetworkCameraX360.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                       // socket assertions
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"              // CgsNetwork::NetworkTexture
 #include "GameShared/Jobs/DXTCompress/CgsNetworkTextureDXTCompress.h"              // SetNewTextureToCompress
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"               // PlayerManager::GetPlayerByID / GetMenuDataByID
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"               // NetworkPlayer::(Un)RegisterMessageType
 #include "GameSource/Network/BrnNetworkManager.h"                                  // BrnNetworkManager accessors
 
-// Use the public XDK declaration on Xbox; the host retains its existing shim.
-#if defined(_XBOX)
+#include "GameSource/Resource/BrnResourceAllocator.h"                              // PrintConsoleMemory
+#include <cstring>
 #include <xcam.h>
-#else
-extern "C" u32 XCamGetStatus();
-#endif
 
 namespace BrnNetwork
 {
     namespace
     {
+        const char KAC_CAMERA_FILE[] =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/X360/BrnNetworkCameraX360.cpp";
+
         // --- pixel formats the camera textures are allocated at (X360 PrepareTextures /
         //     GetCompressedLocalCameraPicture immediates; passed straight to NetworkTexture). ---
         const s32 KI_CAMERA_WIDTH  = 160;
@@ -155,11 +156,8 @@ namespace BrnNetwork
     // =======================================================================
     // ResetRemotePlayers @ 0x82586A48
     //
-    // Reset every feed slot to free (the stream descriptor zeroed, the network index / player id /
-    // xuid sentinelled, the state words + feed flags cleared), release the decoded texture, and
-    // (re)construct the six embedded reliable messages. The X360 seeds the descriptor + xuid words
-    // with 0x800000000LL (a Time value: 8 seconds, fraction 0) -- modelled as zeroing the
-    // descriptor + a default-constructed xuid below; the descriptor is opaque XCAM state.
+    // Zero the stream descriptor, XUID, state words and feed flags, set both IDs to -1,
+    // release the decoded texture, and reconstruct the six embedded reliable messages.
     // =======================================================================
     void CameraX360::ResetRemotePlayers()
     {
@@ -176,6 +174,7 @@ namespace BrnNetwork
             lSlot.miNetworkPlayerIndex = KI_INVALID_PLAYER_ID;
             lSlot.meVideoFrameState    = 0;
             lSlot.meReceiveState       = 0;
+            lSlot.mbFeedActive         = false;
             lSlot.mbFeedRequested      = false;
 
             lSlot.mDecodedTexture.Release();
@@ -401,11 +400,18 @@ namespace BrnNetwork
     //   un-homed stream-engine vtable.
     void CameraX360::OnGameStart() { /* BLOCKED: stream-engine vtable */ }
 
-    // ResetVideoPackets @ 0x825869F8 -- DECLARATION-ONLY.
-    //   Faithful spine: for each of 256 packets, CgsSystem::CgsXOverlapped::Construct(&mOverlapped),
-    //   zero the receive buffer, clear the two flags. BLOCKED: CgsXOverlapped is declared inline in
-    //   its own X360 platform .cpp (no shared header to include without forking it).
-    void CameraX360::ResetVideoPackets() { /* BLOCKED: CgsXOverlapped has no shared home */ }
+    // ARTIST 0x825869F8. The reset covers 0x400 payload bytes beginning at packet+0xA.
+    void CameraX360::ResetVideoPackets()
+    {
+        for (s32 liPacket = 0; liPacket < KI_MAX_VIDEO_PACKETS; ++liPacket)
+        {
+            VideoPacket& lrPacket = maVideoPackets[liPacket];
+            lrPacket.mOverlapped.Construct();
+            std::memset(lrPacket.maReceivePayload, 0, 0x400);
+            lrPacket.muReceiveLength = 0;
+            lrPacket.mbInUse = false;
+        }
+    }
 
     // Update @ 0x825920A8 -- DECLARATION-ONLY.
     //   Faithful spine: when the request timer has elapsed (current network time vs mRequestTimer),
@@ -415,26 +421,113 @@ namespace BrnNetwork
     //   GetLocalCameraPicture when user+game enabled. BLOCKED on the un-homed pumps + network time.
     void CameraX360::Update() { /* BLOCKED: stream-engine/socket pumps + per-frame network time */ }
 
-    // Release @ 0x8258B530 -- DECLARATION-ONLY.
-    //   Faithful spine: Release the local + received textures, CloseSocket, ResetVideoPackets,
-    //   ResetRemotePlayers, release the stream engine via its vtable slot+4, then clear
-    //   miNumberActiveFeeds/mbPrepared, reset the request timer, miRequestedPlayerID=-1,
-    //   miUserSetting=0, mbGameEnabled=0, mbFeedActiveAny=0; returns true. BLOCKED on CloseSocket +
-    //   ResetVideoPackets + the stream-engine vtable.
-    bool CameraX360::Release() { return true; /* BLOCKED: socket + stream-engine teardown */ }
+    // ARTIST 0x8258B530.
+    bool CameraX360::Release()
+    {
+        mLocalCameraTexture.Release();
+        mReceivedCameraTexture.Release();
+        CloseSocket();
+        ResetVideoPackets();
+        ResetRemotePlayers();
+        mpStreamEngine->Release();
 
-    // Prepare @ 0x82593B28 -- DECLARATION-ONLY.
-    //   Faithful spine: ResetVideoPackets, ResetRemotePlayers, PrepareTextures; fill an
-    //   XCAM_STREAM_ENGINE_INIT_PARAMS (the grounded immediates 0xA00038/1000/64/128/30/4/1024/4/
-    //   1/1) and XCamCreateStreamEngine(&params, &mpStreamEngine) (assert success); OpenSocket;
-    //   miNumberActiveFeeds=0, mbPrepared=1; reset request timer, miRequestedPlayerID=-1,
-    //   miUserSetting=1, mbGameEnabled=0, mbFeedActiveAny=0; returns true. BLOCKED on the XCAM
-    //   stream-engine creation + OpenSocket.
-    bool CameraX360::Prepare(CgsMemory::HeapMalloc* /*lpHeapMalloc*/) { return true; /* BLOCKED: XCAM engine + socket */ }
+        miNumberActiveFeeds = 0;
+        mbPrepared = false;
+        mRequestTimer.SetFloatVal(0.0f);
+        miRequestedPlayerID = KI_INVALID_PLAYER_ID;
+        miUserSetting = 0;
+        mbGameEnabled = false;
+        mbFeedActiveAny = false;
+        return true;
+    }
+
+    // ARTIST 0x82593B28.
+    bool CameraX360::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc)
+    {
+        BrnResource::PrintConsoleMemory(0);
+        ResetVideoPackets();
+        ResetRemotePlayers();
+        PrepareTextures(lpHeapMalloc);
+
+        XCAM_STREAM_ENGINE_INIT_PARAMS lParams = {};
+        lParams.VideoResolution = XCAMRESOLUTION_160x120;
+        lParams.MaximumBitrate = 1000;
+        lParams.MinimumBitrate = 64;
+        lParams.InitialTargetBitrate = 128;
+        lParams.InitialTargetFramerate = XCAMFRAMERATE_30;
+        lParams.MaxRemoteConsoles = 4;
+        lParams.NetworkDataPacketSize = 1024;
+        lParams.ThreadProcessorID = 4;
+        lParams.GenerateLocalPreview = TRUE;
+        lParams.GetDataDirectFromCamera = TRUE;
+        if (XCamCreateStreamEngine(&lParams, &mpStreamEngine) != ERROR_SUCCESS)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Unable to create XVID Streaming Engine!\n", KAC_CAMERA_FILE, 137);
+            CgsDev::Assert::EndAssert();
+        }
+        OpenSocket();
+
+        miNumberActiveFeeds = 0;
+        mbPrepared = true;
+        BrnResource::PrintConsoleMemory(0);
+        mRequestTimer.SetFloatVal(0.0f);
+        miRequestedPlayerID = KI_INVALID_PLAYER_ID;
+        miUserSetting = 1;
+        mbGameEnabled = false;
+        mbFeedActiveAny = false;
+        return true;
+    }
+
+    // ARTIST 0x82586AF8.
+    void CameraX360::OpenSocket()
+    {
+        sockaddr_in lAddress = {};
+        lAddress.sin_family = AF_INET;
+        lAddress.sin_port = 1001; // Xenon stores the port in network byte order.
+        mVDPSocket = static_cast<s32>(socket(AF_INET, SOCK_DGRAM, IPPROTO_VDP));
+        if (mVDPSocket == KI_INVALID_SOCKET)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("socket failed\n", KAC_CAMERA_FILE, 1021);
+            CgsDev::Assert::EndAssert();
+        }
+        if (bind(static_cast<SOCKET>(mVDPSocket), reinterpret_cast<const sockaddr*>(&lAddress),
+                 sizeof(lAddress)) != 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lMessage << "sendsock bind failed, error ";
+            lMessage << WSAGetLastError() << "\n";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), KAC_CAMERA_FILE, 1028);
+            CgsDev::Assert::EndAssert();
+        }
+        u_long luNonBlocking = 1;
+        ioctlsocket(static_cast<SOCKET>(mVDPSocket), FIONBIO, &luNonBlocking);
+    }
+
+    // ARTIST 0x82586C50.
+    void CameraX360::CloseSocket()
+    {
+        if (mVDPSocket == KI_INVALID_SOCKET)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mVDPSocket != INVALID_SOCKET", KAC_CAMERA_FILE, 1049);
+            CgsDev::Assert::EndAssert();
+        }
+        if (closesocket(static_cast<SOCKET>(mVDPSocket)) != 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lMessage << "close socket bind failed, error ";
+            lMessage << WSAGetLastError() << "\n";
+            CgsDev::Assert::FireAssert(lMessage.GetBuffer(), KAC_CAMERA_FILE, 1051);
+            CgsDev::Assert::EndAssert();
+        }
+        mVDPSocket = KI_INVALID_SOCKET;
+    }
 
     // The remaining private pumps are pure un-homed glue; declared-only.
-    void CameraX360::OpenSocket()  { /* BLOCKED: Winsock/XDK socket */ }
-    void CameraX360::CloseSocket() { /* BLOCKED: Winsock/XDK socket */ }
     s32  CameraX360::ReceiveFrom(char* /*lpcData*/, s32 /*liDataSize*/, s32* /*lpnIPAddress*/) { return 0; /* BLOCKED: Winsock */ }
     void CameraX360::ReceiveVideoData()      { /* BLOCKED: socket + stream-engine vtable */ }
     void CameraX360::SendVideoData()         { /* BLOCKED: socket + stream-engine vtable */ }
@@ -491,8 +584,12 @@ namespace BrnNetwork
         // Console offsets, pinned in a 32-bit build (inert on the 64-bit host).
 #define BRN_CAM_AT(type, member, off) \
         CGS_STATIC_ASSERT((sizeof(void*) != 4 || offsetof(type, member) == off), #member " @ " #off)
-        BRN_CAM_AT(VideoPacket, maOverlapped,             0x410);
+        BRN_CAM_AT(VideoPacket, maDatagramHeader,         0x000);
+        BRN_CAM_AT(VideoPacket, muReceiveLength,          0x008);
+        BRN_CAM_AT(VideoPacket, maReceivePayload,         0x00A);
+        BRN_CAM_AT(VideoPacket, mOverlapped,              0x410);
         BRN_CAM_AT(VideoPacket, mbInUse,                  0x42C);
+        CGS_STATIC_ASSERT((sizeof(VideoPacket) == 0x430), "sizeof(VideoPacket) == 0x430");
         BRN_CAM_AT(RemotePlayerData, mXuid,               0x28);
         BRN_CAM_AT(RemotePlayerData, miPlayerID,          0x34);
         BRN_CAM_AT(RemotePlayerData, mLastVideoFrameTime, 0x40);
@@ -522,9 +619,9 @@ namespace BrnNetwork
 
         // VideoPacket field order: the receive buffer precedes the overlapped, which precedes the
         // in-use flag.
-        CGS_STATIC_ASSERT((offsetof(VideoPacket, maOverlapped) > offsetof(VideoPacket, maReceiveBuffer)),
+        CGS_STATIC_ASSERT((offsetof(VideoPacket, mOverlapped) > offsetof(VideoPacket, maReceivePayload)),
                       "receive buffer precedes the overlapped");
-        CGS_STATIC_ASSERT((offsetof(VideoPacket, mbInUse) > offsetof(VideoPacket, maOverlapped)),
+        CGS_STATIC_ASSERT((offsetof(VideoPacket, mbInUse) > offsetof(VideoPacket, mOverlapped)),
                       "overlapped precedes the in-use flag");
 
         // RemotePlayerData field order (descriptor -> xuid -> indices -> states -> texture -> flags).

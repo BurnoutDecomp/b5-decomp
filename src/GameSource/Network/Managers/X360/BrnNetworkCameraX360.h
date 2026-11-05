@@ -32,12 +32,14 @@
 //
 //   VideoPacket (stride 1072 == 0x430; ResetVideoPackets walks 256 of them, ReceiveVideoData /
 //   SendVideoData stride them by 1072):
-//     +0x000  macReceiveBuffer[1040]  char    (the VDP datagram payload; ReceiveFrom recv into +0)
+//     +0x000  maDatagramHeader[8]    u8      (the leading VDP datagram bytes)
+//     +0x008  muReceiveLength        u16     (payload length passed to the stream engine)
+//     +0x00A  maReceivePayload       char    (the rest of the 1040-byte datagram)
 //     +0x410  mOverlapped             CgsXOverlapped (28-byte XOVERLAPPED async I/O; +0x410)
 //     +0x42C  mbInUse                 bool    (ReceiveVideoData latches +0x42C == +1068)
 //
-//   +0x00000  maVideoPackets[256]     (256 * 0x430 == 0x42F00 == 274432)
-//   +0x42F08  mpStreamEngine          IXCamStreamEngine*  (XCamCreateStreamEngine handle, +274432)
+//   +0x00000  maVideoPackets[256]     (256 * 0x430 == 0x43000)
+//   +0x43000  mpStreamEngine          IXCamStreamEngine*
 //
 //   RemotePlayerData (stride 360 == 0x168; base S == this + 274440; the table walks 8 of them;
 //   the feed-slot loops compare miPlayerID @ S+52 against -1/the wanted id):
@@ -86,12 +88,8 @@
 // RELATIONSHIPS (the per-entry field order and the table-vs-tail member order), mirroring the
 // sibling BrnNetwork::GamerPictureManagerX360::_AssertLayout.
 //
-// FLAGGED un-homed deps (kept declaration-only, NOT fabricated):
-//   * the XVID streaming engine (XCamCreateStreamEngine + the engine's vtable the asm calls by
-//     raw slot, e.g. (*(**slot + N))()), CgsSystem::CgsXOverlapped (declared inline in its own
-//     platform .cpp, no shared header), the Winsock/XDK socket layer, and
-//     CgsNetwork::ServerInterfaceGamesX360::GetPlayerXUIDByID. Methods that pivot on those
-//     un-decodable indirect vtable calls are left declaration-only and FLAGGED at their stub.
+// The SDK supplies the stream engine, socket API and overlapped record. The camera feed
+// pumps and their player integration still need reconstruction.
 //
 // Original home (from the asm assert strings):
 //   ..\..\..\GameSource\Network/X360/BrnNetworkCameraX360.cpp
@@ -99,6 +97,7 @@
 
 #include "types.hpp"
 #include <cstddef>   // offsetof
+#include "GameShared/GameClasses/System/CgsXOverlapped.h"                  // CgsSystem::CgsXOverlapped
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                  // CgsSystem::Time
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"     // CgsNetwork::NetworkTexture
 #include "GameSource/Network/Messages/BrnCameraStatusMessage.h"           // CameraStatusMessage
@@ -106,6 +105,7 @@
 #include "GameSource/Network/Messages/BrnCameraRequestResponseMessage.h"  // CameraRequestResponseMessage
 #include "GameShared/Jobs/DXTCompress/CgsNetworkTextureDXTCompress.h"      // NetworkTextureDXTCompress + CompressionCompleteCallback
 
+struct IXCamStreamEngine;
 namespace CgsMemory { class HeapMalloc; }
 
 namespace CgsNetwork
@@ -136,22 +136,14 @@ namespace BrnNetwork
         // The VDP receive datagram size handed to ReceiveFrom (`li r5, 1040`).
         static const s32 KI_VDP_PACKET_SIZE = 1040;
 
-        // The opaque XVID streaming-engine handle. FLAG: the concrete engine type + its vtable
-        // (whose slots the X360 calls by raw byte offset) live in the Xbox 360 XDK / the
-        // not-yet-homed CgsNetwork XVID glue; modelled here as an incomplete pointed-to type so
-        // the handle member is named without fabricating the vtable shape.
-        struct IXCamStreamEngine;
-
-        // -------------------------------------------------------------------------------------
-        // One async receive packet (stride 0x430). The XOVERLAPPED async-I/O sub-object is the
-        // platform-local CgsSystem::CgsXOverlapped (declared inline in its own X360 .cpp, no
-        // shared header), so its 28 bytes are reserved as opaque storage here and FLAGGED.
+        // The datagram and its asynchronous receive state (stride 0x430).
         struct VideoPacket
         {
-            char maReceiveBuffer[1040];   // +0x000  the VDP datagram payload
-            u8   maOverlapped[28];        // +0x410  CgsSystem::CgsXOverlapped (opaque; FLAGGED)
-            bool mbInUse;                 // +0x42C  (== +1068; an async recv is outstanding)
-            u8   maPad42D[3];             // +0x42D  pad to the 0x430 stride
+            u8 maDatagramHeader[8];
+            u16 muReceiveLength;
+            char maReceivePayload[KI_VDP_PACKET_SIZE - 8 - sizeof(u16)];
+            CgsSystem::CgsXOverlapped mOverlapped;
+            bool mbInUse;
         };
 
         // One remote-player camera-feed slot (stride 0x168). See the header layout note above
@@ -225,8 +217,7 @@ namespace BrnNetwork
         // (re)construct its embedded reliable messages; release its decoded texture.
         void ResetRemotePlayers();
 
-        // X360 0x825869F8 -- reset the 256-entry receive-packet ring (construct each overlapped,
-        // zero the buffer, clear the flags). DECLARATION-ONLY (CgsXOverlapped has no shared home).
+        // X360 0x825869F8 -- reset the 256-entry receive-packet ring.
         void ResetVideoPackets();
 
         // X360 0x82595410 -- the decoded camera texture for a player (the local one when the id is
