@@ -24,7 +24,9 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // CgsGui::GuiEventAptTriggerPayload
 #include "GameSource/Gui/BrnGuiCache.h"                                 // GuiCache (icon manager / tracker / zoom / resources)
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"                        // GuiTracker::GetTrackerInformation
-#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                      // CgsGui::GuiEvent<212> (the render record head)
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "SharedClasses/Gui/SatNav/BrnMapUtils.h"                        // BrnGui::MapTransform (the zoomed view install)
 
 #include <cmath>     // sinf/cosf (the XMMatrixRotationY fold)
@@ -354,13 +356,24 @@ void SatNavComponent::UpdateFreeRoaming()
 
 // @ 0x82469378 -- the per-frame sat-nav tick: (re)claim the icon set, refresh the
 // view params + icon manager, drive the north indicator, fill the render payload for
-// the active mode, and post it to the view-state channel. (The X360 brackets the body
-// with PerfMonCpu monitors -- profiling plumbing, not reconstructed.)
+// the active mode, and post it to the view-state channel.
 void SatNavComponent::Update()
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // :228 (non-gating)
+    CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miSatNavUpdate);
+    const char* const lpcSourceFile = "..\\..\\..\\GameSource\\Gui/SatNav/BrnSatNav.cpp";
+    if (!mpGuiCache)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mpGuiCache", lpcSourceFile, 228);
+        CgsDev::Assert::EndAssert();
+    }
     mpIconManager = mpGuiCache->GetMapIconManager();
-    CGS_ASSERT(mpIconManager != 0, "mpIconManager");   // :231 (non-gating)
+    if (!mpIconManager)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mpIconManager", lpcSourceFile, 231);
+        CgsDev::Assert::EndAssert();
+    }
 
     const MapIconManager::OwnerId lePreviousId = mIconManagerId;
     if (lePreviousId == MapIconManager::E_OWNERID_INVALID)
@@ -368,10 +381,17 @@ void SatNavComponent::Update()
         // Claim the icon set: component-name base "<parent>SatNavIcon", 16 icons,
         // owner E_SATNAV_MAP, no road signs, drive-thrus unless the mode is 13, no
         // drive-thru selection, display type 5, no icon parent (X360 stack args).
+        const bool lbShowDriveThrus = (mpGuiCache->GetGameMode() != 13);
         char lacIconComponentName[128];
         CgsCore::SPrintf(lacIconComponentName, 127, "%s%s",
                          macSatNavIconParentNameBase, "SatNavIcon");
-        const bool lbShowDriveThrus = (mpGuiCache->GetGameMode() != 13);   // X360 lwz cache+0x9E58, != 13
+        lacIconComponentName[127] = '\0';
+        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        {
+            *CgsDev::Log::gpDebugPrint
+                << "MAPICONMANAGER: SatNavComponent is calling SetOwnerParameters with OwnerID "
+                << static_cast<s32>(MapIconManager::E_SATNAV_MAP) << "(E_SATNAV_MAP).\n";
+        }
         mIconManagerId = mpIconManager->SetOwnerParameters(
             mpStateInterface, lacIconComponentName,
             16, MapIconManager::E_SATNAV_MAP,
@@ -390,11 +410,18 @@ void SatNavComponent::Update()
 
     mpPlayerInfo = reinterpret_cast<const GuiPlayerInfo*>(
         &mpGuiCache->GetWorldCameraPosition());   // cache +0x4AE0
-    CGS_ASSERT(mpPlayerInfo != 0, "mpPlayerInfo");   // :292 (non-gating)
+    if (!mpPlayerInfo)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("mpPlayerInfo", lpcSourceFile, 292);
+        CgsDev::Assert::EndAssert();
+    }
     SetViewParamsFromPlayerCar(mpPlayerInfo);
 
+    CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miMapIconMgrUpdate);
     if (mpIconManager != 0)
         mpIconManager->Update();
+    CgsDev::PerfMonCpu::StopMonitor(GuiPerfmons::miMapIconMgrUpdate);
 
     if (mbUseNorthIndicator)
     {
@@ -417,23 +444,18 @@ void SatNavComponent::Update()
         UpdateFreeRoaming();
     }
 
-    // Post the render payload on the view-state channel (X360 record {48, 212, 16},
-    // ch41, 64 bytes -- native-width here per the PlayAptMovie precedent).
-    CGS_ASSERT(mpStateInterface != 0, " state interface is invalid ");   // :333 (non-gating)
+    if (!mpStateInterface)
     {
-        struct GuiEventRenderSatNavRecord : public CgsGui::GuiEvent<212>
-        {
-            GuiEventRenderSatNav mPayload;
-            explicit GuiEventRenderSatNavRecord(const GuiEventRenderSatNav& lrPayload)
-                : CgsGui::GuiEvent<212>(48, 16)
-                , mPayload(lrPayload)
-            {
-            }
-        } lRecord(mRenderSatNavEvent);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord),
-            41 /* KI_CHANNEL_VIEW_STATE */, sizeof(lRecord));
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lStream << " state interface is invalid ";
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcSourceFile, 333);
+        CgsDev::Assert::EndAssert();
     }
+
+    // ARTIST 0x824696A8 posts the 64-byte render record on view-state channel 41.
+    mpStateInterface->OutputViewState(mRenderSatNavEvent);
+    CgsDev::PerfMonCpu::StopMonitor(GuiPerfmons::miSatNavUpdate);
 }
 
 // @ 0x8244EEC8 -- build the four corners of the zoomed world window around the car.
