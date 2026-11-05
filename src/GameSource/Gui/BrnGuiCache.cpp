@@ -247,6 +247,23 @@ namespace BrnGui
     void GuiCache::Construct(GuiTracker* lpGuiTracker,
                              CgsGui::SystemUserProfile* lpSystemUserProfile)
     {
+        // The padding split below must preserve the console's native car-unlock region.
+        CGS_STATIC_ASSERT((sizeof(CgsID) == 8), "ARTIST car-unlock ID is eight bytes");
+        CGS_STATIC_ASSERT((offsetof(GuiCache, mCarUnlockNewCarId) == 0x4B68),
+                          "ARTIST GuiCache car-unlock ID offset");
+        CGS_STATIC_ASSERT((offsetof(GuiCache, meCarSelectType) == 0x4B70),
+                          "ARTIST GuiCache car-select type offset");
+        CGS_STATIC_ASSERT((offsetof(GuiCache, mbJunkyardCarUnlockPending) == 0x4B74),
+                          "ARTIST GuiCache junkyard unlock flag offset");
+        CGS_STATIC_ASSERT((offsetof(GuiCache, mbCarUnlockPending) == 0x4B75),
+                          "ARTIST GuiCache car-unlock flag offset");
+        CGS_STATIC_ASSERT((offsetof(GuiCache, mbCarUnlockDetermined) == 0x4B76),
+                          "ARTIST GuiCache car-unlock determination offset");
+        CGS_STATIC_ASSERT((offsetof(GuiCache, mbSuppressPostEventPresentation) == 0x4B77),
+                          "ARTIST GuiCache post-event suppression offset");
+        CGS_STATIC_ASSERT((offsetof(GuiCache, mbPlayIntroVideo) == 0x4B78),
+                          "ARTIST GuiCache intro-video gate offset");
+
         // The console's two prologue asserts, in its order and with its own literals. Both
         // are NON-GATING (CgsDev::Assert::FireAssert returns and the stores run regardless),
         // so they are reproduced as plain CGS_ASSERTs ahead of the stores.
@@ -294,6 +311,11 @@ namespace BrnGui
         // save present) pass ProfileManager::ValidateProfiles' DLC1-options check instead
         // of logging "Options Data Profile version mismatch, expected 1, got 0".
         mOptionsDataProfileDLC1.Construct();
+
+        // ARTIST 0x82506028 / 0x82506034: clear the junkyard-unlock flag and its
+        // adjacent eight-byte car ID (r30 is zero at both stores).
+        mbJunkyardCarUnlockPending = false;
+        mCarUnlockNewCarId = 0;
 
         // ⛔ FLAG GameState stand-in (2026-08-02, car-select wave).
         // CONSOLE CHAIN: meCarSelectType is latched by RecEvent's `case 77` (see the switch
@@ -2569,6 +2591,20 @@ namespace BrnGui
             mTrophyCarID          = lpTrophyEvent->mTrophyCarID;
             break;
         }
+
+        case 73:
+            // ARTIST RecEvent table case 69 is incoming GUI event 73 (the switch
+            // subtracts four). NewCarUnlockedAction posts the 8-byte CgsID payload.
+            mbJunkyardCarUnlockPending = true;
+            mCarUnlockNewCarId = *reinterpret_cast<const CgsID*>(lpEvent);
+            break;
+
+        case 74:
+            // ARTIST RecEvent table case 70 is incoming GUI event 74. The original
+            // ignores its one-byte payload and clears both car-unlock fields.
+            mbJunkyardCarUnlockPending = false;
+            mCarUnlockNewCarId = 0;
+            break;
 
         case 79:
             // ARTIST 0x8250EE0C copies GuiEnteredJunkyard's bool to +0x4B57.

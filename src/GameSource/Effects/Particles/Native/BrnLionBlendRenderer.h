@@ -117,17 +117,17 @@ namespace BrnGraphics
     // (The same identification CgsImRenderer.cpp:270 already made, from the same three fields.)
     // LionBlendRenderer::EndRendering @0x8227E610 word 10 calls the FIRST of those with
     // dword_83010F20 -- the blend one -- which is exactly what a DWARF `SetState(const BlendState*)`
-    // inlined into it should emit. Nothing disagrees with anything.
+    // inlined into it should emit. Native code obtains that same standard state from
+    // `ImRendererBase::GetStateLibrary().mpBlendState_Standard`.
     //
     // ⭐ AND THE TYPEDEF WAS THE ONE THING THAT REALLY WAS WRONG. It aliased
     // renderengine::MaterialState, which is the *material* block that CONTAINS a blend, a
     // depth-stencil and a rasteriser state (renderstates.h:254). The object the blend applier
     // takes is renderengine::BlendMaterialState (blendstate.h:35) -- the same reconciliation
     // shadowingdevice.cpp already made for shadow::Device::SetState, whose DWARF also spells its
-    // parameter `const BlendState*`. dword_83010F20, the default template EndRendering binds, is
-    // already declared BlendMaterialState* in BrnLionBlendRenderer.cpp. So the alias is corrected
-    // here to the type the whole chain actually passes -- from the applier's signature, not from
-    // whatever made a call compile.
+    // parameter `const BlendState*`. The standard state-library slot is this same BlendState type,
+    // so the alias is the type the whole chain actually passes -- from the applier's signature,
+    // not from whatever made a call compile.
     typedef renderengine::BlendMaterialState BlendState;
 
     class LionBlendRenderer

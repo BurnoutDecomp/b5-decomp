@@ -1789,7 +1789,10 @@ namespace BrnGui
         s32  mePaybackAvailableType;                     // +0x4B5C (19292) BrnNetwork::EPaybackType
         s32  mePaybackVictimRaceCarIndex;                // +0x4B60 (19296) ::EActiveRaceCarIndex
         bool mbPaybackAvailable;                         // +0x4B64 (19300)
-        u8   mPad_4B65[0xB];                             // +0x4B65..+0x4B6F
+        u8   mPad_4B65[3];                              // +0x4B65..+0x4B67
+        // ARTIST RecEvent event 73 stores its 8-byte GuiCarUnlockNewCarEvent CgsID here;
+        // event 74 clears it. No original X360 member name is attested.
+        CgsID mCarUnlockNewCarId;                       // +0x4B68..+0x4B6F
         // ADDITIVE CARVE (BrnCarSelectMain wave G): which car-select flow is running.
         // DWARF h:1687 `BrnGameState::GameStateModuleIO::ECarSelectType meCarSelectType`;
         // the member NAME is baked into the X360 assert string "meCarSelectType >
@@ -1800,9 +1803,10 @@ namespace BrnGui
         // BrnGameState::GameStateModuleIO::ECarSelectType (BrnGameStateSharedIO.h).
         s32  meCarSelectType;                            // +0x4B70 (19312)
         // ADDITIVE CARVE (CrashNavEnterOnlineBase::HandleEnteringJunkyard @0x824CB070,
-        // lbz mpGuiCache+0x4B74 == 1 -> "TO_CUNLOCK" else "TO_CSELECT"). FLAG:
-        // consumer-named -- the producer-side semantics are unrecovered (it gates the
-        // junkyard entry into the car-UNLOCK flavour of car select).
+        // lbz mpGuiCache+0x4B74 == 1 -> "TO_CUNLOCK" else "TO_CSELECT"). ARTIST
+        // GuiCache::Construct clears it; RecEvent event 73 (NewCarUnlockedAction) sets it
+        // while storing the car ID at +0x4B68, and event 74 (CarUnlockEndAction) clears it.
+        // The C++ name is descriptive; no original X360 member name is attested.
         bool mbJunkyardCarUnlockPending;                 // +0x4B74 (19316)
         // ADDITIVE GROW (BrnGuiCache DetermineCarUnlockPending @0x824EC678): the two car-unlock
         // pending flag bytes (Hex-Rays field_4B75 / field_4B76). FLAG: consumer-named.

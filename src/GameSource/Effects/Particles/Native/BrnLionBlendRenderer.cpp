@@ -37,19 +37,13 @@
 #include <cstdio>   // [lionsprite] witness   // the one-shot CreateInternalMaterial announcement
 #include "GameSource/Effects/Particles/LionParticleRender.h"   // LionParticleRender::CreateInternalMaterial / cParticleMaterial (the Lion trap stubs below)
 
-// The process-wide default blend-state template bound at batch end (X360 .data home is the
-// LionParticleRender TU; extern for the compile gate). Same static that
-// LionParticleRenderMaterial.cpp / BrnSimpleParticleRenderer.cpp read their base blend
-// parameters from.
-extern renderengine::BlendMaterialState* dword_83010F20;
-
 namespace BrnGraphics
 {
 
 // ---------------------------------------------------------------------------
 // BrnGraphics::LionBlendRenderer::EndRendering  @ 0x8227E610
 //
-// End the immediate-mode blend batch: bind the shared default blend template through this
+// End the immediate-mode blend batch: bind the shared standard blend state through this
 // renderer's own SetState (X360 word 10 `bl CgsGraphics::ImRendererBase::SetState` with
 // r3 = this+4, r4 = dword_83010F20), then run the inlined
 // CgsGraphics::ImRenderer<V>::EndRendering: assert this renderer is the active one and clear
@@ -64,10 +58,9 @@ namespace BrnGraphics
 // ---------------------------------------------------------------------------
 void LionBlendRenderer::EndRendering()
 {
-    // SetState(dword_83010F20): the BlendState overload against the immediate-mode renderer.
-    // The X360 emits `ImRendererBase::SetState(&mRenderer + 4, dword_83010F20)`; the return
-    // value (the renderer, X360 r3) is discarded.
-    SetState(reinterpret_cast<const BlendState*>(dword_83010F20));
+    // The X360's dword_83010F20 is the shared standard state built by ConstructOnceOnly.
+    // Use its typed library slot so Lion and GUI rendering share the same initialized object.
+    SetState(CgsGraphics::ImRendererBase::GetStateLibrary().mpBlendState_Standard);
 
     // Inlined CgsGraphics::ImRenderer<V>::EndRendering (CgsImRenderer.h).
     CgsGraphics::ImRendererBase* lpBase = static_cast<CgsGraphics::ImRendererBase*>(&mRenderer);
@@ -1303,7 +1296,7 @@ namespace BrnGraphics
     // ImRendererBase base and the console inlined them at every call site. EndRendering
     // @0x8227E610 word 10 shows exactly what that inlining looks like --
     // `bl CgsGraphics::ImRendererBase::SetState` (@0x82276D08, the BLEND overload) with
-    // r3 == &mRenderer + 4 and r4 == dword_83010F20.
+    // r3 == &mRenderer + 4 and r4 == the standard blend-state library slot.
     //
     // ⛔ THEY DO NOT FORWARD INTO CgsGraphics::ImRendererBase, AND THE REASON IS NOT THE OLD
     // TYPE QUESTION (which is answered in the header) -- it is that the committed

@@ -5,8 +5,11 @@
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"              // streamed native assert
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // Start/StopMonitor
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log (deferral gap log)
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
+#include "GameSource/Gui/BrnGuiPerfmons.h"                                // GuiPerfmons::miHudStateUpdate
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // GuiEventDriveThruDiscovered / GuiEventChangeDistrict
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // CgsGui::GuiEventAptTriggerPayload (event 21, typed)
 #include "GameSource/Gui/Flapt/BrnFlaptManager.h"                         // BrnFlapt::FlaptManager
@@ -479,39 +482,64 @@ namespace BrnGui
     }
 
     // =======================================================================
-    //  Update -- the phase dispatch (header-inline on X360, not exported; composed
-    //  from the phase bodies' advance returns; UpdatePermenant runs every frame)
+    //  Update  @ 0x82481A10 -- the phase dispatch
     // =======================================================================
     void FBurnMainHudState::Update()
     {
+        CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miHudStateUpdate);
+
         switch (meInternalState)
         {
         case E_INTERNALSTATE_SETUP:
-            if (UpdateSetupState())
-                meInternalState = E_INTERNALSTATE_LOADING;
-            break;
+            meInternalState = E_INTERNALSTATE_SETUP;   // @0x82481A64/6C
+            if (!UpdateSetupState())
+                break;
+            // fall through -- @0x82481A80
         case E_INTERNALSTATE_LOADING:
-            if (UpdateLoading())
-                meInternalState = E_INTERNALSTATE_WFINIT;
-            break;
+            meInternalState = E_INTERNALSTATE_LOADING; // @0x82481A80/88
+            if (!UpdateLoading())
+                break;
+            // fall through -- @0x82481A9C
         case E_INTERNALSTATE_WFINIT:
-            if (UpdateWFInit())
-                meInternalState = E_INTERNALSTATE_RUNNING;
-            break;
+            meInternalState = E_INTERNALSTATE_WFINIT;  // @0x82481A9C/A4
+            if (!UpdateWFInit())
+                break;
+            // fall through -- @0x82481AB8
         case E_INTERNALSTATE_RUNNING:
+            meInternalState = E_INTERNALSTATE_RUNNING; // @0x82481AB8/C0
             UpdateRunning();
             break;
+        case E_INTERNALSTATE_LEAVING:
+            meInternalState = E_INTERNALSTATE_LEAVING; // @0x82481ACC/D0
+            break;
         default:
+            {
+                // ARTIST streams the invalid phase into the shared assert buffer, then
+                // fires the original FBurnMainHudState.cpp:1282 assertion.
+                CgsDev::Assert::BeginAssert();
+                CgsDev::StrStream lAssertStream(
+                    CgsDev::Assert::gpcMessageBuffer,
+                    CgsDev::Assert::giMessageBufferSize);
+                lAssertStream << "Should never call update in the following state";
+                lAssertStream << static_cast<s32>(meInternalState);
+                CgsDev::Assert::FireAssert(
+                    CgsDev::Assert::gpcMessageBuffer,
+                    "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnFBurnMainHudState.cpp",
+                    1282);
+                CgsDev::Assert::EndAssert();
+            }
             break;
         }
 
-        UpdatePermenant();
+        if (meInternalState != E_INTERNALSTATE_LEAVING)
+            UpdatePermenant();
 
-        // The pumps read without consuming; the state clears its in-queue at frame end
-        // (the shared boot/HUD-state idiom).
+        // ARTIST clears the state in-queue after UpdatePermenant and before StopMonitor;
+        // phase fallthrough lets queued GUI events (including 549) survive until RUNNING.
         StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        if (lpInQueue != 0)
-            lpInQueue->Clear();
+        lpInQueue->Clear();
+
+        CgsDev::PerfMonCpu::StopMonitor(GuiPerfmons::miHudStateUpdate);
     }
 
     // =======================================================================
