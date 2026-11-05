@@ -6,11 +6,11 @@
 // import; the loader/manager look resources up by it. Shape taken from the Feb-2007 partial source
 // (GameShared/GameClasses/System/Resource/CgsResourceID.h), which the X360 spine matches for this type.
 //
-// RECONCILE: the X360/Feb-2007 runtime id-hashers are u64 (Construct -> HashString(const RwChar*) /
-// HashData(const u8*, u32)). The static HashString below is the existing reconstruction and returns a
-// 32-bit CRC - kept for its current callers. Reconstructing the real u64 hashers (+ Construct) from the
-// X360 is a follow-on; it is the load-by-name path, not needed to READ ids already stored in a bundle
-// (that only needs the value + GetHash/SetHash).
+// ARTIST 0x828D84A8 returns the low CRC32 zero-extended in its 64-bit result
+// (clrldi r3,r11,32 at 0x828D8550; the empty-string tail also clears the upper
+// bits). DecFIGS declares uint64_t HashString(const RwChar*). Keep this outlined
+// byte-string entry point's unsigned result when it flows into a request's u64 ID.
+// Construct/HashData API recovery remains outside this correction.
 
 namespace CgsDev { struct StrStreamBase; }
 
@@ -26,7 +26,7 @@ namespace CgsResource
         u64  GetHash() const     { return mHash; }
         void SetHash(u64 luHash) { mHash = luHash; }
 
-        static s32 HashString(const u8* lpString);   // existing 32-bit CRC hasher (see RECONCILE note)
+        static u64 HashString(const u8* lpString);   // original unsigned64 result, zero-extended CRC32
 
         friend bool operator==(ID lLeft, ID lRight) { return lLeft.mHash == lRight.mHash; }
         friend bool operator!=(ID lLeft, ID lRight) { return lLeft.mHash != lRight.mHash; }

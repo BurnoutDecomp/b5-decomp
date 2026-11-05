@@ -210,12 +210,12 @@ void PresentationEffect::Play(const PresentationEntry& arEntry)
             static_cast<Streaming::StreamingStateManager*>(
                 lpModule->GetEnvironment().GetStateManager(6));
         CGS_ASSERT(lpStreaming != 0, "lpStreamingStateManager");
-        if (lpStreaming)
-        {
-            mStreamParams.mContentSpecName = arEntry.mu32ContentSpec;
-            mu8StreamOutput = arEntry.mu8MixerOutput;
-            lpStreaming->PostStreamRequest(Streaming::StreamRequest(this, 6, 0.1f));
-        }
+        mStreamParams.mContentSpecName = arEntry.mu32ContentSpec;
+        // ARTIST 0x8269E4FC queues the 16-byte stop request before the
+        // 24-byte play request at 0x8269E508, both for this IStreamUser.
+        lpStreaming->PostStreamRequest(Streaming::StreamStopRequest(this, 0.25f));
+        lpStreaming->PostStreamRequest(Streaming::StreamRequest(this, 4, 0.1f));
+        mu8StreamOutput = arEntry.mu8MixerOutput;
         return;
     }
 

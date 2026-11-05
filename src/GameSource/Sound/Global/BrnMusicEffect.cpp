@@ -1199,15 +1199,7 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
                 // pass-through unless the name is the "intro" video sentinel, which resolves
                 // the localised INTRO stream through the stream mappings +
                 // languagestreamconfiguration[meLanguage].
-                u32 luContentSpec = GetStreamFromVideoName(luName);
-                // FLAG (pre-existing, kept): the shipped title screen asks for
-                // "GunsAndRoses" while the streams registry holds "Guns_And_Roses".
-                const u32 luGunsAndRoses =
-                    static_cast<u32>(CgsSound::Playback::Name::MakeHash("GunsAndRoses"));
-                if (luName == luGunsAndRoses)
-                    luContentSpec = static_cast<u32>(
-                        CgsSound::Playback::Name::MakeHash("Guns_And_Roses"));
-                mMenuStreamName = luContentSpec;
+                mMenuStreamName = GetStreamFromVideoName(luName);
                 mbMenuStreamIsVideo = lbIsVideo;
                 mbMenuStreamOverCustom = lbOverCustom;
                 if (lbIsVideo && mEATraxStream.IsPlayingOrQueued())

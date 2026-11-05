@@ -137,7 +137,7 @@ namespace BrnGui
     //     play the "intro" video with its own sound-stream name;
     //     otherwise post phase-complete (70) straight away.
     //   E_PLAYING_VIDEO: when the video-finished feedback lands, restore the menu music
-    //     ("GunsAndRoses"), raise the loading screen (command 19), and post 70.
+    //     ("Guns_And_Roses"), raise the loading screen (command 19), and post 70.
     //   E_FINISHED_VIDEO: idle (drain the queue).
     void PostTitleScreenLoad::Update()
     {
@@ -188,7 +188,7 @@ namespace BrnGui
                 break;
             {
                 MusicOnMenuStreamEvent lMusic(static_cast<s32>(
-                    CgsSound::Playback::Name::MakeHash("GunsAndRoses")));
+                    CgsSound::Playback::Name::MakeHash("Guns_And_Roses")));
                 mpStateInterface->OutputGuiEvent<MusicOnMenuStreamEvent>(lMusic);
             }
             PostCommand16<19>(mpStateInterface, KI_CHANNEL_GUI_OUT);   // loading screen up

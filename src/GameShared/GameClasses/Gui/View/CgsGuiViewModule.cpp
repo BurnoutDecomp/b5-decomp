@@ -2,6 +2,8 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"
 #include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
+#include "GameShared/GameClasses/Gui/CgsGuiEventAddLocalisedTextPointer.h"
+#include "GameShared/GameClasses/Gui/CgsGuiEventLocalisedTextPointerRemoved.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"
 
 #include <cstring>
@@ -436,19 +438,102 @@ namespace CgsGui
         }
     }
 
-    // X360 @0x8285ED00 -- NOT YET RECONSTRUCTED (the ledger dossier holds the
-    // reviewed body): the language view events (10-12). Land with the
-    // language-ownership slice.
+    // X360 @0x8285ED00. Event 10 formats the {Apt name, view key, format, value}
+    // body at +0/+4/+8/+0xC; 11 asserts as unsupported; 12 registers or removes the
+    // caller-owned text pointer and posts the typed removal notification on removal.
     void ViewModule::ProcessIncomingLanguageEvent(const void* lpEvent, s32 liSize,
                                                   s32 liEventId,
                                                   ViewIO::OutputBuffer* lpOutput)
     {
-        (void)lpEvent;
         (void)liSize;
-        (void)liEventId;
         (void)lpOutput;
-    }
 
+        const char* const lpcFile =
+            "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CgsGuiViewModule.cpp";
+
+        switch (liEventId)
+        {
+        case 10:
+        {
+            // The ARTIST consumer loads +0/+4 as the Apt component and view key passed
+            // to UpdateFlashComponent, +8 as the format selector, and +0xC as an f32.
+            struct LocalisedValueEventFields
+            {
+                const char* mpacAptName;
+                const char* mpacViewState;
+                s32 miFormatType;
+                f32 mfTimeInSeconds;
+            };
+            const LocalisedValueEventFields* lpValue =
+                static_cast<const LocalisedValueEventFields*>(lpEvent);
+            char lacFormattedValue[136];
+
+            if (lpValue->miFormatType == 0)
+            {
+                mLanguageManager.FormatMinutesAndSecondsString(
+                    lacFormattedValue, lpValue->mfTimeInSeconds, 128);
+            }
+            else if (lpValue->miFormatType == 1)
+            {
+                mLanguageManager.FormatSecondsString(
+                    lacFormattedValue, lpValue->mfTimeInSeconds, 128);
+            }
+            else
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert(
+                    "Undefined format type for localised value", lpcFile, 654);
+                CgsDev::Assert::EndAssert();
+                // ARTIST continues to UpdateFlashComponent after this assert.
+            }
+
+            AptAux::UpdateFlashComponent(&mAptAux, lpValue->mpacAptName,
+                                          lpValue->mpacViewState, lacFormattedValue, false);
+            break;
+        }
+
+        case 11:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "E_GUI_ADD_LOCALISED_TEXT event is no longer supported", lpcFile, 671);
+            CgsDev::Assert::EndAssert();
+            break;
+
+        case 12:
+        {
+            const GuiEventAddLocalisedTextPointer* lpTextEvent =
+                static_cast<const GuiEventAddLocalisedTextPointer*>(lpEvent);
+
+            // The native consumer maps marker 0 to add and nonzero to remove. The
+            // ARTIST producers UpdateDownloadingTOS (0x82566320) and AnswerAgreeTOS
+            // (0x82566478) provide those two values respectively.
+            if (lpTextEvent->miMarker != 0)
+            {
+                mLanguageManager.RemoveStringPointer(lpTextEvent->macId);
+
+                GuiEventLocalisedTextPointerRemoved lRemovedEvent;
+                lRemovedEvent.SetStringRemoved(lpTextEvent->macId);
+                mOutputEventQueue.CgsModule::VariableEventQueue<256, 16>::AddEvent(
+                    &lRemovedEvent, 13, 4);
+            }
+            else
+            {
+                // AddStringPointer stores this caller-owned text pointer; it does not copy it.
+                mLanguageManager.AddStringPointer(lpTextEvent->macId,
+                    reinterpret_cast<const u8*>(lpTextEvent->mpText));
+            }
+            break;
+        }
+
+        default:
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(
+                "Unexpected type sent to ViewModule::ProcessIncomingLanguageEvent",
+                lpcFile, 701);
+            CgsDev::Assert::EndAssert();
+            break;
+        }
+    }
     // =========================================================================
     // ⭐⭐ ProcessIncomingUnloadRequestNotification @0x828586E8 -- THE OTHER HALF of the
     // load notification above, and until this wave it was an EMPTY BODY: the notification
