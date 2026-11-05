@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface (OutputGuiEvent/RegisterForEvents)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::VariableEventQueue (the in-queue)
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"         // CgsResource::ID::HashString (resId = name hash)
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // GuiEventAptTriggerPayload (event 21)
 #include "GameSource/Gui/BrnGuiVideoEvents.h"                             // BrnGui::GuiEventPlayVideo (508)
 #include "GameSource/Gui/BrnGuiCache.h"                                    // GuiCache::GetTime (the EA-logo dwell)
 #include "GameSource/Game/BrnGameModule.hpp"                          // gpBurnoutGame (soft-reboot query)
@@ -43,7 +44,7 @@ namespace BrnGui
         };
 
         // The boot GUI sub-ids/channels the X360 uses (BootVideos::Update @0x82478778).
-        const s32 KI_EVENT_APT_NAME       = 21;    // apt-name notification (the Criterion sub-name match)
+        const s32 KI_EVENT_APT_TRIGGER    = 21;    // Apt trigger (kind + unique id + component-name pointer)
         const s32 KI_EVENT_VIDEO_TICK     = 6;     // per-tick video notification (sub-id 49 = skip request)
         const s32 KI_VIDEO_TICK_SKIP_SUB  = 49;    // payload+4 == 49 -> the player asked to stop
         const s32 KI_CHANNEL_GUI_OUT      = 40;
@@ -247,14 +248,14 @@ namespace BrnGui
                 break;
 
             case E_UPDATE_STAGE_MAIN_CRITERION_LOGO_MOVIE:
-                // @0x82478C34-70 -- the apt-name notification for "EA_Criterion_Logo" ends the
-                // phase as well as the video-finished event does; both post command 70 on the
-                // GUI-out channel, which is what MarketingScreens::Update advances on.
-                if (liEventId == KI_EVENT_APT_NAME)
+                // @0x82478C34-70 -- the event-21 transition-complete trigger for
+                // "EA_Criterion_Logo" ends the phase, as does video-finished (510).
+                if (liEventId == KI_EVENT_APT_TRIGGER)
                 {
-                    const s32*  lpiPayload = reinterpret_cast<const s32*>(lpEvent);
-                    const char* lpcName    = reinterpret_cast<const char*>(lpEvent) + 8;
-                    if (lpiPayload[0] == 4 && std::strcmp(lpcName, "EA_Criterion_Logo") == 0)
+                    const CgsGui::GuiEventAptTriggerPayload* lpTrigger =
+                        reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpEvent);
+                    if (lpTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE &&
+                        std::strcmp(lpTrigger->mpacComponentName, "EA_Criterion_Logo") == 0)
                     {
                         PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
                         meUpdateStage = E_UPDATE_STAGE_DONE;

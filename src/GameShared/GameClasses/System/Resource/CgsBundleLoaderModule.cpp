@@ -209,6 +209,8 @@ void BundleLoaderModule::ProcessBundleHeader() // 828D7A90
     std::memcpy(&mCurrentBundle, mpcHeaderBuffer, sizeof(mCurrentBundle));
     if (mpcDebugDataBuffer)
         *mpcDebugDataBuffer = 0;
+    // ARTIST 0x828D7AE4 / CgsBundleLoaderModule.cpp:599: the bundle platform is X360 (2).
+    CGS_ASSERT(mCurrentBundle.muPlatform == BundleV2::KU_PLATFORM, "Invalid platform");
     CGS_ASSERT(mCurrentBundle.muVersion == BundleV2::KU_VERSION, "Bundle version is out of date\n");
     CGS_ASSERT(mCurrentBundle.muResourceEntriesCount <= static_cast<u32>(miMaxResourcesPerBundle),
                "Bundle contains more resources than maximum defined in init options\n");

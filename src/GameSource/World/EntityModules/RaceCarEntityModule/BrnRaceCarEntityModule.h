@@ -675,11 +675,13 @@ public:
         // ====================================================================
 
         // X360 0x822FEBF8. A car's five streamed resources have arrived: publish them into
-        // the slot, colour it, and ask for it to be placed on the track. PARTIAL SLICE --
-        // see the .cpp banner. Only caller: UpdateStreaming.
+        // the slot, colour it, and ask for it to be placed on the track.
+        // ARTIST passes the AI and scene interfaces but this body does not use them.
         void OnRaceCarResourcesLoaded(
                 EActiveRaceCarIndex leActiveRaceCarIndex,
-                BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface );
+                BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInputInterface,
+                BrnAI::AIModuleIO::RaceCarAIInterface* lpRaceCarAIInterface,
+                CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInputInterface );
 
         // X360 0x822CE588. Decide WHERE a freshly loaded car goes and post the request.
         // For a PLAYER car outside a game mode that is ActiveRaceCar::RequestPlaceOnTrack

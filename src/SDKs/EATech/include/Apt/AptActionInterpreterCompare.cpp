@@ -425,24 +425,14 @@ MixedCompare:
         }
 
         // ---- LABEL_964 region: numeric/string coercion with float tolerance.
-        // Decide per operand whether its string form parses as a float (contains '.').
-        bool bTopHasDot   = false;   // v53
-        bool bUnderHasDot = false;   // v54
-
-        if (IsDefinedType(pTop, AptVFT_StringValue) || IsDefinedType(pTop, AptVFT_StringObject)
-            || IsDefinedType(pTop, AptVFT_Float))
-        {
-            if (!IsDefinedType(pTop, AptVFT_Float)
-                && pTop->c_string()->GetInternalString()->UTF8_Find(".", 0) != -1)
-                bTopHasDot = true;
-        }
-        if (IsDefinedType(pUnder, AptVFT_StringValue) || IsDefinedType(pUnder, AptVFT_StringObject)
-            || IsDefinedType(pUnder, AptVFT_Float))
-        {
-            if (!IsDefinedType(pUnder, AptVFT_Float)
-                && pUnder->c_string()->GetInternalString()->UTF8_Find(".", 0) != -1)
-                bUnderHasDot = true;
-        }
+        // ARTIST sets the operand's float flag for a defined float or a
+        // defined string containing '.'. Only strings go through the search.
+        const bool bTopUsesFloat = IsDefinedType(pTop, AptVFT_Float)
+            || (IsDefinedStringType(pTop)
+                && pTop->c_string()->GetInternalString()->UTF8_Find(".", 0) != -1);
+        const bool bUnderUsesFloat = IsDefinedType(pUnder, AptVFT_Float)
+            || (IsDefinedStringType(pUnder)
+                && pUnder->c_string()->GetInternalString()->UTF8_Find(".", 0) != -1);
 
         float fTop;     // the top side's numeric form
         float fUnder;   // the under side's numeric form
@@ -450,7 +440,7 @@ MixedCompare:
         if (IsDefinedType(pTop, AptVFT_Integer))
         {
             const int nTopInt = pTop->toInteger();
-            if (!bUnderHasDot)
+            if (!bUnderUsesFloat)
             {
                 // both integral -> integer compare.
                 v2 = (pUnder->toInteger() - nTopInt) == 0;
@@ -463,7 +453,7 @@ MixedCompare:
         else if (IsDefinedType(pUnder, AptVFT_Integer))
         {
             const int nUnderInt = pUnder->toInteger();
-            if (!bTopHasDot)
+            if (!bTopUsesFloat)
             {
                 // both integral -> integer compare (v5 side fixed).
                 v2 = (nUnderInt - pTop->toInteger()) == 0;
