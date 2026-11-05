@@ -257,14 +257,6 @@ namespace Native
                                       bool                          lbRenderCrashBanks);
     };
 
-    // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN-STABLE. The simple-particle ladder this run:
-    // records SpawnParticle wrote, quads CB4ParticleBank::Render wrote, batches BuildDispatchData
-    // appended, and the batches / vertices BrnSimpleParticleRenderer::Dispatch handed the device.
-    extern u32 gauSimpleParticleSpawned;
-    extern u32 gauSimpleParticleQuadsBuilt;
-    extern u32 gauSimpleParticleBatchesBuilt;
-    extern u32 gauSimpleParticleDrawnBatches;
-    extern u32 gauSimpleParticleDrawnVertices;
 }
 }
 

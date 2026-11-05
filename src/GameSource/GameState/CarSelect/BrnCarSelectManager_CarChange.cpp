@@ -58,32 +58,6 @@ static const char* const KAC_BRNPROFILE_FILE =
 // liveryselect" deform amount the sibling TU names KF_LIVERYSELECT_DELAY_BEFORE_CHANGE.
 static const f32 KF_DEBUG_TROPHY_CAR_DEFORM = 0.85f;   // flt_82029BB8 (1062836634)
 
-// ----------------------------------------------------------------------------
-// SetupSpawnLocations nearest-drive-in geometry helpers (file-local).
-//
-// FLAG: these reproduce the X360 control flow for choosing which of the two type-0 "drive-in" spawn
-// slots is nearer the player's last car. The actual reads (the active-car validity byte at interface
-// +0x2860, the player position from sub_82310398, and each SpawnLocation's position vector) live
-// behind sub-offsets NOT modelled on the minimal slices in scope. They return the X360-default taken
-// when the player has no valid last car (don't swap -> keep discovery order). Replace the bodies when
-// the RaceCar output interface + SpawnLocation position members are reconstructed.
-// ----------------------------------------------------------------------------
-static inline bool CsmHasValidLastPlayerCar(
-    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* /*lpInterface*/)
-{
-    // X360: mePlayerActiveRaceCarIndex (interface +0x2858) != -1 && per-car valid byte (+0x2860) != 0.
-    return false;   // FLAG: interface validity sub-offsets not modelled -> X360 "no valid car" path.
-}
-
-static inline bool CsmIsSecondSpawnLocationCloser(
-    const BrnTrigger::SpawnLocation* /*lpSlot0*/,
-    const BrnTrigger::SpawnLocation* /*lpSlot4*/,
-    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* /*lpInterface*/)
-{
-    // X360: dist2(playerPos, slot4Pos) compared (vcmpgtfp) against slot0Pos.w -> true == slot4 nearer.
-    return false;   // FLAG: position sub-offsets not modelled -> never swap (keep discovery order).
-}
-
 // ============================================================================
 // GetProfileCarData (X360 0x82365760).
 // Resolve the player Profile's CarData record whose car id == lrCarID, or NULL on miss. Used by the
@@ -880,43 +854,26 @@ void CarSelectManager::SetupSpawnLocations()
         }
     }
 
-    // --- Pick the nearer of the two generic drive-in slots (0 and 4) to the player's last car -------
-    // FLAG: the X360 reaches the player's last race-car position through mpGameStateModule's cached
-    // "last active race car interface" (this+0x39820) and its active-car index (+0x2858) / position
-    // (sub_82310398). Those sub-offsets are NOT cleanly modelled on the minimal GameStateModule slice,
-    // so the distance compare is reconstructed behaviourally and the deep reads are flagged.
+    // ARTIST 0x8236ECB4..0x8236ED6C. Keep the authored slot order unless
+    // the active player's heading opposes the second generic spawn.
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpLastActiveCar =
+        mpGameStateModule.Get()->GetLastActiveRaceCarInterface();
+    if (lpLastActiveCar == 0)
     {
-        const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpLastActiveCar =
-            mpGameStateModule.Get()->GetLastActiveRaceCarInterface();
-        if (lpLastActiveCar == 0)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert("lpLastActiveRaceCarInterface", KAC_CSM_FILE, 1119);
-            CgsDev::Assert::EndAssert();
-        }
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert("lpLastActiveRaceCarInterface", KAC_CSM_FILE, 1119);
+        CgsDev::Assert::EndAssert();
+    }
 
-        // X360 asserts mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT (8) and only does the
-        // distance compare when the player has a valid active car (index != -1 && a per-car "valid"
-        // byte set at interface +0x2860). When valid, it computes the squared distance from the
-        // player's last position to maSpawnLocations[4]'s position and compares it against
-        // maSpawnLocations[0]'s position's W component (vmsum3fp128 dot vs a splatted scalar); when
-        // [4] is the nearer it swaps 0<->4 so maSpawnLocations[0] ends up the nearest drive-in slot.
-        //
-        // FLAG: the active-car validity byte, the player position, and the spawn-location position
-        // vector all live behind interface / SpawnLocation sub-offsets that are NOT modelled on the
-        // minimal slices in scope. The helper reproduces the *control flow* (only swap when the player
-        // car is valid AND slot 4 is closer); its two opaque reads return the X360-default
-        // "not-valid / not-closer" so the array keeps its discovery order (the X360 path taken when the
-        // player has no valid last car). Replace with the real geometry when the RaceCar output
-        // interface + SpawnLocation position members are reconstructed.
-        if (CsmHasValidLastPlayerCar(lpLastActiveCar) &&
-            CsmIsSecondSpawnLocationCloser(maSpawnLocations[0].Get(),
-                                           maSpawnLocations[4].Get(),
-                                           lpLastActiveCar))
+    if (lpLastActiveCar->IsPlayerCarActive())
+    {
+        const Vector3 lvSpawnDirection = maSpawnLocations[4].Get()->mDirection;
+        const Vector3 lvPlayerDirection = lpLastActiveCar->GetPlayerDirection();
+        if (rw::math::vpu::Dot(lvSpawnDirection, lvPlayerDirection) < 0.0f)
         {
-            const BrnTrigger::SpawnLocation* lpTmp = maSpawnLocations[0].Get();
+            const BrnTrigger::SpawnLocation* lpFirst = maSpawnLocations[0].Get();
             maSpawnLocations[0].Set(maSpawnLocations[4].Get());
-            maSpawnLocations[4].Set(lpTmp);
+            maSpawnLocations[4].Set(lpFirst);
         }
     }
 
