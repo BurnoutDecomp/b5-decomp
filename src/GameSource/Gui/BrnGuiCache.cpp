@@ -1391,6 +1391,9 @@ namespace BrnGui
         case 96:
             mu8EasyDriveGateState = *reinterpret_cast<const u8*>(lpEvent);
             break;
+        case 592: // ARTIST 0x82510F1C: rendered replay car, indexed by the payload word.
+            maReplayARCRendered[*reinterpret_cast<const s32*>(lpEvent)] = true;
+            break;
         case 471:
             mu8EATraxChyronActive = *reinterpret_cast<const u8*>(lpEvent);
             break;
