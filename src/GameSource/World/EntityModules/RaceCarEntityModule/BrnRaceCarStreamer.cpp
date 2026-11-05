@@ -128,9 +128,29 @@ bool RaceCarStreamer::IsDesiredRaceCarLoadedForCarSelect( s32 liActiveRaceCar ) 
     if( maDesiredCarIds[liActiveRaceCar] == 0 )
         return true;
 
+    // FLAG PC divergence: a car whose data is not on disk can never load, and the
+    // junkyard's prefetch wait would hold the streaming-complete edge (and with it the
+    // whole car-select screen) for ever. Treat it as settled -- see HasDesiredRaceCarLoadFailed.
+    if( HasDesiredRaceCarLoadFailed( liActiveRaceCar ) )
+        return true;
+
     return maDesiredCarIds[liActiveRaceCar] == GetCarModelId( liActiveRaceCar )
         && ( IsRaceCarLoaded( liActiveRaceCar )
           || IsFlagSet( liActiveRaceCar, E_LOADFLAG_ALL_EXCEPT_AUDIO ) );
+}
+
+// FLAG PC divergence, not an X360 function. A profile can own a car the shipped data does
+// not contain (cars added through the debug menu on another build: TESTCAR03 / VEH_BTC03 is
+// in the retail VehicleList but has no VEHICLES\VEH_BTC03_*.BIN). Its graphics bundle open
+// fails, the base streamer retries for ever (the console's behaviour -- on the disc it never
+// fails), and anything waiting for the car would wait for ever. The graphics leg is the one
+// every car needs, so its failure stands for the car's.
+bool RaceCarStreamer::HasDesiredRaceCarLoadFailed( s32 liActiveRaceCar ) const
+{
+    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
+    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+
+    return mGraphicsStreamer.HasDesiredAssetLoadFailed( liActiveRaceCar );
 }
 
 // @ 0x822CC650. The loaded vehicle graphics resource for an already-loaded car.
@@ -675,12 +695,16 @@ void RaceCarStreamer::UpdateDesiredCars()
     // Use the same four-resource readiness as IsDesiredRaceCarLoadedForCarSelect;
     // the unrelated audio wait must not block every junkyard prefetch indefinitely.
     // Body graphics, wheels, physics and attributes must all be loaded.
+    // FLAG PC divergence: a slot whose car data is not on disk never finishes loading, so it
+    // must not count as "still busy" -- otherwise one unloadable car stops every later
+    // prefetch and the junkyard waits on them for ever (see HasDesiredRaceCarLoadFailed).
     for( s32 liActiveRaceCar = 0; liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS; liActiveRaceCar++ )
     {
         CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
 
         if( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0
-            && !IsFlagSet( liActiveRaceCar, E_LOADFLAG_ALL_EXCEPT_AUDIO ) )
+            && !IsFlagSet( liActiveRaceCar, E_LOADFLAG_ALL_EXCEPT_AUDIO )
+            && !HasDesiredRaceCarLoadFailed( liActiveRaceCar ) )
         {
             return;
         }

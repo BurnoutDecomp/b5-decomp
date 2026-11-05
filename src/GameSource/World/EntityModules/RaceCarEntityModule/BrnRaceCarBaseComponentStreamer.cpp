@@ -121,6 +121,18 @@ CgsID RaceCarBaseComponentStreamer::GetDesiredAsset( s32 liActiveRaceCar ) const
     return maDesiredAssets[liActiveRaceCar];
 }
 
+// FLAG PC divergence, not an X360 function. The slot's entry is keyed exactly as AddEntry
+// keyed it: (desired asset, user id == the race-car slot).
+bool RaceCarBaseComponentStreamer::HasDesiredAssetLoadFailed( s32 liActiveRaceCar ) const
+{
+    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+
+    const CgsID lDesiredAsset = maDesiredAssets[liActiveRaceCar];
+    return lDesiredAsset != 0
+        && HasEntryLoadFailed( lDesiredAsset, static_cast<u64>( liActiveRaceCar ) );
+}
+
 // @ 0x822B7198. True iff the race-car slot's LOADED asset (mLoadedEntries bit set)
 // matches lAssetId. Gated read of maLoadedAssets (this+0x1318) behind the per-car
 // loaded bit (mLoadedEntries, this+0x1360). The X360 inlines BitArray<8>::IsBitSet's

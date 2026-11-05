@@ -67,6 +67,9 @@ public:
 
     bool  IsVehicleAssetLoaded( CgsID lAssetId, s32 liActiveRaceCar );
     CgsID GetDesiredAsset( s32 liActiveRaceCar ) const;
+    // FLAG PC divergence (not an X360 member): the slot's desired asset failed to load and
+    // has not loaded since -- see InternalBaseStreamer::HasEntryLoadFailed.
+    bool  HasDesiredAssetLoadFailed( s32 liActiveRaceCar ) const;
     CgsID GetLoadedAsset( s32 liActiveRaceCar ) const;
 
 protected:

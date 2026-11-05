@@ -128,6 +128,9 @@ public:
     bool  IsRaceCarLoaded( s32 liActiveRaceCar ) const;
     bool  IsRaceCarActive( s32 liActiveRaceCar ) const;
     bool  IsDesiredRaceCarLoadedForCarSelect( s32 liActiveRaceCar ) const;
+    // FLAG PC divergence (not an X360 member): the slot's car graphics failed to load, i.e.
+    // the car's data is not on disk and it can never load (see the .cpp).
+    bool  HasDesiredRaceCarLoadFailed( s32 liActiveRaceCar ) const;
     CgsID GetCarModelId( s32 liActiveRaceCar ) const;
 
     // [FLAG PC bring-up] NOT X360 functions. GetGraphicsResource / GetWheelGraphicsResource
