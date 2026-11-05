@@ -271,8 +271,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         Vector4 mHalfWidths;       // :303
     };
 
-    // :311 -- the per-vehicle avoidance debug snapshot (allocated on demand, pointed at by
-    // mpaDEBUGVehicleAvoidance). Debug-only; never read by shipped logic.
+    // DecFIGS :311 -- per-vehicle avoidance debug snapshot.
     struct DEBUG_VehicleAvoidance
     {
         Vector3 mPosition;         // :313
@@ -1934,22 +1933,10 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // GenerateDispatchLists @0x8273B280 (Camera::operator= @0x8273B2C8).
         BrnDirector::Camera::Camera mCameraLastFrame;                // :881
 
-        bool                  mbDEBUGWorstCase;                     // :883
-
-        DEBUG_VehicleAvoidance* mpaDEBUGVehicleAvoidance;           // :886
-        u32                   muDEBUGVehicleAvoidanceCount;         // :887
-
-        f32                   mfDEBUGAvoidance_LineTestResultR;     // :889
-        f32                   mfDEBUGAvoidance_LineTestScore;       // :890
-        f32                   mfDEBUGAvoidance_PassScore;           // :891
-
-        // X360 +0x729F0, in the un-emitted DWARF :892..:895 window, so the NAME IS INFERRED (FLAG):
-        // BrnTraffic::DebugComponent::OnActivate registers this byte as the "Performance" checkbox
-        // "Running Worst Case" (0x827632A4..0x827632BC `addi r4, r4, 0x29F0`). Construct stores 0
-        // (0x82740E00 `stbx r30(0), r31, 0x729F0`) and nothing but that checkbox writes it. While it
-        // is set RecalculateActiveHulls @0x8274C9C4 swaps in a baked hull list and ManageTriggers
-        // @0x827476A0 / @0x827477DC registers no light triggers.
-        bool                  mbDEBUGRunningWorstCase;
+        // ARTIST +0x729F0: the "Running Worst Case" checkbox, followed immediately by
+        // the monitor handles. DecFIGS :883 names this byte mbDEBUGWorstCase; its
+        // avoidance debug members at :886..:891 are not attested in this X360 interval.
+        bool                  mbDEBUGWorstCase;
 
         s32                   miPerfMon_PreSceneUpdate;             // :896
         s32                   miPerfMon_PostSceneUpdate;            // :897

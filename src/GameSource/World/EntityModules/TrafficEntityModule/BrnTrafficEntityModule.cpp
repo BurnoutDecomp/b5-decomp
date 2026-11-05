@@ -540,7 +540,7 @@ namespace BrnTraffic
 // PropToTrafficInterface rings, WorldModule::BridgePropModuleToTrafficModule_PrePhysics
 // @0x827AEA70 carries them into InputBuffer_PrePhysics, PrePhysicsUpdate calls
 // HandlePropModuleRequests, and TrafficLightManager::TrafficLightGot{Smashed,Restored} set
-// TrafficLightRuntimeState::muFlags bit 0x80.
+// TrafficLightRuntimeState::mxStateBits bit 0x80.
 //
 // OPEN PARK: the VISIBLE consumer of bit 0x80 has no body anywhere in the tree.
 // TrafficLightManager::RenderLightsForHull @0x8275DBF0 and
@@ -662,12 +662,6 @@ void TrafficEntityModule::HandlePropModuleRequests(
         }
     }
 
-    // [DIAG] NOT IN THE X360 BINARY. One-shot, opt-in behind BRN_PROP_DIAG. Fires the first
-    // frame either ring carries anything, which is the only proof on this build that the chain
-    // closed, since the corona render leg has no body. The logged instance index is the dense
-    // index the manager resolved from the persistent id, read through the manager TU's diag
-    // accessor; -1 means the id was not in the baked table. Every traffic-light prop posts a
-    // restore on load, so the restore ring is normally the one that fires.
 
 }
 
@@ -3087,7 +3081,7 @@ void TrafficEntityModule::RecalculateActiveHulls(
 
     // ARTIST8274C9C4..8274CAC0: the original Running Worst Case toggle selects
     // the 15 native-u16 hull IDs at 820BA81C..820BA83A instead of race-car hulls.
-    if (mbDEBUGRunningWorstCase)
+    if (mbDEBUGWorstCase)
     {
         static const u16 kauDEBUGRunningWorstCaseHulls[15] =
         {
@@ -4828,7 +4822,7 @@ void TrafficEntityModule::Construct()
 
     mbNetworkHasDetectedDivergence = false;            // 0x72B54
     mbHullSyncDivergence           = false;            // 0x725EC
-    mbDEBUGRunningWorstCase        = false;            // 0x729F0 (0x82740E00 stbx r30(0))
+    mbDEBUGWorstCase               = false;            // 0x729F0 (0x82740E00 stbx r30(0))
 
     // X360 Construct 0x82740E14..0x82741330: page 2 counters, in registration order.
     // AddMonitor receives name/r3, page/r4, minimum/r5, budget/f1, scaled/r7.
@@ -19484,7 +19478,7 @@ void TrafficEntityModule::ManageTriggers(BrnTrafficIO::OutputBuffer_PreScene* lp
             // LightTriggerId::Set (BrnTrafficLightTrigger.h:211 / :212).
             CGS_ASSERT(luHull < KU_MAX_HULLS, "luHull < KU_MAX_HULLS");
             CGS_ASSERT(luTrigger < 256u, "luLightTriggerIndex < 256");
-            if (!mbDEBUGRunningWorstCase)
+            if (!mbDEBUGWorstCase)
             {
                 BrnWorld::TriggerEntityModuleIO::InRemoveTriggerEvent lRemoveEvent;
                 lRemoveEvent.mTriggerID = (luHull << 8) | KU_LIGHT_TRIGGER_ID_OWNER_TAG | luTrigger;
@@ -19502,7 +19496,7 @@ void TrafficEntityModule::ManageTriggers(BrnTrafficIO::OutputBuffer_PreScene* lp
             CGS_ASSERT(luHull < KU_MAX_HULLS, "luHull < KU_MAX_HULLS");
             CGS_ASSERT(luTrigger < 256u, "luLightTriggerIndex < 256");
             const LightTrigger* lpLightTrigger = &lpHull->mpaLightTriggers[luTrigger];
-            if (!mbDEBUGRunningWorstCase)
+            if (!mbDEBUGWorstCase)
             {
                 const u32 lTriggerId = (luHull << 8) | KU_LIGHT_TRIGGER_ID_OWNER_TAG | luTrigger;
 

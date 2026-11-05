@@ -433,7 +433,7 @@ namespace BrnTraffic
         SetRange(&muKillZoneToFire, 0u, static_cast<u32>(mpModule->mpData->muNumKillZones) - 1u);
         RegisterFunction(&DebugComponent::FireKillZone, this, "KillZones", "Fire KillZone!");
 
-        RegisterVariable(&mpModule->mbDEBUGRunningWorstCase, "Performance", "Running Worst Case");
+        RegisterVariable(&mpModule->mbDEBUGWorstCase, "Performance", "Running Worst Case");
         RegisterVariable(&mpModule->muNumUpdateVehiclesJobs, "Performance", "# UpdateVehicles jobs");
         SetRange(&mpModule->muNumUpdateVehiclesJobs, 1u, 4u);
         RegisterVariable(&mpModule->mbDEBUGRenderSpecialPerfmons,

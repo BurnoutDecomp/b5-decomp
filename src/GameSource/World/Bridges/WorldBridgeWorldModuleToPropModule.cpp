@@ -1,7 +1,6 @@
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToEntityModules.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"          // gpDebugPrint (PROPS-BOOT one-shot)
 
 // ============================================================================
 // GameSource/World/Bridges/WorldBridgeWorldModuleToPropModule.cpp
@@ -111,9 +110,6 @@ void BridgeWorldModuleToPropModule_PreScene(
 {
     (void)lpWorldModule;   // X360 r3 -- overwritten at 0x827AAD0C, never read
 
-    CGS_ASSERT(lpPropInputBuffer_PreScene != 0, "lpPropInputBuffer_PreScene != NULL");
-    CGS_ASSERT(lpWorldOutputBuffer_PreScene != 0, "lpWorldOutputBuffer_PreScene != NULL");
-
     lpPropInputBuffer_PreScene->GetPropInstancesNeededForZoneQueue()->Append(
         *lpWorldOutputBuffer_PreScene->GetPropInstancesNeededForZoneQueue());
 
@@ -126,33 +122,6 @@ void BridgeWorldModuleToPropModule_PreScene(
     lpPropInputBuffer_PreScene->SetPlayerZoneNumber(
         lpWorldOutputBuffer_PreScene->GetPlayerZoneNumber());
 
-    // DIAGNOSTIC (prop-spawn wave 2026-08-12) -- NOT in the X360 binary. Deliberately NOT
-    // gated on gxMessageFilterFlags (bit 0 is off in a default PC boot), so a boot log
-    // always answers "did the streamer's zone request ever reach the prop module?".
-    // One-shot: fires on the FIRST frame this bridge carries a non-empty queue.
-    // Boot-log grep: "PROPS-BOOT world->prop bridge".
-    {
-        static bool sbLoggedFirstTransfer = false;
-        if ( !sbLoggedFirstTransfer && CgsDev::Log::gpDebugPrint != 0 )
-        {
-            const s32 liNeeded =
-                lpWorldOutputBuffer_PreScene->GetPropInstancesNeededForZoneQueue()->GetLength();
-            const s32 liLoaded =
-                lpWorldOutputBuffer_PreScene->GetPropGraphicsLoadedQueue()->GetLength();
-            const s32 liUnloaded =
-                lpWorldOutputBuffer_PreScene->GetPropGraphicsUnloadedQueue()->GetLength();
-            if ( liNeeded != 0 || liLoaded != 0 || liUnloaded != 0 )
-            {
-                sbLoggedFirstTransfer = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "PROPS-BOOT world->prop bridge first transfer: instancesNeeded "
-                    << liNeeded << " graphicsLoaded " << liLoaded
-                    << " graphicsUnloaded " << liUnloaded
-                    << " playerZone " << lpWorldOutputBuffer_PreScene->GetPlayerZoneNumber()
-                    << "\n";
-            }
-        }
-    }
 }
 
 }   // namespace WorldModule

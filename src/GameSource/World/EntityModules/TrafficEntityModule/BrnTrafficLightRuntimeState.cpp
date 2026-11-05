@@ -15,17 +15,17 @@
 //     phase >=3                   -> assert("Unknown light state ...")(else)
 //
 //   countdown branch:
-//     f0 = this->mfTimer - lfTimeDelta                lfs/fsubs/stfs 0(this)
+//     f0 = this->mfTimeLeftInState - lfTimeDelta                lfs/fsubs/stfs 0(this)
 //     if (!(f0 > 0.0f)) {                             fcmpu f0,0.0 ; bgt end
 //        flags = this[+5]                             lbz r11, 5(this)
-//        this->mfTimer = 0.0f                         stfs f31, 0(this)
+//        this->mfTimeLeftInState = 0.0f                         stfs f31, 0(this)
 //        this->muState = 0                            stb 0, 4(this)
-//        this->muFlags = (flags & 0xF8) | 1           rlwimi r11,1,0,29,23 ; stb r11,5(this)
+//        this->mxStateBits = (flags & 0xF8) | 1           rlwimi r11,1,0,29,23 ; stb r11,5(this)
 //     }
 //
 // rlwimi r11,1,0,29,23 inserts the source (1) into r11 everywhere except PPC bits
 // 24..28 (the high 5 bits of the low byte, 0xF8) -- i.e. it preserves the top 5 bits
-// of muFlags and forces the low 3 bits (0x07) to the value 1. Hence (flags & 0xF8) | 1.
+// of mxStateBits and forces the low 3 bits (0x07) to the value 1. Hence (flags & 0xF8) | 1.
 //
 // The "Unknown light state" branch streamed `state` into the assert buffer via StrStream
 // in the X360 build; CGS_ASSERT collapses that to a static message per project policy.
@@ -40,12 +40,12 @@ void TrafficLightRuntimeState::Update(f32 lfTimeDelta)
 
     if (muState == E_STATE_COUNTDOWN)
     {
-        mfTimer = mfTimer - lfTimeDelta;
-        if (!(mfTimer > 0.0f))
+        mfTimeLeftInState = mfTimeLeftInState - lfTimeDelta;
+        if (!(mfTimeLeftInState > 0.0f))
         {
-            mfTimer = 0.0f;
+            mfTimeLeftInState = 0.0f;
             muState = E_STATE_IDLE;
-            muFlags = static_cast<u8>((muFlags & 0xF8) | 1);
+            mxStateBits = static_cast<u8>((mxStateBits & 0xF8) | 1);
         }
     }
     else if (muState >= E_STATE_COUNT)
@@ -83,7 +83,7 @@ void TrafficLightManager::UpdateHull(const Hull* lpHull, f32 lfTimeDelta)
     {
         // The array still holds the 8-byte placeholder record (see the header); the call goes through the
         // attested record, as Construct / ChangeLightState do.
-        reinterpret_cast<TrafficLightRuntimeState*>(GetLightState(luInstance))->Update(lfTimeDelta);
+        GetLightState(luInstance)->Update(lfTimeDelta);
     }
 }
 

@@ -70,18 +70,6 @@ namespace BrnGuiSaveLoad
         const s32 liExpectedCount =
             static_cast<s32>(lpProgressionData->GetEventJunctionCount());
 
-        // [DIAG one-profile] NOT IN THE X360 BINARY. A count mismatch here rejects the whole
-        // save and ReportTaskCompleted then silently skips the deserialise -- a boot that
-        // looks exactly like a first boot. Print the two numbers so "the save did not load"
-        // can be told apart from "the save loaded and was empty".
-        if (Log::gpDebugPrint != 0)
-        {
-            *Log::gpDebugPrint
-                << "[profile-save] ValidateProfile: version=" << liVersion
-                << " storedEventCount=" << liProfileCount
-                << " expectedJunctions=" << liExpectedCount << "\n";
-        }
-
         // The stored and expected manifests must have the same number of entries.
         if (liExpectedCount != liProfileCount)
         {

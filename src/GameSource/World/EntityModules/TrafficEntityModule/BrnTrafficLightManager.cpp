@@ -1,11 +1,9 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficLightManager.h"
 #include "SharedClasses/Traffic/Junctions/BrnTrafficLightCollection.h"   // TrafficLightCollection::GetInstanceIndexForInstanceID
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint (the countdown witness)
 #include "SharedClasses/Traffic/BrnTrafficHull.h"                         // Hull::muFirstTrafficLight / muLastTrafficLight
                                                                           // (the corona renderers; one ETrafficLightState
                                                                           // home since the BL-1 merge, L3 2026-09-27)
 #include <cstddef>                                                        // offsetof (the countdown member pins)
-#include <cstdlib>                                                        // std::getenv (the countdown witness)
 
 // BrnTraffic::TrafficLightManager::GetLightState @ 0x8274F9A0
 //
@@ -25,22 +23,7 @@
 namespace BrnTraffic
 {
 
-namespace
-{
-    // [DIAG] NOT IN THE X360 BINARY. Backing state for Q7Diag_GetLastResolvedLightIndex /
-    // ...InstanceID (declared in BrnTrafficLightManager.h -- see the banner there for why this
-    // is a file-static + free function rather than a member). Written only by the two
-    // GotSmashed/GotRestored bodies below, read only by the [Q7-tlight] one-shot in
-    // BrnTrafficEntityModule_wQ7_01.cpp. No console counterpart.
-    s32 gQ7DiagLastResolvedLightIndex      = -1;
-    u32 gQ7DiagLastResolvedLightInstanceID = 0;
-}
-
-// [DIAG] NOT IN THE X360 BINARY -- see BrnTrafficLightManager.h.
-s32 Q7Diag_GetLastResolvedLightIndex()      { return gQ7DiagLastResolvedLightIndex; }
-u32 Q7Diag_GetLastResolvedLightInstanceID() { return gQ7DiagLastResolvedLightInstanceID; }
-
-TrafficLightState* TrafficLightManager::GetLightState(u32 luInstance)
+TrafficLightRuntimeState* TrafficLightManager::GetLightState(u32 luInstance)
 {
     CGS_ASSERT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES,
                "luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES");
@@ -53,7 +36,7 @@ TrafficLightState* TrafficLightManager::GetLightState(u32 luInstance)
 // A prop-smash event (from TrafficEntityModule::HandlePropModuleRequests) knocks over a
 // traffic light: resolve the persistent instance id to its dense index via the baked
 // collection's id hash, then flag the matching runtime state record as smashed by setting
-// the top bit (0x80) of its flags byte (record+5 == TrafficLightRuntimeState::muFlags).
+// the top bit (0x80) of its flags byte (record+5 == TrafficLightRuntimeState::mxStateBits).
 // A missing id (index == -1) is silently ignored. Assert strings are the X360 rodata
 // literals verbatim (baked d:\p4 path + lines 417/425 dropped per project policy).
 void TrafficLightManager::TrafficLightGotSmashed(const TrafficLightCollection* lpTrafficLightData,
@@ -64,17 +47,11 @@ void TrafficLightManager::TrafficLightGotSmashed(const TrafficLightCollection* l
     const s32 liInstanceIndex = lpTrafficLightData->GetInstanceIndexForInstanceID(luInstanceID);
     if (liInstanceIndex != -1)
     {
-        TrafficLightState* lpState = GetLightState(static_cast<u32>(liInstanceIndex));
+        TrafficLightRuntimeState* lpState = GetLightState(static_cast<u32>(liInstanceIndex));
         CGS_ASSERT(lpState, "lpState");
 
-        // Set the smashed bit (0x80) of the record's flags byte at +5 (the attested
-        // TrafficLightRuntimeState::muFlags offset). Byte access keeps this slice additive
-        // over the placeholder TrafficLightState element type (see BrnTrafficLightManager.h).
-        reinterpret_cast<u8*>(lpState)[5] |= 0x80u;
+        lpState->mxStateBits |= 0x80u;
 
-        // [DIAG] NOT IN THE X360 BINARY -- record the resolution for the [Q7-tlight] one-shot.
-        gQ7DiagLastResolvedLightIndex      = liInstanceIndex;
-        gQ7DiagLastResolvedLightInstanceID = luInstanceID;
     }
 }
 
@@ -92,7 +69,7 @@ void TrafficLightManager::TrafficLightGotSmashed(const TrafficLightCollection* l
 //   bl GetLightState
 //   cmplwi r31,0 / bne              -> assert("lpState")                        :0x1C3 (451)
 //   lbz    r11,5(r31)
-//   clrlwi r11,r11,25               -> KEEP bits 25..31 == muFlags &= 0x7F      (the ONE
+//   clrlwi r11,r11,25               -> KEEP bits 25..31 == mxStateBits &= 0x7F      (the ONE
 //                                      instruction that differs from the smashed twin,
 //                                      which sets 0x80 instead)
 //   stb    r11,5(r31)
@@ -107,18 +84,11 @@ void TrafficLightManager::TrafficLightGotRestored(const TrafficLightCollection* 
     const s32 liInstanceIndex = lpTrafficLightData->GetInstanceIndexForInstanceID(luInstanceID);
     if (liInstanceIndex != -1)
     {
-        TrafficLightState* lpState = GetLightState(static_cast<u32>(liInstanceIndex));
+        TrafficLightRuntimeState* lpState = GetLightState(static_cast<u32>(liInstanceIndex));
         CGS_ASSERT(lpState, "lpState");
 
-        // Clear the smashed bit (0x80) of the record's flags byte at +5, leaving the low
-        // 7 bits (the active-state mask the corona render legs consume) untouched. Byte
-        // access mirrors the smashed twin above and keeps this slice additive over the
-        // placeholder TrafficLightState element type.
-        reinterpret_cast<u8*>(lpState)[5] &= 0x7Fu;
+        lpState->mxStateBits &= 0x7Fu;
 
-        // [DIAG] NOT IN THE X360 BINARY -- record the resolution for the [Q7-tlight] one-shot.
-        gQ7DiagLastResolvedLightIndex      = liInstanceIndex;
-        gQ7DiagLastResolvedLightInstanceID = luInstanceID;
     }
 }
 
@@ -157,8 +127,8 @@ namespace
 // Called by TrafficEntityModule::Reset @0x8272D39C.
 void TrafficLightManager::Construct()
 {
-    CGS_STATIC_ASSERT((sizeof(TrafficLightRuntimeState) == sizeof(TrafficLightState)),
-                  "the attested record and the array's placeholder are the same 8 bytes");
+    CGS_STATIC_ASSERT((sizeof(TrafficLightRuntimeState) == 8),
+                  "ARTIST traffic light state stride");
     CGS_STATIC_ASSERT((offsetof(TrafficLightManager, mbCountdownLights) == 0x12C0), "mbCountdownLights @0x12C0");
     CGS_STATIC_ASSERT((offsetof(TrafficLightManager, meCountdownState) == 0x12C4), "meCountdownState @0x12C4");
     CGS_STATIC_ASSERT((offsetof(TrafficLightManager, mfCountdownRemainingTime) == 0x12C8),
@@ -166,12 +136,9 @@ void TrafficLightManager::Construct()
 
     for (u32 luTrafficLight = 0; luTrafficLight < KU_MAX_TRAFFIC_LIGHT_INSTANCES; ++luTrafficLight)
     {
-        // The array still holds the 8-byte placeholder record (see the header); the stores go
-        // through the attested record's names.
-        TrafficLightRuntimeState& lrState =
-            reinterpret_cast<TrafficLightRuntimeState&>(maLightStates[luTrafficLight]);
-        lrState.mfTimer = 0.0f;   // mfTimeLeftInState
-        lrState.muFlags = 0;      // mxStateBits
+        TrafficLightRuntimeState& lrState = maLightStates[luTrafficLight];
+        lrState.mfTimeLeftInState = 0.0f;   // mfTimeLeftInState
+        lrState.mxStateBits = 0;      // mxStateBits
         lrState.muState = 2;      // E_STATE_GREEN
     }
 
@@ -227,25 +194,23 @@ void TrafficLightManager::ChangeLightState(u32 luInstance, bool lbChangeToRed)
 {
     CGS_ASSERT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES, "luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES");
 
-    // The array still holds the 8-byte placeholder record (see the header); the stores go through the
-    // attested record's names, as Construct's do.
     if (lbChangeToRed)
     {
-        if (reinterpret_cast<TrafficLightRuntimeState*>(GetLightState(luInstance))->muState
+        if (GetLightState(luInstance)->muState
             == static_cast<u8>(E_TRAFFICLIGHTSTATE_RED))
         {
             return;
         }
         TrafficLightRuntimeState* const lpState =
-            reinterpret_cast<TrafficLightRuntimeState*>(GetLightState(luInstance));
-        lpState->mfTimer = KF_AMBER_TIME;
-        lpState->muFlags = static_cast<u8>((lpState->muFlags & 0xF8u) | (1u << E_TRAFFICLIGHTSTATE_AMBER));
+            GetLightState(luInstance);
+        lpState->mfTimeLeftInState = KF_AMBER_TIME;
+        lpState->mxStateBits = static_cast<u8>((lpState->mxStateBits & 0xF8u) | (1u << E_TRAFFICLIGHTSTATE_AMBER));
         lpState->muState = static_cast<u8>(E_TRAFFICLIGHTSTATE_AMBER);
         return;
     }
 
-    TrafficLightRuntimeState* const lpState = reinterpret_cast<TrafficLightRuntimeState*>(GetLightState(luInstance));
-    lpState->muFlags = static_cast<u8>((lpState->muFlags & 0xF8u) | (1u << E_TRAFFICLIGHTSTATE_GREEN));
+    TrafficLightRuntimeState* const lpState = GetLightState(luInstance);
+    lpState->mxStateBits = static_cast<u8>((lpState->mxStateBits & 0xF8u) | (1u << E_TRAFFICLIGHTSTATE_GREEN));
     lpState->muState = static_cast<u8>(E_TRAFFICLIGHTSTATE_GREEN);
 }
 
@@ -289,47 +254,19 @@ void TrafficLightManager::Update(f32 lfTimeDelta)
 // traffic dispatch pass.
 // ============================================================================
 
-namespace
-{
-    u32 guTrafficLightCoronaDiagLastMask  = 0xFFFFFFFFu;
-    s32 giTrafficLightCoronaDiagLinesLeft = 48;
-
-    void ReportTrafficLightCorona(u32 luInstance, bool lbAllLightsRenderer, bool lbCountdown, bool lbSmashed,
-                                  u32 luActiveStates)
-    {
-        // The change key: the mask, whether it is the countdown's, and which renderer drew it.
-        const u32 luMask = lbSmashed ? 0x80000000u
-                                     : (luActiveStates | (lbCountdown ? 0x40000000u : 0u)
-                                        | (lbAllLightsRenderer ? 0x20000000u : 0u));
-        guTrafficLightCoronaDiagLastMask = luMask;
-        --giTrafficLightCoronaDiagLinesLeft;
-        *CgsDev::Log::gpDebugPrint << "[tl-corona] instance " << luInstance << " "
-                                   << (lbAllLightsRenderer ? "RenderAllLightsToBeInStateForHull" : "RenderLightsForHull")
-                                   << (lbCountdown ? " countdown" : "");
-        if (lbSmashed)
-        {
-            *CgsDev::Log::gpDebugPrint << " smashed: not drawn";
-        }
-        else
-        {
-            *CgsDev::Log::gpDebugPrint << " mask " << luActiveStates;
-        }
-    }
-}
-
 // -- TrafficLightRuntimeState::IsSmashed / GetLightState -- DWARF .cpp:100 / :118, inlined by both renderers ---------
 //   IsSmashed:      lbz r11, 5(state) ; rlwinm r11, r11, 0, 0, 24 (& 0xFFFFFF80) ; cmplwi r11, 0 ; bne -> skip
 //   GetLightState:  clrlwi r5, r11, 25 (& 0x7F), r11 the same flags byte (0x8275DDEC / 0x8275DE08)
-// The flags byte is TrafficLightRuntimeState::muFlags (+5): SetState (ChangeLightState's rlwimi) keeps its low three
+// The flags byte is TrafficLightRuntimeState::mxStateBits (+5): SetState (ChangeLightState's rlwimi) keeps its low three
 // bits at 1 << state, and TrafficLightGotSmashed / GotRestored set / clear the top bit.
 bool TrafficLightRuntimeState::IsSmashed() const
 {
-    return (muFlags & 0x80u) != 0;
+    return (mxStateBits & 0x80u) != 0;
 }
 
 u8 TrafficLightRuntimeState::GetLightState() const
 {
-    return static_cast<u8>(muFlags & 0x7Fu);
+    return static_cast<u8>(mxStateBits & 0x7Fu);
 }
 
 // -- RenderLightsForHull @ 0x8275DBF0 (a hole in the export set; read with tools/re/ppcdis.py) -- DWARF .cpp:290 ----
@@ -367,14 +304,9 @@ void TrafficLightManager::RenderLightsForHull(const Hull* lpHull, const TrafficL
 
         for (u32 luInstance = lpHull->muFirstTrafficLight; luInstance < lpHull->muLastTrafficLight; ++luInstance)
         {
-            // The array still holds the 8-byte placeholder record (see the header); the reads go through the
-            // attested record, as Construct / ChangeLightState do.
             const TrafficLightRuntimeState* lpLightState =
-                reinterpret_cast<const TrafficLightRuntimeState*>(GetLightState(luInstance));
+                GetLightState(luInstance);
             CGS_ASSERT(lpLightState, "lpLightState");                                      // .cpp:309
-
-            ReportTrafficLightCorona(luInstance, false, true, lpLightState->IsSmashed(),
-                                     luActiveStates);                                     // [DIAG] NOT X360
             if (!lpLightState->IsSmashed())
             {
                 lpTrafficLightData->RenderCoronasForInstance(luInstance, luActiveStates, lpCoronaSubmissionInterface,
@@ -387,11 +319,8 @@ void TrafficLightManager::RenderLightsForHull(const Hull* lpHull, const TrafficL
         for (u32 luInstance = lpHull->muFirstTrafficLight; luInstance < lpHull->muLastTrafficLight; ++luInstance)
         {
             const TrafficLightRuntimeState* lpLightState =
-                reinterpret_cast<const TrafficLightRuntimeState*>(GetLightState(luInstance));
+                GetLightState(luInstance);
             CGS_ASSERT(lpLightState, "lpLightState");                                      // .cpp:327
-
-            ReportTrafficLightCorona(luInstance, false, false, lpLightState->IsSmashed(),
-                                     lpLightState->GetLightState());                      // [DIAG] NOT X360
             if (!lpLightState->IsSmashed())
             {
                 lpTrafficLightData->RenderCoronasForInstance(luInstance, lpLightState->GetLightState(),
@@ -429,11 +358,8 @@ void TrafficLightManager::RenderAllLightsToBeInStateForHull(const Hull* lpHull,
     for (u32 luInstance = lpHull->muFirstTrafficLight; luInstance < lpHull->muLastTrafficLight; ++luInstance)
     {
         const TrafficLightRuntimeState* lpLightState =
-            reinterpret_cast<const TrafficLightRuntimeState*>(GetLightState(luInstance));
+            GetLightState(luInstance);
         CGS_ASSERT(lpLightState, "lpLightState");                                          // .cpp:366
-
-        ReportTrafficLightCorona(luInstance, true, false, lpLightState->IsSmashed(),
-                                 luActiveStates);                                         // [DIAG] NOT X360
         if (!lpLightState->IsSmashed())
         {
             lpTrafficLightData->RenderCoronasForInstance(luInstance, luActiveStates, lpCoronaSubmissionInterface,

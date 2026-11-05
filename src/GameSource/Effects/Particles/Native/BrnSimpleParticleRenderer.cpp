@@ -18,16 +18,14 @@
 // ============================================================================
 
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleRenderer.h"
-#include "GameSource/Effects/Particles/Native/BrnSimpleParticleArray.h"   // GetTexture, the diag counters
+#include "GameSource/Effects/Particles/Native/BrnSimpleParticleArray.h"   // GetTexture
 #include "GameSource/Effects/Particles/Native/BrnNativeParticleVertex.h"  // canonical packed GPU stride
 #include "GameSource/Effects/Particles/Native/BrnIm3dSmokeRenderer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/blendstate.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"    // ImRendererBase::mgpActiveRenderer
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsBasicColouredTexturedVertex.h"  // the 24-byte stride
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"      // shadow::Device
-#include <cstdio>    // [diag] snprintf
 #include <cstdlib>   // malloc
 
 // The device surface Dispatch binds through -- the same minimal extern surface SparkRenderer::Dispatch
@@ -40,10 +38,6 @@ namespace BrnParticle
 {
 namespace Native
 {
-    // [DIAG] NOT IN THE X360 BINARY -- see BrnSimpleParticleArray.h. DELETE-WHEN-STABLE.
-    u32 gauSimpleParticleDrawnBatches  = 0;
-    u32 gauSimpleParticleDrawnVertices = 0;
-
     namespace
     {
         // The Xenos primitive Dispatch passes to D3DDevice_DrawVertices (`li r4, 0xD` at 0x8228CD34):
@@ -220,8 +214,6 @@ namespace Native
             D3DDevice_DrawVertices(gpD3DDevice, static_cast<D3DPRIMITIVETYPE>(KU_XENOS_QUADLIST),
                                    lrBatch.GetStartVertex(), lrBatch.GetVertexCount());
 
-            gauSimpleParticleDrawnBatches  += 1u;                        // [diag]
-            gauSimpleParticleDrawnVertices += lrBatch.GetVertexCount();  // [diag]
         }
 
         // The EndRendering fold at 0x8228CD48.
