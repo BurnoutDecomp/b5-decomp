@@ -137,7 +137,8 @@ namespace
 
 MusicEffect::EaTraxData::EaTraxData()
     : miPreviewSong(-1), miPreviousPreviewSong(-1), miCurrentSong(-1),
-      mpLogicModule(0), mePlayOrder(E_PLAY_ORDER_SEQUENTIAL)
+      mpLogicModule(0), mePlayOrder(E_PLAY_ORDER_SEQUENTIAL),
+      mbPendingChange(false), mbPlayFromEATraxSlider(false)
 {
     mEnabledSongs.Construct();
     mEnabledSongsNoGameMode.Construct();
@@ -236,16 +237,17 @@ void MusicEffect::EaTraxData::SetCurrentSong(s32 aiSong)
 // ---------------------------------------------------------------------------------
 
 MusicEffect::MusicEffect()
-    : BrnEffectObject(), mpMixerControl(0), mfLastPublishedGuiVolume(0.0f),
-      mJumpHpf(),   // @0x826C8DB4 `stw 0, 0x34(r3)` -- DESTRUCTED until Attach
+    : BrnEffectObject(), mJumpHpf(),
       mSecondaryStream(), mEATraxStream(), mMusicStreamMenu(),
       mJunkyardStream(), mEaTraxData(),
-      mbPlaylistChanged(false), mbPreviewActive(false), meEventEndResult(0),
+      meEventEndResult(0),
       mbEventWon(false), mbEventEndPending(false),
       mCarUnlockName(KU_NULL_NAME), mMenuStreamName(KU_NULL_NAME),
       meMusicType(E_MUSIC_TYPE_NONE), mePrevMusicType(E_MUSIC_TYPE_NONE),
+      mpStreamingStateManager(0), mpMixerControl(0),
       mePendingMusicType(E_MUSIC_TYPE_NONE),
-      meJunkyardAmbience(E_JUNKYARD_AMBIENCE_NONE), miPicParadiseMusic(0),
+      meJunkyardAmbience(E_JUNKYARD_AMBIENCE_NONE), mfLastPublishedGuiVolume(0.0f),
+      miPicParadiseMusic(0),
       mbHoldVolumes(false), mbMenuStreamIsVideo(false), mbMenuStreamOverCustom(false),
       meLanguage(0) {}
 
@@ -435,8 +437,9 @@ bool MusicEffect::Attach()
     Streaming::StreamingStateManager* lpStreaming =
         static_cast<Streaming::StreamingStateManager*>(
             lpModule->GetEnvironment().GetStateManager(6));
-    CGS_ASSERT(lpStreaming != 0, "lpStreamingStateManager");
-    if (!lpStreaming)
+    mpStreamingStateManager = lpStreaming;
+    CGS_ASSERT(mpStreamingStateManager != 0, "lpStreamingStateManager");
+    if (!mpStreamingStateManager)
         return false;
     // X360 Attach @0x8269CC60 asserts BOTH: cpp:514 "mpStreamingStateManager" and
     // cpp:515 "mpMixerControl" -- the controller must already have been attached by
@@ -450,10 +453,10 @@ bool MusicEffect::Attach()
     mJunkyardStream.ResetVoiceStages();
     // Request priorities as the console's inlined Prepares seed them (@0x8269CC60:
     // `stw 5,0xA0 / stw 5,0x100 / stw 5,0x160 / stw 0,0x1C0`): 5, 5, 5, junkyard 0.
-    mSecondaryStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec", 5);
-    mEATraxStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec", 5);
-    mMusicStreamMenu.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec", 5);
-    mJunkyardStream.Prepare(lpModule, lpStreaming, "MusicFiltVoiceSpec", 0);
+    mSecondaryStream.Prepare(5);
+    mEATraxStream.Prepare(5);
+    mMusicStreamMenu.Prepare(5);
+    mJunkyardStream.Prepare(0);
     // X360 0x8269CE48..0x8269CE50 (inlined JumpHpf::Construct): state CONSTRUCTED,
     // start frequency flt_820AA558 = 230 Hz, current frequency flt_82001CC0 = 0.
     mJumpHpf.Construct();
@@ -553,9 +556,9 @@ s32 MusicEffect::GetMusicType(const void* apGameModeInterface) const
 // X360 0x8269D260.
 void MusicEffect::UpdateSongs()
 {
-    if (!mbPlaylistChanged || mEaTraxData.miCurrentSong == -1)
+    if (!mEaTraxData.mbPendingChange || mEaTraxData.miCurrentSong == -1)
     {
-        mbPlaylistChanged = false;
+        mEaTraxData.mbPendingChange = false;
         return;
     }
     const u32 luCurrent = static_cast<u32>(mEaTraxData.miCurrentSong);
@@ -572,14 +575,14 @@ void MusicEffect::UpdateSongs()
         }
     }
     mEaTraxData.mRemainingSongs.UnSetBit(luCurrent);
-    mbPlaylistChanged = false;
+    mEaTraxData.mbPendingChange = false;
 }
 
 // ---- UpdatePreviewTrack @0x826F6FD0 ---------------------------------------------
 // ⭐ THE EA TRAX MENU'S AUDITION, AND IT WAS A SILENT DROP. The whole chain into this
 // function already existed and was bodied -- CrashNavTrax posts GUI event 460,
 // SoundLogicModule::ProcessGuiEvents case 460 turns it into sound message 9, and Notify's
-// case 9 stores miPreviewSong / miPreviousPreviewSong / mbPreviewActive. This is the body
+// case 9 stores miPreviewSong / miPreviousPreviewSong / mEaTraxData.mbPlayFromEATraxSlider. This is the body
 // that turns that stored state into a queued stream, and it had no definition anywhere in
 // the tree, so the state was captured every time and then dropped. Pressing RB on the EA
 // Trax tab did nothing.
@@ -646,11 +649,11 @@ void MusicEffect::UpdatePreviewTrack(bool abCustomSoundtrack)
             ? static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpcStream)) : 0u;
 
         // ⚠️ THE OUTPUT SLOT IS THE PREVIEW FLAG, INVERTED. X360 0x826F7150..0x826F7170
-        // reads mbPreviewActive, turns it into 0 or -1, clears bit 3 (`rlwinm r11,r11,0,
+        // reads mEaTraxData.mbPlayFromEATraxSlider, turns it into 0 or -1, clears bit 3 (`rlwinm r11,r11,0,
         // 29,27`) and adds 10 -- i.e. slot 1 when the preview is active and slot 10 when it
         // is not. Slot 1 is the menu-music output the preview is meant to be heard on.
-        mMusicStreamMenu.Queue(luContentSpec,
-                            static_cast<u8>(mbPreviewActive ? 1 : 10));
+        mMusicStreamMenu.Queue(CgsSound::Playback::Name(static_cast<uintptr_t>(luContentSpec)), mpLogicModule,
+                            static_cast<u8>(mEaTraxData.mbPlayFromEATraxSlider ? 1 : 10));
 
         // [DIAG] NOT IN THE X360 BINARY -- opt-in witness (BRN_MUSIC_DIAG=1) that the EA
         // Trax menu's audition reached the stream, which is the whole point of this body.
@@ -874,7 +877,7 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
                 const char* lpcStream = lSong.Stream();
                 const u32 luContentSpec = lpcStream
                     ? static_cast<u32>(CgsSound::Playback::Name::MakeHash(lpcStream)) : 0u;
-                mEATraxStream.Queue(luContentSpec, 1);
+                mEATraxStream.Queue(CgsSound::Playback::Name(static_cast<uintptr_t>(luContentSpec)), mpLogicModule, 1);
 
                 // ⭐ THE IN-GAME "NOW PLAYING" POST (X360 @0x826FECCC..0x826FECF4). This is
                 // the arm that actually puts the chyron on screen during play; the preview
@@ -910,7 +913,7 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
             mSecondaryStream.StopAndUnqueue(0.0f);
             mEATraxStream.PauseWithFade(0.1f);
             const u32 luSpec = GetEventStartContentSpec(lpGameMode);
-            mSecondaryStream.Queue(luSpec, 2);
+            mSecondaryStream.Queue(CgsSound::Playback::Name(static_cast<uintptr_t>(luSpec)), mpLogicModule, 2);
         }
         break;
 
@@ -925,7 +928,7 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
                     KA_EVENT_END_RANK_NAMES[meEventEndResult]));
             else
                 luSpec = GetEventEndContentSpec(lpGameMode);
-            mSecondaryStream.Queue(luSpec, 3);
+            mSecondaryStream.Queue(CgsSound::Playback::Name(static_cast<uintptr_t>(luSpec)), mpLogicModule, 3);
             mbEventEndPending = false;
         }
         break;
@@ -940,7 +943,7 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
             mEATraxStream.PauseWithFade(0.1f);
             CGS_ASSERT(mCarUnlockName != KU_NULL_NAME,
                        "mCarUnlockName != CgsSound::Playback::K_NULL_NAME");
-            mSecondaryStream.Queue(mCarUnlockName, 5);
+            mSecondaryStream.Queue(CgsSound::Playback::Name(static_cast<uintptr_t>(mCarUnlockName)), mpLogicModule, 5);
             mCarUnlockName = KU_NULL_NAME;
         }
         mePendingMusicType = E_MUSIC_TYPE_NONE;
@@ -966,8 +969,8 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
                 KA_CLASSICAL_MUSIC_DATA[miPicParadiseMusic % KI_NUM_PICTURE_PARADISE_NAMES];
             CGS_ASSERT(lrTrack.mpcStream != 0,
                        "KA_CLASSICAL_MUSIC_DATA[ miPicParadiseMusic ].mpcStream");
-            mSecondaryStream.Queue(
-                static_cast<u32>(CgsSound::Playback::Name::MakeHash(lrTrack.mpcStream)), 6);
+            mSecondaryStream.Queue(CgsSound::Playback::Name(static_cast<uintptr_t>(
+                static_cast<u32>(CgsSound::Playback::Name::MakeHash(lrTrack.mpcStream)))), mpLogicModule, 6);
             BrnGui::GuiClassicalChyronEvent lEvent = {};
             lEvent.miPieceIndex = miPicParadiseMusic;
             CGS_ASSERT(lrTrack.mpcComposerTextId != 0,
@@ -993,8 +996,8 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
         {
             mSecondaryStream.StopAndUnqueue(0.0f);
             mEATraxStream.PauseWithFade(0.1f);
-            mSecondaryStream.Queue(
-                static_cast<u32>(CgsSound::Playback::Name::MakeHash("ShowtimeStart")), 11);
+            mSecondaryStream.Queue(CgsSound::Playback::Name(static_cast<uintptr_t>(
+                static_cast<u32>(CgsSound::Playback::Name::MakeHash("ShowtimeStart")))), mpLogicModule, 11);
         }
         mePendingMusicType = E_MUSIC_TYPE_NONE;
         break;
@@ -1006,7 +1009,7 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
             mMusicStreamMenu.StopAndUnqueue(0.1f);
             CGS_ASSERT(mMenuStreamName != KU_NULL_NAME,
                        "mMenuStreamName != CgsSound::Playback::K_NULL_NAME");
-            mMusicStreamMenu.Queue(mMenuStreamName, 12);
+            mMusicStreamMenu.Queue(CgsSound::Playback::Name(static_cast<uintptr_t>(mMenuStreamName)), mpLogicModule, 12);
             // X360 @0x826FF68C..690: `stw r16(=0), 0x1FC(r18); stw r16, 0x200(r18)` -- the two
             // preview cursors are ZEROED here (Notify's clear arm is the one that writes -1).
             mEaTraxData.miPreviewSong = 0;
@@ -1032,10 +1035,10 @@ void MusicEffect::UpdateParams(f32 afDeltaTime)
         break;
     }
 
-    mEATraxStream.Update(afDeltaTime);
-    mSecondaryStream.Update(afDeltaTime);
-    mMusicStreamMenu.Update(afDeltaTime);
-    mJunkyardStream.Update(afDeltaTime);
+    mEATraxStream.Update(mpStreamingStateManager, afDeltaTime);
+    mSecondaryStream.Update(mpStreamingStateManager, afDeltaTime);
+    mMusicStreamMenu.Update(mpStreamingStateManager, afDeltaTime);
+    mJunkyardStream.Update(mpStreamingStateManager, afDeltaTime);
 }
 
 void MusicEffect::ProcessUpdate()
@@ -1143,7 +1146,7 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
         std::memcpy(&mEaTraxData.mEnabledSongsNoGameMode, lpuPayload,
                     sizeof(mEaTraxData.mEnabledSongsNoGameMode));
         mEaTraxData.mRemainingSongs.SetAll();
-        mbPlaylistChanged = true;
+        mEaTraxData.mbPendingChange = true;
         break;
     }
     case 8:   // E_SOUNDMESSAGE_EATRAX_LAST_PLAYED_INDEXES (GUI 459) -- restore state.
@@ -1159,7 +1162,7 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
         mEaTraxData.miPreviousPreviewSong = mEaTraxData.miPreviewSong;
         std::memcpy(&mEaTraxData.miPreviewSong, lpuPayload,
                     sizeof(mEaTraxData.miPreviewSong));
-        mbPreviewActive = (lpuPayload[4] != 0);
+        mEaTraxData.mbPlayFromEATraxSlider = (lpuPayload[4] != 0);
         break;
 
     case 10:  // E_SOUNDMESSAGE_EATRAX_ADVANCE_TRACK (GUI 461) -- "skip".
@@ -1309,15 +1312,15 @@ void MusicEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
             else
             {
                 mJunkyardStream.StopAndUnqueue(0.1f);
-                mJunkyardStream.Queue(static_cast<u32>(
-                    CgsSound::Playback::Name::MakeHash("JunkyardWithMusic")), 13);
+                mJunkyardStream.Queue(CgsSound::Playback::Name(static_cast<uintptr_t>(static_cast<u32>(
+                    CgsSound::Playback::Name::MakeHash("JunkyardWithMusic")))), mpLogicModule, 13);
             }
         }
         else if (leAmbience < E_JUNKYARD_AMBIENCE_COUNT)
         {
             mJunkyardStream.StopAndUnqueue(0.1f);
-            mJunkyardStream.Queue(static_cast<u32>(
-                CgsSound::Playback::Name::MakeHash("Junkyard")), 13);
+            mJunkyardStream.Queue(CgsSound::Playback::Name(static_cast<uintptr_t>(static_cast<u32>(
+                CgsSound::Playback::Name::MakeHash("Junkyard")))), mpLogicModule, 13);
         }
         else
         {

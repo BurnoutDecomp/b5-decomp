@@ -253,13 +253,33 @@ bool InAirEffect::Attach()
 
 bool InAirEffect::Detach()
 {
-    mInAirVoice.Release();
-    mLandingVoices.Release();
-    mHardLandingVoice.Release();
-    mJunkyardLandingSweetnerVoice.Release();
-    mJumpCamLandingVoice.Release();
-    mpCollisionMgr = 0;
-    return BrnSound::Logic::BrnEffectObject::Detach();
+    // ARTIST @0x826F47D0 receives the EffectObject subobject view (+4 from the
+    // complete object). Its detach-state switch falls through all valid states;
+    // preserve the resource release order, including VoicePoolBase at adjusted +0x90.
+    switch (meDetachState)
+    {
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_NONE:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_NONE;
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_BEGIN:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_BEGIN;
+        mInAirVoice.Release();
+        mLandingVoices.Release();
+        mJunkyardLandingSweetnerVoice.Release();
+        mJumpCamLandingVoice.Release();
+        mHardLandingVoice.Release();
+        mpCollisionMgr = 0;
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_UPDATING:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_UPDATING;
+        // fall through
+    case CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED:
+        meDetachState = CgsSound::Logic::EffectBase::E_DETACH_STATE_FINISHED;
+        BrnSound::Logic::BrnEffectObject::Detach();
+        return true;
+    default:
+        return false;
+    }
 }
 
 void InAirEffect::ProcessUpdate()

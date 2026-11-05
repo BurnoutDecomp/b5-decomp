@@ -12,54 +12,48 @@ namespace Logic
 {
 
 MusicStream::MusicStream()
-    : mu32VoiceUpdateStage(0), mu32PrevVoiceUpdateStage(0),
-      mCreateParams(), mpStreamingManager(0), meState(E_STOPPED), mfFadeTime(0.0f),
-      mfFadeDuration(0.25f), mfVolume(1.0f), mfHighPassFrequency(0.0f),
-      mfLowPassFrequency(96000.0f), muPriority(0), muQueuedContentSpec(0),
-      mbInternalPause(false), mbStreamPaused(false), mbSongQueued(false),
-      mu8QueuedOutputSlot(0), mu8OutputSlot(0),
-      miDiagLastGainQ(-1) {}   // [DIAG] NOT IN THE X360 BINARY
+    : mu32VoiceUpdateStage(0), mu32PrevVoiceUpdateStage(0), mCreateParams(),
+      meState(E_STOPPED), mfFadeTime(0.0f), mfFadeDuration(0.0f),
+      mfVolume(0.0f), mfHighPassFrequency(0.0f), mfLowPassFrequency(96000.0f),
+      muPriority(0), mbInternalPause(false), mbStreamPaused(false),
+      mbSongQueued(false), mu8QueuedOutputSlot(0), mu8OutputSlot(0) {}
 
-void MusicStream::Prepare(Module::SoundLogicModule* apModule,
-                          Streaming::StreamingStateManager* apStreamingManager,
-                          const char* apVoiceSpec, u32 auPriority)
+void MusicStream::Construct()
 {
-    muPriority = auPriority;   // X360 Attach @0x8269CC60: the per-stream request priority
-    CGS_ASSERT(apModule != 0, "lpLogicModule");
-    CGS_ASSERT(apStreamingManager != 0, "lpStreamingStateManager");
-    mCreateParams.Clear();
-    mCreateParams.mpLogicModule = apModule;
-    mCreateParams.mFactoryName = static_cast<u32>(
-        CgsSound::Playback::GenericRwacFactorySkName().GetValue());
-    mCreateParams.mVoiceSpecName = static_cast<u32>(
-        CgsSound::Playback::Name::MakeHash(apVoiceSpec));
-    mCreateParams.mSlotName = static_cast<u32>(
-        CgsSound::Playback::Name::MakeHash("~PlayerVoice::SK_PLAYER_SLOT_NAME~"));
-    mCreateParams.mSendName = static_cast<u32>(
-        CgsSound::Playback::Name::MakeHash("Send01"));
-    mCreateParams.mSubMixVoiceID = 1;
-    mCreateParams.miSendIndex = 0;
-    mpStreamingManager = apStreamingManager;
+    ResetVoiceStages();
+}
+
+bool MusicStream::Prepare(u32 auPriority)
+{
     meState = E_STOPPED;
+    mfFadeTime = 0.0f;
+    mfFadeDuration = 0.0f;
+    mfVolume = 0.0f;
     mfHighPassFrequency = 0.0f;
     mfLowPassFrequency = 96000.0f;
-    mbInternalPause = false;
+    muPriority = auPriority;
     mbStreamPaused = false;
     mbSongQueued = false;
     mu8QueuedOutputSlot = 0;
     mu8OutputSlot = 0;
+    return true;
 }
 
-void MusicStream::Queue(u32 auContentSpec, u8 auOutputSlot)
+// ARTIST 0x8269CB88: create parameters are populated when a song is queued.
+void MusicStream::Queue(CgsSound::Playback::Name aContentSpec,
+                        CgsSound::Logic::Module* apModule, u8 auOutputSlot)
 {
-    if (meState != E_STOPPED)
-        Stop();
-    mCreateParams.mContentSpecName = auContentSpec;
-    muQueuedContentSpec = auContentSpec;
-    // (the request priority is NOT an argument here -- X360 Queue @0x8269CB88 leaves +0x54 alone)
+    CGS_ASSERT(apModule != 0, "lpLogicModule");
+    mCreateParams.mpLogicModule = apModule;
+    mCreateParams.mFactoryName = static_cast<u32>(CgsSound::Playback::GenericRwacFactorySkName().GetValue());
+    mCreateParams.mVoiceSpecName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("MusicFiltVoiceSpec"));
+    mCreateParams.mSlotName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("~PlayerVoice::SK_PLAYER_SLOT_NAME~"));
+    mCreateParams.mContentSpecName = static_cast<u32>(aContentSpec.GetValue());
+    mCreateParams.mSendName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
+    mCreateParams.miSendIndex = 0;
+    mCreateParams.mSubMixVoiceID = 1;
+    SetSongQueued(true);
     mu8QueuedOutputSlot = auOutputSlot;
-    if (!mbSongQueued)
-        SetSongQueued(true);
 }
 
 void MusicStream::Stop(f32 afFadeOut)
@@ -75,18 +69,17 @@ void MusicStream::Stop(f32 afFadeOut)
     meState = E_STOP_REQUESTED;
 }
 
-void MusicStream::Update(f32 afDeltaTime)
+void MusicStream::Update(Streaming::StreamingStateManager* apStreamingManager, f32 afDeltaTime)
 {
     if (meState == E_STOPPED && mbSongQueued)
     {
         // ARTIST @ 0x826871F8 cancels this user's older requests before replacement.
-        mpStreamingManager->PostStreamRequest(
+        apStreamingManager->PostStreamRequest(
             Streaming::StreamStopRequest(this, 0.0f));
-        mCreateParams.mContentSpecName = muQueuedContentSpec;
-        mpStreamingManager->PostStreamRequest(
+        apStreamingManager->PostStreamRequest(
             Streaming::StreamRequest(this, muPriority, 0.1f));
-        SetSongQueued(false);
         mbInternalPause = false;
+        SetSongQueued(false);
         mu8OutputSlot = mu8QueuedOutputSlot;
         meState = E_PLAYING;
     }
@@ -100,7 +93,7 @@ void MusicStream::Update(f32 afDeltaTime)
         mfFadeTime += afDeltaTime;
         if (mfFadeTime >= mfFadeDuration)
         {
-            mpStreamingManager->PostStreamRequest(
+            apStreamingManager->PostStreamRequest(
                 Streaming::StreamStopRequest(this, 0.0f));
             meState = E_STOPPED;
         }
@@ -183,26 +176,7 @@ void MusicStream::UpdateVoiceParams(CgsSound::Logic::VoiceWrapper& arVoice,
     arVoice.SetGain(static_cast<u32>(mCreateParams.miSendIndex),
                     afGain * lfVolume, &luSend);
 
-    // [DIAG] NOT IN THE X360 BINARY (BRN_STREAM_DIAG=1). THE decisive number for a
-    // "queues but is inaudible" stream: the gain this stream actually writes to its
-    // send, factored into the effect's streamsettings gain and mfVolume -- and
-    // mfVolume is whatever MusicEffect::ProcessUpdate read out of the DYNAMIC MIXER
-    // at this stream's own output slot.
-    {
-        // Edge key: the output slot, the ContentSpec, and -- the whole point --
-        // whether the send gain is AUDIBLE or a hard zero. A stream whose mixer slot
-        // reads 0 logs exactly one line and stops; a normally-jittering gain does not
-        // storm the log.
-        const f32 lfSend = afGain * lfVolume;
-        const int liKey = static_cast<int>(mu8OutputSlot) * 4
-                        + (lfSend > 0.0009765625f ? 1 : 0) * 2
-                        + (meState == E_PLAYING ? 1 : 0);
-        if (liKey != miDiagLastGainQ)
-        {
-            miDiagLastGainQ = liKey;
 
-        }
-    }
 }
 
 void MusicStream::StreamStopped()

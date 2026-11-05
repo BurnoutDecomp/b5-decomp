@@ -1401,6 +1401,36 @@ namespace BrnGui
         case 106:
             if (!mbFriendsListOpen) mbFriendsListChangePending = true;
             break;
+        case 109:
+            // ARTIST table index 105 reaches 0x8250EF90 and latches this+0x4B4E.
+            // NetworkOutStartingGameDueToPlayerJoin already publishes GUI event 109.
+            mbIsStartingGameDueToPlayerJoin = true;
+            break;
+        case 128:
+        case 129:
+            // ARTIST table indices 124/125 share 0x8250EEE8:
+            // preparing for invite on, invite-received flag off.
+            mbInviteInProgress = true;
+            mbPerformingInvite = false;
+            break;
+        case 131:
+            // ARTIST 0x8250EF04 clears the named eight-player tables in this order:
+            // disconnected, then eliminated/in-car-select interleaved per player.
+            for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
+                maOnlinePlayerDisconnected[liPlayer] = false;
+            for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
+            {
+                maOnlinePlayerEliminated[liPlayer] = false;
+                maOnlinePlayerInCarSelect[liPlayer] = false;
+            }
+            mbInviteInProgress = false;
+            mbPerformingInvite = true;
+            break;
+        case 132:
+            // ARTIST 0x8250EF78 clears both invite-state bytes.
+            mbInviteInProgress = false;
+            mbPerformingInvite = false;
+            break;
         case 14:
             mStateLoadingHelper.OnLoadNotification(
                 reinterpret_cast<const CgsGui::GuiEventLoadNotification*>(lpEvent));

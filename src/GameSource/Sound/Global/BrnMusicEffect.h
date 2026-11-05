@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameSource/Sound/Module/LogicModule/BrnEffectObject.h"
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"
 
@@ -35,20 +36,15 @@ public:
     };
 
     MusicStream();
-    // X360 MusicEffect::Attach @0x8269CC60 inlines the four Prepares and seeds each
-    // stream's REQUEST PRIORITY (+0x54) there: EA Trax 5 (`stw 5, 0x100(r31)`), secondary
-    // 5 (+0xA0), menu 5 (+0x160), junkyard 0 (+0x1C0). Nothing else writes it -- Queue
-    // @0x8269CB88 stores only mbSongQueued (+0x5A) and the slot (+0x5B). Speech requests
-    // at 6 (SpeechEffect::PlayStream @0x8269EAF0), so StreamingStateManager::GetFreeState
-    // @0x826B0EB8 evicts a music stream for a voice-over rather than refusing it.
-    void Prepare(Module::SoundLogicModule* apModule,
-                 Streaming::StreamingStateManager* apStreamingManager,
-                 const char* apVoiceSpec, u32 auPriority);
-    void Queue(u32 auContentSpec, u8 auOutputSlot);
+    void Construct();
+    bool Prepare(u32 auPriority);
+    void Queue(CgsSound::Playback::Name aContentSpec,
+               CgsSound::Logic::Module* apModule, u8 auOutputSlot);
     void Stop(f32 afFadeOut = 0.25f);
-    void Update(f32 afDeltaTime);
+    void Update(Streaming::StreamingStateManager* apStreamingManager, f32 afDeltaTime);
     void SetSongQueued(bool abSongQueued);
     u8 GetOutputSlot() const { return mu8OutputSlot; }
+    void SetPriority(u32 auPriority) { muPriority = auPriority; }
     void SetVolume(f32 afVolume) { mfVolume = afVolume; }
     void SetHighPassFreq(f32 afFrequency) { mfHighPassFrequency = afFrequency; }
     void SetLowPassFreq(f32 afFrequency) { mfLowPassFrequency = afFrequency; }
@@ -131,7 +127,6 @@ private:
     u32 mu32VoiceUpdateStage;       // +0x04 (see HasVoiceStartedPlaying)
     u32 mu32PrevVoiceUpdateStage;   // +0x08
     CgsSound::Logic::VoiceWrapper::CreateParams mCreateParams;   // +0x0C
-    Streaming::StreamingStateManager* mpStreamingManager;
     EState meState;
     f32 mfFadeTime;
     f32 mfFadeDuration;
@@ -139,18 +134,13 @@ private:
     f32 mfHighPassFrequency;
     f32 mfLowPassFrequency;
     u32 muPriority;
-    u32 muQueuedContentSpec;
     bool mbInternalPause;
     bool mbStreamPaused;
     bool mbSongQueued;
     u8 mu8QueuedOutputSlot;
     u8 mu8OutputSlot;
 
-    // [DIAG] NOT IN THE X360 BINARY. Edge-detector for the opt-in BRN_STREAM_DIAG
-    // send-gain witness in UpdateVoiceParams (the gain quantised to 1/1000), so a
-    // steady stream logs one line rather than one per frame. Never read by any
-    // behavioural arm.
-    int miDiagLastGainQ;
+
 };
 
 class MusicEffect : public BrnEffectObject
@@ -263,6 +253,8 @@ public:
         s32 miCurrentSong;           // +0x38  SetCurrentSong's record
         Module::SoundLogicModule* mpLogicModule;  // +0x3C
         s32 mePlayOrder;             // +0x40  message 11 (GUI 462), EPlayOrder
+        bool mbPendingChange;        // +0x44
+        bool mbPlayFromEATraxSlider; // +0x45
     };
 
     MusicEffect();
@@ -314,17 +306,7 @@ private:
     static u32 GetEventStartContentSpec(const void* apGameModeInterface);
     u32 GetEventEndContentSpec(const void* apGameModeInterface) const;
 
-    // X360 MusicEffect +0x230, stored by AttachController @0x826873A0 and asserted
-    // non-null by Attach @0x8269CC60 ("mpMixerControl", BrnMusicEffect.cpp:515).
-    // ProcessUpdate reads its cached music-volume setting to publish this effect's
-    // dynamic-mixer INPUT 0.
-    MixerControl* mpMixerControl;
-
-    // X360 MusicEffect +0x23C. The last slot-9 mixer output this effect published as
-    // GuiOut event 513; the publish is edge-triggered on it (ProcessUpdate's tail).
-    f32 mfLastPublishedGuiVolume;
-
-    // X360 MusicEffect +0x34 (DWARF BrnMusicEffect.h:618). Notify(14) opens/closes it,
+    // Whole-object +0x38 (DWARF BrnMusicEffect.h:618). Notify(14) opens/closes it,
     // UpdateParams ticks it, ProcessUpdate hands its frequency to mEATraxStream.
     JumpHpf mJumpHpf;
 
@@ -335,8 +317,6 @@ private:
     EaTraxData mEaTraxData;
 
     // ---- X360 MusicEffect tail (+0x210 .. +0x246) ------------------------------
-    bool mbPlaylistChanged;      // +0x210  set by message 7, consumed by UpdateSongs
-    bool mbPreviewActive;        // +0x211  message 9's second payload byte
     s32  meEventEndResult;       // +0x214  message 23 payload +0x5C (rank 1..4 -> a
                                  //         "00Race_End_RANK_0n" sting, else the mode sting)
     bool mbEventWon;             // +0x218  message 23: mode-dependent "won" flag
@@ -344,9 +324,12 @@ private:
     u32  mCarUnlockName;         // +0x21C  message 28's ContentSpec
     u32  mMenuStreamName;        // +0x220  message 13's ContentSpec
     s32  meMusicType;            // +0x224
-    s32  mePrevMusicType;        // +0x228
+    s32  mePrevMusicType;        // adjusted +0x228
+    Streaming::StreamingStateManager* mpStreamingStateManager; // adjusted +0x22C
+    MixerControl* mpMixerControl; // adjusted +0x230
     s32  mePendingMusicType;     // +0x234  one-shot type pushed by Notify (5/11/12)
     s32  meJunkyardAmbience;     // +0x238  message 40
+    f32  mfLastPublishedGuiVolume; // adjusted +0x23C
     s32  miPicParadiseMusic;     // +0x240  index into KA_CLASSICAL_MUSIC_DATA
     bool mbHoldVolumes;          // +0x244  message 15 -- ProcessUpdate's early-out
     bool mbMenuStreamIsVideo;    // +0x245  message 13 payload +4
