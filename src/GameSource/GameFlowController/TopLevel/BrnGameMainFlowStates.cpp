@@ -1228,13 +1228,6 @@ void MainGameFlowStateCheckDiskSpace::OnEnter()
     // PC models that slot as RequestGuiFsmStage (the same field Marketing/Start/MemoryCard
     // stamp with 1/2/4).
     gpBurnoutGame->RequestGuiFsmStage(4);
-
-    // @0x823AAC84 / @0x823AAC8C -- mbSaveLoadState = 1, mbVideoState = 1 (the profile phase
-    // is the sim-paused save-load window: update set 0xE1).
-    {
-        gpBurnoutGame->GetMainFlowStateMachine().SetSaveLoadState(true);
-        gpBurnoutGame->GetMainFlowStateMachine().SetVideoState(true);
-    }
 }
 void MainGameFlowStateCheckDiskSpace::OnLeave() {}
 // Update @ 0x823F2D28 lives in its DWARF home TU, BrnGameMainFlowCheckDiskSpace.cpp.
@@ -1243,17 +1236,21 @@ void MainGameFlowStateCheckDiskSpace::Render() { LoadingScriptedState::Render();
 // --- MainGameFlowStateMemoryCard (the profile / save-device phase) -----------------------
 MainGameFlowStateMemoryCard::MainGameFlowStateMemoryCard() {}
 
-// @ 0x823AAC48 -- request the BF_PROFILE GUI FSM stage (BrnBFProFsm; pending-stage byte = 4;
-// the X360 skips to 5 under the autotest flags -- no autotest on PC).
+// ARTIST 0x823AAC48: unpark loading, set the save/load and video flags, then request BF_PROFILE.
+// An invite that needs no login overrides the pending GUI stage with 5.
 void MainGameFlowStateMemoryCard::OnEnter()
 {
     // @0x823AAC78 -- CLEAR ONLY (no raise): by the profile phase the world load is meant
     // to be running, so this state never re-parks it.
     gBrnScriptedLoadPaused = false;
 
-    gpBurnoutGame->RequestGuiFsmStage(4);
-    if (CgsDev::Message::gxMessageFilterFlags & 1)
-        *CgsDev::Log::gpDebugPrint << "MemoryCard: OnEnter -> GUI FSM stage 4 (BrnBFProFsm)\n";
+    BrnGame::BrnGameModule* const lpGameModule = gpBurnoutGame;
+    lpGameModule->GetMainFlowStateMachine().SetSaveLoadState(true);
+    lpGameModule->GetMainFlowStateMachine().SetVideoState(true);
+    lpGameModule->RequestGuiFsmStage(4);
+    const BrnGui::GuiModule& lrGui = lpGameModule->GetGuiModule();
+    if (lrGui.IsPerformingInvite() && !lrGui.IsLoginNeededForInvite())
+        lpGameModule->RequestGuiFsmStage(5);
 }
 // @ 0x823AACC8 -- clear the save-load + video bytes on the way out.
 void MainGameFlowStateMemoryCard::OnLeave()
@@ -1264,8 +1261,8 @@ void MainGameFlowStateMemoryCard::OnLeave()
     }
 }
 
-// @ 0x823F2F98 -- gated on the world-load stage (X360 dword_82FAE4B0 == 8); advance when
-// the GUI posts phase-complete (the profile task resolved).
+// ARTIST 0x823F2F98: after world loading, advance on GUI phase completion or on an invite
+// that needs no login.
 // ⭐ CORRECTED 2026-08-14 (boot audit F-P4-4 / F-P6-21): the gate was keyed to
 // gBrnInitialLoadingComplete -- the INITIAL-loading-done signal, which the loading screen
 // raises long before the scripted world load starts. With the park chain restored that
@@ -1279,13 +1276,14 @@ void MainGameFlowStateMemoryCard::Update()
     // @0x823F2FB0 -- the world-loaded gate, tested FIRST.
     if (gBrnScriptedLoadStage != 8)
         return;
-    if (gpBurnoutGame->IsGuiPhaseComplete())
+    BrnGame::BrnGameModule* const lpGameModule = gpBurnoutGame;
+    const BrnGui::GuiModule& lrGui = lpGameModule->GetGuiModule();
+    const bool lbSkipProfile = lrGui.IsPerformingInvite() && !lrGui.IsLoginNeededForInvite();
+    if (lpGameModule->IsGuiPhaseComplete() || lbSkipProfile)
     {
-        // X360 @0x823F2FD0..D8: `stb r11(=1), 0x9A02F5(gm)` -- gm+10094117, the streaming-wait
-        // request DoUpdate_GameStatePreWorld turns into game event 8 (-> WaitForStreaming ->
-        // the boot pause), stored right before the STATEEND SendEvent.
-        gpBurnoutGame->RequestStreamingWait();
-        gpBurnoutGame->GetMainFlowStateMachine().SendEvent(
+        // ARTIST 0x823F3020: request the streaming wait before advancing the main flow.
+        lpGameModule->RequestStreamingWait();
+        lpGameModule->GetMainFlowStateMachine().SendEvent(
             BrnGameMainFlowController::E_MGE_STATEEND);
     }
 }
