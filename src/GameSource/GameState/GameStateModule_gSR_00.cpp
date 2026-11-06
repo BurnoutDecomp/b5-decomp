@@ -276,6 +276,29 @@ bool IsBlockingTrainingTipActiveForCanEnterGate(const TrainingManager* lpTrainin
     return false;
 }
 
+// CheckIfPlayerIsAtJunctionWithAnEvent's tip gauntlet, inlined three times on the console
+// (@0x82390B44, @0x82390C08, @0x82390CB8). Only the first also wants 30 s of free burn.
+static void TryRequestJunctionTrainingTip(TrainingManager* lpTrainingManager,
+                                          const ModeManager& lrModeManager,
+                                          BrnProgression::ETrainingType leType,
+                                          bool lbNeedsFreeBurnTime)
+{
+    if (lpTrainingManager->IsTipPending() || lpTrainingManager->IsInPictureParadise())
+    {
+        return;
+    }
+    if (lbNeedsFreeBurnTime && lrModeManager.GetTimeInFreeBurn() < 30.0f)
+    {
+        return;
+    }
+    if (lpTrainingManager->IsTipAllowedInGameMode(leType) &&
+        !lpTrainingManager->GetProfile()->HasPlayerSeenTrainingType(leType) &&
+        lpTrainingManager->GetTimeSinceLastTip() >= 5.0f)
+    {
+        lpTrainingManager->RequestTip(leType);
+    }
+}
+
 }   // anonymous namespace
 
 // ============================================================================================
@@ -543,12 +566,10 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
         const u32 luEventJunctionID           = lpJunctionLogicBox->GetEventJunctionID();
         lAction.muEventJunctionID             = luEventJunctionID;                 // @0x823909B8
 
-        // "The junction under the car CHANGED this frame" (@0x823909A0..0x823909BC). Consumed
-        // only by the PARKED training-tip arm below; computed here because it is the console's,
-        // and so that landing that arm needs no re-derivation.
+        // "The junction under the car CHANGED this frame" (@0x823909A0..0x823909BC), for the
+        // training-tip arm below.
         const bool lbJunctionChanged =
             (muCachedJunctionLogicBoxId != luPreviousJunctionLogicBoxId);
-        (void)lbJunctionChanged;
 
         if (static_cast<s32>(luEventJunctionID) <= 0)                              // @0x823909C0
         {
@@ -608,22 +629,32 @@ void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
                 }
             }
 
-            // [PARKED] THE TRAINING-TIP ARM (0x82390B18..0x82390D5C), entered only when
-            // `lbJunctionChanged || TrainingManager::mbVoiceoverFinishedLastFrame` (gsm+46663).
-            // Console body, written out for whoever lands it -- it is a clean three-way choice
-            // and every id below is image-cited:
-            //   * no special car          -> E_TRAINING_TYPE_DISCOVERS_EVENT (8)
-            //   * special car, I am in it -> E_TRAINING_TYPE_CORRECT_CAR_FOR_CHALLENGE (24),
-            //                                and mark tip 25 already-seen on the Profile
-            //   * special car, I am not   -> E_TRAINING_TYPE_WRONG_CAR_FOR_CHALLENGE (25)
-            //   each behind the same gauntlet: !TrainingManager::IsTipPending() &&
-            //   !IsInPictureParadise() && ModeManager::GetTimeInFreeBurn() >= 30.0f (the first
-            //   arm only) && IsTipAllowedInGameMode(type) &&
-            //   !Profile::HasPlayerSeenTrainingType(type) && GetTimeSinceLastTip() >= 5.0f,
-            //   then RequestTip(type).
-            // Parked because it drives TrainingManager state through accessors that are
-            // declare-only on this build (IsTipPending / GetProfile / GetTimeSinceLastTip /
-            // RequestTip) and posts NO action -- nothing the mounted GUI reads depends on it.
+            // 0x82390B18..0x82390D50: the junction's training tip, when the junction changed or
+            // the voiceover has just finished. It posts no action of its own.
+            if (lbJunctionChanged || mpTrainingManager->DidVoiceoverFinishLastFrame())
+            {
+                if (lSpecialEventCarId == 0)
+                {
+                    TryRequestJunctionTrainingTip(mpTrainingManager, mModeManager,
+                                                  BrnProgression::E_TRAINING_TYPE_DISCOVERS_EVENT,
+                                                  true);                           // @0x82390B44
+                }
+                else if (lbSpecificCarEventValid)
+                {
+                    TryRequestJunctionTrainingTip(mpTrainingManager, mModeManager,
+                                                  BrnProgression::E_TRAINING_TYPE_CORRECT_CAR_FOR_CHALLENGE,
+                                                  false);                          // @0x82390C08
+                    // @0x82390CA0: taken whatever the request did.
+                    lpProfile->SetTrainingAlreadySeen(
+                        BrnProgression::E_TRAINING_TYPE_WRONG_CAR_FOR_CHALLENGE);
+                }
+                else
+                {
+                    TryRequestJunctionTrainingTip(mpTrainingManager, mModeManager,
+                                                  BrnProgression::E_TRAINING_TYPE_WRONG_CAR_FOR_CHALLENGE,
+                                                  false);                          // @0x82390CB8
+                }
+            }
 
             // LABEL_118 (@0x82390D5C..0x82390DA0): the record's OWN mbCanEnterEvent is the member
             // AND the unlocked flag AND "no blocking tip", recomputed here because the console
