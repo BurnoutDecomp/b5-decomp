@@ -38,14 +38,10 @@
 //   GameModeData::GameModeData        @ 0x826AFE88
 //   GameModeData::Reset               @ 0x826977D8
 //
-// DEFERRED (declared, NOT bodied -- they hang off UpdateGameModeHud @0x82702670,
-// which reads the RootInputBuffer::ScoringOutputInterface; that interface is not
-// reached by this slice): UpdateGameModeHud, UpdateStuntRun @0x82701598,
-// UpdateShowtime @0x82701830, UpdateRoadRage @0x82701AA0, UpdateBurningRoute,
-// UpdateEventTimeRemaining @0x826FE400, UpdateSlipStreaming @0x82701BA8,
-// PlaySound(ePresentationSampleTags, u8), FindPauseEventMapping. They are the
-// score-tick / countdown / stunt / showtime / road-rage lane; the message-driven
-// GUI sting lane (Notify -> FindEventMapping -> maVoices) is complete here.
+// ALSO BODIED, in the .cpp: UpdateGameModeHud @0x82702670, UpdateStuntRun @0x82701598,
+// UpdateShowtime @0x82701830, UpdateRoadRage @0x82701AA0, UpdateEventTimeRemaining
+// @0x826FE400, PlaySound(ePresentationSampleTags, u8) @0x826FE540 and
+// UpdateSlipStreaming @0x82701BA8.
 //
 // LAYOUT (X360 byte offsets, all cross-checked between FOUR functions at once --
 // the virtuals receive the EffectBase sub-object pointer, which the asm shows as
@@ -57,6 +53,8 @@
 //     +0x22B ( 555)  mau8ChokeGroups[3]     (Attach `*v6++ = 0`)
 //     +0x230 ( 560)  maGameModeVoices[4]    (Detach `a1 + 556`, stride 92)
 //     +0x3A0 ( 928)  mMusicStream           (Attach LP 96000.0 / priority 2)
+//     +0x400 (1024)  mSlipstreamAmount      (UpdateSlipStreaming `addi r3, r29, 0x400`;
+//                                           reads back its mean at 0x42C(r29))
 //     +0x430 (1072)  mGameModeData          (Reset @0x8270275C `addi r3, r26, 0x430`;
 //                                           every member below lines up with the
 //                                           console's a1+1072.. cursors, e.g.
@@ -124,7 +122,10 @@ struct HUDEffect : public BrnSound::Logic::BrnEffectObject
         E_SPLICE_ROAD_RAGE_TIME_ADD    = 20,
         E_SPLICE_ROAD_RAGE_COUNT_DOWN  = 21,
         E_SPLICE_ROAD_RAGE_TIME_ENDED  = 22,
-        E_SPLICE_ONLINE_RIVAL_SWEEP    = 23
+        E_SPLICE_ONLINE_RIVAL_SWEEP    = 23,
+        // FLAG name (ARTIST-only, the DWARF enum stops at 23): the slipstream sting
+        // UpdateSlipStreaming plays alongside its stream. `li r4, 0x18` @0x82701CD0.
+        E_SPLICE_SLIPSTREAM            = 24
     };
 
     // The GUI-side record sound message 5 carries. DWARF
@@ -192,9 +193,9 @@ struct HUDEffect : public BrnSound::Logic::BrnEffectObject
 
     // @ 0x82686BA8. Slipstream-audio proximity/alignment weight for the car in front.
     // The three Vector3 args arrive in vector registers (v1/v2/v3); `this` (r3) is
-    // unused by the body. DWARF renders the return as `double`.
-    f64 GetSlipstreamAmount( Vector3 lCarInFrontVelocity,
-                             Vector3 lOwnWeightedVelocity,
+    // unused by the body. The caller @0x82701F0C loads them, see the .cpp banner.
+    f64 GetSlipstreamAmount( Vector3 lPlayerPosition,
+                             Vector3 lSlipstreamOrigin,
                              Vector3 lNegatedDirection );
 
 private:
@@ -210,6 +211,7 @@ private:
     // none of it ran while that function was one statement short. See the banner over
     // UpdateParams in the .cpp.
     void UpdateGameModeHud(Module::SoundLogicModule* apModule);   // @0x82702670
+    void UpdateSlipStreaming(f32 afDeltaTime);                    // @0x82701BA8
     void UpdateShowtime();                                        // @0x82701830
     void UpdateRoadRage(const Module::Io::RootInputBuffer::ScoringOutputInterface* apScoring);   // @0x82701AA0
     void UpdateStuntRun(const Module::Io::RootInputBuffer::ScoringOutputInterface* apScoring);   // @0x82701598
@@ -240,6 +242,10 @@ public:
     // MusicStream::Prepare does, and ProcessUpdate writes its volume from the DMix
     // output slot. Materialised by name from the committed BrnMusicStream home.
     MusicStream                   mMusicStream;
+    // FLAG name (not in the PS3 DWARF either): the ten-sample mean of the slipstream
+    // weight, ATTESTED by ctor @0x826E1A04 / Attach @0x8269C490 / UpdateSlipStreaming
+    // @0x82701F2C at +0x400, sitting exactly between mMusicStream and mGameModeData.
+    CgsSound::Utils::Average<10, f32> mSlipstreamAmount;
     GameModeData                  mGameModeData;                      // :338
     Attrib::Gen::presentationcomponent mHudMessageData;               // :339
     GuiAudioEventRecord           mLastPlayedEvent;                   // :340
