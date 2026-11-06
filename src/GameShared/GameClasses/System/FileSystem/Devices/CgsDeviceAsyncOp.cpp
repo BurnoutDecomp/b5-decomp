@@ -3,14 +3,13 @@
 //   CgsFileSystem::AsyncOp::AsyncOp @ 0x828DE2F8
 //   CgsFileSystem::AsyncOp::GetLastOperationResult @ 0x82661160
 //
-// Out-of-line body for the AsyncOp result accessor. Reading the result of an
-// operation that was never waited on is a programming error, so the original
-// asserts in that case (the asm guards on the +0x28 "outstanding" flag and fires
-// the assert machinery against CgsDeviceAsyncOp.h:159) before returning the cached
-// +0x18 result.
+// Out-of-line bodies for the AsyncOp result accessors. The original code checks
+// the +0x28 outstanding flag, streams the assertion message into the shared
+// assert buffer, then returns the cached handle/result on continuation.
 
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDeviceAsyncOp.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 namespace CgsFileSystem
 {
@@ -22,14 +21,37 @@ namespace CgsFileSystem
     {
     }
 
+    // ARTIST 0x826610A8. Assertion continuation still returns the copied handle.
+    Handle AsyncOp::GetLastOperationHandle()
+    {
+        if (mbOperating)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lAssertMessage(
+                CgsDev::Assert::gpcMessageBuffer,
+                CgsDev::Assert::giMessageBufferSize);
+            lAssertMessage << "Last operation has not been waited before\n";
+            CgsDev::Assert::FireAssert(
+                CgsDev::Assert::gpcMessageBuffer,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.h",
+                152);
+            CgsDev::Assert::EndAssert();
+        }
+        return mHandle;
+    }
+
     // ARTIST 0x82661160. Assertion continuation still returns the stored result.
     s32 AsyncOp::GetLastOperationResult()
     {
         if (mbOperating)
         {
             CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lAssertMessage(
+                CgsDev::Assert::gpcMessageBuffer,
+                CgsDev::Assert::giMessageBufferSize);
+            lAssertMessage << "Last operation has not been waited before\n";
             CgsDev::Assert::FireAssert(
-                "Last operation has not been waited before\n",
+                CgsDev::Assert::gpcMessageBuffer,
                 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.h",
                 159);
             CgsDev::Assert::EndAssert();

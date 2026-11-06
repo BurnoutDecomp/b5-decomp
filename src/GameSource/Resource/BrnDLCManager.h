@@ -235,9 +235,8 @@ private:
 // BURNOUT_X360_ARTIST.XEX. Holds an inline array of DLC package records + a small
 // version-check/monitor state machine. Construct @0x826659E8 owns initialization
 // of the shared availability table before the DLC debug page is constructed.
-// The original monitor Start/worker bodies are recovered in BrnDLCManagerMonitor.cpp,
-// deliberately unmounted while the PC content discovery/mount backend is unresolved.
-// Full DLC Prepare remains unactivated; these declarations do not start the worker.
+// The original monitor Start/worker bodies are recovered in BrnDLCManagerMonitor.cpp.
+// Prepare requires those bodies and the native async-file providers when selected.
 //
 // Capacity is an inference from floor(0x500 / 0x4C); the asm never attests the array bound.
 enum { KU_DLC_PACKAGE_CAPACITY = 16 };
@@ -272,11 +271,11 @@ public:
         char mPath[64];
         s32  miPriority;
         s32  miVersion;
-        u8   mOpaqueTail[4];
+        u32  muOpaqueTail;
     };
 
     void Construct();                                    // ARTIST 0x826659E8; DWARF :62
-    bool Prepare(GameDataIO::AllocatorList* lpAllocatorList); // DWARF :66; unactivated
+    bool Prepare(GameDataIO::AllocatorList* lpAllocatorList); // ARTIST 0x8266AF50; DWARF :66
     bool Release();                                      // DWARF :70
     void Destruct();                                     // DWARF :74
     void StartDLCMonitor();                              // DWARF :77
@@ -286,6 +285,9 @@ public:
     // 0 <= liPackage < muPackageCount (runtime-streamed "Package <i> is out of range\n" message)
     // and returns &maPackages[liPackage].
     DLCPackage* GetPackage(s32 liPackage);
+
+    // Inlined count read in GameDataModule::Prepare (ARTIST 82674108/826741C0).
+    s32 GetPackageCount() const { return muPackageCount; }
 
     // X360 0x82662E18. The current package's version check failed: shift-remove it from the array,
     // decrement muPackageCount, and advance mePrepareStage (3 = more to check, 9 = done).
@@ -317,6 +319,9 @@ private:
     static void AssertNativeLayout()
     {
         CGS_STATIC_ASSERT((sizeof(DLCPackage) == 0x4C), "ARTIST DLC package stride");
+        CGS_STATIC_ASSERT((offsetof(DLCPackage, miPriority) == 0x40), "ARTIST DLC package priority");
+        CGS_STATIC_ASSERT((offsetof(DLCPackage, miVersion) == 0x44), "ARTIST DLC package version");
+        CGS_STATIC_ASSERT((offsetof(DLCPackage, muOpaqueTail) == 0x48), "ARTIST DLC package tail word");
         CGS_STATIC_ASSERT((sizeof(CgsFileSystem::AsyncOp) == 0x30), "ARTIST DLC version operation");
         CGS_STATIC_ASSERT((offsetof(DLCManager, macVersionText) == 0x4C0), "ARTIST DLC version text");
         CGS_STATIC_ASSERT((offsetof(DLCManager, mVersionFileOp) == 0x4D0), "ARTIST DLC version operation owner");

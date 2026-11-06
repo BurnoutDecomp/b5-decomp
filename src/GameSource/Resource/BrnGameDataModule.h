@@ -67,9 +67,7 @@ namespace BrnResource
             // The X360 numbers its data-table stages 9..14 (PrepareVehicleList 9,
             // PrepareFreeburnChallengeList 10, PrepareICEList 11, PrepareWheelList 12,
             // PrepareHudMessages 13, PreparePopups 14). The ones that are live here keep the
-            // console's numbers; the DLC 16-18 stages are still skipped
-            // between ATTRIBSYS and DONE. (Order of execution comes from the switch's
-            // fall-through order below, not from the numeric value.)
+            // console's numbers. DLC stages 16-18 run before ATTRIBSYS (6).
             E_PREPARE_VEHICLE_LIST = 9,
             // [challenge-list wave 2026-08-27] X360 stage 10, PrepareFreeburnChallengeList
             // @0x8266C088 -- "OnlineChallenges.bndl" / "B5ChallengeList" into POOL 26.
@@ -81,7 +79,10 @@ namespace BrnResource
             E_PREPARE_HUD_MESSAGES = 13,
             // Stage 14, PreparePopups -- the overlay popup table ("Popups.pup") the overlays
             // director resolves every overlay request against.
-            E_PREPARE_POPUPS       = 14
+            E_PREPARE_POPUPS       = 14,
+            E_PREPARE_DLC          = 16,
+            E_PREPARE_DLC_PATCH    = 17,
+            E_PREPARE_DLC_PATCH_WAIT = 18
         };
 
         enum EReleaseStage
@@ -515,5 +516,6 @@ namespace BrnResource
         uintptr_t muNumCollisionBlocks;                // +0x7432C
         CgsResource::ResourceIO::FileSystemStatusInterface mFileSystemStatus; // +0x74330
         BrnResource::DLCManager mDLCManager;            // +0x74338
+        s32 miDLCPatchPackage;                         // +0x74990
     };
 }

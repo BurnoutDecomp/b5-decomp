@@ -2,7 +2,6 @@
 #include "GameSource/Game/GameBridgeGUIToX.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // typed PostWorldInputBuffer owner
 #include "GameShared/GameClasses/Core/CgsAssert.h"
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"     // [DIAG] CgsDev::Log::gpDebugPrint
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress ("GMInvAccept" / "GMStrOffline")
 #include "GameShared/GameClasses/Development/CgsStrStream.h"          // CgsDev::StrStream (the formatted default-case assert)
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"  // BrnGameState::TrainingManager (cases 94 / 473)
@@ -58,17 +57,6 @@ namespace BrnGame
         // FLAG: the 64-bit game-flags word (console this+0x691E60) is un-homed on the PC
         // module; bit 41 reads 0 (see the banner).
         const u64 lu64GameFlags = 0;
-
-        // [DIAG] NOT IN THE X360 BINARY -- prove the bridge is reached at all.
-        {
-            static bool sbLoggedFirstCall = false;
-            if (!sbLoggedFirstCall && CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbLoggedFirstCall = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[sim-pause] BridgeGuiToGameState: FIRST CALL\n";
-            }
-        }
 
         const CgsModule::Event* lpEvent = 0;
         s32 liEventSize = 0;
@@ -173,11 +161,6 @@ namespace BrnGame
                     }
                     break;
                 case 191:
-                    // [DIAG] NOT IN THE X360 BINARY -- the pause spine's head rung.
-                    if (CgsDev::Log::gpDebugPrint != 0)
-                        *CgsDev::Log::gpDebugPrint
-                            << "[sim-pause] GUI 191 activate=" << lpW[0]
-                            << " -> game event 93 payload " << ((lpW[0] == 0) ? 1 : 0) << "\n";
                     if (lpW[0] == 0 && lpW[1] == 1)
                     {
                         unsigned char lSignal;   // 1 uninitialised payload byte (matches &v48)

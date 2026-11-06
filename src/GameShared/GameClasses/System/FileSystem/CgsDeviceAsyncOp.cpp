@@ -14,6 +14,8 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceAsyncOp.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "eathread/eathread.h"                      // EA::Thread::kTimeoutNone
 
 namespace CgsFileSystem
 {
@@ -41,10 +43,42 @@ namespace CgsFileSystem
         GetDeviceManager()->Close(lHandle, &AsyncOp::CompletionCallback, this, liPriority);
     }
 
+    // @ 0x828DE3E8. The completion callback publishes one semaphore permit.
+    bool AsyncOp::IsDone()
+    {
+        if (!mbOperating)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lAssertMessage(
+                CgsDev::Assert::gpcMessageBuffer,
+                CgsDev::Assert::giMessageBufferSize);
+            lAssertMessage << "No operation\n";
+            CgsDev::Assert::FireAssert(
+                CgsDev::Assert::gpcMessageBuffer,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.cpp",
+                173);
+            CgsDev::Assert::EndAssert();
+        }
+        return mSemaphore.GetCount() > 0;
+    }
+
     // @ 0x828DE338. Block on the completion semaphore, then mark the op finished.
     void AsyncOp::Wait()
     {
-        CGS_ASSERT(mbOperating, "No operation\n");
+        if (!mbOperating)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lAssertMessage(
+                CgsDev::Assert::gpcMessageBuffer,
+                CgsDev::Assert::giMessageBufferSize);
+            lAssertMessage << "No operation\n";
+            CgsDev::Assert::FireAssert(
+                CgsDev::Assert::gpcMessageBuffer,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.cpp",
+                145);
+            CgsDev::Assert::EndAssert();
+        }
+        mSemaphore.Wait(&EA::Thread::kTimeoutNone);
         mbOperating = false;
     }
 
