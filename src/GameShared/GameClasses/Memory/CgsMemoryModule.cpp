@@ -84,56 +84,71 @@ namespace CgsMemory
         }
     }
 
-    // @ 0x8286AF68 - set up bank 0 (the root) directly from the module's root memory regions (maRootSets).
-    // The root has no parent, so unlike CreateBank it doesn't sub-allocate from a parent -- each type's
-    // blocks come straight off the global free list, and the type's data pointer is the root region itself.
+    namespace
+    {
+        __forceinline void FireRootBankAssert(const char* lpcMessage, int liLine)
+        {
+            CgsDev::Assert::BeginAssert();
+            {
+                CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                           CgsDev::Assert::giMessageBufferSize);
+                lMessage << lpcMessage;
+            }
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModule.cpp", liLine);
+            CgsDev::Assert::EndAssert();
+        }
+    }
+
+    // ARTIST 0x8286AF68. Root blocks come directly from the module's free list.
     void MemoryModule::CreateRootBank()
     {
         MemoryBank& lrRoot = mpBanks[0];
-        lrRoot.SetID(0);                                  // root bank id = 0
-        lrRoot.SetParent(static_cast<u8>(MemoryBank::KU_INVALID_BANK));   // no parent
-        lrRoot.SetAllowFragmentation(true);              // X360: flags = (flags & 0xFC) | 1
+        lrRoot.SetParent(static_cast<u8>(MemoryBank::KU_INVALID_BANK));
+        lrRoot.SetID(0);
+        lrRoot.SetAllowFragmentation(true);
         lrRoot.SetIsLeaf(false);
-        mpu8IdMap[0] = 0;                                 // bank id 0 -> slot 0
 
-        // name = "ROOT"
         const char* lpcName = "ROOT";
-        char*       lpcDst  = mppcNames[0];
+        char* lpcDst = mppcNames[0];
         s32 li = 0;
         for (; lpcName[li] != 0; ++li)
             lpcDst[li] = lpcName[li];
         lpcDst[li] = 0;
+        mpu8IdMap[0] = 0;
 
         for (s32 lt = 0; lt < MemoryBank::KI_NUM_TYPES; ++lt)
         {
             const RootResourceSet& lrRegion = maRootSets[lt];
-            const u32 luNumBlocks = lrRegion.muNumBlocks;
-            CGS_ASSERT(luNumBlocks != 0xFFFFu, "Root resource set not initialised");
+            if (lrRegion.muNumBlocks == 0xFFFFu)
+                FireRootBankAssert("ERROR: Can not have more than 65534 blocks in a bank\n", 975);
+            if (lrRegion.muNumBlocks != 0 && lrRegion.muDataSize % lrRegion.muNumBlocks != 0)
+                FireRootBankAssert("ERROR: Data size must be divisble by num blocks\n", 976);
 
-            u32 luBlockSizeBytes = 0;
-            if (luNumBlocks != 0)
-            {
-                CGS_ASSERT(lrRegion.muDataSize % luNumBlocks == 0, "Root region size not a multiple of block count");
-                luBlockSizeBytes = lrRegion.muDataSize / luNumBlocks;
-            }
-            // [VERIFY granularity vs asm when run: block sizes are stored in 1KB units (>>10); the X360 also
-            // asserts 1KB alignment and a max block size.]
-            CGS_ASSERT((luBlockSizeBytes & 0x3FFu) == 0, "Root block size must be 1KB aligned");
-            CGS_ASSERT((luBlockSizeBytes & 0xFFF00000u) <= 0x4000000u, "Root block size too large");
+            const u32 luBlockSizeBytes = lrRegion.muNumBlocks != 0
+                ? lrRegion.muDataSize / lrRegion.muNumBlocks : 0;
+            if ((luBlockSizeBytes & 0x3FFu) != 0)
+                FireRootBankAssert("ERROR: Block size must be a multiple of 1024 bytes\n", 989);
+            if ((luBlockSizeBytes & 0xFFF00000u) > 0x4000000u)
+                FireRootBankAssert("ERROR: A single block can't be bigger than 64mb - you doin something very wrong!!!\n", 990);
+            if (lrRegion.muNumBlocks != 0 && lrRegion.muDataSize % lrRegion.muNumBlocks != 0)
+                FireRootBankAssert("Root bank size is not divisble by number of blocks\n", 991);
 
-            lrRoot.SetNumBlocks(lt, static_cast<u16>(luNumBlocks));
+            lrRoot.SetNumBlocks(lt, lrRegion.muNumBlocks);
             lrRoot.SetBlockSize(lt, static_cast<u16>(luBlockSizeBytes >> 10));
 
             if (luBlockSizeBytes != 0)
             {
-                u32 luFirstBlock = 0;
-                u32 luLastBlock  = 0;
-                if (!AllocateBlocks(static_cast<u16>(luNumBlocks), 0, static_cast<u8>(lt), false,
+                u32 luFirstBlock;
+                u32 luLastBlock;
+                if (!AllocateBlocks(lrRegion.muNumBlocks, 0, static_cast<u8>(lt), false,
                                     &luFirstBlock, &luLastBlock))
                 {
-                    CGS_ASSERT(false, "Root bank allocation failed");
+                    FireRootBankAssert("Failed to allocate blocks for root bank\n", 1007);
                     return;
                 }
+                if (lrRegion.mpDataStart == 0)
+                    FireRootBankAssert("NULL pointer found for none-zero-length bank section\n", 1011);
                 lrRoot.SetFirstBlock(lt, luFirstBlock);
                 lrRoot.SetLastBlock(lt, luLastBlock);
                 lrRoot.SetData(lt, lrRegion.mpDataStart);

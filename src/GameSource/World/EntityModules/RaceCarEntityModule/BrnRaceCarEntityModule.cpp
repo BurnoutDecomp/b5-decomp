@@ -6229,28 +6229,33 @@ void RaceCarEntityModule::SetPaddingForResetRaceCars(
 void RaceCarEntityModule::UpdateCurrentWorldRegion(
         RaceCarEntityModuleIO::GameEventQueue* lpGameEventQueue )
 {
-    if( lpGameEventQueue == 0 )
+    ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
+    if( !lpActiveRaceCar->IsActive() )
     {
         return;
     }
+
+    const Vector3 lSamplePosition = lpActiveRaceCar->GetPosition();
+
+    const char* const lpcSourceFile =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp";
     if( mDistrictMapResourceHandle.mpResourceMemory == 0 )
     {
-        return;       }
-
-    ActiveRaceCar* lpActiveRaceCar = GetActiveRaceCar( mePlayerActiveRaceCarIndex );
-    if( lpActiveRaceCar == 0 || !lpActiveRaceCar->IsActive() )
-    {
-        return;
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "mDistrictMapResourceHandle.GetResource() != NULL", lpcSourceFile, 3075);
+        CgsDev::Assert::EndAssert();
     }
 
-    CGS_ASSERT( mDistrictMapResourceHandle.mpResourceMemory != 0,
-                "mDistrictMapResourceHandle.GetResource() != NULL" );                        // :3075
-    CGS_ASSERT( *reinterpret_cast<void* const*>( mDistrictMapResourceHandle.mpResourceMemory ) != 0,
-                "mDistrictMapResourceHandle.GetResource()->GetMemoryResource() != NULL" );   // :3076
-
-    // The X360 samples the position with a zeroed w lane (the lvx128/vperm staging).
-    Vector3 lSamplePosition = lpActiveRaceCar->GetPosition();
-    lSamplePosition.mV.w = 0.0f;
+    const CgsResource::SmallResource* const lpDistrictMapResource =
+        static_cast<const CgsResource::SmallResource*>( mDistrictMapResourceHandle.mpResourceMemory );
+    if( lpDistrictMapResource->m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY] == 0 )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "mDistrictMapResourceHandle.GetResource()->GetMemoryResource() != NULL", lpcSourceFile, 3076);
+        CgsDev::Assert::EndAssert();
+    }
 
     const u8 luValue = mWorldMap2D.GetValue( lSamplePosition );
     if( luValue == CgsWorld::KU_INVALID_WORLD_MAP_VALUE )
@@ -6268,16 +6273,6 @@ void RaceCarEntityModule::UpdateCurrentWorldRegion(
             reinterpret_cast<const CgsModule::Event*>( &lRegion ),
             BrnGameState::GameStateModuleIO::E_EVENT_CHANGE_WORLD_REGION,
             static_cast<s32>( sizeof( lRegion ) ) );
-
-        if( CgsDev::Log::gpDebugPrint != 0 )
-        {
-            // [DIAG] NOT IN THE X360 BINARY -- the district chain's producer rung (the
-            // [UI-gate] ladder idiom; unconditional, fires only on a region CHANGE).
-            *CgsDev::Log::gpDebugPrint
-                << "[district] region change -> county " << static_cast<s32>( lRegion.GetCounty() )
-                << " district " << static_cast<s32>( lRegion.GetDistrict() )
-                << " (event 115)\n";
-        }
     }
 }
 
