@@ -8207,7 +8207,7 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     // ⭐ [rival range-loop wave 2026-09-05, lane W1] THE HIDING-EVENT PUBLISH, at the console's
     // own position and on the console's own queue: the `bl` at 0x823076B0, i.e. immediately
     // after the world-region sample (0x8230769C, above) and before StorePlayerRoutePortalPositions
-    // (0x823076BC, still not reproduced), INSIDE the sim-paused skip (the `bne cr6, loc_823076C0`
+    // (0x823076BC, called below), INSIDE the sim-paused skip (the `bne cr6, loc_823076C0`
     // at 0x82307610 lands past it), with a2 == lpOutput->GetGameEventQueue() -- the SECOND
     // sub_822B67D0 accessor call, at 0x823076A4, which returns the same queue as the first.
     //

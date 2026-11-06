@@ -19,12 +19,6 @@
 // score-type loops. Prepare touches none of it, so this split costs ZERO. Established repo
 // pattern (BrnTriggerQueryManager_Prepare.cpp, BrnCarSelectManager_CarChange.cpp,
 // BrnGameStateStreetManager_wB_01.cpp). Fold back into wB_00 when that one symbol lands.
-//
-// ⚠️ StreetManager::Construct is still not called by GameStateModule::Construct (see the
-// DELETE-WHEN block there): the embedded sub-object's stage words / owner pointers come from
-// the frozen header's in-class initialisers instead, which is exactly why
-// meDistrictMapLoadStage starts at E_DISTRICT_MAP_LOAD_REQUEST rather than an indeterminate
-// value on the first tick.
 // ===========================================================================
 
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"

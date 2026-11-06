@@ -469,12 +469,7 @@ private:
     void SwapBuffers();
 
     // ---- the frame bracket's END (the off-screen scene target's exit path) -------------------
-    // DECLARATIONS ONLY: the reconstructed bodies for all three are delivered in this pass's
-    // bodies/ directory and are deliberately NOT mounted into BrnRendererModule.cpp yet -- they
-    // call the three state factories (which ARE the real classes in this header since the
-    // 2026-08-15 gate-flip wave; that precondition is met). The full, ordered precondition list for mounting them is in the pass
-    // REPORT (scratch/postfx_round3_out/G4_bracket_end/REPORT.md section 2.4). Nothing calls any
-    // of the three today, so declaring them adds no link requirement.
+    // The bodies of all three are in BrnRendererModule.cpp and Render calls them.
     //
     // Close the anti-aliased pass: retarget to the down-sample buffer, restore the
     // pass-default state triple, composite the quarter-res particles, resolve the colour surface.

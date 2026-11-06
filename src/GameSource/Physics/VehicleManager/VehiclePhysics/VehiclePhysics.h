@@ -869,7 +869,7 @@ namespace Vehicle
 
         // @0x8261FC10 (178): the engine-force applier (BODIED). IsCounterSteeringAtLowSpeed traction
         // scaling of the drive, gas<->brake swap in reverse gear, then Engine::Update (the powertrain
-        // torque core -- STILL A LOUD TRAP, its own wave) and, when not frozen,
+        // torque core, bodied in Engine.cpp) and, when not frozen,
         // ApplyEngineForcesOntoWheels. Register map recovered at the UpdateEngine call site: f1..f5 =
         // gas/brake/steering/fwdSpeed/mfBoostMaxSpeedScale, r6 = mbHandBrake, v1 = dt.
         void ApplyEngineForces(f32 lfGas, f32 lfBrake, bool lbHandBrake, f32 lfSteering,

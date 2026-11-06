@@ -3839,14 +3839,13 @@ u32 PresetEvent::GetEventId() const
 // icon come up on a set destination instead of staying empty. The opt-in `[satnav-tracker]`
 // witness below (BRN_SATNAV_DIAG) reports each publish that reaches RecEvent.
 //
-// ⛔ PUBLISH GUARD -- THE ONE PIECE STILL MISSING, NAMED RATHER THAN FAKED. Nothing in this
-// tree WRITES GuiCache::mpGuiTracker (X360 cache+0x4054); the member has readers only
-// (GetGuiTracker, BrnGuiCache.h:626). The console derefs it right after its non-gating
-// "Invalid tracker pointer" assert, so on this build an unguarded deref would turn a reported
+// ⛔ PUBLISH GUARD. GuiCache::Construct stores GuiCache::mpGuiTracker (X360 cache+0x4054), and
+// GuiModule calls it with &mGuiTracker. The console derefs the pointer right after its
+// non-gating "Invalid tracker pointer" assert, so an unguarded deref would turn a reported
 // miss into a crash on a path the offline map and the pre-race fly-by reach every run. All
-// three publishes therefore test the pointer and, when it is absent, report it ONCE through
-// LogAbsentGuiTrackerOnce ([[silent-drop-stubs]]) instead of dropping the record silently.
-// DELETE-WHEN the GuiCache binds its GuiTracker at construction.
+// three publishes therefore test the pointer as a PC addition and, when it is absent, report
+// it ONCE through LogAbsentGuiTrackerOnce ([[silent-drop-stubs]]) instead of dropping the
+// record silently.
 //
 // ⭐ CONSOLE BEHAVIOUR THAT WILL LOOK LIKE A REGRESSION AFTER THE MOUNT, pre-empted:
 // GetLandmarkInfoFromIndex / GetLandmarkInfoFromID now FIRE the console's `lpLandmark`
@@ -3897,12 +3896,10 @@ namespace
 
     // [FLAG PC bring-up guard, 2026-09-07] LOG-ONCE report that GuiCache::mpGuiTracker
     // (X360 cache+0x4054) is not bound. The console derefs it straight after its non-gating
-    // "Invalid tracker pointer" assert; nothing in this tree WRITES that member yet, so an
-    // unguarded deref would turn a reported miss into a crash on the offline map / fly-by
-    // path. The three publishes below therefore test it and report the absence once, rather
-    // than dropping the record silently.
-    // DELETE-WHEN GuiCache::mpGuiTracker is bound at construction (that is the ONE remaining
-    // piece between here and a drawn route line -- the RecEvent side is real).
+    // "Invalid tracker pointer" assert; GuiCache::Construct stores it, so this fires only when
+    // a publish runs before that, where an unguarded deref would turn a reported miss into a
+    // crash. The three publishes below test it and report the absence once, rather than
+    // dropping the record silently.
     void LogAbsentGuiTrackerOnce(const char* lpacProducer)
     {
         static bool sbLogged = false;

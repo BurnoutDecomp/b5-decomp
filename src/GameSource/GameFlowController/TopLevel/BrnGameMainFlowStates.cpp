@@ -576,9 +576,7 @@ void DriveWorldUpdateFrame(BrnResource::GameDataIO::InputBuffer* lpGameDataInput
     // obituary, asm proof and measurement are at the site in
     // BrnPhysicsModuleUpdateFunctions.cpp. This staging line is now the ONLY thing standing
     // between the module and a zero-timestep frame, which makes it more load-bearing, not less.
-    //
-    // ⚠️ The vehicle CREATE path is still absent, so the module conducts over an empty body
-    // set -- an empty tick is the expected, honest outcome, not a regression.
+
     lpWorldInput->LockForWrite();
     lpWorldInput->SetTimerStatusInterface(
         reinterpret_cast<const BrnWorldIO::TimerStatusInterface*>(

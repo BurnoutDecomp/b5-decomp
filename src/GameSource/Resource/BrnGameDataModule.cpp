@@ -731,12 +731,12 @@ namespace BrnResource
     //            Clear + stage = 2 (still returns false through the tail).
     //   stage 2: return true (complete). stage >= 3 asserts "Invalid resource prepare stage.\n".
     //
-    // [FLAG PC boot gate] the schema blobs are X360 BIG-ENDIAN rodata; their LE port (the
-    // schema-vault chunk container flips like attribsys_transcode.py's data vaults, but the
-    // BIN payload is the SDK ClassLoadData record set) and the Attrib SDK runtime cluster
-    // are not committed. Until then the PC stage 0 logs one-shot and jumps straight to
-    // stage 2 WITHOUT registering a schema -- AttribSysModule::sbSchemaLoaded stays false
-    // and its vault-array interior stays gated (see CgsAttribSysModule.cpp).
+    // [FLAG PC boot gate] the schema blobs are X360 BIG-ENDIAN rodata. While
+    // CgsAttribSys::KB_PC_ATTRIB_SCHEMA_FILES is true (it is), the PC stage 0 loads their LE
+    // ports, schema.vlt and schema.bin, and pushes RegisterSchema. With it false the PC stage 0
+    // logs one-shot and jumps straight to stage 2 WITHOUT registering a schema --
+    // AttribSysModule::sbSchemaLoaded stays false and its vault-array interior stays gated (see
+    // CgsAttribSysModule.cpp).
     // Forward declaration: the shared list-prepare resource input carve, defined in the
     // anonymous namespace below. The schema prepare's X360 tail pumps the resource module
     // through it too (boot audit F-P7-17), and that tail comes first in this file.

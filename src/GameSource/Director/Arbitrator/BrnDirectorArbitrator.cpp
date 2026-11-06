@@ -569,7 +569,7 @@ namespace BrnDirector
     //     if ( !mbDoAttractMode ) {
     //         mArbStateAttractMode.Release(info);                  // vtable +0xC
     //         meState = E_STATE_NORMAL;
-    //         <the "Jump_Effect" stop-hook poke -- gated, see case 5>
+    //         <the "Jump_Effect" stop hook>
     //     }
     // ------------------------------------------------------------------------
     void Arbitrator::UpdateAttractMode(Camera::Camera& lrCameraInOut,

@@ -138,10 +138,8 @@ namespace CgsGraphics
 //      AFTER ResolveMSAA (the order is load-bearing; see its own banner). It is NOT the post-fx
 //      composite -- BrnPostFx::Render @0x8240A468 is the next wave and retires it.
 //
-// STILL NOT CALLED, and deliberately: EndRenderAntiAliased @0x82408B00 and BeginQuarterResBuffer
-// @0x82408C38 are DECLARATION-ONLY in this tree (BrnRendererModule.h:385/:389 and the banner above
-// them), so calling either would be an unresolved external. renderengine::PCSceneBlit_Begin/_End
-// stand in for the surface half of EndRenderAntiAliased until it is mounted.
+// BeginQuarterResBuffer @0x82408C38 and EndRenderAntiAliased @0x82408B00 are bodied in this
+// file, and Render calls both inside its PCBringUpParticleCompositeChainReady() gate.
 //
 // HOW TO REVERT, in one edit: set this macro back to 0. Everything the wiring step added lives
 // inside `#if BRN_ANTIALIAS_BRACKET_AVAILABLE`, so at 0 this translation unit preprocesses to
@@ -3023,13 +3021,13 @@ namespace
     // [FLAG PC bring-up] THE UNCONDITIONAL SURFACE HANDOFF -- put the SWAP CHAIN back on the device.
     //
     // WHY THIS EXISTS AS ITS OWN FUNCTION. BeginRenderAntiAliased binds the anti-alias buffer's
-    // colour+depth surfaces and NOTHING in this tree unbinds them -- that is EndRenderAntiAliased
-    // @0x82408B00, which is declaration-only (BrnRendererModule.h:385). Until it lands, the only
-    // code that rebinds the back buffer is renderengine::PCSceneBlit_Begin
-    // (XenonD3D9Shims.cpp), and that call used to sit BELOW the present blit's two
-    // "is there anything to present" guards. So a frame that tripped either guard left the scene
-    // target bound for the entire 2D/GUI tail: the loading screen, the Apt GUI, the movie and the
-    // debug HUD would all be drawn off-screen and the frame would present the black
+    // colour+depth surfaces and NOTHING in this tree unbinds them: EndRenderAntiAliased
+    // @0x82408B00 binds the DOWN-SAMPLE buffer and composites the particles, it does not rebind
+    // the swap chain. The only code that rebinds the back buffer is
+    // renderengine::PCSceneBlit_Begin (XenonD3D9Shims.cpp), and that call sits BELOW the
+    // present blit's two "is there anything to present" guards. So a frame that trips either
+    // guard would leave the scene target bound for the entire 2D/GUI tail: the loading screen,
+    // the Apt GUI, the movie and the debug HUD would all be drawn off-screen and the frame would present the black
     // renderengine::Device::FrameBegin clear. THE INVARIANT THIS RESTORES: if
     // BeginRenderAntiAliased bound the scene target this frame, something puts the back buffer back
     // this frame -- on EVERY path, including both early returns and the BRN_WORLD_ONLY early-out in
@@ -3046,9 +3044,6 @@ namespace
     // Im2d::BeginRendering re-enables alpha blending and SetTexture sets the stage ops to MODULATE,
     // so the blit state has to be installed AFTER both, which is why the call sits where it does
     // inside the quad path below.)
-    //
-    // RETIRED BY EndRenderAntiAliased @0x82408B00: delete this the day that body is mounted, since
-    // it is the console's own surface handoff.
     void PCBringUpHandBackTheBackBuffer()
     {
         renderengine::PCSceneBlit_Begin();
@@ -4746,12 +4741,9 @@ void BrnRendererEvalPostFxTint2dColour(const BrnGraphics::EffectsArbitrator* lpA
 // below stays for the frames before the first DoDispatch, and for any build where the producer is
 // unmounted.
 //
-// ⚠ STENCIL-MASK DEVIATION, LIVE FROM THIS CHANGE ON. The console's composite blurs CARS and WORLD
-// separately behind the stencil mask BrnPostFx writes; this tree's composite has no stencil mask, so
-// a real (non-zero) velocity now blurs the WHOLE frame uniformly instead of only what the mask
-// selects. That is a known, deliberate deviation -- the fix is the stencil mask, not a weakened
-// velocity. Until it lands, expect directional streaking of the world (and of the car with it) in
-// the intro / menu cameras, which is precisely the boot proof this rung is checked against.
+// The console's composite blurs CARS and WORLD separately behind a stencil mask. This tree has no
+// stencil plane there, so renderengine::PCStampMotionBlurMask carries the cars-vs-world mask in
+// the scene target's alpha lane, and Render stamps it before ResolveMSAA.
 //
 // THE PARAMETER IS TYPED: BrnParticle::ParticleModule::ParticleRenderData. Passing a null pointer
 // -- which Render still does when nothing in this tree PRODUCES the render data -- is the honest
@@ -5584,14 +5576,10 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
     // [PC bring-up, post-fx spine wave 2026-08-13] Realise the off-screen SCENE target (and the
     // down-sample buffer beside it) the same lazy way, on the first frame that has a device.
     //
-    // NOTHING RENDERS INTO IT YET, and that is deliberate. This wave lands the pool half of the spine
-    // only: the console's frame bracket (BeginRenderAntiAliased @0x823FFA18 / ResolveMSAA @0x823FFBE0 /
-    // EndRenderAntiAliased @0x82408B00) is what actually redirects the world passes off-screen, and all
-    // three are still absent from the tree -- their ledger "reviewed" status is false, like the eight
-    // pool creators' was. Until they land, the world keeps drawing straight to the back buffer and this
-    // target is created, logged ("[postfx-rt] ...") and left idle. The point of landing it separately is
-    // that a wrong scene target and a wrong bracket look identical on screen; this half is provable on
-    // its own, from the log line and an unchanged frame.
+    // The console's frame bracket (BeginRenderAntiAliased @0x823FFA18 / ResolveMSAA @0x823FFBE0 /
+    // EndRenderAntiAliased @0x82408B00) is what redirects the world passes off-screen. All three
+    // are bodied and called from Render; the world draws into the scene target whenever
+    // lbSceneBracketOpen is true. The target creation is logged ("[postfx-rt] ...").
     EnsurePostFxSceneTargets(mAllocatedRenderTargets, mbMultisampledBackbuffer);
 
     // [PC bring-up, gate-flip wave 2026-08-15] The three RENDER-STATE FACTORIES. The console
@@ -6640,12 +6628,11 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         //
         // ⚠ THE FLARE'S TARGET IS A DECLARED PC DEVIATION. The console draws it into the QUARTER-RES
         // particle buffer that BrnRendererModule::BeginQuarterResBuffer @0x82408C38 opens, and the
-        // post-fx composite adds that buffer to the frame. On PC neither exists: BeginQuarterResBuffer
-        // is declaration-only and pool slot 9 is never created (only ANTI_ALIAS + DOWN_SAMPLE are).
-        // So the flare is drawn into the DOWN-SAMPLE buffer -- the surface ResolveMSAA has just
-        // filled and the surface the composite reads -- i.e. the same colour bus one stage earlier.
-        // The blend is the console's own additive RGB either way. DELETE-WHEN the quarter-res
-        // buffer and BeginQuarterResBuffer land.
+        // post-fx composite adds that buffer to the frame. Here the flare is drawn into the
+        // DOWN-SAMPLE buffer -- the surface ResolveMSAA has just filled and the surface the
+        // composite reads -- i.e. the same colour bus one stage earlier. The blend is the console's
+        // own additive RGB either way. The measured justification is the "THE FLARE STAYS WHERE IT
+        // IS" banner further down.
         //
         // ⚠ AND THE SCENE TARGET IS RE-BOUND UNCONDITIONALLY inside this gate, not only when the
         // flare draws. CgsRenderTarget::Begin on the 1x1 occlusion buffer leaves that 1x1 surface
@@ -6747,8 +6734,9 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
 
         // [FLAG PC bring-up] PRESENT THE SCENE TARGET. The world passes above drew into the
         // off-screen anti-alias buffer and ResolveMSAA has just copied the result into the
-        // down-sample buffer; nothing has handed it back to the swap chain, because that is
-        // EndRenderAntiAliased @0x82408B00 and it is declaration-only. So one full-screen textured
+        // down-sample buffer; nothing has handed it back to the swap chain, because
+        // EndRenderAntiAliased @0x82408B00 binds the down-sample buffer and composites the
+        // particles, it does not rebind the swap chain. So one full-screen textured
         // quad copies the scene onto the back buffer here, before the 2D/GUI tail draws over it.
         // NOT the post-fx composite: BrnPostFx::Render @0x8240A468 is the next wave and is what
         // retires this call, the helper it calls, and renderengine::PCSceneBlit_Begin/_End.
@@ -6785,8 +6773,9 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         //   stack = the calibration texture handle, or null
         // The three that come off mEffectsArbitrator (tint vector, motion-blur flag, calibration
         // texture) are the console's own NO-EVENT values, not invented ones, and the seam function
-        // documents each; mEffectsArbitrator is never Constructed on this build, so reading through
-        // mapaEffectsFrames[0] would crash rather than give a wrong answer.
+        // documents each; EnsureEffectsArbitratorBringUp constructs mEffectsArbitrator, and
+        // reading through mapaEffectsFrames[0] before it has would crash rather than give a wrong
+        // answer.
         //
         // THE GATE IS THE CONSOLE'S. `lbz r11, 0(r26)` @0x8240DC6C / `beq cr6, loc_8240DE44` skips
         // the entire block; r26 is this+0xC41C, which BrnGraphics::DebugComponent::OnActivate
@@ -6801,17 +6790,16 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         // fallback arm calls the blit, which rebinds on all of its own paths.
         //
         // ⚠ AND THE FALLBACK IS NOT DEFENSIVE PADDING. PCBringUpRenderPostFxComposite returns false
-        // whenever the pool cannot supply BOTH surfaces, which is this build's state -- only
-        // DOWN_SAMPLE and ANTI_ALIAS are created. Handing the swap chain back without the composite
-        // COPIES NOTHING, so without this else-arm the frame would be black with the GUI on top.
+        // whenever the pool cannot supply BOTH surfaces. Handing the swap chain back without the
+        // composite COPIES NOTHING, so without this else-arm the frame would be black with the GUI on top.
         // lbComposited is ALSO false when mbRenderPostFX is off, and the fallback covers that too:
         // on the console, turning that debug toggle off leaves the frame with no presenter at all,
         // which is a debug-menu behaviour, not one worth reproducing as a black screen on PC. That
         // is the ONE deviation from the console's conditional and it is confined to the else-arm --
         // the composite itself runs exactly when the console runs it.
         //
-        // RETIRES THE BLIT: the day this gate is permanently 1 and EndRenderAntiAliased @0x82408B00
-        // lands, delete PCBringUpBlitSceneTargetToBackBuffer, PCBringUpHandBackTheBackBuffer,
+        // RETIRES THE BLIT: the day this gate is permanently 1, delete
+        // PCBringUpBlitSceneTargetToBackBuffer, PCBringUpHandBackTheBackBuffer,
         // renderengine::PCSceneBlit_Begin/_End and their XenonD3D9Shims.cpp bodies together.
         // ---- X360 Render lines 964..1232 -- THE EFFECTS-FRAME APPLY BLOCK. --------------------
         //

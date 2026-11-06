@@ -138,7 +138,6 @@ namespace Deformation
     //   FIRST (it was registered by ConstructUpdatePerformanceMonitors; this is a dependency tripwire,
     //   it does NOT register it), then adds Check Detaching, Upd. Skinning Offs, Upd. IK, and
     //   Upd. wheels & glass.
-    // MOVED VERBATIM from BrnDeformableObject_Lifecycle.cpp:781.
     // ==============================================================================================
     void DeformableObject::ConstructUpdateIKAndLocatorsPerformanceMonitors()
     {
@@ -161,7 +160,6 @@ namespace Deformation
     // ==============================================================================================
     // (5) ConstructPostPhysicsPerformanceMonitors @ 0x825B9C88  (51 instructions)
     //   Register the two post-physics sphere-update monitors.
-    // MOVED VERBATIM from BrnDeformableObject_Lifecycle.cpp:805.
     // ==============================================================================================
     void DeformableObject::ConstructPostPhysicsPerformanceMonitors()
     {

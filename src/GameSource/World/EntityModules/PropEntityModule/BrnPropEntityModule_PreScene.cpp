@@ -1026,8 +1026,8 @@ namespace BrnWorld
             --miFramesUntilUpdateVisibleSigns;
         }
 
-        // P9: the corona-phase advance, ASM 0x8230BBF4..0x8230BDCC. Runs when the sim is not
-        // paused (the step-10 `lUpdateSet & 1` latch, var_238) or while a replay plays back
+        // P9: the corona-phase advance, ASM 0x8230BBF4..0x8230BDCC. Runs outside a network
+        // catch-up (the step-10 `lUpdateSet & 1` latch, var_238) or while a replay plays back
         // (serialiser mode 4 / 5 / 6), over every corona-type-data entry of the collection:
         //   mrMasterTime = fmod( mrMasterTime + mrTimestep, GetTotalTime() )
         // done as x - trunc(x / period) * period (fctiwz, fcfid, fnmsubs). The records are

@@ -613,16 +613,6 @@ void OutputBuffer::Construct()
     mbSetUpAllEventStartsInterfaceIsValid  = false;
     mbSpecificGameModeEventInterfaceIsValid = false;
     mbControllerActive                      = false;
-
-    // ⚠️ STILL NOT MADE, and named so nobody has to re-derive them:
-    //   * TakedownEvent<..,8>::Construct(this + 16448) -- ⭐ MADE 2026-09-03 (takedown wave), see the
-    //     ConstructTakedownEventOutputQueue call above; no longer on this list.
-    //   * DirtyTrickEvent<..,28>::Construct + GameStateToNetworkInterface::Clear (this + 16784)
-    //     -- MADE, see the mGameStateToNetworkInterface.Construct() call above.
-    //   * the two input bind/unbind request queues (this + 17324 / 17400) -- MADE, see the
-    //     mGameStateToControllerInterface.Construct() call above.
-    //   * GameStateToGuiInterface::Construct (this + 17488) -- ⭐ MADE 2026-08-27 (defect D2),
-    //     see the call above; it is no longer on this list.
 }
 
 // DestroyIOBuffer<OutputBuffer> runs this before it frees the buffer. In console order:

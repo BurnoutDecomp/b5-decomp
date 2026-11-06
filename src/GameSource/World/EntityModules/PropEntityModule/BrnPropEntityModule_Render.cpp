@@ -564,6 +564,8 @@ PropEntityModule::RenderPropAndCoronas(
         {
             const f32 lfPeriod = lpData->mrTimeOff + lpData->mrTimeOn;
             const f32 lfTime   = lpData->mrMasterTime + lpCoronaType->GetTimeOffset();
+            // FLAG PC-platform leaf: the console divides with VMX vrefp + two Newton steps + vrfiz;
+            // a plain division has the same meaning, without the estimate's last-bit error.
             const f32 lfPhase  = lfTime - truncf( lfTime / lfPeriod ) * lfPeriod;
             if ( lfPhase > lpData->mrTimeOn )
             {
