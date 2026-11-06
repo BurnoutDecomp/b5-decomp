@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"          // [DIAG] sink
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"             // CgsSound::Utils::Slope (UpdateParams)
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"        // CgsSound::Playback::Name::MakeHash
+#include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h"   // K_DefaultSendName
 #include "GameSource/Sound/Global/BrnGlobalStateManager.h"          // the pass-by submix voice (Prepare)
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
@@ -309,7 +310,8 @@ bool PassbyEffect::Prepare(CgsSound::Logic::State* apState)
             static_cast<BrnSound::Logic::GlobalStateManager*>(
                 GetLogicModule()->GetEnvironment().GetStateManager(0));
         mVoice.Connect(
-            static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01")),
+            static_cast<u32>(
+                CgsSound::Playback::K_DefaultSendName.GetValue()),
             static_cast<u32>(lpGlobalStateManager
                                  ->GetSubmixVoice(BrnSound::Logic::GlobalStateManager::E_SUBMIX_VOICE_PASSBY)
                                  .GetIdent()));

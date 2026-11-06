@@ -482,12 +482,12 @@ void CarSelectManager::StartCarModificationState(GameStateModuleIO::GameActionQu
         *CgsDev::Log::gpDebugPrint << "=== CarSelectManager: Car Modification\n";
 
     {
-        u8 lacModScreen[8];
-        std::memset(lacModScreen, 0, sizeof(lacModScreen));
-        lacModScreen[0] = 1;   // X360 v21 = 1
-        lacModScreen[4] = 1;   // X360 v22 = 1
+        GameStateModuleIO::CarSelectModificationScreen lModScreen;
+        lModScreen.meCarSelectType = GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD;
+        lModScreen.mbEntering = true;
         AsActionQueue(lpActionQueue)->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(lacModScreen), KI_ACTION_CAR_MOD_SCREEN, 8);
+            reinterpret_cast<const CgsModule::Event*>(&lModScreen),
+            KI_ACTION_CAR_MOD_SCREEN, sizeof(lModScreen));
     }
 
     // X360: if (mDesiredCarId == 0) mDesiredCarId = mStartCarId; then assert it is non-null.
@@ -604,11 +604,12 @@ void CarSelectManager::StartCarSelectState(GameStateModuleIO::GameActionQueue* l
     AsActionQueue(lpActionQueue)->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&liReady), KI_ACTION_CAR_SELECT_READY, 4);
 
-    u8 lacModScreen[8];
-    std::memset(lacModScreen, 0, sizeof(lacModScreen));
-    lacModScreen[0] = 1;   // X360 v5 = 1 (begin), v6 = 0
+    GameStateModuleIO::CarSelectModificationScreen lModScreen;
+    lModScreen.meCarSelectType = GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD;
+    lModScreen.mbEntering = false;
     AsActionQueue(lpActionQueue)->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(lacModScreen), KI_ACTION_CAR_MOD_SCREEN, 8);
+        reinterpret_cast<const CgsModule::Event*>(&lModScreen),
+        KI_ACTION_CAR_MOD_SCREEN, sizeof(lModScreen));
 
     // X360: if (mDesiredCarId hi-word == 0) mDesiredCarId = mStartCarId.
     if (mDesiredCarId == 0)
@@ -1117,12 +1118,13 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
 
     GameActionQueueImpl* lpQueue = AsActionQueue(lpActionQueue);
 
-    // close the car-mod screen (8B: [0]=1 begin -> end-screen).
+    // Publish the end of the offline junkyard mod screen (action 76: type=JUNKYARD, entering=0).
     {
-        u8 lacModScreen[8];
-        std::memset(lacModScreen, 0, sizeof(lacModScreen));
-        lacModScreen[0] = 1;
-        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(lacModScreen), KI_ACTION_CAR_MOD_SCREEN, 8);
+        GameStateModuleIO::CarSelectModificationScreen lModScreen;
+        lModScreen.meCarSelectType = GameStateModuleIO::E_CAR_SELECT_TYPE_JUNKYARD;
+        lModScreen.mbEntering = false;
+        lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lModScreen),
+                          KI_ACTION_CAR_MOD_SCREEN, sizeof(lModScreen));
     }
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)

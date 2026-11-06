@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h" // K_DefaultSendName
 #include "GameSource/Director/Camera/Camera.h"
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"
 #include "GameSource/Sound/Collision/BrnCollisionStateManager.h"
@@ -82,7 +83,8 @@ CgsSound::Logic::VoiceWrapper::CreateParams MakeSplicerParams(
     lParams.mpContent = apContent;
     lParams.mSlotName = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Slot~"));
-    lParams.mSendName = KU_SEND01;
+    lParams.mSendName = static_cast<u32>(
+        CgsSound::Playback::K_DefaultSendName.GetValue());
     lParams.mSubMixVoiceID = 1;
     lParams.miSendIndex = 0;
     return lParams;
@@ -225,7 +227,8 @@ bool InAirEffect::Attach()
         lParams.mpContent = lpContent;
         lParams.mSlotName = static_cast<u32>(
             CgsSound::Playback::Name::MakeHash("AEMS_Slot"));
-        lParams.mSendName = KU_SEND01;
+        lParams.mSendName = static_cast<u32>(
+            CgsSound::Playback::K_DefaultSendName.GetValue());
         lParams.mSubMixVoiceID = 1;
         lParams.miSendIndex = 0;
         mInAirVoice.Create(lParams);

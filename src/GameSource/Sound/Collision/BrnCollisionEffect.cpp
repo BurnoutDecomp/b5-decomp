@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h" // K_DefaultSendName
 #include "GameSource/Sound/Collision/BrnCollisionControl.h"
 #include "GameSource/Sound/Collision/BrnCollisionState.h"
 #include "GameSource/Sound/Collision/BrnCollisionStateManager.h"
@@ -176,7 +177,8 @@ bool CollisionEffect::Prepare(CgsSound::Logic::State* apState)
                 BrnSound::Logic::GlobalStateManager::E_SUBMIX_VOICE_COLLISION)
                 .GetIdent();
         mCrashVoice.Connect(
-            static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01")),
+            static_cast<u32>(
+                CgsSound::Playback::K_DefaultSendName.GetValue()),
             static_cast<u32>(liCollisionSubmixIdent));
         return true;
     }

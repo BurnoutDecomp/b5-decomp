@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h" // K_DefaultSendName
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
@@ -196,7 +197,7 @@ void PresentationEffect::PlayStream(CgsSound::Logic::Command::QueueElement auCon
     mStreamParams.mSubMixVoiceID = 1;
     mStreamParams.miSendIndex = 0;
     mStreamParams.mSendName = static_cast<u32>(
-        CgsSound::Playback::Name::MakeHash("Send01"));
+        CgsSound::Playback::K_DefaultSendName.GetValue());
 
     lpStreamingStateMan->PostStreamRequest(
         Streaming::StreamStopRequest(this, 0.25f));
@@ -239,7 +240,8 @@ void PresentationEffect::Play(const PresentationEntry& arEntry)
         static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
     CgsSound::Logic::VoiceWrapper::CreateParams lParams;
     lParams.mpLogicModule = lpModule;
-    lParams.mSendName = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Send01"));
+    lParams.mSendName = static_cast<u32>(
+        CgsSound::Playback::K_DefaultSendName.GetValue());
     lParams.mSubMixVoiceID = 1;
     lParams.miSendIndex = 0;
 

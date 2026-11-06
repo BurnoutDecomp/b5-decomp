@@ -31,6 +31,7 @@
 #include "GameSource/Replays/BrnReplayQuantisedQuatPos.h"
 #include "GameSource/Replays/Serialisers/BrnReplayTrafficEntitySerialiserFrame.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"
+#include "vendor/renderware/physics/JointFrames.hpp" // QuaternionFromMatrix33
 
 #include <cstring>
 
@@ -79,7 +80,7 @@ namespace BrnReplays
     // @0x82714118
     // Return the recorded physics-info record for luPhysicsInfo, range-checking the
     // index against the FastBitArray bound and asserting the bit is set.
-    TrafficPhysicsInfoRecord* TrafficEntitySerialiser::GetPhysicsInfo(u32 luPhysicsInfo)
+    BrnTraffic::TrafficPhysicsInfo* TrafficEntitySerialiser::GetPhysicsInfo(u32 luPhysicsInfo)
     {
         TrafficEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
         CGS_ASSERT(luPhysicsInfo < KU_NUM_PHYSICS_INFO, "invalid index");
@@ -206,35 +207,62 @@ namespace BrnReplays
     }
 
     // @0x82658D98
-    // Read a 12-byte quantised quat+pos record off the stream, unpack it and VMX-expand
-    // it into the 64-byte destination transform. The VMX expansion is the quaternion ->
-    // rotation-matrix build the X360 does inline; reconstructed as the UnPack call plus
-    // the matrix store the caller performs.
+    // Read the packed quaternion and position, then reproduce the VMX matrix expansion.
     void TrafficEntitySerialiser::ReadAsQuatPos(void* lpTransform)
     {
         u8 lauPacked[12];
         BaseSerialiser::Read(lauPacked, 12);
 
-        float lafUnpacked[8];
+        CGS_ALIGN(16) float lafUnpacked[8];
         QuantisedQuatPos::UnPack(lafUnpacked, lauPacked);
 
-        // The X360 builds a rotation matrix from the unpacked quaternion in VMX regs and
-        // stores it (plus the position lane) into lpTransform. The exact matrix math is
-        // produced by the (not-yet reconstructed) QuantisedQuatPos expansion; copy the
-        // unpacked working set into the transform record as the grounded surface.
-        std::memcpy(lpTransform, lafUnpacked, sizeof(lafUnpacked));
+        // ARTIST 0x82658E34..B0: sqrt(2) scaling, fused diagonal and the
+        // original three byte-permutation controls, including the row W lanes.
+        static const CGS_ALIGN(16) f32 kSqrt2[4] =
+            { 1.41421354f, 1.41421354f, 1.41421354f, 1.41421354f };
+        static const CGS_ALIGN(16) u32 kX[4] = { 0x04050607, 0x10111213, 0x00010203, 0x00010203 };
+        static const CGS_ALIGN(16) u32 kY[4] = { 0x00010203, 0x18191A1B, 0x00010203, 0x00010203 };
+        static const CGS_ALIGN(16) u32 kZ[4] = { 0x08090A0B, 0x14151617, 0x00010203, 0x00010203 };
+        const __vector4 s = __vmulfp(__lvx(lafUnpacked, 0), __lvx(kSqrt2, 0));
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        const __vector4 d = __vnmsubfp(s, s, half);
+        const __vector4 p = __vmulfp(s, __vpermwi(s, 0x60));
+        const __vector4 r = __vmulfp(__vspltw(s, 3), __vpermwi(s, 0x84));
+        const __vector4 diagonal = __vaddfp(d, __vpermwi(d, 0x60));
+        const __vector4 add = __vaddfp(p, r);
+        const __vector4 sub = __vsubfp(p, r);
+        const __vector4 x = __vrlimi(__vperm(diagonal, add, __lvx(kX, 0)), sub, 2, 0);
+        const __vector4 y = __vrlimi(__vperm(sub, diagonal, __lvx(kY, 0)), add, 2, 3);
+        const __vector4 z = __vrlimi(__vperm(add, sub, __lvx(kZ, 0)), diagonal, 2, 2);
+        const __vector4 position = { lafUnpacked[4], lafUnpacked[5], lafUnpacked[6], 0.0f };
+        Matrix44Affine* lpOut = static_cast<Matrix44Affine*>(lpTransform);
+        __stvx(position, &lpOut->wAxis, 0);
+        __stvx(x, &lpOut->xAxis, 0);
+        __stvx(y, &lpOut->yAxis, 0);
+        __stvx(z, &lpOut->zAxis, 0);
     }
 
     // @0x82658B50
-    // Pack the 64-byte source transform (quat orientation + position) into a 12-byte
-    // quantised record and write it to the stream.
+    // Convert the basis to a quaternion and pack the position and orientation.
     void TrafficEntitySerialiser::WriteAsQuatPos(const void* lpTransform)
     {
-        // The X360 reads the transform's basis vectors in VMX regs, derives a quaternion
-        // (with the w-sign-selection `fsel`) plus the position, then Pack()s an 8-float
-        // scratch. Reconstructed as the scratch-build + Pack + Write surface.
-        float lafScratch[8];
-        std::memcpy(lafScratch, lpTransform, sizeof(lafScratch));
+        const Matrix44Affine& lrTransform = *static_cast<const Matrix44Affine*>(lpTransform);
+        rw::math::vpu::Matrix33 lBasis;
+        lBasis.xAxis = lrTransform.xAxis;
+        lBasis.yAxis = lrTransform.yAxis;
+        lBasis.zAxis = lrTransform.zAxis;
+        const rw::math::vpu::Quaternion lQuat = rw::math::vpu::QuaternionFromMatrix33(lBasis, 0.0f);
+
+        CGS_ALIGN(16) float lafScratch[8];
+        lafScratch[0] = lQuat.x;
+        lafScratch[1] = lQuat.y;
+        lafScratch[2] = lQuat.z;
+        lafScratch[3] = lQuat.w;
+        lafScratch[4] = lrTransform.wAxis.mV.x;
+        const f32 lfY = lrTransform.wAxis.mV.y;
+        // 0x82658D58..68: fsel(y - (-900), y, -900), including unordered behavior.
+        lafScratch[5] = static_cast<f32>(__fsel(lfY - (-900.0f), lfY, -900.0f));
+        lafScratch[6] = lrTransform.wAxis.mV.z;
 
         u8 lauPacked[12];
         QuantisedQuatPos::Pack(lauPacked, lafScratch);
@@ -339,7 +367,7 @@ namespace BrnReplays
              liInfo = lpFrame->mPhysicsBits.GetNextBitSet(liInfo))
         {
             const u32 luInfo = static_cast<u32>(liInfo);
-            WritePhysicsInfo(lpFrame->maPhysicsInfo[luInfo].maInfo,
+            WritePhysicsInfo(&lpFrame->maPhysicsInfo[luInfo],
                              static_cast<u8>(luInfo));
         }
 
@@ -468,7 +496,7 @@ namespace BrnReplays
         CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()");
 
         // record[0] = vehicle type byte (`lbz 0(r31); stb 0(r29)`), NOT the flags byte.
-        lpRecord->maData[0] = lpVehicle->GetVehicleType();
+        lpRecord->muVehicleType = lpVehicle->GetVehicleType();
 
         // a3 != -1 && !lpVehicle->IsPhysical()  ->  assert (asm 0x82713EEC-0x82713EFC).
         if (liPhysicalPartsIndex != -1)
@@ -478,19 +506,19 @@ namespace BrnReplays
         }
 
         // record[2] = physical-parts index; record[1] starts cleared.
-        lpRecord->maData[2] = static_cast<u8>(liPhysicalPartsIndex);
-        lpRecord->maData[1] = 0;
+        lpRecord->miPhysicsIndex = static_cast<s8>(liPhysicalPartsIndex);
+        lpRecord->muFlags = 0;
 
         // Bit 0x01: headlights on when warmth >= 0.5 (flt_820BA62C; `fcmpu; blt`).
         if (lpVehicle->GetHeadlightWarmth() >= KF_HEADLIGHT_ON_THRESHOLD)
         {
-            lpRecord->maData[1] |= 0x01u;
+            lpRecord->muFlags |= TrafficVehicleDataRecord::E_FLAG_HEADLIGHTS;
         }
 
         // Bit 0x02: brakelights (`clrlwi r11,r3,24; cmplwi; beq`).
         if (lpVehicle->AreBrakelightsOn())
         {
-            lpRecord->maData[1] |= 0x02u;
+            lpRecord->muFlags |= TrafficVehicleDataRecord::E_FLAG_BRAKELIGHTS;
         }
 
         // The next three mxEffectState (+7) reads each re-assert IsAlive() first (the
@@ -500,25 +528,25 @@ namespace BrnReplays
         CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()"); // asm 0x6C1
         if ((luEffectState & 0x02u) != 0)              // a2[7] & 0x02 (left-indicator bit)
         {
-            lpRecord->maData[1] |= 0x04u;
+            lpRecord->muFlags |= TrafficVehicleDataRecord::E_FLAG_LEFT_INDICATOR;
         }
 
         CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()"); // asm 0x6C8
         if ((luEffectState & 0x04u) != 0)              // a2[7] & 0x04 (right-indicator bit)
         {
-            lpRecord->maData[1] |= 0x08u;
+            lpRecord->muFlags |= TrafficVehicleDataRecord::E_FLAG_RIGHT_INDICATOR;
         }
 
         CGS_ASSERT(lpVehicle->IsAlive(), "IsAlive()"); // asm 0x6BA
         if ((luEffectState & 0x10u) != 0)              // a2[7] & 0x10 (alarm bit)
         {
-            lpRecord->maData[1] |= 0x10u;
+            lpRecord->muFlags |= TrafficVehicleDataRecord::E_FLAG_ALARM;
         }
 
         // Bit 0x20: set when the vehicle is NOT physical (`(a2[5] & 8) == 0`).
         if ((lpVehicle->GetFlags() & BrnTraffic::Vehicle::E_FLAG_PHYSICAL) == 0)
         {
-            lpRecord->maData[1] |= 0x20u;
+            lpRecord->muFlags |= TrafficVehicleDataRecord::E_FLAG_NOT_PHYSICAL;
         }
     }
 }

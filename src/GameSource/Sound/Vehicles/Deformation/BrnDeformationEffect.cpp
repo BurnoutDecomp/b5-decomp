@@ -14,6 +14,7 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h" // complete PhysicsControl for the AttachController downcast (BY NAME)
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h" // K_DefaultSendName
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h"
 #include <cmath>
@@ -164,7 +165,7 @@ bool DeformationEffect::Attach()
         lParams.mSlotName = static_cast<u32>(
             CgsSound::Playback::Name::MakeHash("AEMS_Slot"));
         lParams.mSendName = static_cast<u32>(
-            CgsSound::Playback::Name::MakeHash("Send01"));
+            CgsSound::Playback::K_DefaultSendName.GetValue());
         lParams.mSubMixVoiceID = 1;
         lParams.mReverbSendName = static_cast<u32>(
             CgsSound::Playback::Name::MakeHash("ReverbSend"));

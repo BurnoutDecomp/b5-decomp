@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h" // K_DefaultSendName
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
@@ -169,7 +170,8 @@ bool AISkidEffect::Attach()
     lParams.mpContent           = lpSkidsContent;
     lParams.mContentSpecName    = 0;
     lParams.mSlotName           = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "AEMS_Slot" ) );
-    lParams.mSendName           = KAU_AI_SKID_SENDS[0];
+    lParams.mSendName           = static_cast<u32>(
+        CgsSound::Playback::K_DefaultSendName.GetValue());
     lParams.mSubMixVoiceID      = 1;
     lParams.mReverbSendName     = KAU_AI_SKID_SENDS[1];
     lParams.mReverbSubMixVoiceID = 2;

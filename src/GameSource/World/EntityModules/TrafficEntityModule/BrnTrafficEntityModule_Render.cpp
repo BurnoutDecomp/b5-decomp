@@ -23,19 +23,16 @@
 // same packet shape, technique-bit scheme, instanced wheel draw and shadow-pass split.
 //
 // NAMED GATES, each with its blocker:
-//   G1 the replay-serialiser pose source (module +468256 selects it);
 //   G2 a physical traffic car RENDERS: its wheels come from
 //      TrafficPhysicsInfo::maWheelTransforms; its main-view blobby-shadow producer uses the
 //      road-test normal/height and VehicleTypeRuntime bounds when PhysicsInfo is present;
 //   G3 the glass-fracture reset + the damaged-vehicle budget leg;
 //   G4 the detached-body-part override table;
-//   G5 SubmitCoronasForVehicle @0x82727BB0 (its sibling RenderTrafficLightCoronas @0x8271EC80 landed:
-//      L3 RACEINTRO 2026-09-27);
 //   G6 BrnBlobbyShadowBuffer::AddShadow -- main-view producer recovered from the ARTIST
 //      VehicleTypeRuntime bounds, vehicle transform and optional physics road-test normal;
 //   G7 RenderTrafficLightCoronas' replay-playback source (the serialiser at module +0x724C0).
 // PreDispatchUpdate is otherwise real, including the FastBitArray duplicate suppression and the
-// species-dispatched liveness predicate; GenerateDispatchLists is complete apart from G5;
+// species-dispatched liveness predicate; GenerateDispatchLists submits vehicle coronas;
 // RenderTrafficCar's entry gates, asset/spec resolution, paint colour, body transform, shader
 // constants 20/21/22/23/24/26, body-part loop and wheel loop are real.
 //
@@ -65,10 +62,12 @@
 #include "SharedClasses/Traffic/BrnTrafficVehicleType.h"                    // VehicleTypeData::muAssetId
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                // CgsSceneManager::EntityId
-#include "rw/math/vpu/matrix44affine_operation.h"                           // Mult / MakeRotationX/Y/Z / Inverse / TransformPoint
+#include "rw/math/vpu/matrix44affine_operation.h"                           // Mult / MakeRotationX/Y/Z
+#include "rw/math/vpu/vector3_operation.h"                                  // GetVector3_YAxis
 #include "GameShared/GameClasses/Graphics/CgsCamera.h"                     // CgsGraphics::Camera (RenderTrafficLightCoronas)
 #include "SharedClasses/Traffic/BrnTrafficPvs.h"                           // Pvs::GetHullIndexForPoint / ForIndices (the same)
 
+#include <algorithm>
 #include <float.h>
 #include <cmath>    // powf / sqrtf
 #include <cstdlib>  // getenv / atoi ([tdef-upload] witness, opt-in)
@@ -98,10 +97,6 @@ namespace BrnTraffic
 // The console's wheel matrix / pointer stack arrays are four entries long, which is also
 // the debug variable's upper bound (identical to the race car's KU_WHEELS_TO_RENDER_MAX).
 static const s32 KI_TRAFFIC_WHEELS_TO_RENDER_MAX = 4;
-
-// (G-WHEELEXISTS closed 2026-09-02: TrafficPhysicsInfo::mabWheelExists is written every frame
-// by ProcessDeformationData @0x8271DEB0, now bodied and live in _wT1_01.cpp; the physical
-// wheel arm below reads the array directly, as the console does.)
 
 // The verlet-offset array length shader constant 22 declares (128 registers). Same block the
 // race car publishes; see the deliberate-deviation note at the publish site.
@@ -133,8 +128,7 @@ static const Vector4 gaNullVerletOffsets[ KU_VERLET_OFFSET_COUNT ] = {};
 //     vspltw v0,v0,0 / stvx128 v0,r0,r11 / blr
 // The race car's positional twin (unk_82FAD990 -> flt_82004C88) also measures 8.0f; that
 // agreement is now a CROSS-CHECK, not the evidence -- this global was read on its own.
-// Still inert today, because lRearLights is all-zero while its producer
-// SubmitCoronasForVehicle is gate G5; landing that producer is what makes it visible.
+// SubmitCoronasForVehicle supplies the rear-light vector before the draw pass.
 static const f32 KF_TRAFFIC_SELF_ILLUMINATION_INTENSITY = 8.0f;
 
 // unk_8300C9A0 and unk_8300C8F0 -- the wheel-spin blur pair:
@@ -162,6 +156,51 @@ static const f32 KF_TRAFFIC_WHEEL_BLUR_SCALE       = 1.0f / 30.0f;
 // variant) and every traffic wheel rendered blurred, parked cars included -- the traffic half
 // of the reported "wheels in the junkyard are blurred" bug.
 static const f32 KF_TRAFFIC_WHEEL_BLUR_THRESHOLD = 30.0f;
+
+// ARTIST 0x82728D88 reads 0x820BA5E8 for replay speed. The two speed
+// limits in the road-noise ramp are 30 and 100 mph multiplied by 0x82F31928.
+static const f32 KF_TRAFFIC_REPLAY_SPEED = 30.0f;
+static const f32 KF_TRAFFIC_MPH_TO_METRES_PER_SECOND = 0.44704f;
+static const f32 KF_TRAFFIC_ROAD_NOISE_START = 30.0f * KF_TRAFFIC_MPH_TO_METRES_PER_SECOND;
+static const f32 KF_TRAFFIC_ROAD_NOISE_END = 100.0f * KF_TRAFFIC_MPH_TO_METRES_PER_SECOND;
+static const f32 KF_TRAFFIC_ROAD_NOISE_SPEED_SCALE =
+    1.0f / (KF_TRAFFIC_ROAD_NOISE_END - KF_TRAFFIC_ROAD_NOISE_START);
+static const f32 KF_TRAFFIC_MAX_ROAD_NOISE_AMPLITUDE = 0.223f; // 0x8200D508
+static const f32 KF_TRAFFIC_FRONT_WHEEL_ROTATION_OFFSET = 0.2f; // 0x82004744
+
+// The wheel matrix products accumulate each XYZ coefficient over the right
+// operand's rows. Translation starts with the right operand's translation.
+static __vector4 MultiplyWheelBasisRow(__vector4 lvRow, const Matrix44Affine& lrRight)
+{
+    __vector4 lvResult = __vmulfp(__vspltw(lvRow, 0), lrRight.xAxis.mV);
+    lvResult = __vmaddfp(__vspltw(lvRow, 1), lrRight.yAxis.mV, lvResult);
+    return __vmaddfp(__vspltw(lvRow, 2), lrRight.zAxis.mV, lvResult);
+}
+
+static Matrix44Affine MultiplyWheelTransform(const Matrix44Affine& lrLeft,
+                                             const Matrix44Affine& lrRight)
+{
+    Matrix44Affine lResult;
+    lResult.xAxis.mV = MultiplyWheelBasisRow(lrLeft.xAxis.mV, lrRight);
+    lResult.yAxis.mV = MultiplyWheelBasisRow(lrLeft.yAxis.mV, lrRight);
+    lResult.zAxis.mV = MultiplyWheelBasisRow(lrLeft.zAxis.mV, lrRight);
+    const __vector4 lvRow = lrLeft.wAxis.mV;
+    __vector4 lvTranslation = __vmaddfp(__vspltw(lvRow, 0), lrRight.xAxis.mV, lrRight.wAxis.mV);
+    lvTranslation = __vmaddfp(__vspltw(lvRow, 1), lrRight.yAxis.mV, lvTranslation);
+    lResult.wAxis.mV = __vmaddfp(__vspltw(lvRow, 2), lrRight.zAxis.mV, lvTranslation);
+    return lResult;
+}
+
+static Matrix44Affine ScaleWheelTransform(const Vector3& lrScale, const Matrix44Affine& lrTransform)
+{
+    Matrix44Affine lScale;
+    const __vector4 lvZero = __vspltisw(0);
+    lScale.xAxis.mV = __vrlimi(lvZero, lrScale.mV, 8, 0);
+    lScale.yAxis.mV = __vrlimi(lvZero, lrScale.mV, 4, 0);
+    lScale.zAxis.mV = __vrlimi(lvZero, lrScale.mV, 2, 0);
+    lScale.wAxis.mV = lvZero;
+    return MultiplyWheelTransform(lScale, lrTransform);
+}
 
 // ============================================================================
 // PreDispatchUpdate  @ 0x8274D900   (EXPORT HOLE -- reconstructed from the leak's
@@ -228,6 +267,17 @@ static const f32 KF_TRAFFIC_WHEEL_BLUR_THRESHOLD = 30.0f;
 //     GetStaticTrafficParamFromFullV @0x827078D0 is the console's own truncation of the DWARF's
 //     GetStaticTrafficParamFromFullVehicleIndex, not a different function.
 // ============================================================================
+namespace
+{
+struct TrafficVehicleRenderInfoLess
+{
+    bool operator()(const VehicleRenderInfo& lhs, const VehicleRenderInfo& rhs) const
+    {
+        return lhs.mfDistanceSq < rhs.mfDistanceSq;
+    }
+};
+}
+
 void
 TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispatch* lpInput,
                                         BrnTrafficIO::OutputBuffer_PreDispatch* lpOutput )
@@ -263,6 +313,37 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
     // array -- TryClearupOffscreenTraffic (which then treats every car as never-rendered),
     // ClearupCrashedTraffic and NukeTrafficJams' kill selection (_wT5_01.cpp / _wT6_01.cpp),
     // and PostPhysicsUpdate's 80-byte copy into the crash-traffic input interface (+0xCA8).
+    if (mbReplayPlayback)
+    {
+        // ARTIST 0x8274DDE0..E0AC walks recorded vehicle bits and poses,
+        // independently of live scene IDs and the live rendered-last-frame set.
+        const BrnReplays::TrafficEntitySerialiserStaticLayout* lpFrame =
+            mTrafficEntitySerialiser.GetStaticLayout();
+        VehicleRenderInfo laVisible[600];
+        u32 luVisible = 0;
+        for (s32 liVehicle = lpFrame->mVehicleUpdateBits.GetFirstBitSet();
+             liVehicle >= 0;
+             liVehicle = lpFrame->mVehicleUpdateBits.GetNextBitSet(liVehicle))
+        {
+            const u32 luVehicle = static_cast<u32>(liVehicle);
+            const Vector3& lrPos = mTrafficEntitySerialiser.GetVehicleTransform(luVehicle)->mTransform.Pos();
+            const __vector4 lvDelta = __vsubfp(lrPos.mV, lCameraPosition.mV);
+            const f32 lfDistanceSq = __vmsum3fp(lvDelta, lvDelta).x;
+            if (!(lfDistanceSq < mfRenderCullDistanceSq))
+                continue;
+
+            VehicleRenderInfo& lrInfo = laVisible[luVisible++];
+            lrInfo.muEntityIndex = luVehicle;
+            lrInfo.mfDistanceSq = lfDistanceSq;
+            lrInfo.mLOD = CgsGraphics::Model::E_STATE_LOD_0;
+        }
+        std::sort(laVisible, laVisible + luVisible, TrafficVehicleRenderInfoLess());
+        const u32 luCount = luVisible < muMaxVehiclesToRender ? luVisible : muMaxVehiclesToRender;
+        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+            lrRenderInfos.Append(laVisible[luIndex]);
+    }
+    else
+    {
     mVehicleSoaData.mVehiclesRenderedLastFrame.UnSetAll();
 
     // The producer (WorldModule::FilterFrustumTestResults) has already kept only the
@@ -373,6 +454,8 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
         lrRenderInfos[ luInsertAt ] = lInfo;
     }
 
+    }
+
     // The console's cap, applied last (`muMaxVehiclesToRender`, DWARF :689). Because the list
     // is already near-to-far the truncation keeps the nearest N, which is what the qsort +
     // clamp does on the console.
@@ -389,6 +472,162 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
         {
             lrRenderInfos.Append( laKept[ luCopy ] );
         }
+    }
+}
+
+// ARTIST 82727E3C..F08: magnitude with two Newton steps, then
+// 1 + max(distance - 8, 0) * flt_820BE730 (1/142).
+static f32 TrafficCoronaScale(Vector3 lPosition, Vector3 lCameraPosition)
+{
+    const __vector4 delta = __vsubfp(lPosition.mV, lCameraPosition.mV);
+    const __vector4 squared = __vmsum3fp(delta, delta);
+    const __vector4 zero = __vspltisw(0);
+    const __vector4 one = __vcfsx(__vspltisw(1), 0);
+    const __vector4 half = __vcfsx(__vspltisw(1), 1);
+    __vector4 reciprocal = __vrsqrtefp(squared);
+    for (s32 i = 0; i != 2; ++i)
+        reciprocal = __vmaddfp(__vmulfp(reciprocal, half),
+                               __vnmsubfp(squared, __vmulfp(reciprocal, reciprocal), one),
+                               reciprocal);
+    const __vector4 distance = __vsel(__vmulfp(squared, reciprocal), zero, __vcmpeqfp(zero, squared));
+    const Vector4 eight(8.0f, 8.0f, 8.0f, 8.0f);
+    const Vector4 factor(0.0070422534f, 0.0070422534f, 0.0070422534f, 0.0070422534f);
+    Vector4 result;
+    result.mV = __vmaddfp(__vsubfp(__vcfsx(__vspltisw(2), 0), one),
+        __vmulfp(__vmaxfp(__vsubfp(distance, eight.mV), zero), factor.mV), one);
+    return result.mV.x;
+}
+
+// ARTIST 82727BB0. Replay records have the same 4112-byte physical snapshot
+// as TrafficPhysicsInfo (SetPhysicsData copies that entire array).
+void TrafficEntityModule::SubmitCoronasForVehicle(
+    BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface,
+    u32 luVehicle, Vector3 lCameraPosition, Vector3 /*lCameraDirection*/,
+    Vector4& lFrontLights, Vector4& lRearLights)
+{
+    if (mbTrafficIsHidden)
+        return;
+    CGS_ASSERT(lpCoronaSubmissionInterface != 0, "lpCoronaSubmissionInterface != NULL");
+
+    const TrafficPhysicsInfo* lpPhysicsInfo = 0;
+    Matrix44Affine lTransform;
+    u32 luVehicleType;
+    f32 lfHeadlightWarmth;
+    f32 lfSpotHeadlightWarmth;
+    f32 lfIndicatorWarmth;
+    bool lbBrake, lbLeft, lbRight, lbAlarm;
+    if (mbReplayPlayback)
+    {
+        const BrnReplays::TrafficVehicleDataRecord* lpData = mTrafficEntitySerialiser.GetVehicleData(luVehicle);
+        const s8 liPhysics = lpData->miPhysicsIndex;
+        if (liPhysics >= 0)
+            lpPhysicsInfo = mTrafficEntitySerialiser.GetPhysicsInfo(liPhysics);
+        lTransform = mTrafficEntitySerialiser.GetVehicleTransform(luVehicle)->mTransform;
+        luVehicleType = lpData->muVehicleType;
+        const u8 flags = lpData->muFlags;
+        lfHeadlightWarmth = (flags & 1) ? 1.0f : 0.0f;
+        lfIndicatorWarmth = 1.0f;
+        lfSpotHeadlightWarmth = lfHeadlightWarmth;
+        lbBrake = (flags & 2) != 0;
+        lbLeft = (flags & 4) != 0;
+        lbRight = (flags & 8) != 0;
+        lbAlarm = (flags & 16) != 0;
+    }
+    else
+    {
+        const Vehicle* lpVehicle = GetVehicle(luVehicle);
+        if (!lpVehicle->HasEntity())
+            return;
+        if (lpVehicle->IsPhysical())
+        {
+            lpPhysicsInfo = GetTrafficPhysicsInfoForVehicl(luVehicle);
+            if (lpPhysicsInfo->mbIsFatallyCrashing)
+                return;
+        }
+        lTransform = GetVehicleTransform(luVehicle);
+        luVehicleType = lpVehicle->GetVehicleType();
+        lfHeadlightWarmth = lpVehicle->GetHeadlightWarmth();
+        lfIndicatorWarmth = lpVehicle->GetIndicatorBulbWarmth();
+        lfSpotHeadlightWarmth = lpVehicle->GetHeadlightWarmth();
+        lbBrake = lpVehicle->AreBrakelightsOn();
+        lbLeft = lpVehicle->IsLeftIndicatorOn();
+        lbRight = lpVehicle->IsRightIndicatorOn();
+        lbAlarm = lpVehicle->IsAlarmOn();
+    }
+
+    const f32 lfFrontRunningOpacity = 1.0f - lfHeadlightWarmth;
+    const f32 lfDifference = 0.8f - lfSpotHeadlightWarmth;
+    const f32 lfNonNegative = static_cast<f32>(__fsel(-lfDifference, 0.0f, lfDifference));
+    const f32 lfSpotOpacity = static_cast<f32>(__fsel(0.8f - lfNonNegative, lfNonNegative, 0.8f));
+    const f32 lfScale = TrafficCoronaScale(lTransform.wAxis, lCameraPosition);
+    bool lbRunning = true;
+    bool lbRear = true;
+    if (GetVehicleSpecies(luVehicle) == Vehicle::E_SPECIES_STATIC)
+    {
+        if (lbAlarm)
+            lbRunning = lbRear = lbBrake = lbLeft = lbRight = false;
+        else
+        {
+            lbRunning = lbLeft && ((luVehicle & 4) == 4);
+            lbRear = lbBrake = lbRight = lbLeft;
+        }
+    }
+    if (lbRunning) lRearLights.SetY(1.0f);
+    if (lbBrake) lRearLights.SetX(1.0f);
+
+    const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec> lSpec(
+        maTrafficVehiclePhysicsSpecs[luVehicleType].GetResourceHandle());
+    const BrnPhysics::Deformation::StreamedDeformationSpec* lpSpec = lSpec.operator->();
+    const Matrix44Affine lLocatorToWorld = rw::math::vpu::Mult(
+        rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(lpSpec->mCarModelSpaceToHandlingBodySpaceTransform),
+        lTransform);
+    const BrnPhysics::Deformation::LocatorPointSpecList& lrLocators = lpSpec->mLightTags;
+    const u32 luCount = lpPhysicsInfo ? static_cast<u32>(lpPhysicsInfo->miNumLightLocators) : lrLocators.GetNumLocatorPoints();
+    const Vector3 lForward = lTransform.zAxis;
+    const Vector3 lBackward = rw::math::vpu::Negate(lForward);
+    for (u32 i = 0; i < luCount; ++i)
+    {
+        s32 liType;
+        Vector3 lPosition;
+        if (lpPhysicsInfo)
+        {
+            liType = static_cast<s8>(lpPhysicsInfo->maLightTagPointTypes[i]);
+            CGS_ASSERT(liType <= BrnPhysics::Deformation::E_TAGPOINT_COUNT,
+                       "lpPhysicsInfo->maLightTagPointTypes[luTagPoint] <= BrnPhysics::Deformation::E_TAGPOINT_COUNT");
+            lPosition = lpPhysicsInfo->maLightLocatorPositions[i];
+        }
+        else
+        {
+            liType = lrLocators.GetLocatorTy(i);
+            lPosition = lrLocators.GetLocatorXf(i)->wAxis;
+        }
+        BrnCoronaType leType = eCoronaTypeTrafficHeadLight;
+        Vector3 lDirection = lForward;
+        f32 lfOpacity = 1.0f;
+        bool lbSubmit = true;
+        switch (liType)
+        {
+        case 1: case 2:
+            if (lbRunning)
+            {
+                const Vector3 lWorld = rw::math::vpu::TransformPoint(lLocatorToWorld, lPosition);
+                lpCoronaSubmissionInterface->AddCorona(lWorld, lForward, lfScale, 1.0f, eCoronaTypeTrafficHeadLight);
+                lpCoronaSubmissionInterface->AddCorona(lWorld, lForward, lfScale, lfFrontRunningOpacity, eCoronaTypeTrafficHeadLight);
+                lFrontLights.SetY(1.0f);
+            }
+            continue;
+        case 3: case 4: lbSubmit = lbRear; leType = eCoronaTypeTrafficRearLight; lDirection = lBackward; break;
+        case 5: case 6:
+            lbSubmit = lbRunning; leType = eCoronaTypeTrafficSpotlights; lfOpacity = lfSpotOpacity;
+            if (lbSubmit) lPosition = lrLocators.GetLocatorXf(i)->wAxis;
+            break;
+        case 7: case 9: lbSubmit = lbLeft; leType = eCoronaTypeTrafficIndicator; lfOpacity = lfIndicatorWarmth; if (liType == 9) lDirection = lBackward; break;
+        case 8: case 10: lbSubmit = lbRight; leType = eCoronaTypeTrafficIndicator; lfOpacity = lfIndicatorWarmth; if (liType == 10) lDirection = lBackward; break;
+        case 11: case 12: case 13: lbSubmit = lbBrake; leType = eCoronaTypeTrafficBrakeLight; lDirection = lBackward; break;
+        default: lbSubmit = false; break;
+        }
+        if (lbSubmit)
+            lpCoronaSubmissionInterface->AddCorona(rw::math::vpu::TransformPoint(lLocatorToWorld, lPosition), lDirection, lfScale, lfOpacity, leType);
     }
 }
 
@@ -478,7 +717,7 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
     //
     // These are not a stub. They are the console's own state whenever the corona pass is skipped,
     // which it is on every shadow-map pass, and they are out params of SubmitCoronasForVehicle
-    // that RenderTrafficCar consumes. Passing zeros while gate G5 is open is faithful.
+    // that RenderTrafficCar consumes.
     Vector4 laFrontLights[ 64 ];
     Vector4 laRearLights[ 64 ];
     for ( u32 luZero = 0; luZero < luLength && luZero < 64u; ++luZero )
@@ -501,14 +740,14 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
     //       RenderTrafficLightCoronas( lpInput->GetCoronaSubmissionInterface(),
     //                                  lCameraPosition, lCameraDirection );  // bl 0x8271EC80 at 0x8273B4C4
     //   }
-    // NAMED GATE G5, what is left of it: SubmitCoronasForVehicle @0x82727BB0 (DWARF :22445) has no
-    // declaration in this tree, so the traffic cars' own light coronas stay unsubmitted and the two light
-    // vectors stay zero; the monitor id at +0x72A38 is a ship-only member with no DWARF name (debug-only).
-    // The order is load-bearing: the corona pass runs before the draw pass and only off the shadow pass,
-    // matching the race-car leg's own mbRenderingShadowMap `continue`.
-    // DELETE-WHEN SubmitCoronasForVehicle lands.
+    // The monitor at +0x72A38 remains unnamed; submit the light data before drawing.
     if ( !lpShadowMap->IsRenderingShadowMap() )
     {
+        for (u32 i = 0; i < luLength; ++i)
+            SubmitCoronasForVehicle(lpCoronaSubmissionInterface,
+                                    laTrafficRenderInfos[i].muEntityIndex,
+                                    lCameraPosition, lCameraDirection,
+                                    laFrontLights[i], laRearLights[i]);
         RenderTrafficLightCoronas( lpCoronaSubmissionInterface, lCameraPosition, lCameraDirection );
     }
 
@@ -554,7 +793,7 @@ TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Disp
 //   r3 this (r27) ; r4 lpCoronaSubmissionInterface (r15, spilled at 0x3EC) ; v1 lCameraPosition (v125) ;
 //   v2 lCameraDirection (v124)
 //   1. The light manager and the active-hull set: `lbzx +0x72520` -- live (0): &mTrafficLightManager (+0x53790)
-//      and &mActiveHullsForLocalPlayer (+0x3EA9C); the replay arm is gate G7 below. Then the .cpp:3359 (0xD1F)
+//      and &mActiveHullsForLocalPlayer (+0x3EA9C); replay uses the corresponding frame members. The .cpp:3359 (0xD1F)
 //      tripwire "lpTrafficLightManager".
 //   2. PerfMonCpu::StartMonitor / StopMonitor (+0x72A30, then +0x72A34 around step 4): debug-only, left out.
 //   3. Every ACTIVE hull (the Set's GetLength / operator[] tripwires, CgsSet.h:227 / :257 / :258):
@@ -604,14 +843,17 @@ TrafficEntityModule::RenderTrafficLightCoronas( BrnCoronaManager::BrnSubmissionI
                                                 Vector3 lCameraPosition,
                                                 Vector3 lCameraDirection )
 {
-    // ---- step 1, NAMED GATE G7: the replay-playback source ------------------
-    // Under the replay latch at module +0x72520 the console takes both inputs from
-    // BrnReplays::TrafficEntitySerialiser (module +0x724C0; sub_82707090 twice: the manager at its +0x22FB0, the
-    // active-hull set at its +0). The latch and the serialiser are not modelled on this build (the un-emitted DWARF
-    // :776/:777 window; AddVehiclesToTargetList's replay hull source is the same gate), and Construct writes the
-    // latch ZERO, so live play takes this arm. DELETE-WHEN the replay wave lands.
     const TrafficLightManager* lpTrafficLightManager = &mTrafficLightManager;
-    const ::Set<u16, KU_MAX_ACTIVE_HULLS>& lrActiveHulls = mActiveHullsForLocalPlayer;
+    const ActiveHullSet* lpActiveHulls = &mActiveHullsForLocalPlayer;
+    if ( mbReplayPlayback )
+    {
+        // ARTIST 0x8271ECD8–0x8271ED08 selects both recorded inputs.
+        const BrnReplays::TrafficEntitySerialiserStaticLayout* lpFrame =
+            mTrafficEntitySerialiser.GetStaticLayout();
+        lpTrafficLightManager = &lpFrame->mTrafficLightManager;
+        lpActiveHulls = &lpFrame->mActiveHullsForLocalPlayer;
+    }
+    const ActiveHullSet& lrActiveHulls = *lpActiveHulls;
     CGS_ASSERT( lpTrafficLightManager != 0, "lpTrafficLightManager" );              // .cpp:3359
 
     const Vector4 lvCullDistance(KF_RENDER_CULL_CORONA_DISTANCE_SQ, KF_RENDER_CULL_CORONA_DISTANCE_SQ,
@@ -688,13 +930,13 @@ TrafficEntityModule::RenderTrafficLightCoronas( BrnCoronaManager::BrnSubmissionI
 //        Non-zero BAILS THE WHOLE FUNCTION (bne -> the epilogue).
 //   `lbzx r11, r25, 0x72520` @0x82728BEC -> module +468256 selects the REPLAY-SERIALISER pose
 //        source (BrnReplays::TrafficEntitySerialiser lives at +468160; the arm calls
-//        GetVehicleData / GetPhysicsInfo / GetVehicleTransform on it). Gate G1.
+//        GetVehicleData / GetPhysicsInfo / GetVehicleTransform on it).
 //
 // ---- THE LIVE ARM (@0x82728BF8 onward) ----------------------------------------------
 //   GetVehicle(idx) -> flags byte at +5: bit0 (ALIVE) and bit1 must BOTH be set, else bail;
 //   bit3 (PHYSICAL) -> GetTrafficPhysicsInfoForVehicl (asserting non-null, :15106) and the
 //   "not physical" latch cleared. Then GetVehicleType, GetVehicleTransform,
-//   GetPitch_Roll_Steering_WheelRot, GetSpeed.
+//   GetPitch_Roll_Steering_WheelRot and GetSpeed in the original.
 // ============================================================================
 void
 TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFrame,
@@ -723,57 +965,60 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         return;
     }
 
-    // ---- entry gate 2 (G1): the replay-serialiser pose source -------------
-    // NAMED GATE. When module +468256 is set the console takes the vehicle's type, damage record
-    // and transform from BrnReplays::TrafficEntitySerialiser (module +468160) instead of from the
-    // live pools, and derives the "not physical" latch from the serialised flag bit 5 rather than
-    // from Vehicle::mxFlags. BLOCKER: the serialiser is not reconstructed
-    // (TrafficEntitySerialiser::GetVehicleData / GetPhysicsInfo / GetVehicleTransform are
-    // undeclared here) and the member at +468256 is unnamed. The live arm below runs outside
-    // replay playback. DELETE-WHEN the replay wave lands.
-
-    const Vehicle* lpVehicle = GetVehicle( luEntityIdx );
-    if ( lpVehicle == 0 )
-    {
-        return;
-    }
-
-    // `lbz r11, 5(r29)` then two independent bit tests, BOTH of which must pass
-    // (@0x82728C00..0x82728C18). Bit 0 is E_FLAG_ALIVE; the second bit is the same one
-    // Vehicle::IsAlive()'s sibling predicates read, and it gates rendering specifically.
-    if ( !lpVehicle->IsAlive() )
-    {
-        return;
-    }
-    // FLAG (partial gate read): the console requires flags bit 1 as well as bit 0
-    // (`rlwinm r10, r11, 0,30,30` @0x82728C10, beq -> bail). Vehicle's PC flag enum does not name
-    // bit 1 yet, and GetFlags() is the only raw accessor, so the test goes through it rather than
-    // inventing a predicate. Naming stays with whoever owns BrnTrafficVehicle.h.
-    if ( ( lpVehicle->GetFlags() & 0x02u ) == 0u )
-    {
-        return;
-    }
-
-    // ---- G2: the physical (promoted) arm -----------------------------------
-    // `rlwinm r11, r11, 0,28,28` @0x82728C1C -> Vehicle::IsPhysical(); the console then fetches
-    // GetTrafficPhysicsInfoForVehicl(idx), asserts it non-null (pseudocode :3188-:3197, baked
-    // .cpp line 15106) and clears the "not physical" latch (`LOBYTE(v68) = 0` @0x82733200's
-    // twin at :3200). That latch does three things downstream, and all three are now honoured:
-    //   * the wheel block takes maWheelTransforms instead of composing the locator (see below);
-    //   * the main-view blobby producer uses mvRoadTestNormal_HeightAboveRoad when PhysicsInfo
-    //     is present; the shadow-map pass is excluded by its separate rendering-byte gate;
-    //   * the damaged verlet-offset upload is enabled -- still G3, see that gate.
-    // The accessor returns the real TrafficPhysicsInfo*. The replay and wheel paths remain
-    // incomplete in this source; the live shadow path uses the physical record below.
-    const bool lbIsPhysical = lpVehicle->IsPhysical();
+    const Vehicle* lpVehicle = 0;
     const TrafficPhysicsInfo* lpPhysicsInfo = 0;
-    if ( lbIsPhysical )
-    {
-        lpPhysicsInfo = GetTrafficPhysicsInfoForVehicl( luEntityIdx );
-        CGS_ASSERT( lpPhysicsInfo != 0, "lpPhysicsInfo" );                       // baked .cpp 15106
-    }
+    bool lbNotPhysical;
+    u32 luVehicleType;
+    Matrix44Affine lBodyTransform;
+    Vector4 lPitchRollSteerWheel;
+    VecFloat lvfVehicleSpeed;
 
-    const u32 luVehicleType = static_cast< u32 >( lpVehicle->GetVehicleType() );
+    // ARTIST 0x82728CFC..0x82728DE4. The signed slot and the physical
+    // state bit are independent: the slot can be absent on a physical car.
+    if (mbReplayPlayback)
+    {
+        const BrnReplays::TrafficVehicleDataRecord* lpVehicleData =
+            mTrafficEntitySerialiser.GetVehicleData(luEntityIdx);
+        const s8 liPhysicsIndex = lpVehicleData->miPhysicsIndex;
+        if (liPhysicsIndex >= 0)
+        {
+            lpPhysicsInfo = mTrafficEntitySerialiser.GetPhysicsInfo(liPhysicsIndex);
+            if (!lpPhysicsInfo)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpPhysicsInfo",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/"
+                    "TrafficEntityModule/BrnTrafficEntityModule.cpp", 15125);
+                CgsDev::Assert::EndAssert();
+            }
+        }
+        luVehicleType = lpVehicleData->muVehicleType;
+        const Matrix44Affine& lrRecordedTransform =
+            mTrafficEntitySerialiser.GetVehicleTransform(luEntityIdx)->mTransform;
+        lBodyTransform.xAxis.mV = lrRecordedTransform.xAxis.mV;
+        lBodyTransform.yAxis.mV = lrRecordedTransform.yAxis.mV;
+        lBodyTransform.zAxis.mV = lrRecordedTransform.zAxis.mV;
+        lBodyTransform.wAxis.mV = lrRecordedTransform.wAxis.mV;
+        lPitchRollSteerWheel.mV = __vspltisw(0);
+        lvfVehicleSpeed = VecFloat(KF_TRAFFIC_REPLAY_SPEED);
+        lbNotPhysical = (lpVehicleData->muFlags & BrnReplays::TrafficVehicleDataRecord::E_FLAG_NOT_PHYSICAL) != 0;
+    }
+    else
+    {
+        lpVehicle = GetVehicle(luEntityIdx);
+        if (!lpVehicle || !lpVehicle->IsAlive() || (lpVehicle->GetFlags() & 0x02u) == 0u)
+        {
+            return;
+        }
+
+        lbNotPhysical = !lpVehicle->IsPhysical();
+        if (!lbNotPhysical)
+        {
+            lpPhysicsInfo = GetTrafficPhysicsInfoForVehicl(luEntityIdx);
+            CGS_ASSERT(lpPhysicsInfo != 0, "lpPhysicsInfo"); // ARTIST .cpp:15106
+        }
+        luVehicleType = lpVehicle->GetVehicleType();
+    }
 
     // ---- the asset id, the streamer gates, the two specs -------------------
     // Leak :8524-8543 maps one-for-one onto ship pseudocode :633-656.
@@ -801,15 +1046,9 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         return;
     }
 
-    // maTrafficVehiclePhysicsSpecs[type]. The console reads it as
-    // `CreateFromHandle(local, 32*VehicleType + this + 482156)`, a 32-byte stride because a
-    // console CgsResource::ResourcePtr is 32 bytes. That stride is X360 and must not survive: on
-    // the host the array is indexed by name and the host ResourcePtr has its own size.
-    // FLAG (extent): the DWARF declares this array KU_MAX_VEHICLE_ASSETS (64) long, but the
-    // console indexes it by vehicle type, bounded by KU_MAX_VEHICLE_TYPES (96). The extent
-    // still needs independent reconciliation against the original declaration and callers.
-    const CgsResource::ResourcePtr< BrnPhysics::Deformation::StreamedDeformationSpec >&
-        lrPhysicsSpecPtr = maTrafficVehiclePhysicsSpecs[ luVehicleType ];
+    // ARTIST 0x82728EA8..0x82728EC0 binds a local alias from the resource handle.
+    const CgsResource::ResourcePtr<BrnPhysics::Deformation::StreamedDeformationSpec> lpPhysicsSpec(
+        static_cast<const CgsResource::BaseResourcePtr&>(maTrafficVehiclePhysicsSpecs[luVehicleType]));
 
     const CgsGraphics::Model* lpWheelModel = lpWheelGraphicsSpec->GetWheelModel();
     CGS_ASSERT( lpWheelModel != 0, "lpWheelModel" );
@@ -818,8 +1057,12 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
     // recovered producer reads its bbox offset, half-size and axle offsets before fog and draw.
     const VehicleTypeRuntime* lpVehicleTypeRuntime = GetVehicleTypeRuntime( luVehicleType );
 
-    const Matrix44Affine lBodyTransform = maVehicleTransforms[luEntityIdx];
-    const Vector4 lPitchRollSteerWheel = lpVehicle->GetPitch_Roll_Steering_WheelRot();
+    if (lpVehicle)
+    {
+        lBodyTransform = maVehicleTransforms[luEntityIdx];
+        lPitchRollSteerWheel = lpVehicle->GetPitch_Roll_Steering_WheelRot();
+        lvfVehicleSpeed = lpVehicle->GetSpeed();
+    }
     const f32 lfPitch    = lPitchRollSteerWheel.mV.x;
     const f32 lfRoll     = lPitchRollSteerWheel.mV.y;
     const f32 lfSteering = lPitchRollSteerWheel.mV.z;
@@ -848,7 +1091,7 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         CGS_ASSERT(lOffset.mV.x < 0.1f, "Vehicle has asymmetric bounding box round Z");
         const Vector4 lExtents(lPacked);
         const rw::math::vpu::VecFloat lWidth(__vspltw(lHalfSize.mV, 0));
-        if (!lbIsPhysical)
+        if (lbNotPhysical)
         {
             const rw::math::vpu::VecFloat lHeight(__vspltisw(0));
             lpBlobbyShadowRenderer->AddShadow(lBodyTransform, lExtents, lWidth, lHeight);
@@ -1066,18 +1309,138 @@ TrafficEntityModule::RenderTrafficCar( CgsGraphics::DispatchFrame* lpDispatchFra
         }
     }
 
-    // ========================================================================
-    // THE WHEEL BLOCK  (pseudocode :2177-:3120)
-    //
-    // Same shape as the race car's: build up to four world matrices plus their per-instance
-    // constant vectors, then submit ONE instanced DrawRenderable. The per-wheel matrix is the
-    // leak's algorithm (:8629-:8737) and the ship's asm agrees leg for leg:
-    //   identity -> road-noise Y offset -> front wheels steer about Y by -steering ->
-    //   rotate about X by the wheel rotation (front wheels +0.2 rad) -> * bodyTransform ->
-    //   translate by the spec wheel position pushed through the inverse of the car-model ->
-    //   handling-body transform -> * the per-wheel scale, with the LEFT wheels mirrored.
-    // ========================================================================
+    // ARTIST 0x8272A984..0x8272B800, including the non-instanced wheel model path.
+    const CgsGraphics::Model::State lWheelLOD =
+        (lLOD > CgsGraphics::Model::E_STATE_LOD_1) ? lLOD : CgsGraphics::Model::E_STATE_LOD_1;
+    if (!lpWheelModel->DoesStateExist(lWheelLOD))
+        return;
 
+    const __vector4 lvZero = __vspltisw(0);
+    const __vector4 lvOne = __vcfsx(__vspltisw(1), 0);
+    const __vector4 lvAngularVelocity = __vmulfp(lvfVehicleSpeed.mV,
+        VecFloat(KF_TRAFFIC_WHEEL_SPIN_SPEED_SCALE).mV);
+    const __vector4 lvBlur = __vminfp(__vmulfp(lvAngularVelocity,
+        VecFloat(KF_TRAFFIC_WHEEL_BLUR_SCALE).mV), lvOne);
+    const Vector4 lWheelBlur(__vrlimi(lvZero, lvBlur, 8, 0));
+    CgsGraphics::mShaderConstantTable.SetShaderConstantData(25, lWheelBlur);
+
+    unsigned int luCompare;
+    __vcmpgtfpR(VecFloat(KF_TRAFFIC_WHEEL_BLUR_THRESHOLD).mV, lvAngularVelocity, &luCompare);
+    u8 lu8WheelTechnique = (luCompare & 0x80u) ? 1u : 0u;
+
+    Matrix44Affine laWheelTransforms[KI_TRAFFIC_WHEELS_TO_RENDER_MAX];
+    const Matrix44Affine* lapWheelTransforms[KI_TRAFFIC_WHEELS_TO_RENDER_MAX] = {0, 0, 0, 0};
+    Vector4 laWheelConstants[CgsGraphics::Model::KU_MAX_INSTANCES_PER_GROUP];
+    for (u32 luEntry = 0; luEntry < CgsGraphics::Model::KU_MAX_INSTANCES_PER_GROUP; ++luEntry)
+        laWheelConstants[luEntry].mV = lvZero;
+    s32 liWheelCount = 0;
+    u32 luWheelLimit = static_cast<u32>(giWheelsToRender);
+    if (lpPhysicsInfo)
+    {
+        // Both live and replay physics records supply the same existence flags
+        // at +0xFC8 and world-space transforms at +0xD30.
+        for (u8 luWheel = 0; luWheel < luWheelLimit; ++luWheel)
+        {
+            if (!lpPhysicsInfo->mabWheelExists[luWheel])
+                continue;
+
+            const BrnPhysics::Deformation::WheelSpec* lpWheel = lpPhysicsSpec->GetWheelSpec(luWheel);
+            laWheelTransforms[liWheelCount] =
+                ScaleWheelTransform(lpWheel->mScale, lpPhysicsInfo->maWheelTransforms[luWheel]);
+            lapWheelTransforms[liWheelCount] = &laWheelTransforms[liWheelCount];
+            laWheelConstants[liWheelCount].mV = lWheelBlur.mV;
+            ++liWheelCount;
+            luWheelLimit = static_cast<u32>(giWheelsToRender);
+        }
+    }
+    else
+    {
+        const __vector4 lvBiasedSpeed = __vmulfp(__vsubfp(lvfVehicleSpeed.mV,
+            VecFloat(KF_TRAFFIC_ROAD_NOISE_START).mV), VecFloat(KF_TRAFFIC_ROAD_NOISE_SPEED_SCALE).mV);
+        const __vector4 lvMaxRoadNoise = __vmulfp(__vminfp(lvOne, __vmaxfp(lvZero, lvBiasedSpeed)),
+            VecFloat(KF_TRAFFIC_MAX_ROAD_NOISE_AMPLITUDE).mV);
+        const __vector4 lvRoadUp = rw::math::vpu::GetVector3_YAxis().mV;
+
+        // 0x8272AA4C reads the translation of the model-to-handling transform.
+        const Matrix44Affine& lrModelToHandling = lpPhysicsSpec->mCarModelSpaceToHandlingBodySpaceTransform;
+        const __vector4 lvSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+        Matrix44Affine lFrontWheel = MultiplyWheelTransform(
+            rw::math::vpu::MakeRotationX(lfWheelRot + KF_TRAFFIC_FRONT_WHEEL_ROTATION_OFFSET),
+            rw::math::vpu::MakeRotationY(-lfSteering));
+        Matrix44Affine lRearWheel = rw::math::vpu::MakeRotationX(lfWheelRot);
+        lFrontWheel.wAxis.mV = __vxor(lrModelToHandling.wAxis.mV, lvSign);
+        lRearWheel.wAxis.mV = lFrontWheel.wAxis.mV;
+        lFrontWheel = MultiplyWheelTransform(lFrontWheel, lBodyTransform);
+        lRearWheel = MultiplyWheelTransform(lRearWheel, lBodyTransform);
+
+        for (u8 luWheel = 0; luWheel < luWheelLimit; ++luWheel)
+        {
+            const BrnPhysics::Deformation::WheelSpec* lpWheel = lpPhysicsSpec->GetWheelSpec(luWheel);
+            // The effect RNG's vector draw advances once per wheel, even when
+            // the road-noise amplitude is zero. The vertical offset is squared.
+            const __vector4 lvUnitRandom = mEffectRand.RandomVecFloat().mV;
+            const __vector4 lvSignedRandom = __vsubfp(__vaddfp(lvUnitRandom, lvUnitRandom), lvOne);
+            const __vector4 lvNoise = __vmulfp(lvSignedRandom, lvMaxRoadNoise);
+            const __vector4 lvWheelPosition =
+                __vmaddfp(lvRoadUp, __vmulfp(lvNoise, lvNoise), lpWheel->mPosition.mV);
+
+            Matrix44Affine lWheel = (luWheel < 2) ? lFrontWheel : lRearWheel;
+            if ((luWheel & 1u) == 0)
+            {
+                const __vector4 lvNegativeOne = __vcfsx(__vspltisw(-1), 0);
+                lWheel.xAxis.mV = __vmulfp(lWheel.xAxis.mV, lvNegativeOne);
+                lWheel.zAxis.mV = __vmulfp(lWheel.zAxis.mV, lvNegativeOne);
+            }
+            lWheel = ScaleWheelTransform(lpWheel->mScale, lWheel);
+            lWheel.wAxis.mV = __vaddfp(lWheel.wAxis.mV, MultiplyWheelBasisRow(lvWheelPosition, lBodyTransform));
+
+            laWheelTransforms[luWheel] = lWheel;
+            lapWheelTransforms[luWheel] = &laWheelTransforms[luWheel];
+            laWheelConstants[luWheel].mV = lWheelBlur.mV;
+            luWheelLimit = static_cast<u32>(giWheelsToRender);
+        }
+
+        // ARTIST 0x8272B268 always submits four in this arm. A smaller
+        // debug count leaves null pointers in the instanced submission.
+        liWheelCount = KI_TRAFFIC_WHEELS_TO_RENDER_MAX;
+    }
+
+    if (lbShadowPass)
+        lu8WheelTechnique = 2;
+    if (liWheelCount == 0)
+        return;
+
+    const bool lbInstancing = lpWheelModel->GetFlag(CgsGraphics::Model::E_FLAG_MODEL_USES_INSTANCE_SHADER);
+    // The shader provider uploads five stream vectors for at most four
+    // wheels. The main-view stack slot after the four held the half-size.
+    if (lbInstancing && !lpShadowMap->IsRenderingShadowMap())
+        laWheelConstants[KI_TRAFFIC_WHEELS_TO_RENDER_MAX].mV = lpVehicleTypeRuntime->GetBBoxHalfSize().mV;
+
+    const s32 liDrawCount = lbInstancing ? 1 : liWheelCount;
+    for (s32 liWheel = 0; liWheel < liDrawCount; ++liWheel)
+    {
+        if (!lbInstancing)
+            CgsGraphics::mShaderConstantTable.SetShaderConstantData(25, laWheelConstants[liWheel]);
+
+        const CgsGraphics::Renderable* lpWheelRenderable = lpWheelModel->GetRenderable(lWheelLOD);
+        CGS_ASSERT(lpWheelRenderable != 0, "lpRenderable");
+        CgsGraphics::DispatchList* lpWheelList = lpDispatchFrame->GetList(liModelOnlyDisplayList);
+        CGS_ASSERT(lpWheelList != 0, "lpDispatchList");
+
+        if (lbInstancing)
+            CgsGraphics::Model::SetupShaderConstantsForInstancing(liWheelCount, lapWheelTransforms, laWheelConstants);
+        else
+            CgsGraphics::mShaderConstantTable.SetShaderConstantData(0, laWheelTransforms[liWheel]);
+
+        const bool lbFirst = (lpWheelList->GetCount() & 0x7F) == 0;
+        lpDispatchFrame->GetBin().BeginPacket();
+        CgsGraphics::DrawRenderable::AddToBin(
+            lpWheelRenderable, lpDispatchFrame, lbFirst,
+            static_cast<s8>(liOpaqueList), static_cast<s8>(liTransparentList),
+            lbInstancing ? 0 : 1, lu8WheelTechnique, lbShadowPass,
+            0xFFu, 0u, lbInstancing ? liWheelCount : 0, 0u);
+        lpWheelList->Submit(0, lpDispatchFrame->GetBin().EndPacket());
+    }
 }
 
 }  // namespace BrnTraffic

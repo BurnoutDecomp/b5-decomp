@@ -29,6 +29,10 @@ namespace CgsSound
 namespace Playback
 {
 
+// CgsSubmixVoice.h:29 (DecFIGS). ARTIST interns this shared default send once
+// during startup; the definition is adjacent to the root sound allocator globals.
+extern const Name K_DefaultSendName;
+
 // CgsSubmixVoice.h:44/59/78 (DWARF). SubmixVoice : public Voice, adding a submix
 // PlugIn pointer.
 struct SubmixVoice : public Voice

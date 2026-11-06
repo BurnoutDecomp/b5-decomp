@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor (START stage)
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"            // CgsSound::TestBed::Allocator (the four carve globals)
+#include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h"         // CgsSound::Playback::K_DefaultSendName
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"       // AllocatorList (the bank carves)
 #include "rw/rwcore_general_alloc.h"                                     // rw::core::GeneralResourceAllocator (bank 0x18/0x19)
 #include "rw/audio/core/PlugIn.h"                                        // rw::audio::core::System (CreateInstance/Lock/...)
@@ -93,6 +94,18 @@ namespace
         {1, "sound\\streams\\StreamsRegistry_JP.bundle", "StreamsRegistry"},
     };
 
+}
+
+// DecFIGS declares K_DefaultSendName in CgsSubmixVoice.h:29. ARTIST's XCU
+// initializer for dword_8300A6E0 immediately precedes the root allocator
+// initializers; this TU placement preserves that startup adjacency without
+// claiming the original ARTIST object-file owner.
+namespace CgsSound
+{
+namespace Playback
+{
+const Name K_DefaultSendName("Send01");
+}
 }
 
 // DecFIGS BrnRootSoundModule.cpp:57..60 places these shared objects at :: scope.

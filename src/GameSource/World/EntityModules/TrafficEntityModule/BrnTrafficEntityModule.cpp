@@ -3869,25 +3869,15 @@ void TrafficEntityModule::PostPhysicsUpdate(CgsModule::IOBufferStack* lpInputBuf
         lpInput->GetVehicleManagerOutputInterface()->GetTrafficTypeRequestQueue(),
         lpOutput->GetTrafficTypeResponseQueue());
 
-    // The console's remaining tail (re-read by crash parity FX-TRAFFICLIGHTS, 2026-09-25):
-    //   0x8274EEC8..0x8274EEDC  the output's replay request interface (0x82711D90, the IO header's
-    //                           GetWriteInterfaceAt834784) ->RegisterSerialiser(&the module's TrafficEntitySerialiser
-    //                           at +0x724C0) (0x821F34A0), before the two unlocks;
-    //   0x8274EEF0..0x8274EF3C  after them: serialiser state (lwz 0(+0x724C0)) 1, 2 or 3 and the byte +0x7251B
-    //                           clear -> TrafficEntitySerialiser::Write(0) (0x8265F4E8) -- the replay recording;
-    //   0x8274EF40..0x8274EFD8  PerfMonCpu::StopMonitor x2 and GetMonitorData x5 into the miPerfMon_* stats.
-    // BLOCKED, the replay legs: RegisterSerialiser is bodied (BrnReplayRequestInterface.cpp), but there is no
-    // serialiser to hand it. BrnReplays::TrafficEntitySerialiser (Construct 0x8264C978, Write 0x8265F4E8) is
-    // declared only inside the UNMOUNTED BrnReplayTrafficEntitySerialiser.cpp, the module header has no member at
-    // +0x724C0, and Construct's own serialiser leg is gated (the [T1-traffic-leg] line). That is the traffic
-    // replay subsystem, not a tail call. Its independent debug-perfmon snapshot tail is restored below.
-    {
-
-
-    }
+    // ARTIST 0x8274EEC8..DC registers while the output is write-locked.
+    lpOutput->GetReplayRequestInterface()->RegisterSerialiser(&mTrafficEntitySerialiser);
 
     lpInput->UnlockForRead();
     lpOutput->UnlockForWrite();
+
+    // ARTIST 0x8274EEF0..3C: the constructor sets this skip byte to true.
+    if (mTrafficEntitySerialiser.IsRecording() && !mTrafficEntitySerialiser.SkipModuleSerialise())
+        mTrafficEntitySerialiser.Write();
 
     CgsDev::PerfMonCpu::StopMonitor(miPerfMon_PostPhysicsUpdate_Post1);
     CgsDev::PerfMonCpu::StopMonitor(miPerfMon_PostPhysicsUpdate);
@@ -5123,7 +5113,7 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     // 0x8274A994 `mr r30, r8` puts the update set (the 6th argument) in r30, and the prologue
     // splits it into the two bits this function cares about:
     //     0x8274A9A4  rlwinm r11, r30, 24, 24, 31   ; (updateSet >> 8) & 0xFF
-    //     0x8274A9AC  rlwinm r29, r11, 0,  31, 31   ; r29 = BIT 8  -- mbInReplay; it drives the
+    //     0x8274A9AC  rlwinm r29, r11, 0,  31, 31   ; r29 = BIT 8  -- mbReplayPlayback; it drives the
     //                                               ;   EnterReplay @0x827081D8 / LeaveReplay
     //                                               ;   @0x82708248 latch at 0x8274A9C4..0x8274A9D8
     //     0x8274A9B0  rlwinm r27, r30, 0,  31, 31   ; r27 = updateSet & 1 -- THE SIM-PAUSED BIT
@@ -5144,14 +5134,20 @@ void TrafficEntityModule::PreSceneUpdate(CgsModule::IOBufferStack* lpInputBuffer
     // above); the export set simply carries no per-function JSON for this address. ⭐ "The export
     // does not have it" is a fact about the export, never about the binary.
     //
-    // The SIM-PAUSED half is LIVE now (it gates the block below, and it is what makes a paused
-    // traffic sim actually stop). The REPLAY half stays gated: bit 8 is decoded above in the
-    // console and drives EnterReplay @0x827081D8 / LeaveReplay @0x82708248, neither of which has
-    // a body in this tree, and replay is not this wave's surface.
-    // DELETE WHEN: EnterReplay/LeaveReplay are bodied.
+    // ARTIST 0x8274A9A0..AA4C: the playback edge and serialiser work precede IO locks.
+    const bool lbReplayPlayback = (lUpdateSet & 0x100u) != 0;
+    if (lbReplayPlayback != mbReplayPlayback)
     {
-
+        if (lbReplayPlayback)
+            EnterReplay();
+        else
+            LeaveReplay();
     }
+    mbReplayPlayback = lbReplayPlayback;
+    mTrafficEntitySerialiser.CheckStaticLayoutCleared();
+    if (mTrafficEntitySerialiser.IsPlaying() && !mTrafficEntitySerialiser.SkipModuleSerialise())
+        mTrafficEntitySerialiser.Read();
+    UpdateSerialiser();
 
     lpOutput->LockForWrite();
     lpInput->LockForRead();
@@ -5597,7 +5593,7 @@ namespace
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::AddVehiclesToTargetList  @ 0x82722470   PARTIAL
+// TrafficEntityModule::AddVehiclesToTargetList  @ 0x82722470
 //
 // Decide which traffic vehicle assets should be resident, and flag them in the streamer
 // (TrafficCarStreamer::AddVehiclesToTargetList @0x8274F6A0 ORs E_LOADFLAG_REQUESTED into
@@ -5651,36 +5647,22 @@ void TrafficEntityModule::AddVehiclesToTargetList()
         return;
     }
 
-    // The HULL arm (0x82722578..0x82722640): stream the assets the local player's current hull
-    // declares. Each Hull carries an inline asset-index table (Hull::mauVehicleAssets, X360
-    // hull+64, count at hull+6).
-    u16 luHull = KU_INVALID_HULL;
-
+    u16 luHull;
+    if ( mbReplayPlayback )
     {
-        // GATE -- the replay-playback hull source (0x82722588..0x827225A0), i.e.
-        // `if (*(this + 0x72520)) luHull = *(sub_82707090(this + 0x724C0) + 74);`. Module
-        // +0x724C0 is the BrnReplays::TrafficEntitySerialiser and +0x72520 the replay-playback
-        // latch; both sit in the DWARF's un-emitted :776/:777 window with no member in
-        // BrnTrafficEntityModule.h, and the serialiser class has no owning header in this tree.
-        // Construct writes the latch zero, so live gameplay takes the arm below; this gate
-        // changes replay playback only.
-        // DELETE WHEN: the two members are modelled and the serialiser gets a header.
-
+        // ARTIST 0x82722614–0x82722624 selects the recorded player hull.
+        luHull = mTrafficEntitySerialiser.GetStaticLayout()->muLocalPlayerHull;
     }
-
-    // maaRaceCarHulls[meLocalPlayerIndex] -- the per-active-race-car active-hull list, X360
-    // this + 350220 + 24*index (Reset @0x8272CDA0 Appends into the same array at the same
-    // base). Entry 0 is the hull the car is in; the rest are neighbours.
-    const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrPlayerHulls =
-        maaRaceCarHulls[meLocalPlayerIndex];
-
-    if ( lrPlayerHulls.GetLength() == 0 )
+    else
     {
-        // 0x827225A8 `bne` -- before the first RecalculateActiveHulls the list is empty.
-        return;
+        const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrPlayerHulls =
+            maaRaceCarHulls[meLocalPlayerIndex];
+        if ( lrPlayerHulls.GetLength() == 0 )
+        {
+            return;
+        }
+        luHull = lrPlayerHulls.GetItem( 0 );
     }
-
-    luHull = lrPlayerHulls.GetItem( 0 );
 
     if ( luHull != KU_INVALID_HULL )
     {
@@ -5693,7 +5675,7 @@ void TrafficEntityModule::AddVehiclesToTargetList()
 }
 
 // ----------------------------------------------------------------------------
-// TrafficEntityModule::UpdateStreaming  @ 0x82748848   COMPLETE except one arm
+// TrafficEntityModule::UpdateStreaming  @ 0x82748848
 // DWARF :1554 `void UpdateStreaming(OutputBuffer_PostPhysics *)`.
 //
 // Per-frame streamer pump, in the console's order: clear last frame's wanted bits, run the
@@ -5771,35 +5753,22 @@ void TrafficEntityModule::UpdateStreaming( BrnTrafficIO::OutputBuffer_PostPhysic
         break;
     }
 
-    // The pump (0x827489AC..0x827489F0). During replay playback the console replaces Update's
-    // bonus-asset list with the recorded one:
-    //     if (*(this + 0x72520)) {
-    //         luNumBonus = *(sub_82707090(this + 0x724C0) + 150);   // count byte
-    //         lpauBonus  = sub_82707090(this + 0x724C0) + 151;      // the bytes after it
-    //     }
-    //     mStreamer.Update(lpauBonus, luNumBonus);
+    // ARTIST 0x827489AC–0x827489F0 uses the recorded bonus list during replay.
+    const u8* lpauBonusAssets = 0;
+    u32 luNumBonusAssets = 0;
+    if ( mbReplayPlayback )
     {
-        // GATE -- same two un-modelled members as the replay leg above (+0x72520 latch,
-        // +0x724C0 serialiser); sub_82707090 is an unnamed serialiser accessor.
-        //
-        // The (0, 0) below is not a placeholder: it is the console's own value on every
-        // non-replay frame (both locals start zero, only the latched arm changes them,
-        // 0x827489B0). Live gameplay is unchanged; replay playback loses the recorded set.
-        // DELETE WHEN: the two members are modelled and the serialiser gets a header.
-
+        const BrnReplays::TrafficEntitySerialiserStaticLayout* lpFrame =
+            mTrafficEntitySerialiser.GetStaticLayout();
+        luNumBonusAssets = lpFrame->muNumBonusAssets;
+        lpauBonusAssets = lpFrame->maBonusAssets;
     }
+    mStreamer.Update( lpauBonusAssets, luNumBonusAssets );
 
-    mStreamer.Update( 0, 0 );
-
+    // ARTIST 0x827489F4–0x82748A1C latches readiness after pumping the streamer.
+    if ( mbReplayPlayback && !mbReplayAssetsReady )
     {
-        // GATE -- the "all loaded" latch (0x827489F4..0x82748A1C), console
-        // `if (*(this+0x72520) && !*(this+0x72521)) *(this+0x72521) = AreAllAssetsLoaded();`.
-        // Both bytes are in the same un-modelled :776/:777 window. The second is set to one by
-        // Construct and cleared by EnterReplay @0x827081D8 and LeaveReplay @0x82708248, i.e. a
-        // "replay assets have arrived" latch re-armed at each replay boundary. Dead on every
-        // live-gameplay frame. DELETE WHEN: the two members are modelled.
-
-
+        mbReplayAssetsReady = mStreamer.AreAllAssetsLoaded();
     }
 
     // 0x82748A20..0x82748A30: carry the streamer's requests into this frame's output buffer.

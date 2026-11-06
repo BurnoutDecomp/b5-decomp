@@ -165,18 +165,6 @@ namespace
         if (lpGuiCache != 0 && lpProfile != 0)   // X360 unconditional; PC null-guard
         {
             lpGuiCache->SetPlayIntroVideo(lpProfile->GetIsNewProfile());
-
-            // [DIAG] NOT IN THE X360 BINARY. This prints the value the DESERIALISE actually
-            // produced, not the fact that the load "succeeded" -- the two are different claims
-            // and only the first one decides whether the intro replays.
-            if (CgsDev::Log::gpDebugPrint != 0)
-            {
-                *CgsDev::Log::gpDebugPrint
-                    << "[profile-save] deserialised: isNewProfile="
-                    << (lpProfile->GetIsNewProfile() ? 1 : 0)
-                    << " -> playIntroVideo="
-                    << (lpGuiCache->ShouldPlayIntroVideo() ? 1 : 0) << "\n";
-            }
         }
     }
 
@@ -1421,8 +1409,8 @@ void ProfileManager::ReadProfileData()
 
 // ---------------------------------------------------------------------------
 // ProfileManager::ValidateProfiles  @ 0x825073A0  (BrnGuiProfile.cpp:733)
-//   Validate all five stored segments; every check runs (the X360 combines
-//   them with non-short-circuiting ANDs so each segment logs its own verdict).
+//   Validate all five stored segments; materialize every result before combining,
+//   matching the X360's non-short-circuiting validation terms.
 // ---------------------------------------------------------------------------
 bool ProfileManager::ValidateProfiles()
 {
@@ -1445,42 +1433,9 @@ bool ProfileManager::ValidateProfiles()
 
     const bool lbOptionsDLC1Valid = mStoredData.mOptionsDataProfileDLC1.ValidateProfile();
 
-    // [PC save migration, NOT X360] PC saves written before the live-revenge block was a
-    // Clear()ed LiveRevengeProfile carry this segment as all zeros (version 0), which the real
-    // check rejects, sending every existing PC save down the damaged-save path. No console save
-    // holds an all-zero segment, so exactly that image is upgraded in place to a fresh profile
-    // (what it always stood for) before the check; the next save writes it back as version 6.
-    {
-        const u8* lpSegment = mStoredData.mLiveRevengeProfile.maData;
-        bool lbAllZero = true;
-        for (u32 i = 0; i < sizeof(mStoredData.mLiveRevengeProfile.maData); ++i)
-        {
-            if (lpSegment[i] != 0) { lbAllZero = false; break; }
-        }
-        if (lbAllZero)
-        {
-            reinterpret_cast<BrnNetwork::LiveRevengeProfile*>(mStoredData.mLiveRevengeProfile.maData)->Clear();
-        }
-    }
-
     const bool lbLiveRevengeValid =
         reinterpret_cast<BrnNetwork::LiveRevengeProfile*>(mStoredData.mLiveRevengeProfile.maData)
             ->ValidateProfile();
-
-    // [DIAG one-profile] NOT IN THE X360 BINARY. A rejected save is otherwise INVISIBLE --
-    // ReportTaskCompleted just skips the deserialise arm, and the boot then looks exactly
-    // like a first boot. Name the five terms and, for the one that can legitimately reject a
-    // real save, the two counts it compares.
-    if (CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[profile-save] ValidateProfiles: progression=" << (lbProgressionValid ? 1 : 0)
-            << " progressionDLC1=" << (lbProgressionDLC1Valid ? 1 : 0)
-            << " options=" << (lbOptionsValid ? 1 : 0)
-            << " optionsDLC1=" << (lbOptionsDLC1Valid ? 1 : 0)
-            << " liveRevenge=" << (lbLiveRevengeValid ? 1 : 0)
-            << "  (the progression term prints its own two counts above)\n";
-    }
 
     return lbProgressionValid & lbProgressionDLC1Valid & lbOptionsValid &
            lbOptionsDLC1Valid & lbLiveRevengeValid;
