@@ -10298,10 +10298,8 @@ void TrafficEntityModule::UpdateParams_HandleLaneChanges(u32 luParam,
     if (mbAllowDivergentBehaviour &&                                    // 0x827259B8 +0x717E7
         meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)          // 0x827259CC +0x713F0
     {
-        // 0x827259EC / 0x827259F0. The console calls GetDeterministicParamPos (@0x82714258,
-        // declaration-only here); its body is ParamTransform::GetDeterministicPos, reached the
-        // same way _wT2_06.cpp's cone tests reach it.
-        const Vector3 lParamPos = GetParamTransform(luParam)->GetDeterministicPos();
+        // 0x827259EC / 0x827259F0.
+        const Vector3 lParamPos = GetDeterministicParamPos(luParam);
         const Vector3 lPlayerToParam = lParamPos - mLocalPlayerPosition;   // +0x713D0
 
         // 0x82725A34..0x82725A68: vmsum3fp + vrsqrtefp with two Newton-Raphson steps, then
