@@ -345,7 +345,7 @@ public:
     // -- Inline accessors/setters used by the nested GameModeState states -----------------
     // None of these is separately X360-attested: the X360 build inlined them at every call
     // site (e.g. CountdownState::OnEnter reads mpModeManager off the mode; IntroState/OutroState
-    // ::Update read mfTimeStepSeconds; CountdownState::OnLeave sets mbVisibleCars). De-inlined
+    // ::Update read mfTimeStepSeconds; CountdownState::OnLeave sets mbCountdownJustFinished). De-inlined
     // back to their logical accessor form here, matching the DWARF declarations.
     ModeManager* GetModeManager() const           { return mpModeManager; }
     // The mode's current state-machine state (EGameModeState). Inlined in the X360 build at the
@@ -358,7 +358,8 @@ public:
     bool         HasFinished() const              { return mbFinished; } // DecFIGS declaration; inlined ARTIST 82350E88
     void         SetFinished(bool lbFinished)     { mbFinished = lbFinished; }
     void         SetIntroJustFinished(bool lbFin) { mbIntroJustFinished = lbFin; }
-    void         SetVisibleCars(bool lbVisible)   { mbVisibleCars = lbVisible; }
+    bool         CountdownJustFinished() const    { return mbCountdownJustFinished; }
+    void         SetCountdownJustFinished(bool lbFinished) { mbCountdownJustFinished = lbFinished; }
     // Inlined in the X360 build at the state-machine call sites (InProgressState::OnEnter sets
     // the timer-start request; ResultsState::OnEnter requests the results screen). De-inlined to
     // their named-accessor form; both back the latch bytes GameMode::Initialise clears.

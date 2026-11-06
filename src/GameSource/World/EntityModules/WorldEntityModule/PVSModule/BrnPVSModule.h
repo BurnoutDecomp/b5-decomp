@@ -111,7 +111,7 @@ namespace BrnWorld
 
         // X360 0x822BAFF0. Returns the module's output data structure (the GetZoneResponse queue
         // buffer). Tripwires "lpBuffer != NULL" / "lpOutputBuffer" on null.
-        PVSIO::OutputBuffer* GetOutputInterface();
+        PVSIO::OutputInterface* GetOutputInterface();
 
         // X360 0x822BB068. Returns the game-data request interface embedded in the output buffer
         // (asm: GetOutputStructure() + 0x1718 == &OutputBuffer::mGameDataRequestInterface).
@@ -143,6 +143,15 @@ namespace BrnWorld
         // (Construct is the only attested store); the name describes the behaviour Update
         // selects on it, which IS attested (0x822EE138 lbz +0x1FB0 -> the single-zone branch).
         bool mbDebugRestrictZoneLists;                                   // X360 +0x1FB0
+
+#if defined(D_PLATFORM_X360) && D_PLATFORM_X360
+        static void _AssertNativeLayout()
+        {
+            CGS_STATIC_ASSERT((offsetof(PVSModule, mePrepareStage) == 0x1D70), "PVS prepare stage");
+            CGS_STATIC_ASSERT((offsetof(PVSModule, meReleaseStage) == 0x1D74), "PVS release stage");
+            CGS_STATIC_ASSERT((offsetof(PVSModule, mZoneList) == 0x1D78), "PVS zone list");
+        }
+#endif
 
         friend class PVSDebugComponent;
     };

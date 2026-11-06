@@ -109,18 +109,7 @@ static const s32 KI_NO_NEXT_GAME_MODE = ModeManager::KI_GAME_MODE_SLOTS;
 // ============================================================================================
 // [!!] TEMPORARY ACCESS BRIDGE -- DELETE WHEN header_requests #1..#6 LAND ON BrnGameMode.h.
 // ============================================================================================
-// UpdateCurrentMode is, at its core, the consumer of SIX GameMode fields (the console reads them as
-// mode+0xA4 / +0xAD / +0xAE / +0xAF / +0xB0 / +0xB1). The committed BrnGameMode.h exposes SETTERS
-// for four of the latches (SetFinished / SetTimerStartRequest / SetShowResultsRequest /
-// SetIntroJustFinished) but NO READERS for any of them, no accessor at all for
-// mbCountdownJustFinished, and no setter for mfTimeStepSeconds -- and this partfile may not edit
-// that header. Without the readers the function is literally unwritable, so the six accessors are
-// bridged here through the standard protected-member idiom (a derived type may name a protected
-// base member through a pointer to the derived type). Nothing is ever constructed; the bridge has
-// no state and no console counterpart.
-//
-// EVERY SITE BELOW IS A ONE-LINE MECHANICAL EDIT once the header grows: ModeLatch::IsFinished(m)
-// becomes m->IsFinished(), and so on. The exact declaration text is in this agent's report.
+// This bridge accesses the remaining GameMode fields at +0xA4, +0xAD, +0xAE, +0xAF and +0xB0.
 namespace
 {
 struct ModeLatch : public GameMode
@@ -137,11 +126,6 @@ struct ModeLatch : public GameMode
     // console mode+0xB0
     static bool HasIntroJustFinished(const GameMode* lpMode)
         { return static_cast<const ModeLatch*>(lpMode)->mbIntroJustFinished; }
-    // console mode+0xB1 -- the ONLY latch with neither a getter nor a setter on the committed header.
-    static bool HasCountdownJustFinished(const GameMode* lpMode)
-        { return static_cast<const ModeLatch*>(lpMode)->mbCountdownJustFinished; }
-    static void SetCountdownJustFinished(GameMode* lpMode, bool lbValue)
-        { static_cast<ModeLatch*>(lpMode)->mbCountdownJustFinished = lbValue; }
     // console `stfs f31, 0xA4(r11)` -- the per-frame update step every GameModeState ticks by.
     static void SetUpdateTimeStep(GameMode* lpMode, f32 lfTimeStepSeconds)
         { static_cast<ModeLatch*>(lpMode)->mfTimeStepSeconds = lfTimeStepSeconds; }
@@ -363,7 +347,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     }
 
     // ---- (8) the countdown-just-finished latch --------------------------------------------------
-    if (ModeLatch::HasCountdownJustFinished(mpCurrentGameMode))
+    if (mpCurrentGameMode->CountdownJustFinished())
     {
         // [!] The console passes an UNINITIALISED stack byte (the slot is not written until the
         // action-262 post far below) and the consumer reads no payload. Zero-initialised here so
@@ -371,7 +355,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
         u8 luStopModeCountdownPayload = 0;
         lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&luStopModeCountdownPayload),
                                     GameStateModuleIO::E_ACTION_STOP_MODE_COUNTDOWN, 1);
-        ModeLatch::SetCountdownJustFinished(mpCurrentGameMode, false);
+        mpCurrentGameMode->SetCountdownJustFinished(false);
 
         // [x] UN-PARKED 2026-08-26 (stuntrace fsm round) -- header_request #9b IS CLOSED. Console
         // `stwx 3, gsm, 0x38B64`, i.e.

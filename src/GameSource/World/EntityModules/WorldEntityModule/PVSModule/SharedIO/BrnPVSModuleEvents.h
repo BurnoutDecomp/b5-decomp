@@ -66,12 +66,11 @@ struct GetZoneRequest
 //     event with `memcpy(736 * miLength + mpEvents, src, 736)` -- element stride
 //     736.
 //   * OutputBuffer::Construct @ 0x822EE658 places the next member (a
-//     VariableEventQueue<512,16>) at +0x1718, immediately after the
+//     VariableEventQueue<512,16>) at +0x1718, after the
 //     EventQueue<GetZoneResponse,8> sub-object: base 16 + 8*736 = 0x1710,
-//     rounded up to the 16-aligned 0x1718.
-// 736 == 46*16, and EventQueue<...,8>::Construct @ 0x822E51B0 lays the inline
-// maEvents[8] at the 16-aligned +0x10 -- so GetZoneResponse is 16-aligned (it
-// carries a 16-aligned vector/matrix payload).
+//     followed by the total-zone word and the aligned OutputInterface tail.
+// EventQueue<...,8>::Construct @ 0x822E51B0 lays the inline maEvents at +0x10.
+// DecFIGS declares u64 zone IDs and no vector payload; its natural X360 alignment is 8.
 //
 // INTERIOR (X360 offsets, now FULLY attested -- the whole 736-byte body is written
 // field by field by BrnWorld::PVSModule::Update @0x822EE050, which settled the three
@@ -104,7 +103,7 @@ struct GetZoneRequest
 //    == mPlayerZoneResponse + 0x2D8) back into the next request's miLookupIndex. So
 //    +0x2D8 is the lookup index and +0x000 is the player index -- the two names were
 //    swapped in the previous slice.
-struct CGS_ALIGN(16) GetZoneResponse
+struct GetZoneResponse
 {
     static const s32 KI_MAX_ZONES = 48;
 
@@ -194,66 +193,48 @@ struct InputBuffer : public CgsModule::DataStructure
     CgsModule::EventQueue<GetZoneRequest, 8> mZoneRequestQueue;   // +0x00
 };
 
-// ============================================================================
-// BrnWorld::PVSIO::OutputBuffer -- the PVS module's single-buffered OUTPUT data
-// structure (the TOutputBuffer template argument of the module's base).
-//
-// LAYOUT (X360 authoritative):
-//   +0x0000  EventQueue<GetZoneResponse, 8> mZoneResponseQueue
-//            The per-zone visibility replies the PVS Update produces. The
-//            EventQueue_GetZoneResponse_8 instance TU pins maEvents at the
-//            16-aligned +0x10, so this sub-object spans 0x10 + 8*736 == 0x1710,
-//            rounded up to the 16-aligned 0x1718.
-//   +0x1718  RequestInterface<512> mGameDataRequestInterface
-//            The game-data request interface the module fills to stream PVS data
-//            (LoadPVS, type 26). BrnWorld::PVSModule::GetGameDataRequestInt
-//            @ 0x822BB068 returns its address (asm: `addi r3, OutputStructure,
-//            0x1718`). sizeof(RequestInterface<512>) == 512 + 16 == 528.
-//
-// The +0x1718 placement is the SAME constant the EventQueue_GetZoneResponse_8 TU
-// already documents (0x10 + 8*736 == 0x1710, 16-aligned to 0x1718); pinned by
-// OutputBuffer::Construct @ 0x822EE658 and re-attested by GetGameDataRequestInt.
-//
-// FLAG (slice): only these two X360-attested members are modelled. The 16-byte
-// EventQueue base (mpEvents/miMaxLength/miLength, 12 bytes) is alignment-padded to
-// 16 because GetZoneResponse is 16-aligned, so mGameDataRequestInterface naturally
-// lands at +0x1718. Grow ADDITIVELY if a later PVS-module TU attests further
-// output-buffer members.
+// DecFIGS BrnPVSModuleOutputInterface.h:74-75. The u64 zone IDs give
+// the response queue eight-byte alignment on X360. Its 0x1710 bytes and the
+// total-zone word make this interface 0x1718 bytes after aggregate alignment.
+struct OutputInterface
+{
+    typedef CgsModule::EventQueue<GetZoneResponse, 8> ZoneResponseQueue;
+    void Construct() { mGetZoneResponseQueue.Construct(); mGetZoneResponseQueue.Clear(); }
+    void Clear() { mGetZoneResponseQueue.Clear(); }
+    ZoneResponseQueue* GetZoneResponseQueue() { return &mGetZoneResponseQueue; }
+    const ZoneResponseQueue* GetZoneResponseQueue() const { return &mGetZoneResponseQueue; }
+    u32 GetTotalZones() const { return muTotalZones; }
+    void SetTotalZones(u32 luTotalZones) { muTotalZones = luTotalZones; }
+
+    ZoneResponseQueue mGetZoneResponseQueue;
+    u32 muTotalZones;
+};
+
+// ARTIST 0x822EE658 and 0x822BB068: the output interface starts at zero,
+// followed by the game-data request interface at +0x1718. The outer buffer
+// remains 16-aligned; its 0x1930-byte extent anchors the following PVS stages.
 struct CGS_ALIGN(16) OutputBuffer : public CgsModule::DataStructure
 {
     void Construct()
     {
-        mZoneResponseQueue.Construct();
-        // The embedded game-data request pipe (X360 OutputBuffer::Construct @0x822EE658
-        // drives both members; the request interface's VariableEventQueue<512,16> must be
-        // Constructed before the Prepare/Release Clears run their "Not Constructed" guard).
-        mGameDataRequestInterface.mRequestQueue.Construct();
-        muTotalZones = 0;
+        mOutputInterface.Construct();
+        mGameDataRequestInterface.Construct();
+        Clear();
     }
-    // X360 0x822EE6A0 -- real body (clears the zone-response queue + the game-data request
-    // interface, returns true). De-inlined; body in BrnPVSModuleIO.cpp.
     bool Prepare();
-    // X360 0x822EE6D8 -- real body (clears the zone-response queue + the game-data request
-    // interface, returns true). De-inlined; body in BrnPVSModuleIO.cpp.
     bool Release();
-    // X360 0x822EE710 -- real body (clears the zone-response queue + the game-data request
-    // interface; tail-calls VariableEventQueue<512,16>::Clear). De-inlined; body in BrnPVSModuleIO.cpp.
     void Destruct();
-    void Clear()    {}
+    void Clear() { mOutputInterface.Clear(); mGameDataRequestInterface.Clear(); }
 
-    CgsModule::EventQueue<GetZoneResponse, 8>*    GetZoneResponseQueue() { return &mZoneResponseQueue; }
-    const CgsModule::EventQueue<GetZoneResponse, 8>* GetZoneResponseQueue() const { return &mZoneResponseQueue; }
+    OutputInterface* GetOutputInterface() { return &mOutputInterface; }
+    const OutputInterface* GetOutputInterface() const { return &mOutputInterface; }
+    BrnResource::GameDataIO::RequestInterface<512>* GetGameDataRequestInterface()
+        { return &mGameDataRequestInterface; }
+    const BrnResource::GameDataIO::RequestInterface<512>* GetGameDataRequestInterface() const
+        { return &mGameDataRequestInterface; }
 
-    // WorldEntityModule::GetTotalZones @ 0x822BB0E0 reads this under the module's
-    // output lock (X360: output-structure + 0x1710, between the queue and the
-    // game-data request interface).
-    u32 GetTotalZones() const { return muTotalZones; }
-
-    CgsModule::EventQueue<GetZoneResponse, 8>     mZoneResponseQueue;          // X360 +0x0000
-    u32                                           muTotalZones;                // X360 +0x1710
-    BrnResource::GameDataIO::RequestInterface<512> mGameDataRequestInterface;  // X360 +0x1718
-
-    // Pin the X360-attested layout the two accessors depend on.
+    OutputInterface mOutputInterface;
+    BrnResource::GameDataIO::RequestInterface<512> mGameDataRequestInterface;
     static void _AssertLayout();
 };
 }

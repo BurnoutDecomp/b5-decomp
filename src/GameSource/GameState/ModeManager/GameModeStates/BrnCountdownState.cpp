@@ -46,10 +46,9 @@ void CountdownState::Update()
     mpGameMode->SetCountdownDisplay(liCountdownDisplay);
 }
 
-// X360 0x823165F0. Leaving the countdown: tell the mode the visible cars can be shown
-// now that the pre-race countdown is over.
+// X360 0x823165F0. Raise the latch consumed by ModeManager::UpdateCurrentMode.
 void CountdownState::OnLeave()
 {
-    mpGameMode->SetVisibleCars(true);
+    mpGameMode->SetCountdownJustFinished(true);
 }
 }

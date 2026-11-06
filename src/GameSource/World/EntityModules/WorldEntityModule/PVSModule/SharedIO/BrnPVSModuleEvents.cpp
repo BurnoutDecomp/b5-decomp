@@ -28,26 +28,20 @@ namespace PVSIO
         *lpbOutUseVelocity = mbUseVelocity != 0;  // lbz 0x24(this) -> stb *lpbOutUseVelocity
     }
 
-    // OutputBuffer member ORDER the PVS-module accessors attest:
-    //   mZoneResponseQueue @ +0 (its inline maEvents at the 16-aligned +0x10, so the
-    //   EventQueue<GetZoneResponse,8> sub-object spans 0x10 + 8*736 == 0x1710, 16-aligned
-    //   to 0x1718 on the X360 32-bit layout), then RequestInterface<512>
-    //   mGameDataRequestInterface, whose address BrnWorld::PVSModule::GetGameDataRequestInt
-    //   @ 0x822BB068 returns (`addi r3, OutputStructure, 0x1718`).
-    //
-    // LAYOUT NOTE: the X360 +0x1718 offset is a 32-bit-pointer artifact (the EventQueue base
-    // holds a T* + two s32, 12 bytes on X360 vs 16 on the 64-bit host). On the host the member
-    // ORDER is what is load-bearing -- the getter returns &mGameDataRequestInterface BY NAME,
-    // not by raw offset -- so only the member sequence (queue first, request interface second)
-    // is pinned here, not the X360 absolute byte offset (matches the sibling
-    // BrnWorldEntityModuleIO host-offset convention).
     void OutputBuffer::_AssertLayout()
     {
-        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mZoneResponseQueue) == 0x0),
-                      "PVSIO::OutputBuffer::mZoneResponseQueue must be the first member");
-        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mGameDataRequestInterface) >
-                      offsetof(OutputBuffer, mZoneResponseQueue)),
-                      "PVSIO::OutputBuffer::mGameDataRequestInterface must follow the response queue");
+#if defined(D_PLATFORM_X360) && D_PLATFORM_X360
+        CGS_STATIC_ASSERT((sizeof(GetZoneResponse) == 0x2E0), "response stride");
+        CGS_STATIC_ASSERT((__alignof(GetZoneResponse) == 8), "response alignment");
+        CGS_STATIC_ASSERT((sizeof(OutputInterface::ZoneResponseQueue) == 0x1710), "response queue extent");
+        CGS_STATIC_ASSERT((offsetof(OutputInterface, muTotalZones) == 0x1710), "total zones offset");
+        CGS_STATIC_ASSERT((sizeof(OutputInterface) == 0x1718), "output interface extent");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mOutputInterface) == 0), "output interface offset");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mGameDataRequestInterface) == 0x1718), "request interface offset");
+        CGS_STATIC_ASSERT((sizeof(OutputBuffer) == 0x1930), "output buffer extent");
+        CGS_STATIC_ASSERT((__alignof(OutputBuffer) == 16), "output buffer alignment");
+#endif
     }
+
 }
 }
