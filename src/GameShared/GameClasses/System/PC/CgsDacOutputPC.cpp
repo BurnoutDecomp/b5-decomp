@@ -6,6 +6,13 @@
 #include "rw/audio/core/Mixer.h"       // Mixer::KU_FRAME_SIZE
 #include "rw/audio/core/PlugIn.h"      // System (ExecuteCommands + the two locks)
 
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <Windows.h> // QueryPerformanceCounter ([FLAG PC witness] refill split)
 #include <atomic>
 #include <cstring> // memset (the silence frames)
 
@@ -46,12 +53,17 @@ namespace
             return;
 
         CgsSystem::RwacCommandTracePC::MarkEngineBegin(lpSystem);
+        // [FLAG PC witness] the refill split, see AudioOutputPC::NoteEngineFillTiming.
+        LARGE_INTEGER lT0 = {}, lT1 = {}, lT2 = {}, lT3 = {}, lFreq = {};
+        ::QueryPerformanceCounter(&lT0);
         System::ExecuteCommandsLock(lpSystem);
+        ::QueryPerformanceCounter(&lT1);
         CgsSystem::RwacCommandTracePC::MarkConsumerEvent(
             CgsSystem::RwacCommandTracePC::CommandLockAcquired, 2);
         CgsSystem::RwacCommandTracePC::MarkConsumerEvent(
             CgsSystem::RwacCommandTracePC::CommandPassBegin, 3);
         System::ExecuteCommands(lpSystem);
+        ::QueryPerformanceCounter(&lT2);
         CgsSystem::RwacCommandTracePC::MarkConsumerEvent(
             CgsSystem::RwacCommandTracePC::CommandPassEnd, 4);
         // Commands may retire the DAC. Read it only AFTER command execution and
@@ -103,7 +115,15 @@ namespace
                 lpOut[liSample * 2 + 1] = lfRight;
             }
         }
+        ::QueryPerformanceCounter(&lT3);
         System::ExecuteCommandsUnlock(lpSystem);
+        ::QueryPerformanceFrequency(&lFreq);
+        if (lFreq.QuadPart != 0)
+        {
+            const auto lUs = [&](const LARGE_INTEGER& a, const LARGE_INTEGER& b)
+            { return static_cast<unsigned int>((b.QuadPart - a.QuadPart) * 1000000 / lFreq.QuadPart); };
+            CgsSystem::AudioOutputPC::NoteEngineFillTiming(lUs(lT0, lT1), lUs(lT1, lT2), lUs(lT2, lT3));
+        }
         CgsSystem::RwacCommandTracePC::MarkConsumerEvent(
             CgsSystem::RwacCommandTracePC::EngineEnd, 7);
     }
