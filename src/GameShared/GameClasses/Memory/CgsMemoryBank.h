@@ -54,10 +54,12 @@ namespace CgsMemory
             bool mbAllowFragmentation;
         };
 
-        // Reset to "unused": empty every resource set + mark the bank invalid. (X360 InitBanks inlines
-        // this per bank: each set zeroed with first/last block = invalid, mId = -1, parent/flags = 0xFF.)
+        // Reset to "unused": empty every resource set and mark the bank invalid.
+        // ARTIST InitBanks and DestroyBank preserve the existing flag byte.
         void Clear()
         {
+            mId       = -1;
+            mu8Parent = KU_INVALID_BANK;   // 0xFF
             for (s32 li = 0; li < KI_NUM_TYPES; ++li)
             {
                 maResourceSets[li].mu16BlockSize = 0;
@@ -66,9 +68,6 @@ namespace CgsMemory
                 maResourceSets[li].muLastBlock   = 0xFFFFFFFFu;
                 maResourceSets[li].mpData        = 0;
             }
-            mId       = -1;
-            mu8Parent = KU_INVALID_BANK;   // 0xFF
-            mu8Flags  = 0xFF;              // X360 sets the parent+flags half-word to 0xFFFF
         }
         bool  IsUsed() const                    { return mId != -1; }
         s16   GetID() const                     { return mId; }
