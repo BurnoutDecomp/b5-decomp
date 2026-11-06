@@ -27,7 +27,7 @@
 // type with no committed layout, not a behaviour we chose to drop):
 //   - (the five Im3d family Constructs all run now: Im3d / TexPlusLighting / Skids / Smoke /
 //     Blend -- the smoke renderer was the last placeholder, retired 2026-09-24 by FX-CRASHVFX)
-//   - cLionFX::Init + NativeParticleVertex::Construct + LionParticleRender::Setup's
+//   - cLionFX::Init + LionParticleRender::Setup's
 //     Lion half (the Lion core is not landed)
 //   - the four SparkArray bucket-manager records and ResetSparkFrameData
 //   - (the per-array BrnSimpleParticleArray::Construct + spawn-time seeding and the
@@ -380,13 +380,8 @@ bool ParticleModule::Prepare(const BrnResource::GameDataIO::AllocatorList* lpAll
         mVertexBufferManagerSparks.Construct(lpVfxAllocator, KU_VB_SIZE_SPARKS, false);
         mVertexBufferManagerParticles.Construct(lpVfxAllocator, KU_VB_SIZE_PARTICLES, false);
 
-        // NativeParticleVertex::Construct(lpVfxAllocator) -- the Lion vertex declaration.
-        {
-            static bool sbLogged = false;
-            LogNotReconstructed(sbLogged,
-                "ParticleModule::Prepare's BrnParticle::NativeParticleVertex::Construct "
-                "(the native Lion vertex declaration)");
-        }
+        // 0x8229C078.
+        NativeParticleVertex::Construct(lpVfxAllocator);
 
         // --- the five contained immediate-mode renderers ---------------------------------
         // All five take the same argument: `off_82F2C814`, the process-wide "GlobalGraphics"

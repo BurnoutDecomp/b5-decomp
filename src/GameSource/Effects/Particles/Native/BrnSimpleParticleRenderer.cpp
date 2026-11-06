@@ -272,10 +272,15 @@ namespace Native
         const bool lbUseZFade = false;
         mpRenderer->BeginRendering(BrnGraphics::Im3dSmokeRenderer::KI8_PROGRAM_SANS_ZFADE);
 
-        // The stream. The console reads the stride out of the descriptor off_82FAB6A4's own element
-        // table; that descriptor IS the 24-byte BasicColouredTexturedVertex stream the renderer
-        // declares (and NativeParticleVertex::VertexIterator::Write fills), so use its packed
-        // GPU stride. The separate BasicColouredTexturedVertex CPU record is32 bytes.
+        // 0x8228CBB0: shadow-compare the native vertex descriptor off_82FAB6A4 and mark the program
+        // state dirty on a change. Its three element words are the ones CgsIm3d declares, so the
+        // D3D declaration does not change.
+        shadow::Device::SetVertexDescriptor(reinterpret_cast<const renderengine::VertexDescriptorData*>(
+            NativeParticleVertex::GetVertexDescriptor()));
+
+        // The stream. The console reads the stride out of that descriptor's own element table; it
+        // is NativeParticleVertex::VertexIterator::Write's packed 24 bytes. The separate
+        // BasicColouredTexturedVertex CPU record is 32 bytes.
         const u32 luVertexStride = NativeParticleVertex::GetStride();
         D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, 0, 1);
         D3DDevice_SetStreamSource(gpD3DDevice, 0, lpVertexBuffer, 0, luVertexStride, 1);
