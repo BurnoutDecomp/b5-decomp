@@ -168,38 +168,12 @@ namespace BrnGui
     {
         if (muSaveDataSizeKb != 0 && muGameDataSizeKb != 0)
         {
-            // X360: the parameterised TextField::SetLocalisedText @0x824E7F78 --
-            // macMessageId under E_FORMAT_ID_LOOKUP with the two KB counts as
-            // E_FORMAT_INTEGER positional parameters (%1/%2), via the two-slot
-            // LanguageManager formatter @0x828659E8. That vararg overload is not
-            // committed yet; compose the identical result from the committed formatter
-            // surface (the E_FORMAT_INTEGER parameter branch atoi's its text, so the
-            // decimal marshalling below reproduces the console's integer formatting),
-            // then adopt + push exactly as the overload's tail does (SetDatabaseText +
-            // OutputAptData).
-            CgsLanguage::LanguageManager* lpLanguageManager =
-                mpStateInterface->GetLanguageManager();
-
-            char lacSaveKb[16];
-            char lacGameKb[16];
-            CgsCore::SPrintf(lacSaveKb, sizeof(lacSaveKb), "%u", muSaveDataSizeKb);
-            CgsCore::SPrintf(lacGameKb, sizeof(lacGameKb), "%u", muGameDataSizeKb);
-
-            const char* lapcParams[2] = { lacSaveKb, lacGameKb };
-            const CgsLanguage::LanguageManager::ParameterFormatType laeParamTypes[2] =
-            {
-                CgsLanguage::LanguageManager::E_FORMAT_INTEGER,
-                CgsLanguage::LanguageManager::E_FORMAT_INTEGER,
-            };
-
-            char lacMessage[1120];   // the formatter writes through a 1024 cap
-            lpLanguageManager->Obsolete_FormatTextByArray(
-                lacMessage, 1024, macMessageId,
-                CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 2, lapcParams,
-                laeParamTypes);
-
-            mMessageText.SetDatabaseText(lacMessage);
-            mMessageText.OutputAptData();
+            mMessageText.SetLocalisedText(macMessageId,
+                                          CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP,
+                                          static_cast<s32>(muSaveDataSizeKb),
+                                          CgsLanguage::LanguageManager::E_FORMAT_INTEGER,
+                                          static_cast<s32>(muGameDataSizeKb),
+                                          CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
         }
         else
         {

@@ -117,6 +117,15 @@ namespace BrnGui
                               s32 liValue,
                               CgsLanguage::LanguageManager::ParameterFormatType leValueFormat);
 
+        // @0x824E7F78 (BrnTextField.cpp:418/:419) -- the TWO-INTEGER-PARAMETER variant: lpacText
+        // under leFormat with liValue1 and liValue2 printed into %1 and %2.
+        bool SetLocalisedText(const char* lpacText,
+                              CgsLanguage::LanguageManager::ParameterFormatType leFormat,
+                              s32 liValue1,
+                              CgsLanguage::LanguageManager::ParameterFormatType leValue1Format,
+                              s32 liValue2,
+                              CgsLanguage::LanguageManager::ParameterFormatType leValue2Format);
+
         // @0x824E7DD0 (BrnTextField.cpp:386/:387) -- the ONE-FLOAT-PARAMETER variant
         // (ledger-unnamed sub_824E7DD0), the exact sibling of the integer form above with
         // LanguageManager::FormatTextFromFloat in place of FormatTextFromInt. Same two

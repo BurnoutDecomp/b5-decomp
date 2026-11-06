@@ -873,6 +873,36 @@ namespace CgsLanguage
         return true;
     }
 
+    // @ 0x828659E8 (asserts cpp:1259/1260) -- the two-value form of FormatTextFromInt, with the
+    // same constant 1024 print cap.
+    bool LanguageManager::FormatTextFromInt(char* lpacBuffer, u32 luBufferSize,
+                                            const char* lpcSourceText, ParameterFormatType leType,
+                                            s32 liValue1, ParameterFormatType leValue1Type,
+                                            s32 liValue2, ParameterFormatType leValue2Type)
+    {
+        CGS_ASSERT(lpacBuffer != 0, "Target field is invalid in LanguageManager::FormatText");  // cpp:1259
+        CGS_ASSERT(lpcSourceText != 0, "Text field is invalid in TextField::SetLocalisedText"); // cpp:1260
+
+        (void)luBufferSize;
+
+        char lacSourceBuffer[1024];
+        FormatText(lacSourceBuffer, 1024, lpcSourceText, leType);
+
+        char lacValue1Buffer[64];
+        char lacValue2Buffer[64];
+        FormatText(lacValue1Buffer, 64, liValue1, leValue1Type);
+        FormatText(lacValue2Buffer, 64, liValue2, leValue2Type);
+
+        const CgsUnicode::CgsUtf8* lapUtf8Params[2];
+        lapUtf8Params[0] = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacValue1Buffer);
+        lapUtf8Params[1] = reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacValue2Buffer);
+
+        CgsUnicode::_Print(reinterpret_cast<CgsUnicode::CgsUtf8*>(lpacBuffer),
+                           reinterpret_cast<const CgsUnicode::CgsUtf8*>(lacSourceBuffer),
+                           1024, lapUtf8Params, 2);
+        return true;
+    }
+
     // [H1 wave 2026-08-25] @ 0x82865878 (asserts cpp:1221/1222) -- FormatTextFromInt's float
     // sibling, store-for-store: resolve the source id into a 1024 scratch, render the float
     // value into a 64-byte slot through the FLOAT dispatcher, print into %1.
