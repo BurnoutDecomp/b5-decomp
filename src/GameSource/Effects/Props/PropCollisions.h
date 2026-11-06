@@ -2,6 +2,7 @@
 #define GAMESOURCE_EFFECTS_PROPS_PROPCOLLISIONS_H
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT (VFXCoronaTypeData::GetCoronaType)
 #include "rw/math/vpu/types.h"                                          // rw::math::vpu::Vector3 / Matrix44Affine
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                   // CgsNumeric::Random (PropCollisions::mRandom, BY VALUE)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"      // CgsResource::ResourcePtr / ResourceHandle (BY VALUE)
@@ -59,6 +60,50 @@ namespace BrnParticle
         }
     };
 
+    // DWARF VFXPropsResourceType.h:256 -- one corona's light behaviour, shared by every placement of it.
+    // Console stride 0x20 (FixUp loop D `32 * index`, PreSceneUpdate `addi r28, r28, 0x20`).
+    struct VFXCoronaTypeData
+    {
+        static const u32 KU_CORONA_TYPE_MAX = 17;   // VFXCoronaTypeMax: GetCoronaType's `cmplwi r11, 0x11`
+
+        u32  mnID;             // +0x00 :256
+        u32  mType;            // +0x04 :257  eVFXCoronaType, the corona texture
+        f32  mrTimeOn;         // +0x08 :258
+        f32  mrTimeOff;        // +0x0C :259
+        f32  mrSizeMin;        // +0x10 :260
+        f32  mrSizeMax;        // +0x14 :261
+        f32  mrMasterTime;     // +0x18 :262  advanced by PropEntityModule::PreSceneUpdate
+        bool mbSynchronised;   // +0x1C :263
+        u8   maPad1D[3];
+
+        // :166 / 0x822A4418 -- with its "mType<VFXCoronaTypeMax" assert (VFXPropsResourceType.h:168).
+        s32 GetCoronaType() const
+        {
+            CGS_ASSERT(mType < KU_CORONA_TYPE_MAX, "mType<VFXCoronaTypeMax");
+            return static_cast<s32>(mType);
+        }
+        f32 GetTotalTime() const { return mrTimeOn + mrTimeOff; }   // :202
+    };
+    static_assert(sizeof(VFXCoronaTypeData) == 0x20, "VFXCoronaTypeData is the console's 32-byte record");
+
+    // DWARF VFXPropsResourceType.h:302 -- one corona placed on a prop, in the prop's model space.
+    // Console stride 0x50 (FixUp loop D `80 * index`, RenderPropAndCoronas `addi r24, r24, 0x50`).
+    struct VFXCoronaType
+    {
+        rw::math::vpu::Matrix44Affine mTransform;   // +0x00 :302  row zAxis (+0x20) = facing, wAxis (+0x30) = position
+        u32 mpTypeData;                            // +0x40 :303  VFXCoronaTypeData* -- a 32-bit address word
+        f32 mrTimeOffset;                          // +0x44 :306  phase offset into the shared blink cycle
+        u8  maPad48[8];
+
+        f32 GetTimeOffset() const { return mrTimeOffset; }   // :289
+
+        const VFXCoronaTypeData* GetTypeData() const   // :274
+        {
+            return reinterpret_cast<const VFXCoronaTypeData*>(static_cast<uintptr_t>(mpTypeData));
+        }
+    };
+    static_assert(sizeof(VFXCoronaType) == 0x50, "VFXCoronaType is the console's 80-byte record");
+
     // DWARF VFXPropsResourceType.h:311 -- 16 bytes.
     struct VFXPropState
     {
@@ -71,6 +116,12 @@ namespace BrnParticle
         {
             return reinterpret_cast<const VFXMaterial*>(static_cast<uintptr_t>(mpVFXMaterial));
         }
+        // RenderPropAndCoronas reads `*(state + 8)` + 0x50 * i and `*(state + 0xC)` for the count.
+        const VFXCoronaType* GetCoronaTypes() const
+        {
+            return reinterpret_cast<const VFXCoronaType*>(static_cast<uintptr_t>(mpCoronaType));
+        }
+        u32 GetNumCoronas() const { return muNumCoronas; }
     };
 
     // DWARF VFXPropsResourceType.h:352 -- 16 bytes.
@@ -96,6 +147,15 @@ namespace BrnParticle
             return reinterpret_cast<const VFXProp*>(static_cast<uintptr_t>(mpPropTable));
         }
         u32 GetTableSize() const { return muPropTableSize; }                        // :466
+
+        // :634, with its "luOffset < muCoronaDataTableSize" assert (:636) -- PreSceneUpdate's phase loop
+        // (0x8230BD50 `lwz 0x2C`, 0x8230BD74 `lwz 0x28` + 0x20 * i).
+        u32 GetNumCoronaTypeData() const { return muCoronaDataTableSize; }
+        VFXCoronaTypeData* GetCoronaTypeDataByOffset(u32 luOffset) const
+        {
+            CGS_ASSERT(luOffset < muCoronaDataTableSize, "luOffset < muCoronaDataTableSize");
+            return reinterpret_cast<VFXCoronaTypeData*>(static_cast<uintptr_t>(mpCoronaTypeDataTable)) + luOffset;
+        }
 
         u32 mpPropTable;             // +0x00 :645
         u32 muPropTableSize;         // +0x04 :646

@@ -24,6 +24,7 @@
 // ============================================================================
 
 #include "BrnPropEntityModule.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
 #include "pc/gcm/renderengine/reflections/PropReflection.h"
 #include "pc/gcm/renderengine/reflections/ReflectionLodDebug.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
@@ -445,15 +446,16 @@ namespace BrnWorld
             {
                 return false;   // reply has not landed yet -- resume next frame
             }
-            // PARK -- the X360 then binds mVFXPropCollection from the reply's resource
-            // handle (`ld r11, 0x18(event); CreateFromHandle(&mVFXPropCollection, &r11)`).
-            // The reply is a pool AcquireResourceResponse, whose struct has NO committed
-            // home (CgsResourceIOEvents.h declares the REQUEST and the *List* response, not
-            // this one), so the handle cannot be read by name and the console's +0x18 is a
-            // 32-bit-target offset that does not survive to x64. Deliberately not poked.
-            // Consequence: the VFX prop-effects collection stays unbound -- particle FX on
-            // prop impacts, not prop spawning/rendering. Restore as
-            // `mVFXPropCollection = lpResponse->mHandle;` when the response type lands.
+            // The reply carries the resource handle (`ld r11, 0x18(event); CreateFromHandle`).
+            const CgsModule::Event* lpVfxEvent = 0;
+            s32 liVfxEventSize = 0;
+            mReceiverQueue.GetFirstEvent(&lpVfxEvent, &liVfxEventSize);
+            const CgsResource::Events::AcquireResourceResponse* lpVfxReply =
+                reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpVfxEvent);
+            CgsResource::ResourceHandle lVfxHandle;
+            lVfxHandle.mpResourceMemory = lpVfxReply->mpResourceMemory;
+            lVfxHandle.mpSourceEntry    = lpVfxReply->mpSourceEntry;
+            mVFXPropCollection = lVfxHandle;
             // fall through
         }
 
