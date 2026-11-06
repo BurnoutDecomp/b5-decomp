@@ -23,14 +23,20 @@ void WorldMap2D::Construct(const void* lpData, Vector2 lWorldOrigin, Vector2 lWo
 
 uint8_t WorldMap2D::GetValue(Vector2 lPosition) const
 {
-    // Normalised position within the world rect (0..1 across the grid).
-    // X360 computes 1/size via vrefp + two Newton-Raphson refinement steps
-    // (vnmsubfp/vmaddfp); a plain divide is the equivalent reconstruction.
-    const float lfRatioX = (lPosition.mV.x - mWorldOrigin.mV.x) / mWorldSize.mV.x;
-    const float lfRatioY = (lPosition.mV.y - mWorldOrigin.mV.y) / mWorldSize.mV.y;
+    using rw::math::vpu::VectorIntrinsic;
+    using rw::math::vpu::detail::Vector3NativeReciprocal;
 
-    const int32_t liX = static_cast<int32_t>(lfRatioX * muWidth);
-    const int32_t liY = static_cast<int32_t>(lfRatioY * muHeight);
+    const VectorIntrinsic lvDeltaX = __vsubfp(__vspltw(lPosition.mV, 0),
+                                              __vspltw(mWorldOrigin.mV, 0));
+    const VectorIntrinsic lvDeltaY = __vsubfp(__vspltw(lPosition.mV, 1),
+                                              __vspltw(mWorldOrigin.mV, 1));
+    const VectorIntrinsic lvInverseX = Vector3NativeReciprocal(__vspltw(mWorldSize.mV, 0));
+    const VectorIntrinsic lvInverseY = Vector3NativeReciprocal(__vspltw(mWorldSize.mV, 1));
+    const VectorIntrinsic lvRatioX = __vmulfp(lvInverseX, lvDeltaX);
+    const VectorIntrinsic lvRatioY = __vmulfp(lvInverseY, lvDeltaY);
+
+    const int32_t liX = static_cast<int32_t>(lvRatioX.v[0] * muWidth);
+    const int32_t liY = static_cast<int32_t>(lvRatioY.v[0] * muHeight);
 
     if (liX < 0 || liX >= muWidth || liY < 0 || liY >= muHeight)
     {
@@ -38,19 +44,6 @@ uint8_t WorldMap2D::GetValue(Vector2 lPosition) const
     }
 
     return mpValues[liY * muWidth + liX];
-}
-
-// The Vector3 overload projects onto the ground plane before the shared 2D lookup.
-// ARTIST callers @0x822D3A9C / 0x822F57D8 inline this conversion: vperm with
-// mask @0x82CDA450 gathers (X, Z, X, X), so GetValue reads world X/Z in lanes 0/1.
-uint8_t WorldMap2D::GetValue(Vector3 lPosition) const
-{
-    Vector2 lFlat;
-    lFlat.mV.x = lPosition.mV.x;
-    lFlat.mV.y = lPosition.mV.z;
-    lFlat.mV.z = 0.0f;
-    lFlat.mV.w = 0.0f;
-    return GetValue(lFlat);
 }
 
 }
