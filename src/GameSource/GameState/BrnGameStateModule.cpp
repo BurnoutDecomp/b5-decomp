@@ -576,6 +576,11 @@ void GameStateModule::PreWorldUpdate(
     if (lbDriveThruDataDirty)
         SendSetUpAllDriveThrusMessage(lpActionQueue);
     DetectModeStarts(lpInput, lpOutput);
+    // Test harness, not on the console: each is inert unless its BRN_ variable is set.
+    HarnessInjectEventStartBringUp(lpOutput);
+    HarnessInjectPlayerCarBringUp();
+    HarnessAuditVehicleAudioBringUp();
+    HarnessInjectJunkyardCarBringUp();
     // FLAG PC-platform leaf: optional feedback observes this frame's locked
     // snapshot and semantic events. Publish only copied values, never a handle.
     if (CgsInput::PCGamepad::WantsFeedback())
