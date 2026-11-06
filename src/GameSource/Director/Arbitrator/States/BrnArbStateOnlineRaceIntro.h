@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT (handle IsAllocated check)
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"   // ArbitratorState / ArbStateSharedInfo
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"              // Camera::BehaviourHandle
+#include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h" // Camera::BehaviourInterpolate::Parameters, held by value
 
 // ============================================================================
 // GameSource/Director/Arbitrator/States/BrnArbStateOnlineRaceIntro.h
@@ -34,9 +35,8 @@
 //                           muAllocationKey@+0x184, muHelperIndex@+0x188, mpManager@+0x18C,
 //                           mpBehaviour@+0x190).
 //   * mInterpolatorParams  @+0x194 (BehaviourInterpolate::Parameters, 0x10) -- the per-take
-//                           interpolation parameters Construct seeds ({+0x00:0, +0x04:8,
-//                           +0x08:0, +0x0C:2}; the +0x04 word is set to 8 then the +0x0C word
-//                           to 2, the rest 0).
+//                           interpolation parameters Construct seeds ({+0x00 mType:8,
+//                           +0x04 name:0, +0x08 method:0, +0x0C mapping:2}).
 //   * maRivalBehaviourHandle[3] @+0x1A4 / +0x1B8 / +0x1CC (BehaviourHandle, 0x14 each) -- the
 //                           three rival "show" ICE-anim handles.
 //   * mPlayerBehaviourHandle @+0x1E0 (BehaviourHandle, 0x14) -- the player "show" handle.
@@ -46,7 +46,10 @@
 //   * mfTimeToSpendLookingAtPlayer @+0x210 (f32) -- player "show" segment time.
 //   * mfTimeInState        @+0x214 (f32) -- seconds spent in the current sub-state.
 //   * muCurrentRival       @+0x218 (u32) -- which rival the fly-by is on.
-//   * muRivalMovieOffset   @+0x21C (u32) -- the rival-handle-array allocation cursor.
+//   * muRivalMovieOffset   @+0x21C (u32) -- the rotating shot cursor: SetupRivalMovie picks
+//                           shot (offset % rivalShots) + 2 and increments it. Only Construct
+//                           zeroes it, so successive intros show different shots. The rival
+//                           handles themselves are indexed by muCurrentRival.
 //   * meState              @+0x220 (EState) -- the state-machine value; the dispatch table is
 //                           indexed by it (0..11; default -> assert).
 // Parity is BY NAMED MEMBER (the project's x64-gate rule): the console's 4-byte-pointer offsets
@@ -117,30 +120,18 @@ namespace BrnDirector
 
         // ---- the per-take interpolation parameters (mInterpolatorParams, +0x194, 0x10) -----
         // The BehaviourInterpolate::Parameters block Construct seeds and Update hands to the
-        // interpolator setup. The declaration record names the member
-        // BrnDirector::Camera::BehaviourInterpolate::Parameters but the BehaviourInterpolate TU's
-        // minimal slice models Parameters as an opaque type; the four words Construct writes are
-        // reproduced here BY VALUE so the seed is byte-faithful. FLAG: the field ROLES are not
-        // recovered (only the seeded values are asm-attested: {+0x00:0, +0x04:8, +0x08:0,
-        // +0x0C:2}); replace with the real BehaviourInterpolate::Parameters layout when that TU
-        // lands. Kept a nested POD (not the shared slice's empty Parameters) so the 16-byte
-        // seed has somewhere faithful to live without forking the shared type.
-        struct InterpolatorParameters
-        {
-            InterpolatorParameters()
-                : muField00(0), muField04(0), muField08(0), muField0C(0) {}
-
-            u32 muField00;   // +0x00  Construct: 0
-            u32 muField04;   // +0x04  Construct: 8   (FLAG: role not recovered)
-            u32 muField08;   // +0x08  Construct: 0
-            u32 muField0C;   // +0x0C  Construct: 2   (FLAG: role not recovered)
-        };
+        // interpolator through SetParameters. Construct @0x8225AE98 stores +0x194 = 8 (mType),
+        // +0x198 = 0 (mpcDebugName), +0x19C = 0 (method), then +0x1A0 = 1 and +0x1A0 = 2: the
+        // inlined Parameters::Construct followed by mapping = E_MAPPING_EXPONENTIAL_SYMMETRICAL.
+        // It was a four-u32 POD seeded {0, 8, 0, 2}, one word off; reinterpreted as Parameters
+        // on x64, its debug name read the last two words as 0x0000000200000000 and
+        // BehaviourHelper::GetDebugFullName faulted on it in the online race intro.
 
         static const u32 KU_NUM_RIVAL_BEHAVIOURS = 3;
 
         // ---- members, declaration order; offsets in comments -----------------------------
         Camera::BehaviourHandle<Camera::BehaviourInterpolate> mInterpolator;       // +0x180
-        InterpolatorParameters                        mInterpolatorParams;   // +0x194
+        Camera::BehaviourInterpolate::Parameters      mInterpolatorParams;   // +0x194
         Camera::BehaviourHandle<Camera::BehaviourIceAnim> maRivalBehaviourHandle[KU_NUM_RIVAL_BEHAVIOURS]; // +0x1A4
         Camera::BehaviourHandle<Camera::BehaviourIceAnim> mPlayerBehaviourHandle; // +0x1E0
         Camera::BehaviourHandle<Camera::BehaviourIceAnim> mLightsBehaviourHandle; // +0x1F4
@@ -163,16 +154,14 @@ namespace BrnDirector
         // the event's online-race-start shot group.
         void SetupRivalMovie(ArbStateSharedInfo& lrSharedInfo, u32 luRivalIndex);   // @cpp:472
 
-        // Allocate the take-to-take interpolator and latch it to blend lrFrom -> lrTo over
-        // mfTimeToSpendInterpolating, seeded from mInterpolatorParams. De-inlines the console's
-        // interpolator-setup sequence (NewBehaviour<BehaviourInterpolate> + the per-take params
-        // + the Setup over the two producing cameras) the MOVING_TO_* edges share.
-        // FLAG: the console builds the from/to camera references from the producing
-        // BehaviourHandles before the multi-arg Setup; modelled here through the BehaviourInterpolate
-        // named-setup API, NOT paraphrased to per-field stores.
+        // Allocate the take-to-take interpolator and latch it to blend from lrFrom's helper to
+        // lrTo's over mfTimeToSpendInterpolating, seeded from mInterpolatorParams. De-inlines the
+        // sequence the three console sites share (0x822737CC, 0x8227394C, 0x82273AE8):
+        // NewBehaviour<BehaviourInterpolate>, the inlined SetParameters, both handles' helper
+        // indices (sub_821FD4B8) and Setup(duration, from, to, manager) (sub_8224EE58).
         void SetupInterpolator(ArbStateSharedInfo& lrSharedInfo,
-                               const Camera::Camera& lrFromCamera,
-                               const Camera::Camera& lrToCamera);
+                               const Camera::BehaviourHandle<Camera::BehaviourIceAnim>& lrFrom,
+                               const Camera::BehaviourHandle<Camera::BehaviourIceAnim>& lrTo);
     };
 }
 
