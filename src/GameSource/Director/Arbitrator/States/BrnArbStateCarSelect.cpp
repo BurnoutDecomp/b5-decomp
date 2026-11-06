@@ -17,6 +17,7 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h" // Camera::BehaviourRotateAboutVehicle
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"                         // Camera::Utils::Cycle
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"                     // Attrib::Gen::shotgroup
+#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"
 #include "GameSource/AttribSys/Generated/classes/iceanim.h"                       // Attrib::Gen::iceanim
 #include "rw/math/vpu/types.h"                                                    // rw::math::vpu::Matrix44Affine / Vector3
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h" // the roaming hand-back
@@ -564,28 +565,37 @@ namespace BrnDirector
             return;
         }
 
-        // ⚠️ GATE: the X360's MIDDLE arm resolves the unlocked car's own unlock movie --
-        //     DirectorResourceManager::GetVehicleInfoRef(lRef, rm, mUnlockedVehicleType);
-        //     lpUnlockShot = Attrib::Gen::burnoutcarasset(lRef).<field @ +392>;
-        //     if ( lpUnlockShot ) assert lpUnlockShot->GetClassKey()==iceanim::ClassKey();
-        //     ... Attrib::RefSpec::Clean(lRef);
-        //   The burnoutcarasset generated accessor set is not recovered for this build (its
-        //   only ledger function is the ctor), so the +392 field has no NAME -- inventing one
-        //   would be fabrication, and reaching it by offset is an audit failure. The X360's
-        //   own fallback (the shared car-unlock shot group) is therefore taken unconditionally.
-        //   CONSEQUENCE: a car whose asset declares a bespoke unlock movie gets the shared one.
-        //   DELETE-WHEN: the burnoutcarasset generated field set is recovered.
-        const Attrib::Gen::shotgroup& lrCarUnlockShots =
-            lrSharedInfo.mpDirectorResourceManager->GetCarUnlock();
+        // 0x8226F4A0: the unlocked car's own movie, when its asset declares one. The temporary
+        // instance is gone by 0x8226F4C4; lVehicleInfo's resolved collection keeps the data alive
+        // until the Clean at the end.
+        Attrib::RefSpec lVehicleInfo =
+            lrSharedInfo.mpDirectorResourceManager->GetVehicleInfoRef(lrGameState.mUnlockedVehicleType);
         Camera::BehaviourIceAnim::ShotReference* lpUnlockShot =
-            GetShot(lrCarUnlockShots, muCarUnlockMovie);
-        muCarUnlockMovie = Camera::Utils::Cycle(muCarUnlockMovie, 0u,
-                                                lrCarUnlockShots.Num_ShotList(), 1u);
+            Attrib::Gen::burnoutcarasset(lVehicleInfo, nullptr).GetCarUnlockShotRefSpec();
+
+        if (lpUnlockShot->GetCollectionKey() != 0)
+        {
+            CGS_ASSERT(lpUnlockShot->GetClassKey() == static_cast<u64>(Attrib::Gen::iceanim::ClassKey()),
+                       "lpUnlockShot->GetClassKey()==Attrib::Gen::iceanim::ClassKey()");
+        }
+        else
+        {
+            const Attrib::Gen::shotgroup& lrCarUnlockShots =
+                lrSharedInfo.mpDirectorResourceManager->GetCarUnlock();
+            lpUnlockShot = GetShot(lrCarUnlockShots, muCarUnlockMovie);
+            muCarUnlockMovie = Camera::Utils::Cycle(muCarUnlockMovie, 0u,
+                                                    lrCarUnlockShots.Num_ShotList(), 1u);
+        }
 
         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
             mCarUnlockCam, this, KP_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REF_LIMIT_UNLOCK);
         mCarUnlockCam.GetBehaviour()->ClearBaseFirstFrameGate();
         mCarUnlockCam.GetBehaviour()->SetParameters(lpUnlockShot);
+
+        if (lVehicleInfo.HasResolvedCollection())
+        {
+            lVehicleInfo.Clean();
+        }
     }
 
     // ------------------------------------------------------------------------

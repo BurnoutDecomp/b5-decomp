@@ -48,6 +48,9 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // the one-shot bank diagnostic
 #include "GameSource/AttribSys/Generated/classes/aftertouchcam.h"      // the mAfterTouchCam class key
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"  // Attrib::StringToKey
+#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"    // the vehicle-info ref's class key
+#include "SharedClasses/DataLists/VehicleList.h"                        // GetVehicleInfoRef
+#include "SharedClasses/DataLists/VehicleListEntry.h"                   // GetVehicleInfoRef
 #include "SharedClasses/DataLists/ICEList.h"                            // ICEResourceMgr::GetTakeData's dictionary lookup
 
 namespace BrnDirector
@@ -185,6 +188,23 @@ const ICE::ICETakeData* ICEResourceMgr::GetTakeData(CgsResource::ID lId) const
 const ICE::ICETakeData* ICEResourceMgr::GetTakeData(s32 liTakeIndex) const
 {
     return mpResourceManager->GetICEList().GetICETakeDataFromGuid(liTakeIndex);
+}
+
+// ----------------------------------------------------------------------------
+// @0x82239620. Asserts :485 and :489. The class key is burnoutcarasset's, composed in registers;
+// the collection key is the vehicle entry's hashed attrib key at +0xA0; the collection pointer
+// stays null until a caller resolves the ref.
+Attrib::RefSpec DirectorResourceManager::GetVehicleInfoRef(s64 lVehicleID) const
+{
+    CGS_ASSERT(mpVehicleList != 0, "mpVehicleList");
+
+    const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lVehicleID);
+    const BrnResource::VehicleListEntry* lpEntry =
+        (liVehicleIndex >= 0) ? mpVehicleList->GetVehicleData(liVehicleIndex) : nullptr;
+    CGS_ASSERT(lpEntry != 0, "lpEntry");
+
+    return Attrib::RefSpec(Attrib::Gen::burnoutcarasset::KU_BURNOUTCARASSET_CLASS_KEY,
+                           lpEntry->GetAttribCollectionKeyHash());
 }
 
 // ----------------------------------------------------------------------------

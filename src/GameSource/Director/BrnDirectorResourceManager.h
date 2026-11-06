@@ -565,7 +565,7 @@ public:
                                                           s64 liFinishLineID) const;
 
     // @0x82239620 -- the vehicle-info RefSpec for a car id, resolved through mpVehicleList.
-    // Returned BY VALUE (the DWARF's own signature). DECLARATION-ONLY.
+    // Returned BY VALUE (the DWARF's own signature).
     Attrib::RefSpec GetVehicleInfoRef(s64 lVehicleID) const;
 
 private:
