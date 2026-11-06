@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (the helper tripwires)
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"  // ArbitratorState / ArbStateSharedInfo
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"  // Camera::BehaviourHandle / BehaviourHelperIndex
+#include "GameSource/Director/Camera/Utils/BrnCameraImpactEffect.h"
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h" // THE BehaviourInterpolate home
                                                              // (RECONCILED 2026-08-01: the manager header used to carry
                                                              // a rival, member-less slice of this class and the two were
@@ -251,21 +252,7 @@ namespace BrnDirector
         Camera::Camera::ShotReference* mpRightToLeft;         // +0x298 (664)
         Camera::Camera::ShotReference* mpIdle;                // +0x29C (668)
 
-        // ⚠️ FLAG (opaque, un-includable embedded aggregate): the DWARF member here is
-        //   `Camera::Utils::CameraImpactEffect mImpactEffect` (h:182) -- a 20-byte
-        //   {f32 mfImpactFactor; CameraShake mCameraShake;} block, exactly the extent
-        //   Construct zeroes (+672..+688). Its real home
-        //   (Camera/Utils/BrnCameraImpactEffect.h) transitively pulls the canonical
-        //   CameraShake / Looker / Tweaker / CollisionPolicy homes, which are STILL FORKED
-        //   inside Behaviours/BrnBehaviourIceAnim.h (six C2011 redefinitions) -- and this TU
-        //   must include the ICE-anim behaviour. Modelling the member as its named, correctly
-        //   sized opaque storage is the project's convention for exactly this case; the two
-        //   operations the X360 runs on it (Construct + RegisterImpact, and the per-frame
-        //   Update) are documented ⚠️ GATEs in the .cpp rather than reached by offset.
-        //   DELETE-WHEN: BrnBehaviourIceAnim.h's Utils/collision-policy forks are retired in
-        //   favour of the canonical homes (the same de-forking wave that already retired its
-        //   Behaviour + Timestep forks).
-        u8 maImpactEffect[20];                             // +0x2A0 (672)
+        Camera::Utils::CameraImpactEffect mImpactEffect;       // +0x2A0 (672)
 
         const Attrib::Gen::shotgroup* mpRivalUnlockShotGroup;  // +0x2B4 (692)
 
