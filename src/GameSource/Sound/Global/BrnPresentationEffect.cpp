@@ -11,6 +11,9 @@
 #include "GameSource/Sound/Global/BrnGlobalStateManager.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 // =============================================================================
@@ -34,6 +37,19 @@ namespace BrnSound
 namespace Logic
 {
 bool KB_SPEW_PRESENTATION_MESSAGES = false; // ARTIST82FFB8D3, DecFIGS :23
+
+// [FLAG PC witness] [presentation] NOT IN THE X360 BINARY. BRN_AEMS_DIAG=1, capped.
+static void PresentationDiag(const char* lpcFormat, s32 aiA, s32 aiB, s32 aiC)
+{
+    static const bool sbEnabled = std::getenv("BRN_AEMS_DIAG") != 0;
+    static u32 suLines = 0;
+    if (!sbEnabled || suLines >= 120u)
+        return;
+    ++suLines;
+    char lacMsg[160];
+    std::snprintf(lacMsg, sizeof(lacMsg), lpcFormat, aiA, aiB, aiC);
+    CgsDev::Log::WriteToLog(lacMsg);
+}
 
 // ---------------------------------------------------------------------------
 // PresentationEffect::PresentationEffect()  @ 0x826E7628  (MINIMAL -- see FLAGs)
@@ -145,6 +161,8 @@ bool PresentationEffect::Attach()
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
     mActions.ChangeWithDefault(lpModule->GetGlobalData().PresentationActions());
+    CGS_ASSERT(mActions.NumOfActions() > 0, "mActions.NumOfActions() > 0");
+    CalculateDataOffsets(mActions);                 // ARTIST 0x8269E348
     mu8StreamOutput = 9;
 
     mStreamParams.Clear();
@@ -169,6 +187,39 @@ bool PresentationEffect::Attach()
     return true;
 }
 
+// ---------------------------------------------------------------------------
+// PresentationEffect::CalculateDataOffsets  @ 0x82687DC0
+//   Per action: the first and last row of the action list that carries it. Resolve
+//   @0x82687990 walks only that range. r27 = this+0x240 == mau8DataOffsets,
+//   r24 = this+0x24E == mau8DataEnds. An action with no row keeps first 0xFF / last 0,
+//   an empty range. The asserts are not guards: the asm stores straight after them.
+// ---------------------------------------------------------------------------
+void PresentationEffect::CalculateDataOffsets(
+    const Attrib::Gen::presentationactionlist& arActionList)
+{
+    for (s32 liIndex = 0; liIndex < 14; ++liIndex)
+    {
+        mau8DataOffsets[liIndex] = 0xFF;
+        mau8DataEnds[liIndex] = 0;
+    }
+
+    const u16 lu16NumActions = arActionList.NumOfActions();
+    CGS_ASSERT(lu16NumActions < 0xFF, "lu16NumActions < 0xFF");
+
+    for (s32 liIndex = 0; liIndex < static_cast<s32>(lu16NumActions); ++liIndex)
+    {
+        const s32 leAction = arActionList.Actions(static_cast<u32>(liIndex));
+        CGS_ASSERT(leAction < 14, "leAction < PresentationAction::KI_NUM_ENUMS");
+
+        if (mau8DataOffsets[leAction] == 0xFF)
+            mau8DataOffsets[leAction] = static_cast<u8>(liIndex);
+        mau8DataEnds[leAction] = static_cast<u8>(liIndex);
+    }
+
+    PresentationDiag("[FLAG PC witness] [presentation] rows=%d firstAction0=%d lastAction0=%d\n",
+                     lu16NumActions, mau8DataOffsets[0], mau8DataEnds[0]);
+}
+
 const CgsSound::Logic::VoiceWrapper::CreateParams&
 PresentationEffect::GetCreateParams() const
 {
@@ -190,8 +241,20 @@ void PresentationEffect::StreamStopped()
 bool PresentationEffect::Resolve(s32 aiAction, u64 auStringId, u64 auScreenId,
                                  PresentationEntry& arEntry) const
 {
+    // FLAG PC-platform leaf: ARTIST @0x82687990 indexes the two tables with no bound, so an
+    // action >= 14 (the GUI's "Pitch".."SwitchedOn" labels) reads whatever bytes follow them.
+    // CalculateDataOffsets asserts every row < 14, so no row can match such an action and the
+    // console result is always "not found"; the x64 member layout after the tables differs,
+    // so the out-of-range read is answered directly instead of being reproduced.
+    if (aiAction >= 14)
+        return false;
+
     Attrib::Gen::presentationactionlist::ResolvedAction lResolved;
-    if (!mActions.Resolve(static_cast<u32>(aiAction), auStringId, auScreenId, lResolved))
+    const bool lbFound = mActions.Resolve(static_cast<u32>(aiAction), mau8DataOffsets[aiAction],
+                                          mau8DataEnds[aiAction], auStringId, auScreenId, lResolved);
+    PresentationDiag("[FLAG PC witness] [presentation] resolve action=%d found=%d splice=%d\n",
+                     aiAction, lbFound ? 1 : 0, lbFound ? lResolved.mu16Splice : -1);
+    if (!lbFound)
         return false;
     arEntry.mu64StringId = lResolved.muStringId;
     arEntry.mu64ScreenId = lResolved.muScreenId;

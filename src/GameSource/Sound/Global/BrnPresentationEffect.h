@@ -120,6 +120,9 @@ struct PresentationEffect : public BrnEffectObject,
                                    f32 afGain, f32 afElapsedTime) override;
     virtual void StreamStopped() override;
 
+    // DWARF :274; ARTIST @0x82687DC0, sole caller Attach @0x8269E2B0.
+    void CalculateDataOffsets(const Attrib::Gen::presentationactionlist& arActionList);
+
     // DWARF :286; X360 this+0x40, stride 0x80 (attested). The ctor constructs all 4.
     AgingVoice maVoices[4];
 
