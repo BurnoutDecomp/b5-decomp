@@ -750,11 +750,9 @@ void GameMode::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lp
     (void)lpInput;
 }
 
-// Slot 5 (vtbl+20). LINK-HOLE CLOSER, not a recovered console body: there is no GameMode::Start
-// export, because all fifteen concrete modes override the slot. On this tree one mode still relies
-// on it, FaceOffMode (checked 2026-11-04: `grep "Start *(" GameModes/*.h`), whose vtable would be an
-// unresolved external without this definition. Empty and inert -- that mode builds no GameModeParams.
-// Delete it once FaceOffMode declares its Start.
+// Slot 5 (vtbl+20). There is no GameMode::Start export: all fifteen concrete modes override the slot,
+// and on this tree they all declare their own. GameMode is still instantiable as a C++ type, so its
+// vtable needs a definition. Empty and never reached by a concrete mode.
 void GameMode::Start(const StartGameModeParams* lpStartGameModeParams,
                      GameModeParams* lpGameModeParams,
                      ScoringSystem* lpScoringSystem)
