@@ -17,8 +17,50 @@
 
 #include "GameSource/Effects/Particles/Native/BrnNativeParticleVertex.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
+#include "pc/gcm/renderengine/VertexDescriptor.h"
+#include "rw/rwcore_structs.h"                    // rw::Resource, rw::ResourceDescriptor
+
+#include <cstdlib>                                // malloc
 
 namespace BrnParticle {
+
+renderengine::VertexDescriptor* NativeParticleVertex::mpVertexDescriptor = nullptr;
+
+// X360 @ 0x822811A0, ParticleModule::Prepare @0x8229C078 is its one caller. The body never reads
+// the allocator (r3 is overwritten before the first use): the resource block comes from `bl malloc`
+// and is never freed. Only the four element lanes the asm stores are written -- the usage and
+// usage-index lanes keep the Parameters() 0xFF "default for this element type" sentinel, which is
+// what turns the three types into POSITION0 / COLOR0 / TEXCOORD0.
+void NativeParticleVertex::Construct(rw::IResourceAllocator* /*lpAllocator*/)
+{
+    renderengine::VertexDescriptor::Parameters lParameters;
+
+    lParameters.maElements[0].mu16Stream    = 0;
+    lParameters.maElements[0].mu16Pad0      = 0;
+    lParameters.maElements[0].miOffset      = 0x2A23B9;   // FLOAT3
+    lParameters.maElements[0].mu8UsageIndex = 1;          // element type 1 -> POSITION0
+
+    lParameters.maElements[1].mu16Stream    = 0;
+    lParameters.maElements[1].mu16Pad0      = 12;
+    lParameters.maElements[1].miOffset      = 0x14C86;    // packed colour
+    lParameters.maElements[1].mu8UsageIndex = 4;          // element type 4 -> COLOR0
+
+    lParameters.maElements[2].mu16Stream    = 0;
+    lParameters.maElements[2].mu16Pad0      = 16;
+    lParameters.maElements[2].miOffset      = 0x2C23A5;   // FLOAT2
+    lParameters.maElements[2].mu8UsageIndex = 6;          // element type 6 -> TEXCOORD0
+
+    rw::ResourceDescriptor lDescriptor;
+    renderengine::VertexDescriptor::GetResourceDescriptor(&lDescriptor, &lParameters);
+
+    rw::Resource lResource = {};
+    lResource.m_baseResources[0] = std::malloc(lDescriptor.m_baseResourceDescriptors[0].m_size);
+
+    CGS_ASSERT(mpVertexDescriptor == nullptr, "mpVertexDescriptor == NULL");
+    mpVertexDescriptor = reinterpret_cast<renderengine::VertexDescriptor*>(
+        renderengine::VertexDescriptor::Initialize(&lResource, &lParameters));
+    CGS_ASSERT(mpVertexDescriptor != nullptr, "mpVertexDescriptor");
+}
 
 // X360 @ 0x8291E478. Called from BrnSimpleParticleArray::CB4ParticleBank::Render
 // and SparkArray::RenderBank.

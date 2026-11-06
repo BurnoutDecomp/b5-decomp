@@ -62,10 +62,13 @@ namespace BrnParticle {
 // BrnNativeParticleVertex.h:45 (DWARF).
 struct NativeParticleVertex
 {
-    renderengine::VertexDescriptor* mpVertexDescriptor; // BrnNativeParticleVertex.h:100
+    // :100. A static member in the DWARF (`extern`), off_82FAB6A4 on the console. Read by
+    // SparkRenderer::Dispatch and BrnSimpleParticleRenderer::Dispatch.
+    static renderengine::VertexDescriptor* mpVertexDescriptor;
 
-    void Construct(rw::IResourceAllocator* lpAllocator);      // :62
-    renderengine::VertexDescriptor* GetVertexDescriptor();    // :65
+    // :62, X360 @0x822811A0. Builds the shared 24-byte vertex declaration.
+    static void Construct(rw::IResourceAllocator* lpAllocator);
+    static renderengine::VertexDescriptor* GetVertexDescriptor() { return mpVertexDescriptor; } // :65
 
     // BrnNativeParticleVertex.h:69 -- the on-disk vertex stride (asserted 24 in Write).
     static u32 GetStride() { return 24u; }
