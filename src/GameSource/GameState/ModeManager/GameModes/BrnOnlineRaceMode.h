@@ -1,6 +1,8 @@
 #pragma once
 
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineGameMode.h"
+#include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"  // LightTriggerId / StartGameModeParams
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"                      // CgsNumeric::Random (mRandom, by value)
 
 namespace BrnGameState
 {
@@ -8,9 +10,6 @@ namespace BrnGameState
 // their own owning headers rather than forked locally. GetName is owned by the GetName-only sibling TU
 // (BrnOnlineRaceMode GetName); this header additionally declares the virtuals owned by the
 // BrnOnlineRaceMode.cpp TU as overrides of the GameMode base slots.
-//
-// NOT-YET-RECONSTRUCTED OVERRIDE (vtable 0x820D07F0, checked 2026-08-26): OnlineRaceMode also
-// overrides slot 5 Start (0x82338EB8). No body exists in the tree, so it is not declared here.
 class OnlineRaceMode : public OnlineGameMode
 {
 public:
@@ -41,6 +40,24 @@ public:
     // HandleLoadingScreenLoaded @0x8234B8A8 once. DWARF BrnOnlineRaceMode.h:15 declares this
     // override; ADDED 2026-08-26 with the 26-slot base.
     virtual bool HasLoadingScreen() const;
+
+    // X360 0x82338EB8, vtable 0x820D07F0 slot 5 (vtbl+20). Fills the online race's GameModeParams
+    // from the NetworkRoundManager's start events.
+    virtual void Start(const StartGameModeParams* lpStartGameModeParams,
+                       GameModeParams*            lpGameModeParams,
+                       ScoringSystem*             lpScoringSystem);
+
+private:
+    // X360 0x82330B88. DWARF BrnOnlineRaceMode.cpp:132. Of the lights on luTriggerId's junction, the
+    // packed id of the one whose start direction points most directly at lv3Reference.
+    LightTriggerId GetBestStartGridID(LightTriggerId             luTriggerId,
+                                      const StartGameModeParams* lpStartGameModeParams,
+                                      Vector3                    lv3Reference);
+
+    // DWARF BrnOnlineRaceMode.h:72, console this+0xC0 (Start's `addi r6, r29, 0xC0`). The console
+    // object is 240 bytes, 0xC0 + sizeof(Random). Primed on the first round only, so a later round's
+    // shuffle carries on from where the previous one stopped.
+    CgsNumeric::Random mRandom;
 };
 
 // ---- VTABLE-BINDING TRIPWIRE (see the explanation in BrnOfflineGameMode.h) ----------------------
@@ -57,4 +74,6 @@ static_assert(sizeof(static_cast<f32 (OnlineRaceMode::*)() const>(&OnlineRaceMod
               "OnlineRaceMode::GetOutroTimeout must bind GameMode vtable slot 16");
 static_assert(sizeof(static_cast<bool (OnlineRaceMode::*)() const>(&OnlineRaceMode::HasLoadingScreen)) != 0,
               "OnlineRaceMode::HasLoadingScreen must bind GameMode vtable slot 24");
+static_assert(sizeof(static_cast<void (OnlineRaceMode::*)(const StartGameModeParams*, GameModeParams*, ScoringSystem*)>(&OnlineRaceMode::Start)) != 0,
+              "OnlineRaceMode::Start must bind GameMode vtable slot 5");
 }

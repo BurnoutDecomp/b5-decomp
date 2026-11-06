@@ -512,6 +512,15 @@ public:
     void SetStartingGrid(GameModeParams* lpGameModeParams, s32 liCarCount, bool lbPushForwards) const;   // X360 0x82328608
     void SetOnlineRaceCars(GameModeParams* lpGameModeParams,
                            const GameStateModuleIO::StartNetworkGameEvent* lpStartNetworkGameEvent) const;
+    // X360 0x82328800, DWARF signature. Every caller passes the round index in the last argument and
+    // the body never reads it.
+    void SetOnlineLandmarks(GameModeParams* lpGameModeParams,
+                            const GameStateModuleIO::StartNetworkRoundEvent* lpStartNetworkRoundEvent,
+                            s32 liCurrentRound) const;
+    // X360 0x82311B30, DWARF signature. Odd rounds swap the two teams.
+    void SetOnlineRoadRageTeamsGameParams(GameModeParams* lpGameModeParams,
+                                          const GameStateModuleIO::StartNetworkGameEvent* lpStartNetworkGameEvent,
+                                          s32 liCurrentRound) const;
     // [!] PARAMETER NAMES CORRECTED with the body: the fourth argument is NOT the push-forwards
     // flag SetStartingGrid takes. It selects how each team's grid block is ordered -- true keeps
     // the current standings (sort by cumulative points), false shuffles.

@@ -4,7 +4,7 @@
 // Partfile of the BrnGameState::OnlineBurningHomeRunMode TU.
 // OnlineBurningHomeRunMode::PickNewBurningHomeRunRunner. Callers:
 // ModeManager::SetPlayerDisconnected, ModeManager::HandleNewHostEvent and the mode's own
-// PreWorldUpdate (not reconstructed).
+// PreWorldUpdate.
 // ============================================================================
 
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineBurningHomeRunMode.h"

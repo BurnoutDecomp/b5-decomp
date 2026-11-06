@@ -282,6 +282,16 @@ public:
     void GenerateOnlineTeamChangeMessages(const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
                                           EActiveRaceCarIndex lePlayerActiveRaceCarIndex);
 
+    // OnlineBurningHomeRunMode::PreWorldUpdate inlines this: `stw crashesToGo, 0x6D4C(mm)` then
+    // `stw index, 0x6D48(mm)` @0x8234D170 (ModeManager+0x6B00 is this object, so these are its +0x24C
+    // and +0x248). The name is inferred from the payload GenerateBurningHomeRunMessages sends; no
+    // console symbol exists for it.
+    void SetBurningHomeRunRunnerCrashed(EActiveRaceCarIndex leRunnerRaceCarIndex, s32 liCrashesToGo)
+    {
+        miBurningHomeRunCrashesToGo             = liCrashesToGo;
+        meBurningHomeRunRunnerCrashRaceCarIndex = leRunnerRaceCarIndex;
+    }
+
 private:
     void GenerateBurningHomeRunCheckpointMessage(ModeManager* lpModeManager, ScoringSystem* lpScoringSystem);
     void GenerateBurningHomeRunMessages(ModeManager* lpModeManager, ScoringSystem* lpScoringSystem);

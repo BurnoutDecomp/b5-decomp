@@ -362,6 +362,10 @@ public:
     // immediately after `lfs f0, 0x850(r30)`.
     f32  GetOnlineTimeLimit() const                     { return mfOnlineModeTimeLimit; }
 
+    // DWARF BrnGameModeParams.h:601. X360-INLINED: OnlineBurningHomeRunMode::Start @0x82339968 emits
+    // it as `lfs f0, 0xF0(event) / stfs f0, 0x850(params)` @0x823399F0.
+    void SetOnlineTimeLimit(f32 lfOnlineTimeLimit)      { mfOnlineModeTimeLimit = lfOnlineTimeLimit; }
+
     // DWARF BrnGameModeParams.h:458 `void SetAStarDistanceFunction(BrnAI::AStarDistanceFunction)`.
     // Typed s32 here ONLY because the member is still the EAStarDistFunc_Stub placeholder -- re-type
     // both together when BrnAI::AStarDistanceFunction (BrnAStar.h:47) is wired in. X360-INLINED:
