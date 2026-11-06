@@ -8,11 +8,11 @@
 //
 // Reconstructed from BURNOUT_X360_ARTIST.XEX:
 //   CgsModule::EventQueue<BrnWorld::PVSIO::GetZoneResponse, 8>::Construct  @ 0x822E51B0
-//     points the base queue at its inline maEvents (this + 0x10, 16-aligned), sets
+//     points the base queue at its inline maEvents (this + 0x10, eight-byte aligned), sets
 //     miMaxLength = 8, clears miLength. The "lpEventBuffer != NULL" assert
 //     (CgsBaseEventQueue.h:160) lives in BaseEventQueue::Construct. Called by
 //     BrnWorld::PVSIO::OutputBuffer::Construct (which then places its
-//     VariableEventQueue<512,16> at +0x1718, i.e. 0x10 + 8*736).
+//     VariableEventQueue<512,16> after the complete OutputInterface at +0x1718).
 //   CgsModule::BaseEventQueue<BrnWorld::PVSIO::GetZoneResponse>::AddEvent  @ 0x822C9E28
 //     appends a copy of the event (the X360 emits `memcpy(736*miLength + mpEvents,
 //     src, 736)`, stride 736 == sizeof(GetZoneResponse)), bumps miLength, returns 1.
@@ -20,12 +20,9 @@
 //     AddEvent (which copies via T::operator=) matches semantically. Called by
 //     BrnWorld::PVSModule::Update.
 
-// Lock the element stride (736) the X360 AddEvent memcpy attests.
-// X360 stride: sizeof(GetZoneResponse) == 736 (32-bit ZoneEntry). The 2026-07-24
-// interior grow (WorldEntityModule TU) widened ZoneEntry::mpZoneData to a host
-// pointer, so the PC stride departs (semantic-by-NAME, x64 gate); the queue walks
-// by sizeof, which stays self-consistent.
-CGS_STATIC_ASSERT((sizeof(BrnWorld::PVSIO::GetZoneResponse) % 16 == 0), "GetZoneResponse 16-align drift");
+// The response stride is 0x2E0; X360 assertions in BrnPVSModuleEvents.cpp
+// pin its alignment and its containing output-interface layout.
+CGS_STATIC_ASSERT((sizeof(BrnWorld::PVSIO::GetZoneResponse) == 0x2E0), "GetZoneResponse stride");
 
 template void
 CgsModule::EventQueue<BrnWorld::PVSIO::GetZoneResponse, 8>::Construct();

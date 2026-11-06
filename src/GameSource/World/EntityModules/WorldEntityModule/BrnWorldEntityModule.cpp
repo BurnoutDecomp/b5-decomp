@@ -652,7 +652,7 @@ WorldEntityModule::UpdateStream( WorldEntityIO::OutputBuffer_PreScene* lpOutputB
 
     mPVSModule.LockForOutput();
 
-    PVSIO::OutputBuffer* lpPVSOutput = mPVSModule.GetOutputInterface();
+    PVSIO::OutputInterface* lpPVSOutput = mPVSModule.GetOutputInterface();
 
     CGS_ASSERT( lpPVSOutput->GetZoneResponseQueue()->GetLength() > 0, "Expected zone response\n" );
 

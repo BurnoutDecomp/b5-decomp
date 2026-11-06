@@ -446,6 +446,16 @@ private:
     // DWARF BrnWorldEntityModule.cpp:109 -- file-static in the .cpp.
     // (declared there as `_mbAllowStreamStalling`).
 
+#if defined(D_PLATFORM_X360) && D_PLATFORM_X360
+    static void _AssertNativePVSLayout()
+    {
+        CGS_STATIC_ASSERT((offsetof(WorldEntityModule, mPVSModule) == 0x660), "world PVS module");
+        CGS_STATIC_ASSERT((offsetof(WorldEntityModule, mPlayerZoneResponse) == 0x2620), "world PVS response");
+        CGS_STATIC_ASSERT((offsetof(WorldEntityModule, mPVSDebugComponent) == 0x2900), "world PVS debug component");
+        CGS_STATIC_ASSERT((offsetof(WorldEntityModule, mMassive) == 0x6790), "world Massive member");
+    }
+#endif
+
     friend class PVSDebugComponent;
     friend class CollisionDebugComponent;
     friend class WorldGraphicsStreamer;

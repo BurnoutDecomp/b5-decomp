@@ -103,7 +103,7 @@ namespace
         if ( mePrepareStage > E_PREPARESTAGE_MODULE )
         {
             lpOutputBuffer = SafeLockOutputForWrite();
-            lpOutputBuffer->mZoneResponseQueue.Clear();                      // stw 0, 8(buffer)
+            lpOutputBuffer->mOutputInterface.mGetZoneResponseQueue.Clear();                      // stw 0, 8(buffer)
             lpOutputBuffer->mGameDataRequestInterface.mRequestQueue.Clear(); // VariableEventQueue<512,16>::Clear @ +0x1718
         }
 
@@ -130,7 +130,7 @@ namespace
                 if ( lpOutputBuffer == 0 )
                 {
                     lpOutputBuffer = SafeLockOutputForWrite();
-                    lpOutputBuffer->mZoneResponseQueue.Clear();
+                    lpOutputBuffer->mOutputInterface.mGetZoneResponseQueue.Clear();
                     lpOutputBuffer->mGameDataRequestInterface.mRequestQueue.Clear();
                 }
 
@@ -183,9 +183,9 @@ namespace
             case E_PREPARESTAGE_DONE:
             {
                 PVSIO::OutputBuffer* lpDoneBuffer = static_cast<PVSIO::OutputBuffer*>( LockOutputForWrite() );
-                lpDoneBuffer->mZoneResponseQueue.Clear();
+                lpDoneBuffer->mOutputInterface.mGetZoneResponseQueue.Clear();
                 lpDoneBuffer->mGameDataRequestInterface.mRequestQueue.Clear();
-                lpDoneBuffer->muTotalZones = mZoneList->GetTotalZones();   // stw zoneList->+0x10, 0x1710(buffer)
+                lpDoneBuffer->mOutputInterface.muTotalZones = mZoneList->GetTotalZones();   // stw zoneList->+0x10, 0x1710(buffer)
                 UnlockOutputForWrite();
 
                 // The X360 leaves the machine ready to re-run from the module stage and arms
@@ -265,7 +265,7 @@ namespace
         PVSIO::InputBuffer* lpInputBuffer =
             static_cast<PVSIO::InputBuffer*>( LockInputForRead() );
 
-        lpOutputBuffer->mZoneResponseQueue.Clear();                      // stw 0, 8(output)
+        lpOutputBuffer->mOutputInterface.mGetZoneResponseQueue.Clear();                      // stw 0, 8(output)
         lpOutputBuffer->mGameDataRequestInterface.mRequestQueue.Clear(); // Clear @ output+0x1718
 
         // The X360 stack frame holds the response and per-zone Zone* scratch array
@@ -294,7 +294,7 @@ namespace
                 lResponse.miNumZones    = 0;
                 lResponse.miLookupIndex = -1;
 
-                lpOutputBuffer->mZoneResponseQueue.AddEvent( lResponse );
+                lpOutputBuffer->mOutputInterface.mGetZoneResponseQueue.AddEvent( lResponse );
                 continue;
             }
 
@@ -435,11 +435,11 @@ namespace
                 }
             }
 
-            lpOutputBuffer->mZoneResponseQueue.AddEvent( lResponse );
+            lpOutputBuffer->mOutputInterface.mGetZoneResponseQueue.AddEvent( lResponse );
         }
 
         // Republish the world's total zone count and drain the request queue.
-        lpOutputBuffer->muTotalZones = mZoneList->GetTotalZones();   // stw zoneList->+0x10, 0x1710(output)
+        lpOutputBuffer->mOutputInterface.muTotalZones = mZoneList->GetTotalZones();   // stw zoneList->+0x10, 0x1710(output)
         lpInputBuffer->mZoneRequestQueue.Clear();                    // stw 0, 8(input)
 
         UnlockInputForRead();
@@ -457,13 +457,13 @@ namespace
     }
 
     // X360 0x822BAFF0. r31 = GetOutputStructure(); if null, fire the two tripwires; return r31.
-    PVSIO::OutputBuffer* PVSModule::GetOutputInterface()
+    PVSIO::OutputInterface* PVSModule::GetOutputInterface()
     {
         // SafeGetOutputStructure() inline-expands the first "lpBuffer != NULL" tripwire
         // (template line 82); then the PVS-level assert (.h:130).
         PVSIO::OutputBuffer* lpOutputBuffer = SafeGetOutputStructure();
         CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer");
-        return lpOutputBuffer;
+        return lpOutputBuffer->GetOutputInterface();
     }
 
     // X360 0x822BB068. r31 = GetOutputStructure(); if null, fire the two tripwires; return

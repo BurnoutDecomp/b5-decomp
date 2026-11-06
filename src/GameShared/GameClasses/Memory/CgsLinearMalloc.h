@@ -32,12 +32,27 @@ namespace CgsMemory
         static RwMemoryFunctions mCachedMemoryFuncs;
         static LinearMalloc* mpActiveRWAllocator;
 
+        friend void _LinearMalloc_AssertX360Layout();
         bool   mbCreated;
-        void*  mpAlloc; // owned allocation slot; borrowed Create does not set it
         size_t mnStartAddress;
         size_t mnEndAddress;
         size_t mnNextAddress;
         size_t mnAlignment;
         void*  mpLastAlloc;
+        void*  mpAlloc; // owned allocation slot; borrowed Create does not set it
     };
+
+#if defined(_XBOX)
+    inline void _LinearMalloc_AssertX360Layout()
+    {
+        CGS_STATIC_ASSERT((sizeof(LinearMalloc) == 0x1c), "LinearMalloc size");
+        CGS_STATIC_ASSERT((offsetof(LinearMalloc, mbCreated) == 0x00), "mbCreated offset");
+        CGS_STATIC_ASSERT((offsetof(LinearMalloc, mnStartAddress) == 0x04), "mnStartAddress offset");
+        CGS_STATIC_ASSERT((offsetof(LinearMalloc, mnEndAddress) == 0x08), "mnEndAddress offset");
+        CGS_STATIC_ASSERT((offsetof(LinearMalloc, mnNextAddress) == 0x0c), "mnNextAddress offset");
+        CGS_STATIC_ASSERT((offsetof(LinearMalloc, mnAlignment) == 0x10), "mnAlignment offset");
+        CGS_STATIC_ASSERT((offsetof(LinearMalloc, mpLastAlloc) == 0x14), "mpLastAlloc offset");
+        CGS_STATIC_ASSERT((offsetof(LinearMalloc, mpAlloc) == 0x18), "mpAlloc offset");
+    }
+#endif
 }
