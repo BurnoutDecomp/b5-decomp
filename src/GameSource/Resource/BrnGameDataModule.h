@@ -281,6 +281,15 @@ namespace BrnResource
         void ProcessUnloadWorldUnitRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                            const GameDataIO::GameDataAssetEvent* lpEvent,
                                            s32 liEventId, s32 liSlotIndex);            // 0x82671160
+        void ProcessUnloadWorldCollisionRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                                const GameDataIO::GameDataAssetEvent* lpEvent,
+                                                s32 liEventId, s32 liSlotIndex);       // 0x826712A0
+        void ProcessUnloadPVSRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                     const GameDataIO::GameDataAssetEvent* lpEvent,
+                                     s32 liEventId, s32 liSlotIndex);                  // 0x82671420
+        void ProcessGetWorldCollisionRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+                                             const GameDataIO::GameDataAssetEvent* lpEvent,
+                                             s32 liEventId, s32 liSlotIndex);           // 0x82670700
         void ProcessLoadPVSRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                    const GameDataIO::GameDataAssetEvent* lpEvent,
                                    s32 liEventId, s32 liSlotIndex);                    // 0x8266F9C0
