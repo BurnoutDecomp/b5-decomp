@@ -11,6 +11,11 @@
 //   ModeManager::SetOnlineRaceCars        -- copy the event's per-car roster into GameModeParams
 //   ModeManager::SetupOnlineStartingGrid  -- order the roster into the junction's start block
 //
+// and the two the race, road rage and burning home run Start bodies drive beside them:
+//
+//   ModeManager::SetOnlineLandmarks               -- publish the round's landmarks as checkpoints
+//   ModeManager::SetOnlineRoadRageTeamsGameParams -- the road rage teams, swapped on odd rounds
+//
 // ============================================================================
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
@@ -19,6 +24,8 @@
 #include "GameSource/GameState/BrnGameEvents.h"                                  // StartNetworkGameEvent / KI_MAX_RACE_CARS
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"  // TQM::GetTrafficData
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"     // GameModeParams members / AddStartLocation
+#include "GameSource/GameState/Progression/BrnProgressionManager.h"           // ProgressionManager::FindLandmarkAISectionIndex
+#include "SharedClasses/Trigger/BrnLandmark.h"                                // Landmark::GetId
 #include "SharedClasses/Traffic/BrnTrafficDataResourceType.h"                 // TrafficData::GetHull
 #include "SharedClasses/Traffic/BrnTrafficHull.h"                             // Hull::mpaLightTriggerStartData
 #include "SharedClasses/Traffic/BrnTrafficLightTrigger.h"                     // LightTriggerStartData::GetStart*
@@ -44,6 +51,85 @@ namespace
     // what IS attested is the test that fills it (CarScoreData::GetDisconnected, the +0x69 flag the
     // network-results update owns), so the bucket is named for its own predicate.
     const s32 KI_DISCONNECTED_BUCKET = KI_PLAYER_TEAM_BUCKET_COUNT;
+}
+
+// ============================================================================
+// ModeManager::SetOnlineLandmarks -- X360 0x82328800
+// ============================================================================
+// The online counterpart of SetUpCheckPointsForGameMode's loop (StartGameMode runs that one for
+// offline modes only): the round event already holds region indices, so no landmark search. The
+// "liRegionIndex < miRegionCount" and "GetType() == E_TYPE_LANDMARK" asserts the console inlines
+// here belong to TriggerData::GetLandmarkFromRegionIndex (BrnTriggerData.h:624 / :615).
+//
+// liCurrentRound: each caller loads r6 with it (`mr r6, r23` @0x823393C8) and this body never reads
+// r6. Kept because the DWARF declares the parameter.
+// ============================================================================
+void ModeManager::SetOnlineLandmarks(GameModeParams* lpGameModeParams,
+                                     const GameStateModuleIO::StartNetworkRoundEvent* lpStartNetworkRoundEvent,
+                                     s32 liCurrentRound) const
+{
+    (void)liCurrentRound;
+
+    const BrnTrigger::TriggerData* lpTriggerData = mpTriggerQueryManager->GetTriggerData();
+
+    for (s32 liLandmark = 0; liLandmark < lpStartNetworkRoundEvent->miNumLandmarksInRound; ++liLandmark)
+    {
+        const LandmarkIndex lLandmarkIndex = lpStartNetworkRoundEvent->maLandmarks[liLandmark];
+        const BrnTrigger::Landmark* lpLandmark =
+            lpTriggerData->GetLandmarkFromRegionIndex(static_cast<s32>(lLandmarkIndex));
+
+        const u16 luLandmarkAISection =
+            mpProgressionManager->FindLandmarkAISectionIndex(lpLandmark->GetId());
+
+        lpGameModeParams->AddCheckpoint(lLandmarkIndex, luLandmarkAISection);
+        mpTriggerQueryManager->AddLandmarkIndexForGameMode(lLandmarkIndex);
+    }
+}
+
+// ============================================================================
+// ModeManager::SetOnlineRoadRageTeamsGameParams -- X360 0x82311B30
+// ============================================================================
+// The two sides swap attack and defence each round: even rounds copy the event's teams as they are,
+// odd rounds exchange red and blue. A slot on neither team must be an empty one, past the active
+// cars, and goes out as no team. Fixed eight-slot walk in both arms.
+// ============================================================================
+void ModeManager::SetOnlineRoadRageTeamsGameParams(GameModeParams* lpGameModeParams,
+                                                   const GameStateModuleIO::StartNetworkGameEvent* lpStartNetworkGameEvent,
+                                                   s32 liCurrentRound) const
+{
+    if (liCurrentRound % 2 != 0)
+    {
+        for (s32 liGridPosition = 0; liGridPosition < GameStateModuleIO::KI_MAX_RACE_CARS; ++liGridPosition)
+        {
+            const GameStateModuleIO::EPlayerTeam leEventTeam = lpStartNetworkGameEvent->maePlayerTeam[liGridPosition];
+            GameStateModuleIO::EPlayerTeam       leTeam;
+
+            if (leEventTeam == GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM)
+            {
+                leTeam = GameStateModuleIO::E_PLAYER_TEAM_RED_TEAM;
+            }
+            else if (leEventTeam == GameStateModuleIO::E_PLAYER_TEAM_RED_TEAM)
+            {
+                leTeam = GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM;
+            }
+            else
+            {
+                CGS_ASSERT(liGridPosition >= static_cast<int32_t>(mScoringSystem.GetNumberOfActiveCars()),
+                           "liGridPosition >= static_cast<int32_t>(mScoringSystem.GetNumberOfActiveCars())");
+                leTeam = GameStateModuleIO::E_PLAYER_TEAM_NONE;
+            }
+
+            lpGameModeParams->maePlayerTeam[liGridPosition] = static_cast<EPlayerTeam_Stub>(leTeam);
+        }
+    }
+    else
+    {
+        for (s32 liGridPosition = 0; liGridPosition < GameStateModuleIO::KI_MAX_RACE_CARS; ++liGridPosition)
+        {
+            lpGameModeParams->maePlayerTeam[liGridPosition] =
+                static_cast<EPlayerTeam_Stub>(lpStartNetworkGameEvent->maePlayerTeam[liGridPosition]);
+        }
+    }
 }
 
 // ============================================================================
