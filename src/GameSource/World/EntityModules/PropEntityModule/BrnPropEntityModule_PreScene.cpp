@@ -125,19 +125,9 @@
 //      statement is, in names:
 //        e->mrMasterTime = fmod( e->mrMasterTime + mrTimestep, e->GetTotalTime() );
 //      over `GetCoronaTypeDataByOffset(i)` (:634, whose own bounds assert is the :636 text).
-//      BLOCKER (unchanged, re-grepped): `BrnParticle::VFXPropCollection` is still only
-//      FORWARD-DECLARED in-tree (BrnPropEntityModule.h:162); the committed
-//      SharedClasses/Graphics/VFXPropsResourceType.h is 25 lines and homes only the
-//      resource-type HANDLER (VFXPropCollectionResourceType), not the payload. `operator->`
-//      on an incomplete type is a hard error, so this cannot be landed from here at all --
-//      and that header is NOT this cluster's file.
-//      MOUNT (one owner, one sitting): home VFXPropCollection + VFXCoronaTypeData in
-//      SharedClasses/Graphics/VFXPropsResourceType.h from the DWARF rows above. ⚠ It is a
-//      SERIALISED resource whose six embedded pointers WIDEN on the x64 host, so it needs
-//      the same porter/static_assert contract BrnPropGraphicsList.h documents -- that, not
-//      the arithmetic, is the work.
-//      It is a visual-only phase wrap; props spawn, render and smash without it. The same
-//      type blocks the corona tail of RenderPropAndCoronas (BrnPropEntityModule_Render.cpp:65).
+//      LANDED 2026-11-05: the records are homed in GameSource/Effects/Props/PropCollisions.h with
+//      the rest of the collection (32-bit address words, as FixUp leaves them), and step 12
+//      below runs the loop. RenderPropAndCoronas reads the same records.
 //
 // ---- STATE OF THE INPUT SIDE ---------------------------------------------------------
 // Both producers of PropEntityIO::InputBuffer_PreScene are bodied and mounted:
@@ -166,6 +156,23 @@
 #include "SharedClasses/Physics/Props/BrnPhysicsPropZoneData.h"           // PropZoneData::GetZoneId
 #include "SharedClasses/Physics/Props/BrnPropGraphicsList.h"              // PropGraphicsList::muZoneNumber (step 11 / P7)
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h"         // PropPhysicsDataHeader
+#include "GameSource/Effects/Props/PropCollisions.h"                     // BrnParticle::VFXPropCollection / VFXCoronaTypeData
+#include <cmath>     // truncf (the corona phase wrap)
+
+namespace
+{
+    // FLAG PC-platform leaf: the PPC `fctiwz` the console wraps the corona phase with rounds
+    // toward zero and SATURATES (NaN reads as INT_MIN). A C++ float-to-int conversion out of
+    // range is undefined, and truncf(inf) * 0 is NaN, so an always-on corona (on + off == 0)
+    // would turn its master time into NaN here where the console's keeps growing.
+    f32 ConsoleTruncTowardZero( f32 lfValue )
+    {
+        if ( lfValue != lfValue )            return -2147483648.0f;
+        if ( lfValue >= 2147483647.0f )      return 2147483647.0f;
+        if ( lfValue <= -2147483648.0f )     return -2147483648.0f;
+        return truncf( lfValue );
+    }
+}
 
 #include <cstdlib>   // atoi  (the X360 calls the CRT's, @0x82C0B868)
 #include <cmath>     // sqrtf (the vrsqrtefp + two Newton refinements, lowered)
@@ -1019,14 +1026,32 @@ namespace BrnWorld
             --miFramesUntilUpdateVisibleSigns;
         }
 
-        // P9: the corona-phase advance -- STILL PARKED. Re-measured 2026-08-19 (wave Q6 C5):
-        // the decode is COMPLETE and every raw offset now has a DWARF name
-        //   e->mrMasterTime = fmod( e->mrMasterTime + mrTimestep, e->GetTotalTime() );
-        // over mVFXPropCollection's muCoronaDataTableSize corona-type-data entries.
-        // The ONLY thing missing is a home for BrnParticle::VFXPropCollection /
-        // VFXCoronaTypeData (still forward-declaration-only in this tree), and that home --
-        // SharedClasses/Graphics/VFXPropsResourceType.h -- is another owner's file.
-        // Full recipe in the PARK LIST at the top of this file.
+        // P9: the corona-phase advance, ASM 0x8230BBF4..0x8230BDCC. Runs when the sim is not
+        // paused (the step-10 `lUpdateSet & 1` latch, var_238) or while a replay plays back
+        // (serialiser mode 4 / 5 / 6), over every corona-type-data entry of the collection:
+        //   mrMasterTime = fmod( mrMasterTime + mrTimestep, GetTotalTime() )
+        // done as x - trunc(x / period) * period (fctiwz, fcfid, fnmsubs). The records are
+        // homed in GameSource/Effects/Props/PropCollisions.h with the rest of the collection.
+        {
+            const BrnReplays::BaseSerialiser::EMode leReplayMode = mPropEntitySerialiser.GetMode();
+            const bool lbReplayPlaying =
+                leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_PREPARING ||
+                leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING ||
+                leReplayMode == BrnReplays::BaseSerialiser::E_MODE_PLAYING_STALLED;
+            if ( ( lUpdateSet & KU_UPDATESET_NETWORK_CATCHUP ) == 0 || lbReplayPlaying )
+            {
+                for ( u32 luOffset = 0;
+                      luOffset < mVFXPropCollection.GetMemoryResource()->GetNumCoronaTypeData();
+                      ++luOffset )
+                {
+                    BrnParticle::VFXCoronaTypeData* lpData =
+                        mVFXPropCollection.GetMemoryResource()->GetCoronaTypeDataByOffset( luOffset );
+                    const f32 lfTime   = lpData->mrMasterTime + mrTimestep;
+                    const f32 lfPeriod = lpData->GetTotalTime();
+                    lpData->mrMasterTime = lfTime - ConsoleTruncTowardZero( lfTime / lfPeriod ) * lfPeriod;
+                }
+            }
+        }
 
         // ⭐ P8 LANDED 2026-08-19 (wave Q5). ASM 0x8230BDD0..0x8230BDE8:
         //   `mr r3, lpOutput ; bl 0x822B9930` == GetVisibleOverheadSignArray() (the

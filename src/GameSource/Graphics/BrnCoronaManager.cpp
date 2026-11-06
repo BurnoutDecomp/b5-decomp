@@ -190,8 +190,8 @@ void BrnCoronaManager::BrnSubmissionInterface::AddCorona(const Vector3& lvPositi
 // into a packed stack Vector3). The console object at 0x82F242FC is FIVE floats
 // (400, 1400, 14500, 0.75, 2.25) -- a whole SmoothStep -- but AddPropCorona reads only the first
 // three (its scale-factors argument is the caller's lvSize, see the banner below); the trailing
-// (0.75, 2.25) are recorded here so nobody has to re-dump them. Prop coronas have no producer on
-// this build yet (BrnWorld::PropEntityModule::RenderPropAndCoronas @0x822DC010 is ledger `todo`).
+// (0.75, 2.25) are recorded here so nobody has to re-dump them. Prop coronas come from
+// BrnWorld::PropEntityModule::RenderPropAndCoronas @0x822DC010 (BrnPropEntityModule_Render.cpp).
 const Vector3 kPropCoronaScaleCurveParams = { 400.0f, 1400.0f, 14500.0f, 0.0f };
 
 // ---------------------------------------------------------------------------------------------

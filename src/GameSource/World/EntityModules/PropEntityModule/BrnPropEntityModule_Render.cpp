@@ -62,14 +62,9 @@
 //    IsPropAddedToScene / GetPartTransform, and PropZoneManager's private
 //    mauStartIndexOfZone[] to turn a global entity index into a zone-local one. A
 //    one-shot log fires the first time a replay id reaches this function.
-// 2. THE CORONA LOOP of RenderPropAndCoronas (the whole tail after the RenderModel
-//    call). Fully decoded -- see the block comment at the call site -- but it walks
-//    BrnParticle::VFXPropCollection / VFXProp / VFXPropState / VFXCoronaType /
-//    VFXCoronaTypeData, and of those only VFXPropCollection even has a forward
-//    declaration in the tree (SharedClasses/Graphics/VFXPropsResourceType.h holds
-//    only the resource-type handler). Those are STREAMED SERIALISED records; minting
-//    their host layouts from the DWARF outside this slice is exactly how a silent
-//    on-disc/host stride mismatch gets in. Left for the TU that homes them.
+// 2. (LANDED 2026-11-05) THE CORONA LOOP of RenderPropAndCoronas. The VFX prop records are
+//    homed in GameSource/Effects/Props/PropCollisions.h in the layout FixUp leaves them in
+//    (32-bit address words), with the console strides pinned by static_assert.
 // The original bounding-circle tail and its image-backed debug constants are recovered below.
 //
 // ---- Model::RenderModelOnly ------------------------------------------------
@@ -114,6 +109,10 @@
 #include "pc/math/VmxFloat.h"
 
 #include "rw/math/vpu/vector3_operation.h"                                // MagnitudeSquared
+#include "rw/math/vpu/matrix44affine_operation.h"                        // TransformPoint / TransformVector (coronas)
+#include "GameSource/Effects/Props/PropCollisions.h"                     // BrnParticle::VFXProp / VFXCoronaType records
+#include "GameSource/Graphics/BrnCoronaManager.h"                        // BrnSubmissionInterface::AddPropCorona
+#include <cmath>     // truncf (the corona blink phase)
 
 #include <cstddef>   // offsetof (the layout tripwire below)
 #include <stdlib.h>  // getenv   ([DIAG] BRN_PROP_DIAG, wave Q6)
@@ -467,20 +466,15 @@ PropEntityModule::RenderModel(
 //   @0x7C const ShaderLodInfo*                     @0x84 bool lbRenderCoronas
 //   @0x8C BrnParticle::VFXProp* (the collection's prop table, which GDL pre-loads once)
 //   @0x94 bool lbUseZOnlyRendering
-//   @0x9C BrnCoronaManager::BrnSubmissionInterface*  -- taken here as the console's raw
-//         32-bit word, because that is what InputBuffer_Dispatch still stores it as (see
-//         that header's POINTER WIDTH note); the parked corona loop never dereferences it,
-//         and reconstituting a host pointer from a 32-bit slot would be the truncation bug.
+//   @0x9C BrnCoronaManager::BrnSubmissionInterface*  -- a host pointer since the 2026-08-18
+//         retype of InputBuffer_Dispatch::mpCoronaSubmissionInterface.
 //
 // RETURN TYPE: void. The epilogue sets no r3 (both early-outs branch straight to it with
 // whatever RenderModel left there), and the only caller discards it. B1's `bool` was
 // copied from RenderModel.
 //
-// Because the corona half is parked (banner item 2) the last three parameters would be
-// unused; they are kept in the signature -- they are what the console passes, and the
-// follow-up TU needs them. The two the parked loop no longer needs a TYPE for
-// (the VFX prop table and the corona interface) are taken as the console's raw words so
-// this file does not have to mint a serialised-record layout it cannot verify.
+// The VFX prop table stays a `const void*` in the signature because the module header only
+// forward-declares the BrnParticle records; the body reads it as `const VFXProp*`.
 // =============================================================================
 void
 PropEntityModule::RenderPropAndCoronas(
@@ -523,80 +517,70 @@ PropEntityModule::RenderPropAndCoronas(
         return;
     }
 
-    (void)luPropTypeId;
-    (void)lpVFXPropTable;
-    (void)lpCoronaSubmissionInterface;
+    // @0x822DC090..0x822DC2DC: the corona loop. The collection is re-fetched for the bounds
+    // check (`sub_822CA288` == mVFXPropCollection.GetMemoryResource(), `lwz 4` ==
+    // muPropTableSize); the table itself is the caller's pre-loaded lpVFXPropTable.
+    const BrnParticle::VFXPropCollection* lpCollection = mVFXPropCollection.GetMemoryResource();
+    CGS_ASSERT( luPropTypeId < lpCollection->GetTableSize(),
+                "Prop TypeId not in Vfx prop table. If new props have been added, be sure to rebuild the particles bundle" );
+    const BrnParticle::VFXProp* lpVFXProp =
+        static_cast<const BrnParticle::VFXProp*>( lpVFXPropTable ) + luPropTypeId;   // slwi r11, r30, 4
+    CGS_ASSERT( lpVFXProp != 0, "lpVFXProp != NULL" );
 
-    // -------------------------------------------------------------------------
-    // PARKED (see banner item 2): the corona loop @0x822DC090..0x822DC2DC. FULLY
-    // DECODED -- the follow-up TU only has to home the five BrnParticle records. The
-    // DecFIGS DWARF (SharedClasses/Graphics/VFXPropsResourceType.h) already matches the
-    // asm field for field:
-    //
-    //   VFXPropCollection { VFXProp* mpPropTable; u32 muPropTableSize; ... }
-    //   VFXProp           { u64 mPropID; VFXPropState* mpPropStates; u32 muNumPropStates; }
-    //                       -- console stride 16, which is the asm's `slwi r11,r30,4`
-    //   VFXPropState      { VFXMaterial* mpVFXMaterial; u32 muNumVFXMaterials;
-    //                       VFXCoronaType* mpCoronaType; u32 muNumCoronas; }
-    //                       -- the asm's *(state+8) / *(state+0xC)
-    //   VFXCoronaType     { Matrix44Affine mTransform; VFXCoronaTypeData* mpTypeData;
-    //                       f32 mrTimeOffset; }  -- console stride 0x50, the asm's r24 += 0x50
-    //   VFXCoronaTypeData { u32 mnID; u32 mType; f32 mrTimeOn; f32 mrTimeOff;
-    //                       f32 mrSizeMin; f32 mrSizeMax; f32 mrMasterTime;
-    //                       bool mbSynchronised; }
-    //
-    // The body:
-    //   const VFXPropCollection* lpCollection = mVFXPropCollection.GetMemoryResource();
-    //   CGS_ASSERT( luPropTypeId < lpCollection->muPropTableSize,
-    //               "Prop TypeId not in Vfx prop table. If new prop..." );
-    //   const VFXProp* lpVFXProp = &lpVFXPropTable[ luPropTypeId ];   // caller-supplied table
-    //   CGS_ASSERT( lpVFXProp != 0, "lpVFXProp != NULL" );
-    //   const VFXPropState* lpState = lpVFXProp->GetState( 0 );
-    //   for ( u32 luCorona = 0; luCorona < lpState->muNumCoronas; ++luCorona )
-    //   {
-    //       const VFXCoronaType* lpCoronaType = &lpState->mpCoronaType[ luCorona ];
-    //       CGS_ASSERT( lpCoronaType != 0, "lpCoronaType != NULL" );
-    //
-    //       // @0x822DC180..0x822DC1D0. Read the vmaddfp operands in ENCODING order
-    //       // (vD,vA,vB,vC => vD = vA*vC + vB) for the plain form and in LOGICAL order for
-    //       // the ...128 form; getting this backwards silently swaps the accumulator and
-    //       // the multiplier and puts every corona at the wrong place.
-    //       Vector3 lWorldPos    = TransformPoint ( *lpTransform, lpCoronaType->mTransform.Pos() );
-    //       Vector3 lWorldNormal = TransformVector( *lpTransform, lpCoronaType->mTransform.At() );
-    //
-    //       // Back-face cull: skip when the camera is behind the corona's plane.
-    //       if ( Dot3( lWorldPos - lCameraPosition, lWorldNormal ) >= 0.0f ) continue;
-    //
-    //       const VFXCoronaTypeData* lpData = lpCoronaType->mpTypeData;
-    //       f32 lfIntensity;
-    //       if ( lpData->mrTimeOn == flt_82001CC0 && lpData->mrTimeOff == flt_82001CC0 )
-    //       {
-    //           lfIntensity = 1.0f;                       // flt_82001C98
-    //       }
-    //       else
-    //       {
-    //           // @0x822DC214..0x822DC298: a vrefp/vnmsubfp/vmaddfp Newton-Raphson
-    //           // reciprocal, a vrfiz truncate and a vnmsubfp -- i.e. the strength-reduced
-    //           // fmod, then a triangular on/off ramp.
-    //           const f32 lfPeriod = lpData->mrTimeOn + lpData->mrTimeOff;
-    //           const f32 lfPhase  = fmodf( lpData->mrMasterTime + lpCoronaType->mrTimeOffset,
-    //                                       lfPeriod );
-    //           lfIntensity = ( lfPhase <= lpData->mrTimeOn )
-    //                             ? ( lfPhase / lpData->mrTimeOn )
-    //                             : ( 1.0f - ( lfPhase - lpData->mrTimeOn ) / lpData->mrTimeOff );
-    //       }
-    //
-    //       const Vector2 lSizeMinMax = { lpData->mrSizeMin, lpData->mrSizeMax };
-    //       lpCoronaSubmissionInterface->AddPropCorona( &lSizeMinMax,
-    //                                                   lpData->GetCoronaType(),
-    //                                                   lWorldPos, lWorldNormal, lfIntensity );
-    //   }
-    //
-    // Still unresolved for the follow-up: the value of flt_82001CC0 (the "both times are
-    // this => always on" sentinel, almost certainly 0.0f but not readable from a
-    // function-only export) and AddPropCorona's exact parameter order, which must be
-    // pinned off 0x823FD138's own prologue rather than off this call site.
-    // -------------------------------------------------------------------------
+    const BrnParticle::VFXPropState* lpState = lpVFXProp->GetState( 0 );
+    for ( u32 luCorona = 0; luCorona < lpState->GetNumCoronas(); ++luCorona )
+    {
+        const BrnParticle::VFXCoronaType* lpCoronaType = lpState->GetCoronaTypes() + luCorona;   // r24 += 0x50
+        CGS_ASSERT( lpCoronaType != 0, "lpCoronaType != NULL" );
+
+        // @0x822DC180..0x822DC1D0: the placement's position row (+0x30) through the whole prop
+        // transform, its facing row (+0x20) through the rotation only.
+        const Vector3 lvWorldPosition =
+            rw::math::vpu::TransformPoint( *lpTransform, Vector3( lpCoronaType->mTransform.wAxis ) );
+        const Vector3 lvWorldDirection =
+            rw::math::vpu::TransformVector( *lpTransform, Vector3( lpCoronaType->mTransform.zAxis ) );
+
+        // @0x822DC1D4..0x822DC1EC: a corona facing away from the camera is skipped
+        // (vmsum3fp128 of (position - camera) . direction, vcmpgefp128 against zero).
+        const Vector3 lvToCorona = { lvWorldPosition.x - lCameraPosition.x,
+                                     lvWorldPosition.y - lCameraPosition.y,
+                                     lvWorldPosition.z - lCameraPosition.z, 0.0f };
+        if ( lvToCorona.x * lvWorldDirection.x + lvToCorona.y * lvWorldDirection.y +
+             lvToCorona.z * lvWorldDirection.z >= 0.0f )
+        {
+            continue;
+        }
+
+        // @0x822DC1F0..0x822DC298: the blink. Both times zero (flt_82001CC0) is a steady light at
+        // full intensity (flt_82001C98); otherwise the phase in the on+off cycle (the vrefp /
+        // vrfiz / vnmsubfp sequence is fmod) ramps up over mrTimeOn and down over mrTimeOff.
+        const BrnParticle::VFXCoronaTypeData* lpData = lpCoronaType->GetTypeData();
+        f32 lfIntensity;
+        if ( lpData->mrTimeOn == 0.0f && lpData->mrTimeOff == 0.0f )
+        {
+            lfIntensity = 1.0f;
+        }
+        else
+        {
+            const f32 lfPeriod = lpData->mrTimeOff + lpData->mrTimeOn;
+            const f32 lfTime   = lpData->mrMasterTime + lpCoronaType->GetTimeOffset();
+            const f32 lfPhase  = lfTime - truncf( lfTime / lfPeriod ) * lfPeriod;
+            if ( lfPhase > lpData->mrTimeOn )
+            {
+                lfIntensity = 1.0f - ( lfPhase - lpData->mrTimeOn ) / lpData->mrTimeOff;
+            }
+            else
+            {
+                lfIntensity = lfPhase / lpData->mrTimeOn;
+            }
+        }
+
+        // @0x822DC29C..0x822DC2C8: the size pair { mrSizeMin, mrSizeMax } on the stack (r4), the
+        // texture (r6), position v1, direction v2, intensity f1.
+        const Vector2 lvSize = { lpData->mrSizeMin, lpData->mrSizeMax };
+        lpCoronaSubmissionInterface->AddPropCorona( lvWorldPosition, lvWorldDirection, lvSize,
+                                                    lfIntensity, lpData->GetCoronaType() );
+    }
 }
 
 // =============================================================================
@@ -730,10 +714,8 @@ PropEntityModule::GenerateDispatchLists(
 
     // @0x822FB688: the VFX prop table is fetched ONCE, outside the loop, and handed to
     // every RenderPropAndCoronas call (which re-fetches the collection itself for the
-    // bounds check). Parked with the corona loop -- see RenderPropAndCoronas -- so the
-    // console's `*(u32*)mVFXPropCollection.GetMemoryResource()` read is not performed here
-    // and the parameter is passed as null rather than as a guessed table pointer.
-    const void* lpVFXPropTable = 0;
+    // bounds check): `*(u32*)mVFXPropCollection.GetMemoryResource()` == mpPropTable.
+    const void* lpVFXPropTable = mVFXPropCollection.GetMemoryResource()->GetTable();
 
     s32 liSubmitted = 0;
 
