@@ -5,7 +5,7 @@
 void CgsModule::ModuleSingleBuffered::Construct()
 {
     this->mePrepareStage = EManagerPrepareStage::E_MANAGERPREPARESTAGE_START;
-    this->meReleaseStage = EManagerReleaseStage::E_MANAGERRELEASESTAGE_START;
+    this->meReleaseStage = EManagerReleaseStage::E_MANAGERRELEASESTAGE_DONE;
 
     this->mbIsNewModule = false;
 

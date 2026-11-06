@@ -34,24 +34,9 @@ namespace CgsInput
     // XInputGetCapabilities dwFlags: XINPUT_FLAG_GAMEPAD (the asm passes the immediate 1).
     static const u32 KU_XINPUT_FLAG_GAMEPAD = 1;
 
-    // The following lifecycle stores are inlined in InputPads::InitializePads @0x828E7238
+    // The lifecycle stores are inlined in InputPads::InitializePads @0x828E7238
     // and InputPads::Destruct @0x828EFBF0; ARTIST has no separate ManagerX360 constructor or
-    // destructor call. These methods expose those exact manager-owned stores to InputPads.
-    void ManagerX360::Construct()
-    {
-        miNumBoundPads = 0;               // InputPads::InitializePads: stw 0, +0x70
-        mu8Unknown74 = 0;                  // InputPads::InitializePads: stb 0, +0x74
-        for (u32 luPort = 0; luPort < KU_NUMBER_OF_INPUT_PORTS; ++luPort)
-        {
-            mapBoundPads[luPort] = 0;      // +0x60 .. +0x6C
-        }
-        for (u32 luPort = 0; luPort < KU_NUMBER_OF_INPUT_PORTS; ++luPort)
-        {
-            maDevices[luPort].meDeviceType = 0;
-            maDevices[luPort].mbConnected = 0;
-        }
-    }
-
+    // destructor call. Construct is inline in the header to preserve that call shape.
     void ManagerX360::Destruct()
     {
         for (u32 luPort = 0; luPort < KU_NUMBER_OF_INPUT_PORTS; ++luPort)

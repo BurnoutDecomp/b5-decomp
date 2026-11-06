@@ -63,7 +63,18 @@ namespace CgsInput
         // Stores performed inline by InputPads::InitializePads before it constructs the pads:
         // zero the bound table, count, +0x74 byte and each record's type/connected fields.
         // The 16-byte state snapshots are not cleared by the original path.
-        void Construct();
+        inline void Construct()
+        {
+            miNumBoundPads = 0;
+            mu8Unknown74 = 0;
+            for (u32 luPort = 0; luPort < KU_NUMBER_OF_INPUT_PORTS; ++luPort)
+                mapBoundPads[luPort] = 0;
+            for (u32 luPort = 0; luPort < KU_NUMBER_OF_INPUT_PORTS; ++luPort)
+            {
+                maDevices[luPort].meDeviceType = 0;
+                maDevices[luPort].mbConnected = 0;
+            }
+        }
 
         // Stores performed inline by InputPads::Destruct after the player/port records:
         // zero each record's type/connected fields, count and +0x74 byte. The bound table is

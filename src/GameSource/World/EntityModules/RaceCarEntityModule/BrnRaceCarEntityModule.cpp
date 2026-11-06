@@ -102,6 +102,11 @@
 namespace BrnWorld
 {
 
+// ARTIST 0x82FAD2B0, seeded by Prepare before the range and colour draws.
+CgsNumeric::Random mRandom;
+
+static const u64 KU_PREPARE_RANDOM_SEED = 0x8FE06DC2ull;
+
 // The null CgsID sentinel, spelled exactly as BrnRaceCar.cpp does (a "spawn/reset" record
 // carries 0 for "no car" / "derive the wheel set" / "no rival").
 static const CgsID KU_CGSID_NULL = 0;
@@ -256,8 +261,10 @@ namespace
 
 void RaceCarEntityModule::Construct()
 {
+    CgsModule::ModuleSingleBuffered::Construct();
+
     mePrepareStage             = 0;
-    miPrepareCarIndex          = 0;
+    miPrepareCarIndex          = 2; // E_RELEASESTAGE_DONE
     meLoadGlobalResourcesStage = 0;
     miExpectedResponseCount    = 0;
 
@@ -275,6 +282,7 @@ void RaceCarEntityModule::Construct()
     // ARTIST 822FD924: Construct the embedded diagnostic owner before the streamer.
     mRCEntityModuleDebugComponent.Construct(this);
     mRaceCarStreamer.Construct();
+    mPlaceOnTrackManager.Construct(this);
     mfTimeStep = 0.0f;
     mfLastPlayerCarSpeed = 0.0f;
     mbOncomingTimerActive = false;
@@ -430,6 +438,8 @@ void RaceCarEntityModule::Construct()
     // DrawRenderable::Interpret, so no draw ever reaches the
     // DrawInstancedIndexedPrimitive_Custom trap.
     mbRenderWheels = true;
+
+    mbIsNewModule = true;
 }
 
 // X360 0x82300730. The module's resumable global-resource load, driven from Prepare
@@ -446,7 +456,7 @@ void RaceCarEntityModule::Construct()
 //   6   : wait; assert the reply id is 52 and its fail flag is clear; take mpVehicleList
 //   9   : RequestInterface<8192>::GetWheelList(&mReceiverQueue, 0) -> Clear()
 //   10  : wait; assert the reply id is 59 and its fail flag is clear; take mpWheelList
-//   0x11: done
+//   0x11: already done; stage-10 success leaves its response state intact
 //
 // Every wait compares the queue's event count against miExpectedResponseCount (always
 // staged to 1) and returns false while short. The two asserts are the console's
@@ -574,7 +584,6 @@ bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuff
     }
     // fall through
     case 0x11:
-        meLoadGlobalResourcesStage = 0x11;
         return true;
 
     default:
@@ -596,10 +605,9 @@ bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuff
 //       (BrnRaceCarStreamer.cpp:87 asserts it is non-null).
 //
 bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* lpOutput,
-                                   const CgsResource::ResourceHandle& lrDistrictMapHandle )
+                                   CgsResource::ResourceHandle lDistrictMapHandle )
 {
     CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );   // X360 :663
-    (void)lrDistrictMapHandle;
 
     if( CgsDev::Log::gpDebugPrint != 0 )
         *CgsDev::Log::gpDebugPrint << "[RaceCar] Prepare stage " << mePrepareStage
@@ -609,15 +617,13 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
     switch( mePrepareStage )
     {
     case 0:
-        mPlaceOnTrackManager.Construct( this );
-
         {
             const bool lbDistrictMapReady =
-                ( lrDistrictMapHandle.mpResourceMemory != 0 ) &&
-                ( *reinterpret_cast<void* const*>( lrDistrictMapHandle.mpResourceMemory ) != 0 );
+                ( lDistrictMapHandle.mpResourceMemory != 0 ) &&
+                ( *reinterpret_cast<void* const*>( lDistrictMapHandle.mpResourceMemory ) != 0 );
             if( lbDistrictMapReady )
             {
-                mDistrictMapResourceHandle = lrDistrictMapHandle;
+                mDistrictMapResourceHandle = lDistrictMapHandle;
 
                 const Vector2 KV_DISTRICT_MAP_WORLD_ORIGIN(-4208.0f, -3846.0f); // unk_82FAD520
                 const Vector2 KV_DISTRICT_MAP_WORLD_SIZE(8270.0f, 6101.0f); // unk_82FAD8E0
@@ -653,14 +659,19 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
         // The inlined NearMissManager::Prepare on +0x17E68 (its fourteen list counts, three
         // scalars and two flags zeroed).
         mNearMissManager.Prepare();
+        mAirTimeManager.Construct();
+        mTrafficCheckManager.Construct();
 
         mPowerParkingManager.Prepare();
-        mBoostDebugComponent.Register(); // ARTIST 823040C0
-        mRCEntityModuleDebugComponent.Register(); // ARTIST 823040C4..823040CC
-        mePrepareStage = 0;
+        mCrashPlayManager.mCrashPlayDebugComponent.Register();
+        mRandom.SetSeed(KU_PREPARE_RANDOM_SEED);
+        mBoostDebugComponent.Register();
+        mRCEntityModuleDebugComponent.Register();
     // fall through
     case 1:
         mePrepareStage = 1;
+        if( !CgsModule::ModuleSingleBuffered::Prepare() )
+            return false;
     case 2:
     {
         mePrepareStage = 2;
@@ -672,11 +683,10 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
     }
     // fall through
     case 3:
-        // The console re-arms the stage to 1 here and runs the per-car Prepare sweep --
-        // RaceCar::Prepare x35 then ActiveRaceCar::Prepare x8 (asm 0x82304xxx). Both are
-        // real bodies now, so the sweep is restored (pose wave 2026-07-31); the stage is
-        // parked at 3 so a re-entry is idempotent rather than replaying
-        // LoadGlobalResources.
+        mePrepareStage = 1;
+        miPrepareCarIndex = 0;
+        mePlayerActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+
         for( s32 liGlobal = 0; liGlobal < E_GLOBAL_RACE_CAR_INDEX_COUNT; ++liGlobal )
         {
             maRaceCars[liGlobal].Prepare();
@@ -685,18 +695,24 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
         {
             maActiveRaceCars[liActive].Prepare();
         }
-        //
-        // What IS reproduced is the stage-3 TAIL: the console stores the module's vehicle-list
-        // pointer into the streamer (`*(a1 + 69888) = *(a1 + 99380)`), which is
-        // RaceCarStreamer::Prepare -- the assert at BrnRaceCarStreamer.cpp:87 sits right there.
-        mePrepareStage         = 3;
-        miPrepareCarIndex      = 0;
 
-        if( mpVehicleList != 0 )
-        {
-            mRaceCarStreamer.Prepare( mpVehicleList, mpWheelList );
-        }
+        mDeterministicRandom.SetSeed(KU_PREPARE_RANDOM_SEED);
+        mNonDeterministicRandom.SetSeed(KU_PREPARE_RANDOM_SEED);
 
+        mfCurrentTailgateDuration = 0.0f;
+        mfRandomBoostTime = -1.0f;
+        mbRandomBoostOn = false;
+        mbSendStreamingComplete = false;
+        miPendingRequestCount = 0;
+        mbWaitingForStreaming = false;
+        mbOnlineModeJustFinished = false;
+        mCameraTransform.SetIdentity();
+        meActivePaybackType = BrnNetwork::E_PAYBACK_TYPE_SIX_AXIS_STEERING;
+        meActivePaybackAggressor = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+        std::memset(&mPlayerVehicleControls, 0, sizeof(mPlayerVehicleControls));
+
+        ClearAllActiveRaceCarToPlayerScoringMappings();
+        mRaceCarStreamer.Prepare(mpVehicleList, mpWheelList);
         return true;
 
     default:

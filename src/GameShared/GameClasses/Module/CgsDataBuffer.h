@@ -19,7 +19,12 @@ namespace CgsModule
         bool mbMultiThreaded;
 
     public:
-        void Construct();
+        void Construct()
+        {
+            mxStatusFlags.Clear();
+            mpDataStructure = 0;
+            mbMultiThreaded = false;
+        }
         bool Prepare();
         bool Release();
         void Destruct();

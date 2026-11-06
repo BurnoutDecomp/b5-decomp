@@ -32,6 +32,8 @@ namespace BrnWorld
             case 1:     // E_RELEASESTAGE_MANAGER
             {
                 miPrepareCarIndex = 1;
+                if( !CgsModule::ModuleSingleBuffered::Release() )
+                    return false;
                 break;
             }
 
@@ -64,7 +66,7 @@ namespace BrnWorld
     // ========================================================================
     // RaceCarEntityModule::Destruct (vtable slot 3, 136 insns), in the console's order:
     //
-    //   ModuleSingleBuffered::Destruct()                       (see the FLAG below)
+    //   ModuleSingleBuffered::Destruct()                       (ARTIST 0x822F3DD0)
     //   mBoostDebugComponent.Destruct()                        (+0x17E50, see the FLAG below)
     //   mRCEntityModuleDebugComponent.Destruct()               (+0x17CF0, see the FLAG below)
     //   mRaceCarStreamer.Destruct()                            (+0x11100)
@@ -77,7 +79,8 @@ namespace BrnWorld
     // ========================================================================
     void RaceCarEntityModule::Destruct()
     {
- // ARTIST 0x822F3E18, folded empty base body
+        CgsModule::ModuleSingleBuffered::Destruct();
+
         // The race-car diagnostic owner is real; teardown is inlined at 822F3E1C..822F3E54.
         mRCEntityModuleDebugComponent.Destruct();
 
