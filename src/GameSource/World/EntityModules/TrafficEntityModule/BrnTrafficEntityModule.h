@@ -801,7 +801,14 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // is restored here (the body only reads; it reaches Vehicle through the const
         // GetVehicle overload below). Return width is the console's 8-byte key.
         VehicleTypeRuntime::AttribKey GetCarAssetAttribKey(u32 luVehicle) const;
-        void  GetDeterministicParamPos(u32 luParam);                 // @ 0x82714258 (FLAG: ParamTransform)
+        // @0x82714258 -- returns the Vector3 through the hidden r3 slot. BrnTrafficEntityModule.h:2387
+        // asserts the index and then forwards to ParamTransform::GetDeterministicPos; the bounds test
+        // and the +0xDCC << 6 are maParamTransforms[luParam].
+        Vector3 GetDeterministicParamPos(u32 luParam) const
+        {
+            CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+            return maParamTransforms[luParam].GetDeterministicPos();
+        }
         // @0x82708C10. SIGNATURE CORRECTED 2026-08-28 from the asm, which was never a
         // `void f(u32, void*)`: r4 is the sympathetic-crash target's EntityId (the body splits
         // its owner byte and 14-bit index), r5 is a Vector3 out-slot, and r3 returns 0/1
