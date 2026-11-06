@@ -4,6 +4,8 @@
 // Bodied from BURNOUT_X360_ARTIST.XEX:
 //   AemsFactory::CsisPrint(const char*)        @ 0x8268A018
 //   AemsFactory::FindPatchMonitor(const char*) @ 0x82689E98
+//   AemsFactory::UpdateAEMSPatches(f32)        @ 0x826A2C30
+//   AemsFactory::AddPatchMonitor(ClassData*)   @ 0x82689EF8 (no ARTIST export: DecFIGS 0x82E954)
 //
 // CsisPrint @ 0x8268A018:
 //   if (CgsDev::Message::gxMessageFilterFlags & 1)
@@ -22,7 +24,7 @@
 //   return 0;
 // The X360 inner do/while is a hand-inlined strcmp over the two C strings; the
 // outer loop walks the table and bails out at the registered count. Called by
-// AemsFactory::AddPatchMonitor (DEFERRED sibling).
+// AemsFactory::AddPatchMonitor.
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
@@ -31,12 +33,16 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 
 #include "rw/rwcore_structs.h"      // rw::IResourceAllocator / BaseResourceDescriptors (the carve)
 #include "SDKs/Csis/CsisSystem.h"   // Csis::System::IsInited
 #include "SDKs/Csis/CsisClass.h"
 #include "SDKs/EATech/include/snd/sndaems.h" // Snd9::Aems::SetSamplePlayerFactory
 
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <new>      // placement new (the in-carve construct)
 
@@ -212,9 +218,38 @@ bool AemsFactory::DoCreateContent(const ContentSpec& akrSpec,
     return lpContent != 0;
 }
 
-// ARTIST @0x826C2358. Drain the fixed CSIS command ring on the playback thread.
-void AemsFactory::DoUpdate(f32 /*af32DeltaTime*/)
+// [FLAG PC witness] [aems] NOT IN THE X360 BINARY. BRN_AEMS_DIAG=1, capped; off by default.
+namespace
 {
+    bool AemsDiagEnabled()
+    {
+        static const bool sbEnabled = std::getenv("BRN_AEMS_DIAG") != 0;
+        return sbEnabled;
+    }
+
+    void AemsDiagPrintf(const char* lpcFormat, ...)
+    {
+        static u32 suLines = 0;
+        if (!AemsDiagEnabled() || suLines >= 400u)
+            return;
+        ++suLines;
+        char lacMsg[256];
+        va_list lArgs;
+        va_start(lArgs, lpcFormat);
+        std::vsnprintf(lacMsg, sizeof(lacMsg), lpcFormat, lArgs);
+        va_end(lArgs);
+        CgsDev::Log::WriteToLog(lacMsg);
+    }
+}
+
+// ARTIST @0x826C2358. Drain the fixed CSIS command ring on the playback thread, then run
+// the live AEMS instances.
+void AemsFactory::DoUpdate(f32 af32DeltaTime)
+{
+    CpuMonitors& lrMonitors = GetEnvironment().GetCpuMonitors();
+    CgsDev::PerfMonCpu::StartMonitor(lrMonitors.miAemsFactoryUpdate);
+    CgsDev::PerfMonCpu::StartMonitor(lrMonitors.miAemsFactoryUpdate2);
+
     uintptr_t laWords[16];
     for (;;)
     {
@@ -235,10 +270,12 @@ void AemsFactory::DoUpdate(f32 /*af32DeltaTime*/)
                 reinterpret_cast<Csis::ClassHandle*>(laWords[1]);
             Csis::InterfaceId lId;
             lId.mpName = reinterpret_cast<const char*>(laWords[2]);
+            CGS_ASSERT(lId.mpName != 0, "lCommand.mpName");
+            CGS_ASSERT(lpHandle != 0, "lCommand.mpHandle");
             lId.muSystemId = static_cast<u16>(laWords[3]);
             lId.muInterfaceId = static_cast<u16>(laWords[4]);
             const Csis::Result leResult = lpHandle->SetFast(&lId);
-            CGS_ASSERT(static_cast<s32>(leResult) >= 0, "ClassHandle::SetFast");
+            CGS_ASSERT(static_cast<s32>(leResult) == 0, "Csis::RESULT_OK == lResult");
             break;
         }
         case E_CSIS_COMMAND_CREATE:
@@ -248,32 +285,147 @@ void AemsFactory::DoUpdate(f32 /*af32DeltaTime*/)
                 reinterpret_cast<Csis::ClassHandle*>(laWords[1]);
             void* lpParameters = reinterpret_cast<void*>(laWords[2]);
             Csis::Class** lppClass = reinterpret_cast<Csis::Class**>(laWords[3]);
+            CGS_ASSERT(lpHandle != 0, "lCommand.mpHandle");
+            CGS_ASSERT(lpParameters != 0, "lCommand.mpData");
+            CGS_ASSERT(lppClass != 0, "lCommand.mppClass");
             const int liResult = Csis::Class::CreateInstanceFast(
                 lpHandle, lpParameters, lppClass);
-            CGS_ASSERT(liResult >= 0, "Class::CreateInstanceFast");
+            CGS_ASSERT(liResult == 0, "Csis::RESULT_OK == lResult");
+            AddPatchMonitor(*lppClass);    // 0x826C2578: right after the create, no guard
             break;
         }
         case E_CSIS_COMMAND_RELEASE:
         {
             CGS_ASSERT(luCount == 2, "Release command size");
             Csis::Class* lpClass = reinterpret_cast<Csis::Class*>(laWords[1]);
-            if (lpClass)
-                lpClass->ReleaseFast();
+            CGS_ASSERT(lpClass != 0, "lCommand.mpClass");
+            const int liResult = lpClass->ReleaseFast();
+            CGS_ASSERT(liResult == 0, "Csis::RESULT_OK == lResult");
             break;
         }
         case E_CSIS_COMMAND_UPDATE:
         {
             CGS_ASSERT(luCount == 3, "Update command size");
             Csis::Class* lpClass = reinterpret_cast<Csis::Class*>(laWords[1]);
-            if (lpClass)
-                lpClass->SetMemberDataFast(reinterpret_cast<void*>(laWords[2]));
+            void* lpData = reinterpret_cast<void*>(laWords[2]);
+            CGS_ASSERT(lpClass != 0, "lCommand.mpClass");
+            CGS_ASSERT(lpData != 0, "lCommand.mpData");
+            const int liResult = lpClass->SetMemberDataFast(lpData);
+            CGS_ASSERT(liResult == 0, "Csis::RESULT_OK == lResult");
             break;
         }
         default:
-            CGS_ASSERT(false, "Invalid CSIS command");
+            CGS_ASSERT(false, "Invalid Command");
             break;
         }
     }
+
+    UpdateAEMSPatches(af32DeltaTime);
+
+    CgsDev::PerfMonCpu::StopMonitor(lrMonitors.miAemsFactoryUpdate);
+    CgsDev::PerfMonCpu::StopMonitor(lrMonitors.miAemsFactoryUpdate2);
+}
+
+// ---------------------------------------------------------------------------
+// AemsFactory::UpdateAEMSPatches(f32 af32TimeStep)  @ 0x826A2C30
+//   flt_83277644 = step * 1000 (ms) for the walk, 10.0f after it. For each timer client
+//   of off_832775EC (next read first: a tick may destroy its own instance): its monitor
+//   (the inlined FindPatchMonitor(TIMERCLIENTFN*)), assert "lpPatchMonitor" (:282, NOT a
+//   guard), Start/InterpretModule(fn, data)/Stop. ARTIST has no other caller of
+//   InterpretModule and no AEMS timer: AddTimer's callers are the rwaudio plug-ins and
+//   Snd9Service only. Runs under the System lock Environment::Update @0x826D7500 holds.
+// ---------------------------------------------------------------------------
+void AemsFactory::UpdateAEMSPatches(f32 af32TimeStep)
+{
+    Snd9::gVariableTimerPeriod = af32TimeStep * 1000.0f;
+
+    u32 luInstances = 0;
+    Snd9::Aems::InstanceLink* lpNode = Snd9::Aems::gpInstanceUpdateList;
+    while (lpNode)
+    {
+        Snd9::Aems::InstanceLink* lpNext = lpNode->mpNext;
+        const Snd9::Aems::TimerClient* lpClient =
+            reinterpret_cast<const Snd9::Aems::TimerClient*>(lpNode);
+
+        PatchMonitor* lpPatchMonitor = FindPatchMonitor(lpClient->mpClientFn);
+        CGS_ASSERT(lpPatchMonitor != 0, "lpPatchMonitor");
+
+        CgsDev::PerfMonCpu::StartMonitor(lpPatchMonitor->miPerfmon);
+        Snd9::InterpretModule(lpClient->mpClientFn, lpClient->mpClientData);
+        CgsDev::PerfMonCpu::StopMonitor(lpPatchMonitor->miPerfmon);
+
+        lpNode = lpNext;
+        ++luInstances;
+    }
+
+    if (AemsDiagEnabled())
+    {
+        static u32 suTicks = 0;
+        if (suTicks < 5u || (luInstances != 0u && suTicks % 600u == 0u))
+            AemsDiagPrintf("[FLAG PC witness] [aems] tick=%u stepMs=%.3f instances=%u monitors=%u\n",
+                           suTicks, Snd9::gVariableTimerPeriod, luInstances, muPatchMonitorCount);
+        ++suTicks;
+    }
+
+    Snd9::gVariableTimerPeriod = 10.0f;
+}
+
+// ---------------------------------------------------------------------------
+// AemsFactory::AddPatchMonitor(ClassData*)  @ 0x82689EF8 (absent from the ARTIST export;
+// DecFIGS @0x82E954, its only caller the same DoUpdate create arm as ARTIST @0x826C2358).
+//   One monitor per class name. A class met again only refreshes the bytecode pointer
+//   (a re-registered bank's new image); a new one fills the next slot and registers a
+//   perf monitor: page 0x13 (the "Aems Update" page Module::Prepare registers), budget
+//   0.25, scaled. The asserts are not guards.
+//
+// FLAG (native-64 record): the console reads the module and the name out of the 32-bit
+// class descriptor. In the native record the name is muTargetOrOffset (the field
+// CsisSystem.cpp's handle lookup compares with strcmp) and the module is the head constructor
+// client's mpClientData (the only place SNDAEMS_addmodulebank stores it).
+// ---------------------------------------------------------------------------
+void AemsFactory::AddPatchMonitor(Csis::Class* apClassData)
+{
+    CGS_ASSERT(apClassData != 0, "lpClassData");
+
+    const Csis::SystemClient24* lpDescriptor =
+        reinterpret_cast<const Csis::SystemClient24*>(apClassData->mpClassDesc);
+    const Csis::ClassClientNode* lpClient =
+        reinterpret_cast<const Csis::ClassClientNode*>(lpDescriptor->muRuntimeLink);
+    const Snd9::Aems::ModuleRecord* lpModule =
+        static_cast<const Snd9::Aems::ModuleRecord*>(lpClient->mpClientData);
+    CGS_ASSERT(lpModule != 0, "lpModule");
+
+    const char* lpcName = reinterpret_cast<const char*>(lpDescriptor->muTargetOrOffset);
+    PatchMonitor* lpPatchMonitor = FindPatchMonitor(lpcName);
+    if (lpPatchMonitor != 0)
+    {
+        lpPatchMonitor->mpClientFunc = lpModule->mpProgram;
+        return;
+    }
+
+    CGS_ASSERT(muPatchMonitorCount < KU_MAX_PATCH_MONITORS,
+               "muPatchMonitorCount < KU_MAX_PATCH_MONITORS");
+
+    PatchMonitor& lrMonitor = maPatchMonitors[muPatchMonitorCount];
+    lrMonitor.mpName = lpcName;
+    lrMonitor.mpClientFunc = lpModule->mpProgram;
+    lrMonitor.mpClientData = 0;
+    lrMonitor.miPerfmon = CgsDev::PerfMonCpu::AddMonitor(
+        lpcName, static_cast<CgsDev::PerfMonCpuPage>(0x13), false, 0.25f, true);
+    ++muPatchMonitorCount;
+    AemsDiagPrintf("[FLAG PC witness] [aems] monitor %u name=%s\n",
+                   muPatchMonitorCount, lpcName);
+}
+
+// DWARF h:235 (DecFIGS @0x825DAC), inlined into UpdateAEMSPatches on ARTIST.
+PatchMonitor* AemsFactory::FindPatchMonitor(const u8* apClientFunc)
+{
+    for (u32 luI = 0; luI < muPatchMonitorCount; ++luI)
+    {
+        if (maPatchMonitors[luI].mpClientFunc == apClientFunc)
+            return &maPatchMonitors[luI];
+    }
+    return nullptr;
 }
 
 // ---------------------------------------------------------------------------

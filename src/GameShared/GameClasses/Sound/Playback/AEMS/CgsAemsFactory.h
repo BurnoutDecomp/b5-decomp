@@ -8,6 +8,8 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsHandle.h"
 
+namespace Csis { class Class; }
+
 namespace CgsSound
 {
 namespace Playback
@@ -62,6 +64,9 @@ protected:
 
     static void CsisPrint(const char* lpcText);
     PatchMonitor* FindPatchMonitor(const char* lpcName);
+    PatchMonitor* FindPatchMonitor(const u8* apClientFunc);   // DWARF h:235, inlined @0x826A2C88
+    void AddPatchMonitor(Csis::Class* apClassData);           // DWARF h:232
+    void UpdateAEMSPatches(f32 af32TimeStep);                 // DWARF h:241, @0x826A2C30
 
 private:
     u32 muPatchMonitorCount;
