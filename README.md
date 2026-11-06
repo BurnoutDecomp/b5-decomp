@@ -11,12 +11,12 @@ and selects existing Xbox branches directly. `src/pc/` stays as an unbuilt
 reference; shared sources must not include it. Some PC diagnostic and movie I/O
 blocks remain in shared code and still need cleanup or console reconstruction.
 
-This is an incomplete source experiment. The complete game does not build or boot
-yet and has not produced a byte match. The executable build, missing platform and
-middleware implementations, original class layouts, VMX code and compiler/codegen
-recovery still need work. Missing implementations are left unresolved. Mixed methods that depend on PC
-infrastructure are removed as whole definitions when their console implementation
-is still missing; the base commit is `209fb3b94f7266506dff4ffd569e8553f1b3af93`.
+This is an incomplete source experiment. R173 passed the full native compile
+gate and produced a strict-linked Xbox 360 XEX. R174 is a source checkpoint
+awaiting a fresh full link and sound manager registration check. Launch and
+whole-image byte matching remain open. Platform and middleware recovery,
+original class layouts, VMX code and compiler code generation still need work.
+The base commit is `209fb3b94f7266506dff4ffd569e8553f1b3af93`.
 
 The parent workflow's desktop build and existing PC runtime tests do not apply.
 Use ARTIST assembly as the authority for all future work, including Apt; DecFIGS
@@ -48,7 +48,8 @@ python tools/prepare_x360_linker.py --sdk "path\to\XDK"
 ```
 
 The prepared linker is `build/x360/tool-host/link.exe`. Original SDK files stay
-unchanged; neither command installs software or changes system settings. Native
-linking works for the CRC objects. The game still has source compatibility,
-console layout and missing implementation work before it can link or boot.
-SDK files and build output stay outside Git under `build/`.
+unchanged. SDK files and build output stay outside Git under `build/` or in
+an external artifact directory.
+
+See the [Xbox 360 tooling guide](tools/x360/README.md) for the strict-link
+history, current verification commands and archived worktree scripts.

@@ -1,0 +1,3 @@
+import ida_bytes,ida_funcs,idc
+from pathlib import Path
+a=0x825F6BB0;f=ida_funcs.get_func(a);Path('D:/Reverse/BP-X360-Experimental-Artifacts/racecar_math_combined/825F6BB0.bin').write_bytes(ida_bytes.get_bytes(a,f.end_ea-a));idc.qexit(0)

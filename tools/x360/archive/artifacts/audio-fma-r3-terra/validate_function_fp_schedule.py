@@ -1,0 +1,7 @@
+import json,re,hashlib
+from pathlib import Path
+out=Path('D:/Reverse/BP-X360-Experimental-Artifacts/audio-fma-r3-terra');d=out/'native';r={}
+for n in ['XasEnc','Xas1Enc']:
+ s=(d/(n+'.asm')).read_text(encoding='utf-8');match=re.search(r'^\?EncodeBlock@'+n+r'@[^\n]*\bPROC\b',s,re.M);assert match;start=match.start();end=s.index('ENDP',start);lines=s[start:end].splitlines();ops=[line.strip() for line in lines if re.search(r'\b(fmadds|fmuls|fadds)\b',line)];assert sum('fmadds' in x for x in ops)>=3;r[n]={'compiled_function_fp_ops':ops,'source_object_sha256':hashlib.sha256((d/(n+'.obj')).read_bytes()).hexdigest()}
+s=(d/'Butterworth.asm').read_text(encoding='utf-8');start=s.index('?CalculateFilterCoefficients@Butterworth@core@audio@rw@@');start=s.index('PROC',start);end=s.index('ENDP',start);lines=s[start:end].splitlines();ops=[line.strip()for line in lines if re.search(r'\b(fmadds|fmuls|fadds)\b',line)];assert sum('fmadds' in x for x in ops)>=3;r['Butterworth']={'compiled_function_fp_ops':ops,'source_object_sha256':hashlib.sha256((d/'Butterworth.obj').read_bytes()).hexdigest()};r['limits']='Compiler loop unrolling may repeat operations; verify operands/order against ARTIST windows and actual whole-function case receipts, not counts alone.'
+(out/'native-function-fp-schedule.json').write_text(json.dumps(r,indent=2),encoding='utf-8');print({n:len(r[n]['compiled_function_fp_ops']) for n in ['XasEnc','Xas1Enc','Butterworth']})

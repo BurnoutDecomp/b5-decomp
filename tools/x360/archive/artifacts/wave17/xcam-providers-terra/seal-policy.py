@@ -1,0 +1,13 @@
+import json,pathlib,hashlib
+p=pathlib.Path(r'D:/Reverse/BP-X360-Experimental-Artifacts/wave16/r19-strict-game-link-diagnostic'); a=pathlib.Path(r'D:/Reverse/BP-X360-Experimental-Artifacts/wave17/xcam-providers-terra'); sdk=pathlib.Path(r'C:/Users/adri1/.codex/worktrees/fbaf/BP-Decomp_Workflow/b5-decomp/build/x360/sdk-6534.4/portable/XDK'); inv=json.load(open(p/'invocation.json')); boundary=json.load(open(a/'XCAM_BOUNDARY.json')); ns={};exec(pathlib.Path(r'D:/Reverse/BP-X360-Experimental-Artifacts/wave16/native-link-providers-terra/inventory-r19.py').read_text().split('records=[]; failures=[]')[0],ns)
+sha=lambda p: hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
+x=[v for v in inv['objects'] if v['source'].lower().startswith('src/sdks/xcam/')]; assert len(x)==18 and all(v['sha256']==sha(v['object']) for v in x)
+outer=[]
+for v in inv['objects']:
+ if v in x: continue
+ for name,kind,*_ in ns['parse'](pathlib.Path(v['object']).read_bytes()):
+  if name.startswith('XCam') and kind in ('undefined','weak'): outer.append({'symbol':name,'source':v['source'],'object':v['object'],'sha256':v['sha256']})
+assert all(not e['outside_consumers'] or e['sdk_xcam_providers'] for e in boundary['outside_referenced'])
+result={'policy':'Replace the complete set of 18 listed reconstructed XCam objects with the retail SDK xcam.lib; do not mix partial implementations. Pending Root approval and downstream archive/link closure.', 'sealed_base':'6be513e1b3b69f9c28ed42a01ffafdc92924f857','strict_input_invocation':str(p/'invocation.json'),'strict_input_sha256':sha(p/'invocation.json'),'objects':x,'source_objects_sha256_verified':True,'outside_public_references':outer,'boundary':str(a/'XCAM_BOUNDARY.json'),'boundary_sha256':sha(a/'XCAM_BOUNDARY.json'),'retail_archive':str(sdk/'lib/xbox/xcam.lib'),'retail_archive_sha256':sha(sdk/'lib/xbox/xcam.lib'),'public_header':str(sdk/'include/xbox/xcam.h'),'public_header_sha256':sha(sdk/'include/xbox/xcam.h'),'public_declaration':'XCAMDEVICESTATE WINAPI XCamGetStatus(); (C linkage, WINAPI=CDECL under Xbox)','limitations':['No archive provider selection has been made by this policy.','XCamGetStatus and XCamShutdown code match ARTIST excluding relocatable bits per SDK-owner review; downstream references and data/runtime behavior unverified.','No full link, runtime, or camera streaming validation; absent or future consumers must be checked before reusing this policy.']}
+(a/'XCAM_PROVIDER_POLICY.json').write_text(json.dumps(result,indent=2)+'\n')
+print('object count',len(x),'outside refs',outer,'sdk sha',result['retail_archive_sha256'],'policy sha',sha(a/'XCAM_PROVIDER_POLICY.json'))

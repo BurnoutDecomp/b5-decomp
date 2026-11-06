@@ -1,0 +1,10 @@
+from pathlib import Path
+p=Path(r'D:/Reverse/BP-X360-Experimental-Worktrees/wave8_scene_terra/src/vendor/renderware/collision/SeparatingDirection.cpp')
+s=p.read_text()
+s=s.replace('AddRimToEdgeCandidate(SepAdd(lrOther.mPos, lvOtherOffset),','AddRimToEdgeCandidate(MaddScalar(lvOtherAxis, lrOther.mDimensions.mV.x, lrOther.mPos),')
+s=s.replace('const Vector3 lvRimPlus    = SepAdd(lrCylinder.mPos, lvAxisOffset);','const Vector3 lvRimPlus    = MaddScalar(lvCylAxis, lrCylinder.mDimensions.mV.x, lrCylinder.mPos);')
+s=s.replace('Vector3 lvVertex = Scale(lrAxis0, lvSH0.mV.x);\n            lvVertex = SepAdd(lvVertex, Scale(lrAxis1, lvSH1.mV.x));\n            lvVertex = SepAdd(lvVertex, Scale(lrAxis2, lvSH2.mV.x));', 'Vector3 lvVertex = MaddScalar(lrAxis0, lvSH0.mV.x, Scale(lrAxis1, lvSH1.mV.x));\n            lvVertex = MaddScalar(lrAxis2, lvSH2.mV.x, lvVertex);')
+s=s.replace('Vector3 lvCorner = Scale(lrAxis0, -lvSA0.mV.x);\n        lvCorner = SepAdd(lvCorner, Scale(lrAxis1, lvSA1.mV.x));\n        lvCorner = SepAdd(lvCorner, Scale(lrAxis2, lvSA2.mV.x));', 'Vector3 lvCorner = MaddScalar(lrAxis0, -lvSA0.mV.x, Scale(lrAxis1, lvSA1.mV.x));\n        lvCorner = MaddScalar(lrAxis2, lvSA2.mV.x, lvCorner);')
+s=s.replace('lvCorner = SepSub(Scale(lrAxis0, lvSA0.mV.x), Scale(lrAxis1, lvSA1.mV.x));\n        lvCorner = SepAdd(lvCorner, Scale(lrAxis2, lvSA2.mV.x));', 'lvCorner = SepSub(Scale(lrAxis0, lvSA0.mV.x), Scale(lrAxis1, lvSA1.mV.x));\n        lvCorner = MaddScalar(lrAxis2, lvSA2.mV.x, lvCorner);')
+s=s.replace('lvCorner = SepAdd(Scale(lrAxis0, lvSA0.mV.x), Scale(lrAxis1, lvSA1.mV.x));', 'lvCorner = MaddScalar(lrAxis0, lvSA0.mV.x, Scale(lrAxis1, lvSA1.mV.x));')
+p.write_bytes(s.replace('\n','\r\n').encode())

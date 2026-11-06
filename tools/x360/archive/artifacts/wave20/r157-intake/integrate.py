@@ -1,0 +1,25 @@
+import hashlib,json,pathlib,subprocess
+H=pathlib.Path(__file__).resolve().parent; B=H.parent/"r157-batch"; W=pathlib.Path("C:/Users/adri1/.codex/worktrees/bp360/wave4-intake"); CAN=pathlib.Path("C:/Users/adri1/.codex/worktrees/fbaf/BP-Decomp_Workflow/b5-decomp"); P=CAN.parent; L=H.parent.parent/"wave8/repair-r21-layout-intake-20261103"
+read=lambda p:json.loads(pathlib.Path(p).read_text()); sha=lambda p:hashlib.sha256(pathlib.Path(p).read_bytes()).hexdigest()
+def git(*args,cwd=W):return subprocess.check_output(["git","--no-optional-locks",*args],cwd=cwd)
+a=read(H/"ROOT_RELEASE.json"); m=read(B/"MANIFEST.json"); proj=read(H/"projection.json"); entries={x["path"]:x for x in m["final_paths"]}; base=m["base"]
+assert a["approved"] is True and a["manifest_sha256"]==sha(B/"MANIFEST.json")=="bfcb45b1fdf78b3e5f6ae2ddf3a1c5c2dfe43a393c9e8b020fdf663db2292e54" and a["patch_sha256"]==sha(B/"r157.patch")=="c9fe90a547e2743b08b2c1bfc1e02c1e7b75b7d3fda741ae599c355be6a068c6" and a["projection_sha256"]==sha(H/"projection.json") and a["review_sha256"]==sha(a["review_path"]) and a["guard_baseline_sha256"]==sha(H/"guard-baseline.json") and a["netconn_binding_sha256"]==sha(H/"netconn-check-binding.json") and a["entropy_binding_sha256"]==sha(H/"entropy-check-binding.json") and a["loading_binding_sha256"]==sha(H/"loading-check-binding.json")
+review=read(a["review_path"]); assert str(review["verdict"]).lower()=="pass" and review["manifest_sha256"]==a["manifest_sha256"] and review["patch_sha256"]==a["patch_sha256"] and review["base"]==base
+assert base=="8157850d32d5d15c6187b22969e939f5ca7c201d" and len(entries)==23 and len(entries)==len(m["final_paths"]) and all(x["new"] for x in entries.values()) and {p for p,x in entries.items() if x["old"] is None}=={'src/GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPhysicsInfo.h'} and git("rev-parse","HEAD").decode().strip()==base and not git("status","--porcelain=v1").strip() and not git("branch","--show-current").strip()
+assert git("rev-parse","HEAD",cwd=CAN).decode().strip()=="3534f7f16103a58ff904bbd1604e18e9934868f4" and not git("status","--porcelain=v1",cwd=CAN).strip()
+assert git("ls-files","--stage","b5-decomp",cwd=P).decode().strip()==read(read(L/"campaign.json")["plan"])["parent_gitlink_index"]
+for path,x in entries.items():
+ line=git("ls-files","--stage","--",path).decode().strip(); expected=x["old"]
+ if expected is None: assert not line and not (W/path).exists(),path
+ else: assert line.split()[:2]==[expected.split()[0],expected.split()[-1]],path
+git("-c","core.whitespace=cr-at-eol","apply","--check","--index",str(B/"r157.patch"));git("-c","core.whitespace=cr-at-eol","apply","--index",str(B/"r157.patch"))
+assert set(git("diff","--cached","--name-only").decode().splitlines())==set(entries)
+assert git("write-tree").decode().strip()==m["projected_tree"]
+postimage_proof={}
+for path,x in entries.items():
+ line=git("ls-files","--stage","--",path).decode().strip(); assert line.split()[:2]==[x["new"].split()[0],x["new"].split()[-1]],path
+ raw=git("hash-object","--no-filters","--",path).decode().strip(); clean=git("hash-object","--path="+path,"--",path).decode().strip(); assert x["new"].split()[-1] in (raw,clean),path; postimage_proof[path]={"index_blob":x["new"].split()[-1],"raw_blob":raw,"clean_filtered_blob":clean}
+(H/"postimage-blob-proof.json").write_text(json.dumps(postimage_proof,indent=2)+"\n")
+msg=H/"COMMIT_MESSAGE.txt"; msg.write_text("Integrate experimental X360 R157 batch\n\nCo-Authored-By: Codex GPT-6 <noreply@openai.com>\n")
+git("commit","--file",str(msg)); head=git("rev-parse","HEAD").decode().strip(); assert git("rev-list","--parents","-n","1",head).decode().split()==[head,base] and git("rev-parse",head+"^{tree}").decode().strip()==m["projected_tree"] and not git("status","--porcelain=v1").strip()
+binding={"base":base,"head":head,"paths":sorted(entries),"manifest_sha256":sha(B/"MANIFEST.json"),"patch_sha256":sha(B/"r157.patch"),"projection_sha256":sha(H/"projection.json"),"review_sha256":a["review_sha256"],"guard_baseline_sha256":a["guard_baseline_sha256"]}; (H/"commit-binding.json").write_text(json.dumps(binding,indent=2)+"\n");print("INTEGRATED",head,flush=True)

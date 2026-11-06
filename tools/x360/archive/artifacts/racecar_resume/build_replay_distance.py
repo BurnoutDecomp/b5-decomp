@@ -1,0 +1,5 @@
+from pathlib import Path
+import subprocess,os,json
+root=Path('D:/Reverse/BP-X360-Experimental-Worktrees/racecar_containment');out=Path('D:/Reverse/BP-X360-Experimental-Artifacts/racecar_resume/replay_distance');out.mkdir(parents=True,exist_ok=True);cmd=json.loads(Path('D:/Reverse/BP-X360-Experimental-Artifacts/racecar_resume/frozen_9769/command.json').read_text());cmd=[x for x in cmd[:-1] if not x.startswith(('/Fo','/Fa'))]+['/Fo'+str(out/'probe.obj'),'/Fa'+str(out/'probe.asm'),'D:/Reverse/BP-X360-Experimental-Artifacts/racecar_resume/replay-distance-probe.cpp'];sdk=Path(cmd[0]).parents[2];tmp=out/'temp';tmp.mkdir(exist_ok=True);env=dict(os.environ);env.update(XEDK=str(sdk),TEMP=str(tmp),TMP=str(tmp),PATH=str(sdk/'bin/win32')+os.pathsep+str(Path(os.environ['SystemRoot'])/'System32'))
+for k in ['CL','_CL_','LINK','_LINK_']:env.pop(k,None)
+r=subprocess.run(cmd,cwd=root,env=env,capture_output=True,text=True,errors='replace',timeout=180);(out/'command.json').write_text(json.dumps(cmd,indent=2),encoding='utf8');(out/'compile.log').write_text(r.stdout+r.stderr,encoding='utf8');print(r.stdout+r.stderr);assert r.returncode==0

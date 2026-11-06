@@ -1,0 +1,8 @@
+import sys,json,struct,hashlib
+from pathlib import Path
+root=Path('C:/Users/adri1/.codex/worktrees/fbaf/BP-Decomp_Workflow');sys.path.insert(0,str(root/'scratch/x360_sdk'));import native_atomic_fixture as F
+out=Path('D:/Reverse/BP-X360-Experimental-Artifacts/wave7/dac-terra');d=out/'snd9-native-build';p=d/'Snd9Service.obj';q=d/'TimerHandle.obj';pre='?GetPlugInDescRunTime@Snd9Service@';b=F.Bundle([F.Coff(p,pre),F.Coff(q,'??0TimerHandle@')]);b.select(pre);c=F.cpu(b);c.run(b.entry);ptr=c.g(3)&0xffffffff;raw=bytearray(c.mem.rd(ptr,0x34));orig=bytearray(b''.join(F.M.V.x360rd.u32(0x82f90158+i).to_bytes(4,'big') for i in range(0,0x34,4)));assert F.cstring(c,int.from_bytes(raw[:4],'big'))=='Snd9Service'
+for off,name,addr in [(4,'?GetSize@Snd9Service@',0x82b9bb20),(8,'?CreateInstance@Snd9Service@',0x82ba0130),(16,'?Process@Snd9Service@',0x82b9bd80)]:
+ got=int.from_bytes(raw[off:off+4],'big');exp=F.address(b,name);assert got==exp,(name,hex(got),hex(exp));assert int.from_bytes(orig[off:off+4],'big')==addr;raw[off:off+4]=orig[off:off+4]=bytes(4)
+mapaddr=int.from_bytes(raw[0x14:0x18],'big');assert c.mem.rd(mapaddr,4)==bytes.fromhex('0006ffff');assert F.M.V.x360rd.u32(0x82f90154)==0x0006ffff;raw[:4]=orig[:4]=bytes(4);raw[0x14:0x18]=orig[0x14:0x18]=bytes(4);errors=[] if raw==orig else [{'compiled':raw.hex(),'original':orig.hex()}]
+r={'cases':1,'errors':errors,'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'original_record':'82F90158','limits':'Actual descriptor bytes and channel-map data; callback identities verified, source name verified; registry behavior not executed.'};(out/'snd9-descriptor-comparison.json').write_text(json.dumps(r,indent=2)+'\n');print(errors);assert not errors

@@ -1,0 +1,14 @@
+{
+  "report": "D:\\Reverse\\BP-X360-Experimental-Artifacts\\wave20\\r173-intake\\loading-coff-verification.json",
+  "report_sha256": "967cb0d08798277761de6b9a5381e78cea695a7ee45739747c1e430d10b42d78",
+  "input_receipt_sha256": "6b0ff8ef567e4daa35507cf5d3876884ff853ccd447206a765a03a3fa51a14e7",
+  "completion_sha256": "53e5b9f455ddb1fe73d7a67930f095acc3899cb2f37cefef7e51135dd53c089c",
+  "source": "src/GameSource/Game/BrnLoadingScreenTextures.cpp",
+  "source_sha256": "05af0667ea9539c21e43d0ea86115f8a9331e17bae8d1f122b4933f3c1341eab",
+  "object": "D:\\Reverse\\BP-X360-Experimental-Artifacts\\wave20\\r29-intake-repaired\\native-selected\\BrnLoadingScreenTextures-3658ca5d.obj",
+  "object_sha256": "85fc37a14df9398998b1e526168fa60aa590231b1dc81478951a95a4da89067c",
+  "generated_inputs": {
+    "C:\\Users\\adri1\\.codex\\worktrees\\bp360\\wave4-intake\\build\\x360\\generated\\BrnLoadingScreenTextures.generated.inc": "8bcbabe53a3ba9698c84984f3e69685ca2a1824f17e97d32f52de39f420b63f7",
+    "C:\\Users\\adri1\\.codex\\worktrees\\bp360\\wave4-intake\\build\\x360\\generated\\BrnLoadingScreenTextures.manifest.json": "4238696aa197a39fc1baadedb8d7bc132f391f6ac414b4bfa9822eb5b4af4797"
+  }
+}

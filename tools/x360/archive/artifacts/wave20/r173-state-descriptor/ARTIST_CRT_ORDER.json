@@ -1,0 +1,17 @@
+{
+  "artist_registry": "0x8268DFE8",
+  "entries": [
+    {"crt_slot":"0x82CD1DE4","thunk":"0x82C61B58","descriptor":"0x82F2E7EC","name":"BrnStateManager","id":-1},
+    {"crt_slot":"0x82CD1E04","thunk":"0x82C61C10","descriptor":"0x82F2E84C","name":"StreamingStateManager","id":6},
+    {"crt_slot":"0x82CD1E28","thunk":"0x82C61D60","descriptor":"0x82F2E87C","name":"PlayerVehicleStateManager","id":1},
+    {"crt_slot":"0x82CD1E30","thunk":"0x82C61D98","descriptor":"0x82F2E88C","name":"AIVehicleStateManager","id":2},
+    {"crt_slot":"0x82CD1E4C","thunk":"0x82C61E08","descriptor":"0x82F2E900","name":"TrafficStateManager","id":3},
+    {"crt_slot":"0x82CD1FDC","thunk":"0x82C62D78","descriptor":"0x82F2F84C","name":"EmitterStateManager","id":7},
+    {"crt_slot":"0x82CD1FE0","thunk":"0x82C62D88","descriptor":"0x82F2F85C","name":"GlobalStateManager","id":0},
+    {"crt_slot":"0x82CD208C","thunk":"0x82C63370","descriptor":"0x82F2F94C","name":"CollisionStateManager","id":5},
+    {"crt_slot":"0x82CD2094","thunk":"0x82C63390","descriptor":"0x82F2F96C","name":"PassbyStateManager","id":4},
+    {"crt_slot":"0x82CD22AC","thunk":"0x82C65C10","descriptor":"0x82F2FAA0","name":"StateManager","id":-1}
+  ],
+  "method": "Scan ARTIST text direct branch targets to 8268DFE8; read each registration descriptor from lis/addi preceding branch; scan ARTIST data for thunk pointers and order the aligned CRT table locations. Each of nine derived descriptor base pointers is 82F2FAA0.",
+  "boundary": "Order is from the ARTIST image and its CRT function table, not runtime instrumentation."
+}

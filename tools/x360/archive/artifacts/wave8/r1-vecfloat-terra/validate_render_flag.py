@@ -1,0 +1,5 @@
+from pathlib import Path
+import sys,json,hashlib
+sys.path.insert(0,'C:/Users/adri1/.codex/worktrees/fbaf/BP-Decomp_Workflow/scratch/x360_sdk');import validate_render_states as R
+sys.path.insert(0,'C:/Users/adri1/.codex/worktrees/fbaf/BP-Decomp_Workflow/tools/re');import x360rd
+out=Path('D:/Reverse/BP-X360-Experimental-Artifacts/wave8/r1-vecfloat-terra');p=out/'render_cull_init/probe.obj';o=R.Coff(p,'??__EgavShadowCullDistances');sym=[x for x in o.symbols.values() if x[0].startswith('?gUseVisibleRaceCars@')];assert len(sym)==1;s,off,sec=sym[0];section=o.sections[sec];b=o.data[section[4]+off];original=x360rd.rd(0x82cdb6b9,1)[0];d={'expected':original,'compiled':b,'match':original==b,'fixture_object_sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'scope':'isolated fixture copied current Render.cpp byte declaration; compiler initial .data byte vs ARTIST 82CDB6B9; actual Render object, dynamic runtime writers and branch execution not proved'};(out/'render-visible-flag-fixture.json').write_text(json.dumps(d,indent=2));print(json.dumps(d,indent=2));assert original==b

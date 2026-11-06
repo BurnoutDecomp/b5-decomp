@@ -1,0 +1,18 @@
+{
+  "reference_verifier_path": "D:\\Reverse\\BP-X360-Experimental-Artifacts\\wave20\\r27-loading-terra-relative\\verify-coff.py",
+  "reference_verifier_sha256": "6da64ff76f941b4522c12e7277059da7be371636f12277b442b313b13ae229e7",
+  "adapted_verifier_sha256": "f0a1b05aa5fe68b19692fb5d921e513b29442394c8df67b80b6c0977fe1f6559",
+  "coff_reference": {
+    "path": "D:\\Reverse\\BP-X360-Experimental-Artifacts\\wave20\\r29-root-combined\\LOADING_COFF.json",
+    "sha256": "aac56a1a105dfdb64ea6299a463c0a4d49e00e78214dc1cc6e7ec3c1f63f58c3"
+  },
+  "stage": {
+    "path": "D:\\Reverse\\BP-X360-Experimental-Artifacts\\wave20\\r29-provisional-preflight\\stage_loading_input.py",
+    "sha256": "33d8450565a16e7d382d7fb20e916ddf257e59a1327cabaacbeccc2d4250b830"
+  },
+  "contract": {
+    "path": "D:\\Reverse\\BP-X360-Experimental-Artifacts\\wave20\\r27-loading-terra-relative\\NATIVE_INTAKE_INPUT.json",
+    "sha256": "5595446155f387ebc482046edd99c457c70afbff2dc13267637277ce189406cf"
+  },
+  "r29_origin_sha256": "8a68ba992fea5de81d95c0be048776385a8788b5079445f85f1af31da009bb3c"
+}

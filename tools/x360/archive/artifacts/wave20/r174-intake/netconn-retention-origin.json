@@ -1,0 +1,18 @@
+{
+  "report": "D:\\Reverse\\BP-X360-Experimental-Artifacts\\wave20\\r173-intake\\netconn-codegen.json",
+  "report_sha256": "384ddb1d43cf72e86c85493c393a9d25eec0703bd4ba2dbd0a933f8d1a5bf32a",
+  "completion_sha256": "53e5b9f455ddb1fe73d7a67930f095acc3899cb2f37cefef7e51135dd53c089c",
+  "units": {
+    "vendor/dirtysdk/src/x360/netconn_owner_x360.cpp": {
+      "object": "D:\\Reverse\\BP-X360-Experimental-Artifacts\\wave20\\r38-intake\\native-selected\\netconn_owner_x360-a420b1ad.obj",
+      "sha256": "c6b0f373a031b1ba7552811b5989a56e427949fd02a1e8ac004d036e8ae468aa",
+      "source_sha256": "38de8f715dbc8e2ab37bfbf91689b90e6eeaebbd209ba336a0f5df58482a958a"
+    },
+    "vendor/dirtysdk/src/x360/netconn_friends_x360.cpp": {
+      "object": "D:\\Reverse\\BP-X360-Experimental-Artifacts\\wave20\\r38-intake\\native-selected\\netconn_friends_x360-51986b50.obj",
+      "sha256": "d59fb92489200ba710eb06584b014edaed4efef97dc7590588fbd57b4e438ace",
+      "source_sha256": "a2e69c7a9864d3cbb33bf4a7e5ad4b995d99337509cded83da263cd7dc4d4657"
+    }
+  },
+  "crt_sha256": "55af4a701977e1f803a5f001c4b01f319db9544cfa984d190aeabecf1b3ed8f5"
+}

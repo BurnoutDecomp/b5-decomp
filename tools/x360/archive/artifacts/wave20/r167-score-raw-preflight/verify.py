@@ -1,0 +1,15 @@
+"""R167 focused Xbox COFF object-representation and copy-footprint proof."""
+import hashlib,json,pathlib,runpy
+P=pathlib.Path;wave=P('D:/Reverse/BP-X360-Experimental-Artifacts/wave20');out=P(__file__).resolve().parent;m=runpy.run_path(str(wave/'r156-layout-linked/verify_layout_linked.py'))['m'];sha=lambda p:hashlib.sha256(p.read_bytes()).hexdigest();report=json.loads((out/'compile-results.json').read_text());assert all(x['exit']==0 for x in report['results'])
+a=out/'BrnGameStateSharedIO.obj';b=out/'BrnGameStateModuleIO.obj';symbol='?CopyFromNativeRecord@CarScoreData@GameStateModuleIO@BrnGameState@@QAAXPBE@Z';body,rels=m['collect'](a,symbol);assert not rels
+expected='7c6b1b78 7d232050 39400046 7d0958ae 394affff 2b0a0000 990b0000 396b0001 409affec 39630048 39400075 7d0b48ae 394affff 2b0a0000 990b0000 396b0001 409affec 396300c0 3940001a 7d0b48ae 394affff 2b0a0000 990b0000 396b0001 409affec 396300dc 3940004c 7d0b48ae 394affff 2b0a0000 990b0000 396b0001 409affec 4e800020';assert body==bytes.fromhex(expected)
+ranges=[(0,0x46),(0x48,0xbd),(0xc0,0xda),(0xdc,0x128)]; touched={i for start,end in ranges for i in range(start,end)};assert len(touched)==289 and set(range(0x128))-touched=={0x46,0x47,0xbd,0xbe,0xbf,0xda,0xdb}
+# Simulate loop semantics on distinct byte patterns; omitted positions retain destination values.
+src=bytes((i*17+13)&255 for i in range(0x128));dst=bytearray([0xa5]*0x128)
+for start,end in ranges:
+ for i in range(start,end):dst[i]=src[i]
+assert all(dst[i]==(src[i] if i in touched else 0xa5) for i in range(0x128))
+fn='?GetUnboundPlayerScoreBytes@OutputBuffer@GameStateModuleIO@BrnGameState@@QBAPBEXZ';access,rel=m['collect'](b,fn);assert not rel and access==bytes.fromhex('3c6300033863a3904e800020')
+assign='??4CarScoreData@GameStateModuleIO@BrnGameState@@QAAAAV012@ABV012@@Z';actual,rel=m['collect'](a,assign);assert not rel and hashlib.sha256(actual).hexdigest()=='f7661bf3746297a85e95db26b841580d65e48c82c15f88a25c7dc7d7ad49c73c'
+artist=json.loads((wave/'r166-carscore-assignment/PPC_COPY_PROOF.json').read_text());assert artist['candidate_body_sha256']==hashlib.sha256(actual).hexdigest() and artist['distinct']['artist']['ordered_load_and_store_bytes']==289 and artist['distinct']['artist']['untouched']==['0x46','0x47','0xbd','0xbe','0xbf','0xda','0xdb']
+r={'state':'pass','base':'135948fd62910b9dc8911e865cf476555d05460e','tree':'77910cc622803ecd685ea93afca520619840d51c','objects':{a.name:sha(a),b.name:sha(b)},'compile_report_sha256':sha(out/'compile-results.json'),'copy_symbol':symbol,'copy_body_sha256':hashlib.sha256(body).hexdigest(),'copy_ranges':[[hex(x),hex(y)] for x,y in ranges],'copied_bytes':289,'holes':['0x46','0x47','0xbd','0xbe','0xbf','0xda','0xdb'],'native_score_offset':'0x2a4b8','native_record_offset':'0x2a390','record_size':'0x128','prior_assignment_body_sha256':hashlib.sha256(actual).hexdigest(),'scope':'focused XDK compile and decoded PPC footprint; no link, native execution or bridge proof'};(out/'PROOF.json').write_text(json.dumps(r,indent=2)+'\n');print('PASS',sha(out/'PROOF.json'))

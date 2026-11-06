@@ -1,0 +1,11 @@
+from pathlib import Path
+import json,re,hashlib
+src=Path('D:/Reverse/BP-Decomp_Workflow/.ida-exports/BURNOUT_X360_ARTIST.XEX');out=Path('D:/Reverse/BP-X360-Experimental-Artifacts/world-containment-526adc/racecar');rows=[];n=0
+for p in src.glob('*.json'):
+ try:
+  d=json.loads(p.read_text(encoding='utf8'));n+=1
+  for l in d.get('assembly','').splitlines():
+   if re.search(r'\b(?:ori|addi)\s+r\d+,\s*r\d+,\s*(?:0x8800|-0x7800)\b',l,re.I):rows.append({'function':d.get('name'),'export':str(p),'line':l,'export_sha256':hashlib.sha256(p.read_bytes()).hexdigest()})
+ except Exception:pass
+report={'scope':'Exported ARTIST instructions with ori immediate 0x8800 or addi immediate -0x7800 as potential low half of 0x18800; no CFG/register provenance filter; alternate encodings, functions without export, data and indirect allocator contracts are not covered.','exports_scanned':n,'hits':rows,'decfigs_replay_serialiser':{'source':'C:/Users/adri1/.codex/worktrees/fbaf/BP-Decomp_Workflow/scratch/parallel-native/racecar_layout_sol/decfigs-racecar-types.json','base_size':'0x54','derived_size':'0x54','declared_alignment_shift_plus_one':2,'alignment':4,'limit':'DecFIGS PS3, X360 adds words at 0x18/0x1C and its own derived latch at 0x5C; this does not prove X360 size/alignment.'},'held_native_derived':{'serialiser_start':'0x185F8','serialiser_size':'0x60','matrix_start':'0x18660','matrix_size':'0x40','matrix_alignment':16,'original_serialiser_start':'0x18600','original_invalidated_byte':'0x186C0','deduction':'Hypothetically aligning serialiser start from 185F8 to 18600 puts its 0x60 end at 18660; matrix already begins there. Such alignment fixes the serializer start only and cannot shift matrix or subsequent flag by the observed 0x20.'},'next_evidence_needed':'Find a direct X360 allocation/array stride/sizeof for RaceCarEntitySerialiser or independent reads/writes to the replay matrix or intervening region; without one, the 0x20 cannot be assigned to a class size, member or special alignment.'}
+p=out/'serializer-alignment-inquiry.json';p.write_text(json.dumps(report,indent=2)+'\n');print('exports',n,'hits',len(rows),'artifact_sha256',hashlib.sha256(p.read_bytes()).hexdigest());print(rows)

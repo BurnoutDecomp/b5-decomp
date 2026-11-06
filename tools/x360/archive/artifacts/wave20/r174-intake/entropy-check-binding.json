@@ -1,0 +1,8 @@
+{
+  "original_verifier": "D:\\Reverse\\BP-X360-Experimental-Artifacts\\wave30\\protossl-native\\entropy-final\\verify_frame.py",
+  "original_verifier_sha256": "bbaffac9e41fe26f9cf24cfd734f4dd61d438a30bb534b543ad66adb2710a84f",
+  "original_receipt": "D:\\Reverse\\BP-X360-Experimental-Artifacts\\wave30\\protossl-native\\entropy-final\\frame-verification.json",
+  "original_receipt_sha256": "f634a2a180e2e8fc7f5e1a9108fa5357b3d5b132cb376a508c6af7792c29b174",
+  "adapted_verifier_sha256": "29ae2ab9dee8eb87b3694557ecd945ea2a71fe1dff67aef38fe103f9942f4983",
+  "r28_origin_sha256": "7a87d64440b9bfd6241b3fdd2b3df6e197e10ea18b0a5382a74b7d3c342a033d"
+}

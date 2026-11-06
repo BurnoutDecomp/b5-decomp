@@ -1,0 +1,18 @@
+from pathlib import Path
+import sys,random,struct,json,hashlib
+owner=Path('D:/Reverse/BP-X360-Experimental-Artifacts/rendercore-corona-r1-a26');sys.path.insert(0,str(owner));from corona_fixture_final import *
+base=Path('D:/Reverse/BP-X360-Experimental-Artifacts/wave8/r1-vecfloat-terra');out=base/'render-rce-rebind-v4';ro=out/'render/probe.obj';mo=out/'corona/probe.obj';co=out/'curves/probe.obj';io=out/'corona_iterator/probe.obj';prefix='?AddCorona@BrnSubmissionInterface@BrnCoronaManager@@QAAXVVector3@vpu@math@rw@@0MMABW4';render='?SubmitCoronasForRaceCar@RaceCarEntityModule@BrnWorld@@';objects=[F.Coff(ro,render),F.Coff(mo,prefix),F.Coff(co,PREFIXES['Curves.cpp']),F.Coff(io,PREFIXES['rwgcoronabufferiterator.cpp']),F.Coff(PATHS['core_probe.cpp'],PREFIXES['core_probe.cpp'])];b=F.Bundle(objects);select(b,render,True);callee=entry(b,prefix);inner=entry(b,'?AddCorona@BrnSubmissionInterface@BrnCoronaManager@@QAAXVVector3@vpu@math@rw@@0MMABU');curve=entry(b,'?Evaluate@SmoothStep@Curves@BrnEffects@@SAM');table=(owner/'native-initialized-table.bin').read_bytes();rng=random.Random(0x822d19e8);errors=[];IFACE=F.M.S.SELF+0x1000;DATA=F.M.S.AUX+0x1000
+for i in range(4):
+ iface=bytearray(rng.randbytes(0x70));index=[0,1,32,511][i%4];struct.pack_into('>III',iface,4,DATA,index,512);camera=[rng.uniform(-100,100) for _ in range(3)];struct.pack_into('>3fI',iface,0x50,*camera,rng.getrandbits(32));dist=[0.,10.,20.,100.,219.,250.,400.][i%7];pos=struct.unpack('>4I',struct.pack('>3fI',camera[0]+dist,camera[1],camera[2],rng.getrandbits(32)));direction=struct.unpack('>4I',struct.pack('>3fI',[-1.,1.,0.][i%3],0.,0.,rng.getrandbits(32)));opacity=[0.,.25,.5,1.,-1.,2.][i%6];enum=i%25;seed=rng.randbytes(0x9000);colour=rng.getrandbits(32);guard=(rng.getrandbits(32)&~1)|(i&1);results=[]
+ for compiled in (False,True):
+  c=cpu(b);trace=[]
+  def observe(pc,word):
+   if pc==(curve if compiled else 0x8227d2f0):trace.append([hex(pc),hex(ptr(c,3)),hex(ptr(c,4)),c.mem.rd(ptr(c,3),12).hex(),c.mem.rd(ptr(c,4),8).hex(),c.f(1)])
+  c.instruction_observer=observe;sp=ptr(c,1);c.mem.wr(IFACE,iface);c.mem.wr(DATA,seed);c.mem.wr(0x82f24310,table);put(c,0x82fb0040,colour);put(c,0x82fb0044,guard);put(c,0x82f242d0,colour);c.setf(31,opacity)
+  if compiled:
+   c.vr[1]=pos;c.vr[127]=direction;c.setg(25,IFACE);c.setg(14,sp+0x6c);put(c,sp+0x6c,enum);c.setf(30,1.);c.mem.wr(b.entry+0x3d0,bytes.fromhex('4e800020'));c.run(b.entry+0x3bc);c.run(callee)
+  else:
+   raw=b''.join(struct.pack('>I',F.M.V.x360rd.u32(x)) for x in range(0x822d19d4,0x822d19ec,4));c.mem.add(0x822d19d4,len(raw),raw);c.mem.add(0x82001000,0x1000);c.mem.wr(0x82001c98,struct.pack('>f',1.));c.setg(30,0x82000000);c.setg(29,IFACE);c.vr[122]=pos;c.vr[2]=direction;put(c,sp+0x64,enum);c.mem.wr(0x822d19e8,bytes.fromhex('4e800020'));c.run(0x822d19d4);c.run(0x823fd428)
+  results.append((c.mem.rd(IFACE,0x70),c.mem.rd(DATA,0x9000),c.mem.rd(0x82fb0040,8),c.mem.rd(0x82f242d0,4),trace))
+ if results[0]!=results[1]:errors.append([i,results[0][1][0x7fe0:0x7fe8].hex(),results[1][1][0x7fe0:0x7fe8].hex(),camera,dist,enum,opacity,results[0][-1],results[1][-1]])
+d={'cases':4,'count':len(errors),'mismatches':errors[:4],'objects':{str(x):hashlib.sha256(x.read_bytes()).hexdigest() for x in [ro,mo,co,io,PATHS['core_probe.cpp']]},'scope':'actual Render emitted first strobe setup to actual combined AddCorona enum provider/Curves/Iterator against ARTIST setup and original provider, 25 types, complete interface and 0x9000 corona buffer and colour/guard; original initialized table seeded from independently matched CRT. Prior point transform/direction controlled, no full producer loop/GPU/hardware claim.'};(out/'corona-chain-diagnostic-curve.json').write_text(json.dumps(d,indent=2)+'\n');print(json.dumps(d,indent=2))
