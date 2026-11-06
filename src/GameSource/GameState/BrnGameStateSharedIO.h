@@ -727,7 +727,9 @@ namespace BrnGameState
             void            SetTimedOut(bool lbTimedOut)    { mbTimedOut = lbTimedOut; }        // +0x68 (UpdateNetworkPlayerResults stb 0x68)
             bool            GetDisconnected() const         { return mbDisconnected; }          // +0x69
             void            SetDisconnected(bool lbDisconnected) { mbDisconnected = lbDisconnected; } // +0x69 (Set/Clear-PlayerDisconnected)
-            CgsSystem::Time GetTimeAsRunner() const         { return mTimeAsRunner; }           // +0x84
+            // +0x84 is maTotalTimeInTeam[E_PLAYER_TEAM_BLUE_TEAM]: the burning-home-run gather reads
+            // that one element (lwz 0x84 / lfs 0x88), so the name keeps its consumer's meaning.
+            CgsSystem::Time GetTimeAsRunner() const         { return maTotalTimeInTeam[E_PLAYER_TEAM_BLUE_TEAM]; } // +0x84
             bool            GetCompletedBurningHomeRun() const { return mbCompletedBurningHomeRun; } // +0xBC
             // [FX-GS 2026-09-23, crash-parity G11-D4] the flag's one writer:
             // ModeManager::HandleOnlineBurningHomeRunCheckForModeFinished `stb 1, 0xBC(r3)` @0x82328B3C.
@@ -829,16 +831,17 @@ namespace BrnGameState
             CgsSystem::Time GetTimeInCurrentTeam() const           { return mTimeInCurrentTeam; }         // +0x6C
             void            SetTimeInCurrentTeam(CgsSystem::Time lTime) { mTimeInCurrentTeam = lTime; }   // +0x6C
 
-            // Per-team accumulated time, indexed by team (8-byte Time stride at +0x74, 2 teams).
+            // Per-team accumulated time, indexed by EPlayerTeam (8-byte Time stride at +0x74). DWARF
+            // :500 declares Time maTotalTimeInTeam[3]: NONE, RED and BLUE. UpdateTeamStats @0x8231F384
+            // indexes it with the raw team (slwi r11, team, 3) and asserts nothing; the "luTeam < 2"
+            // assert this accessor used to carry was not the console's, and team 2 (BLUE) tripped it.
             CgsSystem::Time GetTimeInTeam(u32 luTeam) const
             {
-                CGS_ASSERT(luTeam < 2, "luTeam < 2");
-                return maTimeInTeam[luTeam];
+                return maTotalTimeInTeam[luTeam];
             }
             void SetTimeInTeam(u32 luTeam, CgsSystem::Time lTime)
             {
-                CGS_ASSERT(luTeam < 2, "luTeam < 2");
-                maTimeInTeam[luTeam] = lTime;
+                maTotalTimeInTeam[luTeam] = lTime;
             }
 
             bool            GetEliminated() const                  { return mbEliminated; }               // +0xD9
@@ -945,8 +948,7 @@ namespace BrnGameState
             u8   maStorage6A[1];                    // +0x6A       byte (carved from old maStorage6A[2])
             bool mbHasNetworkResults;              // +0x6B       per-car "valid network result applied" flag; ClearData stb 0,0x6B / UpdateNetworkPlayerResults stb 1,0x6B. PROVISIONAL name (no DWARF). (carved from old maStorage6A[2])
             CgsSystem::Time mTimeInCurrentTeam;    // +0x6C (8)  time spent in the current team; reset to 0 by SetPlayerTeam on a team change (addi r3,r11,0x6C; SetFloatVal), accumulated by UpdateTeamStats (addi r3,r31,0x6C; Time::operator+=). Ctor zeroes via stw 0x6C/stfs 0x70. (carved from old maStorage6A)
-            CgsSystem::Time maTimeInTeam[2];       // +0x74..+0x84  per-team accumulated time, indexed by team; UpdateTeamStats: base addi r3,r11,0x74 with r11=(team<<3)+r31. Team index itself lives on CarData @+0x13C, outside this record. (carved from old maStorage6A)
-            CgsSystem::Time mTimeAsRunner;         // +0x84 (8)  time-as-runner (BHR gather lwz 0x84 / lfs 0x88)
+            CgsSystem::Time maTotalTimeInTeam[3];  // +0x74..+0x8C  DWARF :500. Per-team accumulated time, indexed by EPlayerTeam; UpdateTeamStats: base addi r3,r11,0x74 with r11=(team<<3)+r31. Team index itself lives on CarData @+0x13C, outside this record. Element [2] (+0x84) is what the BHR gather reads as the time as runner.
             u8   maStorage8C[48];                  // +0x8C..+0xBC  (incl. chainable-stunt Time pairs region the ctor zeroes)
             bool mbCompletedBurningHomeRun;        // +0xBC      completed-burning-home-run flag (BHR gather lbz 0xBC)
             u8   maStorageBD[3];                   // +0xBD..+0xC0
@@ -1013,7 +1015,7 @@ namespace BrnGameState
             //   and may be a misnomer for a crash-aggressor tally; left UNCHANGED (committed field, grow-only).
             // Unchanged named anchors: mTotalTime@0x00, mfDistanceToFinish@0x48, miTakedowns@0x4C,
             // miOnlineFinishPositionScore@0x58, miOnlineStandingsPosition@0x5C, mbTimedOut@0x68,
-            // mbDisconnected@0x69, mTimeAsRunner@0x84, maStorage8C@0x8C, mbCompletedBurningHomeRun@0xBC,
+            // mbDisconnected@0x69, maTotalTimeInTeam@0x74 (was maTimeInTeam[2] + mTimeAsRunner@0x84), maStorage8C@0x8C, mbCompletedBurningHomeRun@0xBC,
             // maStorageBD@0xBD, miCumulativeCheckpoints@0xC4, miChainable*@0xC8, mbChainActive@0xD8.
             // Carved-from-blob: miOnlineStuntScore(4)@0xD4 replaces the old maStorageD4[4]@0xD4;
             // miBarrelRollCount(4)@0xFC carved from the old maStorageFC[12] head (8-byte maStoragePad100 keeps sizeof).
@@ -1040,7 +1042,7 @@ namespace BrnGameState
                 static_assert(offsetof(CarScoreData, miOnlineStandingsPosition)   == 0x5C, "CarScoreData::miOnlineStandingsPosition offset");
                 static_assert(offsetof(CarScoreData, mbTimedOut)                  == 0x68, "CarScoreData::mbTimedOut offset");
                 static_assert(offsetof(CarScoreData, mbDisconnected)              == 0x69, "CarScoreData::mbDisconnected offset");
-                static_assert(offsetof(CarScoreData, mTimeAsRunner)               == 0x84, "CarScoreData::mTimeAsRunner offset");
+                static_assert(offsetof(CarScoreData, maTotalTimeInTeam)           == 0x74, "CarScoreData::maTotalTimeInTeam offset");
                 static_assert(offsetof(CarScoreData, mbCompletedBurningHomeRun)   == 0xBC, "CarScoreData::mbCompletedBurningHomeRun offset");
                 static_assert(offsetof(CarScoreData, muOnlinePostEventValueC0)    == 0xC0, "CarScoreData::online result value offset");
                 static_assert(offsetof(CarScoreData, miCumulativeCheckpoints)     == 0xC4, "CarScoreData::miCumulativeCheckpoints offset");
