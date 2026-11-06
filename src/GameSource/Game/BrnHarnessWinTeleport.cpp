@@ -113,9 +113,11 @@ namespace
     s32  giGapFrames      = KI_DEFAULT_GAP_FRAMES;
     f32  gfSpeed          = 0.0f;
     f32  gfLeadMetres     = KF_DEFAULT_LEAD_METRES;
+    bool gbRepeat         = false;   // BRN_WIN_TELEPORT_REPEAT: re-arm in the online lobby after DONE
 
     // ------------------------------------------------------------------------
-    // Producer state. One event per process: once DONE, the capability stays quiet.
+    // Producer state. One event per process: once DONE, the capability stays quiet, unless
+    // BRN_WIN_TELEPORT_REPEAT re-arms it when the online lobby comes back (a second online race).
     // ------------------------------------------------------------------------
     enum EStage
     {
@@ -282,6 +284,8 @@ namespace
 
         giGapFrames = static_cast<s32>(lfGap);
         gbEnabled   = true;
+        const char* lpcRepeat = std::getenv("BRN_WIN_TELEPORT_REPEAT");
+        gbRepeat    = lpcRepeat != 0 && lpcRepeat[0] != '\0' && lpcRepeat[0] != '0';
 
         // [FLAG PC witness] the arming line.
         if (DebugLog() != 0)
@@ -564,8 +568,25 @@ void PreWorldUpdate(const BrnGameState::ModeManager& lrModeManager,
                     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutput)
 {
     ProducerState& lrState = gState;
-    if (!IsEnabled() || lrState.meStage == E_STAGE_DONE)
+    if (!IsEnabled())
     {
+        return;
+    }
+    if (lrState.meStage == E_STAGE_DONE)
+    {
+        if (gbRepeat && lrState.mbSeenInProgress &&
+            lrModeManager.GetCurrentGameModeType() == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
+        {
+            const s32 liHops = lrState.miHopCount;
+            lrState = ProducerState{ E_STAGE_WAITING_DELAY, false, 0.0f, 0, 0, 0, -1, 0u, 0,
+                                     false, false, 0, 0, {}, false, { 0.0f, 0.0f, 0.0f, 0.0f } };
+            // [FLAG PC witness] the re-arm.
+            if (DebugLog() != 0)
+            {
+                *DebugLog() << "[win-teleport] re-armed in the online lobby (BRN_WIN_TELEPORT_REPEAT; last event took "
+                            << liHops << " hops)\n";
+            }
+        }
         return;
     }
     ++lrState.miFrame;
