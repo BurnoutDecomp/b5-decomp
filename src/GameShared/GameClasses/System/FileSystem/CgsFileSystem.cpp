@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDeviceMemFileSystem.h"
 #include <new>
 #include <cstddef>
@@ -37,18 +38,26 @@ namespace CgsFileSystem
         return lStream;
     }
 
-    // ARTIST @0x82906950. Reject exhaustion, select the first stream whose
-    // effective status is CLOSED, configure its async stream device and return
-    // the one-pointer ReadStream handle.
+    // ARTIST @0x82906950. Apply the patch overlay before choosing a stream slot.
     ReadStream FileSystem::OpenReadStreamInternal(
         const char* lpcName, void* lpBuffer, u32 luBufferSize, u32 luNumBlocks,
-        s32 liNormalPriority, s32 liHighPriority, bool /*lbUseHDCache*/)
+        s32 liNormalPriority, s32 liHighPriority, bool lbUseHDCache)
     {
-        CGS_ASSERT(muNumUsedReadStreams < KU_MAX_READ_STREAMS,
-                   "Out of read streams\n");
+        const char* const lpcAssertFile =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFileSystem.cpp";
+        if (muNumUsedReadStreams >= KU_MAX_READ_STREAMS)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Out of read streams\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcAssertFile, 578);
+            CgsDev::Assert::EndAssert();
+        }
 
         ReadStream lResult;
         lResult.Construct(0);
+        char lacFileName[256];
+        const bool lbRemapped = mPatchManager.RemapFilename(lpcName, lacFileName, sizeof(lacFileName));
         for (u32 luIndex = 0; luIndex < KU_MAX_READ_STREAMS; ++luIndex)
         {
             StreamDeviceDiskRead& lrDevice = maReadStreams[luIndex];
@@ -56,13 +65,22 @@ namespace CgsFileSystem
                 StreamDeviceDiskRead::E_STATUS_CLOSED)
                 continue;
 
-            lrDevice.Open(lpcName, lpBuffer, luBufferSize, luNumBlocks,
-                          liNormalPriority, liHighPriority, false, -1);
+            lrDevice.Open(lacFileName, lpBuffer, luBufferSize, luNumBlocks,
+                          liNormalPriority, liHighPriority, lbUseHDCache && !lbRemapped,
+                          static_cast<s32>(luIndex));
             lResult.Construct(&lrDevice);
             ++muNumUsedReadStreams;
             break;
         }
-        CGS_ASSERT(lResult.IsValid(), "Failed to set device on stream\n");
+
+        if (!lResult.IsValid())
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Failed to set device on stream\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcAssertFile, 608);
+            CgsDev::Assert::EndAssert();
+        }
         return lResult;
     }
 

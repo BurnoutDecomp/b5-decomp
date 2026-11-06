@@ -57,8 +57,8 @@ namespace CgsResource
         // X360 0x828E6548. Assert the singleton is not yet live, chain the base module
         // Construct, bind+Clear the receiver queue (capacity 512, alignment 16), publish
         // spInstance, store the GameTalk channel, and init the state fields.
-        // (lpGameTalk is the Construct arg a2 -- the reply channel.)
-        void Construct(CgsGameTalk::GameTalk* lpGameTalk);
+        // Typed lifecycle entries follow the ModuleSingleBuffered slots.
+        virtual void Construct(CgsGameTalk::GameTalk* lpGameTalk); // ARTIST vtable +0x40
 
         // X360 0x828E65D8. Register the LiveUpdate handler once and prepare state.
         virtual bool Prepare();
@@ -74,7 +74,7 @@ namespace CgsResource
         // machine (arm -> settle 5 frames -> push the LoadBundleRequest -> await the
         // loader response -> report success/failed over GameTalk), publish the in-progress
         // status, and unlock.
-        void Update(CgsModule::IOBuffer* lpOutputBuffer);
+        virtual void Update(CgsModule::IOBuffer* lpOutputBuffer); // ARTIST vtable +0x44
 
         // X360 0x828DAF60. Static GameTalk message callback (registered as an
         // EA::GameTalk::MessageHandler). When the incoming message's state is 1 and it

@@ -44,8 +44,13 @@ namespace CgsFileSystem
 
     struct OperationPool
     {
+        OperationPool();
+
         void Construct();
         void Destruct();
+        // ARTIST DeviceManager::AddPhysicalDevice initializes an active slot under this pool's
+        // lock: clear used flags, Init its zero-count semaphore, then unlock.
+        void InitializeForDevice();
 
         // @ 0x828E9828 â€” under the lock, claim the first free slot, copy the operation
         // in, stamp it with the next sequence number, and post one permit. Asserts when

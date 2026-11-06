@@ -46,11 +46,10 @@ namespace CgsFileSystem
     }
 
     // ctor @ 0x828F0C90.
-    // The X360 ctor, per physical slot, RtlInitializeCriticalSection'd the OperationPool lock,
-    // default-constructed its Semaphore and Thread, then initialised the device-list futex. Here
-    // the slot's Semaphore + Thread and the device-list Futex are constructed by their own C++
-    // member ctors; the remaining per-slot OperationPool bring-up (lock + slot table) is done by
-    // OperationPool::Construct.
+    // The X360 ctor initializes each OperationPool lock and constructs semaphore data with
+    // bInitialize=false; AddPhysicalDevice clears the active slot and initializes its zero-count
+    // OS semaphore before starting the worker. C++ constructs the data-only Semaphore members
+    // before this body; OperationPool::Construct initializes each pool lock and sequence counter.
     DeviceManager::DeviceManager()
         : miInitializationThread(0)
         , mbInitialized(false)
@@ -115,7 +114,7 @@ namespace CgsFileSystem
 
     // AddPhysicalDevice @0x828F9320 — register lpDevice under lpcPrefix (asserting the name is
     // free and a slot is available), install its error callback, then spawn the worker thread.
-    bool DeviceManager::AddPhysicalDevice(Device* lpDevice, const char* lpcPrefix, ErrorCallback lpfErrorCallback)
+    void DeviceManager::AddPhysicalDevice(Device* lpDevice, const char* lpcPrefix, ErrorCallback lpfErrorCallback)
     {
         mDeviceListFutex.Lock();
 
@@ -125,7 +124,7 @@ namespace CgsFileSystem
         for (s32 liIndex = 0; liIndex < KI_MAX_PHYSICAL_DEVICES; ++liIndex)
             if (!maPhysicalDevices[liIndex].mpDevice) { liSlot = liIndex; break; }
         CGS_ASSERT(liSlot >= 0, "No free physical devices\n");
-        if (liSlot < 0) { mDeviceListFutex.Unlock(); return false; }
+        if (liSlot < 0) { mDeviceListFutex.Unlock(); return; }
 
         PhysicalDeviceSlot& lrSlot = maPhysicalDevices[liSlot];
 
@@ -133,8 +132,10 @@ namespace CgsFileSystem
         strncpy(lrSlot.macPrefix, lpcPrefix, KI_MAX_PREFIX_LENGTH);
         lrSlot.macPrefix[KI_MAX_PREFIX_LENGTH] = 0;
 
-        // Install the device + its error callback (X360: *(dev+8)=callback, *(dev+4)=0). The
-        // slot's OperationPool was already brought up by the DeviceManager ctor.
+        // Activate the operation pool before publishing the device or starting its worker.
+        lrSlot.mOperations.InitializeForDevice();
+
+        // Install the device + its error callback (X360: *(dev+8)=callback, *(dev+4)=0).
         lrSlot.mpDevice = lpDevice;
         lpDevice->SetParent(0);
         lpDevice->SetErrorCallback(lpfErrorCallback);
@@ -151,7 +152,6 @@ namespace CgsFileSystem
         lParams.mbSuspended = false;
         lrSlot.mWorkerThread.Begin(PhysicalDeviceThread, &lrSlot, &lParams,
             EA::Thread::Thread::GetGlobalRunnableFunctionUserWrapper());
-        return true;
     }
 
     // ARTIST828F0CF8..828F11B4 (raw assembly; export hole).

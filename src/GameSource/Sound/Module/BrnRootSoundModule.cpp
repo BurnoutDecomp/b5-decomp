@@ -112,10 +112,10 @@ const Name K_DefaultSendName("Send01");
 // Statistics and the original memory-dump action read the same live allocators.
 // Static-init names from X360 82C61A88/AC8/B08; gRwac's missing exporter row is
 // still FLAG: name spelling unverified against the binary string at82C61A48.
-CgsSound::TestBed::Allocator gRwacTestBedAlloc("Rwac", 0);
-CgsSound::TestBed::Allocator gCsisTestBedAlloc("Csis", 0);
-CgsSound::TestBed::Allocator gPlaybackTestBedAlloc("Playback", 0);
+CgsSound::TestBed::Allocator gRwacTestBedAlloc("RWAC", 0);
 CgsSound::TestBed::Allocator gLogicTestBedAlloc("Logic", 0);
+CgsSound::TestBed::Allocator gPlaybackTestBedAlloc("Playback", 0);
+CgsSound::TestBed::Allocator gCsisTestBedAlloc("Csis", 0);
 
 // ARTIST826AF288. The apparent int return is the final unused log/guard return;
 // DecFIGS declares void. Keep original dump, sorted dump and sanity-check order.

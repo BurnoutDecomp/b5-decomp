@@ -174,6 +174,13 @@ namespace GameDataIO
         // superseded structural approximation).
         void Construct(); // ARTIST82666908: base, filesystem +9, allocator pointer +4
 
+        // DecFIGS h:163. ARTIST 82674818..82674828 inlines this during Update.
+        void Clear()
+        {
+            mFileSystemStatusInterface.Construct();
+            mpAllocatorList = 0;
+        }
+
         // @ 0x823B18D8 -- read-locked accessor. DWARF h:167. Returns *(this+4) (asm `lwz r3,4(r28)`).
         const AllocatorList* GetAllocatorList() const;
 

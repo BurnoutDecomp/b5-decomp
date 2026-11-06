@@ -71,7 +71,7 @@ namespace CgsFileSystem
         Device* FindDevice(const char* lpcPrefix);
 
         // Register a physical device under lpcPrefix and spawn its worker thread (step 2).
-        bool AddPhysicalDevice(Device* lpDevice, const char* lpcPrefix, ErrorCallback lpfErrorCallback); // 0x828F9320
+        void AddPhysicalDevice(Device* lpDevice, const char* lpcPrefix, ErrorCallback lpfErrorCallback); // 0x828F9320
 
         void AddVirtualDevice(Device* lpDevice, const char* lpcPrefix,
                               const char* lpcParent, ErrorCallback lpfErrorCallback);

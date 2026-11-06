@@ -149,5 +149,8 @@ bool CgsSystem::HardwareInit::IsHardDiskAvailable()
 // ARTIST828D6138: enabling another worker dynamically is unsupported.
 void CgsSystem::HardwareInit::EnableJobThread()
 {
-    CGS_ASSERT(false, "Not supported on xbox\n");
+    CgsDev::Assert::BeginAssert();
+    CgsDev::Assert::FireAssert("Not supported on xbox\n",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\X360/CgsHardwareInitX360.cpp", 247);
+    CgsDev::Assert::EndAssert();
 }

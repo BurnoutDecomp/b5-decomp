@@ -10,22 +10,37 @@
 // Use the native SDK critical-section declarations.
 namespace CgsFileSystem
 {
-    // Construct/Destruct â€” the X360 split this pool's bring-up between the DeviceManager ctor
-    // (RtlInitializeCriticalSection on mFutex + the Semaphore subobject ctor) and Add-
-    // PhysicalDevice (zero the used-flags + Semaphore::Init count 0). Here it is consolidated:
-    // init the lock, clear the slot table + sequence counter. mOperationCount (the vendor
-    // EA::Thread::Semaphore subobject) is created count-0 by its own member ctor.
+    // The X360 DeviceManager ctor constructed semaphore data with bInitialize=false; this typed
+    // member ctor preserves that uninitialized-handle state. Construct initializes the pool lock
+    // and sequence counter; AddPhysicalDevice clears used flags and creates the OS semaphore.
+    OperationPool::OperationPool()
+        : mOperationCount(0, false)
+    {
+    }
+
     void OperationPool::Construct()
     {
         RtlInitializeCriticalSection(&mFutex.mCriticalSection);
-        for (s32 liIndex = 0; liIndex < KI_MAX_OPERATIONS; ++liIndex)
-            mabUsedOperations[liIndex] = false;
         muNextOperationNumber = 0;
     }
 
     void OperationPool::Destruct()
     {
         RtlDeleteCriticalSection(&mFutex.mCriticalSection);
+    }
+
+    // ARTIST 0x828F9320, before the slot is published and its worker starts. Init's bool result
+    // is intentionally ignored just as in the native AddPhysicalDevice body.
+    void OperationPool::InitializeForDevice()
+    {
+        RtlEnterCriticalSection(&mFutex.mCriticalSection);
+        for (s32 liIndex = 0; liIndex < KI_MAX_OPERATIONS; ++liIndex)
+            mabUsedOperations[liIndex] = false;
+
+        EA::Thread::SemaphoreParameters lParameters(0, true, 0);
+        (void)mOperationCount.Init(&lParameters);
+
+        RtlLeaveCriticalSection(&mFutex.mCriticalSection);
     }
 
     // The absolute-deadline argument the X360 hands Semaphore::Wait (unk_820F6FD8). A

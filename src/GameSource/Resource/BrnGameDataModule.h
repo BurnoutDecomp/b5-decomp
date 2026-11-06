@@ -251,15 +251,18 @@ namespace BrnResource
         // the acquire response to PopupController::AddPopupResource.
         bool PreparePopups(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack);
 
-        // The shared body of the two above (the X360 emits them as two near-identical
-        // functions; the only differences are the bundle path, the resource name, the
-        // pool id, the mbAllowFailiure flag, the stage word and the list object). PC
-        // helper, not an X360 function -- see the .cpp.
+        enum EPrepareDataList
+        {
+            E_PREPARE_DATA_VEHICLES, E_PREPARE_DATA_CHALLENGES, E_PREPARE_DATA_ICE,
+            E_PREPARE_DATA_WHEELS, E_PREPARE_DATA_HUD_MESSAGES, E_PREPARE_DATA_POPUPS
+        };
+
+        template <EPrepareDataList EList>
         bool PrepareDataListResource(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
                                      s32& lriStage, const char* lpcBundleFileName,
-                                     const char* lpcResourceName, bool lbAllowFailure,
-                                     s32 liPoolId,
-                                     CgsResource::ResourceHandle* lpOutHandle);
+                                     const char* lpcResourceName, s32 liPoolId,
+                                     s32 liLoadReplyLine, s32 liAcquireReplyLine,
+                                     s32 liAcquireIdLine, s32 liStageLine);
 
         // Shared completion-post helper (the X360 inlines this 40-byte response build in
         // every acquire/load-fail case): post a GameDataAssetEvent built from the slot's

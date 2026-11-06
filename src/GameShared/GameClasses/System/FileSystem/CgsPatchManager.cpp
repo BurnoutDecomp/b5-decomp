@@ -4,13 +4,12 @@
 // DirSearchThreadProc 0x828F0B88, SearchFolder 0x828F0A78, AddFileToCurrentPatch 0x828E9678,
 // RemapFilename 0x828E9488, GetPhysicalPath 0x828DCF40). See CgsPatchManager.h for the design.
 //
-// The inlined "String <s> is too long. Buffer size = N, string length = M" assert blocks the X360
-// emitted at CgsStringUtils.h:65 ARE the bounds check inside CgsCore::StrCpy; the de-optimised C++
-// expresses them as the StrCpy call they came from.
+// ARTIST inlines the checked CgsStringUtils copy in the unpatched remap path.
 
 #include "GameShared/GameClasses/System/FileSystem/CgsPatchManager.h"
 
 #include "GameShared/GameClasses/Containers/CgsHash.h"       // CgsContainers::CgsHash::CalculatePathHash
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::SPrintf / StrCpy
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint / gxMessageFilterFlags
 
@@ -181,8 +180,17 @@ namespace CgsFileSystem
             return true;
         }
 
-        // Not patched: copy the source through unchanged (StrCpy carries the X360 length assert).
-        CgsCore::StrCpy(lpcDest, luDestSize, lpcSource);
+        if (std::strlen(lpcSource) >= luDestSize)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lMessage << "String " << lpcSource << " is too long. Buffer size = " << luDestSize
+                     << ", string length = " << static_cast<u32>(std::strlen(lpcSource)) << "\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+            CgsDev::Assert::EndAssert();
+        }
+        std::strcpy(lpcDest, lpcSource);
         return false;
     }
 
