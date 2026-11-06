@@ -6,20 +6,21 @@
 #include "rw/rwcore_general_alloc.h"                          // rw::core::GeneralResourceAllocator (CreateAllocators)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // [5b trace] (Construct runs at runtime, gpDebugPrint ready)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"             // Pool::InitOptions (CreatePools)
+#include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
 #include "GameShared/GameClasses/Memory/CgsMemoryBank.h"                        // MemoryBank::Params (CreatePoolBank)
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"                    // MemoryIO Input/OutputBuffer (async pump)
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"       // SendCreatePoolMemoryRequest / DoCreatePoolRequest
 #include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h"             // PoolIO::OutputBuffer (request transport)
 #include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"         // ResourceIO::InputBuffer (CreatePool request input)
+#include "GameShared/GameClasses/System/Resource/CgsLiveUpdateModuleIO.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"         // Events::LoadBundleRequest/AcquireResourceRequest (streaming)
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"          // E_RESOURCETYPE_FONT (stream validation)
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"            // EventReceiverQueue (acquire response receiver)
 #include "GameSource/Resource/BrnMemoryMapData.h"                               // KAC_MEMORY_MAP_POOLS (the 27 real pools)
 #include "GameSource/Resource/BrnGameDataModuleIO.h"                            // GameDataIO In/OutputBuffer (Update pump)
 #include "GameShared/GameClasses/Core/CgsID.h"                                  // CgsIDUnCompress / CgsIDConvertToString / CgsIDCompress
-#include "SharedClasses/DataLists/VehicleListEntry.h"                           // VehicleListEntry (the vehicle-table probe)
+#include "SharedClasses/DataLists/VehicleListEntry.h"
 #include "SharedClasses/DataLists/ChallengeListResourceType.h"                  // ChallengeListResource (complete: the stage-10 ResourcePtr)
-#include "SharedClasses/DataLists/ChallengeListEntry.h"                         // ChallengeListEntry (the challenge-table probe)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                    // CgsDev::StrStream (prop bundle name build)
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"               // CgsResource::ID::HashString
@@ -551,579 +552,249 @@ namespace BrnResource
         return false;
     }
 
-    // ====================================================================================
-    // The data-table prepares -- Prepare stages 9 (@0x8266C410) and 12 (@0x8266D1F8).
-    //
-    // ⭐ These, not the VL__/WL__ GET handlers, are where the vehicle and wheel tables are
-    // actually loaded. The GET handlers stream nothing (see ProcessGetVehicleListRequest).
-    //
-    // The X360 pair are two near-identical six-state machines. Reproduced faithfully as one
-    // shared body plus two thin wrappers, because the ONLY differences are:
-    //     stage word   a1[140]                        a1[142]
-    //     bundle       "Vehicles/VehicleList.bundle"   "Wheels/WheelList.bundle"
-    //     resource     "B5VehicleList"                 "B5WheelList"
-    //     allowFail    true                            false
-    //     consumer     mVehicleList.AddListResource    mWheelList.AddListResource
-    //     assert lines 875 / 907 / 914 / 946           1383 / 1415 / 1422 / 1446
-    // [marked deviation] the console emits two separate functions with the bodies written
-    // out twice; folding them keeps every store and every guard identical.
-    //
-    // The state machine (X360 store-for-store):
-    //   0/1 : LoadBundleRequest{mpUser=&mReceiverQueue, miEventId=0, file=<bundle>,
-    //         mbLiveUpdateReplace=false, miPoolId=5, mbAllowFailiure=<flag>,
-    //         mbUseHDCache=false} -> resource queue type 2; mReceiverQueue.Clear(); -> 2
-    //   2   : nothing queued -> tail (pump + return false). Queued -> assert the event id is
-    //         2 (LoadBundleResponse), fall into 3.
-    //   3   : AcquireResourceRequest{mpUser=&mReceiverQueue, miEventId=0, miPoolId=5,
-    //         mResourceId=HashString(<resource>)} -> resource queue type 4;
-    //         mReceiverQueue.Clear(); -> 4  (which then sees the empty queue and tails out)
-    //   4   : nothing queued -> tail. Queued -> assert the event id is 4 and the response's
-    //         miEventId is 0, bind a ResourcePtr from the response handle, AddListResource.
-    //   5   : terminal -> return true.
-    // Every non-terminal exit runs the X360's shared tail: unlock the resource input, pump
-    // the resource module (UpdateResourceModule @0x826663B0), and return false.
-    // ====================================================================================
     namespace
     {
-        const s32 KI_DATA_LIST_POOL_ID = 5;   // X360 immediate (the "GameData" pool)
+        const char* const KAC_GAMEDATA_PREPARE_SOURCE =
+            "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp";
 
-        // [gateui r3] PrepareHudMessages @0x8266C8E0 uses a DIFFERENT pool: `li r26, 0xB`
-        // at 0x8266C948, stored as the LoadBundleRequest's miPoolId (var_84 @+140) and
-        // again as the AcquireResourceRequest's miPoolId (var_128 @+8). Its sibling
-        // PreparePopups @0x8266CBA0 uses the same 11. Reading 5 here would push the HUD
-        // message bundle into the GameData pool and the acquire would miss.
-        const s32 KI_GUI_DATA_POOL_ID  = 11;  // X360 immediate (`li r26, 0xB`)
+        void FireDataListReplyAssert(s32 liLine)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << "Invalid event id received\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                KAC_GAMEDATA_PREPARE_SOURCE, liLine);
+            CgsDev::Assert::EndAssert();
+        }
 
-        // [challenge-list wave 2026-08-27] and a THIRD pool: PrepareFreeburnChallengeList
-        // @0x8266C088 uses `li r25, 0x1A` (26) at 0x8266C0F0, stored as the LoadBundleRequest's
-        // miPoolId (+0x8C) and again as the AcquireResourceRequest's miPoolId (+0x08). 26 is the
-        // memory map's "Freeburn Challenges" pool (BrnMemoryMapData.h -- 0x3F000 bytes, 20
-        // resources), which is exactly the right size for the shipped 98944-byte payload.
-        // Reading 5 here would push the bundle into the GameData pool and the acquire would miss.
-        const s32 KI_FREEBURN_CHALLENGE_POOL_ID = 26;  // X360 immediate (`li r25, 0x1A`)
+        // ARTIST 8266C6C4..8266C800: the resource-pointer formatter and the
+        // three resource-database diagnostics precede the vehicle list bind.
+        void LogVehicleListResource(const CgsResource::ResourcePtr<VehicleListResource>& lrResource)
+        {
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                CgsDev::StrStreamBase& lrLog = *CgsDev::Log::gpDebugPrint;
+                lrLog << "VehicleListPtr: ";
+                const CgsResource::Entry* const lpEntry = lrResource.GetResourceHandle().mpSourceEntry;
+                if (lpEntry)
+                {
+                    lrLog << "[";
+                    const u32 luTypeId = lpEntry->mpResourceType->GetCachedId();
+                    CgsResource::SmallResource lMemory;
+                    lpEntry->mpResourceThis->GetResource(&lMemory);
+                    lrLog << "ID: " << lpEntry->mID << ", Address: ";
+                    lrLog.AppendFormat("0x%X", reinterpret_cast<u32>(lMemory.m_baseResources[0]));
+                    lrLog << ", TypeID: " << CgsDev::E_PRINTMODE_HEXONCE << luTypeId << "]";
+                }
+                else
+                {
+                    lrLog << "[NULL]";
+                }
+                lrLog << "\n";
+            }
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+            {
+                // The disabled database lookup has no side effects. The resource
+                // dereference passed to the first lookup still checks the pointer.
+                (void)*lrResource;
+                *CgsDev::Log::gpDebugPrint << "VehicleListPtr: [ResourceDatabaseDisabled]\n";
+            }
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "VehicleListPtr: [ResourceDatabaseDisabled]\n";
+            if (CgsDev::Message::gxMessageFilterFlags & 1)
+                *CgsDev::Log::gpDebugPrint << "VehicleListPtr: [ResourceDatabaseDisabled]\n";
+        }
+
+        CgsResource::ResourceHandle GetDataListHandle(const CgsResource::Events::AcquireResourceResponse& lrResponse)
+        {
+            CgsResource::ResourceHandle lHandle;
+            lHandle.mpResourceMemory = lrResponse.mpResourceMemory;
+            lHandle.mpSourceEntry = lrResponse.mpSourceEntry;
+            return lHandle;
+        }
     }
 
-    bool GameDataModule::PrepareDataListResource(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack,
-                                                 s32& lriStage, const char* lpcBundleFileName,
-                                                 const char* lpcResourceName, bool lbAllowFailure,
-                                                 s32 liPoolId,
-                                                 CgsResource::ResourceHandle* lpOutHandle)
+    // GameData prepare stages 9..14 share the request and wait states. Keep
+    // each native terminal bind and receiver clear in its original position.
+    template <GameDataModule::EPrepareDataList EList>
+    __forceinline bool GameDataModule::PrepareDataListResource(CgsModule::IOBufferStack* lpInputStack,
+        CgsModule::IOBufferStack* lpOutputStack, s32& lriStage, const char* lpcBundleFileName,
+        const char* lpcResourceName, s32 liPoolId, s32 liLoadReplyLine, s32 liAcquireReplyLine,
+        s32 liAcquireIdLine, s32 liStageLine)
     {
         CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
         lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
         lpResourceInput->LockForWrite();
-
-        bool lbComplete = false;
-        bool lbFallThrough = true;
 
         switch (lriStage)
         {
         case 0:
         case 1:
         {
-            lriStage = 1;
+            if (EList != E_PREPARE_DATA_CHALLENGES)
+                lriStage = 1;
+            if (EList == E_PREPARE_DATA_HUD_MESSAGES || EList == E_PREPARE_DATA_POPUPS)
+                mReceiverQueue.Clear();
+
             CgsResource::Events::LoadBundleRequest lRequest;
-            memset(&lRequest, 0, sizeof(lRequest));
-            lRequest.mpUser    = &mReceiverQueue;
+            lRequest.mpUser = &mReceiverQueue;
             lRequest.miEventId = 0;
             lRequest.SetFileName(lpcBundleFileName);
             lRequest.mbLiveUpdateReplace = false;
-            lRequest.miPoolId            = liPoolId;
-            lRequest.mbAllowFailiure     = lbAllowFailure;
-            lRequest.mbUseHDCache        = false;
+            lRequest.miPoolId = liPoolId;
+            lRequest.mbAllowFailiure = EList == E_PREPARE_DATA_VEHICLES || EList == E_PREPARE_DATA_CHALLENGES;
+            lRequest.mbUseHDCache = false;
             lpResourceInput->GetResourceQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRequest),
-                2 /*LoadBundle*/, static_cast<s32>(sizeof(lRequest)));
-            mReceiverQueue.Clear();
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 2, sizeof(lRequest));
+
+            if (EList != E_PREPARE_DATA_HUD_MESSAGES && EList != E_PREPARE_DATA_POPUPS)
+                mReceiverQueue.Clear();
         }
         // fall through
         case 2:
         {
             lriStage = 2;
             if (mReceiverQueue.GetLength() < 1)
-            {
-                lbFallThrough = false;
                 break;
-            }
+
             const CgsModule::Event* lpEvent = 0;
             s32 liSize = 0;
-            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
-            CGS_ASSERT(liType == 2, "Invalid event id received\n");   // X360 cpp:875 / 1383 / 716
+            if (mReceiverQueue.GetFirstEvent(&lpEvent, &liSize) != 2)
+                FireDataListReplyAssert(liLoadReplyLine);
         }
         // fall through
         case 3:
         {
             lriStage = 3;
+            if (EList == E_PREPARE_DATA_HUD_MESSAGES || EList == E_PREPARE_DATA_POPUPS)
+                mReceiverQueue.Clear();
+
             CgsResource::Events::AcquireResourceRequest lRequest;
-            memset(&lRequest, 0, sizeof(lRequest));
-            lRequest.mpUser    = &mReceiverQueue;
+            lRequest.mpUser = &mReceiverQueue;
             lRequest.miEventId = 0;
-            lRequest.miPoolId  = liPoolId;
-            lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
-                CgsResource::ID::HashString(reinterpret_cast<const u8*>(lpcResourceName)))));
+            lRequest.miPoolId = liPoolId;
+            lRequest.mResourceId.SetHash(CgsResource::ID::HashString(reinterpret_cast<const u8*>(lpcResourceName)));
             lpResourceInput->GetResourceQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRequest),
-                4 /*AcquireResource*/, static_cast<s32>(sizeof(lRequest)));
-            mReceiverQueue.Clear();
+                reinterpret_cast<const CgsModule::Event*>(&lRequest), 4, sizeof(lRequest));
+
+            if (EList != E_PREPARE_DATA_HUD_MESSAGES && EList != E_PREPARE_DATA_POPUPS)
+                mReceiverQueue.Clear();
         }
         // fall through
         case 4:
         {
             lriStage = 4;
             if (mReceiverQueue.GetLength() < 1)
-            {
-                lbFallThrough = false;
                 break;
-            }
+
             const CgsModule::Event* lpEvent = 0;
             s32 liSize = 0;
-            const s32 liType = mReceiverQueue.GetFirstEvent(&lpEvent, &liSize);
-            CGS_ASSERT(liType == 4, "Invalid event id received\n");   // X360 cpp:907 / 1415 / 769
-
-            const CgsResource::Events::AcquireResourceResponse* lpResponse =
+            if (mReceiverQueue.GetFirstEvent(&lpEvent, &liSize) != 4)
+                FireDataListReplyAssert(liAcquireReplyLine);
+            const CgsResource::Events::AcquireResourceResponse* const lpResponse =
                 reinterpret_cast<const CgsResource::Events::AcquireResourceResponse*>(lpEvent);
-            CGS_ASSERT(lpResponse != 0 && lpResponse->miEventId == 0,
-                       "Invalid event id received\n");                // X360 cpp:914 / 1422 / 776
+            if (EList != E_PREPARE_DATA_HUD_MESSAGES && lpResponse->miEventId != 0)
+                FireDataListReplyAssert(liAcquireIdLine);
 
-            // X360: BaseResourcePtr::CreateFromHandle(&localPtr, &response.mHandle) then
-            // <List>::AddListResource(this + <offset>, &localPtr). The handle is handed back
-            // to the caller so the two wrappers can bind their own typed ResourcePtr.
-            if (lpResponse != 0 && lpOutHandle != 0)
+            switch (EList)
             {
-                lpOutHandle->mpResourceMemory = lpResponse->mpResourceMemory;
-                lpOutHandle->mpSourceEntry    = lpResponse->mpSourceEntry;
+            case E_PREPARE_DATA_VEHICLES:
+            {
+                CgsResource::ResourcePtr<VehicleListResource> lResource(GetDataListHandle(*lpResponse));
+                LogVehicleListResource(lResource);
+                mVehicleList.AddListResource(lResource);
+                break;
             }
-            lriStage = 5;
-            lbComplete = true;
-            break;
+            case E_PREPARE_DATA_CHALLENGES:
+            {
+                CgsResource::ResourcePtr<ChallengeListResource> lResource(GetDataListHandle(*lpResponse));
+                mChallengeList.AddListResource(lResource);
+                break;
+            }
+            case E_PREPARE_DATA_ICE:
+            {
+                ICEList::ICETakeDictionaryResourcePtr lResource(GetDataListHandle(*lpResponse));
+                mICEList.AddListResource(lResource);
+                break;
+            }
+            case E_PREPARE_DATA_WHEELS:
+            {
+                CgsResource::ResourcePtr<WheelListResource> lResource(GetDataListHandle(*lpResponse));
+                mWheelList.AddListResource(lResource);
+                break;
+            }
+            case E_PREPARE_DATA_HUD_MESSAGES:
+                mHudMessageController.AddMessages(lpResponse);
+                break;
+            case E_PREPARE_DATA_POPUPS:
+                mPopupController.AddPopupResource(lpResponse);
+                mReceiverQueue.Clear();
+                break;
+            }
         }
+        // fall through
         case 5:
-            // X360 LABEL_27 / LABEL_19: terminal. (The wheel machine resets its word to 2
-            // here rather than leaving it at 5 -- a console quirk with no observable effect,
-            // since Prepare never re-enters a completed stage. Left at 5 for both.)
-            lbFallThrough = false;
-            lbComplete = false;
+            lriStage = EList == E_PREPARE_DATA_WHEELS ? 2 : 5;
             lpResourceInput->UnlockForWrite();
             lpInputStack->DestroyIOBuffer(&lpResourceInput);
-            mReceiverQueue.Clear();
+            if (EList != E_PREPARE_DATA_HUD_MESSAGES && EList != E_PREPARE_DATA_POPUPS)
+                mReceiverQueue.Clear();
             return true;
+
         default:
-            CGS_ASSERT(false, "Invalid Stage\n");   // X360 cpp:946 / 1446 / 803
-            lbFallThrough = false;
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("Invalid Stage\n", KAC_GAMEDATA_PREPARE_SOURCE, liStageLine);
+            CgsDev::Assert::EndAssert();
             break;
         }
-        (void)lbFallThrough;
 
-        // ARTIST: only a pending pass pumps the resource module; terminal passes
-        // destroy their input carve and return after the response has been consumed.
         lpResourceInput->UnlockForWrite();
-        if (!lbComplete)
-            UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
+        UpdateResourceModule(lpInputStack, lpOutputStack, lpResourceInput);
         lpInputStack->DestroyIOBuffer(&lpResourceInput);
-
-        if (lbComplete)
-        {
-            mReceiverQueue.Clear();
-            return true;
-        }
         return false;
     }
 
-    // @ 0x8266C410 -- Prepare stage 9.
+    // ARTIST 8266C410, GameData prepare stage 9.
     bool GameDataModule::PrepareVehicleList(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
-        CgsResource::ResourceHandle lHandle;
-        lHandle.Clear();
-        if (!PrepareDataListResource(lpInputStack, lpOutputStack, miVehicleListPrepareStage,
-                                     "Vehicles/VehicleList.bundle", "B5VehicleList",
-                                     true /*mbAllowFailiure -- the X360 sets 1 here*/,
-                                     KI_DATA_LIST_POOL_ID,
-                                     &lHandle))
-            return false;
-
-        if (lHandle.mpResourceMemory != 0)
-        {
-            CgsResource::ResourcePtr<VehicleListResource> lResourcePtr(lHandle);
-            mVehicleList.AddListResource(lResourcePtr);
-        }
-        else
-        {
-            // [marked deviation] the console has no null path here (mbAllowFailiure only
-            // covers the bundle load); report instead of binding a null list.
-            *CgsDev::Log::gpDebugPrint
-                << "[GameData] PrepareVehicleList: B5VehicleList did not resolve"
-                   " -- vehicle table is EMPTY\n";
-        }
-
-        *CgsDev::Log::gpDebugPrint
-            << "[GameData] PrepareVehicleList: " << mVehicleList.GetVehicleCount()
-            << " vehicles (" << mVehicleList.GetSelectableVehicleCount()
-            << " selectable, " << mVehicleList.GetSponsorVehicleCount() << " sponsor)\n";
-
-        // [PC diagnostic] prove the table is not just RESIDENT but READABLE: resolve the
-        // Junkyard starter car by id and read its display name back out of the streamed
-        // payload. A silently un-FixUp'd entry array (no registered resource type, or a
-        // mis-sized offset slot) shows up here as index -1 / garbage rather than as an AV
-        // three subsystems later.
-        {
-            const s32 liCavalry = mVehicleList.GetVehicleIndex(CgsIDCompress("PUSMC01"));
-            const VehicleListEntry* lpFirst = mVehicleList.GetVehicleData(0);
-            *CgsDev::Log::gpDebugPrint
-                << "[GameData]   PUSMC01 (Hunter Cavalry) index=" << liCavalry
-                << "  entry0 name='" << (lpFirst != 0 ? lpFirst->GetName() : "<null>")
-                << "' rank=" << (lpFirst != 0 ? (s32)lpFirst->GetUnlockRank() : -1)
-                << " carType=" << (lpFirst != 0 ? (s32)lpFirst->GetCarType() : -1) << "\n";
-        }
-        return true;
+        return PrepareDataListResource<E_PREPARE_DATA_VEHICLES>(lpInputStack, lpOutputStack,
+            miVehicleListPrepareStage, "Vehicles/VehicleList.bundle", "B5VehicleList", 5, 875, 907, 914, 946);
     }
 
-    // ========================================================================================
-    // ⭐ @ 0x8266C088 -- Prepare stage 10, PrepareFreeburnChallengeList.
-    //
-    // The SAME six-state machine as PrepareVehicleList/PrepareICEList/PrepareWheelList, over
-    // its own stage word (X360 this+0x22C == a1[139]) with:
-    //     bundle    "OnlineChallenges.bndl" (off_82F2A6F0)
-    //     resource  "B5ChallengeList"       (off_82F2A718)
-    //     pool      26                      (`li r25, 0x1A` @0x8266C0F0 -- NOT the shared 5;
-    //                                        the SAME immediate is stored as the bundle
-    //                                        request's miPoolId @+0x8C and the acquire's @+0x08)
-    //     allowFail true                    (`li r11, 1` -> stb at +0x90 == mbAllowFailiure)
-    //     consumer  BrnResource::ChallengeList::AddListResource(this + 462800, &ptr)
-    //     asserts   cpp:716 / 769 / 776 / 803 ("Invalid Stage\n")
-    // Both string literals are the IDA asm's own string comments on those two rodata slots.
-    //
-    // ⭐ WHY IT WAS PARKED, AND WHY IT NO LONGER IS. The prior wave's rule was "land stage 10
-    // and the reply handler together, or not at all", because a handler without this stage
-    // hands every consumer a live-looking, permanently EMPTY table. It also recorded a premise
-    // that turns out to be FALSE: "there is no challenge-list bundle in build/game to fill it
-    // from". MEASURED -- build/game/ONLINECHALLENGES.BNDL ships and is a correct
-    // already-ported little-endian platform-4 bundle: bnd2 v2, ONE resource, id 0x0D82D720 ==
-    // HashString("B5ChallengeList"), type 0x1001F (ChallengeListResourceType, registered in
-    // CgsResourceTypeRegistration.cpp as of this wave), payload {muNumChallenges = 458,
-    // muEntriesOffset = 0x10} + 458 * 216 bytes == the entry's 98944-byte uncompressed size
-    // exactly. POOL 26 ("Freeburn Challenges", 0x3F000 bytes / 20 resources) is one of the 27
-    // the memory map creates, so the target pool is real too. Both halves land here.
-    //
-    // ⭐ WHAT IT BUYS BEYOND THE CHALLENGE TABLE ITSELF: it is the precondition for
-    // ProcessGetFreeburnChallengeListRequest (id 53), which is the ONE reply
-    // BrnGui::WorldDataController::Prepare stage 9 waits on -- see the stage-10 comment in
-    // Prepare above.
-    // ========================================================================================
+    // ARTIST 8266C088, GameData prepare stage 10.
     bool GameDataModule::PrepareFreeburnChallengeList(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
-        CgsResource::ResourceHandle lHandle;
-        lHandle.Clear();
-        if (!PrepareDataListResource(lpInputStack, lpOutputStack, miChallengeListPrepareStage,
-                                     "OnlineChallenges.bndl", "B5ChallengeList",
-                                     true /*mbAllowFailiure -- the X360 stores 1 here*/,
-                                     KI_FREEBURN_CHALLENGE_POOL_ID,
-                                     &lHandle))
-            return false;
-
-        if (lHandle.mpResourceMemory != 0)
-        {
-            CgsResource::ResourcePtr<ChallengeListResource> lResourcePtr(lHandle);
-            mChallengeList.AddListResource(lResourcePtr);
-        }
-        else
-        {
-            // [marked deviation] the console has no null path here (mbAllowFailiure only
-            // covers the bundle load); report instead of registering a null list. Same shape
-            // and same reason as PrepareVehicleList's own arm.
-            *CgsDev::Log::gpDebugPrint
-                << "[GameData] PrepareFreeburnChallengeList: B5ChallengeList did not resolve"
-                   " -- freeburn challenge table is EMPTY\n";
-        }
-
-        // [PC diagnostic] the same "RESIDENT IS NOT USABLE" probe the vehicle/wheel/ICE stages
-        // carry: the count proves registration, and reading a record back proves the type
-        // handler's FixUp actually rebased the 32-bit entry-array slot (an un-FixUp'd list
-        // shows up here as a garbage id rather than as an AV three subsystems later).
-        {
-            const s32 liCount = mChallengeList.GetChallengeCount();
-            const BrnResource::ChallengeListEntry* lpFirst =
-                (liCount > 0) ? mChallengeList.GetChallengeData(0) : 0;
-            *CgsDev::Log::gpDebugPrint
-                << "[GameData] PrepareFreeburnChallengeList: " << liCount << " challenges"
-                << " | entry0 id=" << (lpFirst != 0 ? lpFirst->GetChallengeID() : (CgsID)0)
-                << " title='" << (lpFirst != 0 ? lpFirst->GetTitleStringID() : "<null>")
-                << "' players=" << (lpFirst != 0 ? lpFirst->GetNumPlayers() : -1)
-                << " actions=" << (lpFirst != 0 ? lpFirst->GetNumActions() : -1) << "\n";
-        }
-        return true;
+        return PrepareDataListResource<E_PREPARE_DATA_CHALLENGES>(lpInputStack, lpOutputStack,
+            miChallengeListPrepareStage, "OnlineChallenges.bndl", "B5ChallengeList", 26, 716, 769, 776, 803);
     }
 
-    // ========================================================================================
-    // @ 0x8266CEB0 -- Prepare stage 11, PrepareICEList.
-    //
-    // The SAME six-state machine as PrepareVehicleList/PrepareWheelList, over its own stage
-    // word (X360 this+0x234 == a1[141]) with:
-    //     bundle    "Cameras.bundle"      (off_82F2A6F8)
-    //     resource  "StandardICETakes"    (off_82F2A71C)
-    //     pool      5                     (`li r20, 5`, the shared KI_DATA_LIST_POOL_ID)
-    //     allowFail false                 (the X360 leaves the byte at its `li r29,0` zero)
-    //     consumer  BrnResource::ICEList::AddListResource(this + 0x70000 - 0x440, &ptr)
-    //     asserts   cpp:1257 / 1286 / 1291 / 1311 ("Invalid Stage\n")
-    // Both string literals are the IDA asm's own string comments on those two rodata slots,
-    // and both are CONFIRMED against the shipped bundle by hash:
-    //     HashString("StandardICETakes") == 0x0DC0EE8F -> CAMERAS.BUNDLE resource type 65
-    //     (the ICE take dictionary)
-    //     HashString("CameraVault")      == 0x28FE4576 -> CAMERAS.BUNDLE resource type 28
-    //     (the AttribSys vault DirectorResourceManager::Prepare acquires; SAME bundle)
-    //
-    // ⭐ WHY THIS FUNCTION MATTERS BEYOND THE ICE LIST. Its stage-0 LoadBundle is the ONLY
-    // thing in the whole image that makes "Cameras.bundle" resident. Both of the bundle's
-    // resources land in pool 5 together, so this is also what puts the CameraVault where
-    // DirectorResourceManager::Prepare's AcquireResource can find it. Without it that
-    // acquire never replies and the director's prepare stage machine parks for ever.
-    //
-    // ⭐ UN-GATED 2026-08-01 (ICE take-runtime wave). The terminal AddListResource used to be
-    // held back because neither ICEList.cpp nor the type-65 handler was in the exe source
-    // list -- with no registered handler the pool skips FixUp, so the dictionary's mpaIndex
-    // and every entry's mpData are still resource-relative OFFSETS, and binding that would
-    // have made every take lookup dereference an offset as a pointer. Both are mounted now
-    // (DictionaryResourceType<ICE::ICETakeData> is registered in
-    // CgsResourceTypeRegistration.cpp), so the bind is the console's own again.
-    // ========================================================================================
+    // ARTIST 8266CEB0, GameData prepare stage 11.
     bool GameDataModule::PrepareICEList(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
-        CgsResource::ResourceHandle lHandle;
-        lHandle.Clear();
-        if (!PrepareDataListResource(lpInputStack, lpOutputStack, miICEListPrepareStage,
-                                     "Cameras.bundle", "StandardICETakes",
-                                     false /*mbAllowFailiure -- the X360 leaves it 0*/,
-                                     KI_DATA_LIST_POOL_ID,
-                                     &lHandle))
-            return false;
-
-        if (lHandle.mpResourceMemory != 0)
-        {
-            BrnResource::ICEList::ICETakeDictionaryResourcePtr lResourcePtr(lHandle);
-            mICEList.AddListResource(lResourcePtr);
-        }
-        else
-        {
-            // [marked deviation] the console has no null path here (as for the vehicle/wheel
-            // lists); report instead of binding a null dictionary.
-            *CgsDev::Log::gpDebugPrint
-                << "[GameData] PrepareICEList: StandardICETakes did not resolve"
-                   " -- the ICE take table is EMPTY\n";
-        }
-
-        *CgsDev::Log::gpDebugPrint
-            << "[GameData] PrepareICEList: " << mICEList.GetICEMovieCount() << " ICE takes\n";
-        {
-            // [PC diagnostic] the three takes ArbStateCarSelect's game-intro shot group
-            // names (610132 Intro_FlyCam_Loop / 605855 DMV_IntroA / 605858 DMV_IntroB),
-            // resolved by guid through the same rebased entry array -- so this doubles as
-            // the regression gate on the type-65 FixUp.
-            static const s32 kaiIntroTakeGuids[3] = { 610132, 605855, 605858 };
-            for (s32 liIndex = 0; liIndex < 3; ++liIndex)
-            {
-                const ICE::ICETakeData* lpTake =
-                    mICEList.GetICETakeDataFromGuid(kaiIntroTakeGuids[liIndex]);
-                *CgsDev::Log::gpDebugPrint
-                    << "[GameData]   take guid " << kaiIntroTakeGuids[liIndex] << " -> "
-                    << (lpTake != 0 ? lpTake->GetName() : "<not found>");
-                if (lpTake != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint << " len=" << lpTake->GetLength();
-                }
-                *CgsDev::Log::gpDebugPrint << "\n";
-            }
-        }
-        return true;
+        return PrepareDataListResource<E_PREPARE_DATA_ICE>(lpInputStack, lpOutputStack,
+            miICEListPrepareStage, "Cameras.bundle", "StandardICETakes", 5, 1257, 1286, 1291, 1311);
     }
 
-    // @ 0x8266D1F8 -- Prepare stage 12. (This one is NOT in the .ida-exports set -- the gap
-    // rule applies: it was recovered straight from the ARTIST database with headless IDA.)
+    // ARTIST 8266D1F8, GameData prepare stage 12.
     bool GameDataModule::PrepareWheelList(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
-        CgsResource::ResourceHandle lHandle;
-        lHandle.Clear();
-        if (!PrepareDataListResource(lpInputStack, lpOutputStack, miWheelListPrepareStage,
-                                     "Wheels/WheelList.bundle", "B5WheelList",
-                                     false /*mbAllowFailiure -- the X360 sets 0 here*/,
-                                     KI_DATA_LIST_POOL_ID,
-                                     &lHandle))
-            return false;
-
-        if (lHandle.mpResourceMemory != 0)
-        {
-            CgsResource::ResourcePtr<WheelListResource> lResourcePtr(lHandle);
-            mWheelList.AddListResource(lResourcePtr);
-        }
-        else
-        {
-            *CgsDev::Log::gpDebugPrint
-                << "[GameData] PrepareWheelList: B5WheelList did not resolve"
-                   " -- wheel table is EMPTY\n";
-        }
-
-        *CgsDev::Log::gpDebugPrint
-            << "[GameData] PrepareWheelList: " << mWheelList.GetWheelCount() << " wheels\n";
-        {
-            // [PC diagnostic] the Hunter Cavalry's default wheel, resolved by name through
-            // the same rebased entry array (also the regression gate on the FixUp fix).
-            const s32 liWheel = mWheelList.FindWheelIndexFromName("5Spoke_19_16_650");
-            *CgsDev::Log::gpDebugPrint
-                << "[GameData]   wheel '5Spoke_19_16_650' index=" << liWheel << "\n";
-        }
-        return true;
+        return PrepareDataListResource<E_PREPARE_DATA_WHEELS>(lpInputStack, lpOutputStack,
+            miWheelListPrepareStage, "Wheels/WheelList.bundle", "B5WheelList", 5, 1383, 1415, 1422, 1446);
     }
 
-    // ========================================================================================
-    // [gateui r3] @ 0x8266C8E0 -- Prepare stage 13, PrepareHudMessages. THE PRODUCER OF
-    // BrnResource::HudMessageController. Until this landed, GuiCache::mpHudMessageController
-    // had ZERO writers anywhere in the tree, so HudMessageDirector::FilterAndSendOffMessage
-    // stopped every HUD message at its `mpController` assert (cpp:222) and the gateui ladder
-    // could never reach `[UI-gate] hud message sent`.
-    //
-    // Structurally identical to the vehicle/wheel/ICE machine (same six states, same
-    // LoadBundleRequest -> wait -> AcquireResourceRequest -> wait -> bind shape, same
-    // "Invalid event id received\n" asserts at cpp:1015 / cpp:1045, same "Invalid Stage\n"
-    // default), with exactly two differences, both X360-measured:
-    //   * POOL 11, not 5 (`li r26, 0xB` @0x8266C948 -- see KI_GUI_DATA_POOL_ID);
-    //   * the terminal step hands the ACQUIRE RESPONSE to HudMessageController::AddMessages
-    //     (`addis r3, r30, 6 / addi r3, r3, 0x5950 / bl AddMessages` @0x8266CB10), instead of
-    //     binding a typed ResourcePtr and calling a list's AddListResource.
-    //
-    // [marked deviation] the shared helper hands back a ResourceHandle rather than the queued
-    // event record, so the response AddMessages reads is rebuilt from that handle here. The
-    // console's AddMessages @0x8267D580 reads exactly ONE thing out of the response --
-    // `CreateFromHandle(this + 4, response + 24)`, i.e. the {mpResourceMemory, mpSourceEntry}
-    // handle pair -- so the two forms are observationally identical.
+    // ARTIST 8266C8E0, GameData prepare stage 13.
     bool GameDataModule::PrepareHudMessages(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
-        CgsResource::ResourceHandle lHandle;
-        lHandle.Clear();
-        if (!PrepareDataListResource(lpInputStack, lpOutputStack, miHudMessagesPrepareStage,
-                                     "HudMessages.hm", "HudMessages.hm",
-                                     false /*mbAllowFailiure -- the X360 stores 0 @0x8266C9C8*/,
-                                     KI_GUI_DATA_POOL_ID,
-                                     &lHandle))
-        {
-            // [DIAG] NOT IN THE X360 BINARY, and NOT a new failure mode -- the stage still
-            // waits exactly as the vehicle/ICE/wheel siblings do, for ever if need be. This
-            // is a one-shot LOUD tripwire so that verify_r3_fix3hud's SUSPECT-1 (a boot hang
-            // on the mounted path, invisible because Prepare simply never completes) is
-            // diagnosable from BrnGame.log instead of looking like a freeze. Three firsts
-            // stack up in this one stage and none had ever run in this tree before round 3:
-            // the first `.hm` bundle requested, the first pool-11 acquire, and the first
-            // acquire of a type whose handler round 4 only just registered.
-            // Unconditional (not BRN_PROP_DIAG-gated) to match this file's house style --
-            // every other gpDebugPrint in BrnGameDataModule.cpp is unconditional -- and it
-            // prints at most once per process.
-            static const s32 KI_HUD_MESSAGE_STALL_WARN_PUMPS = 600;   // ~10 s at 60 Hz
-            static s32       siHudMessageWaitPumps           = 0;
-            static bool      sbHudMessageStallReported       = false;
-
-            ++siHudMessageWaitPumps;
-            if (!sbHudMessageStallReported &&
-                siHudMessageWaitPumps >= KI_HUD_MESSAGE_STALL_WARN_PUMPS &&
-                CgsDev::Log::gpDebugPrint != 0)
-            {
-                sbHudMessageStallReported = true;
-                *CgsDev::Log::gpDebugPrint
-                    << "[GameData] PrepareHudMessages: STILL WAITING after "
-                    << siHudMessageWaitPumps
-                    << " pumps at sub-stage " << miHudMessagesPrepareStage
-                    << " -- the HudMessages.hm LoadBundle/acquire has not answered on pool "
-                    << KI_GUI_DATA_POOL_ID
-                    << ". GameData Prepare stage 13 cannot complete and the boot will not"
-                       " advance past it.\n";
-            }
-            return false;
-        }
-
-        // ⭐ [gateui r4] THE ROUND-3 REFUSAL GATE IS DELETED. It read the registry for type
-        // 44 and, finding no handler, declined the bind -- because
-        // CgsResource::HudMessageResourceType existed (CgsGuiHudMessageType.cpp, GetTypeID
-        // 44) but was never registered, so CgsResourceBundleLoader.cpp's
-        // `mpResourceType != 0` guards (:195/:251/:258/:266) skipped every FixUp pass and the
-        // acquire handed back a pointer table that was still a FILE OFFSET. Both halves are
-        // now closed in the same commit: the type is registered
-        // (CgsResourceTypeRegistration.cpp, "HudMessage") and its FixUp/FixDown relocate at
-        // HOST pointer width (CgsGuiHudMessage.cpp / CgsGuiHudMessageType.cpp, GetLoadBase64)
-        // -- which is what the shipped bundle needs, since build/game/HUDMESSAGES.HM is
-        // already transcoded to platform 4 with 8-byte slots (mppHudMessageData reads 0x80,
-        // the 250 table entries at an 8-byte stride, record stride 0x170 == the host
-        // sizeof(CgsGui::GuiHudMessageData)). With FixUp running, the bind must proceed.
-        if (lHandle.mpResourceMemory != 0)
-        {
-            CgsResource::Events::AcquireResourceResponse lResponse;
-            lResponse.mpUser           = &mReceiverQueue;
-            lResponse.miEventId        = 0;
-            lResponse.miPoolId         = KI_GUI_DATA_POOL_ID;
-            lResponse.mpResourceMemory = lHandle.mpResourceMemory;
-            lResponse.mpSourceEntry    = lHandle.mpSourceEntry;
-            mHudMessageController.AddMessages(&lResponse);
-
-            // [DIAG] NOT IN THE X360 BINARY -- the gateui ladder's producer rung, guarded by
-            // the wave's single knob (BRN_PROP_DIAG) exactly like PropEntityModule_wQ_04.cpp.
-            // Fires ONCE, at the bind, and reports the loaded message count so a silently
-            // empty table (unregistered type 44 / skipped FixUp) is visible here rather than
-            // as an "Unable to find message" line 400 frames later.
-            {
-            }
-        }
-        else
-        {
-            // [marked deviation] the console has no null path here (mbAllowFailiure is 0, so
-            // a missing bundle asserts inside the loader). Report instead of binding a null
-            // resource -- AddMessages would dereference it through mMessagesPtr->
-            // miHudMessageCount for its own 300-message cap assert.
-            *CgsDev::Log::gpDebugPrint
-                << "[GameData] PrepareHudMessages: HudMessages.hm did not resolve"
-                   " -- the HUD message table is EMPTY (the director will reject every"
-                   " message at GetIndexFromMessageHash)\n";
-        }
-
-        *CgsDev::Log::gpDebugPrint
-            << "[GameData] PrepareHudMessages: "
-            << ((lHandle.mpResourceMemory != 0) ? mHudMessageController.GetMessageLoadedCount() : 0)
-            << " hud messages\n";
-        return true;
+        return PrepareDataListResource<E_PREPARE_DATA_HUD_MESSAGES>(lpInputStack, lpOutputStack,
+            miHudMessagesPrepareStage, "HudMessages.hm", "HudMessages.hm", 11, 1015, 1045, 0, 1065);
     }
 
-    // Prepare stage 14, PreparePopups. The same six-state machine as PrepareHudMessages
-    // (pool 11, mbAllowFailiure 0, "Invalid event id received\n" asserts, "Invalid Stage\n"
-    // default) over "Popups.pup"; its terminal step hands the acquire response to
-    // PopupController::AddPopupResource instead of AddMessages. As in the HUD sibling, the
-    // shared helper returns the resolved handle, and the response AddPopupResource reads is
-    // rebuilt from it (AddPopupResource reads only the handle pair).
+    // ARTIST 8266CBA0, GameData prepare stage 14.
     bool GameDataModule::PreparePopups(CgsModule::IOBufferStack* lpInputStack, CgsModule::IOBufferStack* lpOutputStack)
     {
-        CgsResource::ResourceHandle lHandle;
-        lHandle.Clear();
-        if (!PrepareDataListResource(lpInputStack, lpOutputStack, miPopupsPrepareStage,
-                                     "Popups.pup", "Popups.pup",
-                                     false /*mbAllowFailiure*/,
-                                     KI_GUI_DATA_POOL_ID,
-                                     &lHandle))
-        {
-            return false;
-        }
-
-        if (lHandle.mpResourceMemory != 0)
-        {
-            CgsResource::Events::AcquireResourceResponse lResponse;
-            lResponse.mpUser           = &mReceiverQueue;
-            lResponse.miEventId        = 0;
-            lResponse.miPoolId         = KI_GUI_DATA_POOL_ID;
-            lResponse.mpResourceMemory = lHandle.mpResourceMemory;
-            lResponse.mpSourceEntry    = lHandle.mpSourceEntry;
-            mPopupController.AddPopupResource(&lResponse);
-        }
-        else
-        {
-        }
-
-        *CgsDev::Log::gpDebugPrint
-            << "[GameData] PreparePopups: "
-            << ((lHandle.mpResourceMemory != 0) ? "popup table bound" : "no popup table")
-            << "\n";
-        return true;
+        return PrepareDataListResource<E_PREPARE_DATA_POPUPS>(lpInputStack, lpOutputStack,
+            miPopupsPrepareStage, "Popups.pup", "Popups.pup", 11, 1135, 1164, 1167, 1187);
     }
 
     void GameDataModule::Construct()
@@ -1474,32 +1145,26 @@ namespace BrnResource
         lpInputStack->CreateIOBuffer(&lpAttribInput, "Attrib");
         mGameTalk.Update();
 
-        if (lpOutput != 0)
-        {
-            // X360 @0x82674818-2C: LockForWrite(out);
-            // FileSystemStatusInterface::Construct(out + 9);  <- ⭐ NINE, corrected
-            // 2026-08-16 (boot audit F-P7-12): the old "out+36" here was a WORD-index
-            // reading of a byte offset, i.e. the same member counted in the wrong unit.
-            // Then out+4 := 0 (the allocator-list slot cleared) and
-            // SetAllocatorList(out, &mAllocatorList), then the LiveUpdateIO status copy
-            // (SetLiveUpdateStatus from the LiveUpdate output).
-            //
-            lpOutput->LockForWrite();
-            // ARTIST82674820 resets the +9 filesystem interface, then publishes the allocator list.
-            CgsResource::ResourceIO::FileSystemStatusInterface lStatus;
-            lStatus.Construct();
-            lpOutput->SetFileSystemStatusInterface(&lStatus);
-            lpOutput->SetAllocatorList(&mAllocatorList);
-            lpOutput->UnlockForWrite();
-        }
+        lpOutput->LockForWrite();
+        lpInput->LockForRead();
+        lpOutput->Clear();
+        lpOutput->SetAllocatorList(&mAllocatorList);
 
-        if (lpInput != 0)
-            lpInput->LockForRead();
+        // ARTIST 82674830..826748C4 publishes status and queues live-update
+        // requests before forwarding the ordinary GameData requests.
+        CgsResource::LiveUpdateIO::OutputBuffer* lpLiveUpdateOutput = 0;
+        lpOutputStack->CreateIOBuffer(&lpLiveUpdateOutput, "LiveUpdate");
+        mLiveUpdateModule.Update(lpLiveUpdateOutput);
+        lpLiveUpdateOutput->LockForRead();
+        lpOutput->SetLiveUpdateStatus(lpLiveUpdateOutput->GetSt());
+        lpOutput->UnlockForWrite();
 
         lpResourceInput->LockForWrite();
-
-        // [deferred] LiveUpdateIO::OutputBuffer request append (X360 Append<512,16> of the
-        // live-update output's request queue into the resource input; module not committed).
+        const CgsResource::LiveUpdateIO::OutputBuffer::OutputQueue* lpLiveUpdateRequests =
+            lpLiveUpdateOutput->GetOutputQueue();
+        lpResourceInput->GetResourceQueue()->Append<512, 16>(*lpLiveUpdateRequests);
+        lpLiveUpdateOutput->UnlockForRead();
+        lpOutputStack->DestroyIOBuffer(&lpLiveUpdateOutput);
 
         // ---- the request pump: drain the GameData request interface ---------------------
         // Queue type ids < 26 are raw CgsResource requests (CreatePool 0 / LoadBundle 2 /
@@ -1507,7 +1172,6 @@ namespace BrnResource
         // verbatim into the ResourceModule input; ids >= 26 are GameData-level events
         // routed through ProcessGameDataEvent (26 == LoadGameDataEvent, the first
         // GameData-level id -- the X360 boundary compare).
-        if (lpInput != 0)
         {
             // Drain through the CONST accessor (read-locked; the mutable overload asserts
             // the write lock -- X360 0x82663F90 vs 0x823B1788).

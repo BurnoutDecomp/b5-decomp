@@ -58,8 +58,7 @@ namespace GameDataIO
     void OutputBuffer::Construct()
     {
         CgsModule::IOBuffer::Construct();
-        mFileSystemStatusInterface.Construct();
-        mpAllocatorList = 0;
+        Clear();
     }
 
     // ARTIST823B16E0 /82663EE0: read/write lock gates, one status byte at +9.

@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                      // CGS_ASSERT (ValidateProfile, inline accessors)
 #include "GameShared/GameClasses/Containers/CgsArray.h"                                 // Array<T, N>
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"                          // CgsContainers::FastBitArray<10>
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                             // CgsDev::Log::gpDebugPrint (profile version mismatch)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                                // CgsModule::EventQueue<T,N>
 #include "GameSource/CompilerDefines/gameshared_network_defines.h"                      // ::KI_MAX_NETWORK_PLAYERS
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerTypes.h"              // BrnGameState::TakedownEvent
@@ -66,13 +67,14 @@ namespace BrnNetwork
         }
 
         // A profile is valid when it has the current version and every relationship in its
-        // table validates. (On a version mismatch the console logs "Live Revenge Profile version
-        // mismatch, expected <6>, got <version>" to the network dev-log stream, which has no home
-        // in this tree.)
+        // table validates. On a version mismatch the console logs the expected and stored versions.
         bool ValidateProfile()
         {
             if (miVersionNumber != KI_VERSION_NUMBER)
             {
+                *CgsDev::Log::gpDebugPrint << "Live Revenge Profile version mismatch, expected "
+                                            << KI_VERSION_NUMBER
+                                            << ", got " << miVersionNumber << "\n";
                 return false;
             }
 

@@ -26,6 +26,8 @@ namespace LiveUpdateIO
     void OutputBuffer::_AssertLayout()
     {
         CGS_STATIC_ASSERT((offsetof(OutputBuffer, mOutputQueue) == 0x0004), "mOutputQueue @0x0004");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer, mStatus) == 0x214), "ARTIST live-update status");
+        CGS_STATIC_ASSERT((sizeof(OutputBuffer) == 0x218), "ARTIST live-update IO buffer extent");
     }
 
     // X360 0x828EEF98: set the IOBuffer constructed bit (this+0), Construct the +4 request
