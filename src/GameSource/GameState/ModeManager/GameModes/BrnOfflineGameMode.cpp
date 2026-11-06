@@ -10,10 +10,11 @@
 namespace BrnGameState
 {
 // X360 0x82321E38, file BrnOfflineGameMode.cpp:27. The minimum world-Y a landmark may
-// sit at relative to the search origin before it is rejected as a destination. The leading
-// "HACK" matches the original symbol name -- it patches around landmarks authored below the
-// drivable surface. -150.0 is the flt_820211E4 constant the X360 height test compares
-// against (delta.y > KF_HACK_MIN_LANDMARK_HEIGHT).
+// sit at before it is rejected as a destination. The leading "HACK" matches the original symbol
+// name -- it patches around landmarks authored below the drivable surface. -150.0 is the
+// flt_820211E4 constant the X360 height test compares against. The test reads the landmark's
+// ABSOLUTE Y, not its height above the origin: 0x82321F24 saves the position to var_D0 BEFORE the
+// 0x82321F28 vsubfp, and 0x82322004 loads var_CC (that copy's Y).
 const f32 KF_HACK_MIN_LANDMARK_HEIGHT = -150.0f;
 
 // Above this squared distance the forced-debug landmark is accepted immediately; 100^2
@@ -59,7 +60,7 @@ CgsSystem::EFrameRateManagerType OfflineGameMode::GetFrameRateType() const
 //   - otherwise, when lbApplyDirectionFilter is set, landmarks lying behind the reference
 //     direction lv3Direction (negative dot with the origin->landmark vector) are skipped;
 //   - a landmark is accepted when its straight-line distance from the origin lies strictly
-//     inside (lfMinDistance, lfMaxDistance) and its height above the origin clears
+//     inside (lfMinDistance, lfMaxDistance) and its world height clears
 //     KF_HACK_MIN_LANDMARK_HEIGHT.
 // Accepted landmarks have their region index (wrapped as a LandmarkIndex) and AI-section
 // index appended to the two parallel output arrays. The de-optimised body restores the
@@ -109,7 +110,7 @@ u32 OfflineGameMode::SelectRandomDestinations(const BrnTrigger::TriggerData* lpT
         const f32 lfDistance = Length(lv3Delta);
         if (lfDistance > lfMinDistance
             && lfDistance < lfMaxDistance
-            && GetY(lv3Delta) > KF_HACK_MIN_LANDMARK_HEIGHT)
+            && GetY(lv3LandmarkPosition) > KF_HACK_MIN_LANDMARK_HEIGHT)
         {
             lpaLandmarkIndicesOut[luFoundCount] = LandmarkIndex(lpLandmark->GetRegionIndex());
             lpaAISectionIndicesOut[luFoundCount] = mpModeManager->GetProgressionManager()

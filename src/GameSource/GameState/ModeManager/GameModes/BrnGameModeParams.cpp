@@ -472,6 +472,15 @@ Vector3 StartGameModeParams::GetStartDirection() const
 }
 
 // -----------------------------------------------------------------------------
+// GetPlayerPosition -- mPlayerPosition, console +0x2E0 (736), one 16-byte vector slot. Inlined at
+// its reader, FaceOffMode::Start @0x82330500 `li r10,0x2E0 / lvx128 v127, r30, r10`.
+// -----------------------------------------------------------------------------
+Vector3 StartGameModeParams::GetPlayerPosition() const
+{
+    return mPlayerPosition;
+}
+
+// -----------------------------------------------------------------------------
 // GetStartMechanism -- meStartMechanism, console +0x310 (784).
 // Construct stores the validated leStartMechanism argument straight into it (mr r30,r5 at entry,
 // then stw r30, 0x310(r31) @0x8231C258) -- the same argument-to-offset link as GetGameModeType,

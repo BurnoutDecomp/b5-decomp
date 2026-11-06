@@ -442,6 +442,9 @@ public:
     GameStateModule*     GetGameStateModule();                            // asserts "mpGameStateModule"
     TriggerQueryManager* GetTriggerQueryManager() const { return mpTriggerQueryManager; }
     BrnProgression::ProgressionManager* GetProgressionManager() const;    // returns mpProgressionManager (+0x6D5C)
+    // DWARF BrnModeManager.h:372, inlined on the console: FaceOffMode::Start @0x823305C4 reads the seed
+    // at +0x6D90 == mRandom (+28016) + muSeed (+0x20).
+    CgsNumeric::Random*                 GetRandom()                 { return &mRandom; }
     const NetworkRoundManager*          GetNetworkRoundManager() const;   // returns mpNetworkRoundManager (+0x6D64)
     // A one-instruction forward to the embedded ChallengeManager (+0x6E00); ProcessGameEvents'
     // case-18 arm calls it before a network round starts.
