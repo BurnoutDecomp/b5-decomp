@@ -413,9 +413,9 @@ namespace Deformation
         void GetBoundingBox(CgsGeometric::Box* lpBoxOut);                                       // :527
         void GetAlignedDeformedBoundingBox(CgsGeometric::Box* lpBoxOut);                        // :531
 
-        void ConstructUpdatePerformanceMonitors();                                             // :535
-        void ConstructUpdateIKAndLocatorsPerformanceMonitors();                                // :538
-        void ConstructPostPhysicsPerformanceMonitors();                                        // :541
+        static void ConstructUpdatePerformanceMonitors();                                             // :535
+        static void ConstructUpdateIKAndLocatorsPerformanceMonitors();                                // :538
+        static void ConstructPostPhysicsPerformanceMonitors();                                        // :541
         void GetDeformedBoundingBox(CgsGeometric::AxisAlignedBox* lpBoxOut);                    // :545
 
         // DWARF :553. Push this car's stored contacts into the shared penetration solver (vs the

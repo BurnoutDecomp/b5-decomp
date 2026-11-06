@@ -1,4 +1,5 @@
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // CgsDev::PerfMonCpu::AddMonitor
 #include "GameSource/Physics/DeformationManager/BrnDeformationDebugComponent.h"  // complete type for the static mDebugComponent
 
@@ -11,9 +12,9 @@
 // Six of the symbols Construct needs are defined in BrnDeformationConstructShims.cpp:
 //     DetachedPartManager::Construct
 //     DeformationDebugComponent_Construct
-//     DeformableObject_ConstructUpdatePerformanceMonitors
-//     DeformableObject_ConstructUpdateIKAndLocatorsPerformanceMonitors
-//     DeformableObject_ConstructPostPhysicsPerformanceMonitors
+//     DeformableObject::ConstructUpdatePerformanceMonitors
+//     DeformableObject::ConstructUpdateIKAndLocatorsPerformanceMonitors
+//     DeformableObject::ConstructPostPhysicsPerformanceMonitors
 //     DeformationManager::mDebugComponent
 //
 // BrnDeformationManager.cpp is mounted as well, so re-merging is a plain move of this body and text.
@@ -33,9 +34,6 @@ namespace Deformation
     // declares; see the banner there). Bodied by BrnDeformationConstructShims.cpp.
     void DeformationDebugComponent_Construct(DeformationDebugComponent* lpComponent,
                                              DeformationManager* lpManager);
-    void DeformableObject_ConstructUpdatePerformanceMonitors();
-    void DeformableObject_ConstructUpdateIKAndLocatorsPerformanceMonitors();
-    void DeformableObject_ConstructPostPhysicsPerformanceMonitors();
 
     // -----------------------------------------------------------------------------------
     // Construct  @0x82621510   [EXECUTED in goal trace]
@@ -104,14 +102,14 @@ namespace Deformation
         miUpdateSensorDisplPerfMon                               = CgsDev::PerfMonCpu::AddMonitor("  Update sensor displ.",       CgsDev::E_PMP_15, false, 10.0f, true);
         miUpdatePerfMon                                          = CgsDev::PerfMonCpu::AddMonitor("  Update",                     CgsDev::E_PMP_15, false, 10.0f, true);
         miUpdateModelsPerfMon                                    = CgsDev::PerfMonCpu::AddMonitor("     Update models",           CgsDev::E_PMP_15, false, 10.0f, true);
-        DeformableObject_ConstructUpdatePerformanceMonitors();
+        DeformableObject::ConstructUpdatePerformanceMonitors();
         miUpdateIkAndDetachingPerfMon                            = CgsDev::PerfMonCpu::AddMonitor("     Upd.IK & detaching",      CgsDev::E_PMP_15, false, 10.0f, true);
-        DeformableObject_ConstructUpdateIKAndLocatorsPerformanceMonitors();
+        DeformableObject::ConstructUpdateIKAndLocatorsPerformanceMonitors();
         miUpdateDetachedPartsPerfMon                             = CgsDev::PerfMonCpu::AddMonitor("    Update detached parts",    CgsDev::E_PMP_15, false, 10.0f, true);
         miUpdateSkinnedJointsPerfMon                             = CgsDev::PerfMonCpu::AddMonitor("    Update skinned joints",    CgsDev::E_PMP_15, false, 10.0f, true);
         miUpdatePostPhysicsPerfMon                               = CgsDev::PerfMonCpu::AddMonitor("  Post physics update",        CgsDev::E_PMP_15, false, 10.0f, true);
         miPostPhysicsUpdateModelsPerfMon                         = CgsDev::PerfMonCpu::AddMonitor("     Update Models",           CgsDev::E_PMP_15, false, 10.0f, true);
-        DeformableObject_ConstructPostPhysicsPerformanceMonitors();
+        DeformableObject::ConstructPostPhysicsPerformanceMonitors();
         miPostPhysicsUpdateDetachedPartsManPerfMon               = CgsDev::PerfMonCpu::AddMonitor("     Update Detached Parts Man", CgsDev::E_PMP_15, false, 10.0f, true);
         miPostPhysicsProcessJointSpiesPerfMon                    = CgsDev::PerfMonCpu::AddMonitor("     Process Joint Spies",     CgsDev::E_PMP_15, false, 10.0f, true);
         miPostPhysicsUpdateAddContactsToPenSolverPerfMon         = CgsDev::PerfMonCpu::AddMonitor("       Add conts to PenSlvr",  CgsDev::E_PMP_15, false, 10.0f, true);

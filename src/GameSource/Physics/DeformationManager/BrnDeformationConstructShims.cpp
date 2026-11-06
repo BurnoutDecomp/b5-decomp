@@ -1,4 +1,5 @@
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"
 #include "GameSource/Physics/DeformationManager/BrnDeformationDebugComponent.h"
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
@@ -13,7 +14,7 @@
 //   1. DeformationManager::mDebugComponent  -- the static member's only out-of-line definition.
 //   2. DeformationDebugComponent_Construct  -- the declare-only stand-in BrnDeformationManager.cpp
 //      calls; forwards to the real DeformationDebugComponent::Construct.
-//   3-5. The three DeformableObject perfmon registrations, MOVED verbatim out of
+//   3-5. The three static DeformableObject perfmon registrations, MOVED verbatim out of
 //      BrnDeformableObject_Lifecycle.cpp. Their ten si* handles moved with them and are now
 //      EXTERNAL-linkage globals with exactly ONE definition -- see the warning below.
 //   6. DetachedPartManager::Construct       -- one line, and its only body.
@@ -113,13 +114,10 @@ namespace Deformation
     //   Upd. Suspension IK, Upd. Locators), each asserting the returned handle id is >= 0. The
     //   AddMonitor args (page 15, minimum 0, budget 10.0 ms, scaled) are verbatim from the asm.
     //
-    // MOVED VERBATIM from BrnDeformableObject_Lifecycle.cpp:759. The X360 calls all three of these
-    // with NO object (r3 is never seated -- Hex-Rays' `a1` is garbage), i.e. they are effectively
-    // static; BrnDeformableObject.h declares them as instance methods and BrnDeformationManager.cpp
-    // therefore reaches them through free-function stand-ins. That FLAG is unchanged by this split:
-    // the bodies below ARE the stand-ins, and they touch no `this`.
+    // The X360 calls all three of these with NO object (r3 is never seated -- Hex-Rays' `a1` is
+    // garbage), so they are static members.
     // ==============================================================================================
-    void DeformableObject_ConstructUpdatePerformanceMonitors()
+    void DeformableObject::ConstructUpdatePerformanceMonitors()
     {
         siSortContactsPerfMon = CgsDev::PerfMonCpu::AddMonitor("          Sort contacts", CgsDev::E_PMP_15, false, 10.0f, true);
         CGS_ASSERT(siSortContactsPerfMon >= 0, "siSortContactsPerfMon >= 0");
@@ -142,7 +140,7 @@ namespace Deformation
     //   Upd. wheels & glass.
     // MOVED VERBATIM from BrnDeformableObject_Lifecycle.cpp:781.
     // ==============================================================================================
-    void DeformableObject_ConstructUpdateIKAndLocatorsPerformanceMonitors()
+    void DeformableObject::ConstructUpdateIKAndLocatorsPerformanceMonitors()
     {
         // Dependency tripwire (asm: tests the already-registered solve-contacts handle, no AddMonitor).
         CGS_ASSERT(siSolveContactsPerfMon >= 0, "siSolveContactsPerfMon >= 0");
@@ -165,7 +163,7 @@ namespace Deformation
     //   Register the two post-physics sphere-update monitors.
     // MOVED VERBATIM from BrnDeformableObject_Lifecycle.cpp:805.
     // ==============================================================================================
-    void DeformableObject_ConstructPostPhysicsPerformanceMonitors()
+    void DeformableObject::ConstructPostPhysicsPerformanceMonitors()
     {
         siUpdateWorldSpheres = CgsDev::PerfMonCpu::AddMonitor("        Update World Spheres", CgsDev::E_PMP_15, false, 10.0f, true);
         CGS_ASSERT(siUpdateWorldSpheres >= 0, "siUpdateWorldSpheres >= 0");

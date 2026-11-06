@@ -156,17 +156,6 @@ namespace Deformation
         return *reinterpret_cast<StreamedDeformationSpec* const*>(lModelHandle.mpResourceMemory);
     }
 
-    // The X360 reaches three DeformableObject members the FROZEN BrnDeformableObject.h models in a
-    // way this TU cannot call directly: ConstructUpdate/IK/PostPhysics PerformanceMonitors are
-    // declared as INSTANCE methods there but the X360 Construct calls them with NO object (they are
-    // static perfmon-registration routines). Rather than edit a frozen header outside this group, they
-    // are reached via declare-only stand-ins. FLAG: reconcile to `static` on DeformableObject when
-    // that header is next revised. (The fourth stand-in, DeformableObject_ClearVariables, is retired:
-    // Prepare now calls the public DWARF DeformableObject::Construct, which runs ClearVariables --
-    // crash parity G23-D4.)
-    void DeformableObject_ConstructUpdatePerformanceMonitors();
-    void DeformableObject_ConstructUpdateIKAndLocatorsPerformanceMonitors();
-    void DeformableObject_ConstructPostPhysicsPerformanceMonitors();
 
 
     // -----------------------------------------------------------------------------------
