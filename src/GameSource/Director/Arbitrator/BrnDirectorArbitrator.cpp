@@ -564,11 +564,13 @@ namespace BrnDirector
             //   `info.mpDirectorResourceManager + 1288` (id 354708297, falling back to
             //   Attrib::DefaultDataArea(24)), pokes six fields of the behaviour's interior
             //   (+3612/+3600/+3608/+3604/+3624/+40/+4/+3556) and then drives it, exiting on
-            //   mpGameState[432]. It is behind BOTH walls at once: the allocation path (b) and
-            //   the un-homed Behaviour interior those six pokes land in.
-            //   CONSEQUENCE: the final-elite ("burnout licence complete") camera sequence does
-            //   not run; the arbitrator holds whatever camera the previous state left.
-            //   DELETE-WHEN: Camera::Behaviour + BehaviourIceAnim are homed.
+            //   mpGameState[432] (mbDoing100PercentSequence).
+            //   ⛔ UNREACHABLE ON THE CONSOLE. Nothing in ARTIST stores 7 into meState: the only
+            //   writers of +0x44F8 are Construct @0x82254E90 and this Update, whose stores are
+            //   1, 2, 4, 5, 6 and 8. The 100% sequence the exit reads goes through the
+            //   CRASH_NAV_ICE_CAMERAS arm above. A body here could never run or be tested.
+            //   CONSEQUENCE: none on the shipping path.
+            //   DELETE-WHEN: a console writer of state 7 is found.
             break;
 
         // ---- 8: RENDER_METRICS ---------------------------------------------------------
