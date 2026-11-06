@@ -1,4 +1,5 @@
 #include "GameSource/Network/Managers/BrnNetworkLaunchManager.h"
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"   // [FLAG PC witness] [net] launch-mgr
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Network/BrnNetworkManager.h"
@@ -169,7 +170,19 @@ namespace BrnNetwork
         CGS_ASSERT(maUpdateFunctions[meSubState] != 0,
                    "No update function supplied for the current substate");
 
-        return (this->*maUpdateFunctions[meSubState])();
+        const s32     liSubStateBefore = static_cast<s32>(meSubState);
+        const EStatus leStatus         = (this->*maUpdateFunctions[meSubState])();
+
+        // [FLAG PC witness] One line per sub-state change.
+        if (static_cast<s32>(meSubState) != liSubStateBefore)
+        {
+            if (BrnNetHarnessPC::WitnessEnabled())
+            {
+                BrnNetHarnessPC::Witness("launch-mgr", "substate %d -> %d status=%d", liSubStateBefore,
+                                         static_cast<s32>(meSubState), static_cast<s32>(leStatus));
+            }
+        }
+        return leStatus;
     }
 
     // -- shared idle/error gate -------------------------------------------------

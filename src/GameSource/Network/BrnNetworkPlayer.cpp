@@ -1470,11 +1470,14 @@ namespace BrnNetwork
             if (liBucket != siLastBucket)
             {
                 siLastBucket = liBucket;
-                BrnNetHarnessPC::Witness("update-out", "sent since=%u frame=%u car=%d pos=(%.1f, %.1f, %.1f)",
-                                         static_cast<u32>(lUpdateData.mu16FramesSinceStart),
-                                         static_cast<u32>(lu16CurrentFrame), static_cast<s32>(leActiveRaceCarIndex),
-                                         lUpdateData.mMatrix.wAxis.x, lUpdateData.mMatrix.wAxis.y,
-                                         lUpdateData.mMatrix.wAxis.z);
+                if (BrnNetHarnessPC::WitnessEnabled())
+                {
+                    BrnNetHarnessPC::Witness("update-out", "sent since=%u frame=%u car=%d pos=(%.1f, %.1f, %.1f)",
+                                             static_cast<u32>(lUpdateData.mu16FramesSinceStart),
+                                             static_cast<u32>(lu16CurrentFrame), static_cast<s32>(leActiveRaceCarIndex),
+                                             lUpdateData.mMatrix.wAxis.x, lUpdateData.mMatrix.wAxis.y,
+                                             lUpdateData.mMatrix.wAxis.z);
+                }
             }
         }
     }
@@ -1601,13 +1604,16 @@ namespace BrnNetwork
             if (liBucket != siLastBucket)
             {
                 siLastBucket = liBucket;
-                BrnNetHarnessPC::Witness("update-in", "applied since=%u from=%d car=%d snap=%d pos=(%.1f, %.1f, %.1f)",
-                                         static_cast<u32>(lpUpdateData->mu16FramesSinceStart),
-                                         static_cast<s32>(GetPlayerID()),
-                                         static_cast<s32>(leActiveRaceCarIndex),
-                                         lNetworkDriverControls.mbSnap ? 1 : 0,
-                                         lpUpdateData->mMatrix.wAxis.x, lpUpdateData->mMatrix.wAxis.y,
-                                         lpUpdateData->mMatrix.wAxis.z);
+                if (BrnNetHarnessPC::WitnessEnabled())
+                {
+                    BrnNetHarnessPC::Witness("update-in", "applied since=%u from=%d car=%d snap=%d pos=(%.1f, %.1f, %.1f)",
+                                             static_cast<u32>(lpUpdateData->mu16FramesSinceStart),
+                                             static_cast<s32>(GetPlayerID()),
+                                             static_cast<s32>(leActiveRaceCarIndex),
+                                             lNetworkDriverControls.mbSnap ? 1 : 0,
+                                             lpUpdateData->mMatrix.wAxis.x, lpUpdateData->mMatrix.wAxis.y,
+                                             lpUpdateData->mMatrix.wAxis.z);
+                }
             }
         }
 

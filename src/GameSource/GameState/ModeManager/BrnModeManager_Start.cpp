@@ -35,6 +35,8 @@
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"   // [FLAG PC witness] [net] mode-start (BP_LAN runs only)
+
 #include <cstddef>   // offsetof (the action-record layout pins)
 #include <cstdlib>   // getenv (the [showtime] BRN_SHOWTIME_DIAG witness)
 #include <cstring>   // std::memcpy / std::memset (the opaque frame-rate-request write; the
@@ -265,6 +267,23 @@ void ModeManager::StartGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     // scoringSystem). THE stunt-race seat: StuntAttackMode::Start @0x82331E98.
     mpCurrentGameMode->Start(lpStartGameModeParams, &lGameModeParams, &mScoringSystem);
 
+    // [FLAG PC witness] What the mode's Start left in the params. Members only: on a mode whose
+    // Start fills nothing these are the stack's bytes and the accessors would assert on the
+    // never-constructed arrays. Bounded, and silent unless BP_LAN=1 or a harness role is set.
+    if (mpCurrentGameMode->IsOnline())
+    {
+        if (BrnNetHarnessPC::WitnessEnabled())
+        {
+            BrnNetHarnessPC::Witness("mode-start", "mode=%s type=%d params-type=%d params-online=%d light=%08X density=%.2f net-players=%d teams=%d,%d,%d,%d",
+                                     mpCurrentGameMode->GetName(), static_cast<s32>(meCurrentGameModeType),
+                                     static_cast<s32>(lGameModeParams.GetGameModeType()), lGameModeParams.mbIsOnline ? 1 : 0,
+                                     static_cast<u32>(lGameModeParams.mTrafficLightTriggerId), lGameModeParams.mfTrafficDensityScale,
+                                     static_cast<s32>(lGameModeParams.miNumNetworkPlayers),
+                                     static_cast<s32>(lGameModeParams.maePlayerTeam[0]), static_cast<s32>(lGameModeParams.maePlayerTeam[1]),
+                                     static_cast<s32>(lGameModeParams.maePlayerTeam[2]), static_cast<s32>(lGameModeParams.maePlayerTeam[3]));
+        }
+    }
+
     // `lbz r11, 0xAC(mode)` == GameMode::mbIsOnline (+172), i.e. IsOnline().
     if (!mpCurrentGameMode->IsOnline())
     {
@@ -274,6 +293,17 @@ void ModeManager::StartGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     SetupPathfinding(lpStartGameModeParams, &lGameModeParams);
     SetupOpponentData(lpStartGameModeParams, &lGameModeParams);
     SetupCheckpointDistricts(&lGameModeParams);
+
+    // [FLAG PC witness] The two arrays, once the setup passes have read them without firing.
+    if (mpCurrentGameMode->IsOnline())
+    {
+        if (BrnNetHarnessPC::WitnessEnabled())
+        {
+            BrnNetHarnessPC::Witness("mode-start", "mode=%s checkpoints=%d start-locations=%d",
+                                     mpCurrentGameMode->GetName(), lGameModeParams.GetCheckpointCount(),
+                                     lGameModeParams.GetStartLocationCount());
+        }
+    }
 
     // [x] UN-PARKED 2026-08-26 (fix round). Both blockers this leg was parked on have landed:
     // BrnGameMode.h now carries the console 26-slot order with

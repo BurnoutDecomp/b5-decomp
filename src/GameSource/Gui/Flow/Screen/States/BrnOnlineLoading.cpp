@@ -30,6 +30,7 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // GuiEventAptTriggerPayload
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue / AddEvent
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"             // [FLAG PC witness] [net] on-loading
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiAudioTriggerEvent / GuiOverlayRequest
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"                      // OptionsDataProfile::AddReceivedOnlineGameOptions
 #include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
@@ -253,6 +254,12 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::OnLeave()
     {
+        if (BrnNetHarnessPC::WitnessEnabled())
+        {
+            BrnNetHarnessPC::Witness("on-loading", "leave substate=%d round=%d disconnected=%d params-mode=%d params-light=%08X",   // [FLAG PC witness]
+                                     static_cast<s32>(meSubState), miCurrentRoundDisplayed, mbDisconnected ? 1 : 0,
+                                     mCurrentGameParams.meGameMode, mCurrentGameParams.maEvents[0].GetTrafficLightTriggerId());
+        }
         // The console inlines StateInterface::PlayAptMovie here: the empty name at level 3
         // clears the level.
         mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
@@ -349,6 +356,10 @@ namespace BrnGui
             }
 
             case KI_EVENT_ADVANCE:
+                if (BrnNetHarnessPC::WitnessEnabled())
+                {
+                    BrnNetHarnessPC::Witness("on-loading", "advance (137) substate=%d", static_cast<s32>(meSubState));
+                }   // [FLAG PC witness]
                 if (mbDisconnected)
                 {
                     CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
@@ -415,6 +426,10 @@ namespace BrnGui
                                                      static_cast<u32>(miNumResourcesToLoad)))
             {
                 PostWire(mpStateInterface, GuiCommandWire16<479>());
+                if (BrnNetHarnessPC::WitnessEnabled())
+                {
+                    BrnNetHarnessPC::Witness("on-loading", "resources loaded, components next");
+                }   // [FLAG PC witness]
                 mpStateInterface->PlayAptMovie(gGuiResourceIdentifier[KU_LOADING_MOVIE_RESOURCE],
                                                KI_APT_MOVIE_LEVEL);
                 meSubState = E_SUBSTATE_LOADING_COMPONENTS;
@@ -434,6 +449,10 @@ namespace BrnGui
             meSubState = E_SUBSTATE_LOADING_ROUTE_INFO;
 
             PostWire(mpStateInterface, GuiCommandWire16<260>());
+            if (BrnNetHarnessPC::WitnessEnabled())
+            {
+                BrnNetHarnessPC::Witness("on-loading", "post 260 (request game params)");
+            }   // [FLAG PC witness]
 
             // Bring the main map up on both the view and the internal channels.
             GuiEventShowHideSatNav lShowSatNav;
@@ -567,6 +586,11 @@ namespace BrnGui
     {
         const GuiCachePayload* lpPayload = static_cast<const GuiCachePayload*>(lpEvent);
 
+        if (BrnNetHarnessPC::WitnessEnabled())
+        {
+            BrnNetHarnessPC::Witness("on-loading-cache", "event 64 substate=%d all=%d", static_cast<s32>(meSubState),   // [FLAG PC witness]
+                                     (mpGuiCache != 0 && mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN)) ? 1 : 0);
+        }
         CGS_ASSERT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update");
 
         if (mpGuiCache == 0)
@@ -598,6 +622,13 @@ namespace BrnGui
         if (lpTrigger->meEventType != CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
         {
             return;
+        }
+
+        if (BrnNetHarnessPC::WitnessEnabled())
+        {
+            BrnNetHarnessPC::Witness("on-loading-onload", "%s substate=%d all=%d", lpTrigger->mpacComponentName,   // [FLAG PC witness]
+                                     static_cast<s32>(meSubState),
+                                     (mpGuiCache != 0 && mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN)) ? 1 : 0);
         }
 
         for (s32 liPlayer = 0; liPlayer < KI_MAX_PLAYERS; ++liPlayer)
@@ -638,6 +669,12 @@ namespace BrnGui
         CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineLoading::HandleGameParamsChangedEvent");
 
         std::memcpy(&mCurrentGameParams, lpEvent, sizeof(mCurrentGameParams));
+        if (BrnNetHarnessPC::WitnessEnabled())
+        {
+            BrnNetHarnessPC::Witness("on-loading", "params mode=%d light=%08X landmarks=%d",   // [FLAG PC witness]
+                                     mCurrentGameParams.meGameMode, mCurrentGameParams.maEvents[0].GetTrafficLightTriggerId(),
+                                     mCurrentGameParams.maEvents[0].GetNumLandmarks());
+        }
 
         if (mRouteInfoDisplay.IsComponentLoaded())
         {

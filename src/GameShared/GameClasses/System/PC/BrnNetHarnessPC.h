@@ -28,16 +28,32 @@
 //                        the instance is still in the game.
 //   BRN_NET_SCRIPT=list  post arbitrary GUI records. list = entries separated by ';', each
 //                          <seconds>:<gui|net>:<event id>[:<word>/<word>/...]
-//                        gui -> the GUI out queue, right before BridgeGuiToGameState (the game
-//                               state sees it this update, the network the next one, exactly like
-//                               a record a GUI screen posted); needs the InjectGuiEvents hook.
-//                        net -> the network post-simulation GUI queue only (the Update hook).
+//                        gui -> the GUI module's out queue, right before BridgeGuiToGameState. Only
+//                               the game state sees it: the network side appends the GUI OUTPUT
+//                               BUFFER's queue, a different queue (measured: GUI 54 posted here never
+//                               reached StateManager::ProcessGuiEvents). Needs InjectGuiEvents.
+//                        net -> the network post-simulation GUI queue only (the Update hook). A
+//                               record for the network StateManager goes here.
+//                        out -> the GUI output buffer's out queue, right before
+//                               TranslateGuiEventsToNetworkEvents, which reads only that queue and
+//                               turns e.g. GUI 281 into NetworkInLoadingScreenShown.
 //                        A word is decimal or 0x-hex (32 bits); a 'q' prefix makes it 64 bits and
 //                        puts the payload at record offset 16 (an 8-aligned payload), otherwise
 //                        at 12. The record is the GuiEventWrapper form {size, id, offset, payload}
 //                        queued on channel 40. Example (GUI 573 challenge select, selector 0,
 //                        style 1): "20:gui:573:q0x0123456789ABCDEF/0/1".
 //                        No ',' '=' or whitespace inside (flow_run's -DiagEnv splits on them).
+//   BRN_NET_TEAM=<seconds>:<team>
+//                        put the local player on that team (1 red, 2 blue), through the calls GUI 265
+//                        (switch team) makes. That event only swaps red and blue, and nothing on
+//                        this build puts a lobby player on a first team, so road rage's launch
+//                        check ("exactly two teams") cannot pass unattended without this.
+//   BRN_NET_START_MODE=<seconds>:<game mode>
+//                        post GUI event 257 (GuiEventNetworkGameParams), the record the online game
+//                        options screen posts: one round in that mode, on the first preset online
+//                        event that has landmarks. Its 480-byte payload does not fit BRN_NET_SCRIPT.
+//                        Waits for the GUI cache's preset list to fill. The launch itself is a
+//                        BRN_NET_SCRIPT entry: GUI 54 (launch) or 56 (force launch).
 //
 // Witness(): bounded "[net] <site> ..." log lines at the network chokepoints (sign-in, create,
 // join, player list). WitnessTag(): the same with another tag ("[nettraf] ...", "[netui] ...").
@@ -52,6 +68,10 @@ namespace CgsModule
 namespace BrnNetwork
 {
     class BrnNetworkManager;
+}
+namespace BrnGui
+{
+    class GuiCache;
 }
 
 namespace BrnNetHarnessPC
@@ -73,6 +93,12 @@ namespace BrnNetHarnessPC
     // Hook 3, in BrnGameModule's game-state post-world pass: right before BridgeGuiToGameState
     // reads the GUI out queue. Posts the due BRN_NET_SCRIPT "gui" records into it.
     void InjectGuiEvents(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue);
+
+    // Hook 4, right after hook 1 and into the same queue. Posts the due BRN_NET_START_MODE record.
+    void InjectStartMode(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue, const BrnGui::GuiCache* lpGuiCache);
+
+    // Hook 5, right before TranslateGuiEventsToNetworkEvents. Posts the due "out" script records.
+    void InjectGuiOutputBuffer(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutputBufferQueue);
 
     // True when witness lines print (BP_LAN=1 or a harness role).
     bool WitnessEnabled();

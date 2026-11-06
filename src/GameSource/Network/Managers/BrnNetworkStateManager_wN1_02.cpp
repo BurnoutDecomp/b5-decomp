@@ -447,7 +447,10 @@ namespace BrnNetwork
         CgsNetwork::ServerInterfaceGames* lpGames =
             lpStateManager->mpNetworkManager->GetServerInterface()->GetGameComponent();
         const bool lbInGame = lbSuccess && lpGames->IsLocalPlayerInGame();
-        BrnNetHarnessPC::Witness("create", "finished success=%d inGame=%d", lbSuccess ? 1 : 0, lbInGame ? 1 : 0);
+        if (BrnNetHarnessPC::WitnessEnabled())
+        {
+            BrnNetHarnessPC::Witness("create", "finished success=%d inGame=%d", lbSuccess ? 1 : 0, lbInGame ? 1 : 0);
+        }
 
         if (lbInGame)
         {
@@ -550,7 +553,10 @@ namespace BrnNetwork
 
         const bool lbInGame =
             lbSuccess && lpStateManager->mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame();
-        BrnNetHarnessPC::Witness("join", "finished success=%d inGame=%d", lbSuccess ? 1 : 0, lbInGame ? 1 : 0);
+        if (BrnNetHarnessPC::WitnessEnabled())
+        {
+            BrnNetHarnessPC::Witness("join", "finished success=%d inGame=%d", lbSuccess ? 1 : 0, lbInGame ? 1 : 0);
+        }
 
         lpStateManager->mpNetworkManager->GetNetworkInviteManager()->JoinGameComplete(lbInGame);
 
@@ -671,7 +677,10 @@ namespace BrnNetwork
 
         const bool lbInGame =
             lbSuccess && lpStateManager->mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame();
-        BrnNetHarnessPC::Witness("quickjoin", "finished success=%d inGame=%d", lbSuccess ? 1 : 0, lbInGame ? 1 : 0);
+        if (BrnNetHarnessPC::WitnessEnabled())
+        {
+            BrnNetHarnessPC::Witness("quickjoin", "finished success=%d inGame=%d", lbSuccess ? 1 : 0, lbInGame ? 1 : 0);
+        }
 
         if (lbInGame)
         {
@@ -1014,7 +1023,10 @@ namespace BrnNetwork
     {
         CGS_ASSERT(!lbRefreshOnly || (lbStartingAfterJoin && lbStartingAfterOnlineEvent && lbForceStartFreeburnLobby)==false,
                    "!lbRefreshOnly || (lbStartingAfterJoin && lbStartingAfterOnlineEvent && lbForceStartFreeburnLobby)==false");
-        BrnNetHarnessPC::Witness("fblobby", "start afterJoin=%d afterOnlineEvent=%d force=%d refreshOnly=%d", lbStartingAfterJoin ? 1 : 0, lbStartingAfterOnlineEvent ? 1 : 0, lbForceStartFreeburnLobby ? 1 : 0, lbRefreshOnly ? 1 : 0);
+        if (BrnNetHarnessPC::WitnessEnabled())
+        {
+            BrnNetHarnessPC::Witness("fblobby", "start afterJoin=%d afterOnlineEvent=%d force=%d refreshOnly=%d", lbStartingAfterJoin ? 1 : 0, lbStartingAfterOnlineEvent ? 1 : 0, lbForceStartFreeburnLobby ? 1 : 0, lbRefreshOnly ? 1 : 0);
+        }
 
         PlayerParams                 lPlayerParams;
         GameParams                   lGameParams;
@@ -1296,7 +1308,10 @@ namespace BrnNetwork
 
             const bool lbLoggedIn = mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn();
             const LoginManagerBase::ESignInType leSignInType = mpNetworkManager->GetLoginManager()->GetCompletedSignInType();
-            BrnNetHarnessPC::Witness("login", "finished loggedIn=%d signInType=%d", lbLoggedIn ? 1 : 0, static_cast<s32>(leSignInType));
+            if (BrnNetHarnessPC::WitnessEnabled())
+            {
+                BrnNetHarnessPC::Witness("login", "finished loggedIn=%d signInType=%d", lbLoggedIn ? 1 : 0, static_cast<s32>(leSignInType));
+            }
 
             meState = E_STATE_COUNT;
             mpNetworkManager->GetNetworkInviteManager()->LogInComplete(lbLoggedIn);

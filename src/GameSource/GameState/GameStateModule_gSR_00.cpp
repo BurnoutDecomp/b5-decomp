@@ -199,6 +199,17 @@ bool SnapDiagEnabled()
     return sbDiag && CgsDev::Log::gpDebugPrint != 0;
 }
 
+// [FLAG PC bring-up, NOT in the X360 binary] BRN_START_EVENT_FORCE_FACEOFF -- the only way to run
+// E_MODE_FACE_OFF on this build. Nothing can select it: RaceEventData::EModeType has no such value,
+// ProgressionManager::GetEvent never returns 1, and the other StartGameModeParams::Construct callers
+// pass 15, 2, 16, 0 or an online mode. OFF unless the environment carries it, cached once like the
+// rungs around it, so a run without it is the console's path.
+bool HarnessForceFaceOffEnabled()
+{
+    static const bool sbForce = (getenv("BRN_START_EVENT_FORCE_FACEOFF") != 0);
+    return sbForce;
+}
+
 // [DIAG] the `[showtime]` rung -- NOT IN THE X360 BINARY, same guard and same logger.
 bool ShowtimeDiagEnabled()
 {
@@ -1094,8 +1105,12 @@ void GameStateModule::StartModeAtLights(const GameStateModuleIO::PreWorldInputBu
     // ARTIST 82396F08..82396F20: use the same debug-mode override as junction discovery.
     const s32 liDataGameType = static_cast<s32>(
         mProgressionManager.GetGameModeForEvent(lpEventData));
-    const GameStateModuleIO::EGameModeType leGameModeType =
+    GameStateModuleIO::EGameModeType leGameModeType =
         static_cast<GameStateModuleIO::EGameModeType>(mProgressionManager.GetEvent(liDataGameType));
+    if (HarnessForceFaceOffEnabled())
+    {
+        leGameModeType = GameStateModuleIO::E_MODE_FACE_OFF;
+    }
 
     // ---- Trap 3: the special-event car gate (@0x82396F28..0x82396FAC) -----------------------
     const CgsID lSpecialEventCarId = lpEventData->GetSpecialEventCarId();
@@ -1258,6 +1273,17 @@ void GameStateModule::StartModeAtLights(const GameStateModuleIO::PreWorldInputBu
     // and mounted; it is what runs SetupGameMode -> PrepareForMode (the 2272-byte action 23) and
     // seats the concrete GameMode.
     mModeManager.StartGameMode(lpOutput, &lStartGameModeParams);
+
+    if (HarnessForceFaceOffEnabled() && CgsDev::Log::gpDebugPrint != 0)
+    {
+        *CgsDev::Log::gpDebugPrint
+            << "[faceoff] FLAG PC witness: forced mode started, name "
+            << mModeManager.GetCurrentGameMode()->GetName()
+            << " mode " << static_cast<s32>(mModeManager.GetCurrentGameModeType())
+            << " rivals " << mModeManager.GetCurrentGameModeParams()->GetNumRivals()
+            << " checkpoints " << mModeManager.GetCurrentGameModeParams()->GetCheckpointCount()
+            << " eventJunction " << luEventJunctionID << "\n";
+    }
 
     // [PARKED] THE POST-START TAIL, both halves (@0x823972B0..0x823972FC):
     //   (a) five stores into the embedded StreetManager (base this + 284520):
