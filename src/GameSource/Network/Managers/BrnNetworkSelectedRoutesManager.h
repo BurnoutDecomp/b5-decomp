@@ -112,7 +112,7 @@ namespace BrnNetwork
         static void _SelectedRoutesMessageArrivedCallback( CgsNetwork::ReliableMessage* lpMessage,
                                                            NetworkPlayerID lSendingPlayerID,
                                                            void* lpUserData );
-        static void _SelectedRoutesMessageDeliveredCallback( bool lbDelivered, bool lbWasReliable,
+        static void _SelectedRoutesMessageDeliveredCallback( bool lbDelivered, bool lbFakeNack,  // DWARF: lbSuccess, lbFakeNack
                                                             CgsNetwork::SignalMessage* lpMessage,
                                                             NetworkPlayerID lToPlayerID,
                                                             void* lpUserData );

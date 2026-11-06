@@ -28,6 +28,9 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"        // CgsNetwork::PlayerManager
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"        // CgsNetwork::NetworkPlayer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint (the fake-nack warning)
+#include "GameShared/GameClasses/Development/CgsStrStream.h"                // StrStreamBase::operator<<
+#include "GameShared/GameClasses/Network/Packeting/Messages/CgsSignalMessage.h"  // the ack's Message::mu16Frame
 
 namespace BrnNetwork
 {
@@ -457,15 +460,46 @@ namespace BrnNetwork
     }
 
     // ---------------------------------------------------------------------------------
-    // _SelectedRoutesMessageDeliveredCallback  (inlined-only; no recovered body -- DWARF :167)
-    //   The reliable-send ack/nack handler. No standalone X360 symbol and no recovered body;
-    //   reproduced as a no-op. FLAGGED: body not attested -- the empty handler is the
-    //   conventional default for a delivered callback this manager registers but does not act
-    //   on (the round-resend is driven by the round bit sets, not the ack).
+    // _SelectedRoutesMessageDeliveredCallback @ 0x825537A0 (DWARF :533, lbSuccess / lbFakeNack)
+    //   The ack names the round by its send frame: the message's frame is matched against the
+    //   player's per-round send stamps. An ack marks that round received, which is the only
+    //   thing that ever sets mRoundsReceived and so what lets HaveAllPlayersReceivedRoutes, and
+    //   with it the host's launch, go true. A nack clears the round's sent bit, so SendRouteData
+    //   sends it again. A frame matching no stamp is ignored.
     // ---------------------------------------------------------------------------------
     void SelectedRoutesManager::_SelectedRoutesMessageDeliveredCallback(
-        bool /*lbDelivered*/, bool /*lbWasReliable*/, CgsNetwork::SignalMessage* /*lpMessage*/,
-        NetworkPlayerID /*lToPlayerID*/, void* /*lpUserData*/)
+        bool lbDelivered, bool lbFakeNack, CgsNetwork::SignalMessage* lpMessage,
+        NetworkPlayerID lToPlayerID, void* lpUserData)
     {
+        SelectedRoutesManager* lpManager = static_cast<SelectedRoutesManager*>(lpUserData);
+
+        if (lbFakeNack && CgsDev::Log::gpDebugPrint != nullptr)
+        {
+            *CgsDev::Log::gpDebugPrint << "WARNING: Fack Nack found in "
+                                       << "BrnNetwork::SelectedRoutesManager::_SelectedRoutesMessageDeliveredCallback"
+                                       << "\n";
+        }
+
+        SelectedRoutesData* lpData = lpManager->GetSelectedRoutesDataEntry(lToPlayerID);
+        CGS_ASSERT(lpData != 0, "lpData");
+
+        u32 luRound = 0;
+        while (luRound < KI_MAX_ROUNDS && lpData->mau16FrameNumRoundSent[luRound] != lpMessage->mu16Frame)
+        {
+            ++luRound;
+        }
+        if (luRound == KI_MAX_ROUNDS)
+        {
+            return;
+        }
+
+        if (lbDelivered)
+        {
+            lpData->mRoundsReceived.SetBit(luRound);
+        }
+        else
+        {
+            lpData->mRoundsSent.UnSetBit(luRound);
+        }
     }
 } // namespace BrnNetwork
