@@ -487,10 +487,6 @@ namespace CgsSceneManager
 
         FrustumTestJobData    maFrustumTestJobData[KU_NUM_FRUSTUM_TEST_JOBS];  // +0x8E700
         JobCoarseResultBuffer maJobResultBuffers[KU_NUM_FRUSTUM_TEST_JOBS];    // +0x90700
-        // The 0x4000-byte block each result buffer's mpu16Buffer points at. On the X360
-        // JobCoarseResultBuffer::Construct @0x828BB128 carves it from the same allocator;
-        // held inline here so the buffer needs no second allocation.
-        u16  maJobResultStorage[KU_NUM_FRUSTUM_TEST_JOBS][KU_JOB_RESULT_BUFFER_SIZE];
         bool mabFrustumJobActive[KU_NUM_FRUSTUM_TEST_JOBS];      // +0x90B00
         bool mabFrustumJobRequested[KU_NUM_FRUSTUM_TEST_JOBS];   // +0x90B04
     };
