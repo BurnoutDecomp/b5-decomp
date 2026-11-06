@@ -59,10 +59,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface + BrnPhysics::Vehicle::RaceCarState (DoDispatch's TempRaceCarStateCache seam)
 #include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h" // BrnNetHarnessPC::InjectGuiEvents (the LAN test harness hook)
 
-// The in-game flow-state latch (BrnGameMainFlowInGameState.cpp) -- the world-load
-// stand-in below keys its loading-complete report on it.
 namespace renderengine { void PublishPresentDiagnosticsPC(); }
-namespace BrnGameMainFlowController { extern bool gBrnInGameStateActive; }
 
 // ---- Xbox 360 XDK entry point (real prototype lives in the XDK). Displays the system
 // "dirty disc" error UI for the given signed-in user. ------------------------------------
@@ -4593,22 +4590,6 @@ namespace BrnGame
 
                     // The wrapper has already posted snapshot time26 in the native order.
 
-                    // FLAG world-load stand-in: the console's GameState side reports the
-                    // world-load status as game action 191, which the game module's
-                    // translator (GameBridgeGameStateToX @0x823E9CE0, case 191) forwards to
-                    // the GUI as GuiEvent<136> (load started) / GuiEvent<137> (load
-                    // complete). The SCREEN flow's LOADING state blocks on 137 before it
-                    // hands the flow to the in-game state. The PC has no world streaming
-                    // yet, so its "world load" completes trivially: report loading-complete
-                    // each sub-step while the in-game flow state is live (delivery is
-                    // registration-filtered, so the event only reaches a state that is
-                    // actually waiting on it). The real action-191 producer replaces this
-                    // when the world-streaming pipeline lands.
-                    if (BrnGameMainFlowController::gBrnInGameStateActive)
-                    {
-                        CgsGui::GuiEvent<137> lWorldLoadComplete;
-                        CgsGui::GuiModule::AddGuiEvent(lWorldLoadComplete, mpGuiInputBuffer);
-                    }
                     // The real PreWorld action193 -> wrapper -> canonical GUI350 route
                     // replaces the direct stand-in (requires Traffic checkpoint04).
                     // Retain the existing read-only profile ownership diagnostic.
