@@ -1064,12 +1064,7 @@ namespace BrnGui
             mSatNavComponent.RecvEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lSatNavRecord), 213);
 
-            // X360 @0x8247A12C: `lwz r11, 0x4060(cache)` (== mpMapIconManager) then
-            // `stwx r29(=0), r11, 0xAA08` -- a zero store 0xAA08 bytes into the map-icon
-            // manager. [FLAG deferred] BrnGui::MapIconManager is not reconstructed to that
-            // depth and nothing in the tree names the field, so guessing a member here
-            // would be a fabricated write into a live object.
-            // DELETE-WHEN: the MapIconManager recon names +0xAA08.
+            mpCache->GetMapIconManager()->meIconFilterMode = MapIconManager::E_ICONFILTER_ALL;   // @0x8247A12C
         }
         else
         {
