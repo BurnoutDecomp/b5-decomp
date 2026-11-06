@@ -31,6 +31,13 @@ namespace Gen
             Change(const_cast<Collection*>(lrMutable.GetCollectionWithDefault()));
         }
 
+        // DecFIGS presentationactionlist.h:205 names the layout; only the count is homed.
+        struct _LayoutStruct
+        {
+            u8  maUnmodelled[0x1D40];
+            u16 mu16NumOfActions;   // +0x1D40
+        };
+
         struct ResolvedAction
         {
             u64 muStringId;
@@ -43,8 +50,14 @@ namespace Gen
             u8  mu8MixerOutput;
         };
 
-        u32 NumOfActions() const;
-        bool Resolve(u32 auAction, u64 auStringId, u64 auScreenId,
+        // ARTIST Attach @0x8269E314 / CalculateDataOffsets @0x82687E04: lhz +0x1D40.
+        u16 NumOfActions() const;
+        // DecFIGS presentationactionlist.h:205; ARTIST 0x82687E50..0x82687E70: the
+        // element when the index is inside the array's length, else the default area.
+        s32 Actions(u32 auIndex) const;
+        // auFirst/auLast: PresentationEffect::mau8DataOffsets/mau8DataEnds[auAction]
+        // (Resolve @0x82687990 reads +0x240/+0x24E and walks first..last inclusive).
+        bool Resolve(u32 auAction, u32 auFirst, u32 auLast, u64 auStringId, u64 auScreenId,
                      ResolvedAction& arResult) const;
     };
 
@@ -61,18 +74,24 @@ namespace Gen
             mpAttributeData = DefaultDataArea(0x1D48u);
     }
 
-    inline u32 presentationactionlist::NumOfActions() const
+    inline u16 presentationactionlist::NumOfActions() const
+    {
+        return static_cast<const _LayoutStruct*>(mpAttributeData)->mu16NumOfActions;
+    }
+
+    inline s32 presentationactionlist::Actions(u32 auIndex) const
     {
         const u8* lpData = static_cast<const u8*>(mpAttributeData);
-        return reinterpret_cast<const Private*>(lpData + 0x1418u)->GetLength();
+        if (auIndex < reinterpret_cast<const Private*>(lpData + 0x1418u)->GetLength())
+            return reinterpret_cast<const s32*>(lpData + 0x1420u)[auIndex];
+        return *static_cast<const s32*>(DefaultDataArea(4u));
     }
 
     inline bool presentationactionlist::Resolve(
-        u32 auAction, u64 auStringId, u64 auScreenId,
+        u32 auAction, u32 auFirst, u32 auLast, u64 auStringId, u64 auScreenId,
         ResolvedAction& arResult) const
     {
         const u8* lpData = static_cast<const u8*>(mpAttributeData);
-        const u32 luCount = NumOfActions();
         const u64* lpaScreen = reinterpret_cast<const u64*>(lpData + 0x008u);
         const u64* lpaString = reinterpret_cast<const u64*>(lpData + 0x810u);
         const u32* lpaSpec   = reinterpret_cast<const u32*>(lpData + 0x1018u);
@@ -92,7 +111,7 @@ namespace Gen
             if ((liPass == 1 && auStringId == 0) ||
                 (liPass == 2 && auScreenId == 0))
                 continue;
-            for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
+            for (u32 luIndex = auFirst; luIndex <= auLast; ++luIndex)
             {
                 if (lpaAction[luIndex] == auAction &&
                     lpaString[luIndex] == luString &&
