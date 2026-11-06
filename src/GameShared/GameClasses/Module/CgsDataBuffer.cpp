@@ -5,13 +5,6 @@ void CgsModule::DataBuffer::SetDataStructure(DataStructure *pDataStructure)
     mpDataStructure = pDataStructure;
 }
 
-void CgsModule::DataBuffer::Construct()
-{
-    mxStatusFlags.Clear();
-    mpDataStructure = 0;
-    mbMultiThreaded = false;
-}
-
 bool CgsModule::DataBuffer::Prepare()
 {
     mxStatusFlags.Clear();

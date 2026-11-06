@@ -449,7 +449,7 @@ public:
         // the output buffer, which is exactly the buffer LoadGlobalResources publishes its
         // resource requests into -- without it the module can never ask for anything.
         bool Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* lpOutput,
-                      const CgsResource::ResourceHandle& lrDistrictMapHandle );
+                      CgsResource::ResourceHandle lDistrictMapHandle );
 
         // X360 0x82300730. The module's own resumable global-resource load: acquire
         // "CarColours" (pool 5), stream "Vehicles/VEHICLETEX.BIN" into the CarShared pool

@@ -683,8 +683,16 @@ void RaceCarWheelGraphicsStreamer::OnAssetUnloading( s32 liActiveRaceCar )
 void RaceCarStreamer::Prepare( const BrnResource::VehicleList* lpVehicleList,
                                const BrnResource::WheelList* lpWheelList )
 {
-    CGS_ASSERT( lpVehicleList != 0, "lpVehicleList != NULL" );   // X360 BrnRaceCarStreamer.cpp:87
-    (void)lpWheelList;   // FLAG: the console stores only the vehicle list at this site
+    if( lpVehicleList == 0 )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(
+            "lpVehicleList != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarStreamer.cpp",
+            87);
+        CgsDev::Assert::EndAssert();
+    }
+    (void)lpWheelList;
     mpVehicleList = lpVehicleList;
 }
 

@@ -123,7 +123,7 @@ namespace CgsInput
 
     private:
         // X360 0x828E7238. Reset the embedded manager and construct the four pads.
-        void InitializePads();
+        __declspec(noinline) void InitializePads();
 
         // X360 0x828E7350. Accumulate the pad's control values and clamped axes.
         void FillRawData(f32* lafNewRawData, InputIO::PadOutputInformation* lpPadInfo, s32 liPortIndex);

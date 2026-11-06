@@ -168,23 +168,7 @@ static const f32 KF_CROSS_PRODUCT_EPSILON = 1.1920929e-07f;
 // Every draw is the same three instructions -- `ld seed ; srdi hi,32 ; mulld K ; addi 1 ; std`
 // -- which is CgsNumeric::Random::RandomUInt() verbatim (CgsRandom.cpp:52).
 //
-namespace
-{
-    CgsNumeric::Random& GetModuleRandom()
-    {
-        static CgsNumeric::Random sModuleRandom;
-        static bool               sbConstructed = false;
-
-        if (!sbConstructed)
-        {
-            sModuleRandom.Construct();
-            sbConstructed = true;
-        }
-
-        return sModuleRandom;
-    }
-
-}
+extern CgsNumeric::Random mRandom;
 
 // ============================================================================================
 // GetPlayerRaceCar @ 0x822BA068
@@ -573,7 +557,7 @@ void RaceCarEntityModule::UpdateInAndOutOfRangeCars(
                         f32               lfResetSpeed;
                         f32               lfResetDistance = KF_ZERO;   // fmr f30, f29
 
-                        const u32  luDraw = GetModuleRandom().RandomUInt();
+                        const u32  luDraw = mRandom.RandomUInt();
                         const bool lbFromTurnings =
                             (meGameModeType ==
                              BrnGameState::GameStateModuleIO::E_MODE_MARKED_MAN)
@@ -853,13 +837,13 @@ s32 RaceCarEntityModule::GetRandomCarColour( s32 liPaletteIndex, s32 liColourInd
 {
     if( liColourIndex != -1 && !IsCarColourInUse( liPaletteIndex, liColourIndex ) )
     {
-        if( ( GetModuleRandom().RandomUInt() & 1u ) != 0u )
+        if( ( mRandom.RandomUInt() & 1u ) != 0u )
         {
             return liColourIndex;
         }
     }
 
-    s32 liTableIndex = static_cast<s32>( GetModuleRandom().RandomUInt()
+    s32 liTableIndex = static_cast<s32>( mRandom.RandomUInt()
                                          % static_cast<u32>( KI_NUM_AI_CAR_COLOURS ) );
     for( s32 liTry = 0; liTry < KI_NUM_AI_CAR_COLOURS; ++liTry )
     {
