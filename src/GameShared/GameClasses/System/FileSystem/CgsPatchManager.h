@@ -41,7 +41,7 @@ namespace CgsFileSystem
     // CgsPatchManager.h - the patch overlay manager. Instance layout is the faithful X360 member
     // ORDER (members reached BY NAME, never by raw offset); the X360 asm of the methods below is the
     // authority for behaviour. Embedded by value inside the file system; Construct stashes the
-    // owning FileSystem so the background search thread can allocate its scratch through it.
+    // resource allocator used for the map storage and directory-search scratch.
     class PatchManager
     {
     public:
@@ -55,8 +55,8 @@ namespace CgsFileSystem
         // @0x828F0980 (boot trace). Stash the resource allocator, zero the current-patch index, bring
         // up the path-hash map (length 0x1000) over allocator-supplied entry storage, clear the
         // "patching" flag and publish the singleton instance pointer. `lpAllocator` is the object the
-        // X360 stores at +0 and whose virtual Alloc carves the map's entry array (and, later, the
-        // directory-search thread's scratch).
+        // X360 stores at +0 and whose virtual DoAllocate/DoFree carves map entries and the
+        // directory-search thread's scan-lifetime scratch.
         void Construct(rw::IResourceAllocator* lpAllocator);
 
         // @0x828F8F80. Register a new patch folder `lpcFolder` with priority key `liValue`, then
@@ -94,12 +94,12 @@ namespace CgsFileSystem
         void AddFileToCurrentPatch(const char* lpcFile);
 
         // ---- instance layout (faithful X360 member order; X360 members only) ----
-        rw::IResourceAllocator*              mpAllocator;                   // +0    (0)    entry storage
+        rw::IResourceAllocator*              mpAllocator;                   // +0    (0)    resource storage
         PatchEntry                           maPatches[KU_MAX_PATCHES];     // +4    (4)    32 * 68
         s32                                  muCurrentPatchIndex;           // +0x884 (2180)
         CgsContainers::LinearSOAHashTable<s32, u32> mPatchFileMap;             // +0x888 (2184)
         bool                                 mbPatching;                    // +0x898 (2200)
-        s32                                  miSearchHandleCount;           // +0x89C (2204) scan result
+        void*                                mpSearchScratch;               // +0x89C (2204) lane-0 scratch; freed after scan
         EA::Thread::Thread                   mDirSearchThread;              // +0x8A0 (2208)
     };
 }
