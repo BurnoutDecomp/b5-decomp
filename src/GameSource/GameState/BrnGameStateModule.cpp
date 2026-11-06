@@ -2175,25 +2175,6 @@ void GameStateModule::OnProfileLoaded(GameStateModuleIO::OutputBuffer* lpOutput,
 
     RequestUnpause(2, lpOutputActionQueue);
 
-    // [witness] NOT IN THE X360 BINARY: one line per profile load (the boot, or an in-game load). The two car
-    // names are the ids' printable form (CgsIDConvertToString @0x82815D30), so a live case can match the car
-    // the world then streams in ("STRM: Adding racecar ... model=VEH_<name>").
-    if (CgsDev::Log::gpDebugPrint != 0)
-    {
-        const Vector3 lSavedPosition = lpProfile->GetCarPosition();
-        char lacSpawnCarName[KI_CGSID_STRING_LEN];
-        char lacProfileCarName[KI_CGSID_STRING_LEN];
-        CgsIDConvertToString(lSpawnCarId, lacSpawnCarName);
-        CgsIDConvertToString(lpProfile->GetSpawnCarId(), lacProfileCarName);
-        *CgsDev::Log::gpDebugPrint
-            << "[GameStateModule::OnProfileLoaded] junkyard=" << static_cast<u64>(lJunkyardId)
-            << " spawnCar=" << lacSpawnCarName
-            << " profileCar=" << lacProfileCarName
-            << " rank=" << static_cast<s32>(static_cast<s8>(mProgressionManager.GetProgressionRank()))
-            << " maxCars=" << mProgressionManager.GetMaxCarCount()
-            << " savedPos=(" << lSavedPosition.mV.x << ", " << lSavedPosition.mV.y << ", " << lSavedPosition.mV.z
-            << ")\n";
-    }
 }
 
 // ============================================================================

@@ -568,6 +568,17 @@ namespace BrnResource
             CgsDev::Assert::EndAssert();
         }
 
+        void FireTrackResourceAssert(const char* lpcMessage, s32 liLine)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                       CgsDev::Assert::giMessageBufferSize);
+            lMessage << lpcMessage;
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                KAC_GAMEDATA_PREPARE_SOURCE, liLine);
+            CgsDev::Assert::EndAssert();
+        }
+
         // ARTIST 8266C6C4..8266C800: the resource-pointer formatter and the
         // three resource-database diagnostics precede the vehicle list bind.
         void LogVehicleListResource(const CgsResource::ResourcePtr<VehicleListResource>& lrResource)
@@ -1013,6 +1024,8 @@ namespace BrnResource
         // CRC32-lowercase("newgrid") == 0x5A4A4CDB == the id of the one ZoneList resource
         // in the shipped PVS.BNDL (its debug ResourceStringTable also names it "newgrid").
         const char* const KPC_PVS_RESOURCE_NAME      = "newgrid";
+        const char* const KPC_WORLD_COLLISION_RESOURCE_NAME =
+            "gamedb://criterion_burnout5/Burnout-PrePro/Scenes_New/renderworld2#39971"; // off_82F2A728
 
         // The lane-data file names + resource names, all four read straight out of the four
         // handlers' own asm (the `lwz rN, off_82F2Axxx` right before SetFileName/HashString):
@@ -1496,9 +1509,9 @@ namespace BrnResource
             if (memcmp(lacName + 4, "UNIT", 4) == 0)
                 ProcessGetWorldUnitRequest(lpResourceInput, lpEvent, 56, liIndex);
             else if (memcmp(lacName + 4, "COLL", 4) == 0)
-                DeferredGameDataRequest("GetWorldCollision (0x82670700, id 57)", lpSlot);
+                ProcessGetWorldCollisionRequest(lpResourceInput, lpEvent, 57, liIndex);
             else if (memcmp(lacName + 4, "PVS_", 4) == 0)
-                DeferredGameDataRequest("GetPVS (0x82670880, id 58)", lpSlot);
+                ProcessGetPVSRequest(lpResourceInput, lpEvent, 58, liIndex);
             else
                 CGS_ASSERT(false, "Invalid id\n");   // X360 line 3152
         }
@@ -1566,9 +1579,9 @@ namespace BrnResource
             if (memcmp(lacName + 4, "UNIT", 4) == 0)
                 ProcessUnloadWorldUnitRequest(lpResourceInput, lpEvent, 44, liIndex);
             else if (memcmp(lacName + 4, "COLL", 4) == 0)
-                DeferredGameDataRequest("UnloadWorldCollision (0x826712A0, id 45)", lpSlot);
+                ProcessUnloadWorldCollisionRequest(lpResourceInput, lpEvent, 45, liIndex);
             else if (memcmp(lacName + 4, "PVS_", 4) == 0)
-                DeferredGameDataRequest("UnloadPVS (0x82671420, id 46)", lpSlot);
+                ProcessUnloadPVSRequest(lpResourceInput, lpEvent, 46, liIndex);
             else
                 CGS_ASSERT(false, "Invalid id\n");   // X360 line 3033
         }
@@ -2287,6 +2300,50 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             3 /*UnloadBundle*/, static_cast<s32>(sizeof(lRequest)));
     }
 
+    // ARTIST 0x826712A0. The completion at response 45 releases the collision-world reference.
+    void GameDataModule::ProcessUnloadWorldCollisionRequest(
+            CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+    {
+        if (mbCollisionWorldInvalidated)
+            FireTrackResourceAssert("Attempted collision world operation when it is invalidated\n", 5363);
+        if (lpEvent->meType != E_ASSETSET_PHYSICS)
+            FireTrackResourceAssert("Invalid asset type for world collision\n", 5364);
+
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        CgsResource::Events::UnloadBundleRequest lRequest;
+        lRequest.mpUser = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        const s32 liPoolId = lpEvent->miPoolId;
+        lRequest.SetFileName(KPC_WORLD_COLLISION_FILE_NAME);
+        lRequest.miPoolId = liPoolId;
+        lRequest.mbLiveUpdateReplace = false;
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), 3, sizeof(lRequest));
+    }
+
+    // ARTIST 0x82671420. Keep the slot through the resource module's response 46.
+    void GameDataModule::ProcessUnloadPVSRequest(
+            CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+    {
+        if (lpEvent->meType != E_ASSETSET_DATA)
+            FireTrackResourceAssert("Invalid asset type for pvs\n", 5392);
+
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        CgsResource::Events::UnloadBundleRequest lRequest;
+        lRequest.mpUser = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        const s32 liPoolId = lpEvent->miPoolId;
+        lRequest.SetFileName(KPC_PVS_FILE_NAME);
+        lRequest.miPoolId = liPoolId;
+        lRequest.mbLiveUpdateReplace = false;
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), 3, sizeof(lRequest));
+    }
+
     // @ 0x826705D0 -- service a GET world-unit request: acquire the unit's "<name>_list"
     // instance-list resource from the pool named by the request. The reply lands on
     // mReceiverQueue and (X360) ProcessInternalAcquireResponse posts it back to the
@@ -2583,6 +2640,29 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
     // The GET acquire builders the completion routing dispatches (THIS BATCH).
     // ====================================================================================
 
+    // ARTIST 0x82670700. Response 57 diagnoses direct collision GET; normal world loading
+    // uses response 32 and the per-zone AcquireResourceList path.
+    void GameDataModule::ProcessGetWorldCollisionRequest(
+            CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex)
+    {
+        if (mbCollisionWorldInvalidated)
+            FireTrackResourceAssert("Attempted collision world operation when it is invalidated\n", 4927);
+        if (lpEvent->meType != E_ASSETSET_PHYSICS)
+            FireTrackResourceAssert("Invalid asset type for world collision\n", 4928);
+
+        mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
+
+        CgsResource::Events::AcquireResourceRequest lRequest;
+        lRequest.mpUser = &mReceiverQueue;
+        lRequest.miEventId = liSlotIndex;
+        lRequest.miPoolId = lpEvent->miPoolId;
+        lRequest.mResourceId.SetHash(CgsResource::ID::HashString(
+            reinterpret_cast<const u8*>(KPC_WORLD_COLLISION_RESOURCE_NAME)));
+        lpResourceInput->GetResourceQueue()->AddEvent(
+            reinterpret_cast<const CgsModule::Event*>(&lRequest), 4, sizeof(lRequest));
+    }
+
     // @ 0x82670880 -- service a GET PVS request: acquire the world's zone-list resource
     // ("newgrid" -- see KPC_PVS_RESOURCE_NAME) from the request's pool. Response id staged
     // at the slot (58).
@@ -2590,18 +2670,17 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                                               const GameDataIO::GameDataAssetEvent* lpEvent,
                                               s32 liEventId, s32 liSlotIndex)
     {
-        CGS_ASSERT(lpEvent->meType == E_ASSETSET_DATA,
-                   "Invalid asset type for pvs\n");   // X360 line 4957
+        if (lpEvent->meType != E_ASSETSET_DATA)
+            FireTrackResourceAssert("Invalid asset type for pvs\n", 4957);
 
         mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)].miResponseEventId = liEventId;
 
         CgsResource::Events::AcquireResourceRequest lRequest;
-        memset(&lRequest, 0, sizeof(lRequest));
         lRequest.mpUser    = &mReceiverQueue;
         lRequest.miEventId = liSlotIndex;
         lRequest.miPoolId  = lpEvent->miPoolId;
-        lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
-            CgsResource::ID::HashString(reinterpret_cast<const u8*>(KPC_PVS_RESOURCE_NAME)))));
+        lRequest.mResourceId.SetHash(CgsResource::ID::HashString(
+            reinterpret_cast<const u8*>(KPC_PVS_RESOURCE_NAME)));
 
         lpResourceInput->GetResourceQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lRequest),
@@ -3218,9 +3297,10 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             mGameDataEventSlotPool.PushIndex(mGameDataEventSlotPool.GetObjectIndex(lpSlot));
             break;
 
-        case 57:   // world collision GET is not a supported protocol
-            CGS_ASSERT(false,
-                "GETWORLDCOLLISION request not supported - use Load world collision and then Acquire zone collision\n");   // line 3517
+        case 57:   // ARTIST reports the unsupported operation without recycling a receiver-backed slot.
+            FireTrackResourceAssert(
+                "GETWORLDCOLLISION request not supported - use Load world collision and then Acquire zone collision\n",
+                3517);
             break;
 
         case 66:   // surface list -> AttribSys RegisterVault(surface vault). X360 case 'B':
@@ -3272,8 +3352,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
         if (lpSlot->miResponseEventId == 45)
         {
-            CGS_ASSERT(miCollisionWorldRefCount > 0,
-                       "Attempt to unload world collision when it already has 0 ref count\n");   // line 3603
+            if (miCollisionWorldRefCount <= 0)
+                FireTrackResourceAssert("Attempt to unload world collision when it already has 0 ref count\n", 3603);
             --miCollisionWorldRefCount;
         }
 
