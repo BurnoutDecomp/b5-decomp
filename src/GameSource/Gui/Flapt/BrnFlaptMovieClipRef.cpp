@@ -173,6 +173,19 @@ void MovieClipRef::GotoAndStopLabel(const char* lpcLabel) const
     mpMovieClipInst->GotoAndStopLabel(luHash, lpcLabel);
 }
 
+// ---- HasFrameLabel -- [PC] NOT IN THE X360 BINARY ------------------------
+// Hash the label exactly as the goto overloads above do, then ask the instance.
+bool MovieClipRef::HasFrameLabel(const char* lpcLabel) const
+{
+    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
+    CGS_ASSERT(lpcLabel != 0, "lpcLabel");
+
+    u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcLabel),
+                                                       FlaptNameLength(lpcLabel));
+
+    return mpMovieClipInst->HasFrameLabel(luHash);
+}
+
 // ---- SetFrameTriggerCallback @ 0x8246CAB8 --------------------------------
 // Assert the handle and the callback, then install it on the instance. The
 // callback is declared opaquely (void*) in the header to keep the instance
