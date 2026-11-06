@@ -2121,6 +2121,7 @@ EGlobalRaceCarIndex RaceCarEntityModule::SpawnRaceCar(
     lpRaceCar->AddToWorld( leType, lrTransform, lRivalId, lModelId, lResolvedWheelId,
                            static_cast<s8>( liGlobal ),   // asm `extsb r9, r29`
                            liOpponentIndex );
+    lpRaceCar->UpdatePositioningData( lrTransform, &mWorldMap2D );
     {
         const rw::math::vpu::VectorIntrinsic lZeroVelocityIntrinsic = { 0.0f, 0.0f, 0.0f, 0.0f }; const Vector3 lZeroVelocity(lZeroVelocityIntrinsic);
         lpRaceCar->UpdateVelocity( lZeroVelocity );

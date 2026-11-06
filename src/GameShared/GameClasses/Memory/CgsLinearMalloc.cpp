@@ -104,7 +104,34 @@ namespace CgsMemory
 
     void LinearMalloc::SetAlignment(size_t lnAlignment)
     {
+        if (lnAlignment == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("liAlignment> 0",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp", 267);
+            CgsDev::Assert::EndAssert();
+        }
+        if (((lnAlignment - 1) | lnAlignment) + 1 != lnAlignment * 2)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("( ( ( liAlignment- 1 ) | liAlignment) + 1 ) == ( liAlignment* 2 )",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp", 269);
+            CgsDev::Assert::EndAssert();
+        }
         mnAlignment = lnAlignment;
+    }
+
+    size_t LinearMalloc::GetSize() const
+    {
+        // ARTIST tests the stored byte for exactly one before continuing.
+        if (*reinterpret_cast<const u8*>(&mbCreated) != 1u)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("mbCreated==true",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsLinearMalloc.cpp", 301);
+            CgsDev::Assert::EndAssert();
+        }
+        return mnEndAddress - mnStartAddress;
     }
 
     size_t LinearMalloc::GetFreeMemory() const

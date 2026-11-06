@@ -446,36 +446,60 @@ namespace
         UnlockOutputForWrite();
     }
 
-    // X360 0x822BAF78. r31 = GetInputStructure(); if null, fire the two tripwires; return r31.
+    // ARTIST 0x822BAF78: both tripwires run on the same null path.
     PVSIO::InputBuffer* PVSModule::GetInputInterface()
     {
-        // SafeGetInputStructure() inline-expands the first tripwire CGS_ASSERT(lpBuffer,
-        // "lpBuffer != NULL") (template line 73); then the PVS-level assert (.h:122).
-        PVSIO::InputBuffer* lpInputBuffer = SafeGetInputStructure();
-        CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer");
+        PVSIO::InputBuffer* lpInputBuffer = static_cast<PVSIO::InputBuffer*>(GetInputStructure());
+        if (!lpInputBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpBuffer != NULL",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleSingleBufferedTemplate.h", 73);
+            CgsDev::Assert::EndAssert();
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpInputBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\PVSModule/BrnPVSModule.h", 122);
+            CgsDev::Assert::EndAssert();
+        }
         return lpInputBuffer;
     }
 
-    // X360 0x822BAFF0. r31 = GetOutputStructure(); if null, fire the two tripwires; return r31.
+    // ARTIST 0x822BAFF0: OutputInterface begins at the buffer base.
     PVSIO::OutputInterface* PVSModule::GetOutputInterface()
     {
-        // SafeGetOutputStructure() inline-expands the first "lpBuffer != NULL" tripwire
-        // (template line 82); then the PVS-level assert (.h:130).
-        PVSIO::OutputBuffer* lpOutputBuffer = SafeGetOutputStructure();
-        CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer");
+        PVSIO::OutputBuffer* lpOutputBuffer = static_cast<PVSIO::OutputBuffer*>(GetOutputStructure());
+        if (!lpOutputBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpBuffer != NULL",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleSingleBufferedTemplate.h", 82);
+            CgsDev::Assert::EndAssert();
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\PVSModule/BrnPVSModule.h", 130);
+            CgsDev::Assert::EndAssert();
+        }
         return lpOutputBuffer->GetOutputInterface();
     }
 
-    // X360 0x822BB068. r31 = GetOutputStructure(); if null, fire the two tripwires; return
-    // r31 + 0x1718 (the embedded game-data request interface, &mGameDataRequestInterface).
+    // ARTIST 0x822BB068: after the same null diagnostics, return base + 0x1718.
     BrnResource::GameDataIO::RequestInterface<512>* PVSModule::GetGameDataRequestInt()
     {
-        // SafeGetOutputStructure() inline-expands the first "lpBuffer != NULL" tripwire
-        // (template line 82); then the PVS-level assert (.h:138).
-        PVSIO::OutputBuffer* lpOutputBuffer = SafeGetOutputStructure();
-        CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer");
-        return &lpOutputBuffer->mGameDataRequestInterface;   // addi r3, OutputStructure, 0x1718
+        PVSIO::OutputBuffer* lpOutputBuffer = static_cast<PVSIO::OutputBuffer*>(GetOutputStructure());
+        if (!lpOutputBuffer)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpBuffer != NULL",
+                "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleSingleBufferedTemplate.h", 82);
+            CgsDev::Assert::EndAssert();
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert("lpOutputBuffer",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\PVSModule/BrnPVSModule.h", 138);
+            CgsDev::Assert::EndAssert();
+        }
+        return &lpOutputBuffer->mGameDataRequestInterface;
     }
+
 }
 
 // ============================================================================
