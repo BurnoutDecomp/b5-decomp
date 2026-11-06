@@ -140,6 +140,10 @@ public:
     // Picture Paradise is up. De-inlined; no symbol exists in the image.
     bool IsInPictureParadise() const { return mbInPictureParadise; }
 
+    // X360-inlined read of mbVoiceoverFinishedLastFrame (+0x17): gsm+46663 in
+    // CheckIfPlayerIsAtJunctionWithAnEvent @0x82390B24.
+    bool DidVoiceoverFinishLastFrame() const { return mbVoiceoverFinishedLastFrame; }
+
     // ⭐ [stuntrace wave D, D3] X360-INLINED read of meCurrentTrainingType (+0x04). No symbol
     // exists in the image -- every consumer renders as a bare `lbz`/`lwz` at the owner's offset.
     // THREE sites in this wave's chain read it through the GameStateModule, all as gsm+46644
