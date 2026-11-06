@@ -3663,6 +3663,25 @@ void BrnRendererModule::BeginQuarterResBuffer()
 }
 
 // =================================================================================================
+// BrnRendererModule::EndRenderPostFx -- X360 @0x823F65B0. Render's only call is @0x8240DE50, right
+// after the composite. Three inlined shadow::Device::SetState calls push the pass-default triple:
+//     saDepthStencilStates[1]  ZOFF_ZALL_ZWRITEOFF                  (dword_83010910)
+//     saRasterizerStates[2]    Scissor_CullModeNone                 (dword_83010A40)
+//     saBlendStates[0]         Opaque_Modulate_NoAlphaTest_DestRGBA (dword_83010F70)
+// Neither argument is read.
+void BrnRendererModule::EndRenderPostFx(rw::graphics::postfx::RenderTarget* /*lpRenderTarget*/)
+{
+    renderengine::DepthStencilState* const lpDepthStencil =
+        CgsDepthStencilStateFactory::GetState(E_FACTORY_DEPTH_STENCIL_STATE_ZOFF_ZALL_ZWRITEOFF);
+    renderengine::RasterizerState* const lpRasterizer =
+        CgsRasterizerStateFactory::GetState(E_FACTORY_RASTERIZER_STATE_SCISSOR_CULL_MODE_NONE);
+    renderengine::BlendMaterialState* const lpBlend =
+        CgsBlendStateFactory::GetState(E_FACTORY_BLEND_STATE_OPAQUE_MODULATE_NO_ALPHA_TEST_DEST_RGBA);
+    shadow::Device::SetState(lpDepthStencil);
+    shadow::Device::SetState(lpRasterizer);
+    shadow::Device::SetState(lpBlend);
+}
+
 // BrnRendererModule::EndRenderAntiAliased -- X360 @0x82408B00.
 //
 // Close the anti-aliased pass: composite the quarter-res particle buffer back over the scene.
@@ -7001,6 +7020,9 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
 #else
         PCBringUpBlitSceneTargetToBackBuffer(mAllocatedRenderTargets, &mIm2dRenderer);
 #endif
+        // 0x8240DE48: r4 = back buffer +0x108, `lwz r29, 0x24C(r31)`.
+        CgsRenderTarget* const lpPostFxBackBuffer = mAllocatedRenderTargets.GetBackBuffer();
+        EndRenderPostFx(lpPostFxBackBuffer != nullptr ? lpPostFxBackBuffer->GetRenderTarget() : nullptr);
         CgsDev::PerfMonGpu::StopMonitor(mGpuMonitors.miPostFX);
     }
 #endif  // BRN_ANTIALIAS_BRACKET_AVAILABLE
