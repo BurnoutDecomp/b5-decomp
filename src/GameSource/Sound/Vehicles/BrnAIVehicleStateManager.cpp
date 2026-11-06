@@ -170,21 +170,27 @@ CgsSound::Logic::StateManager* AIVehicleStateManager::CreateObject(u32 luType)
 
 // Descriptor 0x82F2E88C: {ObjectID 2, "AIVehicleStateManager", base
 // StateManager::sTypeInfo (0x82F2FAA0), &CreateObject @0x82702358}.
+// The native descriptor and its CRT registration are distinct objects.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> AIVehicleStateManager::sTypeInfo(
+    2, "AIVehicleStateManager", &CgsSound::Logic::StateManager::sTypeInfo,
+    &AIVehicleStateManager::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* AIVehicleStateManager::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        2,
-        "AIVehicleStateManager",
-        CgsSound::Logic::StateManager::GetStaticTypeInfo(),
-        &AIVehicleStateManager::CreateObject );
     return &sTypeInfo;
 }
 
-// CRT init bank @0x82C61D98: `addi r3, r11, 82F2E88C ; b StateManager::AddToClassTypeInfoArray`.
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* const
-    gpAIVehicleStateManagerReg =
-        CgsSound::Logic::StateManager::AddToClassTypeInfoArray(
-            AIVehicleStateManager::GetStaticTypeInfo() );
+namespace
+{
+    struct AIVehicleStateManagerTypeRegistration
+    {
+        AIVehicleStateManagerTypeRegistration()
+        {
+            CgsSound::Logic::StateManager::AddToClassTypeInfoArray(&AIVehicleStateManager::sTypeInfo);
+        }
+    };
+    static AIVehicleStateManagerTypeRegistration gAIVehicleStateManagerTypeRegistration;
+}
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* AIVehicleStateManager::GetTypeInfo() const
 {
@@ -194,7 +200,7 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* AIVehicleStateMan
 // @ 0x82684028: `lwz r3, off_82F2E890` -> the descriptor's name.
 const char* AIVehicleStateManager::GetTypeName() const
 {
-    return "AIVehicleStateManager";
+    return sTypeInfo.typeName;
 }
 
 // ---------------------------------------------------------------------------

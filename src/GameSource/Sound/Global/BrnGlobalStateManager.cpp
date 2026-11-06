@@ -118,66 +118,30 @@ CgsSound::Logic::StateManager* GlobalStateManager::CreateObject(u32 luType)
     return new ("GlobalStateManager", luType != 0) GlobalStateManager();
 }
 
-// ---------------------------------------------------------------------------
-// GlobalStateManager::GetStaticTypeInfo()  (RTTI descriptor)
-//
-// Mirrors the in-tree GetStaticTypeInfo convention (CgsStateManager.cpp:230). A
-// function-local static ClassTypeInfo<StateManager> seeded with (ObjectID, typeName,
-// baseTypeInfo, createObject) so the factory CreateStateMan can match
-// descriptor->ObjectID and call ->createObject.
-//
-// FLAG (ObjectID UNRESOLVED): the per-leaf registration static-init that calls
-// StateManager::AddToClassTypeInfoArray(@0x8268DFE8) with the explicit ObjectID was
-// NOT exported (CreateObject @ 0x826FE380 has no xrefs_to) and no map-state enum names
-// the id in-tree. Per the established in-tree placeholder convention (every committed
-// GetStaticTypeInfo uses 0), the ObjectID is seeded 0 here and MUST be replaced with
-// the real id at integration -- the id is this manager's slot in the
-// CreateStateManagers 0..8 sequence (@ 0x826AFEF8).
-//
-// FLAG (registry hookup deferred): the minimal CgsSound::Logic::StateManager view
-// pulled via BrnStateManager.h (this TU's base) does NOT declare
-// AddToClassTypeInfoArray (full CgsStateManager.h view only, ODR-incompatible with
-// BrnStateManager.h, not co-includable here). The descriptor is produced here but its
-// insertion into the static registry (dword_82FFBC58) must be done by a registration
-// site using the full StateManager view (the conductor-owned CreateStateMan TU).
-// &CreateObject is an ABI-compatible StateManager*(*)(u32) across both views.
-// ---------------------------------------------------------------------------
+// ARTIST descriptor 0x82F2F85C; the CRT thunk registers this preinitialized object.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> GlobalStateManager::sTypeInfo(
+    0, "GlobalStateManager", &CgsSound::Logic::StateManager::sTypeInfo, &GlobalStateManager::CreateObject);
+
+namespace
+{
+    struct GlobalStateManagerTypeRegistration
+    {
+        GlobalStateManagerTypeRegistration()
+        {
+            CgsSound::Logic::StateManager::AddToClassTypeInfoArray(GlobalStateManager::GetStaticTypeInfo());
+        }
+    };
+    static GlobalStateManagerTypeRegistration gGlobalStateManagerTypeRegistration;
+}
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GlobalStateManager::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        0,                          // ObjectID (PS3 DecFIGS static-init 0x85FA1C: GlobalStateManager=0)
-        "GlobalStateManager",       // typeName
-        CgsSound::Logic::StateManager::GetStaticTypeInfo(), // baseTypeInfo (PS3 0x85FA1C: =StateManager::GetStaticTypeInfo())
-        &GlobalStateManager::CreateObject // createObject
-    );
     return &sTypeInfo;
 }
 
-// ---------------------------------------------------------------------------
-// File-scope registration (Part D): land this leaf's descriptor in the shared
-// StateManager RTTI registry (CgsStateManager.cpp gapClassTypeInfoArray, X360
-// dword_82FFBC58) at load time, so StateManager::CreateStateMan (0x826A5B60) can
-// find it by ObjectID. AddToClassTypeInfoArray is the canonical StateManager
-// registration entry (@ 0x8268DFE8), reached through the BrnStateManager base.
-//
-// ObjectID RESOLVED (PS3 DecFIGS static-init 0x85FA1C): GlobalStateManager::sTypeInfo
-// .ObjectID = 0. The descriptor comes from GetStaticTypeInfo() (seeded with that id and
-// baseTypeInfo = StateManager::GetStaticTypeInfo()), so this registration lands the real
-// id. NOTE (2026-08-25): this TU IS in the game build -- the registration runs at
-// static-init and CreateStateManagers constructs this manager at boot.
-// ---------------------------------------------------------------------------
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* const
-    gpGlobalStateManagerReg =
-        CgsSound::Logic::StateManager::AddToClassTypeInfoArray(
-            GlobalStateManager::GetStaticTypeInfo());
-
-// ---------------------------------------------------------------------------
-// GlobalStateManager::GetTypeInfo() const  (vtable RTTI hook)
-//   Returns this leaf's static descriptor.
-// ---------------------------------------------------------------------------
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GlobalStateManager::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +151,7 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GlobalStateManage
 // ---------------------------------------------------------------------------
 const char* GlobalStateManager::GetTypeName() const
 {
-    return "GlobalStateManager";
+    return sTypeInfo.typeName;
 }
 
 // ---------------------------------------------------------------------------

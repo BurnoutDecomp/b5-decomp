@@ -122,6 +122,8 @@ private:
     void CheckForDuplicates(u32 auSourceIndex) const;
 
 private:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo;
+
     // DWARF-attested request rings (BrnStreamingStateManager.h:229-237), in declaration
     // ORDER. The PostStreamRequest/PostStreamRequestInternal/RePostStreamRequest bodies
     // touch these BY NAME. mfCurrentTime (the timestamp source) is the committed base

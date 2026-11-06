@@ -74,6 +74,11 @@ public:
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();
     static CgsSound::Logic::StateManager* CreateObject( u32 luType );                     // @ 0x826FE380
 
+private:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo;
+
+public:
+
     // ---- boot + lifecycle virtuals ----
     virtual bool Prepare();                       // @ 0x826F5BF8  (vtable +0x0C; stub -- see .cpp FLAG)
 

@@ -100,51 +100,29 @@ CgsSound::Logic::StateManager* PlayerVehicleStateManager::CreateObject(u32 luTyp
     return new ("PlayerVehicleStateManager", luType != 0) PlayerVehicleStateManager();
 }
 
-// ---------------------------------------------------------------------------
-// PlayerVehicleStateManager::GetStaticTypeInfo()  (RTTI descriptor)
-//
-// Mirrors the in-tree GetStaticTypeInfo convention (CgsStateManager.cpp:230). A
-// function-local static ClassTypeInfo<StateManager> seeded with (ObjectID, typeName,
-// baseTypeInfo, createObject) so the factory CreateStateMan can match
-// descriptor->ObjectID and call ->createObject.
-//
-// DecFIGS' static initializer pins this manager's ObjectID to 1 and its base descriptor
-// to StateManager. The file-scope registration below reproduces the original registry
-// insertion before the sound module asks the factory to create its managers.
-// ---------------------------------------------------------------------------
+// ARTIST 0x82F2E87C: {1, name, &StateManager::sTypeInfo, &CreateObject}.
+// The native descriptor and its CRT registration are distinct objects.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> PlayerVehicleStateManager::sTypeInfo(
+    1, "PlayerVehicleStateManager", &CgsSound::Logic::StateManager::sTypeInfo,
+    &PlayerVehicleStateManager::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* PlayerVehicleStateManager::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        1,                              // ObjectID (PS3 DecFIGS static-init 0x85FA1C: PlayerVehicleStateManager=1)
-        "PlayerVehicleStateManager",    // typeName
-        CgsSound::Logic::StateManager::GetStaticTypeInfo(), // baseTypeInfo (PS3 0x85FA1C: =StateManager::GetStaticTypeInfo())
-        &PlayerVehicleStateManager::CreateObject // createObject
-    );
     return &sTypeInfo;
 }
 
-// ---------------------------------------------------------------------------
-// File-scope registration (Part D): land this leaf's descriptor in the shared
-// StateManager RTTI registry (CgsStateManager.cpp gapClassTypeInfoArray, X360
-// dword_82FFBC58) at load time, so StateManager::CreateStateMan (0x826A5B60) can
-// find it by ObjectID. AddToClassTypeInfoArray is the canonical StateManager
-// registration entry (@ 0x8268DFE8), reached through the BrnStateManager base.
-//
-// ObjectID RESOLVED (PS3 DecFIGS static-init 0x85FA1C): PlayerVehicleStateManager::sTypeInfo
-// .ObjectID = 1. The descriptor comes from GetStaticTypeInfo() (seeded with that id and
-// baseTypeInfo = StateManager::GetStaticTypeInfo()), so this registration lands the real
-// id. NOTE (2026-08-25): this TU IS in the game build -- the registration runs at
-// static-init and CreateStateManagers constructs this manager at boot.
-// ---------------------------------------------------------------------------
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* const
-    gpPlayerVehicleStateManagerReg =
-        CgsSound::Logic::StateManager::AddToClassTypeInfoArray(
-            PlayerVehicleStateManager::GetStaticTypeInfo());
+namespace
+{
+    struct PlayerVehicleStateManagerTypeRegistration
+    {
+        PlayerVehicleStateManagerTypeRegistration()
+        {
+            CgsSound::Logic::StateManager::AddToClassTypeInfoArray(&PlayerVehicleStateManager::sTypeInfo);
+        }
+    };
+    static PlayerVehicleStateManagerTypeRegistration gPlayerVehicleStateManagerTypeRegistration;
+}
 
-// ---------------------------------------------------------------------------
-// PlayerVehicleStateManager::GetTypeInfo() const  (vtable RTTI hook)
-//   Returns this leaf's static descriptor.
-// ---------------------------------------------------------------------------
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* PlayerVehicleStateManager::GetTypeInfo() const
 {
     return GetStaticTypeInfo();
@@ -157,7 +135,7 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* PlayerVehicleStat
 // ---------------------------------------------------------------------------
 const char* PlayerVehicleStateManager::GetTypeName() const
 {
-    return "PlayerVehicleStateManager";
+    return sTypeInfo.typeName;
 }
 
 // ---------------------------------------------------------------------------
