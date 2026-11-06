@@ -28,6 +28,14 @@ namespace BrnDirector
         bool GetPauseRequest() const { return mbPauseRequest; }
         bool GetPauseRequestState() const { return mbPauseRequestState; }
 
+        // DWARF h:54 `SetPauseRequest(bool lbPauseState)`; inlined by Arbitrator::Update as
+        // `stb 1, 0xE ; stb lbPauseState, 0xF` (0x8226B1C4 / 0x8226B228).
+        void SetPauseRequest(bool lbPauseState)
+        {
+            mbPauseRequest      = true;
+            mbPauseRequestState = lbPauseState;
+        }
+
         // @0x823A7AB8 (class TU; body in BrnDirectorOutputInterface.cpp, DWARF
         // h:101/:102) -- report whether the intro camera has started its
         // look-at-rival move, with the rivalry number and the seconds remaining.

@@ -6,6 +6,8 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"             // DirectorIO::ControlInput (the named camera-control bytes)
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"                  // Camera::PlayerCrashInfo (the BlackFade_Water gate)
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"                 // Camera::EnsureEffectIsStopped
+#include "GameSource/Director/SharedIO/BrnDirectorOutputInterface.h"            // DirectorOutputInterface::SetPauseRequest
+#include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"            // GameState::mbTrainingPause
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // [diag] CgsDev::Log::gpDebugPrint
 #include <cstdlib>                                                                // [diag] getenv
 
@@ -438,11 +440,61 @@ namespace BrnDirector
             //   flag but the arbitrator ignores it. DELETE-WHEN: ArbStateRenderMetrics gets a
             //   real home TU.
 
-            // ⚠️ GATE: the "Jump_Effect" blend (the mbWasDoingTrainingLastFrame latch +
-            //   mfSlomoFactor ramp driving mEffects.mfSimTimeScale / mDepthOfField.mfBlurriness
-            //   and the output interface's two pause-request bytes). Keyed off mpGameState[450]
-            //   -- un-homed. Both members it ramps ARE named here, so this un-gates the moment
-            //   GameState does. CONSEQUENCE: no jump slow-mo / blur. DELETE-WHEN: as (a).
+            // THE TRAINING SLOW-DOWN (console 0x8226B130..0x8226B24C). While a pausing training
+            // tip is up (GameState +0x1C2 mbTrainingPause, set by director action 150), the
+            // world slows into the pause: mfSlomoFactor eases toward 0 by kfSlowDownRate a
+            // frame, drives the camera's sim time scale (+0x104) and the depth-of-field blur
+            // (+0x134), and once it is under the rate the director asks the game to pause.
+            // When the tip is gone it eases back to 1, asking every frame to unpause, and drops
+            // the latch past 0.95. Constants: flt_820047C8 0.05, flt_82001DA0 0.5,
+            // flt_82004FDC 0.95, flt_82001CC0 0.0. DWARF :199/:200 names the two locals.
+            {
+                const f32 kfBlurFactor   = 0.5f;
+                const f32 kfSlowDownRate = 0.05f;
+                Camera::CameraEffects& lrEffects = lrCameraInOut.GetEffects();
+                // [diag] BRN_TRAINING_SLOMO_DIAG -- NOT IN THE X360 BINARY. One line per edge.
+                static const bool sbSlomoDiagEnv = getenv("BRN_TRAINING_SLOMO_DIAG") != 0;
+                const bool lbSlomoDiag = sbSlomoDiagEnv && CgsDev::Log::gpDebugPrint != 0;
+
+                if (lrSharedInfo.mpGameState->mbTrainingPause)
+                {
+                    if (!mbWasDoingTrainingLastFrame)
+                    {
+                        mfSlomoFactor               = 1.0f;
+                        mbWasDoingTrainingLastFrame = true;
+                        if (lbSlomoDiag)
+                            *CgsDev::Log::gpDebugPrint << "[training-slomo] start\n";
+                    }
+                    mfSlomoFactor = mfSlomoFactor + (0.0f - mfSlomoFactor) * kfSlowDownRate;
+                    lrEffects.SetSimTimeScale(mfSlomoFactor);
+                    lrEffects.SetStartHookName("Jump_Effect", 1.0f);
+                    lrCameraInOut.GetDepthOfField().SetBlurriness((1.0f - mfSlomoFactor) * kfBlurFactor);
+                    if (mfSlomoFactor < kfSlowDownRate)
+                    {
+                        if (lbSlomoDiag && mfSlomoFactor != 0.0f)
+                            *CgsDev::Log::gpDebugPrint << "[training-slomo] pause request (slomo "
+                                                       << mfSlomoFactor << ")\n";
+                        mfSlomoFactor = 0.0f;
+                        lrSharedInfo.mpOutputInterface->SetPauseRequest(true);
+                    }
+                }
+                else if (mbWasDoingTrainingLastFrame)
+                {
+                    mfSlomoFactor = mfSlomoFactor + (1.0f - mfSlomoFactor) * kfSlowDownRate;
+                    lrEffects.SetSimTimeScale(mfSlomoFactor);
+                    lrEffects.mStopHookNameString.Set("Jump_Effect");
+                    lrEffects.mbHasStopHookNameString = true;
+                    lrCameraInOut.GetDepthOfField().SetBlurriness((1.0f - mfSlomoFactor) * kfBlurFactor);
+                    lrSharedInfo.mpOutputInterface->SetPauseRequest(false);
+                    if (mfSlomoFactor > 0.95f)
+                    {
+                        mfSlomoFactor               = 1.0f;
+                        mbWasDoingTrainingLastFrame = false;
+                        if (lbSlomoDiag)
+                            *CgsDev::Log::gpDebugPrint << "[training-slomo] released\n";
+                    }
+                }
+            }
             break;
         }
 
