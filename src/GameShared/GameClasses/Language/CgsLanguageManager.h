@@ -186,6 +186,13 @@ namespace CgsLanguage
                                ParameterFormatType leType, s32 liValue,
                                ParameterFormatType leValueType);
 
+        // X360 0x828659E8 (cpp:1259/:1260) -- the two-value form: both values get a 64-byte
+        // slot and are printed into %1 and %2. Body in this TU's cpp.
+        bool FormatTextFromInt(char* lpacBuffer, u32 luBufferSize, const char* lpcSourceText,
+                               ParameterFormatType leType, s32 liValue1,
+                               ParameterFormatType leValue1Type, s32 liValue2,
+                               ParameterFormatType leValue2Type);
+
         // X360 0x82865878 (HUD H1 wave, 2026-08-25) -- FormatTextFromInt's float sibling:
         // resolve lpcSourceText through leType, render lfValue through the FLOAT dispatcher
         // (a 64-byte value slot), print into %1. Caller: TextFieldRef::SetLocalisedText

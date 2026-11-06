@@ -300,33 +300,16 @@ namespace BrnGui
     }
 
     // ---- SetupCarsUnlockedTextComponent (DWARF cpp:1155) ---------------------------
-    // ⛔ NOT WIRED UP THIS WAVE, and deliberately NOT a silent {}. The X360 body is one
-    // call, inlined at both of its sites (SetupComponents @0x824C9A74 and SetupCar
-    // @0x824D81EC):
-    //
-    //     mCarsUnlocked.SetLocalisedText(KAC_CARS_AVAILABLE_STRINGID,
-    //                                    LanguageManager::E_FORMAT_ID_LOOKUP,          // 9
-    //                                    gsiNumCarouselCars,      E_FORMAT_INTEGER,    // 11
-    //                                    gsiNumCarsUnlockedTotal, E_FORMAT_INTEGER);   // 11
-    //
-    // -- the two-integer-parameter TextField::SetLocalisedText overload (sub_824E7F78,
-    // BrnTextField.cpp:418), which resolves through LanguageManager's two-value
-    // FormatTextFromInt (sub_828659E8, CgsLanguageManager.cpp:1259) and thence through
-    // LanguageManager::FormatText(char*, u32, s32, ParameterFormatType) for each
-    // E_FORMAT_INTEGER parameter.
-    //
-    // That last leaf is `LanguageManager::FormatIntegerString`, and on this build it is an
-    // ARMED __debugbreak() trap-stub (CgsLanguageManager.cpp:686, one of the FLAG trap-stub
-    // block). Making the call would break into the debugger on the very screen this wave is
-    // bringing up, every time a car is highlighted. Neither the TextField overload nor the
-    // LanguageManager overload has a reconstructed body, so wiring it now would ALSO mean
-    // inventing two formatters.
-    //
-    // The only visible consequence is that the "<n> of <m> cars available" caption stays
-    // blank; nothing else on the screen reads mCarsUnlocked. Restore the call above verbatim
-    // when FormatIntegerString lands.
+    // Inlined on X360 at both of its sites, SetupComponents @0x824C9A74 and SetupCar @0x824D81EC:
+    // the "<n> of <m> cars available" caption.
     void CarSelectVehicle::SetupCarsUnlockedTextComponent()
     {
+        mCarsUnlocked.SetLocalisedText(KAC_CARS_AVAILABLE_STRINGID,
+                                       CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP,
+                                       gsiNumCarouselCars,
+                                       CgsLanguage::LanguageManager::E_FORMAT_INTEGER,
+                                       gsiNumCarsUnlockedTotal,
+                                       CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
     }
 
     // ---- SetCarouselComponent @ 0x824BBE90 -----------------------------------------

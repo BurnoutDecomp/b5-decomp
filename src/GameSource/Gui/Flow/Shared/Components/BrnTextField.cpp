@@ -214,6 +214,33 @@ bool TextField::SetLocalisedText(const char* lpacText,
     return true;
 }
 
+// @ 0x824E7F78 -- cpp:418/:419. The TWO-INTEGER-PARAMETER variant: as the one-integer form above,
+// through the two-value LanguageManager::FormatTextFromInt @0x828659E8.
+bool TextField::SetLocalisedText(const char* lpacText,
+                                 CgsLanguage::LanguageManager::ParameterFormatType leFormat,
+                                 s32 liValue1,
+                                 CgsLanguage::LanguageManager::ParameterFormatType leValue1Format,
+                                 s32 liValue2,
+                                 CgsLanguage::LanguageManager::ParameterFormatType leValue2Format)
+{
+    CGS_ASSERT(lpacText != 0,
+               "Text field is invalid in TextField::SetLocalisedText");                 // :418 (streamed; folded)
+    CGS_ASSERT(std::strlen(lpacText) < KU_MAX_TEXTFIELD_LEN - 1,
+               "Text string too long in TextField::SetLocalisedText");                  // :419 (streamed; folded)
+
+    CgsLanguage::LanguageManager* lpLanguageManager =
+        TextFieldGetLanguageManager(mpStateInterface);
+
+    char lacFormatted[1152];   // X360 sp+0x80 local (the formatter writes through a 1024 cap)
+
+    lpLanguageManager->FormatTextFromInt(lacFormatted, 1024, lpacText, leFormat,
+                                         liValue1, leValue1Format, liValue2, leValue2Format);
+
+    SetDatabaseText(lacFormatted);
+    OutputAptData();
+    return true;
+}
+
 // @ 0x824E7DD0 -- cpp:386/:387. The ONE-FLOAT-PARAMETER variant (ledger-unnamed
 // sub_824E7DD0): the exact sibling of the integer form above, differing in one call --
 // LanguageManager::FormatTextFromFloat instead of FormatTextFromInt. Same two asserts
