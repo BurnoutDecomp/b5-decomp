@@ -1448,162 +1448,165 @@ namespace BrnGame
     }
 
     // ------------------------------------------------------------------------------------
-    // BrnGameModule::BridgeGameStateToDirector  @ X360 0x823CD170
-    // (console home GameSource/Game/GameBridgeGameStateToX.cpp; body kept here with the other
-    //  DoUpdate_Director bridges -- the BridgeGuiToDirector precedent.)
-    //
-    // ⭐ THE GAME-ACTION LEG (the whole reason this bridge exists, and the only leg whose two
-    // ends are real today):
-    //     lpDirectorInput->GetGameActionQueue()->Append( *lpGameStateOutput->GetGameActionQueue() )
-    // The X360 renders it as
-    //     v29 = sub_823B96F0(a3);                                  // gameStateOut->GetGameActionQueue() const
-    //     v30 = BrnDirector::DirectorIO::InputBuffe(a2);           // directorIn->GetGameActionQueue()
-    //     CgsModule::VariableEventQueue<13312,16>::Append<13312,16>(v30, v29);
-    // -- the console itself proving both queues are the SAME instantiated type.
-    //
-    // ⚠️ THE BRIEF'S "TWO-LINER" IS WRONG, and it matters: 0x823CD170 is a ~150-line function
-    // whose OTHER legs are, in console order --
-    //   * a BrnReplays::DirectorBridgeSerialiser state machine wrapped round the whole body
-    //     (Lock / GetStaticLayout / Unlock; on replay PLAYBACK the game actions are Appended
-    //     from the SERIALISED layout at +10128 instead of from the live buffer, and on RECORD
-    //     they are Appended into it as well);
-    //   * a walk of the game-state output buffer's takedown-event queue (this+0x4040) matching
-    //     each record's race-car index against the player's, publishing mbPlayerTakenDown /
-    //     mePlayerKillerCarIndex into the director input (+31424 / +31404) with the verbatim
-    //     assert "lePlayerKillerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID"
-    //     (GameBridgeGameStateToX.cpp:228) -- ⭐ RECONSTRUCTED 2026-09-24 (crash parity FX-BRIDGES
-    //     CC-8), see the body: both of its reasons had expired (the queue is walked by name for
-    //     the world and GUI bridges, and MainDirector::ProcessInputQueue / ArbStateCrashing are its
-    //     consumers);
-    //   * the player's vehicle TEAM into the director input (+31408) and all 8 teams through
-    //     DirectorIO::InputBuffer::SetVehicleTeam -- ⭐ RECONSTRUCTED 2026-09-25 (crash parity
-    //     FX-DIRECTOR2), see the body: the input's +0x7AB0 word is miPlayerTeam now and the
-    //     +0x3238 team words feed AllVehicleData::Update;
-    //   * a CarScoreData::operator= of the player's score record (gameStateOut+173240 + 296*i)
-    //     into the director input at +12560, plus +12888;
-    //   * the player's end-of-event pair at +31445 / +31446 (@0x7AD5 / @0x7AD6) -- ⭐
-    //     RECONSTRUCTED 2026-09-24 (crash parity FX-DIRECTOR), see the body.
-    // The score leg is still not reconstructed: its director-input destination is opaque storage
-    // in this model and it is not on the crash path. Writing it against opaque zeroes would be the
-    // "data arrives wrong-but-plausible" failure mode, so it is documented, not faked.
-    // DELETE-WHEN: the score span of the input buffer is typed.
-    // ------------------------------------------------------------------------------------
+    // ARTIST 0x823CD170. Slot 3 holds the Director's GameState snapshot.
     void BrnGameModule::BridgeGameStateToDirector(
         BrnDirector::DirectorIO::InputBuffer* lpDirectorInput,
         const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
     {
-        // ---- the player-taken-down leg (X360 live arm 0x823CD330..0x823CD3C8) ----------------
-        //   0x823CD330  r25 = `lwzx gameStateOut + 0x2AEEC` == ScoringOutputInterface
-        //               (+173240) ::mePlayerRaceCarIndex (+0xA34)
-        //   0x823CD340  r27 = GetTakedownEventOutputQueue() const (sub_823B9840)->miLength, read ONCE
-        //   0x823CD36C  per event: the queue is re-fetched and GetEvent(i) (0x822AC660) taken;
-        //               `lwz 4` (meVictimIndex) == r25 -> killer = `lwz 0` (meAggressorIndex),
-        //               the :228 assert, then `stb 1, 0x7AC0` + `stw killer, 0x7AAC` (the inlined
-        //               SetPlayerKiller). A later match overwrites an earlier one.
-        // The cast is the documented cross-home one the world and GUI bridges carry:
-        // GameStateModuleIO::TakedownEventOutputQueueType is still a forward-declared class and the
-        // payload behind it is the committed EventQueue<BrnGameState::TakedownEvent,8>.
-        // The director input is a fresh, Construct()ed buffer every sub-step on this build too
-        // (DoUpdate_Director), so the pair starts cleared exactly as the console's does.
+        const char* const lpcSource =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp";
+        BrnReplays::DirectorBridgeSerialiserStaticLayout* const lpStatic =
+            mDirectorBridgeSerialiser.GetStaticLayout();
+        mDirectorBridgeSerialiser.Lock();
+
+        switch (mDirectorBridgeSerialiser.GetMode())
         {
-            const EActiveRaceCarIndex lePlayerRaceCarIndex =
-                lpGameStateOutput->GetScoringOutputInterface()->mePlayerRaceCarIndex;
-            const s32 liNumTakedowns = reinterpret_cast<const CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>*>(
-                lpGameStateOutput->GetTakedownEventOutputQueue())->GetLength();
+        case BrnReplays::BaseSerialiser::E_MODE_IDLE:
+        case BrnReplays::BaseSerialiser::E_MODE_RECORDING_PREPARING:
+        case BrnReplays::BaseSerialiser::E_MODE_RECORDING:
+        case BrnReplays::BaseSerialiser::E_MODE_RECORDING_STALLED:
+        {
+            const BrnGameState::GameStateModuleIO::ScoringOutputInterface* const lpScoringOutput =
+                lpGameStateOutput->GetScoringOutputInterface();
+            const EActiveRaceCarIndex lePlayerRaceCarIndex = lpScoringOutput->mePlayerRaceCarIndex;
+            const bool lbPlayerUnbound = lePlayerRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID;
+            const BrnGameState::GameStateModuleIO::TakedownEventOutputQueueType* const lpTakedowns =
+                lpGameStateOutput->GetTakedownEventOutputQueue();
+
+            bool lbPlayerWasTakenDown = false;
+            EActiveRaceCarIndex lePlayerKillerRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+            const s32 liNumTakedowns = lpTakedowns->GetLength();
             for (s32 liTakedown = 0; liTakedown < liNumTakedowns; ++liTakedown)
             {
-                const BrnGameState::TakedownEvent& lrTakedownEvent =
-                    reinterpret_cast<const CgsModule::BaseEventQueue<BrnGameState::TakedownEvent>*>(
-                        lpGameStateOutput->GetTakedownEventOutputQueue())->GetEvent(liTakedown);
+                const BrnGameState::TakedownEvent& lrTakedownEvent = lpTakedowns->GetEvent(liTakedown);
                 if (lrTakedownEvent.meVictimIndex == lePlayerRaceCarIndex)
                 {
-                    const EActiveRaceCarIndex lePlayerKillerRaceCarIndex = lrTakedownEvent.meAggressorIndex;
-                    CGS_ASSERT(lePlayerKillerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
-                               "lePlayerKillerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID");   // GameBridgeGameStateToX.cpp:228
+                    lbPlayerWasTakenDown = true;
+                    lePlayerKillerRaceCarIndex = lrTakedownEvent.meAggressorIndex;
+                    if (lePlayerKillerRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+                    {
+                        CgsDev::Assert::BeginAssert();
+                        CgsDev::Assert::FireAssert(
+                            "lePlayerKillerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", lpcSource, 228);
+                        CgsDev::Assert::EndAssert();
+                    }
                     lpDirectorInput->SetPlayerKiller(lrTakedownEvent.meAggressorIndex);
-
-                    // [DIAG] NOT IN THE X360 BINARY -- BRN_CRASHCAM_DIAG (the crash-camera gate):
-                    // the takedown camera's input as published (at most 30 lines).
-                    static s32 siTakenDownLinesLeft = 30;
                 }
             }
-        }
 
-        lpDirectorInput->GetGameActionQueue()->Append(*lpGameStateOutput->GetGameActionQueue());
+            if (BrnReplays::DirectorBridgeSerialiserStaticLayout* lpTakedownLayout =
+                    mDirectorBridgeSerialiser.GetStaticLayout())
+            {
+                lpTakedownLayout->mbPlayerWasTakenDown = lbPlayerWasTakenDown;
+                lpTakedownLayout->muPlayerKillerIndex = static_cast<s8>(lePlayerKillerRaceCarIndex);
+            }
 
-        // ---- the player's TEAM word (X360 live arm 0x823CD428..0x823CD454) -------------------
-        // ⭐ 2026-09-25 (crash parity FX-DIRECTOR2). With the player slot r25 of the takedown leg
-        // (the scoring snapshot's mePlayerRaceCarIndex):
-        //   0x823CD440  `addis r11, r25, 1 ; addi r11, r11, -0x540E ; slwi 2` == 4 * r25 + 0x2AFC8
-        //   0x823CD450  `lwzx r11, r11, r31` -- gameStateOut + 0x2AFC8 + 4 * player ==
-        //               OnlineScoringOutputInterface (+0x2AF68) ::maePlayerTeam (+0x60) [player]
-        //   0x823CD454  `stw r11, 0x7AB0(r23)` -- the director input's player team, which
-        //               ProcessInputQueue copies into GameState::miPlayerTeam (+0x1CC).
-        // No bounds test: a -1 slot reads the word before the array, maiOnlineAwardVariables[7]
-        // (gameStateOut + 0x2AFC4); that read is reproduced by name rather than by a negative index.
-        // (The score record copy into +0x3110 and the +0x3258 byte that follow it, 0x823CD458..
-        //  0x823CD46C, stay open: the input's score span is still opaque.)
-        {
+            lpDirectorInput->GetGameActionQueue()->Append(*lpGameStateOutput->GetGameActionQueue());
+            if (lpStatic != 0)
+            {
+                lpStatic->mGameActionQueue.Construct();
+                lpStatic->mGameActionQueue.Append(*lpGameStateOutput->GetGameActionQueue());
+            }
+
             const BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface* const lpOnlineScoring =
                 lpGameStateOutput->GetOnlineScoringOutputInterface();
-            const s32 liPlayerSlot =
-                static_cast<s32>(lpGameStateOutput->GetScoringOutputInterface()->mePlayerRaceCarIndex);
-            const s32 liPlayerTeam = (liPlayerSlot == -1)
+            const s32 liPlayerTeam = lbPlayerUnbound
                 ? lpOnlineScoring->maiOnlineAwardVariables[7]
-                : static_cast<s32>(lpOnlineScoring->maePlayerTeam[liPlayerSlot]);
-            lpDirectorInput->SetPlayerTeam(liPlayerTeam);                                        // @0x7AB0
-        }
+                : static_cast<s32>(lpOnlineScoring->maePlayerTeam[lePlayerRaceCarIndex]);
+            lpDirectorInput->SetPlayerTeam(liPlayerTeam);
 
-        // ---- the player's end-of-event pair (X360 live arm 0x823CD4A0..0x823CD510) -----------
-        // ⭐ 2026-09-24 (crash parity FX-DIRECTOR). The console reads both out of the scoring
-        // snapshot (gameStateOut + 0x2A4B8, the inlined GetScoringOutputInterface()) with the
-        // player slot it loaded for the takedown leg (r25, `lwzx +0x2AEEC` @0x823CD33C ==
-        // mePlayerRaceCarIndex), and stores them without a lock-bit test:
-        //   0x823CD4A0  `add. r11, r31, 0x2A4B8` -- the accessor's non-gating assert
-        //               "lpGameStateOutput->GetScoringOutputInterface()" (GameBridgeGameStateToX.cpp:256)
-        //   0x823CD4D8  `lbzx +0x2AEB8 + player` == mabPlayerEliminated[player] (+0xA00), with no
-        //               bounds test -> `stb 0x7AD5`
-        //   0x823CD4E4  `lfsx +0x2AF4C` == mfModeTimeRemaining (+0xA94) `fcmpu` flt_82001CC0 (0.0f):
-        //               `bgt` -> 0; else `lbzx +0x2AF60` == mbTimerActive (+0xAA8) != 0 -> r19 (1,
-        //               `li r19, 1` @0x823CD1A8) else 0 -> `stb 0x7AD6`. An unordered compare (NaN)
-        //               is not `gt`, so NaN takes the mbTimerActive arm; `!(x > 0.0f)` keeps that.
-        // (The console's team word @0x7AB0 -- landed above -- the score record and the +0x3258 byte
-        //  sit between the Append and this arm, 0x823CD428..0x823CD49C; the last two are still open.)
-        // MainDirector::ProcessInputQueue copies the pair into GameState +0x1D0 / +0x1D1. Its one
-        // reader, ArbStateRoaming::ProcessPossibleFX, plays "Damage_Crit" / "Wrecked" on it in the
-        // online modes 12 / 14 / 17 only; offline, @0x7AD6 rises when a Road Rage or Stunt Run
-        // clock runs out.
-        {
-            const BrnGameState::GameStateModuleIO::ScoringOutputInterface* const lpScoringOutputInterface =
+            // ARTIST's -1 slot reads the bytes preceding the score array.
+            const u8* const lpUnboundScore = lbPlayerUnbound
+                ? lpGameStateOutput->GetUnboundPlayerScoreBytes() : 0;
+            if (lbPlayerUnbound)
+                lpDirectorInput->SetPlayerScoreFromNativeRecord(lpUnboundScore);
+            else
+                lpDirectorInput->SetPlayerScoreData(&lpScoringOutput->maCarScoreData[lePlayerRaceCarIndex]);
+            lpDirectorInput->SetPlayerComboWarningActive(lpScoringOutput->mbComboWarningActive);
+
+            if (BrnReplays::DirectorBridgeSerialiserStaticLayout* lpScoreLayout =
+                    mDirectorBridgeSerialiser.GetStaticLayout())
+            {
+                if (lbPlayerUnbound)
+                    lpScoreLayout->mPlayerScoreData.CopyFromNativeRecord(lpUnboundScore);
+                else
+                    lpScoreLayout->mPlayerScoreData = lpScoringOutput->maCarScoreData[lePlayerRaceCarIndex];
+            }
+            const bool lbComboWarningActive = lpScoringOutput->mbComboWarningActive;
+            if (BrnReplays::DirectorBridgeSerialiserStaticLayout* lpComboLayout =
+                    mDirectorBridgeSerialiser.GetStaticLayout())
+            {
+                lpComboLayout->mbPlayerComboWarningActive = lbComboWarningActive;
+            }
+
+            const BrnGameState::GameStateModuleIO::ScoringOutputInterface* const lpEventScoring =
                 lpGameStateOutput->GetScoringOutputInterface();
-            CGS_ASSERT(lpScoringOutputInterface != 0,
-                       "lpGameStateOutput->GetScoringOutputInterface()");       // GameBridgeGameStateToX.cpp:256
-            const EActiveRaceCarIndex lePlayerRaceCarIndex = lpScoringOutputInterface->mePlayerRaceCarIndex;
-            lpDirectorInput->SetPlayerEliminated(
-                lpScoringOutputInterface->mabPlayerEliminated[lePlayerRaceCarIndex]);            // @0x7AD5
+            if (lpEventScoring == 0)
+            {
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert("lpGameStateOutput->GetScoringOutputInterface()", lpcSource, 256);
+                CgsDev::Assert::EndAssert();
+            }
+            const u8 luPlayerEliminated = lbPlayerUnbound
+                ? static_cast<u8>(static_cast<u64>(lpEventScoring->maCarIds[E_ACTIVE_RACE_CAR_INDEX_COUNT - 1]))
+                : *reinterpret_cast<const u8*>(&lpEventScoring->mabPlayerEliminated[lePlayerRaceCarIndex]);
+            lpDirectorInput->SetPlayerEliminated(luPlayerEliminated);
             lpDirectorInput->SetModeTimeExpired(
-                !(lpScoringOutputInterface->mfModeTimeRemaining > 0.0f) &&                       // flt_82001CC0
-                lpScoringOutputInterface->mbTimerActive);                                         // @0x7AD6
-        }
+                !(lpEventScoring->mfModeTimeRemaining > 0.0f) && lpEventScoring->mbTimerActive);
 
-        // ---- the per-car TEAMS (X360 live arm 0x823CD514..0x823CD56C, the bridge's last leg) ----
-        // ⭐ 2026-09-25 (crash parity FX-DIRECTOR2). r31 = gameStateOut + 0x2AFC8 (`addis 3 ; addi
-        // -0x5038` @0x823CD518 / 0x823CD528) == OnlineScoringOutputInterface::maePlayerTeam, then for
-        // each active race-car slot i = 0..7 (the EActiveRaceCarIndex iteration, its
-        // "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" tripwire BurnoutConstants.h:39 at 0x823CD550):
-        //   `lwz r5, 0(r31)` then DirectorIO::InputBuffer::SetVehicleTeam @0x823B2938 (input, i, team)
-        //   -- `stw team, 0x3238 + 4 * i`, behind its own two index asserts and the write-lock test.
-        // Their one reader is AllVehicleData::Update's fifth argument (lpaVehicleTeams): the team on
-        // each nearest-car row, which SqDistanceOfNearestOpposingTeamMember compares.
-        {
-            const BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface* const lpOnlineScoring =
-                lpGameStateOutput->GetOnlineScoringOutputInterface();
-            for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
+            s32 liCar = E_ACTIVE_RACE_CAR_INDEX_0;
+            do
             {
                 lpDirectorInput->SetVehicleTeam(static_cast<EActiveRaceCarIndex>(liCar),
-                                                static_cast<s32>(lpOnlineScoring->maePlayerTeam[liCar]));
+                    static_cast<s32>(lpOnlineScoring->maePlayerTeam[liCar]));
+                ++liCar;
+                if (liCar > E_ACTIVE_RACE_CAR_INDEX_COUNT)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                        "..\\..\\..\\GameSource\\BurnoutConstants.h", 39);
+                    CgsDev::Assert::EndAssert();
+                }
             }
+            while (liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT);
+            break;
         }
+
+        case BrnReplays::BaseSerialiser::E_MODE_PLAYING_PREPARING:
+        case BrnReplays::BaseSerialiser::E_MODE_RESTORING:
+            mDirectorBridgeSerialiser.SetDataReady(true);
+            mDirectorBridgeSerialiser.SetDataRestored(true);
+            break;
+
+        case BrnReplays::BaseSerialiser::E_MODE_PLAYING:
+            if (lpStatic != 0)
+            {
+                bool lbPlayerWasTakenDown = false;
+                s32 liKillerIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
+                mDirectorBridgeSerialiser.GetPlayerTakedownInfo(&lbPlayerWasTakenDown, &liKillerIndex);
+                if (lbPlayerWasTakenDown)
+                {
+                    if (liKillerIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+                    {
+                        CgsDev::Assert::BeginAssert();
+                        CgsDev::Assert::FireAssert(
+                            "lePlayerKillerRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", lpcSource, 285);
+                        CgsDev::Assert::EndAssert();
+                    }
+                    lpDirectorInput->SetPlayerKiller(static_cast<EActiveRaceCarIndex>(liKillerIndex));
+                }
+                lpDirectorInput->GetGameActionQueue()->Append(lpStatic->mGameActionQueue);
+                const BrnGameState::GameStateModuleIO::CarScoreData& lrReplayScore =
+                    mDirectorBridgeSerialiser.ReadPlayerScoreData();
+                lpDirectorInput->SetPlayerScoreFromNativeRecord(reinterpret_cast<const u8*>(&lrReplayScore));
+            }
+            break;
+
+        default:
+            break;
+        }
+
+        mDirectorBridgeSerialiser.Unlock();
     }
 
     // ------------------------------------------------------------------------------------

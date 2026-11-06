@@ -45,6 +45,7 @@ namespace BrnDirector
 
         // ---- methods bodied by this type's own TU (BrnDirectorVehicleInputInterface.cpp) ----
         void Construct();                                               // DWARF :54
+        NewVehicleEventQueue* GetNewVehicleEventQueue() { return &mNewVehicleQueue; }
         const NewVehicleEventQueue* GetNewVehicleEventQueue() const;    // DWARF :57
 
         // Announce that a car has entered the simulation. The DWARF spells the first

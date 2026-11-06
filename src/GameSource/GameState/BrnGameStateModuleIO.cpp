@@ -829,6 +829,24 @@ const ScoringOutputInterface* OutputBuffer::GetScoringOutputInterface() const
     return reinterpret_cast<const ScoringOutputInterface*>(&mScoringOutputInterfaceStorage);
 }
 
+// ARTIST's unbound player index -1 selects the 296 bytes immediately before
+// scoring storage. Address them as part of the complete OutputBuffer object.
+const u8* OutputBuffer::GetUnboundPlayerScoreBytes() const
+{
+    CGS_STATIC_ASSERT((offsetof(OutputBuffer, mScoringOutputInterfaceStorage) >= sizeof(CarScoreData)),
+                      "unbound score span must remain within OutputBuffer");
+    CGS_STATIC_ASSERT((offsetof(OutputBuffer, mScoringOutputInterfaceStorage) <= sizeof(OutputBuffer)),
+                      "scoring storage must be within OutputBuffer");
+#if defined(D_PLATFORM_X360) && D_PLATFORM_X360
+    CGS_STATIC_ASSERT((offsetof(OutputBuffer, mScoringOutputInterfaceStorage) == 0x2a4b8),
+                      "ARTIST scoring output offset");
+    CGS_STATIC_ASSERT((sizeof(CarScoreData) == 0x128), "ARTIST score record size");
+    CGS_STATIC_ASSERT((offsetof(OutputBuffer, mScoringOutputInterfaceStorage) - sizeof(CarScoreData) == 0x2a390),
+                      "ARTIST unbound score span");
+#endif
+    return reinterpret_cast<const u8*>(this) + offsetof(OutputBuffer, mScoringOutputInterfaceStorage) - sizeof(CarScoreData);
+}
+
 // INLINED on the X360 -- `outputBuffer + 175976` (0x823E1948 / 0x823E1950). Here the committed
 // type and the console span agree exactly (164 == 164), so there is no slack.
 const OnlineScoringOutputInterface* OutputBuffer::GetOnlineScoringOutputInterface() const

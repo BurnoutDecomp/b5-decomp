@@ -669,6 +669,7 @@ namespace GameStateModuleIO
         const RaceCarRaceDistanceInterface*    GetRaceCarRaceDistanceInterface() const;
         // INLINED on X360 (bridge computes this+173240).
         const ScoringOutputInterface*          GetScoringOutputInterface() const;
+        const u8* GetUnboundPlayerScoreBytes() const;
         // INLINED on X360 (bridge computes this+175976).
         const OnlineScoringOutputInterface*    GetOnlineScoringOutputInterface() const;
         // ---- write-side twins (A9 scoring-feed wave 2026-08-27) --------------------------

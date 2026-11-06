@@ -35,6 +35,9 @@ namespace DirectorIO
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mUsedRaceCars)        == 0x0980), "mUsedRaceCars @0x0980");
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mRaceCarInfo)         == 0x0990), "mRaceCarInfo @0x0990");
         CGS_STATIC_ASSERT((sizeof(BrnDirector::Camera::VehicleInfo)    == 1264),   "VehicleInfo stride 0x4F0");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mPlayerScoreData) == 0x3110), "mPlayerScoreData @0x3110");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbPlayerComboWarningActive) == 0x3258), "mbPlayerComboWarningActive @0x3258");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mfPlayerBoostPercentage) == 0x325C), "mfPlayerBoostPercentage @0x325C");
         CGS_STATIC_ASSERT((offsetof(InputBuffer, maVehicleInfoArray)   == 0x3238), "maVehicleInfoArray @0x3238");
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mControllerInfo)      == 0x3260), "mControllerInfo @0x3260");
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mGameActionQueue)     == 0x3340), "mGameActionQueue @0x3340");
@@ -45,6 +48,9 @@ namespace DirectorIO
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mTimerInterface)      == 0x6750), "mTimerInterface @0x6750");
         CGS_STATIC_ASSERT((sizeof(CgsSystem::TimerStatusInterface)     == 0x30),   "TimerStatusInterface fills the @0x6750 span exactly");
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mVehicleDriverInputInterface) == 0x6780), "mVehicleDriverInputInterface @0x6780");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mWorldStatusInterface) == 0x6AB0), "mWorldStatusInterface @0x6AB0");
+        CGS_STATIC_ASSERT((sizeof(BrnWorld::WorldEntityIO::StatusInterface) == 5), "world status payload size");
+        CGS_STATIC_ASSERT((offsetof(InputBuffer, mbWorldWantsDebugControllerFocus) == 0x7AC7 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "world controller focus seat");
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mContacts)            == 0x6AB8), "mContacts @0x6AB8");
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mTrafficOutputInterface) == 0x6AC0), "mTrafficOutputInterface @0x6AC0");
         CGS_STATIC_ASSERT((sizeof(BrnTraffic::BrnTrafficIO::TrafficDirectorOutputInterface) == 0x78E0 - 0x6AC0),
@@ -162,6 +168,9 @@ namespace DirectorIO
         // +0x24..+0x27, stvx128 zero +0x00 / +0x10). A frame on which BridgeWorldToDirector
         // returns before step 13 (no active player car) therefore publishes the cleared record.
         mPlayerCrashInfo.Construct();
+        mPlayerScoreData.ClearData();
+        mfPlayerBoostPercentage = 0.0f;
+        mbPlayerComboWarningActive = false;
 
         mUsedRaceCars.UnSetAll();
 
@@ -504,6 +513,12 @@ namespace DirectorIO
         mRaceCarInfo[luIndex] = lrInfo;
     }
 
+    void InputBuffer::SetPlayerCrashInfo(const BrnDirector::Camera::PlayerCrashInfo* lpObject)
+    {
+        // ARTIST 0x823E3E68 and 0x823E4FC4 copy the full six-word record.
+        std::memcpy(&mPlayerCrashInfo, lpObject, sizeof(mPlayerCrashInfo));
+    }
+
     void InputBuffer::SetCrashingCentreOfMass(u32 luIndex, const Matrix44Affine& lrCentreOfMass)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
@@ -548,12 +563,6 @@ namespace DirectorIO
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         mfPlayerBoostPercentage = lfPercentage;
-    }
-
-    f32 InputBuffer::GetPlayerBoostPercentage() const
-    {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return mfPlayerBoostPercentage;
     }
 
     void InputBuffer::SetShortcutMenuEvent(bool lbState)

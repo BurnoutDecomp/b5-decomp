@@ -296,7 +296,7 @@ struct GameState
     //   +0x1D1 plays "Wrecked" while an opposing car is near (0x82234CB4);
     //   the two flags only in the online modes 12 / 14 / 17 (jump table 0x82234A68).
     s32                 miPlayerTeam;                            // X360 +0x1CC (FLAG name)
-    bool                mbPlayerEliminated;                      // X360 +0x1D0 (FLAG name)
+    u8                  mbPlayerEliminated;                      // X360 +0x1D0, raw Director input byte
     bool                mbModeTimeExpired;                       // X360 +0x1D1 (FLAG name)
     RankUpInfo          mRankUpInfo;                             // :250  +0x1D4
     ShowTimeInfo        mShowTimeInfo;                           // :251  +0x1DC

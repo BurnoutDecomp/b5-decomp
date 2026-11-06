@@ -4,6 +4,8 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                             // Matrix44Affine (the CoM transforms)
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT (the lpStatic tripwires)
+#include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"
+#include "GameSource/GameState/BrnGameStateSharedIO.h"   // CarScoreData
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h" // BrnReplays::BaseSerialiser
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::VariableEventQueue<13312,16> (mGameActionQueue)
 #include <stddef.h>                                     // offsetof (layout asserts)
@@ -28,10 +30,9 @@
 namespace BrnReplays
 {
     // The 24320-byte bridge snapshot the static buffer holds (spans pinned by the
-    // Write serialise list + the getter offsets; the per-vehicle info record and
-    // the trailing blocks stay opaque -- their field surfaces belong to the
-    // bridge's own TUs). The game-action queue between the vehicle infos and the
-    // crash block is streamed by SerialiseGameActionQueue (+0x2790, 13312+16 bytes).
+    // Write serialise list + the getter offsets). SerialiseGameActionQueue
+    // streams the queue between the vehicle infos and the crash block
+    // (+0x2790, 13312+16 bytes).
     struct DirectorBridgeSerialiserStaticLayout
     {
         s8 muActivePlayerIndex;              // +0x0000 (serialised, 1; SIGNED -- the getters extsb the -1 sentinel)
@@ -39,18 +40,24 @@ namespace BrnReplays
         u8 mbPlayerWasTakenDown;             // +0x0002 (serialised, 1)
         u8 mabVehicleActive[8];              // +0x0003 (serialised, 8)
         u8 maPad000B[0x10 - 0x0B];           // +0x000B .. +0x000F
-        u8 maVehicleInfos[8][1264];          // +0x0010 (serialised, 10112; opaque records)
+        BrnDirector::Camera::VehicleInfo mVehicleInfo[8];   // +0x0010 (serialised, 10112)
         CgsModule::VariableEventQueue<13312, 16> mGameActionQueue;   // +0x2790 (SerialiseGameActionQueue)
-        u8 maBlock5BA0[48];                  // +0x5BA0 (serialised, 48; role not recovered)
+        BrnDirector::Camera::PlayerCrashInfo mPlayerCrashInfo; // +0x5BA0 (serialised, 48)
         Matrix44Affine maCentreOfMassTransforms[8];   // +0x5BD0 (serialised, 512)
-        u8 maPlayerData[296];                // +0x5DD0 (serialised, 296; the truncated-symbol block)
-        u8 mBlock5EF8;                       // +0x5EF8 (serialised, 1)
+        BrnGameState::GameStateModuleIO::CarScoreData mPlayerScoreData; // +0x5DD0 (serialised, 296)
+        bool mbPlayerComboWarningActive;                               // +0x5EF8 (serialised, 1)
         u8 maPad5EF9[3];                     // +0x5EF9 .. +0x5EFB
-        u8 maBlock5EFC[4];                   // +0x5EFC (serialised, 4)
+        f32 mfPlayerBoostPercentage;        // +0x5EFC (serialised, 4)
     };
+    CGS_STATIC_ASSERT((offsetof(DirectorBridgeSerialiserStaticLayout, mVehicleInfo) == 0x10), "vehicle info seat");
+    CGS_STATIC_ASSERT((sizeof(BrnDirector::Camera::VehicleInfo) == 0x4F0), "vehicle info stride");
+    CGS_STATIC_ASSERT((offsetof(DirectorBridgeSerialiserStaticLayout, mPlayerCrashInfo) == 0x5BA0), "player crash info seat");
     CGS_STATIC_ASSERT((offsetof(DirectorBridgeSerialiserStaticLayout, mGameActionQueue) == 0x2790), "game action queue seat");
     CGS_STATIC_ASSERT((offsetof(DirectorBridgeSerialiserStaticLayout, maCentreOfMassTransforms) == 0x5BD0), "centre-of-mass seat");
-    CGS_STATIC_ASSERT((sizeof(DirectorBridgeSerialiserStaticLayout) == 24320), "bridge snapshot size");
+    CGS_STATIC_ASSERT((offsetof(DirectorBridgeSerialiserStaticLayout, mPlayerScoreData) == 0x5DD0), "player score seat");
+    CGS_STATIC_ASSERT((offsetof(DirectorBridgeSerialiserStaticLayout, mbPlayerComboWarningActive) == 0x5EF8), "combo warning seat");
+    CGS_STATIC_ASSERT((offsetof(DirectorBridgeSerialiserStaticLayout, mfPlayerBoostPercentage) == 0x5EFC), "boost percentage seat");
+    CGS_STATIC_ASSERT((sizeof(DirectorBridgeSerialiserStaticLayout) == 0x5F00), "bridge snapshot size");
 
     class DirectorBridgeSerialiser : public BaseSerialiser
     {
@@ -85,13 +92,12 @@ namespace BrnReplays
             return lpStatic->mabVehicleActive[liVehicleIndex] != 0;
         }
 
-        // @0x823A8770 (h:238) -- one vehicle's 1264-byte info record (opaque; the
-        // consumers own the field surface).
-        void* GetVehicleInfo(s32 liVehicleIndex)
+        // @0x823A8770 (h:238) -- one vehicle's 1264-byte info record.
+        const BrnDirector::Camera::VehicleInfo* GetVehicleInfo(s32 liVehicleIndex)
         {
             DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
             CGS_ASSERT(lpStatic != 0, "lpStatic");   // :238 (non-gating)
-            return lpStatic->maVehicleInfos[liVehicleIndex];
+            return &lpStatic->mVehicleInfo[liVehicleIndex];
         }
 
         // @0x823A87E0 (h:287) -- one vehicle's centre-of-mass transform.
@@ -102,14 +108,27 @@ namespace BrnReplays
             return &lpStatic->maCentreOfMassTransforms[liVehicleIndex];
         }
 
-        // @0x823A8850 (h:310) -- the player data block (FLAG: IDA truncates the
-        // symbol at "GetPl"; the accessor name is completed from the block's
-        // role. Opaque -- the consumers own the field surface).
-        void* GetPlayerData()
+        // Inlined at 0x823E3E40..0x823E3E88 and 0x823E3DFC..0x823E3E3C.
+        const BrnDirector::Camera::PlayerCrashInfo* ReadCrashInfo()
         {
             DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
-            CGS_ASSERT(lpStatic != 0, "lpStatic");   // :310 (non-gating)
-            return lpStatic->maPlayerData;
+            CGS_ASSERT(lpStatic != 0, "lpStatic");   // ARTIST h:261
+            return &lpStatic->mPlayerCrashInfo;
+        }
+
+        f32 ReadPlayerBoostPercentage()
+        {
+            DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
+            CGS_ASSERT(lpStatic != 0, "lpStatic");   // ARTIST h:356
+            return lpStatic->mfPlayerBoostPercentage;
+        }
+
+        // ARTIST 0x823A8850 returns the score at +0x5DD0. DecFIGS h:118 names the accessor.
+        const BrnGameState::GameStateModuleIO::CarScoreData& ReadPlayerScoreData()
+        {
+            DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
+            CGS_ASSERT(lpStatic != 0, "lpStatic");   // ARTIST h:310
+            return lpStatic->mPlayerScoreData;
         }
 
         // @0x823A88A8 (h:383/:384/:385) -- the takedown record (was-taken-down +
