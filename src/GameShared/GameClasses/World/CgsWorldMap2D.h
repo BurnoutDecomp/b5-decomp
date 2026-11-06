@@ -30,9 +30,17 @@ public:
     // @0x82907FF8 - sample by 2D world position (this TU).
     uint8_t GetValue(Vector2 lPosition) const;
 
-    // Project a 3D world position onto X/Z, then sample the 2D map.
-    // This overload is inlined at ARTIST call sites before @0x82907FF8.
-    uint8_t GetValue(Vector3 lPosition) const;
+    // ARTIST mask 0x82CDA450 gathers X, Z, X, X before the 2D lookup.
+    uint8_t GetValue(Vector3 lPosition) const
+    {
+        static const CGS_ALIGN(16) u32 kauProjection[4] =
+        {
+            0x00010203, 0x18191A1B, 0x00010203, 0x00010203
+        };
+        Vector2 lMapPosition;
+        lMapPosition.mV = __vperm(lPosition.mV, lPosition.mV, __lvx(kauProjection, 0));
+        return GetValue(lMapPosition);
+    }
 
 private:
     Vector2        mWorldOrigin;   // +0

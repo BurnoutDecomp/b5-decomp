@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"   // MemoryIO request/response types (dispatch)
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"       // CgsMemory::HeapMalloc::Destruct (destroy-allocator)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "rw/rwcore_general_alloc.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstring>
@@ -648,6 +649,9 @@ namespace CgsMemory
                               + static_cast<u32>(sizeof(char*))       * luMaxBanks
                               + 32u * luMaxBanks;
 
+        // ARTIST8286ADDC..8286AE00 resets the embedded allocator before Create.
+        mScratchSpace.Construct();
+
         // Carve the backing block from the resource allocator via its virtual DoAllocate (the engine
         // holds the abstract rw::IResourceAllocator*; the game supplies a concrete one). Descriptor =
         // {m_size = total, m_alignment = 16} on pool 0; the returned Resource's main-memory pointer is
@@ -993,10 +997,11 @@ namespace CgsMemory
     // Prepare is not ready it returns false with the stage parked so the next call resumes there.
     bool MemoryModule::Prepare()
     {
-        mbIsNewModule = true;   // [reliable] see ResourceModule::Prepare -- set before base Prepare
         switch (mePrepareStage)
         {
         case E_PREPARE_START:
+            mePrepareStage = E_PREPARE_START;
+            // fall through
         case E_PREPARE_MANAGER:
             mePrepareStage = E_PREPARE_MANAGER;
             if (!ModuleSingleBuffered::Prepare())
@@ -1004,23 +1009,24 @@ namespace CgsMemory
             // fall through -- base module is prepared, initialise memory
         case E_PREPARE_INIT_MEMORY:
             mePrepareStage = E_PREPARE_INIT_MEMORY;
-            // [PC incremental] Construct allocates the bank/block arrays (mpBanks) from the resource
-            // allocator; until that bring-up is wired, skip bank init so the (still-stubbed-Construct)
-            // module's Prepare runs harmlessly instead of dereferencing a null mpBanks. Becomes a no-op
-            // guard automatically once Construct sets mpBanks.
-            if (mpBanks != 0)
-            {
-                InitBanks();
-                InitBlocks();
-                CreateRootBank();
-            }
+            InitBanks();
+            InitBlocks();
+            CreateRootBank();
             // fall through -- done
         case E_PREPARE_DONE:
             meReleaseStage = E_RELEASE_START;
             mePrepareStage = E_PREPARE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid stage");
+            CgsDev::Assert::BeginAssert();
+            {
+                CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                           CgsDev::Assert::giMessageBufferSize);
+                lMessage << "Invalid stage\n";
+            }
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModule.cpp", 159);
+            CgsDev::Assert::EndAssert();
             return false;
         }
     }
