@@ -52,6 +52,23 @@ void BoostBurnout3::OnTrafficCheck()
 // B5 slot 4 targets the shared empty body.
 void BoostBurnout5::OnTakenDownByAIOrPlayer() {}
 
+// B5 slot 14 targets BoostBurnout2::OnEndCrashPlay @0x822D5350.  mfMaxBoost is
+// sampled before UpdateMaxBoost runs, as in that body.
+void BoostBurnout5::OnEndCrashPlay()
+{
+    miBoostLevel = 0;
+    mfMinBoostAllowedAmount = mfMaxBoost * 0.15f;
+    UpdateMaxBoost(false);
+}
+
+// B5 slot 16 targets BoostBurnout3::OnPropHit @0x822A6620.  BoostBurnout5::Prepare
+// zeroes mfStuntSmashEarning (stfs f31, 0x84(r31) @0x822C1F90), so a prop hit earns
+// nothing in this mode: the call only re-applies AddBoost's clamp.
+void BoostBurnout5::OnPropHit()
+{
+    AddBoost(mfStuntSmashEarning);
+}
+
 // B5 slot 5 targets BoostBurnout2::OnPlayerAttacksRival @0x822A6E68.
 void BoostBurnout5::OnPlayerAttacksRival(BrnPhysics::Vehicle::EImpactType leImpactType)
 {
