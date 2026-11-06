@@ -360,25 +360,14 @@ namespace BrnNetwork
     }
 
     // -----------------------------------------------------------------------
-    // StartProcess  (X360 @ 0x825FC6EC)
+    // StartProcess  (X360 @ 0x82544E58)
     //   Arm the state machine for a process: record the completion callback, select
-    //   the process, reset the action cursor and begin waiting for the server
-    //   interface to go idle so the first action can run.
-    //
-    //   FLAGGED: this function's decompiled body was NOT present in the available
-    //   X360 export (only its symbol/address and the inlined StrStream logging are
-    //   recovered). The body below is reconstructed from the firm state-machine
-    //   invariants: it is the only entry point that arms the machine, and every
-    //   caller (StartEndOfRound / StartEndOfGame) hands it (process, callback,
-    //   userData); the resulting (meCurrentProcess, mun8CurrentAction == 0,
-    //   meSubState == WAIT_IDLE) state is what UpdateWaitIdle / SetNextAction require
-    //   to run the process. No magic constants are introduced.
+    //   the process, reset the action cursor and wait for the server interface to go idle.
     // -----------------------------------------------------------------------
     void PostRoundManager::StartProcess(EProcess leProcess, Callback lpfCallback, void* lpCallbackUserData)
     {
         CGS_ASSERT(lpfCallback != nullptr, "lCallback");
-        CGS_ASSERT(leProcess >= E_PROCESS_END_ROUND && leProcess < E_PROCESS_COUNT,
-                   "(leProcess >= E_PROCESS_END_ROUND) && (leProcess < E_PROCESS_COUNT)");
+        CGS_ASSERT(mCallback == nullptr, "Process already started!");   // @0x82544EA0
 
         mCallback          = lpfCallback;
         mpCallbackUserData = lpCallbackUserData;
@@ -388,8 +377,8 @@ namespace BrnNetwork
     }
 
     // -----------------------------------------------------------------------
-    // StartEndOfRound  (X360 @ 0x825FC9CC)
-    //   Kick off the end-of-round process (trivial wrapper over StartProcess).
+    // StartEndOfRound  (no console symbol: inlined in StateManager::ProcessGameStateActions)
+    //   Kick off the end-of-round process.
     // -----------------------------------------------------------------------
     void PostRoundManager::StartEndOfRound(Callback lpfCallback, void* lpCallbackUserData)
     {
@@ -536,16 +525,12 @@ namespace BrnNetwork
         return true;
     }
 
-    // ActionResume  (X360 @ 0x825FD24C)
-    //   FLAGGED: this function's decompiled body was NOT in the available X360 export
-    //   (func_files span_count == 5, dominant/only-inlined file == CgsStrStream.h),
-    //   i.e. the recovered footprint is purely the "Starting action" debug logging
-    //   followed by `return true`. The resume sequencing proper is owned by the
-    //   suspension manager (driven via the WAIT_RESUME substate / ResumeCompleteCallback).
-    //   Returning true (advance) without an un-groundable substate store is reproduced
-    //   here; no behaviour is invented.
+    // ActionResume  (X360 @ 0x8256D498)
+    //   Resume the server interface suspended for the game; ResumeCompleteCallback advances.
     bool PostRoundManager::ActionResume()
     {
+        meSubState = E_SUBSTATE_WAIT_RESUME;
+        mpNetworkManager->GetSuspensionManager()->Resume(ResumeCompleteCallback, this);
         return true;
     }
 
@@ -563,14 +548,12 @@ namespace BrnNetwork
         return true;
     }
 
-    // ActionUnstartGame  (X360 @ 0x825FDACC)
-    //   FLAGGED: as with ActionResume, the decompiled body was NOT in the available
-    //   X360 export (func_files span_count == 5, only-inlined file == CgsStrStream.h):
-    //   the recovered footprint is the debug logging + `return true`. The actual
-    //   un-start wait is handled by the WAIT_GAME_UNSTART substate. Reproduced as
-    //   return true; no behaviour is invented.
+    // ActionUnstartGame  (X360 @ 0x82545128)
+    //   Wait for the game to leave the "started" state. Without this wait a client reaches the
+    //   post-race lobby with the flag still up and StateManager launches it again.
     bool PostRoundManager::ActionUnstartGame()
     {
+        meSubState = E_SUBSTATE_WAIT_GAME_UNSTART;
         return true;
     }
 
