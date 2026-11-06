@@ -38,7 +38,7 @@ namespace CgsSceneManager
         u32  maQueryNumResults[KU_JOB_BUFFER_MAX_NUM_QUERIES];  // +0x48
         u16* mpu16Buffer;                                      // +0x88
 
-        void Construct(rw::IResourceAllocator* lpAllocator);   // :52 (declare-only)
+        void Construct(rw::IResourceAllocator* lpAllocator);   // :52, X360 @0x828BB128
         void Clear();                                          // :56 (declare-only)
     };
 }

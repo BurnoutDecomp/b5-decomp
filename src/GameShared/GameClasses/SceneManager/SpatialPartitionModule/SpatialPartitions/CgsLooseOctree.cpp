@@ -532,18 +532,7 @@ namespace CgsSceneManager
 
         for (u32 luJob = 0; luJob < KU_NUM_FRUSTUM_TEST_JOBS; ++luJob)
         {
-            // JobCoarseResultBuffer::Construct @0x828BB128 -- clear the counters and
-            // publish the run pool (the console carves 0x4000 bytes out of the same
-            // allocator; the block is held inline here, see the header).
-            JobCoarseResultBuffer& lrBuffer = maJobResultBuffers[luJob];
-            lrBuffer.muNumQueries         = 0;
-            lrBuffer.muCurrentWriteOffset = 0;
-            for (u32 luQuery = 0; luQuery < KU_JOB_BUFFER_MAX_NUM_QUERIES; ++luQuery)
-            {
-                lrBuffer.maQueryOffsets[luQuery]    = 0;
-                lrBuffer.maQueryNumResults[luQuery] = 0;
-            }
-            lrBuffer.mpu16Buffer = maJobResultStorage[luJob];
+            maJobResultBuffers[luJob].Construct(lpAllocator);   // 0x828CA0B0
 
             mabFrustumJobActive[luJob]    = false;
             mabFrustumJobRequested[luJob] = false;
