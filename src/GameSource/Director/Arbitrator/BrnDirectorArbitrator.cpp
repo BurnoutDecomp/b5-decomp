@@ -485,14 +485,7 @@ namespace BrnDirector
         {
             lrCameraInOut = GetNormalCamera();
 
-            // ⚠️ GATE: the transition's own post-FX --
-            //     lrCameraInOut.GetEffects().mStartHookNameString.Set("Jump_Effect");
-            //     ...mbHasStartHookNameString = true;  ...mfStartHookNameBlendAmount = 1.0f;
-            //   Every field is named and this WOULD be writable; it is held back only because
-            //   HookNameStringWrapper::Set is declaration-only (its body lands with the
-            //   effect-trigger TU) and firing a hook the EffectInterface cannot resolve is
-            //   worse than not firing it. CONSEQUENCE: no screen effect on the cut into attract
-            //   mode. DELETE-WHEN: HookNameStringWrapper::Set is bodied.
+            lrCameraInOut.GetEffects().SetStartHookName("Jump_Effect", 1.0f);
 
             if (mArbStateAttractMode.Prepare(lrSharedInfo))
             {
@@ -594,10 +587,9 @@ namespace BrnDirector
         {
             mArbStateAttractMode.Release(lrSharedInfo);
             meState = E_STATE_NORMAL;
-            // ⚠️ GATE: the stop-hook poke
-            //     lrCameraInOut.GetEffects().mStopHookNameString.Set("Jump_Effect");
-            //     lrCameraInOut.GetEffects().mbHasStopHookNameString = true;
-            //   -- held back for the same reason as case 5's start-hook (see there).
+            Camera::CameraEffects& lrEffects = lrCameraInOut.GetEffects();
+            lrEffects.mStopHookNameString.Set("Jump_Effect");
+            lrEffects.mbHasStopHookNameString = true;
         }
     }
 
