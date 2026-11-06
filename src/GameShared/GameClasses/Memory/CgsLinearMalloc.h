@@ -25,7 +25,7 @@ namespace CgsMemory
         size_t GetAlignment() const { return mnAlignment; }   // current bump-pointer alignment
         size_t GetFreeMemory() const;
         size_t GetUsage() const;       // 0x82866D40 - bytes consumed (bump pointer - region start)
-        size_t GetSize() const { return mnEndAddress - mnStartAddress; }   // whole adopted-region size (DWARF accessor; header-inline -- the sound Playback::Module::Prepare stream-buffer sizing divides it by 3)
+        size_t GetSize() const;       // ARTIST 0x82866D50; asserts the allocator is created
         void* GetStartAddress() const; // borrowed region start, independent of mpAlloc
 
     private:
