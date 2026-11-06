@@ -96,10 +96,11 @@ namespace BrnDirector
         // The interpolator handle starts unallocated (+0x180 block zeroed).
         mInterpolator.Clear();
 
-        // The interpolator parameter block seed (+0x194: {+0x00:0, +0x04:8, +0x08:0, +0x0C:2}).
-        mInterpolatorParams           = InterpolatorParameters();
-        mInterpolatorParams.muField04 = 8;
-        mInterpolatorParams.muField0C = 2;
+        // The interpolator parameter block (+0x194): 0x8225AEB8..0x8225AF30 store
+        // {mType 8, name 0, method 0, mapping 1} and then overwrite the mapping with 2.
+        mInterpolatorParams.Construct();
+        mInterpolatorParams.meInterpolationMapping =
+            Camera::BehaviourInterpolate::E_MAPPING_EXPONENTIAL_SYMMETRICAL;
 
         // Every ICE-anim handle starts unallocated (rival[0..2] @+0x1A4/+0x1B8/+0x1CC,
         // mPlayer @+0x1E0, mLights @+0x1F4 blocks zeroed).
@@ -113,11 +114,12 @@ namespace BrnDirector
 
     // ------------------------------------------------------------------------
     // Prepare -- the small entry latch: unless already ACTIVE-or-later, force PREPARING and
-    // reset the rival-movie cursor, then report ready (the console returns true unconditionally).
+    // reset the current rival, then report ready (the console returns true unconditionally).
     //
-    //   if (meState <= 1) { meState = 1; muRivalMovieOffset = 0; }   return true;
+    //   if (meState <= 1) { meState = 1; muCurrentRival = 0; }   return true;
     //
-    // (+0x220 == meState, +0x21C == muRivalMovieOffset on the console; both reached here BY NAME.)
+    // (+0x220 == meState, +0x218 == muCurrentRival. The shot cursor muRivalMovieOffset @+0x21C
+    // is left alone, so the next intro starts on the next shot.)
     // ------------------------------------------------------------------------
     bool ArbStateOnlineRaceIntro::Prepare(ArbStateSharedInfo& lrSharedInfo)
     {
@@ -184,14 +186,16 @@ namespace BrnDirector
     }
 
     // ------------------------------------------------------------------------
-    // SetupRivalMovie -- allocate + configure the rival "show" ICE-anim behaviour at
-    // the current rival-movie cursor (muRivalMovieOffset) for rival luRivalIndex.
+    // SetupRivalMovie @0x8226EC18 -- allocate + configure the rival "show" ICE-anim behaviour
+    // for rival luRivalIndex.
     //
-    // Picks the rival's shot from the online-race-start shot group (indexing
-    // muCurrentRival % luNumRivalMovies into the ShotList, after the two leading non-rival
-    // shots), feeds its data block to a fresh ICE-anim behaviour, and configures the behaviour's
-    // primary/secondary anchor vehicle references to the rival's tracked vehicle. Advances the
-    // cursor afterward.
+    // The shot comes from the rotating cursor, not from the rival: (muRivalMovieOffset %
+    // luNumRivalMovies) + 2, the two leading shots being the player and lights takes. The
+    // behaviour is allocated into maRivalBehaviourHandle[luRivalIndex] and then reached through
+    // maRivalBehaviourHandle[muCurrentRival] (`lwz 0x218`), which every caller has made equal.
+    // The cursor is incremented last (`++*(this + 0x21C)`). An earlier reading indexed the
+    // handles by the cursor, which Prepare never resets, so a second intro ran past the three
+    // handles.
     // ------------------------------------------------------------------------
     void ArbStateOnlineRaceIntro::SetupRivalMovie(ArbStateSharedInfo& lrSharedInfo, u32 luRivalIndex)
     {
@@ -203,25 +207,22 @@ namespace BrnDirector
         const u32 luNumRivalMovies = lrOnlineRaceStartShotGroup.Num_ShotList() - 2;
         CGS_ASSERT(luNumRivalMovies > 0, "luNumRivalMovies > 0");
 
-        // The shot index for this rival: wrap the rival counter into the rival range, then skip
-        // the two leading non-rival shots.
-        const u32 luShotIndex = muCurrentRival % luNumRivalMovies + 2;
+        const u32 luShotIndex = muRivalMovieOffset % luNumRivalMovies + 2;
 
-        // Allocate the rival "show" behaviour into the handle at the current cursor.
         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
-            maRivalBehaviourHandle[muRivalMovieOffset], this,
+            maRivalBehaviourHandle[luRivalIndex], this,
             KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
 
-        maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour()
-            ->SetForceMotionBlurEverything(true);   // +0xE2B = 1
+        Camera::BehaviourHandle<Camera::BehaviourIceAnim>& lrHandle = maRivalBehaviourHandle[muCurrentRival];
+
+        lrHandle.GetBehaviour()->SetForceMotionBlurEverything(true);   // +0xE2B = 1
 
         const void* lpShotData = const_cast<Attrib::Gen::shotgroup&>(lrOnlineRaceStartShotGroup)
                                      .GetShotListData(static_cast<s32>(luShotIndex));
         if (!lpShotData)
             lpShotData = Attrib::DefaultDataArea(KU_SHOT_DEFAULT_DATA_AREA_SIZE);
 
-        Camera::BehaviourIceAnim* lpBehaviour = maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour();
-        lpBehaviour->SetParameters(
+        lrHandle.GetBehaviour()->SetParameters(
             static_cast<Camera::BehaviourIceAnim::ShotReference*>(const_cast<void*>(lpShotData)));
 
         // Anchor the take's eye + look vehicle references to this rival's intro race car (the
@@ -232,47 +233,46 @@ namespace BrnDirector
         const s32 liRivalRaceCar =
             static_cast<s32>(lrSharedInfo.mpGameState->maeIntroCarID[luRivalIndex]);
 
-        lpBehaviour->SetPrimaryVehicleRefToRaceCarIndex(liRivalRaceCar);     // +0xDF0 block
-        maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour()
-            ->SetSecondaryVehicleRefToRaceCarIndex(liRivalRaceCar);          // +0xE00 block
+        lrHandle.GetBehaviour()->SetPrimaryVehicleRefToRaceCarIndex(liRivalRaceCar);     // +0xDF0 block
+        lrHandle.GetBehaviour()->SetSecondaryVehicleRefToRaceCarIndex(liRivalRaceCar);   // +0xE00 block
 
-        // Enable the take's collision policy (behaviour +0xE28).
-        maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour()->SetUseCollisionPolicy(true);
-
-        // Clear the base first-frame gate (behaviour +0x28 = 0).
-        maRivalBehaviourHandle[muRivalMovieOffset].GetBehaviour()->ClearBaseFirstFrameGate();
+        lrHandle.GetBehaviour()->SetUseCollisionPolicy(true);     // +0xE28 = 1
+        lrHandle.GetBehaviour()->ClearBaseFirstFrameGate();       // +0x28 = 0
 
         ++muRivalMovieOffset;
     }
 
     // ------------------------------------------------------------------------
-    // SetupInterpolator -- allocate the take-to-take blend behaviour and latch it to blend
-    // lrFromCamera -> lrToCamera over mfTimeToSpendInterpolating, seeded from mInterpolatorParams.
-    // De-inlines the console's interpolator-setup sequence the MOVING_TO_* edges share.
+    // SetupInterpolator -- allocate the take-to-take blend behaviour and latch it to blend from
+    // lrFrom's camera to lrTo's over mfTimeToSpendInterpolating. The sequence the three console
+    // sites share (0x822737CC, 0x8227394C, 0x82273AE8):
+    //   NewBehaviour<BehaviourInterpolate>(mInterpolator, this, 0, 1)
+    //   the inlined SetParameters(&mInterpolatorParams)
+    //   sub_821FD4B8 on both handles: assert IsAllocated, return the +0x04 helper index
+    //   sub_8224EE58 == BehaviourInterpolate::Setup(mfTimeToSpendInterpolating, from, to, manager)
+    // The references follow the two helpers (CameraReference::Setup snapshots each helper's
+    // camera at once, so the source may be released right after, as two of the sites do). An
+    // earlier reading cached the two produced cameras instead, and passed them in reverse.
     // ------------------------------------------------------------------------
     void ArbStateOnlineRaceIntro::SetupInterpolator(ArbStateSharedInfo& lrSharedInfo,
-                                                    const Camera::Camera& lrFromCamera,
-                                                    const Camera::Camera& lrToCamera)
+                                                    const Camera::BehaviourHandle<Camera::BehaviourIceAnim>& lrFrom,
+                                                    const Camera::BehaviourHandle<Camera::BehaviourIceAnim>& lrTo)
     {
         lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourInterpolate>(
             mInterpolator, this, KPC_NEW_BEHAVIOUR_OWNER, KI_NEW_BEHAVIOUR_REFLIMIT);
 
         Camera::BehaviourInterpolate* lpInterpolator = mInterpolator.GetBehaviour();
 
-        // Seed the interpolation mode + the per-take parameters (the console writes the mode word
-        // at the behaviour base's +0x04 == meTimestepType, and points the params pointer at the
-        // state's InterpolatorParameters block). The InterpolatorParameters POD stands in for the
-        // slice's opaque Parameters here -- cast to the slice type the named setter takes.
-        lpInterpolator->SetInterpolationMode(static_cast<s32>(mInterpolatorParams.muField0C));
-        lpInterpolator->SetParameters(
-            reinterpret_cast<const Camera::BehaviourInterpolate::Parameters*>(&mInterpolatorParams));
+        // The inlined SetParameters at each of the three sites (0x822737F4..0x82273804,
+        // 0x82273970..0x82273980, 0x82273B10..0x82273B24): `lwz 4(params)` is the debug name,
+        // stored at behaviour +0x10, and `stw params, 0x2A0`. Nothing writes behaviour +0x04, so
+        // there is no SetInterpolationMode here; an earlier reading took the name load for one.
+        lpInterpolator->SetParameters(&mInterpolatorParams);
 
-        // The two camera references are SNAPSHOTS: each setter caches the camera it is handed
-        // (meType = E_TYPE_CACHED) rather than recording where it came from.
-        lpInterpolator->SetupCameraAFromCamera(lrFromCamera);
-        lpInterpolator->SetupCameraBFromCamera(lrToCamera);
-        lpInterpolator->SetupDuration(mfTimeToSpendInterpolating);
-        lpInterpolator->Setup();
+        lpInterpolator->Setup(mfTimeToSpendInterpolating,
+                              lrFrom.GetBehaviourHelperIndex(),
+                              lrTo.GetBehaviourHelperIndex(),
+                              lrSharedInfo.mpBehaviourManager);
     }
 
     // ------------------------------------------------------------------------
@@ -413,14 +413,10 @@ namespace BrnDirector
             {
                 SetupRivalMovie(lrSharedInfo, muCurrentRival);
 
-                // Allocate the interpolator and seed it from the InterpolatorParameters block,
-                // then blend FROM the rival "show" produced camera TO the player "show" produced
-                // camera over the per-move time. (The console builds the two CameraReferences from
-                // the rival + player handles and latches Setup over them; expressed
-                // here through the BehaviourInterpolate named-setup API.)
-                SetupInterpolator(lrSharedInfo,
-                    maRivalBehaviourHandle[muRivalMovieOffset - 1].GetProducedCamera(),
-                    mPlayerBehaviourHandle.GetProducedCamera());
+                // Blend from the player "show" to the rival's (0x82273850: r5 = the player
+                // handle's helper, r6 = rival[muCurrentRival]'s).
+                SetupInterpolator(lrSharedInfo, mPlayerBehaviourHandle,
+                                  maRivalBehaviourHandle[muCurrentRival]);
 
                 mfTimeInState = 0.0f;   // +0x214 = 0
                 meState       = E_STATE_MOVING_TO_RIVAL;   // +0x220 = 5
@@ -446,7 +442,7 @@ namespace BrnDirector
             }
             else
             {
-                lrCamera = maRivalBehaviourHandle[muRivalMovieOffset - 1].GetProducedCamera();
+                lrCamera = maRivalBehaviourHandle[muCurrentRival].GetProducedCamera();   // 0x822738DC
             }
 
             if (lbInterpolatorActive || mfTimeInState < mfTimeToSpendLookingAtRival)
@@ -478,13 +474,12 @@ namespace BrnDirector
                 mPlayerBehaviourHandle.GetBehaviour()->SetForceMotionBlurEverything(true); // +0xE2B
                 mPlayerBehaviourHandle.GetBehaviour()->ClearBaseFirstFrameGate();          // +0x28 = 0
 
-                // Blend from the player "show" back over the last rival "show".
-                SetupInterpolator(lrSharedInfo,
-                    mPlayerBehaviourHandle.GetProducedCamera(),
-                    maRivalBehaviourHandle[muRivalMovieOffset - 1].GetProducedCamera());
-
-                // Release the rival behaviour.
-                maRivalBehaviourHandle[muRivalMovieOffset - 1].Release();
+                // Blend from the last rival's "show" back to the player's (0x82273B6C: r5 =
+                // rival[muCurrentRival]'s helper, r6 = the player handle's), then release that
+                // rival (0x82273B98).
+                SetupInterpolator(lrSharedInfo, maRivalBehaviourHandle[muCurrentRival],
+                                  mPlayerBehaviourHandle);
+                maRivalBehaviourHandle[muCurrentRival].Release();
                 meState = E_STATE_MOVING_TO_PLAYER;   // +0x220 = 6
             }
             else
@@ -494,13 +489,12 @@ namespace BrnDirector
                 muCurrentRival = luNextRival;
                 SetupRivalMovie(lrSharedInfo, muCurrentRival);
 
-                // Blend from the newly-set-up rival "show" over the previous one.
-                SetupInterpolator(lrSharedInfo,
-                    maRivalBehaviourHandle[muRivalMovieOffset - 1].GetProducedCamera(),
-                    maRivalBehaviourHandle[muRivalMovieOffset - 2].GetProducedCamera());
-
-                // Release the previous rival behaviour.
-                maRivalBehaviourHandle[muRivalMovieOffset - 2].Release();
+                // Blend from the previous rival's "show" to the new one's (0x822739E0: r5 =
+                // rival[muCurrentRival - 1]'s helper, r6 = rival[muCurrentRival]'s), then release
+                // the previous rival (0x82273A0C).
+                SetupInterpolator(lrSharedInfo, maRivalBehaviourHandle[muCurrentRival - 1],
+                                  maRivalBehaviourHandle[muCurrentRival]);
+                maRivalBehaviourHandle[muCurrentRival - 1].Release();
             }
 
             lrCamera.mState_uFlags |= 0x10000000;
