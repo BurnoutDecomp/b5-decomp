@@ -818,16 +818,12 @@ void ModeManager::ShowModeResults(
         lAction.miField14 = 1;               // record+0x14
         lAction.miField08 = liStuntScore;    // record+0x08
 
-        // [X] PARKED LEG (one store), header_request filed:
-        // Console: `r10 = mpProgressionManager + 0x170` (== Profile) then
-        //     if (liStuntScore > *(profile + 0x268)) *(profile + 0x268) = liStuntScore;
-        // Profile+0x268 == 616 == BrnProfile.h's `s32 miBestStuntRunScore` -- the member EXISTS at
-        // exactly that offset but is below BrnProfile.h:563's `private:` with no accessor pair.
-        // Requested:
-        //     s32  GetBestStuntRunScore() const;
-        //     void SetBestStuntRunScore(s32 liScore);
-        // Behavioural cost while parked: the profile's best-stunt-run high score never rises.
-        (void)mpProgressionManager->GetProfile();
+        // 0x823438DC: the profile's best stunt-run score only ever rises.
+        BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
+        if (liStuntScore > lpProfile->GetBestStuntRunScore())
+        {
+            lpProfile->SetBestStuntRunScore(liStuntScore);
+        }
     }
 
     // ---- "is this the player's FIRST win of this event?" ---------------------------------------
