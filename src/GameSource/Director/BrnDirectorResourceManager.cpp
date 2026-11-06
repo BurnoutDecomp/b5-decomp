@@ -191,6 +191,14 @@ const ICE::ICETakeData* ICEResourceMgr::GetTakeData(s32 liTakeIndex) const
 }
 
 // ----------------------------------------------------------------------------
+// @0x827DEB98. Everything is member construction: the ICEResourceMgr vtable at +552, the 64
+// shotgroup slots and the one cameradefaults through their element constructors (sub_827DC838 and
+// sub_827DC8C8), and the RefSpec default constructor zeroes the bytes the console clears at +1608.
+DirectorResourceManager::DirectorResourceManager()
+{
+}
+
+// ----------------------------------------------------------------------------
 // @0x82239620. Asserts :485 and :489. The class key is burnoutcarasset's, composed in registers;
 // the collection key is the vehicle entry's hashed attrib key at +0xA0; the collection pointer
 // stays null until a caller resolves the ref.
