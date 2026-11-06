@@ -13,6 +13,7 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameSource/Sound/Global/BrnGlobalStateManager.h"      // GetPresentationSpliceBank
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
+#include "GameSource/Sound/Streaming/BrnStreamingStateManager.h"  // the HUD stream's manager
 #include "GameSource/Sound/Global/BrnHudSoundDiag.h"            // [DIAG] NOT IN THE X360 BINARY
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::Dot + operator-(Vec,Vec) + operator*(Vec,float)
 #include <cmath>                              // std::sqrt
@@ -146,15 +147,16 @@ void HUDEffect::GameModeData::Reset()
 // Runtime-initialised module globals mirroring the X360 .data slots
 // HUDEffect::GetSlipstreamAmount reads (the shared 0.0/1.0 singletons are in the
 // 0x8200_xxxx rodata range; these two live in the 0x8300_xxxx MUTABLE data segment,
-// so they are runtime-initialised FILE-SCOPE GLOBALS, not function-local constants):
-//   * flt_830060C0 is written by sub_82C62DB8 as XMVectorCos(0.346f) == cos(0.346 rad)
-//     == 0.9407368f (a ~19.8deg slipstream-cone half-angle cosine gate). VALUE RECOVERED
-//     from the writer.
-//   * flt_830083E4 has a single read-only xref (this function) and no exported writer --
-//     its runtime value is UNRECOVERABLE. Modelled as a flagged global initialised to
-//     1.0f (identity multiplier) so the shape compiles; confidence LOW on this one number.
-static f32 gfSlipstreamConeCos = 0.9407368f;  // flt_830060C0 == cos(0.346f)
-static f32 gfSlipstreamScale   = 1.0f;        // flt_830083E4 -- UNRESOLVED runtime value (confidence=low)
+// so they are runtime-initialised FILE-SCOPE GLOBALS, not function-local constants).
+// BOTH VALUES ARE RECOVERED FROM THEIR CRT INIT THUNKS, which sit next to each other:
+//   * flt_830060C0, thunk @0x82C62DB8: XMVectorCos(flt_8209D74C == 0.346f) == 0.9407368f,
+//     the cosine of the ~19.8 degree slipstream cone half-angle.
+//   * flt_830083E4, thunk @0x82C62E08 (`lfs 1.0 ; lfs flt_830060C0 ; fsubs ; fdivs ; stfs`):
+//     1.0f / (1.0f - flt_830060C0) == 16.87f. It rescales the alignment term, which can
+//     only reach (1 - cos) on its own, back onto [0,1].
+// The second initialiser reads the first, so their definition order here is load-bearing.
+static f32 gfSlipstreamConeCos = 0.9407368f;                          // flt_830060C0
+static f32 gfSlipstreamScale   = 1.0f / (1.0f - gfSlipstreamConeCos); // flt_830083E4
 
 // ---------------------------------------------------------------------------
 // HUDEffect::HUDEffect (Construct)  @ 0x826E1940  (MINIMAL -- see FLAGs)
@@ -203,55 +205,57 @@ HUDEffect::~HUDEffect()
 // HUDEffect::GetSlipstreamAmount  @ 0x82686BA8
 //
 // Slipstream-audio proximity/alignment weight for the car in front. `this` (r3) is
-// unused; the three Vector3 args arrive in vector registers v1/v2/v3:
-//   v1 = car-in-front velocity, v2 = player's weighted velocity,
-//   v3 = negated look direction (caller vxor128 sign-flip).
+// unused; the three Vector3 args arrive in vector registers v1/v2/v3, loaded by the only
+// caller, UpdateSlipStreaming @0x82701F0C:
+//   v1 = the player's position (GetPlayerPosition),
+//   v2 = the car in front's position + 2.0 * its unit velocity,
+//   v3 = the negated unit velocity of the car in front (vxor128 sign-flip).
+// So the result grows as the player sits straight behind that car, in its direction of
+// travel. (This banner used to call v1/v2 velocities; they are positions, see the caller.)
 //
 // ASM (0x82686BA8-0x82686C5C), store-for-store:
-//   relVel  = v1 - v2                                     ; vsubfp
-//   distSq  = Dot3(relVel, relVel)                         ; vmsum3fp128
-//   projRaw = Dot3(v3, relVel)                             ; vmsum3fp128
-//   invDist = 1/sqrt(distSq)                               ; vrsqrtefp + 1 NR step
-//   t1 = 1.0 - (projRaw - 25.0) * (1/15), saturate01       ; two fsel
-//   unitRelVel = relVel * invDist                          ; normalize
-//   projNorm   = Dot3(unitRelVel, v3)                      ; vmsum3fp128
-//   t2 = saturate01(projNorm - gfSlipstreamConeCos)        ; two fsel
+//   offset    = v1 - v2                                    ; vsubfp
+//   distSq    = Dot3(offset, offset)                        ; vmsum3fp128
+//   behind    = Dot3(v3, offset)                            ; vmsum3fp128
+//   invDist   = 1/sqrt(distSq)                              ; vrsqrtefp + 1 NR step
+//   t1 = 1.0 - (behind - 25.0) * (1/15), saturate01         ; two fsel
+//   unitOffset = offset * invDist                           ; normalize
+//   aligned    = Dot3(unitOffset, v3)                       ; vmsum3fp128
+//   t2 = saturate01(aligned - gfSlipstreamConeCos)          ; two fsel
 //   return (t2 * gfSlipstreamScale) * t1
 //
 // FLAG (VMX->portable): vrsqrtefp + 1 NR refine collapsed to exact 1.0f/std::sqrt
 //   (project convention, matches the BrnMathUtils Magnitude family).
 // FLAG (fsel-faithful clamps): both saturate pairs reproduce the PPC
-//   `fsel(a,b,c) == (a >= 0.0f) ? b : c` sense exactly (NOT std::clamp).
-// FLAG (globals, NOT rodata literals): gfSlipstreamConeCos (flt_830060C0 == cos(0.346))
-//   and gfSlipstreamScale (flt_830083E4, UNRESOLVED, modelled as 1.0f) are runtime-
-//   initialised file-scope globals -- see the definitions above.
+//   `fsel(a,b,c) == (a >= 0.0f) ? b : c` sense exactly (NOT std::clamp), which also keeps
+//   the console's answer for a NaN input (a stationary car in front): the fsel takes c.
 // ---------------------------------------------------------------------------
-f64 HUDEffect::GetSlipstreamAmount( Vector3 lCarInFrontVelocity,
-                                    Vector3 lOwnWeightedVelocity,
+f64 HUDEffect::GetSlipstreamAmount( Vector3 lPlayerPosition,
+                                    Vector3 lSlipstreamOrigin,
                                     Vector3 lNegatedDirection )
 {
-    const Vector3 lRelativeVelocity = lCarInFrontVelocity - lOwnWeightedVelocity;   // v0 = v1 - v2
+    const Vector3 lOffset = lPlayerPosition - lSlipstreamOrigin;                        // v0 = v1 - v2
 
-    const f32 lfDistSq  = rw::math::vpu::Dot(lRelativeVelocity, lRelativeVelocity); // vmsum3fp128 v13,v0,v0
-    const f32 lfProjRaw = rw::math::vpu::Dot(lNegatedDirection, lRelativeVelocity); // vmsum3fp128 v10,v3,v0
+    const f32 lfDistSq = rw::math::vpu::Dot(lOffset, lOffset);                          // vmsum3fp128 v13,v0,v0
+    const f32 lfBehind = rw::math::vpu::Dot(lNegatedDirection, lOffset);                // vmsum3fp128 v10,v3,v0
 
     // vrsqrtefp + 1 Newton-Raphson refine -> exact reciprocal-sqrt (see FLAG).
     const f32 lfInvDist = 1.0f / std::sqrt(lfDistSq);
 
-    // t1 = 1.0 - (projRaw - 25.0) * (1/15), then saturate to [0,1] (two fsel).
-    f32 lfSpeedFactor = 1.0f - (lfProjRaw - 25.0f) * 0.06666667f;
-    lfSpeedFactor = ((-lfSpeedFactor) >= 0.0f) ? 0.0f : lfSpeedFactor;                 // fsel: lower clamp -> 0
-    lfSpeedFactor = ((1.0f - lfSpeedFactor) >= 0.0f) ? lfSpeedFactor : 1.0f;           // fsel: upper clamp -> 1
-
-    const Vector3 lUnitRelativeVelocity = lRelativeVelocity * lfInvDist;              // vmulfp128 v0,v0,v13
-    const f32 lfProjNorm = rw::math::vpu::Dot(lUnitRelativeVelocity, lNegatedDirection); // vmsum3fp128 v0,v0,v3
-
-    // t2 = saturate01(projNorm - coneCos) (two fsel).
-    f32 lfDistanceFactor = lfProjNorm - gfSlipstreamConeCos;
+    // Full weight up to 25 m behind the car, fading to nothing at 40 m (two fsel).
+    f32 lfDistanceFactor = 1.0f - (lfBehind - 25.0f) * 0.06666667f;
     lfDistanceFactor = ((-lfDistanceFactor) >= 0.0f) ? 0.0f : lfDistanceFactor;        // fsel: lower clamp -> 0
     lfDistanceFactor = ((1.0f - lfDistanceFactor) >= 0.0f) ? lfDistanceFactor : 1.0f;  // fsel: upper clamp -> 1
 
-    return static_cast<f64>((lfDistanceFactor * gfSlipstreamScale) * lfSpeedFactor);
+    const Vector3 lUnitOffset = lOffset * lfInvDist;                                    // vmulfp128 v0,v0,v13
+    const f32 lfAligned = rw::math::vpu::Dot(lUnitOffset, lNegatedDirection);           // vmsum3fp128 v0,v0,v3
+
+    // How far inside the cone the player sits (two fsel).
+    f32 lfAlignmentFactor = lfAligned - gfSlipstreamConeCos;
+    lfAlignmentFactor = ((-lfAlignmentFactor) >= 0.0f) ? 0.0f : lfAlignmentFactor;        // fsel: lower clamp -> 0
+    lfAlignmentFactor = ((1.0f - lfAlignmentFactor) >= 0.0f) ? lfAlignmentFactor : 1.0f;  // fsel: upper clamp -> 1
+
+    return static_cast<f64>((lfAlignmentFactor * gfSlipstreamScale) * lfDistanceFactor);
 }
 
 
@@ -302,7 +306,7 @@ namespace
 //       *(v6 - 3) = 3   ; *v6++ = 0        ; mau8MixerOutputs = 3, mau8ChokeGroups = 0
 //   the mMusicStream block (a1+928..a1+1016) reset to "stopped, silent,
 //   LP 96000 Hz, priority 2, nothing queued, output slot 0"
-//   the mGameModeData Average block (a1+1020..a1+1064) zeroed
+//   the mSlipstreamAmount Average block (a1+1020..a1+1064 == this+0x400) zeroed
 //   return 1
 //
 // The X360 does NOT call the base EffectBase::Attach here: it inlines the two
@@ -342,22 +346,30 @@ bool HUDEffect::Attach()
         mau8ChokeGroups[liVoice]  = 0;
     }
 
-    // The X360 writes the HUD music-stream block field by field rather than
-    // calling MusicStream::Prepare (which would also stamp the CreateParams);
-    // reproduced by name.
-    // FLAG: the console also stamps the block's priority word to 2 here; the
-    // committed MusicStream home exposes no priority setter and belongs to the
-    // music group, so that ONE field is not written (nothing in this slice queues
-    // the HUD stream, so no observable behaviour depends on it).
+    // The X360 writes the HUD music-stream block field by field here, priority 2 among
+    // them, and fills the stream's CreateParams later, on every MusicStream::Queue
+    // @0x8269CB88 (module, the shared factory and slot names, "MusicFiltVoiceSpec",
+    // "Send01", the content spec), and it hands the streaming manager to every
+    // MusicStream::Update as an argument (*(module + 0x296C), UpdateSlipStreaming
+    // @0x82701D68).
+    // Our MusicStream keeps those fixed values from Prepare on (the MusicEffect streams do too), so
+    // they are stored here rather than on every Queue. The values and their use are the console's.
+    mMusicStream.Prepare(lpModule,
+                         static_cast<Streaming::StreamingStateManager*>(
+                             lpModule->GetEnvironment().GetStateManager(6)),
+                         "MusicFiltVoiceSpec", 2);
+    mMusicStream.ResetVoiceStages();
     mMusicStream.SetVolume(0.0f);
     mMusicStream.SetHighPassFreq(0.0f);
     mMusicStream.SetLowPassFreq(96000.0f);
     mMusicStream.StopAndUnqueue(0.0f);
 
-    mGameModeData.mEventScoreDelta.mfAverage = 0.0f;
+    // this+0x400 (`addi r9, r31, 0x3FC`, r31 == this+4), the slipstream mean. This used to
+    // zero mGameModeData.mEventScoreDelta (+0x430), which X360 Attach does not touch.
+    mSlipstreamAmount.mfAverage = 0.0f;
     for (u32 luPoint = 0; luPoint < 10u; ++luPoint)
-        mGameModeData.mEventScoreDelta.maPoints[luPoint] = 0.0f;
-    mGameModeData.mEventScoreDelta.muNextPoint = 0;
+        mSlipstreamAmount.maPoints[luPoint] = 0.0f;
+    mSlipstreamAmount.muNextPoint = 0;
 
     if (HudSoundDiagBudget(guHudDiagAttach))
     {
@@ -409,55 +421,36 @@ bool HUDEffect::Detach()
 //     82703814  lwz  r4, 0x28(r31)         ; this+0x2C == mpLogicModule
 //     82703818  bl   0x82702670            ; HUDEffect::UpdateGameModeHud
 //
-// ⛔ SO THE ACCUMULATE IS RIGHT AND THE OTHER TWO THIRDS ARE MISSING, AND THIS IS
-// THE ONLY ENTRY POINT THE WHOLE HUD-AUDIO LANE HAS. UpdateGameModeHud
-// @0x82702670 is what dispatches on the live game mode to UpdateShowtime
-// @0x82701830 (modes 2/16), UpdateRoadRage @0x82701AA0 (mode 3),
-// UpdateEventTimeRemaining @0x826FE400 (mode 5) and UpdateStuntRun @0x82701598
-// (mode 7), and UpdateSlipStreaming @0x82701BA8 is the slipstream whoosh. None of
-// those five has a definition in this tree, so none of them can be called from
-// here yet -- the calls land with the bodies, not before, or the link breaks.
-// Until then the slipstream cue, the road-rage countdown and takedown stings, the
-// showtime score ticks, the stunt-run score ticks and the event-timer warnings are
-// all SILENT, and the cause is this function, not any of them.
+// This is the ONLY entry point the whole HUD-audio lane has: UpdateGameModeHud
+// @0x82702670 dispatches on the live game mode to UpdateShowtime @0x82701830
+// (modes 2/16), UpdateRoadRage @0x82701AA0 (mode 3), UpdateEventTimeRemaining @0x826FE400
+// (mode 5) and UpdateStuntRun @0x82701598 (mode 7); UpdateSlipStreaming @0x82701BA8 is the
+// slipstream whoosh. All of them are bodied in this file.
 //
-// [FLAG] Two of three statements. The two calls are REPORTED, not stubbed: adding
-// them needs the five callees above, which is a wave of its own. Every offset they
-// need is already pinned -- mGameModeData's members line up one-for-one with the
-// console's a1+1072.. cursors (mEventScoreDelta.mfAverage at +0x2C,
-// mEventTimeRemaining at +0x30, mEventBoostAmount at +0x38, mfTimeSinceScoreTick
-// at +0x40, mStuntScore at +0x44, mStuntResultScore at +0x54, mShowtimeScore at
-// +0x5C, mShowtimeBoostDelta at +0x64, mbTimeExtended at +0x6C) and the showtime /
-// stunt thresholds are .rdata 0x82F2CE48/4C/50 == 3.5 / 1.5 / 1.0 with the
-// re-trigger gate 0x82F2CE54 == 0.379 s. RootInputBuffer::GuiAudioEventResults was
-// the one open shape and it is settled too (same wave): it is EIGHT bytes,
-// { s32 miStuntResultScore @+0x00; f32 mfShowtimeScore @+0x04 }, which is what
-// RootInputBuffer::Construct writes (0 as a u32 at +0x13730, flt_82001CC0 at
-// +0x13734) and what these two arms read. The mode-5 arm's own arguments are
-// pinned as well -- UpdateGameModeHud @0x827027F0 gates on the scoring interface's
-// byte at +0xAA8 and passes (scoring[+0xA98] - scoring[+0xA90], 10.0f, tag 21,
-// mixer output 3).
+// Settled facts the bodies rely on: mGameModeData's members line up one-for-one with the
+// console's a1+1072.. cursors (mEventScoreDelta.mfAverage at +0x2C, mEventTimeRemaining at
+// +0x30, mEventBoostAmount at +0x38, mfTimeSinceScoreTick at +0x40, mStuntScore at +0x44,
+// mStuntResultScore at +0x54, mShowtimeScore at +0x5C, mShowtimeBoostDelta at +0x64,
+// mbTimeExtended at +0x6C), and the showtime / stunt thresholds are .rdata
+// 0x82F2CE48/4C/50 == 3.5 / 1.5 / 1.0 with the re-trigger gate 0x82F2CE54 == 0.379 s.
+// RootInputBuffer::GuiAudioEventResults is EIGHT bytes, { s32 miStuntResultScore @+0x00;
+// f32 mfShowtimeScore @+0x04 }, which is what RootInputBuffer::Construct writes (0 as a u32
+// at +0x13730, flt_82001CC0 at +0x13734) and what these arms read. The mode-5 arm's
+// arguments: UpdateGameModeHud @0x827027F0 gates on the scoring interface's byte at +0xAA8
+// and passes (scoring[+0xA98] - scoring[+0xA90], 10.0f, tag 21, mixer output 3).
 // ---------------------------------------------------------------------------
 void HUDEffect::UpdateParams(f32 af32DeltaTime)
 {
     mfTimeSinceLastTrigger += af32DeltaTime;
-    // UpdateSlipStreaming();   <- @0x8270380C. STILL REPORTED, see the banner: its body is
-    //                             the convoy/slipstream VMX kernel and it is its own wave.
-    //   What that wave already has: the cue is a "SlipStream" stream QUEUED on mMusicStream
-    //   (this+0x3A0) at mixer output 17 plus splice tag 24 -- which is ONE PAST this class's
-    //   ePresentationSampleTags enum, so the enum needs a 24th enumerator when it lands. It
-    //   is gated on the music type being 12, 14 or 17 and on the module byte at +0x13579,
-    //   and the geometry it needs is GetSlipstreamAmount @0x82686BA8, ALREADY BODIED above.
+    UpdateSlipStreaming(af32DeltaTime);                                         // @0x8270380C
     UpdateGameModeHud(static_cast<Module::SoundLogicModule*>(mpLogicModule));   // @0x82703818
 }
 
 // ---------------------------------------------------------------------------
 // The GAME-MODE HUD AUDIO LANE  (2026-09-16)
 //
-// ⭐⭐⭐ THIS WHOLE LANE WAS DEAD, AND ITS ENTRY POINT IS WHY. HUDEffect::UpdateParams
-// @0x827037E0 is three statements -- accumulate, UpdateSlipStreaming, UpdateGameModeHud --
-// and this tree had only the first, because that function is UNNAMED in the ledger and a
-// name search for it came back empty. Nothing below could ever run.
+// HUDEffect::UpdateParams @0x827037E0 is three statements -- accumulate, UpdateSlipStreaming,
+// UpdateGameModeHud -- and is unnamed in the ledger, so a name search for it comes back empty.
 //
 // The console's dispatch is UpdateGameModeHud @0x82702670: it takes the live game mode from
 // the input buffer's GameModeOutputInterface, resets the per-mode block when the mode
@@ -534,10 +527,29 @@ namespace
     const s32 KI_MODE_STUNT_ATTACK     = 7;    // E_MODE_STUNT_ATTACK
     const s32 KI_MODE_ONLINE_SHOWTIME  = 16;   // E_MODE_ONLINE_SHOWTIME
 
+    // The three modes the slipstream runs in. 17 is spelled E_MODE_ONLINE_MODE_END /
+    // E_MODE_COUNT in the shared enum, but it is a real dispatchable mode (the enum's own
+    // aliasing is explained at ModeManager::KI_GAME_MODE_SLOTS).
+    const s32 KI_MODE_ONLINE_FUGITIVE  = 12;   // E_MODE_ONLINE_FUGITIVE
+    const s32 KI_MODE_ONLINE_FREE_BURN = 14;   // E_MODE_ONLINE_FREE_BURN
+    const s32 KI_MODE_ONLINE_MODE_END  = 17;   // E_MODE_ONLINE_MODE_END
+
+    // X360 tests this inline, twice, as `14 || 12 || 17` (0x82701C74, 0x82701D70).
+    inline bool IsSlipstreamGameMode(s32 aiMode)
+    {
+        return aiMode == KI_MODE_ONLINE_FREE_BURN || aiMode == KI_MODE_ONLINE_FUGITIVE ||
+               aiMode == KI_MODE_ONLINE_MODE_END;
+    }
+
+    // [DIAG] NOT IN THE X360 BINARY -- what the [hud-slip] witness last printed.
+    u32 guHudDiagSlip = 0;
+    s32 giHudDiagSlipKey = -1;
+
     // The mixer outputs each lane plays on (X360 `li r5/r7, N` at the call sites).
     const u8 KU8_MIXER_OUTPUT_ROAD_RAGE = 3;
     const u8 KU8_MIXER_OUTPUT_STUNT     = 17;
     const u8 KU8_MIXER_OUTPUT_SHOWTIME  = 18;
+    const u8 KU8_MIXER_OUTPUT_SLIPSTREAM = 17;   // X360 `li r6/r5, 0x11` @0x82701CB8 / 0x82701CCC
 }
 
 // ---- PlaySound(ePresentationSampleTags, u8)   @ 0x826FE540 ----------------------
@@ -614,6 +626,103 @@ void HUDEffect::UpdateEventTimeRemaining(f32 afTimeRemaining, f32 afWindow,
 
         PlaySound(lSampleTag, au8MixerOutput);
     }
+}
+
+// ---- UpdateSlipStreaming   @ 0x82701BA8 ------------------------------------------
+// The convoy slipstream: a looping "SlipStream" stream while game action 16 says the player
+// is in a convoy, plus a mixer input carrying how squarely the player sits behind the car
+// in front. The module's mu8FlagAt1 / mi32At4 are that action's "in convoy" one-shot and the
+// active race-car index of the car in front (InProgressStuntAction::miCarInFrontIndex).
+//
+// The console's stack frame is 0x29F0 bytes because it COPIES the whole vehicle interface
+// (RCEntityActiveRaceCarOutputInterface's copy ctor @0x826BB258, into var_2970) and queries
+// the copy. Nothing writes to it and it does not outlive the function, so the buffer's own
+// interface is read directly, as UpdateShowtime @0x82701830 does.
+void HUDEffect::UpdateSlipStreaming(f32 afDeltaTime)
+{
+    Module::SoundLogicModule* lpModule = static_cast<Module::SoundLogicModule*>(mpLogicModule);
+    Module::Io::RootInputBuffer* lpInputBuffer = lpModule->GetBrnInputStructure();
+    CGS_ASSERT(lpInputBuffer, "mpBrnLogicInputBuffer");
+
+    const s32 liGameMode = lpInputBuffer->GetGameModeInterface()->miCurrentGameModeType;
+    const u8  lu8InConvoy = lpModule->mDispatchState.mu8FlagAt1;
+
+    // Note the two arms are NOT an if/else on one test: in a convoy with the stream already
+    // up, or outside the three modes, neither runs.
+    if (lu8InConvoy == 1)
+    {
+        if (!mMusicStream.IsPlayingOrQueued() && IsSlipstreamGameMode(liGameMode))
+        {
+            const u32 luSlipStream = static_cast<u32>(
+                CgsSound::Playback::Name::MakeHash("SlipStream"));
+            mMusicStream.Queue(luSlipStream, KU8_MIXER_OUTPUT_SLIPSTREAM);
+            PlaySound(E_SPLICE_SLIPSTREAM, KU8_MIXER_OUTPUT_SLIPSTREAM);
+        }
+    }
+    else if (lu8InConvoy == 0 && mMusicStream.IsPlayingOrQueued())
+    {
+        mMusicStream.StopAndUnqueue(1.0f);   // flt_82001C98, the fold @0x82701D20..0x82701D58
+    }
+
+    mMusicStream.Update(afDeltaTime);
+
+    // [DIAG] NOT IN THE X360 BINARY -- BRN_HUD_SOUND_DIAG=1, one line per CHANGE of what
+    // the gates saw, so a whole run costs a handful of lines.
+    if (HudSoundDiagEnabled())
+    {
+        const s32 liKey = ((liGameMode + 1) << 16) | (static_cast<s32>(lu8InConvoy) << 12) |
+                          ((lpModule->mDispatchState.mi32At4 + 1) << 4) |
+                          static_cast<s32>(mMusicStream.GetState());
+        if (liKey != giHudDiagSlipKey && HudSoundDiagBudget(guHudDiagSlip))
+        {
+            giHudDiagSlipKey = liKey;
+            HudSoundDiagPrintf(
+                "[hud-slip] mode %d gated=%d convoy=%u carInFront=%d stream=%d out=%u mean=%.4f\n",
+                liGameMode, IsSlipstreamGameMode(liGameMode) ? 1 : 0,
+                static_cast<u32>(lu8InConvoy), lpModule->mDispatchState.mi32At4,
+                static_cast<s32>(mMusicStream.GetState()),
+                static_cast<u32>(mMusicStream.GetOutputSlot()),
+                static_cast<double>(mSlipstreamAmount.GetAverage()));
+        }
+    }
+
+    if (!IsSlipstreamGameMode(liGameMode))
+    {
+        return;
+    }
+
+    const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpVehicle =
+        lpModule->GetBrnInputStructure()->GetVehicleInterface();
+    const s32 liCarInFront = lpModule->mDispatchState.mi32At4;
+    const EActiveRaceCarIndex leCarInFront = static_cast<EActiveRaceCarIndex>(liCarInFront);
+
+    f32 lfAmount = 0.0f;
+    if (liCarInFront != -1 && lpVehicle->IsPlayerCarActive() &&
+        lpVehicle->IsRaceCarActive(leCarInFront) &&
+        !lpVehicle->GetPlayerRaceCarState()->mbCrashing)
+    {
+        CGS_ASSERT(liCarInFront < 8, "Invalid RaceCarIndex");   // cpp:888
+        const BrnPhysics::Vehicle::RaceCarState* lpCarInFront =
+            lpVehicle->GetRaceCarState(leCarInFront);
+        CGS_ASSERT(lpCarInFront,
+                   "Cannot find the RaceCarState for the Car in front of the player in the convoy");   // cpp:890
+
+        // X360 0x82701EAC..0x82701EFC: normalise the velocity (vrsqrtefp + 1 NR step, exact
+        // reciprocal-sqrt here as in GetSlipstreamAmount above), then push the car's position
+        // 2.0 along it with vmaddfp128. 0x82701F04..14 flips all four sign bits for v3.
+        const f32 lfSpeedSq = rw::math::vpu::Dot(lpCarInFront->mLinearVelocity,
+                                                 lpCarInFront->mLinearVelocity);
+        const Vector3 lDirection = lpCarInFront->mLinearVelocity * (1.0f / std::sqrt(lfSpeedSq));
+        const Vector3 lOrigin    = lDirection * 2.0f + lpCarInFront->mTransform.Pos();
+
+        lfAmount = static_cast<f32>(
+            GetSlipstreamAmount(lpVehicle->GetPlayerPosition(), lOrigin, -lDirection));
+    }
+    mSlipstreamAmount.Record(lfAmount);
+
+    // subfic/subfe/clrlwi 17 @0x82701F3C: any non-zero byte -> 0x7FFF.
+    SetMixerInputValue(1, lpModule->mDispatchState.mu8FlagAt1 != 0 ? 0x7FFF : 0);
+    SetMixerInputValue(2, static_cast<s32>(mSlipstreamAmount.GetAverage() * 32767.0f));   // flt_820AD310, fctiwz
 }
 
 // ---- UpdateShowtime   @ 0x82701830 ----------------------------------------------
