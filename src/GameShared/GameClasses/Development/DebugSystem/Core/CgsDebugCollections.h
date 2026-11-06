@@ -43,15 +43,22 @@ namespace CgsDev { namespace Internal {
 } }
 
 // Custom array-new the debug pools allocate their backing blocks through (DWARF
-// CgsDebugCollections.h:45) - raw storage from the rw resource allocator. The body (the actual
-// allocator call - X360 AllocateMemoryResource / PC-SDK rw::IResourceAllocator::Alloc) is the
-// bring-up follow-on; declared here so the pool Construct bodies resolve it.
+// CgsDebugCollections.h:45), using the supplied rw resource allocator.
 void* operator new[](size_t size, rw::IResourceAllocator* lpAllocator, CgsDev::Internal::AllocationType leAllocation);
 
 namespace CgsDev
 {
     namespace Internal
     {
+        // ARTIST array-new callers saturate overflowing 32-bit byte counts.
+        inline size_t DebugArrayAllocationSize(u32 luCount, size_t luElementSize)
+        {
+            const u32 luMaxSize = 0xffffffffu;
+            return luCount > luMaxSize / luElementSize
+                ? static_cast<size_t>(luMaxSize)
+                : static_cast<size_t>(luCount) * luElementSize;
+        }
+
         // Fixed-capacity array of T* (DWARF CgsDebugCollections.h:87).
         template <class T>
         struct DebugStaticArray
@@ -64,10 +71,10 @@ namespace CgsDev
             // set capacity, start empty, null the slots.
             void Construct(int liMaxSize, rw::IResourceAllocator* lpAllocator)
             {
-                mppItems  = static_cast<T**>(::operator new[](static_cast<size_t>(liMaxSize) * sizeof(T*), lpAllocator, E_ALLOCATION_NORMAL));
+                mppItems  = static_cast<T**>(::operator new[](DebugArrayAllocationSize(static_cast<u32>(liMaxSize), sizeof(T*)), lpAllocator, E_ALLOCATION_NORMAL));
                 miMaxSize = static_cast<s16>(liMaxSize);
                 miCount   = 0;
-                for (s32 liIndex = 0; liIndex < liMaxSize; ++liIndex)
+                for (s32 liIndex = 0; liIndex < miMaxSize; ++liIndex)
                     mppItems[liIndex] = 0;
             }
 
@@ -133,15 +140,26 @@ namespace CgsDev
             // the allocator, then build the active + free index arrays over it.
             void Construct(int liMaxSize, rw::IResourceAllocator* lpAllocator)
             {
-                mpItemsArray = static_cast<T*>(::operator new[](static_cast<size_t>(liMaxSize) * sizeof(T), lpAllocator, E_ALLOCATION_NORMAL));
+                mpItemsArray = static_cast<T*>(::operator new[](DebugArrayAllocationSize(static_cast<u32>(liMaxSize), sizeof(T)), lpAllocator, E_ALLOCATION_NORMAL));
                 // The X360 allocates the backing block with array-new, which default-constructs every
                 // element (CgsVariableManager.cpp:60 / CgsMenuManager.cpp:59 list the element ctor -
                 // Variable()/Menu()/MenuItemVariable()/MenuWindow()/... - inside Construct). The
                 // menu-item element types carry a vtable and the managers invoke their virtual Prepare
                 // on a freshly pooled element, so the elements MUST be constructed here, not merely
                 // allocated.
-                for (s32 liIndex = 0; liIndex < liMaxSize; ++liIndex)
-                    ::new (static_cast<void*>(&mpItemsArray[liIndex])) T();
+                if (mpItemsArray)
+                {
+                    // The original array-construction loop decrements a 32-bit count
+                    // before its signed test, including its wrap at INT_MIN.
+                    u32 luRemaining = static_cast<u32>(liMaxSize) - 1u;
+                    T* lpItem = mpItemsArray;
+                    while (static_cast<s32>(luRemaining) >= 0)
+                    {
+                        ::new (static_cast<void*>(lpItem)) T();
+                        ++lpItem;
+                        --luRemaining;
+                    }
+                }
                 mActive.Construct(liMaxSize, lpAllocator);
                 mFree.Construct(liMaxSize, lpAllocator);
             }
