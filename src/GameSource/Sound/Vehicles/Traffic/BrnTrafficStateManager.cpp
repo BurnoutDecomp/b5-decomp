@@ -66,28 +66,39 @@ TrafficStateManager::~TrafficStateManager()
 {
 }
 
-// MemBase::operator new(0xCD0, "TrafficStateManager", flavour) + the constructor; the
-// argument only picks the operator-new flavour.
+// ARTIST descriptor 0x82F2E900 supplies ID 3, the TrafficStateManager name, base
+// descriptor 0x82F2FAA0 and factory 0x82701208. The factory's name tag is read from
+// the descriptor before MemBase::operator new(0xCD0, name, flavour).
 CgsSound::Logic::StateManager* TrafficStateManager::CreateObject(u32 luType)
 {
-    return new ("TrafficStateManager", luType != 0) TrafficStateManager();
+    return new (sTypeInfo.typeName, luType != 0) TrafficStateManager();
 }
 
-// Descriptor {3, "TrafficStateManager", StateManager::sTypeInfo, &CreateObject}.
+// The direct class-static descriptor and typed registrar reproduce ARTIST's data
+// object and CRT thunk 0x82C61E08.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> TrafficStateManager::sTypeInfo(
+    3,
+    "TrafficStateManager",
+    &CgsSound::Logic::StateManager::sTypeInfo,
+    &TrafficStateManager::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* TrafficStateManager::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        3,
-        "TrafficStateManager",
-        CgsSound::Logic::StateManager::GetStaticTypeInfo(),
-        &TrafficStateManager::CreateObject );
     return &sTypeInfo;
 }
 
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* const
-    gpTrafficStateManagerReg =
-        CgsSound::Logic::StateManager::AddToClassTypeInfoArray(
-            TrafficStateManager::GetStaticTypeInfo() );
+namespace
+{
+    struct TrafficStateManagerTypeRegistration
+    {
+        TrafficStateManagerTypeRegistration()
+        {
+            CgsSound::Logic::StateManager::AddToClassTypeInfoArray(
+                TrafficStateManager::GetStaticTypeInfo());
+        }
+    };
+    static TrafficStateManagerTypeRegistration gTrafficStateManagerTypeRegistration;
+}
 
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* TrafficStateManager::GetTypeInfo() const
 {
@@ -96,7 +107,7 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* TrafficStateManag
 
 const char* TrafficStateManager::GetTypeName() const
 {
-    return "TrafficStateManager";
+    return sTypeInfo.typeName;
 }
 
 // ---------------------------------------------------------------------------

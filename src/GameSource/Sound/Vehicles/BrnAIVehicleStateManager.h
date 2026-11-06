@@ -93,6 +93,7 @@ public:
     // storable in ClassTypeInfo<StateManager>::mpfnCreateObject. ----
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const override;
     virtual const char* GetTypeName() const override;                      // @ 0x82684028
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();
     static CgsSound::Logic::StateManager* CreateObject( u32 luType );     // @ 0x82702358
 

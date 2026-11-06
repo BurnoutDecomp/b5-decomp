@@ -72,6 +72,7 @@ public:
     // -- its int arg is the operator-new flavour selector, not `this`). ----
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const override;
     virtual const char* GetTypeName() const override;
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();
     static CgsSound::Logic::StateManager* CreateObject( u32 luType );                     // @ 0x827022D8
 

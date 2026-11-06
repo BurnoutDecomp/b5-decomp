@@ -88,6 +88,11 @@ public:
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();
     static CgsSound::Logic::StateManager* CreateObject( u32 luType );                   // @ 0x82701518
 
+private:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo;
+
+public:
+
     // @ 0x826F5AC0 (vtable +0x0C). The per-manager boot bring-up state machine.
     virtual bool Prepare();
     virtual bool Release();

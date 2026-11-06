@@ -159,7 +159,7 @@ public:
     // ---- RTTI hooks (declared for home completeness; bodied in this TU's .cpp). ----
     virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const override;
     virtual const char* GetTypeName() const override;
-    // STATIC: GetStaticTypeInfo returns the function-local static RTTI descriptor and
+    // STATIC: GetStaticTypeInfo returns this manager's typed class-static descriptor and
     // CreateObject is the factory the descriptor stores as a free-function pointer
     // (StateManager*(*)(u32)). The X360 CreateObject @ 0x82702030 never touches an
     // instance -- its int arg is the operator-new flavour selector, not `this` -- so it
@@ -209,6 +209,8 @@ public:
     }
 
 protected:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo;
+
     void UpdateDynamicPropBys( f32 lfTimeStep );
 
     // BrnPassbyStateManager.h:130 (DWARF).

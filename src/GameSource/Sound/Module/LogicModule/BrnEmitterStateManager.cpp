@@ -117,68 +117,30 @@ CgsSound::Logic::StateManager* EmitterStateManager::CreateObject(u32 luType)
     return new ("EmitterStateManager", luType != 0) EmitterStateManager();
 }
 
-// ---------------------------------------------------------------------------
-// EmitterStateManager::GetStaticTypeInfo()  (RTTI descriptor)
-//
-// Mirrors the in-tree GetStaticTypeInfo convention (CgsStateManager.cpp:230): a
-// function-local static ClassTypeInfo<StateManager> seeded with (ObjectID, typeName,
-// baseTypeInfo, createObject) so CreateStateMan matches descriptor->ObjectID and
-// calls ->createObject.
-//
-// ObjectID RESOLVED = 7: the PS3 DecFIGS __static_initialization_and_destruction_0
-// (0x85FA1C) sets BrnSound::Logic::World::EmitterStateManager::sTypeInfo.ObjectID = 7
-// (its slot in the CreateStateManagers 0..8 sequence; the other manager ids there are
-// PlayerVehicle=1, AIVehicle=2, Traffic=3, Passby=4, Collision=5, Streaming=6,
-// Emitter=7, GlobalStateManager=0). The X360 CreateObject @ 0x82701518 has no
-// xrefs_to so the id was not directly exported from the X360, but the PS3 (same source)
-// names it explicitly; used here.
-//
-// FLAG (registry hookup deferred): the full CgsSound::Logic::StateManager view (now
-// the base via BrnStateManager.h) DOES declare AddToClassTypeInfoArray, but the
-// per-leaf static-init that calls it with this leaf's ObjectID is not wired here (it
-// is the conductor-owned registration step). The descriptor is produced here; its
-// insertion into the static registry (StateManager::AddToClassTypeInfoArray) is done
-// at the wiring step. &CreateObject is the StateManager*(*)(u32) the canonical
-// ClassTypeInfo::createObject stores.
-// ---------------------------------------------------------------------------
+// ARTIST descriptor 0x82F2F84C; the CRT thunk registers this preinitialized object.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> EmitterStateManager::sTypeInfo(
+    7, "EmitterStateManager", &CgsSound::Logic::StateManager::sTypeInfo, &EmitterStateManager::CreateObject);
+
+namespace
+{
+    struct EmitterStateManagerTypeRegistration
+    {
+        EmitterStateManagerTypeRegistration()
+        {
+            CgsSound::Logic::StateManager::AddToClassTypeInfoArray(EmitterStateManager::GetStaticTypeInfo());
+        }
+    };
+    static EmitterStateManagerTypeRegistration gEmitterStateManagerTypeRegistration;
+}
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* EmitterStateManager::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        7,                       // ObjectID (PS3 DecFIGS __static_init 0x85FA1C: EmitterStateManager::sTypeInfo.ObjectID = 7)
-        "EmitterStateManager",   // typeName
-        CgsSound::Logic::StateManager::GetStaticTypeInfo(), // baseTypeInfo (PS3 0x85FA1C: =StateManager::GetStaticTypeInfo(); was 0 -- reconciled to the 7 siblings 2026-08-25)
-        &EmitterStateManager::CreateObject // createObject
-    );
     return &sTypeInfo;
 }
 
-// ---------------------------------------------------------------------------
-// File-scope registration (Part D): land this leaf's descriptor in the shared
-// StateManager RTTI registry (CgsStateManager.cpp gapClassTypeInfoArray, X360
-// dword_82FFBC58) at load time, so the factory StateManager::CreateStateMan
-// (0x826A5B60) can find it by ObjectID and CreateStateManagers (0x826AFEF8) can
-// construct it. AddToClassTypeInfoArray is the canonical StateManager registration
-// entry (@ 0x8268DFE8), reached through the BrnStateManager base.
-//
-// ObjectID = 7 (RESOLVED, see GetStaticTypeInfo above): the PS3 DecFIGS __static_init
-// (0x85FA1C) sets EmitterStateManager::sTypeInfo.ObjectID = 7 and appends &sTypeInfo to
-// CgsSound::Logic::StateManager::ClassTypeInfoArray -- exactly the registration this
-// static-init reproduces (the descriptor is seeded 7 by GetStaticTypeInfo, then inserted
-// here). NOTE (2026-08-25): this TU IS in the game build (build_game_exe.bat) -- the
-// registration runs at static-init and CreateStateManagers constructs this manager at boot.
-// ---------------------------------------------------------------------------
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* const
-    gpEmitterStateManagerReg =
-        CgsSound::Logic::StateManager::AddToClassTypeInfoArray(
-            EmitterStateManager::GetStaticTypeInfo());
-
-// ---------------------------------------------------------------------------
-// EmitterStateManager::GetTypeInfo() const  (vtable RTTI hook)
-//   Returns this leaf's static descriptor.
-// ---------------------------------------------------------------------------
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* EmitterStateManager::GetTypeInfo() const
 {
-    return GetStaticTypeInfo();
+    return &sTypeInfo;
 }
 
 // ---------------------------------------------------------------------------
@@ -187,7 +149,7 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* EmitterStateManag
 // ---------------------------------------------------------------------------
 const char* EmitterStateManager::GetTypeName() const
 {
-    return "EmitterStateManager";
+    return sTypeInfo.typeName;
 }
 
 // ---------------------------------------------------------------------------

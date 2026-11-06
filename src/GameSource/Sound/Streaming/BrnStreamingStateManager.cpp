@@ -17,11 +17,8 @@
 //   StreamingStateManager::CreateObject  @ 0x82700B68  (real)
 //   StreamingStateManager::Prepare       @ 0x826EE680  (stub -- domain cascade)
 //   StreamingStateManager::ctor          @ 0x826FBFE0  (real -- self-contained shell)
-// GetTypeInfo / GetTypeName / GetStaticTypeInfo / GetResourceRegistrar /
-// ResourcesAreReady were NOT individually exported; reconstructed from the
-// established in-tree RTTI pattern + the sibling BrnEffectObject::GetResourceRegistrar
-// @ 0x82696850. GetTypeName returns the "StreamingStateManager" literal (off_82F2E850,
-// the tag CreateObject's operator new uses).
+// GetTypeName @0x82683A88 reads the name pointer from the typed descriptor at +4.
+// The descriptor values and CRT registration thunk are pinned by ARTIST_CRT_ORDER.json.
 // =============================================================================
 
 namespace BrnSound
@@ -135,61 +132,40 @@ StreamingStateManager::~StreamingStateManager()
 // ---------------------------------------------------------------------------
 CgsSound::Logic::StateManager* StreamingStateManager::CreateObject(u32 luType)
 {
-    return new ("StreamingStateManager", luType != 0) StreamingStateManager();
+    return new (sTypeInfo.typeName, luType != 0) StreamingStateManager();
 }
 
+// ARTIST descriptor 0x82F2E84C: ObjectID 6, name "StreamingStateManager", base
+// StateManager descriptor 0x82F2FAA0, factory 0x82700B68. The typed static object is
+// registered by the direct CRT registrar below.
 // ---------------------------------------------------------------------------
-// StreamingStateManager::GetStaticTypeInfo()  (RTTI descriptor)
-//
-// Mirrors the in-tree GetStaticTypeInfo convention (CgsStateManager.cpp:230). A
-// function-local static ClassTypeInfo<StateManager> seeded with (ObjectID, typeName,
-// baseTypeInfo, createObject) so the factory CreateStateMan can match
-// descriptor->ObjectID and call ->createObject.
-//
-// FLAG (ObjectID UNRESOLVED): the per-leaf registration static-init that calls
-// StateManager::AddToClassTypeInfoArray(@0x8268DFE8) with the explicit ObjectID was
-// NOT exported (CreateObject @ 0x82700B68 has no xrefs_to) and no map-state enum
-// names the id in-tree. Per the established in-tree placeholder convention (every
-// committed GetStaticTypeInfo uses 0), the ObjectID is seeded 0 here and MUST be
-// replaced with the real id at integration -- the id is this manager's slot in the
-// CreateStateManagers 0..8 sequence (@ 0x826AFEF8).
-//
-// FLAG (registry hookup deferred): the minimal CgsSound::Logic::StateManager view
-// pulled via BrnStateManager.h (this TU's base) does NOT declare
-// AddToClassTypeInfoArray (full CgsStateManager.h view only, ODR-incompatible with
-// BrnStateManager.h, not co-includable here). The descriptor is produced here but its
-// insertion into the static registry (dword_82FFBC58) must be done by a registration
-// site using the full StateManager view (the conductor-owned CreateStateMan TU).
-// &CreateObject is an ABI-compatible StateManager*(*)(u32) across both views.
-// ---------------------------------------------------------------------------
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> StreamingStateManager::sTypeInfo(
+    6,
+    "StreamingStateManager",
+    &CgsSound::Logic::StateManager::sTypeInfo,
+    &StreamingStateManager::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* StreamingStateManager::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        6,                          // ObjectID (PS3 DecFIGS static-init 0x85FA1C: StreamingStateManager=6)
-        "StreamingStateManager",    // typeName
-        CgsSound::Logic::StateManager::GetStaticTypeInfo(), // baseTypeInfo (PS3 0x85FA1C: =StateManager::GetStaticTypeInfo())
-        &StreamingStateManager::CreateObject // createObject
-    );
     return &sTypeInfo;
 }
 
 // ---------------------------------------------------------------------------
-// File-scope registration (Part D): land this leaf's descriptor in the shared
-// StateManager RTTI registry (CgsStateManager.cpp gapClassTypeInfoArray, X360
-// dword_82FFBC58) at load time, so StateManager::CreateStateMan (0x826A5B60) can
-// find it by ObjectID. AddToClassTypeInfoArray is the canonical StateManager
-// registration entry (@ 0x8268DFE8), reached through the BrnStateManager base.
-//
-// ObjectID RESOLVED (PS3 DecFIGS static-init 0x85FA1C): StreamingStateManager::sTypeInfo
-// .ObjectID = 6. The descriptor comes from GetStaticTypeInfo() (seeded with that id and
-// baseTypeInfo = StateManager::GetStaticTypeInfo()), so this registration lands the real
-// id. NOTE (2026-08-25): this TU IS in the game build -- the registration runs at
-// static-init and CreateStateManagers constructs this manager at boot.
-// ---------------------------------------------------------------------------
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* const
-    gpStreamingStateManagerReg =
-        CgsSound::Logic::StateManager::AddToClassTypeInfoArray(
-            StreamingStateManager::GetStaticTypeInfo());
+// ARTIST CRT thunk 0x82C61C10 passes descriptor 0x82F2E84C and tail-branches to
+// StateManager::AddToClassTypeInfoArray; the typed registrar below reproduces that call.
+
+namespace
+{
+    struct StreamingStateManagerTypeRegistration
+    {
+        StreamingStateManagerTypeRegistration()
+        {
+            CgsSound::Logic::StateManager::AddToClassTypeInfoArray(
+                StreamingStateManager::GetStaticTypeInfo());
+        }
+    };
+    static StreamingStateManagerTypeRegistration gStreamingStateManagerTypeRegistration;
+}
 
 // ---------------------------------------------------------------------------
 // StreamingStateManager::GetTypeInfo() const  (vtable RTTI hook)
@@ -201,13 +177,12 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* StreamingStateMan
 }
 
 // ---------------------------------------------------------------------------
-// StreamingStateManager::GetTypeName() const
-//   The X360 leaf GetTypeName loads the tag string (off_82F2E850) used by
-//   CreateObject's operator new -> returns the literal "StreamingStateManager".
+// StreamingStateManager::GetTypeName() const -- ARTIST @0x82683A88 returns the
+// descriptor's name pointer from +4; CreateObject uses the same pointer as its tag.
 // ---------------------------------------------------------------------------
 const char* StreamingStateManager::GetTypeName() const
 {
-    return "StreamingStateManager";
+    return sTypeInfo.typeName;
 }
 
 // ---------------------------------------------------------------------------

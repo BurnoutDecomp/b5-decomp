@@ -93,6 +93,11 @@ struct BrnStateManager : public CgsSound::Logic::StateManager,
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();
     static CgsSound::Logic::StateManager*                                 CreateObject( u32 luType );
 
+private:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo;
+
+public:
+
     // IResourceRequester overrides.
     // ResourcesAreReady  @ PS3 DecFIGS 0x8E8D24 -- empty no-op (faithful to PS3;
     // not individually X360-attested in this TU's dossier). The leaves override

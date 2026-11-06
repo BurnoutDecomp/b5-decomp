@@ -258,53 +258,32 @@ CgsSound::Logic::StateManager* CollisionStateManager::CreateObject(u32 luType)
     return new ("CollisionStateManager", luType != 0) CollisionStateManager();
 }
 
-// ---------------------------------------------------------------------------
-// CollisionStateManager::GetStaticTypeInfo()  (RTTI descriptor)
-//
-// Mirrors the in-tree GetStaticTypeInfo convention (CgsStateManager.cpp:230). A
-// function-local static ClassTypeInfo<StateManager> seeded with (ObjectID, typeName,
-// baseTypeInfo, createObject) so the factory CreateStateMan can match
-// descriptor->ObjectID and call ->createObject.
-//
-// DecFIGS static initialization @ 0x85FA1C pins this manager's ObjectID to 5 and
-// its base descriptor to StateManager::GetStaticTypeInfo().
-//
-// FLAG (registry hookup deferred): the minimal CgsSound::Logic::StateManager view
-// pulled via BrnStateManager.h (this TU's base) does NOT declare
-// AddToClassTypeInfoArray (full CgsStateManager.h view only, ODR-incompatible with
-// BrnStateManager.h, not co-includable here). The descriptor is produced here but its
-// insertion into the static registry (dword_82FFBC58) must be done by a registration
-// site using the full StateManager view (the conductor-owned CreateStateMan TU).
-// &CreateObject is an ABI-compatible StateManager*(*)(u32) across both views.
-// ---------------------------------------------------------------------------
+// ARTIST descriptor 0x82F2F94C: { ID 5, "CollisionStateManager",
+// &StateManager::sTypeInfo (0x82F2FAA0), &CreateObject (0x82701FA8) }.
+CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>
+    CollisionStateManager::sTypeInfo(
+        5, "CollisionStateManager",
+        &CgsSound::Logic::StateManager::sTypeInfo,
+        &CollisionStateManager::CreateObject);
+
 CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* CollisionStateManager::GetStaticTypeInfo()
 {
-    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo(
-        5,                          // ObjectID (PS3 DecFIGS static-init 0x85FA1C: CollisionStateManager=5)
-        "CollisionStateManager",    // typeName
-        CgsSound::Logic::StateManager::GetStaticTypeInfo(), // baseTypeInfo (PS3 0x85FA1C: =StateManager::GetStaticTypeInfo())
-        &CollisionStateManager::CreateObject // createObject
-    );
     return &sTypeInfo;
 }
 
-// ---------------------------------------------------------------------------
-// File-scope registration (Part D): land this leaf's descriptor in the shared
-// StateManager RTTI registry (CgsStateManager.cpp gapClassTypeInfoArray, X360
-// dword_82FFBC58) at load time, so StateManager::CreateStateMan (0x826A5B60) can
-// find it by ObjectID. AddToClassTypeInfoArray is the canonical StateManager
-// registration entry (@ 0x8268DFE8), reached through the BrnStateManager base.
-//
-// ObjectID RESOLVED (PS3 DecFIGS static-init 0x85FA1C): CollisionStateManager::sTypeInfo
-// .ObjectID = 5. The descriptor comes from GetStaticTypeInfo() (seeded with that id and
-// baseTypeInfo = StateManager::GetStaticTypeInfo()), so this registration lands the real
-// id. NOTE (2026-08-25): this TU IS in the game build -- the registration runs at
-// static-init and CreateStateManagers constructs this manager at boot.
-// ---------------------------------------------------------------------------
-static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* const
-    gpCollisionStateManagerReg =
-        CgsSound::Logic::StateManager::AddToClassTypeInfoArray(
-            CollisionStateManager::GetStaticTypeInfo());
+namespace
+{
+    // ARTIST CRT$XCU slot 0x82CD208C points to its registration thunk 0x82C63370.
+    struct CollisionStateManagerTypeRegistration
+    {
+        CollisionStateManagerTypeRegistration()
+        {
+            CgsSound::Logic::StateManager::AddToClassTypeInfoArray(
+                CollisionStateManager::GetStaticTypeInfo());
+        }
+    };
+    static CollisionStateManagerTypeRegistration gCollisionStateManagerTypeRegistration;
+}
 
 // ---------------------------------------------------------------------------
 // CollisionStateManager::GetTypeInfo() const  (vtable RTTI hook)
@@ -318,11 +297,11 @@ CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* CollisionStateMan
 // ---------------------------------------------------------------------------
 // CollisionStateManager::GetTypeName() const
 //   The X360 leaf GetTypeName loads the tag string (off_82F2F950) used by
-//   CreateObject's operator new -> returns the literal "CollisionStateManager".
+//   CreateObject's operator new from the descriptor at 0x82F2F94C + 4.
 // ---------------------------------------------------------------------------
 const char* CollisionStateManager::GetTypeName() const
 {
-    return "CollisionStateManager";
+    return sTypeInfo.typeName;
 }
 
 // ---------------------------------------------------------------------------

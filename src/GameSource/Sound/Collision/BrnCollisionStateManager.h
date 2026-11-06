@@ -323,6 +323,8 @@ public:
     }
 
 private:
+    static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo;
+
     // The InputCollision constructors reach the manager's protected surface: the prop one adds
     // its prop-vs-prop partner straight to the input list (AddInputCollision, sub_826E8B20
     // 0x826E8DFC) and the regular one culls against the scrape history.

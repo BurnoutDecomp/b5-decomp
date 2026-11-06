@@ -121,6 +121,9 @@ namespace Traffic
             return KAE_VEHICLE_CLASS_TO_SIZE[lu8VehicleClass];
         }
 
+    private:
+        static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> sTypeInfo;
+
     protected:
         bool AttachEntity( Slot::TrafficSoundEntity lEntity );
 
