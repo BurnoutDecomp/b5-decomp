@@ -61,7 +61,14 @@ namespace
     {
         CgsGui::SaveLoadPC::WriteTicket muTicket = 0;
         CgsGui::SaveLoadTaskResultHandler* mpHandler = nullptr;
+        ULONGLONG muStartTimeMs = 0;   // when the write (and the save icon) started
     };
+
+    // RealmcIface::SaveTask::Execute @0x82B56620 times the "saving" indication from just
+    // before SaveFiles and, once the container is closed, sleeps until 3000 ms have passed
+    // (`GetThreadTime() < start + 3000` -> ThreadSleep) before it posts its icon message and
+    // MessageSaveDone. The PC write takes milliseconds, so the same floor keeps the icon up.
+    const ULONGLONG KU_SAVE_ICON_MIN_DISPLAY_MS = 3000;
     std::unordered_map<CgsGui::SaveLoadSystem*, PendingSavePC> sPendingSavesPC;
 
     // FLAG PC-platform leaf: native reads complete synchronously, whereas the
@@ -397,8 +404,12 @@ namespace CgsGui
 
         // Match the original completion boundary: callbacks run from Update,
         // never from the IO worker or before the atomic container write finishes.
+        // FLAG PC-platform leaf: the console SaveTask holds the icon for at least
+        // KU_SAVE_ICON_MIN_DISPLAY_MS before it reports, so the ticket is not polled
+        // (Poll consumes a finished write) until that time has passed.
         const auto lPending = sPendingSavesPC.find(this);
-        if (lPending != sPendingSavesPC.end() && lPending->second.muTicket)
+        if (lPending != sPendingSavesPC.end() && lPending->second.muTicket &&
+            ::GetTickCount64() - lPending->second.muStartTimeMs >= KU_SAVE_ICON_MIN_DISPLAY_MS)
         {
             SaveLoadPC::WriteReport lReport;
             const auto leResult = SaveLoadPC::PollWriteContainer(lPending->second.muTicket, lReport);
@@ -406,6 +417,7 @@ namespace CgsGui
             {
                 auto* lpHandler = lPending->second.mpHandler;
                 lPending->second = PendingSavePC{};
+                ShowAutosaveIcon(false);
                 ReportSavePC(lpHandler, leResult, lReport);
                 // The callback can immediately submit a buffered save or release
                 // this owner. Do not use lPending or member state after it.
@@ -592,6 +604,7 @@ namespace CgsGui
                 macSaveInfoComment, macSaveInfoDescription);
             lbQueued = lrPending.muTicket != 0;
             if (!lbQueued) lrPending = PendingSavePC{};
+            else lrPending.muStartTimeMs = ::GetTickCount64();
         }
         catch (const std::exception&) {}
         if (!lbQueued)
@@ -603,6 +616,10 @@ namespace CgsGui
             ReportSavePC(lpHandler, SaveLoadPC::E_WRITE_FAILED, lReport);
             return;
         }
+        // FLAG PC-platform leaf: on the console the Realmc SaveTask drives the icon through
+        // this system's memcard callback (ShowAutosaveIcon @0x8284CA18) while the container
+        // is written; the inert PC interface never calls it, so the write start does.
+        ShowAutosaveIcon(true);
         Update();
     }
 

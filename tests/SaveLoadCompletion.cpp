@@ -3,9 +3,10 @@
 #include <cstdint>
 #include <cstdio>
 #include <unordered_map>
-using u32=uint32_t;using u64=uint64_t;using f32=float;using DWORD=u32;using BOOL=int;
+using u32=uint32_t;using u64=uint64_t;using f32=float;using DWORD=u32;using BOOL=int;using ULONGLONG=u64;
 static const int FALSE=0;
 static DWORD XGetOverlappedResult(void*,DWORD*,BOOL){return 997;}
+static ULONGLONG GetTickCount64(){return 0;}
 namespace CgsDev {namespace Log {void WriteToLog(const char*){}}}
 namespace CgsGui {
 enum ESaveLoadTaskResult{E_SAVELOADTASKRESULT_SUCCESS=0,E_SAVELOADTASKRESULT_FAILURE=1};
@@ -27,11 +28,13 @@ struct SaveLoadSystem{
     const char* macTitle="test";int mbAsyncOpState=0;void* maOverlapped=nullptr;
     Memcard* mpMemcardInterface=nullptr;
     int GetMugshotBufferSizeBytes(){return 0;}
+    void ShowAutosaveIcon(bool){}
     void LoadHandleConfirmLoad(u32);void Update();
 };
 }
 namespace {
-struct PendingSavePC{CgsGui::SaveLoadPC::WriteTicket muTicket=0;CgsGui::SaveLoadTaskResultHandler* mpHandler=nullptr;};
+struct PendingSavePC{CgsGui::SaveLoadPC::WriteTicket muTicket=0;CgsGui::SaveLoadTaskResultHandler* mpHandler=nullptr;ULONGLONG muStartTimeMs=0;};
+const ULONGLONG KU_SAVE_ICON_MIN_DISPLAY_MS=3000;
 std::unordered_map<CgsGui::SaveLoadSystem*,PendingSavePC> sPendingSavesPC;
 // --rev controls retain this fixture table, but old production never queues or
 // consumes it, so the deferred-completion checks must fail on the old code.

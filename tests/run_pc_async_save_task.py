@@ -1,6 +1,7 @@
 """Run production save task submission/update callbacks against the real native writer."""
 from pathlib import Path
 import os
+import re
 from fxgs_common import Tree, definition, compile_and_run, report
 
 os.environ.pop('NoDefaultCurrentDirectoryInExePath', None)
@@ -9,6 +10,9 @@ tree = Tree()
 source = tree.read('src/GameShared/GameClasses/Gui/CgsSaveLoadPS3.cpp')
 helpers = definition(source, 'struct PendingSavePC') + ';\n'
 helpers += 'std::unordered_map<CgsGui::SaveLoadSystem*, PendingSavePC> sPendingSavesPC;\n'
+helpers += re.search(r'const ULONGLONG KU_SAVE_ICON_MIN_DISPLAY_MS = [^;]+;', source)[0] + '\n'
+helpers += definition(source, 'struct PendingLoadResultPC') + ';\n'
+helpers += 'std::unordered_map<CgsGui::SaveLoadSystem*, PendingLoadResultPC> sPendingLoadResultsPC;\n'
 helpers += definition(source, 'void FinishPendingSavePC(') + '\n' + definition(source, 'void ReportSavePC(')
 methods = '\n'.join(definition(source, name) for name in (
     'void SaveLoadSystem::Update()', 'void SaveLoadSystem::Save()',
@@ -18,4 +22,4 @@ backend = tree.read('src/GameShared/GameClasses/Gui/PC/CgsSaveLoadPC.cpp')
 result = compile_and_run(Path(__file__).with_name('PCAsyncSaveTask.cpp'),
                          'async_save_task.inc', body, 'PCAsyncSaveTask',
                          extra_files={'async_save_backend.inc': backend})
-raise SystemExit(report('run_pc_async_save_task', [], result, 14))
+raise SystemExit(report('run_pc_async_save_task', [], result, 20))
