@@ -1641,7 +1641,19 @@ namespace
 }
 
 
-void EventInfoComponent::UpdateOnlineRace(GuiCache*)   { LogDeferredModeArm("UpdateOnlineRace"); }
+// ARTIST 0x824296B0. The offline race readout without the shortcut and near-finish
+// animators: destination, distance (maTextField[4], +0x4C, format 0x13, latched in
+// mfDistToCheckpoint +0x3F4) and the position / total racers pair (+0x34 / +0x40).
+void EventInfoComponent::UpdateOnlineRace(GuiCache* lpCache)
+{
+    UpdateDestinationText(lpCache);
+    if (lpCache->GetDistanceInEvent() != mfDistToCheckpoint)
+    {
+        mfDistToCheckpoint = lpCache->GetDistanceInEvent();
+        maTextField[4].SetLocalisedText(mfDistToCheckpoint, KI_FORMAT_LARGE_DISTANCE);
+    }
+    SetPositionData(lpCache, &maTextField[2], &maTextField[3]);
+}
 // ---- the free-burn lobby panel (mode 15) ------------------------------------------
 namespace
 {
