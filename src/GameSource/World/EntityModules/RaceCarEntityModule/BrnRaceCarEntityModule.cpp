@@ -52,6 +52,8 @@
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h" // OutputBuffer_Prepare
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"                    // CgsResource::ResourceHandle
+#include "GameShared/GameClasses/System/Resource/CgsSmallResource.h"                     // CgsResource::SmallResource
+#include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"                // CgsResource::BinaryFileResource
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"                  // AcquireResourceRequest / *Response
 #include "GameShared/GameClasses/System/Resource/CgsResourceId.h"                        // CgsResource::ID::HashString
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                               // CgsDev::Log::gpDebugPrint
@@ -106,6 +108,8 @@ namespace BrnWorld
 CgsNumeric::Random mRandom;
 
 static const u64 KU_PREPARE_RANDOM_SEED = 0x8FE06DC2ull;
+static const Vector2 KV_DISTRICT_MAP_WORLD_ORIGIN(-4208.0f, -3846.0f); // ARTIST 0x82FAD520
+static const Vector2 KV_DISTRICT_MAP_WORLD_SIZE(8270.0f, 6101.0f); // ARTIST 0x82FAD8E0
 
 // The null CgsID sentinel, spelled exactly as BrnRaceCar.cpp does (a "spawn/reset" record
 // carries 0 for "no car" / "derive the wheel set" / "no rival").
@@ -607,49 +611,41 @@ bool RaceCarEntityModule::LoadGlobalResources( RaceCarEntityModuleIO::OutputBuff
 bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* lpOutput,
                                    CgsResource::ResourceHandle lDistrictMapHandle )
 {
-    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );   // X360 :663
-
-    if( CgsDev::Log::gpDebugPrint != 0 )
-        *CgsDev::Log::gpDebugPrint << "[RaceCar] Prepare stage " << mePrepareStage
-                                   << " load " << meLoadGlobalResourcesStage
-                                   << " replies " << mReceiverQueue.GetCount() << "\n";
+    const char* const lpcSourceFile =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp";
+    if( lpOutput == 0 )
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert( "lpOutput != NULL", lpcSourceFile, 663 );
+        CgsDev::Assert::EndAssert();
+    }
 
     switch( mePrepareStage )
     {
     case 0:
         {
-            const bool lbDistrictMapReady =
-                ( lDistrictMapHandle.mpResourceMemory != 0 ) &&
-                ( *reinterpret_cast<void* const*>( lDistrictMapHandle.mpResourceMemory ) != 0 );
-            if( lbDistrictMapReady )
+            CgsResource::SmallResource* const lpResource =
+                static_cast<CgsResource::SmallResource*>( lDistrictMapHandle.mpResourceMemory );
+            if( lpResource == 0 )
             {
-                mDistrictMapResourceHandle = lDistrictMapHandle;
-
-                const Vector2 KV_DISTRICT_MAP_WORLD_ORIGIN(-4208.0f, -3846.0f); // unk_82FAD520
-                const Vector2 KV_DISTRICT_MAP_WORLD_SIZE(8270.0f, 6101.0f); // unk_82FAD8E0
-
-                const u8* lpResourceMemoryBase =
-                    *reinterpret_cast<u8* const*>( mDistrictMapResourceHandle.mpResourceMemory );
-                const void* lpMapBlob =
-                    lpResourceMemoryBase + *reinterpret_cast<const u32*>( lpResourceMemoryBase + 4 ); // serialized resource header
-                mWorldMap2D.Construct( lpMapBlob,
-                                       KV_DISTRICT_MAP_WORLD_ORIGIN, KV_DISTRICT_MAP_WORLD_SIZE );
-
-                // The console seeds the region tracker from the module ctor's zeroed
-                // storage; make the "no region yet" state explicit so the first sampled
-                // district always reads as a change (Construct is declaration-only on
-                // this build -- the mePlayerActiveRaceCarIndex seam).
-                mCurrentWorldRegion.Construct( BrnWorld::E_DISTRICT_INVALID );
-
-                if( CgsDev::Log::gpDebugPrint != 0 )
-                    *CgsDev::Log::gpDebugPrint << "[RaceCar] district map bound (stage 0)\n";
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert( "lDistrictMapResourceHandle.GetResource() != NULL", lpcSourceFile, 671 );
+                CgsDev::Assert::EndAssert();
             }
-            else if( CgsDev::Log::gpDebugPrint != 0 )
+            if( lpResource->m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY] == 0 )
             {
-                *CgsDev::Log::gpDebugPrint
-                    << "[RaceCar] FLAG district map handle not ready at stage 0 -- "
-                       "region tracking inert this session\n";
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert( "lDistrictMapResourceHandle.GetResource()->GetMemoryResource() != NULL", lpcSourceFile, 672 );
+                CgsDev::Assert::EndAssert();
             }
+
+            mDistrictMapResourceHandle = lDistrictMapHandle;
+            const CgsResource::SmallResource* const lpBoundResource =
+                static_cast<const CgsResource::SmallResource*>( mDistrictMapResourceHandle.mpResourceMemory );
+            const CgsResource::BinaryFileResource* const lpDistrictMap =
+                static_cast<const CgsResource::BinaryFileResource*>( lpBoundResource->m_baseResources[CgsResource::E_MEMTYPE_MAINMEMORY] );
+            mWorldMap2D.Construct( lpDistrictMap->GetData(),
+                                   KV_DISTRICT_MAP_WORLD_ORIGIN, KV_DISTRICT_MAP_WORLD_SIZE );
         }
 
         // Breaker RaceCarEntityModule::Prepare @0x82303FB0..0x82303FB8. This
@@ -716,7 +712,9 @@ bool RaceCarEntityModule::Prepare( RaceCarEntityModuleIO::OutputBuffer_Prepare* 
         return true;
 
     default:
-        CGS_ASSERT( false, "Invalid Stage\n" );   // X360 :776
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert( "Invalid Stage\n", lpcSourceFile, 776 );
+        CgsDev::Assert::EndAssert();
         return false;
     }
 }
