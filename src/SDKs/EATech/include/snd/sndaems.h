@@ -51,8 +51,32 @@ namespace Snd9
 // ----------------------------------------------------------------------------
 int RemoveModuleBankHandler(void* apCommand);
 
+// @ 0x82B71AD8. Run one module instance's bytecode (its timer client's two words).
+void InterpretModule(const u8* apProgram, void* apData);
+
+// flt_83277644 (DecFIGS Snd9::gVariableTimerPeriod), milliseconds per tick.
+extern f32 gVariableTimerPeriod;
+
 namespace Aems
 {
+
+// DecFIGS CListDNode: the intrusive link of the module's and the update list.
+struct InstanceLink
+{
+    InstanceLink* mpNext;
+    InstanceLink* mpPrev;
+};
+
+// DecFIGS AemsDef::TIMERCLIENT (aemsdef.h:502). ARTIST +0 link, +8 program, +0xC data.
+struct TimerClient
+{
+    InstanceLink mLink;
+    const u8*    mpClientFn;   // the module's bytecode (Module::pcode)
+    void*        mpClientData; // the instance's data block
+};
+
+// off_832775EC, the head of the live instances' timer clients.
+extern InstanceLink* gpInstanceUpdateList;
 
 // One intrusive list link, embedded in every ModuleBank at +0x50. The registry
 // head and each mpNext point at the *next* bank's embedded link.

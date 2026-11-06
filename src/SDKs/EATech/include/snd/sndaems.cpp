@@ -24,8 +24,6 @@
 #include "SDKs/Csis/CsisGlobalVariable.h"
 #include "SDKs/Csis/CsisGlobalVariableHandle.h"
 #include "rw/audio/core/PlugIn.h"  // rw::audio::core::System (Lock / Unlock / Free + command ring)
-#include "rw/audio/core/TimerHandle.h"
-#include "rw/audio/core/TimerManager.h"
 
 #include <algorithm>
 #include <cmath>
@@ -48,6 +46,11 @@ extern "C" void SNDAEMSI_CreateModuleInstance(Csis::Class* apClass,
 
 namespace Snd9
 {
+// flt_83277644, DecFIGS Snd9::gVariableTimerPeriod: milliseconds one tick advances the time
+// blocks. SNDSYS_setopts @0x82B7E4BC seeds 10.0f; UpdateAEMSPatches sets it to the frame's
+// step for its walk and puts 10.0f back.
+f32 gVariableTimerPeriod = 10.0f;
+
 namespace Aems
 {
 
@@ -69,6 +72,10 @@ bool gbAemsActive = false;
 // SetSamplePlayerFactory.
 IAemsSamplePlayerFactory* gpSamplePlayerFactory = 0;
 
+// off_832775EC. Every live module instance's timer client; AemsFactory::UpdateAEMSPatches
+// @0x826A2C30 is the only code that walks it to run the instances.
+InstanceLink* gpInstanceUpdateList = 0;
+
 namespace
 {
 struct InstanceDestroySubscriber
@@ -78,12 +85,6 @@ struct InstanceDestroySubscriber
     Csis::Class* mpClass;   // +0x10
     s32 miDestroyPending;   // +0x18
     u32 muPadding;
-};
-
-struct InstanceLink
-{
-    InstanceLink* mpNext;
-    InstanceLink* mpPrev;
 };
 
 struct CsisRelocationRecord
@@ -97,14 +98,6 @@ struct CsisRelocationRecord
 static_assert(sizeof(CsisRelocationRecord) == 12,
               "native AEMS CSIS relocation record");
 
-InstanceLink* gpInstanceUpdateList = 0;
-
-rw::audio::core::TimerHandle gAemsTimerHandle = {};
-bool gbAemsTimerAdded = false;
-f32 gfAemsTimerPeriod = -1.0f;
-f32 gfAemsStepMilliseconds = 0.0f;
-s32 giAemsUpdateInterval = 1;
-s32 giAemsUpdateCountdown = 1;
 
 void Unlink(InstanceLink*& arpHead, InstanceLink* apNode)
 {
@@ -595,7 +588,7 @@ s32 UpdateDelayTrigger(void* apData)
             lpBlock->miOutput = 1;
             return 1;
         }
-        lpBlock->mfElapsed += gfAemsStepMilliseconds;
+        lpBlock->mfElapsed += gVariableTimerPeriod;
     }
     lpBlock->miOutput = 0;
     return 0;
@@ -644,7 +637,7 @@ s32 UpdateEnvelope(void* apData)
         lpBlock->muPoint = 0;
         lpBlock->mfTimeRemaining = lpPoints[1];
         lpBlock->mfStep = (lpPoints[2] - lpBlock->mfValue) / lpBlock->mfTimeRemaining;
-        lpBlock->mfStep *= gfAemsStepMilliseconds;
+        lpBlock->mfStep *= gVariableTimerPeriod;
     }
     else if (liControl == 3 && lpBlock->muPreviousControl != 3 &&
              lpBlock->muPoint < static_cast<s16>(lpBlock->muReleasePoint))
@@ -654,12 +647,12 @@ s32 UpdateEnvelope(void* apData)
         lpBlock->mfTimeRemaining = lpPoints[1 + 2 * lpBlock->muPoint];
         lpBlock->mfStep = (lpPoints[2 + 2 * lpBlock->muPoint] - lpBlock->mfValue) /
                           lpBlock->mfTimeRemaining;
-        lpBlock->mfStep *= gfAemsStepMilliseconds;
+        lpBlock->mfStep *= gVariableTimerPeriod;
     }
     else if ((liControl == 1 || liControl == 3) &&
              lpBlock->muPoint < lpBlock->muPointCount)
     {
-        lpBlock->mfTimeRemaining -= gfAemsStepMilliseconds;
+        lpBlock->mfTimeRemaining -= gVariableTimerPeriod;
         // 82B708BC bgt -> increment; nonpositive/unordered -> next point.
         if (lpBlock->mfTimeRemaining > 0.0f)
         {
@@ -674,7 +667,7 @@ s32 UpdateEnvelope(void* apData)
                 lpBlock->mfTimeRemaining = lpPoints[1 + 2 * lpBlock->muPoint];
                 lpBlock->mfStep = (lpPoints[2 + 2 * lpBlock->muPoint] - lpBlock->mfValue) /
                                   lpBlock->mfTimeRemaining;
-                lpBlock->mfStep *= gfAemsStepMilliseconds;
+                lpBlock->mfStep *= gVariableTimerPeriod;
             }
             else
             {
@@ -745,7 +738,7 @@ s32 UpdateDelayLine(void* apData)
     {
         lpBlock->miPreviousDelay = (std::max)(lpInput[1], 0);
         s32 liSamples = RoundAems(static_cast<f32>(lpBlock->miPreviousDelay) /
-                                 gfAemsStepMilliseconds);
+                                 gVariableTimerPeriod);
         liSamples = (std::min)(liSamples,
             static_cast<s32>(lpBlock->muCapacity) - 1);
         lpBlock->muWriteIndex = static_cast<u16>(lpBlock->muReadIndex + liSamples);
@@ -1098,7 +1091,7 @@ s32 UpdateOscillator(void* apData)
     else
         lfValue = (lpBlock->mfPhase < 0.5f ? lpBlock->mfPhase :
                    1.0f - lpBlock->mfPhase) * 2.0f * lfAmplitude;
-    lpBlock->mfPhase += gfAemsStepMilliseconds /
+    lpBlock->mfPhase += gVariableTimerPeriod /
                         static_cast<f32>(lpBlock->miFrequency);
     return RoundAems(lfValue);
 }
@@ -1131,7 +1124,7 @@ s32 UpdateRamp(void* apData)
             return lpBlock->miTarget;
         }
         lpBlock->mfDeltaPerTick = (lfTarget - lpBlock->mfCurrent) *
-            gfAemsStepMilliseconds / static_cast<f32>(lpBlock->miDuration) /
+            gVariableTimerPeriod / static_cast<f32>(lpBlock->miDuration) /
             4096.0f;
     }
     lpBlock->mfCurrent += static_cast<f32>(lpBlock->miTicks) *
@@ -1296,9 +1289,7 @@ AemsUpdateFunction const gapAemsUpdateFunctions[40] =
 struct ModuleInstanceHeader
 {
     InstanceLink mModuleLink;
-    InstanceLink mUpdateLink;
-    const u8* mpProgram;
-    u8* mpData;
+    TimerClient  mTimerClient;
 };
 
 struct BytecodeAssignment
@@ -1307,93 +1298,7 @@ struct BytecodeAssignment
     s32 miDestinationOffset;
 };
 
-void InterpretModule(ModuleInstanceHeader* apInstance)
-{
-    const u8* lpProgram = apInstance->mpProgram;
-    u8* lpData = apInstance->mpData;
-    while (lpProgram && lpProgram[0] != 0xFFu)
-    {
-        const u8 luOpcode = lpProgram[0];
-        const u8 luAssignmentCount = lpProgram[1];
-        if (luOpcode >= 40)
-            return;
-        const s32 liResult = gapAemsUpdateFunctions[luOpcode](lpData);
-        const BytecodeAssignment* lpAssignments =
-            reinterpret_cast<const BytecodeAssignment*>(lpProgram + 4);
-        for (u8 luAssignment = 0; luAssignment < luAssignmentCount;
-             ++luAssignment)
-        {
-            const BytecodeAssignment& lrAssignment = lpAssignments[luAssignment];
-            s32* lpDestination = reinterpret_cast<s32*>(
-                lpData + lrAssignment.miDestinationOffset);
-            *lpDestination = lrAssignment.miSourceOffset == -1
-                ? liResult
-                : *reinterpret_cast<const s32*>(
-                    lpData + lrAssignment.miSourceOffset);
-        }
-        const s32* lpDataDisplacement = reinterpret_cast<const s32*>(
-            lpAssignments + luAssignmentCount);
-        lpData += *lpDataDisplacement;
-        lpProgram = reinterpret_cast<const u8*>(lpDataDisplacement + 1);
-    }
-}
-
-void AemsTimerCallback(void*, f32 afPeriod)
-{
-    if (afPeriod <= 0.0f)
-        afPeriod = 256.0f / 48000.0f;
-    if (afPeriod != gfAemsTimerPeriod)
-    {
-        gfAemsTimerPeriod = afPeriod;
-        const f32 lfTargetPeriod = 1.0f / 41.599998474121094f;
-        giAemsUpdateInterval = (std::max)(1,
-            static_cast<s32>(std::ceil(lfTargetPeriod / afPeriod)) - 1);
-        giAemsUpdateCountdown = giAemsUpdateInterval;
-        gfAemsStepMilliseconds = static_cast<f32>(giAemsUpdateInterval) *
-                                 afPeriod * 1000.0f;
-    }
-    if (--giAemsUpdateCountdown != 0)
-        return;
-    giAemsUpdateCountdown = giAemsUpdateInterval;
-
-    InstanceLink* lpLink = gpInstanceUpdateList;
-    while (lpLink)
-    {
-        InstanceLink* lpNext = lpLink->mpNext;
-        ModuleInstanceHeader* lpInstance = reinterpret_cast<ModuleInstanceHeader*>(
-            reinterpret_cast<u8*>(lpLink) - offsetof(ModuleInstanceHeader, mUpdateLink));
-        InterpretModule(lpInstance);
-        lpLink = lpNext;
-    }
-}
-
-bool AddAemsTimer()
-{
-    if (gbAemsTimerAdded)
-        return true;
-    // The timer record is carved from the audio System's allocator, which the add-bank
-    // path only touches inside the System critical section.
-    rw::audio::core::System::Lock(off_83271928);
-    const int liResult = rw::audio::core::TimerManager::AddTimer(
-            &off_83271928->mTimerManager, &gAemsTimerHandle,
-            &AemsTimerCallback, 0, "Aems Modules", 0, 0);
-    rw::audio::core::System::Unlock(off_83271928);
-    if (liResult != 0)
-        return false;
-    gbAemsTimerAdded = true;
-    return true;
-}
-
-void RemoveAemsTimer()
-{
-    if (!gbAemsTimerAdded)
-        return;
-    rw::audio::core::TimerManager::RemoveTimer(
-        &off_83271928->mTimerManager, &gAemsTimerHandle);
-    gbAemsTimerAdded = false;
-    gfAemsTimerPeriod = -1.0f;
-}
-}
+} // namespace (anonymous)
 
 // One record slot queued into the audio System's deferred-command ring by
 // BeginRemoveModuleBank; replayed on the audio thread by Snd9::RemoveModuleBankHandler.
@@ -1531,6 +1436,39 @@ IAemsSamplePlayerFactory* SetSamplePlayerFactory(IAemsSamplePlayerFactory* apFac
 } // namespace Aems
 
 // ----------------------------------------------------------------------------
+// Snd9::InterpretModule @0x82B71AD8. Run one instance's bytecode over its data block.
+// Sole ARTIST caller: AemsFactory::UpdateAEMSPatches @0x826A2C30.
+// ----------------------------------------------------------------------------
+void InterpretModule(const u8* apProgram, void* apData)
+{
+    const u8* lpProgram = apProgram;
+    u8* lpData = static_cast<u8*>(apData);
+    while (lpProgram[0] != 0xFFu)
+    {
+        const u8 luOpcode = lpProgram[0];
+        const u8 luAssignmentCount = lpProgram[1];
+        const s32 liResult = Aems::gapAemsUpdateFunctions[luOpcode](lpData);
+        const Aems::BytecodeAssignment* lpAssignments =
+            reinterpret_cast<const Aems::BytecodeAssignment*>(lpProgram + 4);
+        for (u8 luAssignment = 0; luAssignment < luAssignmentCount;
+             ++luAssignment)
+        {
+            const Aems::BytecodeAssignment& lrAssignment = lpAssignments[luAssignment];
+            s32* lpDestination = reinterpret_cast<s32*>(
+                lpData + lrAssignment.miDestinationOffset);
+            *lpDestination = lrAssignment.miSourceOffset == -1
+                ? liResult
+                : *reinterpret_cast<const s32*>(
+                    lpData + lrAssignment.miSourceOffset);
+        }
+        const s32* lpDataDisplacement = reinterpret_cast<const s32*>(
+            lpAssignments + luAssignmentCount);
+        lpData += *lpDataDisplacement;
+        lpProgram = reinterpret_cast<const u8*>(lpDataDisplacement + 1);
+    }
+}
+
+// ----------------------------------------------------------------------------
 // Snd9::RemoveModuleBankHandler @0x82B71650 / XB1 native-8 sub_14096C1F0.
 // ----------------------------------------------------------------------------
 int RemoveModuleBankHandler(void* apCommand)
@@ -1552,10 +1490,7 @@ int RemoveModuleBankHandler(void* apCommand)
         break;
     }
     if (!Aems::gpModuleBankListHead)
-    {
-        Aems::RemoveAemsTimer();
         Aems::gbAemsActive = false;
-    }
     return static_cast<int>(sizeof(Aems::RemoveModuleBankCommand));
 }
 
@@ -1703,10 +1638,6 @@ extern "C" s32 SNDAEMS_addmodulebank(void* apBank, s32 aiStreamFileOffset,
     if (lpBank->mLink.mpNext)
         lpBank->mLink.mpNext->mppPrev = &lpBank->mLink.mpNext;
     Snd9::Aems::gpModuleBankListHead = &lpBank->mLink;
-    // Native sub_14096C510 returns the timer-manager status to its caller, but
-    // SNDAEMS_addmodulebank (sub_14096C960) ignores that value and returns the
-    // bank handle.  Do not turn timer registration into a bank-format failure.
-    Snd9::Aems::AddAemsTimer();
     Snd9::Aems::gbAemsActive = true;
     return lpBank->miBankHandle;
 }
@@ -1752,17 +1683,17 @@ extern "C" void SNDAEMSI_CreateModuleInstance(Csis::Class* apClass,
         lpHeader->mModuleLink.mpNext->mpPrev = &lpHeader->mModuleLink;
     lpModule->mpInstanceList = &lpHeader->mModuleLink;
 
-    InstanceLink* lpDestroyLink = &lpHeader->mUpdateLink;
+    InstanceLink* lpDestroyLink = &lpHeader->mTimerClient.mLink;
     lpDestroyLink->mpNext = gpInstanceUpdateList;
     lpDestroyLink->mpPrev = 0;
     if (gpInstanceUpdateList)
         gpInstanceUpdateList->mpPrev = lpDestroyLink;
     gpInstanceUpdateList = lpDestroyLink;
 
-    lpHeader->mpProgram = static_cast<const u8*>(lpModule->mpProgram);
-    lpHeader->mpData = lpInstance + sizeof(ModuleInstanceHeader);
+    lpHeader->mTimerClient.mpClientFn = static_cast<const u8*>(lpModule->mpProgram);
+    lpHeader->mTimerClient.mpClientData = lpInstance + sizeof(ModuleInstanceHeader);
 
-    u8* lpCursor = lpHeader->mpData;
+    u8* lpCursor = static_cast<u8*>(lpHeader->mTimerClient.mpClientData);
     if (lpModule->mbHasDestructor)
     {
         Csis::ClassClientNode* lpNode =
