@@ -253,10 +253,10 @@ bool PlayerVehicleStateManager::Prepare()
     }
 }
 
+// ARTIST 0x826EFBB8.
 bool PlayerVehicleStateManager::Release()
 {
     mSoundScene.Release();
-    mePrepareState = E_PREPARE_RELEASED;
     return true;
 }
 

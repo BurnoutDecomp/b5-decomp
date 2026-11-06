@@ -79,16 +79,20 @@ bool SoundWorldScene::Prepare(BrnSound::Module::SoundLogicModule* lpLogicModule,
     return true;
 }
 
+// ARTIST inlines this pair in the Emitter and PlayerVehicle Release methods.
 bool SoundWorldScene::Release()
 {
     GetResourceRegistrar().RemoveRequests(this);
-    Construct();
+    Destruct();
     return true;
 }
 
 void SoundWorldScene::Destruct()
 {
-    Release();
+    miNumZonesInUse = 0;
+    mpLogicModule = 0;
+    mu16AcquiringZone = 0;
+    mbAcquireInProgress = false;
 }
 
 void SoundWorldScene::ResetLoader()

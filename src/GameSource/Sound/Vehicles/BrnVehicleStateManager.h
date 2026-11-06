@@ -42,7 +42,7 @@ public:
     // aliases of its own, so CreateState / CreateEffectObject / CreateEffectControl
     // fall back to the player family wherever no AI-specific class (0x2xxxx) exists.
     // For the player manager (meMapState 1) this is the base compare.
-    virtual bool IsStateAlias(s32 liState) const
+    virtual bool IsStateAlias(s32 liState) override
     {
         return (liState == 1 && meMapState == 2) || meMapState == liState;
     }

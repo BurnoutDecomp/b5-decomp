@@ -12,7 +12,8 @@
 //   StateManager::AddToClassTypeInfoArray()  RTTI register        @ 0x8268DFE8  (real)
 //   StateManager::GetStaticTypeInfo()        RTTI descriptor      @ 0x8268D798  (real)
 //   StateManager::Prepare()                  native base fallback @ 0x8268D7B8
-//   StateManager::GetChildStateManager(s32)  vtable +0x14         (stub -- see FLAG)
+//   StateManager::Release()                  vtable +0x10         @ 0x8268D970
+//   StateManager::GetFreeState(void*)         vtable +0x14         @ 0x8268D7D0
 //   StateManager::PrepareStates(...)         shared helper        @ 0x826EAD30  (stub -- see FLAG)
 //   StateManager::CreateStateMan(u32, void*) factory              @ 0x826A5B60  (real -- scans the registry)
 //
@@ -48,6 +49,20 @@ namespace Logic
 // null, exactly the safe no-op the boot orchestration relies on.
 // ---------------------------------------------------------------------------
 static ClassTypeInfo<StateManager>* gapClassTypeInfoArray[StateManager::KU_SIZEOF_CLASS_ARRAY] = { 0 };
+
+// ARTIST 0x82F2FAA0; the CRT thunk registers this same descriptor.
+ClassTypeInfo<StateManager> StateManager::sTypeInfo(-1, "StateManager", 0, 0);
+namespace
+{
+    struct StateManagerTypeRegistration
+    {
+        StateManagerTypeRegistration()
+        {
+            StateManager::AddToClassTypeInfoArray(StateManager::GetStaticTypeInfo());
+        }
+    };
+    static StateManagerTypeRegistration gStateManagerTypeRegistration;
+}
 
 // ---------------------------------------------------------------------------
 // StateManager::StateManager()  @ 0x826FAA18
@@ -147,6 +162,36 @@ StateManager::~StateManager()
 {
 }
 
+// ARTIST 0x8268D798 and 0x8268D7A8: the virtuals share the canonical descriptor.
+ClassTypeInfo<StateManager>* StateManager::GetTypeInfo() const
+{
+    return &sTypeInfo;
+}
+
+const char* StateManager::GetTypeName() const
+{
+    return sTypeInfo.typeName;
+}
+
+// ARTIST 0x8268D970: save each next pointer before detaching and deleting.
+bool StateManager::Release()
+{
+    State* lpState = mpHeadState;
+    miNumStates = 0;
+    while (lpState)
+    {
+        State* lpNext = lpState->mpNextState;
+        lpState->Detach();
+        delete lpState;
+        lpState = lpNext;
+    }
+    mpHeadState = 0;
+    miNumStates = 0;
+    meStatePrepareState = E_STATE_PREPARE_STATE_CREATE;
+    mePrepareState = E_PREPARE_RELEASED;
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // ARTIST 0x8268D7B8. The base fallback completes the prepare stage.
 bool StateManager::Prepare()
@@ -155,19 +200,7 @@ bool StateManager::Prepare()
     return true;
 }
 
-// ---------------------------------------------------------------------------
-// StateManager::GetChildStateManager(s32)  -- vtable slot +0x14
-//
-// PrepareStateManagersOnBoot calls this ONLY on mapStateManagers[0] as
-// `child = (*(**mgr + 20))(mgr, 0); if (child) child->Prepare(0);`. It returns a
-// (possibly null) child StateManager that is itself Prepare()'d on boot.
-//
-// FLAG (stub): the child registry this indexes is not modelled in this view, and the
-// argument's exact role (the X360 passes a literal 0) is unverified. Returning null is
-// a safe non-cascading default (the boot caller guards `if (child)`), so no child is
-// dispatched from the base. The owning manager that actually has children overrides
-// this. NOT an X360-faithful body -- shape only.
-// ---------------------------------------------------------------------------
+// ARTIST 0x8268D7D0. Return the first unattached state, or null.
 State* StateManager::GetFreeState(void* /*apvAttachment*/)
 {
     for (State* lpState = mpHeadState; lpState; lpState = lpState->mpNextState)
@@ -241,7 +274,7 @@ void StateManager::ProcessUpdate()
 //   return 0;
 // i.e. false as soon as one ATTACHED state is not yet in E_UPDATE_ATTACHED.
 // ---------------------------------------------------------------------------
-bool StateManager::IsDataLoaded() const
+bool StateManager::IsDataLoaded()
 {
     for (const State* lpState = mpHeadState; lpState; lpState = lpState->mpNextState)
     {
@@ -524,14 +557,11 @@ ClassTypeInfo<StateManager>* StateManager::AddToClassTypeInfoArray(ClassTypeInfo
 // StateManager::GetStaticTypeInfo()  @ 0x8268D798  -> &unk_82F2FAA0 ("StateManager")
 //   The X360 body returns the address of StateManager's static ClassTypeInfo
 //   descriptor (lis/addi unk_82F2FAA0; blr). The sibling StateManager::GetTypeName
-//   @0x8268D7A8 reads the descriptor's typeName ("StateManager") from +4. Mirrors the
-//   EffectControl/EffectObject GetStaticTypeInfo accessors: a function-local static
-//   descriptor seeded with the recovered type name, so the observable return (the
-//   descriptor carrying typeName "StateManager") matches byte-for-byte.
+//   @0x8268D7A8 reads the same descriptor's typeName ("StateManager") from +4.
+//   ARTIST 0x82C65C10 registers the preinitialized descriptor during CRT startup.
 // ---------------------------------------------------------------------------
 ClassTypeInfo<StateManager>* StateManager::GetStaticTypeInfo()
 {
-    static ClassTypeInfo<StateManager> sTypeInfo(0, "StateManager", 0, 0);
     return &sTypeInfo;
 }
 

@@ -91,8 +91,8 @@ namespace Traffic
 
         // ---- RTTI hooks. STATIC GetStaticTypeInfo / CreateObject so &CreateObject is
         // storable in ClassTypeInfo<StateManager>::createObject. ----
-        virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const;
-        virtual const char* GetTypeName() const;
+        virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const override;
+        virtual const char* GetTypeName() const override;
         static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();
         static CgsSound::Logic::StateManager* CreateObject( u32 luType );
 

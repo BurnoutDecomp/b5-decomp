@@ -314,12 +314,9 @@ void StreamingStateManager::ResourcesAreReady()
 // the module once the full StateManager view (mpLogicModule) + SoundLogicModule are
 // available.
 // ---------------------------------------------------------------------------
+// ARTIST vtable 0x820B7F80, slot +0x10, points to the shared true leaf.
 bool StreamingStateManager::Release()
 {
-    muPlayRequestCount = 0;
-    muStopRequestCount = 0;
-    muNumRePostRequests = 0;
-    mePrepareState = E_PREPARE_RELEASED;
     return true;
 }
 

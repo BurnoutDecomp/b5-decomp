@@ -83,13 +83,14 @@ public:
     // ClassTypeInfo<StateManager>::createObject (the X360 CreateObject @ 0x82701518
     // never touches an instance -- its int arg is the operator-new flavour selector,
     // not `this`). ----
-    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const;
-    virtual const char* GetTypeName() const;                                            // @ 0x826867B8
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const override;
+    virtual const char* GetTypeName() const override;                                   // @ 0x826867B8
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();
     static CgsSound::Logic::StateManager* CreateObject( u32 luType );                   // @ 0x82701518
 
     // @ 0x826F5AC0 (vtable +0x0C). The per-manager boot bring-up state machine.
     virtual bool Prepare();
+    virtual bool Release();
     virtual void UpdateParams(f32 lfDeltaTime) ;
     virtual CgsSound::Logic::State* GetFreeState(void* lpvAttachment) ;
 
