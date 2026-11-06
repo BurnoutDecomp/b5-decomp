@@ -166,7 +166,10 @@ namespace
                         }
                         else
                         {
-                            CGS_ASSERT( false, "Invalid event received\n" );   // BrnPVSModule.cpp:155
+                            CgsDev::Assert::BeginAssert();
+                            CgsDev::Assert::FireAssert( "Invalid event received\n",
+                                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/WorldEntityModule/PVSModule/BrnPVSModule.cpp", 155 );
+                            CgsDev::Assert::EndAssert();
                         }
 
                         liEventType = mReceiverQueue.GetNextEvent( lpEventData, &lpEventData, &liEventSize );
@@ -196,7 +199,10 @@ namespace
 
             default:
             {
-                CGS_ASSERT( false, "Invalid Stage\n" );   // BrnPVSModule.cpp:200
+                CgsDev::Assert::BeginAssert();
+                CgsDev::Assert::FireAssert( "Invalid Stage\n",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/WorldEntityModule/PVSModule/BrnPVSModule.cpp", 200 );
+                CgsDev::Assert::EndAssert();
                 break;
             }
         }
@@ -211,7 +217,8 @@ namespace
     // X360 0x822A8AD8.
     bool PVSModule::Release()
     {
-        if ( meReleaseStage < E_RELEASESTAGE_DONE )
+        const u32 luReleaseStage = static_cast<u32>( meReleaseStage );
+        if ( luReleaseStage < E_RELEASESTAGE_DONE )
         {
             meReleaseStage = E_RELEASESTAGE_MODULE;
 
@@ -220,9 +227,12 @@ namespace
                 return false;
             }
         }
-        else if ( meReleaseStage > E_RELEASESTAGE_DONE )
+        else if ( luReleaseStage > E_RELEASESTAGE_DONE )
         {
-            CGS_ASSERT( false, "Invalid Stage\n" );   // BrnPVSModule.cpp:257
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert( "Invalid Stage\n",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/WorldEntityModule/PVSModule/BrnPVSModule.cpp", 257 );
+            CgsDev::Assert::EndAssert();
             return false;
         }
 

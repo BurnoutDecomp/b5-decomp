@@ -450,11 +450,68 @@ void CarScoreData::ClearData()
         maaLapTimes[i] = lZeroLapTime;
 }
 
-// X360 0x821F4740. The X360 emits explicit per-word/per-byte stores through +292; a full memcpy of
-// the trivially-copyable 296-byte record is equivalent.
+// ARTIST 0x821F4740 copies fields in layout order. It leaves the padding at
+// +0x46..0x47, +0xBD..0xBF and +0xDA..0xDB in the destination untouched.
 CarScoreData& CarScoreData::operator=(const CarScoreData& lOther)
 {
-    memcpy(this, &lOther, sizeof(*this));
+    mTotalTime = lOther.mTotalTime;
+    miRacePosition = lOther.miRacePosition;
+    miHighestRacePosition = lOther.miHighestRacePosition;
+    miCompletedLaps = lOther.miCompletedLaps;
+    miFinishPosition = lOther.miFinishPosition;
+    mfDistanceToFinishLive = lOther.mfDistanceToFinishLive;
+    mfDistanceToPlayer = lOther.mfDistanceToPlayer;
+    mfDistanceToNextCheckpointLive = lOther.mfDistanceToNextCheckpointLive;
+    for (u32 luLap = 0; luLap < 4; ++luLap)
+        maaLapTimes[luLap] = lOther.maaLapTimes[luLap];
+    mbRacePositionImproved = lOther.mbRacePositionImproved;
+    mbHasFinished = lOther.mbHasFinished;
+
+    mfDistanceToFinish = lOther.mfDistanceToFinish;
+    miTakedowns = lOther.miTakedowns;
+    miTakedownsAgainst = lOther.miTakedownsAgainst;
+    miMarkedManTakedownsFor = lOther.miMarkedManTakedownsFor;
+    miOnlineFinishPositionScore = lOther.miOnlineFinishPositionScore;
+    miOnlineStandingsPosition = lOther.miOnlineStandingsPosition;
+    meEliminatorRaceCarIndex = lOther.meEliminatorRaceCarIndex;
+    miNumEliminations = lOther.miNumEliminations;
+    mbTimedOut = lOther.mbTimedOut;
+    mbDisconnected = lOther.mbDisconnected;
+    maStorage6A[0] = lOther.maStorage6A[0];
+    mbHasNetworkResults = lOther.mbHasNetworkResults;
+    mTimeInCurrentTeam = lOther.mTimeInCurrentTeam;
+    maTimeInTeam[0] = lOther.maTimeInTeam[0];
+    maTimeInTeam[1] = lOther.maTimeInTeam[1];
+    mTimeAsRunner = lOther.mTimeAsRunner;
+    for (u32 luByte = 0; luByte < sizeof(maStorage8C); ++luByte)
+        maStorage8C[luByte] = lOther.maStorage8C[luByte];
+    mbCompletedBurningHomeRun = lOther.mbCompletedBurningHomeRun;
+
+    muOnlinePostEventValueC0 = lOther.muOnlinePostEventValueC0;
+    miCumulativeCheckpoints = lOther.miCumulativeCheckpoints;
+    miChainableScore = lOther.miChainableScore;
+    miChainableField = lOther.miChainableField;
+    miCurrentChainableMultiplier = lOther.miCurrentChainableMultiplier;
+    miOnlineStuntScore = lOther.miOnlineStuntScore;
+    mbChainActive = lOther.mbChainActive;
+    mbEliminated = lOther.mbEliminated;
+
+    mfDistanceAccumulator = lOther.mfDistanceAccumulator;
+    mTimeInFirstPlace = lOther.mTimeInFirstPlace;
+    mTimeInLastPlace = lOther.mTimeInLastPlace;
+    mTimeBoosting = lOther.mTimeBoosting;
+    mfLongestDrift = lOther.mfLongestDrift;
+    miBarrelRollCount = lOther.miBarrelRollCount;
+    for (u32 luByte = 0; luByte < sizeof(maStoragePad100); ++luByte)
+        maStoragePad100[luByte] = lOther.maStoragePad100[luByte];
+    miMarkedManTakedownEventsFor = lOther.miMarkedManTakedownEventsFor;
+    miMarkedManTakedownEventsAgainst = lOther.miMarkedManTakedownEventsAgainst;
+    miPaybackTakedownsType2For = lOther.miPaybackTakedownsType2For;
+    miPaybackTakedownsType2Against = lOther.miPaybackTakedownsType2Against;
+    miPaybackTakedownsType4For = lOther.miPaybackTakedownsType4For;
+    miPaybackTakedownsType4Against = lOther.miPaybackTakedownsType4Against;
+    miTraitorousTakedownsFor = lOther.miTraitorousTakedownsFor;
+    miTraitorousTakedownsAgainst = lOther.miTraitorousTakedownsAgainst;
     return *this;
 }
 
