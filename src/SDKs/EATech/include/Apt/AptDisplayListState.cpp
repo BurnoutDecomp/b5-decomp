@@ -142,9 +142,12 @@ void AptDisplayListState::findInst(int nDepth, const EAStringC* pName,
         AptCIH* pPrev = 0;
         for (AptCIH* p = mpFirst; p; pPrev = p, p = p->GetDisplayListNext())
         {
-            // The console skips nodes flagged "pending remove" (mFlagsA inRemList
-            // bit 5 -- GetInRemList); the name match is on the node's instance name.
-            if (!p->GetInRemList() && p->GetInstanceName() == *pName)
+            // Only an empty placeholder (a node no longer defined) can be matched by
+            // name: 0x82AD9A2C lwz r11, 4(r31); extrwi. r11, r11, 1,4; bne next is
+            // mbIsDefined, the same test and field as instantiateCharacter. A live node
+            // keeps its depth, so two siblings may share an instance name (ON_LOAD's
+            // ChevronsColour clip and its TransitionComponent).
+            if (!p->getIsDefined() && p->GetInstanceName() == *pName)
             {
                 *ppOutMatch = p;
                 *ppOutPrev  = pPrev;
