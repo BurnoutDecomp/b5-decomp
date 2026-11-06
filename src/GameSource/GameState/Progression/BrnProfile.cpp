@@ -1947,16 +1947,12 @@ bool Profile::IsStartOfGameDeformActive() const
 // ------------------------------------------------------------------------------------
 // Profile::SetChosenLiveryIdForBaseCar (single-CgsID form)
 //
-// ⚠️⚠️ SIGNATURE DISCREPANCY, RECORDED NOT PAPERED OVER. This overload is what the CONSOLE
-// actually calls: EnterJunkyard @0x82398508 ends
+// This overload is what the console calls: EnterJunkyard @0x82398508 ends
 //     Profile::SetChosenLiveryIdForBaseCar(mpProgressionManager + 368, <the one CgsID>)
-// and the callee @0x82359C90 reconstructs a SINGLE 64-bit value from its argument halves
-// (`v5 = __PAIR64__(a3, a2)`). The repo's OTHER overload -- SetChosenLiveryIdForBaseCar(CgsID,
-// CgsID), bodied in this file and attributed to that same 0x82359C90 -- therefore has one
-// argument too many for the address it claims. Do NOT assume the two-arg body is faithful;
-// it needs its own look. Until then this form forwards with base == chosen, which is what the
-// two-arg body's own in-file caller (line ~307) already does and what "pin the chosen livery to
-// the base car" means.
+// and the callee @0x82359C90 takes TWO 64-bit CgsIDs (r4 and r5, both stored, `std r28` and
+// `stdx r27`). EnterJunkyard reaches it with `ldx r5` + `mr r4, r5` @0x823986AC, i.e.
+// base == chosen, which is what this forwarder does. Hex-Rays shows the pair as a single
+// `__PAIR64__(a3, a2)` value; that is a decompiler artifact.
 // ------------------------------------------------------------------------------------
 void Profile::SetChosenLiveryIdForBaseCar(CgsID lBaseCarId)
 {

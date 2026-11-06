@@ -982,10 +982,11 @@ private:
     // [FLAG PC bring-up, 2026-08-27 D1 profile-event-list wave] once-latch for the
     // UnlockToProgressionRank(0) boot seam in Prepare2. The console reaches that call through
     // PreWorldUpdate @0x823A4F68 -> (medals-dirty byte +133491) -> UpdatePlayerMedals
-    // @0x8239FE50. PreWorldUpdate landed 2026-09-06 (issue #10) but its medals arm is PARKED
-    // because UpdatePlayerMedals is still not reconstructed, so the rank-0 unlock is driven from
-    // the same Prepare2 seam that already owns Profile::Construct. Not a console member.
-    // DELETE-WHEN UpdatePlayerMedals lands and PreWorldUpdate's medals arm calls it.
+    // @0x8239FE50. PreWorldUpdate's medals arm calls UpdatePlayerMedals (bodied in
+    // BrnProgressionManager_Medals.cpp), but the rank-0 unlock is still driven from the same
+    // Prepare2 seam that already owns Profile::Construct, for the reason given in
+    // BrnProgressionManager.cpp. Not a console member.
+    // DELETE-WHEN something reconstructed populates the profile event list at its console seat.
     bool mbInitialRankUnlockDone = false;
 
     // ⭐ X360 +133128 (0x20808) -- THE TROPHY-CAR UNLOCK QUEUE, named by the console's own assert

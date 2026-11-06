@@ -45,10 +45,9 @@
 // in this build's export set, so the base declaration stands. ⛔ `Release` (DWARF :1017) was
 // read the same way and was WRONG: ARTIST has it at 0x82236050 (the export set files it under
 // BrnBehaviourManager.h, whose handle-release bodies it inlines), and its absence here leaked
-// the car-select's camera behaviours on every junkyard exit -- see the body. Two sub-behaviours
-// the X360 inlines are documented ⚠️ GATEs rather than fabricated (each carries its own
-// CONSEQUENCE + DELETE-WHEN): the car-asset's own unlock movie (needs the burnoutcarasset
-// generated field set).
+// the car-select's camera behaviours on every junkyard exit -- see the body. One sub-behaviour
+// the X360 inlines is a documented ⚠️ GATE rather than fabricated (with its CONSEQUENCE +
+// DELETE-WHEN): the car-asset's own unlock movie (needs the burnoutcarasset generated field set).
 //
 // All member access is BY NAME (the x64 gate rule); the console byte offsets quoted in
 // the header are provenance only.
@@ -61,33 +60,6 @@
 // Utils::{CameraShake, Looker, Tweaker}; that de-fork has since landed (the header now
 // #includes all six canonical homes) and the claim was stale.
 //
-// ⛔ STILL NOT MOUNTED -- and the reason is now purely LINK closure, measured with dumpbin
-// over the linked object set (2026-07-31): this TU alone raises 63 externals, 26 of which the
-// linked set already provides and 10 of which the CRT supplies, leaving 27 REAL unresolved
-// game symbols. Mounting it today therefore breaks the build outright. The breakdown:
-//
-//   14  DirectorResourceManager::GetCarSelect*Shots / GetCarUnlock / GetGameIntro.
-//       These are DECLARATION-ONLY in Behaviours/BrnBehaviourIceAnim.h ("bodies in the
-//       resource-manager TU"), and no body exists anywhere in the tree: the fourteen
-//       mCarSelect*/mCarUnlock/mGameIntroGroup members appear only in the recon-map COMMENT
-//       in BrnDirectorResourceManager.h, are not declared, and that TU is not mounted.
-//    6  Camera::BehaviourInterpolate::{Setup, SetupDuration, SetupCameraAFromHelper,
-//       SetupCameraBFromHelper, SetParameters, HasFinished} -- un-landed behaviour.
-//    2  Camera::BehaviourRotateAboutVehicle::{BecomeSimilarTo, SetParameters} -- un-landed.
-//    5  Camera::BehaviourIceAnim::ClearBaseFirstFrameGate, Camera::EnsureEffectIsPlaying,
-//       SharedCameraContainer::{ForcePrimaryGameplayBehaviourToFinish,
-//       GetSelectedGameplayCamera}, and CgsDev::StrStreamBase's vector-deleting destructor.
-//
-// All three siblings together: 81 referenced / 33 provided / 11 CRT / 37 unresolved.
-// DELETE-WHEN: the DirectorResourceManager shot-group member set + the two behaviours land.
-//
-// ⚠️ AND BEFORE MOUNTING, fix the ShotReference decode. Behaviours/BrnBehaviourIceAnim.h
-// typedefs `ShotReference` to Attrib::Gen::iceanim, but SetParameters is handed what is really
-// the raw Attrib::RefSpec ShotList element. The console wraps that RefSpec in a TEMPORARY
-// iceanim and reads the temporary's resolved LAYOUT block at +0xC; the committed C++ calls
-// GetAnimGuid() straight on the RefSpec, which reads RefSpec+4 as if it were mpAttributeData.
-// Latent only because this TU is unmounted. Full write-up at Attrib::Gen::iceanim::GetAnimGuid
-// in AttribSys/Generated/classes/iceanim.h.
 // ----------------------------------------------------------------------------
 
 

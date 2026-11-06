@@ -14,7 +14,7 @@
 // for the ONLINE race intro: the pre-race fly-by that shows each rival in turn, then the
 // player, then the start lights/countdown, before handing control back to the roaming state.
 // It owns one camera interpolator (the blend between successive ICE-anim takes) and four
-// ICE-anim camera behaviours -- three rival "show" takes (cycled through muRivalMovieOffset),
+// ICE-anim camera behaviours -- three rival "show" takes (taken in turn by rival index),
 // one player "show" take and one start-lights take -- and walks the state machine
 // INACTIVE -> PREPARING -> ACTIVE -> SHOWING_PLAYER -> SHOWING_RIVAL -> MOVING_TO_RIVAL ->
 // MOVING_TO_PLAYER -> SHOWING_PLAYER_AGAIN -> WAITING_FOR_COUNTDOWN -> SHOWING_LIGHTS ->

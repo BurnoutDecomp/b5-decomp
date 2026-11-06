@@ -18,7 +18,7 @@
 //
 // The director's ONLINE race-intro arbitrator state. It plays a pre-race camera fly-by: it
 // shows each rival in turn (the three rival "show" ICE-anim takes, cycled through
-// muRivalMovieOffset), blends between them with a camera interpolator, then shows the player and
+// the current rival index), blends between them with a camera interpolator, then shows the player and
 // the start lights, before the countdown hands control back to the roaming state. CalculateState
 // Times splits the event's intro time budget across the per-rival show/move segments. Update
 // walks the state machine, each frame copying whichever behaviour's produced camera is in force

@@ -342,14 +342,6 @@ static void TryRequestJunctionTrainingTip(TrainingManager* lpTrainingManager,
 // That is a divergence and it is stated rather than hidden; it cannot be "fixed" into the right
 // value because the console never computed one.
 //
-// TWO ARMS ARE PARKED, both marked [PARKED] at their sites with the console's own body:
-//   * the DISCOVERY arm (0x823905C8..0x823907E8) -- ProfileEvent flag bit 0, action 55,
-//     Profile::AddGameModeTypeToDiscovered, CheckForAllEventsOfATypeFound /
-//     CheckForAllEventsBeingFound. Parked by the wave brief.
-//   * the TRAINING-TIP arm (0x82390B18..0x82390D5C) -- the three-way DISCOVERS_EVENT /
-//     CORRECT_CAR / WRONG_CAR tip choice.
-// Neither parked arm posts an action the mounted GUI consumes; the action-201 post, which does,
-// is complete.
 // ============================================================================================
 void GameStateModule::CheckIfPlayerIsAtJunctionWithAnEvent(
         const GameStateModuleIO::PreWorldInputBuffer* lpInput,

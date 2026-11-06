@@ -1105,8 +1105,8 @@ public:
     // race-car contact's B-side owner is 0 (the world). No console accessor symbol -- the module
     // pokes the member -- so this exists so the producer names it instead of re-deriving +0x774.
     // ⚠️ Write-ONLY-true here on purpose: the contact pass never clears it. The clear belongs to
-    // ActiveRaceCar::Update @0x822F7A0C (`mbCrashing ? false : (mfTimeInAir <= 0.0f)`), which is
-    // drop #2 in that function's banner and is still not reproduced.
+    // ActiveRaceCar::Update @0x822F7A0C (`mbCrashing ? false : (mfTimeInAir <= 0.0f)`), which
+    // writes mbIsTouchingWorld.
     void SetTouchingWorld(bool lbTouchingWorld)      { mbIsTouchingWorld = lbTouchingWorld; }  // +0x774
     // ADDITIVE 2026-09-14 (boost-wave2), the WRITE half of the two readers above, for the same
     // reason SetTouchingWorld exists: RaceCarEntityModule::UpdateRaceCarContacts @0x822F5CAC /

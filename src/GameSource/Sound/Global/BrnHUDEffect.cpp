@@ -211,7 +211,7 @@ HUDEffect::~HUDEffect()
 //   v2 = the car in front's position + 2.0 * its unit velocity,
 //   v3 = the negated unit velocity of the car in front (vxor128 sign-flip).
 // So the result grows as the player sits straight behind that car, in its direction of
-// travel. (This banner used to call v1/v2 velocities; they are positions, see the caller.)
+// travel.
 //
 // ASM (0x82686BA8-0x82686C5C), store-for-store:
 //   offset    = v1 - v2                                    ; vsubfp

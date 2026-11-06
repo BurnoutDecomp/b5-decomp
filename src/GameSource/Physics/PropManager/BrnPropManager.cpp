@@ -806,18 +806,16 @@ void PropManager::CreateContactEvent( ContactSpy::PropContact* lpOutPropContact,
 //   * DoPropInstanceWorldContactGeneration / DoPartWorldContactGeneration pass the prop's own
 //     slot index as the PER-PRIMITIVE tag --
 //     `lPrimPairList.AddPrimitive(volume, matrix, padding, static_cast<u16>(liPropIndex))`
-//     (console `clrlwi r26,r26,16`), parked at scratchpad/waveQ2/parked/
-//     PropManager_03_Do{PropInstance,Part}WorldContactGeneration.cpp;
+//     (console `clrlwi r26,r26,16`);
 //   * AddContactResultsToQueue (PropManager_wQ2_03.cpp:463) copies that tag straight through:
 //     `lContact.muPolyTagA = lrResult.muPrimitive0Tag;`
 //   * and primitive 0 is always the PROP side on that path (muVolumeInstanceIdA is built from
 //     the prop entity word, muVolumeInstanceIdB from the world's).
 // The same "a locally generated contact carries its own pool index in muPolyTagA" convention is
 // already committed for the deformation pools (BrnDeformationManager_ContactFixups.cpp:71/:122).
-// ⚠️ CONSEQUENCE FOR THE MOUNT: the two Do*WorldContactGeneration bodies are the only producers
-// of that tag, and they are NOT in the tree (parked on two collision-generator declarations).
-// Until they land, no prop-vs-WORLD contact reaches this function at all, so leg (5)'s break
-// path is dead -- which is exactly the hole wave Q4 should report rather than paper over.
+// The two Do*WorldContactGeneration bodies are the only producers of that tag. Both are in this
+// file (landed 2026-08-19) and BeginPropWorldContactGeneration dispatches them, so prop-vs-WORLD
+// contacts reach this function and leg (5)'s break path is live.
 //
 // ==========================================================================================
 // ⚠️ NaN POLARITY (gotcha 4) -- two decisions here are vector compares, and both are written in
@@ -7690,17 +7688,7 @@ void PropManager::RemoveProp( PropEntityID                                      
 //   ida_fmt.txt). Where something is an inference it says INFERENCE on its own line.
 //
 // ==================================================================================================
-// ⛔ CALLEES / GLOBALS THAT ARE DECLARED BUT HAVE NO DEFINITION IN THE TREE
-//    (`cl /c` cannot see an unresolved external, so this file gating green does NOT mean the TU
-//     links). Reported, not stubbed, not invented:
-//      BrnPhysics::Props::PropManager::GetPropInertia @0x82612640 (declared in BrnPropManager.h's GetPropInertia/GetPartInertia block; its
-//          round-1 body is parked at scratchpad/waveQ/parked/
-//          PropManager_04_GetPropInertia_GetPartInertia.cpp, blocked on the rw::collision::AABBox
-//          include clash -- physfix.owner.md §5.1 REQUEST 1b)
-//      the FIVE tuning globals declared at the top of this file (see their banner) -- they need a
-//          declaration in BrnPropManager.h and a definition in BrnPropManager.cpp, exactly like
-//          their fifteen already-homed siblings.
-//    Everything else these three bodies call has a real body -- each one is named at its call site.
+// Everything these three bodies call has a real body -- each one is named at its call site.
 // ==================================================================================================
 
 
@@ -7710,15 +7698,9 @@ namespace Props
 {
 
 // =================================================================================================
-// ⚠️⚠️ FIVE TUNING GLOBALS THAT HAVE NO DECLARATION ANYWHERE IN THE TREE YET -- DECLARED HERE,
-// DEFINED NOWHERE, AND FILED AS A HEADER REQUEST. THIS FILE IS LINK-RED UNTIL THEY LAND.
-//
-// BrnPropManager.h already carries fifteen of this .cpp's tuning globals (the seven the debug
-// component registers plus the eight the keystone wave added). These five are the ones ONLY these
-// three bodies read, so nothing had reason to declare them before. This lander may not edit a
-// header, so they are DECLARED here and reported; nothing is defined, so there is no chance of an
-// ODR clash when BrnPropManager.h/.cpp grow them (a second identical `extern` declaration is legal
-// and inert -- a second DEFINITION would not be, which is why there is none here).
+// THE FIVE TUNING GLOBALS ONLY THESE THREE BODIES READ. BrnPropManager.h declares all five and
+// this file defines them near its top, alongside the fifteen others the header carries (the seven
+// the debug component registers plus the eight the keystone wave added).
 //
 // WHERE THE NAMES COME FROM -- the same method the header's other eight used, and it is not a
 // guess: the DecFIGS global list for THIS EXACT .cpp
@@ -7740,32 +7722,16 @@ namespace Props
 //           reads exactly two zero-page VecFloats: one scales an ANGULAR quantity, one scales a
 //           LINEAR one. Not const in the DWARF, unlike the three above -- transcribed as declared.
 //
-// ⭐ STATUS 2026-08-18 (round 3b): THE HEADER REQUEST THAT STOOD HERE IS DONE, AND THE VALUES ARE
-//    RECOVERED. Both halves are now closed and this block is the record of what happened, not a
-//    request:
-//      * DECLARATIONS: all five are declared in BrnPropManager.h and defined in BrnPropManager.cpp,
-//        so the file-local `extern` re-declarations this file used to carry -- which were the other
-//        half of the request -- are deleted. The per-constant ROLE evidence that used to hang off
-//        those re-declarations moved WITH them onto the header declarations; nothing was dropped.
-//      * VALUES: the note here claimed "their real values come from a dynamic initialiser that is
-//        not in the ARTIST export set (only readers are)". The first clause was right, the second
-//        was measured FALSE. The initialisers ARE in the image -- MSVC dynamic-initialiser thunks
-//        that sit outside every IDA function, hence invisible to any scan built on the per-address
-//        function exports. Measured values, provenance on each header declaration:
-//            KVF_LEAN_PROP_LERP_SPEED           = Splat(0.1f)
-//            KVF_LEAN_PROP_MIN_LERP             = Splat(0.01f)
-//            KVF_LEAN_PROP_ORTHOGONAL_TOLERANCE = Splat(0.1f)
-//            KVF_BREAK_JOINT_LINEAR_VEL         = Splat(1.0f)
-//            KVF_BREAK_JOINT_ANGULAR_VEL        = Splat(1.0f)
-//        The old "CONSEQUENCE" paragraph (a leaning prop's visual transform never catching up; a
-//        broken sign post released with zero spin and zero throw) described what THIS TREE would
-//        have shipped with the placeholder zeroes, never what the console does. It is retired with
-//        the claim it rested on.
+// The values come from MSVC dynamic-initialiser thunks that sit outside every IDA function,
+// hence are invisible to any scan built on the per-address function exports. Measured values,
+// with provenance on each header declaration:
+//     KVF_LEAN_PROP_LERP_SPEED           = Splat(0.1f)
+//     KVF_LEAN_PROP_MIN_LERP             = Splat(0.01f)
+//     KVF_LEAN_PROP_ORTHOGONAL_TOLERANCE = Splat(0.1f)
+//     KVF_BREAK_JOINT_LINEAR_VEL         = Splat(1.0f)
+//     KVF_BREAK_JOINT_ANGULAR_VEL        = Splat(1.0f)
+// The per-constant ROLE evidence is on the header declarations.
 // =================================================================================================
-
-// (The five file-local `extern` re-declarations that used to sit here are DELETED -- they were the
-//  pre-header workaround, and BrnPropManager.h now declares all five. Their ROLE evidence moved
-//  onto those header declarations verbatim.)
 
 
 // =================================================================================================

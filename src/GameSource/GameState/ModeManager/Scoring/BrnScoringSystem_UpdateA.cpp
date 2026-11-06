@@ -65,7 +65,7 @@
 //   UpdateTeamStats               (0x8231F308)  [NOW LANDED -- see body below]
 //       Per car, accumulates the frame delta-time into two CgsSystem::Time slots
 //       inside the embedded CarScoreData (X360 +0x6C mTimeInCurrentTeam, +0x74
-//       maTimeInTeam[] indexed by the CarData team field @+0x13C). The Foundation
+//       maTotalTimeInTeam[] indexed by the CarData team field @+0x13C). The Foundation
 //       phase grew CarScoreData with NAMED accessors for both slots
 //       (Get/SetTimeInCurrentTeam @+0x6C, Get/SetTimeInTeam(team) @+0x74), so the
 //       body now reaches them BY NAME with no blob arithmetic. Body lands below.
@@ -176,7 +176,7 @@ namespace BrnGameState
     // Per-frame team-time accumulator. For every active-race-car slot that owns a
     // CarData record, fold the frame delta-time into that car's per-team time
     // tallies inside the embedded CarScoreData:
-    //   * maTimeInTeam[team] += lDeltaTime   (X360 +0x74, team = CarData @+0x13C)
+    //   * maTotalTimeInTeam[team] += lDeltaTime   (X360 +0x74, team = CarData @+0x13C)
     //   * mTimeInCurrentTeam += lDeltaTime   (X360 +0x6C)
     //
     // X360 detail (asm at 0x8231F308): the frame delta arrives as the f32 argument

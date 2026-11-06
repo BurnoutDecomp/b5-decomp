@@ -1899,8 +1899,7 @@ namespace BrnGui
         // 24-byte OutputGuiEvent<BrnGui::GuiAudioEvent> WRAPPER record -- header
         // { sizeof(payload)=24, type=456, payload offset=16 } then the 24-byte payload. The
         // countdown's four audio posts differ only in the third payload word (3/2/1/0), which
-        // is the countdown step. Shape verbatim from the committed
-        // BrnInGameMessagesComponent.cpp:160 GuiAudioEventRecord40 (the same X360 record).
+        // is the countdown step.
 
         void PostCountdownAudio(CgsGui::StateInterface* lpInterface, s32 liStep)
         {
