@@ -1113,20 +1113,25 @@ namespace BrnGame
         while (liId >= 0 && lpEvent != 0)
         {
             // ---- resolve (command, payload) -- see the PC-ABI FLAG above ------------------
-            const u32* lpuRecord  = reinterpret_cast<const u32*>(lpEvent);
-            s32        liCommand  = liId;
-            const u32* lpuPayload = lpuRecord;
+            // The payload stays a BYTE pointer and each arm reads it at the width the console
+            // does (the BridgeGuiToGameState idiom): the bool arms (94, 469/470) are `lbz r?,
+            // 0(r29)` @0x823CC3CC / @0x823CC708, the word arms take lpiPayload. A bool event is
+            // re-queued by EventInterpreterModule::ProcessOutEvents at its own miOutEventSize
+            // (1 byte), so the bytes after it are stale: reading GUI 470's "finished" {0} as a
+            // word saw them, tested non-zero and left the 100% sequence latched (b5-decomp #79).
+            s32       liCommand = liId;
+            const u8* lpPayload = reinterpret_cast<const u8*>(lpEvent);
             if (liId == 40 && liSize >= 12)
             {
+                const u32* lpuRecord = reinterpret_cast<const u32*>(lpEvent);
                 liCommand = static_cast<s32>(lpuRecord[1]);
                 const u32 luOffset = lpuRecord[2];
                 if (luOffset >= 12u && static_cast<s32>(luOffset) < liSize)
                 {
-                    lpuPayload = reinterpret_cast<const u32*>(
-                        reinterpret_cast<const u8*>(lpEvent) + luOffset);
+                    lpPayload = reinterpret_cast<const u8*>(lpEvent) + luOffset;
                 }
             }
-            const s32 liPayload0 = static_cast<s32>(lpuPayload[0]);
+            const s32* lpiPayload = reinterpret_cast<const s32*>(lpPayload);
 
             switch (liCommand)
             {
@@ -1134,22 +1139,22 @@ namespace BrnGame
                     lpDirectorInput->SetCarSelectTickerClosedThisFrame();
                     break;
 
-                case 94:    // the shortcut menu opened/closed (payload word = the new state)
-                    lpDirectorInput->SetShortcutMenuEvent(liPayload0 != 0);
+                case 94:    // the shortcut menu opened/closed (payload byte = the new state)
+                    lpDirectorInput->SetShortcutMenuEvent(lpPayload[0] != 0);
                     break;
 
                 case 191:   // crash-nav shown/hidden -- ignored entirely when payload[1] == 2
-                    if (static_cast<s32>(lpuPayload[1]) != 2)
+                    if (lpiPayload[1] != 2)
                     {
-                        if (liPayload0 == 0)
+                        if (lpiPayload[0] == 0)
                             lpDirectorInput->SetGotCrashNavShownEvent();
-                        else if (liPayload0 == 1)
+                        else if (lpiPayload[0] == 1)
                             lpDirectorInput->SetGotCrashNavHiddenEvent();
                     }
                     break;
 
                 case 192:   // +0x7AC2  end of car select (only for payload {4, 1})
-                    if (liPayload0 == 4 && static_cast<s32>(lpuPayload[1]) == 1)
+                    if (lpiPayload[0] == 4 && lpiPayload[1] == 1)
                         lpDirectorInput->SetEndOfCarSelect();
                     break;
 
@@ -1174,7 +1179,7 @@ namespace BrnGame
                 case 303:   // +0x7ABC / +0x7AB4  rank up this frame + the new rank. The X360
                             // also runs the colour-calibration-shown store on this arm (the
                             // compiler merged the two tails); reproduced.
-                    lpDirectorInput->SetRankUp(liPayload0);
+                    lpDirectorInput->SetRankUp(lpiPayload[0]);
                     lpDirectorInput->SetGotColourCalibrationShownEvent();
                     break;
 
@@ -1184,14 +1189,14 @@ namespace BrnGame
 
                 case 469:   // +0x7AD3 / +0x7AD4  the 100%-completion sequence start/finish
                 case 470:   // (the two ids share one body on the console)
-                    if (liPayload0 != 0)
+                    if (lpPayload[0] != 0)
                         lpDirectorInput->SetStarting100PercentSequence();
                     else
                         lpDirectorInput->SetFinished100PercentSequence();
                     break;
 
                 case 475:   // +0x7AC9 / +0x7AA4  new director profile data + its payload word
-                    lpDirectorInput->SetDirectorProfileData(liPayload0);
+                    lpDirectorInput->SetDirectorProfileData(lpiPayload[0]);
                     break;
 
                 case 476:   // +0x7ABD  ⭐ start the NEW-PROFILE intro
@@ -1220,11 +1225,10 @@ namespace BrnGame
                                   BrnDirector::DirectorIO::InputBuffer::KU_HOOK_ENUMERATION_BYTES,
                                   "the director copies the canonical501 payload");
                     if (liSize >= static_cast<s32>(BrnDirector::DirectorIO::InputBuffer::KU_HOOK_ENUMERATION_BYTES
-                                                   + (reinterpret_cast<const u8*>(lpuPayload)
-                                                          - reinterpret_cast<const u8*>(lpEvent))))
+                                                   + (lpPayload - reinterpret_cast<const u8*>(lpEvent))))
                     {
                         lpDirectorInput->SetHookEnumeration(
-                            reinterpret_cast<const BrnGui::GuiPFXHookEnumeration*>(lpuPayload));
+                            reinterpret_cast<const BrnGui::GuiPFXHookEnumeration*>(lpPayload));
                         if (getenv("BRN_PFX_DIAG") != 0 && CgsDev::Log::gpDebugPrint != 0)
                             *CgsDev::Log::gpDebugPrint << "[pfx-dir] 501 record (" << liSize << " bytes) -> director input\n";
                     }
@@ -1241,9 +1245,9 @@ namespace BrnGame
                 case 591:   // +0x7AB8  the requested camera type. The console stores 0 or 1 and
                             // fires "Unhandled camera type : <n>" for anything else WITHOUT
                             // storing (GameBridgeGUIToX.cpp:1657).
-                    CGS_ASSERT(liPayload0 == 0 || liPayload0 == 1, "Unhandled camera type");
-                    if (liPayload0 == 0 || liPayload0 == 1)
-                        lpDirectorInput->SetCameraType(liPayload0);
+                    CGS_ASSERT(lpiPayload[0] == 0 || lpiPayload[0] == 1, "Unhandled camera type");
+                    if (lpiPayload[0] == 0 || lpiPayload[0] == 1)
+                        lpDirectorInput->SetCameraType(lpiPayload[0]);
                     break;
 
                 default:
