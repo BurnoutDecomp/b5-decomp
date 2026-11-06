@@ -53,6 +53,8 @@
 
 namespace BrnPhysics
 {
+    namespace Vehicle { class PhysicalTrafficManager; }
+
     // Sound debug controls shared with ReadFromRenderware and the reset-on-track watchdog.
     extern s32 KI_HOLD_CAR_IN_PLACE;              // dword_82FB7514
     extern s32 KI_HOLD_CAR_SPINING_IN_AIR;        // dword_82FB7518
@@ -65,6 +67,8 @@ namespace BrnPhysics
     // declared-only here (no bodies) so this header can serve as the shared owning home.
     class ExternallySimulatedBody
     {
+        friend class Vehicle::PhysicalTrafficManager;
+
     public:
         // Host-side default init only. The console never relies on a constructor -- it calls
         // Construct() @0x8259CF28 explicitly -- but a default-constructed body must not carry

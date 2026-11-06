@@ -1,9 +1,10 @@
 #pragma once
 
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"
+#include "GameShared/GameClasses/Containers/CgsBitArray.h"
 #include "GameSource/Replays/Serialisers/BrnReplayTrafficEntitySerialiserFrame.h"
 
-namespace BrnTraffic { class Vehicle; }
+namespace BrnTraffic { struct TrafficPhysicsInfo; class Vehicle; }
 
 namespace BrnReplays
 {
@@ -17,7 +18,7 @@ namespace BrnReplays
         TrafficEntitySerialiserStaticLayout* GetStaticLayout();
 
         // @0x82653418 -- lazily clear the static layout on the first frame, mark it done.
-        TrafficEntitySerialiserStaticLayout* CheckStaticLayoutCleared();
+        void CheckStaticLayoutCleared();
 
         // @0x8265F2D8 / @0x8265F4E8 -- playback / record one frame (top-level dispatch).
         s32 Read();
@@ -45,11 +46,12 @@ namespace BrnReplays
 
         // --- record-side setters (TrafficEntityModule::UpdateSerialiser drives these) ---
         // @0x827073C8
-        void SetActiveHullsForLocalPlayer(const void* lpActiveHulls);
+        void SetActiveHullsForLocalPlayer(const TrafficSerialiserFrame::ActiveHullSet* lpActiveHulls);
         // @0x82707438
         void SetBonusAssets(const u8* lpauBonusAssets, u32 luNumBonusAssets);
         // @0x82707320
-        void SetPhysicsData(const u64* lpBits, const void* lpaPhysicsInfo);
+        void SetPhysicsData(const CgsContainers::BitArray<KU_NUM_PHYSICS_INFO>* lpBits,
+                            const BrnTraffic::TrafficPhysicsInfo* lpaPhysicsInfo);
         // @0x82714060
         void SetVehicleData(u32 luVehicle, BrnTraffic::Vehicle* lpVehicle);
         // @0x82707168

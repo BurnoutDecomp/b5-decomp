@@ -34,6 +34,8 @@
 // the field decomposition below is an HONEST placeholder pending the mutator TUs.
 // ---------------------------------------------------------------------------
 
+namespace BrnReplays { class TrafficEntitySerialiser; }
+
 namespace BrnTraffic
 {
     // Baked, read-only traffic-light corona view (home: SharedClasses/Traffic/Junctions/
@@ -81,8 +83,15 @@ namespace BrnTraffic
         u8   GetLightState() const;
     };
 
+    // ARTIST copies a 0x12D0-byte manager and places the next member there.
+    // Eight-byte alignment is the least sufficient XDK layout; original spelling/alignof is inferred.
+#if defined(_XBOX)
+    class CGS_ALIGN(8) TrafficLightManager
+#else
     class TrafficLightManager
+#endif
     {
+        friend class BrnReplays::TrafficEntitySerialiser;
     public:
         // GetLightState @ 0x8274F9A0
         // Bounds-asserts the flat instance index, then returns the address of that
@@ -174,6 +183,9 @@ namespace BrnTraffic
         }
     };
 
+#if defined(_XBOX)
+    CGS_STATIC_ASSERT((sizeof(TrafficLightManager) == 0x12D0), "ARTIST traffic light manager extent");
+#endif
 
 }
 

@@ -33,12 +33,14 @@ int main(int lnArgc, char** lapcArgv)
     BrnResource::Allocators::InitMemoryMap();
     BrnRendererModule::DeviceInitialise();
     BrnResource::Allocators::Construct();
+    BrnResource::HeapResourceAllocator* lpRuntimeAllocator =
+        BrnResource::GetRuntimeAllocator();
 
     // off_82F2C854 is mRuntimeAllocator, initialized by ConstructChildAllocators
     // @0x82666E1C. Each call builds all five descriptor lanes and dispatches
     // DoAllocate at allocator slot 4; no allocation name is supplied by ARTIST.
     BrnGame::BrnGameModule* lpNewGame = static_cast<BrnGame::BrnGameModule*>(
-        BrnResource::GetRuntimeAllocator()->AllocateMemoryResource(0x9A1300, 128, 0));
+        lpRuntimeAllocator->AllocateMemoryResource(0x9A1300, 128, 0));
     BrnGame::BrnGameModule::DebugMemoryInit(lpNewGame);
     gpBurnoutGame = lpNewGame ? new (lpNewGame) BrnGame::BrnGameModule : 0;
 
@@ -54,15 +56,15 @@ int main(int lnArgc, char** lapcArgv)
     gDispatchThreadIOBufferStack.Construct("Dispatch");
 
     gUpdateInputBufferStack.Prepare(
-        BrnResource::GetRuntimeAllocator()->AllocateMemoryResource(0x780000, 128, 0), 0x780000, 128);
+        lpRuntimeAllocator->AllocateMemoryResource(0x780000, 128, 0), 0x780000, 128);
     gUpdateOutputBufferStack.Prepare(
-        BrnResource::GetRuntimeAllocator()->AllocateMemoryResource(0x780000, 128, 0), 0x780000, 128);
+        lpRuntimeAllocator->AllocateMemoryResource(0x780000, 128, 0), 0x780000, 128);
     gResourceInputBufferStack.Prepare(
-        BrnResource::GetRuntimeAllocator()->AllocateMemoryResource(0x40000, 128, 0), 0x40000, 128);
+        lpRuntimeAllocator->AllocateMemoryResource(0x40000, 128, 0), 0x40000, 128);
     gResourceOutputBufferStack.Prepare(
-        BrnResource::GetRuntimeAllocator()->AllocateMemoryResource(0x20000, 128, 0), 0x20000, 128);
+        lpRuntimeAllocator->AllocateMemoryResource(0x20000, 128, 0), 0x20000, 128);
     gDispatchThreadIOBufferStack.Prepare(
-        BrnResource::GetRuntimeAllocator()->AllocateMemoryResource(0x18000, 128, 0), 0x18000, 128);
+        lpRuntimeAllocator->AllocateMemoryResource(0x18000, 128, 0), 0x18000, 128);
 
     // ARTIST 827E64D0..827E6590 stops checking as soon as the backing
     // allocator exists, including if an assertion causes it to be installed.

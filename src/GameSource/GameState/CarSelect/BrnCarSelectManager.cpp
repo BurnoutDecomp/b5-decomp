@@ -91,10 +91,6 @@ enum EGameAction
     KI_ACTION_CAR_SELECTION_DROPIN      = 65,   // size 16         -- CarSelectionChangedDropInAction
     KI_ACTION_CAR_SELECTION_DROPIN_DONE = 66,   // size 16         -- CarSelectionDropInCompleteAction
     KI_ACTION_JUNKYARD_DRIVE_THRU       = 7,    // size 48 (0x30)  -- JunkYardDriveThruAction
-    // 77 is NOT an "AllowBoostEarningAction": it is GameStateModuleIO::CarSelectExitAction
-    // (E_ACTION_CAR_SELECT_FINISHED, DWARF CAR_SELECT_EXIT 72 +5), and UpdateExitState now posts it through that
-    // type. The id stays listed here so this table still covers every id the manager posts.
-    KI_ACTION_ALLOW_BOOST_EARNING       = 77,   // size 32 (0x20)  -- CarSelectExitAction (see above)
     KI_ACTION_RESET_PLAYER_DRIVER       = 70,   // size 1          -- SetPlayerCarDriverAction (exit)
     KI_ACTION_SET_INPUT_ENABLED         = 71,   // size 1          -- (enter junkyard input enable)
     KI_ACTION_JUNKYARD_ENTERED          = 99,   // size 1          -- (junkyard entered flag)
@@ -1146,6 +1142,12 @@ void CarSelectManager::UpdateExitState(GameStateModuleIO::GameActionQueue* lpAct
         CgsDev::Assert::FireAssert("lpSpawnLocation", KAC_CSM_FILE, 988);
         CgsDev::Assert::EndAssert();
     }
+
+    GameStateModuleIO::CarSelectExitAction lExitAction;
+    lExitAction.mExitSpawnLocation = lpExitSpawnLocation->mPosition;
+    lExitAction.mbOnlineCarSelect = false;
+    lpQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lExitAction),
+                      GameStateModuleIO::E_ACTION_CAR_SELECT_FINISHED, sizeof(lExitAction));
 
     {
         u8 lacJunkInput[1] = { 0 };

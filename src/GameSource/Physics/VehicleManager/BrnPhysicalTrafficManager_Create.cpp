@@ -166,16 +166,20 @@ namespace Vehicle
 
             const Vector3 lCabHitch = lpCab->GetArticulationPointWorldSpace();
             const Vector3 lTrailerHitch = lpTrailer->GetArticulationPointWorldSpace();
-            const Vector3 lSeparation = lCabHitch - lTrailerHitch;
-            const Vector3 lHalfSeparation = lSeparation * KF_ARTICULATION_SEPARATION_SHARE;
+            const __vector4 lvSeparation = __vsubfp(lCabHitch.mV, lTrailerHitch.mV);
+            const __vector4 lvHalf = {
+                KF_ARTICULATION_SEPARATION_SHARE, KF_ARTICULATION_SEPARATION_SHARE,
+                KF_ARTICULATION_SEPARATION_SHARE, KF_ARTICULATION_SEPARATION_SHARE
+            };
+            const __vector4 lvSign = __vslw(__vspltisw(-1), __vspltisw(-1));
 
-            Matrix44Affine lCabTransform = lpCab->mpVehicleBody->GetTransform();
-            lCabTransform.wAxis = lCabTransform.wAxis - lHalfSeparation;
-            lpCab->mpVehicleBody->SetTransform(lCabTransform);
+            // ARTIST 0x82648F90..0x82648FD8 updates only the two translation rows.
+            Vector3& lrCabPosition = lpCab->mpVehicleBody->mTransform.wAxis;
+            const __vector4 lvCabAdjustment = __vxor(__vmulfp(lvHalf, lvSeparation), lvSign);
+            lrCabPosition.mV = __vaddfp(lrCabPosition.mV, lvCabAdjustment);
 
-            Matrix44Affine lTrailerTransform = lpTrailer->mpVehicleBody->GetTransform();
-            lTrailerTransform.wAxis = lTrailerTransform.wAxis + lHalfSeparation;
-            lpTrailer->mpVehicleBody->SetTransform(lTrailerTransform);
+            Vector3& lrTrailerPosition = lpTrailer->mpVehicleBody->mTransform.wAxis;
+            lrTrailerPosition.mV = __vmaddfp(lvHalf, lvSeparation, lrTrailerPosition.mV);
 
             CGS_ASSERT(mpArticulatedJointCreateBuffer != 0,
                        "mpArticulatedJointCreateBuffer != NULL"); // :1045

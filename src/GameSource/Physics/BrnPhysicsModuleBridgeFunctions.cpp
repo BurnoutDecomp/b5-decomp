@@ -848,11 +848,11 @@ namespace BrnPhysics
         const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriangleCacheInterface =
             lpInputBuffer->GetVehicleInputInterface()->GetTriangleCacheInterface();
 
-        // [DIAG] NOT IN THE X360 BINARY. DELETE-WHEN the traffic contact queue is proven to fill.
-        // Called EVERY frame (it accumulates; it does not sample -- see its banner), and BEFORE
-        // any queue is walked or drained.
-        lpContactInterface->DebugAccumulateQueueLengths();
-
+        /*
+         * Host-only queue telemetry removed; preserve original source-line numbers for
+         * the native CGS_ASSERT diagnostics that follow.
+         *
+         */
         const s32 liNumPotentialContacts = lpContactInterface->GetLength();
 
         // The opening `stw 0` at module+179760 == mVehicleManager.miNonPhysicalContactCount.

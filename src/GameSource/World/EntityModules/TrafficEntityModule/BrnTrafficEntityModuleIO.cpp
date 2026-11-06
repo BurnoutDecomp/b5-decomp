@@ -27,26 +27,27 @@ namespace BrnTrafficIO
     }
 
     // ========================================================================
-    // OutputBuffer_PostPhysics accessors. No host byte offset is pinned: several members are
-    // queue aggregates whose host header is 16 bytes where the console's is 12, so host offsets
-    // legitimately exceed the console ones. The rodata lock messages carry the verbatim "\n".
+    // OutputBuffer_PostPhysics accessors. The lock assertions preserve the ARTIST messages.
     // ========================================================================
     void OutputBuffer_PostPhysics::_AssertLayout()
     {
-        // Parity is by named member and sequence, so no offsetof pin is possible. What is
-        // pinnable is that the scene seat must hold the whole 25-queue aggregate, not 44 bytes.
-        CGS_STATIC_ASSERT((sizeof(OutputBuffer_PostPhysics::SceneInputInterface) > 800000),
-                      "mSceneInputInterface is the real InSceneUpdateInterface (console 818768 B "
-                      "at +11376), not the 44-byte span the +834784 accessor returns");
-        CGS_STATIC_ASSERT((sizeof(OutputBuffer_PostPhysics::InterfaceAt834784) == 44),
-                      "the X360-only member at console +834784 is 44 bytes (Construct zeroes 11 words)");
+        CGS_STATIC_ASSERT((sizeof(SceneInputInterface) > 800000),
+                          "ARTIST post-physics scene interface extent");
+        CGS_STATIC_ASSERT((sizeof(ReplayRequestInterface) == 44),
+                          "ARTIST traffic replay requests contain eleven pointers");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mReplayRequestInterface) == 834784),
+                          "ARTIST traffic replay requests at +834784");
+        CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mGuiEventQueue) == 834828),
+                          "ARTIST traffic GUI queue at +834828");
+        CGS_STATIC_ASSERT((sizeof(OutputBuffer_PostPhysics) == 0xD3D20),
+                          "ARTIST traffic post-physics output extent");
     }
 
     // X360 0x82761908, store for store -- run by CreateIOBuffer<OutputBuffer_PostPhysics>
     // @0x827B79D0, which allocates 0xD3D20 == 867,616 bytes. Three members have no Construct call
     // of their own and reach the console as raw zero stores: mTrafficSoundOutputInterface's
     // leading halfword, the array count inside mTrafficDirectorOutputInterface, and the whole
-    // 44-byte mInterfaceAt834784. 0x82761908 has no per-address JSON under .ida-exports/, an
+    // 44-byte mReplayRequestInterface. 0x82761908 has no per-address JSON under .ida-exports/, an
     // export-run gap rather than a missing function.
     void OutputBuffer_PostPhysics::Construct()
     {
@@ -75,17 +76,11 @@ namespace BrnTrafficIO
         mResourceRequestInterface.Construct();          // +0xCAB90 (830672)
         mResourceRequestInterface.Clear();              // the console's paired Clear
 
-        //   0x82761964-0x8276197C  addis r11,r31,0xD / addi r11,r11,-0x4320 / mtctr 0xB /
-        //                          stw r29,0(r11) / addi r11,r11,4 / bdnz
-        //                                    -- 11 words == the whole 44-byte
-        //                                       mInterfaceAt834784 at +834784, zeroed by an
-        //                                       unrolled-to-a-loop store run. The console runs
-        //                                       it HERE, between the mResourceRequestInterface
-        //                                       leg and the mTrafficTypeResponseQueue leg.
-        mInterfaceAt834784 = InterfaceAt834784();
+        // ARTIST 0x82761964–0x8276197C clears the eleven serialiser slots.
+        mReplayRequestInterface = ReplayRequestInterface();
 
         mTrafficTypeResponseQueue.Construct();          // +0xCAAC0 (830144)
-        mGuiEventQueue.Construct();                     // +0xCFD0C (834828)
+        mGuiEventQueue.Construct();                     // +0xCBD0C (834828)
     }
 
     // X360 0x827A0830 (:387): read-lock; return &mCrashTrafficInputInterface (this + 8).
@@ -182,18 +177,18 @@ namespace BrnTrafficIO
         return &mGameEventQueue;
     }
 
-    // X360 0x827A0B78 (baked 406): read-lock; return the X360-only 44-byte member (this + 834784).
-    const OutputBuffer_PostPhysics::InterfaceAt834784* OutputBuffer_PostPhysics::GetReadInterfaceAt834784() const
+    // X360 0x827A0B78 (baked 406): read-lock; return the replay request interface (this + 834784).
+    const OutputBuffer_PostPhysics::ReplayRequestInterface* OutputBuffer_PostPhysics::GetReplayRequestInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
-        return &mInterfaceAt834784;
+        return &mReplayRequestInterface;
     }
 
     // X360 0x82711D90 (baked 407): write-lock; same member (this + 834784).
-    OutputBuffer_PostPhysics::InterfaceAt834784* OutputBuffer_PostPhysics::GetWriteInterfaceAt834784()
+    OutputBuffer_PostPhysics::ReplayRequestInterface* OutputBuffer_PostPhysics::GetReplayRequestInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        return &mInterfaceAt834784;
+        return &mReplayRequestInterface;
     }
 
     // X360 0x827A0C20 (baked 409): read-lock; return &mSceneInputInterface (this + 11376).

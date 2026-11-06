@@ -1,43 +1,39 @@
 #pragma once
 
-// BrnReplays::TrafficSerialiserFrame -- the per-frame snapshot the traffic replay
-// serialiser records/plays back. No DWARF or prior source recovered for this type,
-// so only the fields that Clear @0x826533D8 touches are known; everything before
-// them is held as an opaque leading block. All access is BY NAME.
-//
-// X360 reference: Clear @0x826533D8 (called by TrafficEntityModule::UpdateSerialiser).
-
-#include "types.hpp"
+#include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
+#include "GameShared/GameClasses/Containers/CgsSet.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"
+#include <cstddef>
 
 namespace BrnReplays
 {
-    // One slot of the traffic frame's reset table. Clear @0x826533D8 zeroes each slot
-    // (asm `li r11,0; std r11,0xA0..0xF0` -- a 64-bit ZERO store; both words become 0).
-    // The Hex-Rays 0xFFFFFFFF00000000 literal is a misread of the std-of-r11=0.
-    struct TrafficFrameSlot
-    {
-        s32 miHandle; // @+0x00 reset to 0 (asm std r11=0 zeroes the whole slot)
-        s32 miValue;  // @+0x04 reset to 0
-    };
+    static const u32 KU_MAX_BONUS_STREAMED_ASSETS = 2;
 
-    // Number of reset slots Clear writes: 11 eight-byte stores from +0xA0 to +0xF0.
-    static const u32 KU_TRAFFIC_FRAME_SLOTS = 11;
-
-    // Opaque per-frame traffic state. Only the region Clear touches is named; the
-    // leading bytes [0x00 .. 0x90) are an undecoded block (no recovered layout). GROW
-    // this home into named fields if/when a DWARF layout is recovered.
     struct TrafficSerialiserFrame
     {
-        u8  maHead[0x90];                            // @0x00 undecoded leading state
-        s32 miFrameCounter;                          // @0x90 reset to 0 by Clear (stw)
-        s16 miActiveCount;                           // @0x94 reset to -1 by Clear (sth -- 16-bit)
-        s16 mPad96;                                  // @0x96 untouched by Clear
-        // @0x98 .. @0x9F : two undecoded words between the counters and the slot table.
-        u8  maGap[0x08];                             // @0x98 undecoded
-        TrafficFrameSlot maSlots[KU_TRAFFIC_FRAME_SLOTS]; // @0xA0 reset table (11 slots)
+        typedef ::Set<u16, BrnTraffic::KU_MAX_ACTIVE_HULLS> ActiveHullSet;
 
-        // @0x826533D8 -- reset the frame's slot table and counters to the empty state
-        // (declared here, defined in BrnReplayTrafficSerialiserFrame.cpp).
-        TrafficSerialiserFrame* Clear();
+        ActiveHullSet mActiveHullsForLocalPlayer;                     // +0x00
+        u16 muLocalPlayerHull;                                        // +0x94
+        u8 muNumBonusAssets;                                          // +0x96
+        u8 maBonusAssets[KU_MAX_BONUS_STREAMED_ASSETS];                                          // +0x97
+        CgsContainers::FastBitArray<BrnTraffic::KU_MAX_TOTAL_TRAFFIC> mVehicleUpdateBits; // +0xA0
+        CgsContainers::FastBitArray<BrnTraffic::KU_MAX_PHYSICAL_TRAFFIC_VEHICLES> mPhysicsBits; // +0xF0
+
+        TrafficSerialiserFrame* Clear();                              // ARTIST 0x826533D8
     };
+
+    CGS_STATIC_ASSERT((offsetof(TrafficSerialiserFrame, mActiveHullsForLocalPlayer) == 0),
+                      "ARTIST traffic replay active hull set");
+    CGS_STATIC_ASSERT((offsetof(TrafficSerialiserFrame, muNumBonusAssets) == 0x96 &&
+                       offsetof(TrafficSerialiserFrame, maBonusAssets) == 0x97),
+                      "ARTIST traffic replay bonus asset fields");
+    CGS_STATIC_ASSERT((offsetof(TrafficSerialiserFrame, muLocalPlayerHull) == 0x94),
+                      "ARTIST traffic replay player hull");
+    CGS_STATIC_ASSERT((offsetof(TrafficSerialiserFrame, mVehicleUpdateBits) == 0xA0),
+                      "ARTIST traffic replay vehicle bits");
+    CGS_STATIC_ASSERT((offsetof(TrafficSerialiserFrame, mPhysicsBits) == 0xF0),
+                      "ARTIST traffic replay physics bits");
+    CGS_STATIC_ASSERT((sizeof(TrafficSerialiserFrame) == 0xF8),
+                      "ARTIST traffic replay frame header extent");
 }

@@ -1146,36 +1146,13 @@ void PhysicalTrafficManager::UpdateTrafficPhysicsPostSimulation(
 //
 // ResolveArticulatedJoints -- the per-frame positional fix-up of the hitch. For each live traffic
 // slot that is a CAB with a non-broken joint, find the trailer and move each half of the pair half
-// the separation between the two articulation points toward the other. Pose only: it writes the
-// two bodies' transform translation rows through ExternallySimulatedBody::Translate and touches no
-// velocity. Dormant by data until something puts a traffic vehicle into
-// E_ARTICULATE_JOINT_ATTACHED -- the joint-creation chain (CreateJoint and friends) is not
-// reconstructed.
+// the separation between the two articulation points toward the other. It writes only the
+// two bodies' transform translation rows.
 //
 // ProcessJointSpys -- walks the OutJointSpy queue on the READ-locked simulation output buffer.
 // THE LOOP BODY IS EMPTY ON PURPOSE: the console's only instruction in it is the checked
 // GetEvent(i) call with its result discarded. The walk still runs the queue's three tripwires.
 // =================================================================================================
-
-namespace
-{
-
-    // Budget: without it this fires once per resolved pair per frame.
-    const s32 KI_JOINT_WITNESS_BUDGET = 24;
-    s32 giJointWitnessLinesLeft = KI_JOINT_WITNESS_BUDGET;
-
-    // Witness for "a joint was resolved". It cannot appear until the joint-creation chain lands.
-    // DELETE-WHEN-STABLE.
-    void JointResolveWitness(s32 liCab, s32 liTrailer, s32 liJointIndex)
-    {
-        --giJointWitnessLinesLeft;
-        *CgsDev::Log::gpDebugPrint
-            << "[T-joint] resolved cab=" << liCab
-            << " trailer=" << liTrailer
-            << " joint=" << liJointIndex
-            << "\n";
-    }
-}
 
 namespace BrnPhysics
 {
@@ -1236,14 +1213,17 @@ void PhysicalTrafficManager::ResolveArticulatedJoints()
         const Vector3 lCabArticulationPoint     = lpCab->GetArticulationPointWorldSpace();
         const Vector3 lTrailerArticulationPoint = lpTrailer->GetArticulationPointWorldSpace();
 
-        // (cab - trailer) / 2 -- the console reaches 0.5f by refining a reciprocal of 2.0f.
-        const Vector3 lSeperationVectorWorld = rw::math::vpu::Mult(
-            rw::math::vpu::Subtract(lCabArticulationPoint, lTrailerArticulationPoint), 0.5f);
+        const __vector4 lvSeparation = __vsubfp(lCabArticulationPoint.mV, lTrailerArticulationPoint.mV);
+        const __vector4 lvHalf = {0.5f, 0.5f, 0.5f, 0.5f};
+        const __vector4 lvSign = __vslw(__vspltisw(-1), __vspltisw(-1));
 
-        lpCab->mpVehicleBody->Translate(rw::math::vpu::Negate(lSeperationVectorWorld));
-        lpTrailer->mpVehicleBody->Translate(lSeperationVectorWorld);
+        // ARTIST 0x825F13DC..0x825F144C adjusts only the translation rows.
+        Vector3& lrCabPosition = lpCab->mpVehicleBody->mTransform.wAxis;
+        const __vector4 lvCabAdjustment = __vxor(__vmulfp(lvHalf, lvSeparation), lvSign);
+        lrCabPosition.mV = __vaddfp(lrCabPosition.mV, lvCabAdjustment);
 
-        JointResolveWitness(liTraffic, liTrailerIndex, liJointIndex);   // DIAG, not in the binary
+        Vector3& lrTrailerPosition = lpTrailer->mpVehicleBody->mTransform.wAxis;
+        lrTrailerPosition.mV = __vmaddfp(lvHalf, lvSeparation, lrTrailerPosition.mV);
     }
 }
 

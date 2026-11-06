@@ -281,7 +281,7 @@ public:
     bool IsSympatheticCrasher() const { return mSympCrashTarget.muValue != 0xFFFFFFFFu; }
 
     void SetSteering(f32 lfValue);
-    void SetWheelRot(f32 lfValue);
+    void SetWheelRot(VecFloat lfValue);
     void SetSwerveAmount(f32 lfValue);
     void SetSwerveTime(f32 lfValue);
     void SetTargetPos(Vector3 lTargetPos);

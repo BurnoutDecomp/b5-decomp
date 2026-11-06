@@ -12,6 +12,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"   // CgsSceneManager::EntityId
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"   // RequestInterface<4096>
+#include "GameSource/Replays/BrnReplayRequestInterface.h"
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"                                   // CgsModule::IOBuffer
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficAIInterfaces.h"    // TrafficAIInterface
@@ -460,9 +461,9 @@ namespace BrnTrafficIO
     //   VariableEventQueue<1536,16>::Construct        this+0x2660   mGameEventQueue          (9824)
     //   InSceneUpdateInterface::Construct             this+0x2C70   mSceneInputInterface     (11376)
     //   VariableEventQueue<4096,16>::Construct+Clear  this+0xCAB90  mResourceRequestInterface(830672)
-    //   11x stw 0 stride 4                            this+0xCFCE0  mInterfaceAt834784 (44 B, X360-only)
+    //   11x stw 0 stride 4                            this+0xCBCE0  mReplayRequestInterface (11 pointers)
     //   EventQueue<TrafficTypeResponse,32>::Construct this+0xCAAC0  mTrafficTypeResponseQueue(830144)
-    //   VariableEventQueue<32768,16>::Construct       this+0xCFD0C  mGuiEventQueue           (834828)
+    //   VariableEventQueue<32768,16>::Construct       this+0xCBD0C  mGuiEventQueue           (834828)
     // CreateIOBuffer allocates 0xD3D20 == 867,616 bytes, closing the last span exactly
     // (867616 - 834828 == 32,788 == sizeof(VariableEventQueue<32768,16>) rounded to 4).
     //
@@ -472,7 +473,7 @@ namespace BrnTrafficIO
     //   +3632   mTrafficSoundOutputInterface     read 0x827A0980 (baked 397) / write 0x82711B98 (398)
     //   +6208   mTrafficDirectorOutputInterface  read 0x827A0A28 (baked 400)
     //   +9824   mGameEventQueue                  read 0x827A0AD0 (baked 403) / write 0x82711CE8 (404)
-    //   +834784 mInterfaceAt834784               read 0x827A0B78 (baked 406) / write 0x82711D90 (407)
+    //   +834784 mReplayRequestInterface          read 0x827A0B78 (baked 406) / write 0x82711D90 (407)
     //   +11376  mSceneInputInterface             read 0x827A0C20 (baked 409)
     //   +830144 mTrafficTypeResponseQueue        read 0x827A0CC8 (baked 412)
     //   +830672 mResourceRequestInterface        read 0x827A0D70 (baked 415)
@@ -488,13 +489,8 @@ namespace BrnTrafficIO
     // only 44 bytes before +834828. Getting this wrong makes InSceneUpdateInterface::Append read
     // 25 mpEvents/miLength pairs out of foreign memory.
     //
-    // FLAG (foreign types / opaque interior): mTrafficDirectorOutputInterface is the real
-    // committed SharedIO type; mInterfaceAt834784 is the X360-only 44-byte member DecFIGS has no
-    // counterpart for, named by offset role rather than invented. Nothing here pins a host byte
-    // offset: several members are queue aggregates whose host header is 16 bytes where the
-    // console's is 12, so host offsets legitimately exceed the console ones. Parity is by named
-    // member and sequence, in the console's ascending-offset order, which is also the DWARF's
-    // member order (:416..:424) plus the one X360-only insertion.
+    // The member order follows ARTIST. The replay request type is attested by both accessors
+    // and the registration and forwarding callers.
     class OutputBuffer_PostPhysics : public CgsModule::IOBuffer
     {
     public:
@@ -512,9 +508,8 @@ namespace BrnTrafficIO
         // DWARF :424 -- Construct proves the shape (VariableEventQueue<32768,16> @ +834828),
         // the same instantiation every other GuiEventInputQueue in the tree is.
         typedef CgsModule::VariableEventQueue<32768, 16> GuiEventInputQueue;
-        // X360-only member at +834828-44: 44 bytes, zeroed by Construct as 11 words, no DecFIGS
-        // counterpart and no recovered type. PARKED: named by offset role rather than invented.
-        struct InterfaceAt834784 { unsigned char maReserved[44]; };
+        // ARTIST passes this member to RegisterSerialiser at 0x8274EEDC.
+        typedef BrnReplays::ReplayIO::RequestInterface ReplayRequestInterface;
 
         // @0x82761908 -- run by CreateIOBuffer<OutputBuffer_PostPhysics> @0x827B79D0.
         void Construct();
@@ -540,9 +535,9 @@ namespace BrnTrafficIO
         // +9824 read/write mGameEventQueue.
         const GameEventQueue* GetGameEventQueue() const;                          // 0x827A0AD0 (baked 403)
         GameEventQueue*       GetGameEventQueue();                                // 0x82711CE8 (baked 404)
-        // +834784 read/write the X360-only member.
-        const InterfaceAt834784* GetReadInterfaceAt834784() const;                // 0x827A0B78 (baked 406)
-        InterfaceAt834784*       GetWriteInterfaceAt834784();                     // 0x82711D90 (baked 407)
+        // +834784 read/write mReplayRequestInterface.
+        const ReplayRequestInterface* GetReplayRequestInterface() const;        // 0x827A0B78 (baked 406)
+        ReplayRequestInterface*       GetReplayRequestInterface();              // 0x82711D90 (baked 407)
         // +11376 read mSceneInputInterface -- the leg
         // WorldModule::BridgeEntityModulesToScene_PostPhysics @0x827AB608 calls.
         const SceneInputInterface* GetSceneInputInterface() const;                // 0x827A0C20 (baked 409)
@@ -588,7 +583,7 @@ namespace BrnTrafficIO
         SceneInputInterface            mSceneInputInterface;               // console +11376  :421
         TrafficTypeResponseQueue       mTrafficTypeResponseQueue;          // console +830144 :422
         ResourceRequestInterface       mResourceRequestInterface;          // console +830672 :423
-        InterfaceAt834784              mInterfaceAt834784;                 // console +834784 (X360-only)
+        ReplayRequestInterface         mReplayRequestInterface;             // console +834784 (X360-only)
         GuiEventInputQueue             mGuiEventQueue;                     // console +834828 :424
     };
 

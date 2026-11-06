@@ -1005,7 +1005,7 @@ Vehicle::Manoeuvre Vehicle::GetCurrentManoeuvre() const
     return static_cast<Manoeuvre>(miManoeuvre);
 }
 
-// ---- single-lane vector setters (insert one lane, NaN-validate the scalar) ----
+// ---- single-lane vector setters: scalar input or ARTIST VecFloat input, as declared ----
 void Vehicle::SetSteering(f32 lfValue)
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
@@ -1013,11 +1013,16 @@ void Vehicle::SetSteering(f32 lfValue)
     mPitch_Roll_Steering_WheelRot.mV.z = lfValue;
 }
 
-void Vehicle::SetWheelRot(f32 lfValue)
+void Vehicle::SetWheelRot(VecFloat lfValue)
 {
     CGS_ASSERT(IsAlive(), "IsAlive()");
-    CGS_ASSERT(lfValue == lfValue, "RwMath::IsValid( lfValue )");
-    mPitch_Roll_Steering_WheelRot.mV.w = lfValue;
+    // ARTIST @0x8270DFBC: vcmpeqfp128. lfValue,lfValue; CR6.EQ is set only when
+    // every lane is self-equal (so a NaN in any lane fails this guard).
+    unsigned int luComparison = 0;
+    __vcmpeqfpR(lfValue.mV, lfValue.mV, &luComparison);
+    CGS_ASSERT((luComparison & 0x80u) != 0, "RwMath::IsValid( lfValue )");
+    mPitch_Roll_Steering_WheelRot.mV =
+        __vrlimi(mPitch_Roll_Steering_WheelRot.mV, lfValue.mV, 1, 0);
 }
 
 void Vehicle::SetSwerveAmount(f32 lfValue)
