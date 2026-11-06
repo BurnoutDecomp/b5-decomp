@@ -11,7 +11,7 @@
 //   StateManager::IsStateAlias(s32)          accessor             @ 0x82680D48  (inline in .h)
 //   StateManager::AddToClassTypeInfoArray()  RTTI register        @ 0x8268DFE8  (real)
 //   StateManager::GetStaticTypeInfo()        RTTI descriptor      @ 0x8268D798  (real)
-//   StateManager::Prepare()                  vtable +0x0C         (stub -- see FLAG)
+//   StateManager::Prepare()                  native base fallback @ 0x8268D7B8
 //   StateManager::GetChildStateManager(s32)  vtable +0x14         (stub -- see FLAG)
 //   StateManager::PrepareStates(...)         shared helper        @ 0x826EAD30  (stub -- see FLAG)
 //   StateManager::CreateStateMan(u32, void*) factory              @ 0x826A5B60  (real -- scans the registry)
@@ -148,23 +148,10 @@ StateManager::~StateManager()
 }
 
 // ---------------------------------------------------------------------------
-// StateManager::Prepare()  -- vtable slot +0x0C
-//
-// PrepareStateManagersOnBoot (0x826837F8) calls this per manager as
-// `(*(**mgr + 12))(mgr)`; a false return aborts boot. The BASE body is not the
-// load-bearing one -- every concrete manager overrides Prepare() with its own
-// bring-up state machine (GlobalStateManager::Prepare @ 0x826F5BF8,
-// EmitterStateManager::Prepare @ 0x826F5AC0, ... -- see PART B), each pulling its
-// domain (Voice/Content/World/Traffic/Vehicle audio).
-//
-// FLAG (stub): the base StateManager has no recovered standalone Prepare body in this
-// group (the real per-manager logic lives in the overrides). Returning true here is a
-// safe non-cascading default so the keystone is instantiable and overridable; it does
-// NOT reproduce any X360 base behaviour (there may be none -- the slot may be pure in
-// the source). Leaves MUST override.
-// ---------------------------------------------------------------------------
+// ARTIST 0x8268D7B8. The base fallback completes the prepare stage.
 bool StateManager::Prepare()
 {
+    mePrepareState = E_PREPARE_FINISHED;
     return true;
 }
 
