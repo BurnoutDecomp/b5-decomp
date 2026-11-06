@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"          // NetworkPlayer::RegisterMessageType / UnRegisterMessageType
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"              // TimeManager::GetCurrentFrameNumber
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                               // GuiNetworkPlayerBattlingEvent (GUI 483)
 
 #include <cstring>   // std::memmove (X360 RemoveAggressiveMove uses memmove)
 
@@ -875,15 +876,20 @@ namespace BrnNetwork
                                    lpInterface->GetActiveRaceCarIndex(lLocalPlayerID),
                                "leAggressorActiveRaceCarIndex != mpNetworkModule->GetActiveRaceCarIndex( lLocalPlayerID )");
 
-                    // Only surface a battling gui event when the local player is the one being
-                    // battled (the victim of the inbound battling move).
+                    // Surface a battling gui event when the battle is between two OTHER players: the
+                    // aggressor is already asserted not to be the local car, and 0x825707F4 skips
+                    // the post (`beq`) when the victim is. 0x825707FC..0x82570818 store {aggressor,
+                    // victim} on the stack and AddEvent them, size 8, id 0x1E3 (483), onto
+                    // OutputBuffer::GetGuiEventQueue().
                     if (leVictimActiveRaceCarIndex != lpInterface->GetActiveRaceCarIndex(lLocalPlayerID))
                     {
-                        // The X360 builds a BrnGui::GuiNetworkPlayerBattlingEvent {aggressor, victim}
-                        // and AddEvent()s it (type id 483) onto OutputBuffer::GetGuiEventQueue(). That
-                        // gui-event type + the variable gui-event queue are not yet reconstructed, so the
-                        // dispatch is documented here rather than fabricated; the relay's own state is
-                        // already fully updated above.
+                        BrnGui::GuiNetworkPlayerBattlingEvent lBattlingEvent;
+                        lBattlingEvent.meAggressorActiveRaceCarIndex = leAggressorActiveRaceCarIndex;
+                        lBattlingEvent.meVictimActiveRaceCarIndex    = leVictimActiveRaceCarIndex;
+                        lpOutput->GetGuiEventQueue()->AddEvent(
+                            reinterpret_cast<const CgsModule::Event*>(&lBattlingEvent),
+                            lBattlingEvent.GetEventType(),
+                            static_cast<s32>(sizeof(lBattlingEvent)));
                     }
                     break;
                 }
