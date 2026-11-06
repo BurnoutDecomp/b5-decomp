@@ -108,6 +108,20 @@ namespace
     const f32 KF_BOUNDARY_STEP                   = 1.0f;         // 0x82001C98
     const f32 KF_INITIAL_DISTANCE_BOUNDARY       = 5.0f;         // 0x8200426C (0x40A00000)
     const s32 KI_NO_LEADER_RACE_POSITION         = 9999;
+
+    // The three online road rage generators read `lbz 0xD9(r3)` (CarScoreData::mbEliminated)
+    // straight off the const GetCarData (sub_8231DCD0) for each of the 8 active slots, with no
+    // null test (0x823952D4, 0x8239546C, 0x82395618). That lookup returns NULL for a slot with
+    // no car (`li r3, 0` @0x8231DD68), which is every slot past the lobby's player count.
+    // FLAG PC-platform leaf: the console read lands on its low page and evidently does not
+    // fault; Windows does. A slot with no car reads as "not eliminated", the value a zero page
+    // gives the console byte. The tests that follow (team, distance, position) still run for it,
+    // as on the console.
+    bool IsRaceCarEliminated(const ScoringSystem* lpScoringSystem, EActiveRaceCarIndex leIndex)
+    {
+        const CarData* lpCarData = lpScoringSystem->GetCarData(leIndex);
+        return (lpCarData != NULL) && lpCarData->GetScoreData()->GetEliminated();
+    }
 }
 
 // ============================================================================
@@ -1132,10 +1146,7 @@ void HUDMessageLogic::GenerateOnlineBlueTeamEscapingMessage(
                     static_cast<EActiveRaceCarIndex>(liActiveRaceCarIndex);
                 const f32 lfCandidateDistanceToFinish =
                     lpScoringSystem->GetRaceCarDistanceToFinish(leCandidateIndex);
-                const CarData* lpCandidateCarData =
-                    static_cast<const ScoringSystem*>(lpScoringSystem)->GetCarData(leCandidateIndex);
-
-                if (!lpCandidateCarData->GetScoreData()->GetEliminated() &&
+                if (!IsRaceCarEliminated(lpScoringSystem, leCandidateIndex) &&
                     lpScoringSystem->GetPlayerTeam(leCandidateIndex) ==
                         GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM)
                 {
@@ -1204,10 +1215,7 @@ void HUDMessageLogic::GenerateOnlineBlueTeamAreBehindYouMessage(
                     static_cast<EActiveRaceCarIndex>(liActiveRaceCarIndex);
                 const f32 lfCandidateDistanceToFinish =
                     lpScoringSystem->GetRaceCarDistanceToFinish(leCandidateIndex);
-                const CarData* lpCandidateCarData =
-                    static_cast<const ScoringSystem*>(lpScoringSystem)->GetCarData(leCandidateIndex);
-
-                if (!lpCandidateCarData->GetScoreData()->GetEliminated() &&
+                if (!IsRaceCarEliminated(lpScoringSystem, leCandidateIndex) &&
                     lpScoringSystem->GetPlayerTeam(leCandidateIndex) !=
                         GameStateModuleIO::E_PLAYER_TEAM_RED_TEAM)
                 {
@@ -1282,9 +1290,7 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
                 liCandidateRacePosition = lpCandidateCarData->GetScoreData()->GetRacePosition();
             }
 
-            const CarData* lpCandidateStatusCarData =
-                static_cast<const ScoringSystem*>(lpScoringSystem)->GetCarData(leCandidateIndex);
-            if (!lpCandidateStatusCarData->GetScoreData()->GetEliminated())
+            if (!IsRaceCarEliminated(lpScoringSystem, leCandidateIndex))
             {
                 const GameStateModuleIO::EPlayerTeam leCandidateTeam =
                     lpScoringSystem->GetPlayerTeam(leCandidateIndex);
