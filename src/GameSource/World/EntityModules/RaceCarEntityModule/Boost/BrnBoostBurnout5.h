@@ -47,13 +47,6 @@
 //
 // REJECTED DECLARATIONS (present in DecFIGS and/or in the wave-P probe drafts;
 //   deliberately NOT declared here -- see the per-item evidence):
-//   * BoostBurnout5::OnPropHit (slot 16) and ::OnEndCrashPlay (slot 14).
-//     Both slots are NON-pure in the base, so BoostBurnout5 is complete without
-//     them, and neither appears in the X360 ledger while BoostBurnout2 AND
-//     BoostBurnout3 each have their own distinct symbol for both. Absence is
-//     therefore consistent with "B5 simply inherits the base body", and there
-//     is no X360 body to reconstruct one from. AGENTS.md gates every DWARF
-//     declaration on X360 attestation -- these two have none.
 //   * BoostBurnout5::RecalculateBoostMode (DecFIGS BrnBoostBurnout5.cpp:283).
 //     No X360 symbol and no caller: the retail ApplyUpdate @0x822C1FC8 has no
 //     `bl` where Feb-2007 called it (the mode transition is written inline).
@@ -155,10 +148,19 @@ public:
     // miBoostLevel = miCombinedBoostLevel - 1; UpdateMaxBoost(false).
     virtual void OnStartCrashPlay() override;
 
+    // -- slot 14 -- ARTIST vtable 0x820CEDC8 targets BoostBurnout2's body @0x822D5350
+    // (ICF: no BoostBurnout5 symbol). DWARF BrnBoostBurnout5.cpp:774. Undoes
+    // OnStartCrashPlay; the base slot is empty.
+    virtual void OnEndCrashPlay() override;
+
     // -- slot 15 -- @0x822A6F88. Returns the literal "Burnout 5 rules".
     // NOTE the trailing const -- the base slot is `const` and dropping it here
     // would silently mint a 51st vtable slot instead of overriding slot 15.
     virtual const char* GetName() const override;
+
+    // -- slot 16 -- ARTIST vtable 0x820CEDC8 targets BoostBurnout3's body @0x822A6620
+    // (ICF: no BoostBurnout5 symbol). DWARF BrnBoostBurnout5.cpp:225.
+    virtual void OnPropHit() override;
 
     // -- slot 17 -- @0x822A6C50. `return meBoostMode == E_BOOSTMODE_B2_BLUE;`
     // (NON-const, matching the base slot). BoostBurnout2/3 do not override it.
