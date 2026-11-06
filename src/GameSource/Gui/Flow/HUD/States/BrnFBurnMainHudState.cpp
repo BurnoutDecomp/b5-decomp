@@ -1,4 +1,5 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnFBurnMainHudState.h"
+#include "GameSource/Gui/Flow/HUD/BrnHudAudioEventRecord.h"
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers
@@ -1334,9 +1335,11 @@ namespace BrnGui
                 }
                 else
                 {
-                    // X360: OutputGuiEvent<GuiAudioEvent>{2,0,-1,-1} then PAUSE.
-                    // FLAG deferred (Slice B): the GuiAudioEvent record type is not
-                    // yet homed; the pause transition is the load-bearing effect.
+                    HudAudioEventRecord lAudio(KI_HUD_AUDIO_PAUSE_PARAM0, KI_HUD_AUDIO_PAUSE_PARAM1,
+                                               KI_HUD_AUDIO_PAUSE_PARAM2);   // @0x82481178
+                    mpStateInterface->GetOutputEventQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
+                        static_cast<s32>(sizeof(lAudio)));
                     SendStateEvent("PAUSE");
                 }
                 break;

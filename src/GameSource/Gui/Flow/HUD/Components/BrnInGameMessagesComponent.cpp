@@ -1,4 +1,5 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnInGameMessagesComponent.h"
+#include "GameSource/Gui/Flow/HUD/BrnHudAudioEventRecord.h"
 
 #include <cstring>   // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
 #include <stdlib.h>  // [gateui r5] getenv (the BRN_PROP_DIAG probe in RefreshString)
@@ -143,31 +144,6 @@ namespace
     // 24-byte GuiAudioEvent payload at +0x10. X360 stores, verbatim:
     //   StartMessage @0x824373D8..0x82437424 : payload {1, 0, 0} + maMessages[cur].mHudMessageId
     //   EndMessage   @0x824375F0..0x8243765C : payload {1, 1, 0} + the same id
-    // ⚠ FLAG payload field NAMES: BrnGui::GuiAudioEvent is still `u8 maPayload[12]` in
-    // BrnGuiDemangledEventTypes.h (fix3gui's lane), so the three leading words have no
-    // recovered names -- they are spelled by role here and NOT forked into that header. The
-    // decode above is the outstanding shared-header request for that file; it is recorded in
-    // scratch/gateui_wave/verify_r3_fix3hud/VERDICT.md (the round-3 banner pointed at a
-    // "gateui r3 report" that was never written).
-    struct alignas(8) GuiAudioEventRecord40
-    {
-        s32   miOutEventSize;     // +0x00 = 24  (sizeof the GuiAudioEvent payload)
-        s32   miOutEventType;     // +0x04 = 456
-        s32   miOutEventOffset;   // +0x08 = 16  (offsetof the payload in this record)
-        s32   miHeaderPad;        // +0x0C (the console leaves this word uninitialised)
-        s32   miAudioParam0;      // +0x10 = 1 in both callers
-        s32   miAudioParam1;      // +0x14 = 0 (start) / 1 (end)
-        s32   miAudioParam2;      // +0x18 = 0 in both callers
-        s32   miPayloadPad;       // +0x1C (uninitialised on the console)
-        CgsID mHudMessageId;      // +0x20
-
-        GuiAudioEventRecord40(s32 liParam1, CgsID lMessageId)
-            : miOutEventSize(24), miOutEventType(456), miOutEventOffset(16), miHeaderPad(0)
-            , miAudioParam0(1), miAudioParam1(liParam1), miAudioParam2(0), miPayloadPad(0)
-            , mHudMessageId(lMessageId)
-        {
-        }
-    };
 }
 
     // @ 0x8240EA80 -- h:310. Return the queue's live message slot index.
@@ -825,9 +801,7 @@ namespace
 
         CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
         {
-            GuiAudioEventRecord40 lAudio(
-                0,
-                mpInGameMessagesQueue
+            HudAudioEventRecord lAudio(1, 0, 0, mpInGameMessagesQueue
                     ->maMessages[mpInGameMessagesQueue->muCurrentMessageIndex].mHudMessageId);
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT, 40);
@@ -856,9 +830,7 @@ namespace
 
         CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
         {
-            GuiAudioEventRecord40 lAudio(
-                1,
-                mpInGameMessagesQueue
+            HudAudioEventRecord lAudio(1, 1, 0, mpInGameMessagesQueue
                     ->maMessages[mpInGameMessagesQueue->muCurrentMessageIndex].mHudMessageId);
             mpStateInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT, 40);
