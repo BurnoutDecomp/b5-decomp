@@ -1,4 +1,10 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacContent.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
+#include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacSubmixVoice.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include <cstdlib>
+#include <new>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x826D7EE0
 //   (CgsSound::Playback::GenericRwacReverbIRContent::`scalar deleting destructor')
@@ -22,6 +28,73 @@ namespace CgsSound
 {
 namespace Playback
 {
+    const Name GenericRwacReverbIRSlot::SK_SLOT_CLASSNAME("~GenericRwacReverbIRSlot~");
+
+    namespace
+    {
+        // [FLAG PC witness] NOT IN THE X360 BINARY. BRN_AEMS_DIAG=1. Slots are few.
+        void ReverbSlotDiag(const char* lpcMessage)
+        {
+            if (std::getenv("BRN_AEMS_DIAG"))
+                CgsDev::Log::WriteToLog(lpcMessage);
+        }
+
+        // SlotFactory<GenericRwacReverbIRSlot>::DoCreateSlot (DecFIGS, the same template
+        // instantiation as GenericRwacContentSlot's @0x8EF094): allocate through
+        // Voice -> Factory -> Environment, alignment 4, tag "SlotImplementation".
+        class GenericRwacReverbIRSlotFactory : public ISlotFactory
+        {
+        public:
+            GenericRwacReverbIRSlotFactory()
+                : ISlotFactory(GenericRwacReverbIRSlot::SK_SLOT_CLASSNAME) {}
+
+            virtual ISlotImplementation* DoCreateSlot(Voice& arVoice) const
+            {
+                Factory& lrFactory = const_cast<Factory&>(arVoice.GetFactory());
+                void* lpMemory = lrFactory.GetEnvironment().Allocate(
+                    static_cast<u32>(sizeof(GenericRwacReverbIRSlot)), 4,
+                    "SlotImplementation");
+                CGS_ASSERT(lpMemory != 0, "lpvMem");
+                ReverbSlotDiag("[FLAG PC witness] [reverbir] slot created\n");
+                return lpMemory ? ::new (lpMemory) GenericRwacReverbIRSlot() : 0;
+            }
+        };
+
+        const GenericRwacReverbIRSlotFactory sGenericRwacReverbIRSlotFactory;
+    }
+
+    // ARTIST @0x826C1C00. Plug-in event 0 with one parameter record: the loaded IR file.
+    void GenericRwacReverbIRSlot::DoPostAttach(const Slot& arSlot, Voice& arVoice,
+                                               Content& arContent)
+    {
+        GenericRwacSubmixVoice& lrRwacVoice = static_cast<GenericRwacSubmixVoice&>(arVoice);
+        void* lpvReverbIRFile = arContent.GetData(E_CONTENT_STATE_LOADED);
+
+        RwacCommandPluginEvent lReverbCommand(
+            reinterpret_cast<uintptr_t>(lrRwacVoice.GetPlugin(arSlot.GetPluginOffset())),
+            0u, 1u);
+        RwacCommandApplyReverbIRFile lReverbParameters(lpvReverbIRFile);
+
+        RwacCommandQueue& lrQueue = lrRwacVoice.GetRwacFactory().GetCommandQueue();
+        lrQueue.Post(lReverbCommand);
+        lrQueue.Post(lReverbParameters);
+        ReverbSlotDiag("[FLAG PC witness] [reverbir] post attach\n");
+    }
+
+    // ARTIST @0x826C1D08. Plug-in event 1, no parameter record (the StopReverbHandler arm of
+    // ReverbIR1::EventEvent @0x82BA56B8).
+    void GenericRwacReverbIRSlot::DoPreDetach(const Slot& arSlot, Voice& arVoice,
+                                              Content& /*arContent*/)
+    {
+        GenericRwacSubmixVoice& lrRwacVoice = static_cast<GenericRwacSubmixVoice&>(arVoice);
+
+        RwacCommandPluginEvent lReverbCommand(
+            reinterpret_cast<uintptr_t>(lrRwacVoice.GetPlugin(arSlot.GetPluginOffset())),
+            1u, 0u);
+        lrRwacVoice.GetRwacFactory().GetCommandQueue().Post(lReverbCommand);
+        ReverbSlotDiag("[FLAG PC witness] [reverbir] pre detach\n");
+    }
+
     GenericRwacReverbIRContent::GenericRwacReverbIRContent(Factory& arFactory,
                                                            const ContentSpec& akrSpec,
                                                            u32 au32Ident)
