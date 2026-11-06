@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
+#include "GameShared/GameClasses/Development/CgsStrStream.h" // streamed assert message buffer
 #include "GameShared/GameClasses/Module/CgsEventQueue.h" // CgsModule::EventQueue<T,N>
 
 #include <cstddef>   // offsetof
@@ -12,6 +13,8 @@ namespace CgsInput { namespace InputIO {
 CGS_STATIC_ASSERT((sizeof(PadOutputInformation) == 932), "PadOutputInformation must be 0x3A4 bytes");
 CGS_STATIC_ASSERT((offsetof(PadOutputInformation, mfStickLX)       == 0x00),  "stickLX @ +0x00");
 CGS_STATIC_ASSERT((offsetof(PadOutputInformation, maActionInfo)    == 0x18),  "action table @ +0x18");
+CGS_STATIC_ASSERT((offsetof(PadOutputInformation, muConnectionWord) == 0x18 + 112 * sizeof(ActionInfo)),
+                  "112 ActionInfo slots end at +0x398");
 CGS_STATIC_ASSERT((offsetof(PadOutputInformation, muConnectionWord)== 0x398), "connection word @ +0x398");
 CGS_STATIC_ASSERT((offsetof(PadOutputInformation, meControllerState)==0x39C), "controller state @ +0x39C");
 CGS_STATIC_ASSERT((offsetof(PadOutputInformation, mbDisconnected)  == 0x3A0), "disconnected flag @ +0x3A0");
@@ -145,9 +148,8 @@ void PostWorldInputBuffer::SetWheelFFSpring(const CgsInput::Device::WheelFFSprin
 //      event queues;
 //   3. for the FIRST FOUR pad records (the scan loop runs 4, not the full 7-slot array):
 //      mbDisconnected = 1 (record +0x3A0; no pad seen this scan yet), zero the 6 leading
-//      stick/axis words (+0x00..+0x17), then zero 112 {f32,u32} pairs from +0x18 -- the 96
-//      ActionInfo slots plus the +0x318..+0x398 tail span (0x18 + 112*8 == 0x398 exactly;
-//      muConnectionWord/meControllerState are left to the pad scan).
+//      stick/axis words (+0x00..+0x17), then zero all 112 ActionInfo pairs from +0x18 to +0x398;
+//      muConnectionWord/meControllerState are left to the pad scan.
 void OutputBuffer::Construct()
 {
     CgsModule::IOBuffer::Construct();
@@ -159,8 +161,7 @@ void OutputBuffer::Construct()
         PadOutputInformation& lrPad = maPadOutputInformation[liPad];
         lrPad.mbDisconnected = 1;
         std::memset(&lrPad.mfStickLX, 0, 6 * sizeof(f32));   // +0x00 .. +0x17
-        // 112 pairs from +0x18: the 96-slot action table AND the +0x318..+0x398 tail span
-        // (one span on the X360; addressed off the record base so the write is one region).
+        // 112 ActionInfo pairs span +0x18..+0x398 on X360.
         std::memset(reinterpret_cast<char*>(&lrPad) + 0x18, 0, 112 * sizeof(ActionInfo));
     }
 }
@@ -215,13 +216,55 @@ OutputBuffer::PadDisconnectedQueue* OutputBuffer::GetPadDisconnectedQueue()
 // X360 0x823B1230 - read-lock accessor returning the iPort-th pad output record (this+296+932*iPort).
 // Callers: BrnGame::BrnGameModule::{GetPadInfoForPlayer0, BridgeControllerToDirector,
 // DoUpdate_InputPreWorld, BridgeControllerToWorld, DoUpdate_Effects, BridgeControllerToGui}.
-// The X360 asserts the read lock then the pad index against [0,4) - matching the three
-// inline asserts at CgsInputModuleIO.h:1203-1205 (messages preserved verbatim, typos and all).
+// Both overloads preserve ARTIST's pad-range checks [0,4) and exact messages after their
+// respective lock-direction assert.
 const PadOutputInformation* OutputBuffer::GetPadInfo(s32 iPort) const
 {
     CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
     CGS_ASSERT(iPort < 4, "Invalid pad specified\n");
     CGS_ASSERT(iPort >= 0, "Port must me positive\n");
+    return &maPadOutputInformation[iPort];
+}
+
+// X360 0x828E6F20 - write-lock accessor used by InputPads::Update; this+0x128+0x3A4*iPort.
+PadOutputInformation* OutputBuffer::GetPadInfo(s32 iPort)
+{
+    if (!IsBufferLockedForWriting())
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                   CgsDev::Assert::giMessageBufferSize);
+        lMessage << "Not locked for writing\n";
+        CgsDev::Assert::FireAssert(
+            CgsDev::Assert::gpcMessageBuffer,
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h",
+            1273);
+        CgsDev::Assert::EndAssert();
+    }
+    if (iPort >= 4)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                   CgsDev::Assert::giMessageBufferSize);
+        lMessage << "Invalid pad specified\n";
+        CgsDev::Assert::FireAssert(
+            CgsDev::Assert::gpcMessageBuffer,
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h",
+            1274);
+        CgsDev::Assert::EndAssert();
+    }
+    if (iPort < 0)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer,
+                                   CgsDev::Assert::giMessageBufferSize);
+        lMessage << "Port must me positive\n";
+        CgsDev::Assert::FireAssert(
+            CgsDev::Assert::gpcMessageBuffer,
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h",
+            1275);
+        CgsDev::Assert::EndAssert();
+    }
     return &maPadOutputInformation[iPort];
 }
 

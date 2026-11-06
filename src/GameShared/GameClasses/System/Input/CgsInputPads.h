@@ -13,7 +13,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Input/CgsInputTypes.h"  // CgsInput::KU_NUMBER_OF_PADS, Device::WheelFFSpring
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h" // CgsInput::InputIO event payloads (JoltEffect, OutputBuffer, ...)
-#include "GameShared/GameClasses/System/Input/Devices/X360/CgsInputDeviceX360Pad.h" // CgsInput::DeviceX360Pad (452-byte fielded layout)
+#include "GameShared/GameClasses/System/Input/Devices/X360/CgsInputManagerX360.h"
 #include "rw/rwcore_structs.h"                                   // rw::IResourceAllocator (Prepare param)
 
 #include <cstddef>   // offsetof (the X360-pinned member-offset static_asserts below)
@@ -48,16 +48,6 @@ namespace CgsInput
         s32  miPort;    // +0x04  resolved physical port, -1 when unbound
     };
 
-    // ---- Per-port record (24-byte stride). InitializePads/Destruct zero {miField00 @+0,
-    // mbField14 @+20}. Only the two written sub-fields are attested; the rest is opaque.
-    struct InputPort
-    {
-        s32 miField00;          // +0x00  zeroed by InitializePads/Destruct
-        u8  maOpaque04[0x14 - 0x04];
-        u8  mbField14;          // +0x14  zeroed by InitializePads/Destruct
-        u8  mau8Pad15[0x18 - 0x15];
-    };
-
     // ============================================================================
     // CgsInput::InputPads -- 0x10D4-byte head + tail flag bytes.
     // ============================================================================
@@ -77,6 +67,9 @@ namespace CgsInput
 
         // X360 0x828EFBF0. Reset all per-player/per-port bind records to unbound.
         void Destruct();
+
+        // X360 0x828F8690. Poll pads and publish their mapped actions under the output write lock.
+        void Update(InputIO::OutputBuffer* lpOutputBuffer);
 
         // X360 0x828DC128. Queue a jolt force-feedback effect on the requesting player's pad
         // (resolving player->port). No free slot or already-higher-priority slot => no-op.
@@ -115,13 +108,13 @@ namespace CgsInput
         // The InputModule drains the post-world pad-mapping queue and copies each 112-byte
         // action-mapping payload into the addressed pad's private mapping storage; it also reads/
         // sets the prepared flag during Release. These accessors reproduce the exact stores the
-        // X360 inlines (InputModule reaches maaMappingStorage @+0x7B8 and mbPrepared @+0xCFC
+        // X360 inlines (InputModule reaches maaMapping @+0x7B8 and mbPrepared @+0xCFC
         // directly) while keeping the storage/flag private.
 
-        // Copy the 112-byte (0x70) action-mapping payload into maaMappingStorage[liPort].
-        void SetActionMapping(s32 liPort, const void* lpPayload)
+        // Copy all 28 control mappings for the specified port.
+        void SetActionMapping(s32 liPort, const InputIO::ActionMapping* lpMapping)
         {
-            std::memcpy(maaMappingStorage[liPort], lpPayload, 0x70);
+            std::memcpy(maaMapping[liPort], lpMapping, sizeof(maaMapping[liPort]));
         }
 
         // Read / set mbPrepared (@+0xCFC).
@@ -129,13 +122,11 @@ namespace CgsInput
         void SetPrepared(bool lbSet) { mbPrepared = lbSet; }
 
     private:
-        // X360 0x828E7238. Zero the per-port records + the six head dwords, then construct the
-        // four DeviceX360Pads (stride 452).
+        // X360 0x828E7238. Reset the embedded manager and construct the four pads.
         void InitializePads();
 
-        // X360 0x828E7350. Accumulate one pad's control floats into the per-action raw-button
-        // array (max) and its axis floats into the running axis array (sum, clamped to [-1,1]).
-        void FillRawData(f32* lafNewRawData, f32* lafAxisData, s32 liPortIndex);
+        // X360 0x828E7350. Accumulate the pad's control values and clamped axes.
+        void FillRawData(f32* lafNewRawData, InputIO::PadOutputInformation* lpPadInfo, s32 liPortIndex);
 
         // X360 0x828EFC58. Per-pad: tick every active jolt + rumble effect through its envelope,
         // accumulate the strongest left/right motor magnitudes, age out finished effects, then
@@ -156,15 +147,7 @@ namespace CgsInput
         // Never-called layout pin so any drift in a member offset is a compile error.
         friend void _InputPads_AssertLayout();
 
-        // ---- head (0x00 .. 0x78) ----
-        InputPort     maPorts[KU_NUMBER_OF_PADS];   // +0x00  (24B stride; 4 records => +0x60)
-        s32           miHead60;                     // +0x60  zeroed by InitializePads
-        s32           miHead64;                     // +0x64
-        s32           miHead68;                     // +0x68
-        s32           miHead6C;                     // +0x6C
-        s32           miHead70;                     // +0x70  zeroed by InitializePads/Destruct
-        u8            mbHead74;                      // +0x74  zeroed by InitializePads/Destruct
-        u8            mau8Pad75[0x78 - 0x75];        // +0x75  align to the pad array
+        ManagerX360   mInputManager;              // +0x00 .. +0x78 (X360)
 
         // ---- physical pad devices ----
         DeviceX360Pad maPads[KU_NUMBER_OF_PADS];    // +0x78, stride 0x1C4 => +0x788 (1928)
@@ -175,12 +158,8 @@ namespace CgsInput
         // ---- per-port resolved-player ids ----
         s32           maiPortToPlayer[KU_NUMBER_OF_PADS]; // +0x7A8 (1960), -1 when unbound => +0x7B8 (1976)
 
-        // ---- per-pad action-mapping table (opaque; not indexed by any body in this TU) -------
-        // Construct fills 112 (0x70) bytes per pad with 0xFF (the `stb -1` inner loop). The DWARF
-        // names this maaMapping (ActionMapping[][]) but its element layout is not attested here and
-        // no body in this TU indexes into it, so it is modelled as opaque per-pad storage that keeps
-        // miCurrentSetOfStates at its asm offset (+0x97C / 2428... actually +0x978 / 2424).
-        u8            maaMappingStorage[KU_NUMBER_OF_PADS][0x70]; // +0x7B8 (1976) => +0x978 (2424)
+        // Each of the 28 physical controls can map to four action IDs. -1 means unused.
+        InputIO::ActionMapping maaMapping[KU_NUMBER_OF_PADS][InputIO::PadMapping::KI_NUM_ACTION_MAPPINGS]; // +0x7B8
 
         s32           miCurrentSetOfStates;         // +0x978 (2424) zeroed by Construct
 
@@ -228,10 +207,11 @@ namespace CgsInput
     inline void _InputPads_AssertLayout()
     {
         CGS_STATIC_ASSERT((sizeof(InputPlayer) == 8), "InputPlayer must be 8 bytes");
-        CGS_STATIC_ASSERT((sizeof(InputPort)   == 24), "InputPort must be 24 bytes (0x18 stride)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, mInputManager)            == 0x00),   "mInputManager @ +0x00");
         CGS_STATIC_ASSERT((offsetof(InputPads, maPads)                  == 0x78),   "maPads @ +0x78");
         CGS_STATIC_ASSERT((offsetof(InputPads, maPlayers)               == 0x788),  "maPlayers @ +0x788 (1928)");
         CGS_STATIC_ASSERT((offsetof(InputPads, maiPortToPlayer)         == 0x7A8),  "maiPortToPlayer @ +0x7A8 (1960)");
+        CGS_STATIC_ASSERT((offsetof(InputPads, maaMapping)              == 0x7B8),  "maaMapping @ +0x7B8");
         CGS_STATIC_ASSERT((offsetof(InputPads, miCurrentSetOfStates)    == 0x978),  "miCurrentSetOfStates @ +0x978 (2424)");
         CGS_STATIC_ASSERT((offsetof(InputPads, maaabActionsDown)        == 0x97C),  "maaabActionsDown @ +0x97C (2428)");
         CGS_STATIC_ASSERT((offsetof(InputPads, mbPrepared)              == 0xCFC),  "mbPrepared @ +0xCFC (3324)");

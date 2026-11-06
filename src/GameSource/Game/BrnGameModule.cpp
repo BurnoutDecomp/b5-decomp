@@ -740,7 +740,7 @@ namespace BrnGame
         {
             const s32 liCommand = liId;
             const u32* const lpuPayload = reinterpret_cast<const u32*>(lpEvent);
-            const s32 liPayload0 = static_cast<s32>(lpuPayload[0]);
+            const u8* const lpuPayloadBytes = reinterpret_cast<const u8*>(lpEvent);
 
             switch (liCommand)
             {
@@ -748,13 +748,14 @@ namespace BrnGame
                     lpDirectorInput->SetCarSelectTickerClosedThisFrame();
                     break;
 
-                case 94:    // the shortcut menu opened/closed (payload word = the new state)
-                    lpDirectorInput->SetShortcutMenuEvent(liPayload0 != 0);
+                case 94:    // the shortcut menu opened/closed (payload byte = the new state)
+                    lpDirectorInput->SetShortcutMenuEvent(lpuPayloadBytes[0] != 0);
                     break;
 
                 case 191:   // crash-nav shown/hidden -- ignored entirely when payload[1] == 2
                     if (static_cast<s32>(lpuPayload[1]) != 2)
                     {
+                        const s32 liPayload0 = static_cast<s32>(lpuPayload[0]);
                         if (liPayload0 == 0)
                             lpDirectorInput->SetGotCrashNavShownEvent();
                         else if (liPayload0 == 1)
@@ -763,7 +764,7 @@ namespace BrnGame
                     break;
 
                 case 192:   // +0x7AC2  end of car select (only for payload {4, 1})
-                    if (liPayload0 == 4 && static_cast<s32>(lpuPayload[1]) == 1)
+                    if (static_cast<s32>(lpuPayload[0]) == 4 && static_cast<s32>(lpuPayload[1]) == 1)
                         lpDirectorInput->SetEndOfCarSelect();
                     break;
 
@@ -788,7 +789,7 @@ namespace BrnGame
                 case 303:   // +0x7ABC / +0x7AB4  rank up this frame + the new rank. The X360
                             // also runs the colour-calibration-shown store on this arm (the
                             // compiler merged the two tails); reproduced.
-                    lpDirectorInput->SetRankUp(liPayload0);
+                    lpDirectorInput->SetRankUp(static_cast<s32>(lpuPayload[0]));
                     lpDirectorInput->SetGotColourCalibrationShownEvent();
                     break;
 
@@ -797,15 +798,15 @@ namespace BrnGame
                     break;
 
                 case 469:   // +0x7AD3 / +0x7AD4  the 100%-completion sequence start/finish
-                case 470:   // (the two ids share one body on the console)
-                    if (liPayload0 != 0)
+                case 470:   // (the two ids share one byte-load body on the console)
+                    if (lpuPayloadBytes[0] != 0)
                         lpDirectorInput->SetStarting100PercentSequence();
                     else
                         lpDirectorInput->SetFinished100PercentSequence();
                     break;
 
                 case 475:   // +0x7AC9 / +0x7AA4  new director profile data + its payload word
-                    lpDirectorInput->SetDirectorProfileData(liPayload0);
+                    lpDirectorInput->SetDirectorProfileData(static_cast<s32>(lpuPayload[0]));
                     break;
 
                 case 476:   // +0x7ABD  ⭐ start the NEW-PROFILE intro
@@ -853,10 +854,13 @@ namespace BrnGame
                 case 591:   // +0x7AB8  the requested camera type. The console stores 0 or 1 and
                             // fires "Unhandled camera type : <n>" for anything else WITHOUT
                             // storing (GameBridgeGUIToX.cpp:1657).
-                    CGS_ASSERT(liPayload0 == 0 || liPayload0 == 1, "Unhandled camera type");
-                    if (liPayload0 == 0 || liPayload0 == 1)
-                        lpDirectorInput->SetCameraType(liPayload0);
+                {
+                    const s32 liCameraType = static_cast<s32>(lpuPayload[0]);
+                    CGS_ASSERT(liCameraType == 0 || liCameraType == 1, "Unhandled camera type");
+                    if (liCameraType == 0 || liCameraType == 1)
+                        lpDirectorInput->SetCameraType(liCameraType);
                     break;
+                }
 
                 default:
                     break;
@@ -3023,10 +3027,11 @@ namespace BrnGame
             }
             else
             {
+                const CgsInput::InputIO::OutputBuffer* lpcInputModuleOutput = lpInputModuleOutput;
                 for (s32 liPort = 0; liPort < CgsInput::KU_NUMBER_OF_PADS; ++liPort)
                 {
                     const CgsInput::InputIO::PadOutputInformation* lpPadInfo =
-                        lpInputModuleOutput->GetPadInfo(liPort);
+                        lpcInputModuleOutput->GetPadInfo(liPort);
                     if (((lpPadInfo->maActionInfo[E_GAMEINPUTACTIONS_START].muStatus >> 1) & 1) != 0)
                     {
                         liStartPressedPort = static_cast<u32>(liPort);

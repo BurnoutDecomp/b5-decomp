@@ -2,10 +2,9 @@
 // CgsInput::ManagerX360 -- the Xbox 360 input manager. Reconstructed from
 // BURNOUT_X360_ARTIST.XEX (asm authoritative; no DecFIGS DWARF for this X360-only class).
 //
-// All three methods are now homed here: UpdateConnectedDevices (@0x828DC480),
-// BindToPort (@0x828E7718) and UnbindFromPort (@0x828E7808). UnbindFromPort's two inlined
-// pad writes reach DeviceX360Pad's private members through the `friend class ManagerX360;`
-// grant in CgsInputDeviceX360Pad.h (anticipated by that header's WAVE54 note).
+// The existing exported methods here are UpdateConnectedDevices (@0x828DC480), BindToPort
+// (@0x828E7718) and UnbindFromPort (@0x828E7808); Update is recovered at @0x828F0028. The
+// manager reset methods wrap the stores inlined in InputPads::InitializePads/Destruct.
 // ============================================================================
 
 #include "GameShared/GameClasses/System/Input/Devices/X360/CgsInputManagerX360.h"
@@ -34,6 +33,42 @@ namespace CgsInput
 
     // XInputGetCapabilities dwFlags: XINPUT_FLAG_GAMEPAD (the asm passes the immediate 1).
     static const u32 KU_XINPUT_FLAG_GAMEPAD = 1;
+
+    // The following lifecycle stores are inlined in InputPads::InitializePads @0x828E7238
+    // and InputPads::Destruct @0x828EFBF0; ARTIST has no separate ManagerX360 constructor or
+    // destructor call. These methods expose those exact manager-owned stores to InputPads.
+    void ManagerX360::Construct()
+    {
+        miNumBoundPads = 0;               // InputPads::InitializePads: stw 0, +0x70
+        mu8Unknown74 = 0;                  // InputPads::InitializePads: stb 0, +0x74
+        for (u32 luPort = 0; luPort < KU_NUMBER_OF_INPUT_PORTS; ++luPort)
+        {
+            mapBoundPads[luPort] = 0;      // +0x60 .. +0x6C
+        }
+        for (u32 luPort = 0; luPort < KU_NUMBER_OF_INPUT_PORTS; ++luPort)
+        {
+            maDevices[luPort].meDeviceType = 0;
+            maDevices[luPort].mbConnected = 0;
+        }
+    }
+
+    void ManagerX360::Destruct()
+    {
+        for (u32 luPort = 0; luPort < KU_NUMBER_OF_INPUT_PORTS; ++luPort)
+        {
+            maDevices[luPort].meDeviceType = 0;
+            maDevices[luPort].mbConnected = 0;
+        }
+        miNumBoundPads = 0;
+        mu8Unknown74 = 0;
+        // InputPads::Destruct does not clear mapBoundPads.
+    }
+
+    CgsInput::Device::EType ManagerX360::GetConnectedDeviceType(s32 liPort)
+    {
+        return static_cast<CgsInput::Device::EType>(maDevices[liPort].meDeviceType);
+    }
+
     // ============================================================================
     // UpdateConnectedDevices @0x828DC480. Poll each of the four XInput slots. On a failed
     // XInputGetState the slot is cleared. On success: if the slot is already connected (or the
@@ -91,6 +126,28 @@ namespace CgsInput
 
             lrDevice.mbConnected  = 0;                          // *v4 = 0
             lrDevice.meDeviceType = 0;                          // *a1 = 0
+        }
+    }
+
+    // ============================================================================
+    // Update @0x828F0028. The native loop walks the bound-pad pointer table, then uses each
+    // non-null pad's stored port (+0xF0) to select the slot record. It calls DeviceX360Pad::Update
+    // with the slot's connected flag, saved port, type and state pointer in that order.
+    // ============================================================================
+    void ManagerX360::Update()
+    {
+        for (u32 luPort = 0; luPort < KU_NUMBER_OF_INPUT_PORTS; ++luPort)
+        {
+            DeviceX360Pad* lpPad = mapBoundPads[luPort];
+            if (lpPad != 0)
+            {
+                const s32 liPadPort = lpPad->mePort;
+                ManagerX360Device& lrDevice = maDevices[liPadPort];
+                lpPad->Update(lrDevice.mbConnected != 0,
+                              liPadPort,
+                              lrDevice.meDeviceType,
+                              lrDevice.maState);
+            }
         }
     }
 

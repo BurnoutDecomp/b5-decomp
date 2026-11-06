@@ -64,6 +64,7 @@ void InputModule::PreWorldUpdate(CgsModule::IOBufferStack* /*lpInputBufferStack*
 
     if (lbUpdatePads)
     {
+        mControllers.Update(lpOutputBuffer);
     }
 
     lpOutputBuffer->GetBindResultQueue()->Append(mOutputBindResultQueue);
@@ -287,23 +288,20 @@ void InputModule::ProcessMappingQueue(const InputIO::PostWorldInputBuffer* lpPos
         const InputIO::PadMapping& lMapping =
             lpPostWorldBuffer->GetPadMappingQueue()->GetEvent(liEvent);
 
-        // The leading 4 bytes of the record are the target port id; the following 112 bytes are the
-        // action-mapping payload copied into the per-pad mapping storage.
-        const s32   liPortId  = *reinterpret_cast<const s32*>(&lMapping);
-        const void* lpPayload = reinterpret_cast<const u8*>(&lMapping) + 4;
+        const s32 liPortId = lMapping.miPortId;
 
         if (liPortId == -1)
         {
             for (u32 luPort = 0; luPort < CgsInput::KU_NUMBER_OF_PADS; ++luPort)
             {
-                mControllers.SetActionMapping(static_cast<s32>(luPort), lpPayload);
+                mControllers.SetActionMapping(static_cast<s32>(luPort), lMapping.maMapping);
             }
         }
         else
         {
             CGS_ASSERT(liPortId < static_cast<s32>(CgsInput::KU_NUMBER_OF_PADS), "Invalid pad ID");
             CGS_ASSERT(liPortId > -1, "Pad Id must be either positive or -1 for all pads");
-            mControllers.SetActionMapping(liPortId, lpPayload);
+            mControllers.SetActionMapping(liPortId, lMapping.maMapping);
         }
     }
 }

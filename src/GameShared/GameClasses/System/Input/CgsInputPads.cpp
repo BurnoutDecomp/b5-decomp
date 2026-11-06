@@ -1,4 +1,4 @@
-// CgsInput::InputPads -- construction, preparation, player/port bind reset, and the jolt/rumble
+// CgsInput::InputPads -- controller updates, player/port binding, and the jolt/rumble
 // force-feedback effect engine. Reconstructed from BURNOUT_X360_ARTIST.XEX (CgsInputPads.cpp,
 // methods @0x828E72xx / 0x828EFxxx / 0x828DCxxx). The class layout + member offsets are pinned in
 // CgsInputPads.h (offsetof static_asserts).
@@ -7,6 +7,8 @@
 
 #include "GameShared/GameClasses/System/Input/CgsInputPads.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/System/CgsHardwareInit.h"
+#include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (BindPlayerToPort's bound asserts)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // [DIAG] CgsDev::Log::gpDebugPrint (UpdatePadRumble witness)
 #include "rw/math/fpu/scalar_operation.h"                      // rw::math::fpu::Clamp (UpdatePadRumble / FillRawData)
@@ -56,23 +58,11 @@ namespace CgsInput
 
     // ------------------------------------------------------------------------------------------------
     // X360 0x828E7238 -- InitializePads.
-    // Zero the per-port records ({miField00, mbField14} per record) and the six head words, then
-    // construct the four physical pad devices (stride 0x1C4).
+    // Reset the manager's device and binding state before constructing the physical pads.
     // ------------------------------------------------------------------------------------------------
     void InputPads::InitializePads()
     {
-        miHead70  = 0;
-        mbHead74  = 0;
-        miHead60  = 0;
-        miHead64  = 0;
-        miHead68  = 0;
-        miHead6C  = 0;
-
-        for (u32 luPortIndex = 0; luPortIndex < KU_NUMBER_OF_PADS; ++luPortIndex)
-        {
-            maPorts[luPortIndex].miField00 = 0;
-            maPorts[luPortIndex].mbField14 = 0;
-        }
+        mInputManager.Construct();
 
         for (u32 luPadIndex = 0; luPadIndex < KU_NUMBER_OF_PADS; ++luPadIndex)
         {
@@ -98,11 +88,7 @@ namespace CgsInput
             maiPortToPlayer[luPadIndex]   = -1;             // +1960 + 4*i
             mauOverrideDeviceState[luPadIndex] = 0;          // X360 const DeviceState* (4-byte slot), null   // +3328 + 4*i
 
-            // per-pad action mapping table: 0x70 bytes of 0xFF
-            for (u32 luByte = 0; luByte < 0x70; ++luByte)
-            {
-                maaMappingStorage[luPadIndex][luByte] = 0xFF;
-            }
+            std::memset(maaMapping[luPadIndex], -1, sizeof(maaMapping[luPadIndex]));
         }
 
         // action-down bitmap: 2 * KU_NUMBER_OF_PADS * 112 bytes cleared (0x380 == 896)
@@ -168,8 +154,7 @@ namespace CgsInput
 
     // ------------------------------------------------------------------------------------------------
     // X360 0x828EFBF0 -- Destruct.
-    // Reset all per-player bind records to unbound and all per-port resolved-player ids + the two head
-    // words to zero/-1.
+    // Reset player bindings and the manager's connection records.
     // ------------------------------------------------------------------------------------------------
     void InputPads::Destruct()
     {
@@ -180,23 +165,148 @@ namespace CgsInput
             maiPortToPlayer[luPadIndex]   = -1;
         }
 
-        for (u32 luPortIndex = 0; luPortIndex < KU_NUMBER_OF_PADS; ++luPortIndex)
+        mInputManager.Destruct();
+    }
+
+    // X360 0x828F8690.
+    void InputPads::Update(InputIO::OutputBuffer* lpOutputBuffer)
+    {
+        mInputManager.UpdateConnectedDevices();
+
+        for (s32 liPort = 0; liPort < static_cast<s32>(KU_NUMBER_OF_PADS); ++liPort)
         {
-            maPorts[luPortIndex].miField00 = 0;
-            maPorts[luPortIndex].mbField14 = 0;
+            DeviceX360Pad& lrPad = maPads[liPort];
+            const s32 liBoundPort = lrPad.GetPort();
+            const Device::EType leConnectedType = mInputManager.GetConnectedDeviceType(liPort);
+
+            if (liBoundPort != -1)
+            {
+                if (leConnectedType == lrPad.GetDeviceType())
+                    continue;
+
+                mInputManager.UnbindFromPort(&lrPad, liBoundPort);
+            }
+            if (leConnectedType != Device::E_NO_DEVICE_TYPE)
+                mInputManager.BindToPort(&lrPad, liPort);
         }
 
-        miHead70 = 0;
-        mbHead74 = 0;
+        mInputManager.Update();
+
+        const char* const lpcAssertFile =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputPads.cpp";
+        const f32 KF_ACTION_DOWN_THRESHOLD = 0.1f; // ARTIST 0x820F78E4
+        const s32 liPreviousSet = 1 - miCurrentSetOfStates;
+
+        for (s32 liPort = 0; liPort < static_cast<s32>(KU_NUMBER_OF_PADS); ++liPort)
+        {
+            f32 lafRawData[KU_NUMBER_OF_CONTROLS] = {};
+            InputIO::PadOutputInformation* lpPadInfo = lpOutputBuffer->GetPadInfo(liPort);
+            DeviceX360Pad& lrPad = maPads[liPort];
+
+            const s32 liPlayer = maiPortToPlayer[liPort];
+            lpPadInfo->muConnectionWord = static_cast<u32>(liPlayer);
+            if (maiPortToPlayer[liPort] != -1)
+            {
+                if (maiPortToPlayer[liPort] != liPlayer)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("maPorts[liPortIndex].GetPlayerID() == liPlayerIndex", lpcAssertFile, 274);
+                    CgsDev::Assert::EndAssert();
+                }
+                if (!maPlayers[liPlayer].mbBound)
+                {
+                    CgsDev::Assert::BeginAssert();
+                    CgsDev::Assert::FireAssert("maPlayers[liPlayerIndex].IsConnected()", lpcAssertFile, 275);
+                    CgsDev::Assert::EndAssert();
+                }
+                lpPadInfo->meControllerState = lrPad.GetDeviceType();
+
+                if (lrPad.IsConnected())
+                {
+                    FillRawData(lafRawData, lpPadInfo, liPort);
+                }
+                else
+                {
+                    if (maiPortToPlayer[liPort] == -1)
+                    {
+                        CgsDev::Assert::BeginAssert();
+                        CgsDev::Assert::FireAssert("maPorts[liPortIndex].IsBound()", lpcAssertFile, 288);
+                        CgsDev::Assert::EndAssert();
+                    }
+                    InputIO::BaseInputEvent lEvent;
+                    lEvent.miPlayer = liPlayer;
+                    lEvent.miPort = liPort;
+                    lpOutputBuffer->GetPadDisconnectedQueue()->AddEvent(lEvent);
+                }
+            }
+            else
+            {
+                FillRawData(lafRawData, lpPadInfo, liPort);
+                lpPadInfo->meControllerState = Device::E_PAD_DEVICE_TYPE;
+            }
+
+            for (u32 luControl = 0; luControl < KU_NUMBER_OF_CONTROLS; ++luControl)
+            {
+                const InputIO::ActionMapping& lrMapping = maaMapping[liPort][luControl];
+                for (u32 luSlot = 0; luSlot < sizeof(lrMapping.maiGameIds); ++luSlot)
+                {
+                    const s32 liAction = lrMapping.maiGameIds[luSlot];
+                    if (liAction == -1)
+                        continue;
+
+                    f32& lfValue = lpPadInfo->maActionInfo[liAction].mfValue;
+                    if (lfValue < lafRawData[luControl])
+                        lfValue = lafRawData[luControl];
+                }
+            }
+
+            if (liPort == 0 && CgsSystem::HardwareInit::HasDetectedAutomaticTestingFile())
+                gpBurnoutGame->mAutoTestManager.FillKeyBindings(lpPadInfo->maActionInfo);
+
+            bool lbPadIdle = true;
+            for (u32 luAction = 0; luAction < sizeof(lpPadInfo->maActionInfo) / sizeof(InputIO::ActionInfo);
+                 ++luAction)
+            {
+                InputIO::ActionInfo& lrAction = lpPadInfo->maActionInfo[luAction];
+                const bool lbDown = !(lrAction.mfValue < KF_ACTION_DOWN_THRESHOLD);
+                const bool lbWasDown = maaabActionsDown[liPreviousSet][liPort][luAction];
+                maaabActionsDown[miCurrentSetOfStates][liPort][luAction] = lbDown;
+
+                if (lbDown)
+                {
+                    lbPadIdle = false;
+                    lrAction.muStatus |= 1u;
+                    if (lbWasDown)
+                        lrAction.muStatus &= ~2u;
+                    else
+                        lrAction.muStatus |= 2u;
+                }
+                else
+                {
+                    lrAction.muStatus &= ~1u;
+                    if (lbWasDown)
+                    {
+                        lbPadIdle = false;
+                        lrAction.muStatus |= 4u;
+                    }
+                    else
+                    {
+                        lrAction.muStatus &= ~4u;
+                    }
+                }
+            }
+
+            lpPadInfo->mbDisconnected = lbPadIdle;
+        }
+
+        miCurrentSetOfStates = liPreviousSet;
     }
 
     // ------------------------------------------------------------------------------------------------
     // X360 0x828E7350 -- FillRawData.
-    // For each control (28): take the per-control float and keep the running max into the per-action
-    // raw-button array. For each axis (6): add the pad's axis value to the running axis accumulator and
-    // clamp the result to [-1, 1].
+    // Keep the maximum per physical control and add each axis, clamped to [-1, 1].
     // ------------------------------------------------------------------------------------------------
-    void InputPads::FillRawData(f32* lafNewRawData, f32* lafAxisData, s32 liPortIndex)
+    void InputPads::FillRawData(f32* lafNewRawData, InputIO::PadOutputInformation* lpPadInfo, s32 liPortIndex)
     {
         for (s32 liControlIndex = 0; liControlIndex < static_cast<s32>(CgsInput::KU_NUMBER_OF_CONTROLS); ++liControlIndex)
         {
@@ -207,12 +317,19 @@ namespace CgsInput
             }
         }
 
-        for (s32 liAxisIndex = 0; liAxisIndex < static_cast<s32>(CgsInput::KU_NUMBER_OF_AXES); ++liAxisIndex)
+        static f32 InputIO::PadOutputInformation::* const lapAxes[KU_NUMBER_OF_AXES] =
         {
-            const f32 lfAxisValue = maPads[liPortIndex].GetAxisValue(static_cast<u32>(liAxisIndex));
-            // DWARF cpp :411 rw::math::fpu::Clamp<float> -- the X360's `fsel f0,f13,f31,f0 ;
-            // fsel f0,f13,f0,f30` pair (-1 then +1), which the fpu Clamp reproduces (NaN -> +1).
-            lafAxisData[liAxisIndex] = rw::math::fpu::Clamp(lafAxisData[liAxisIndex] + lfAxisValue, -1.0f, 1.0f);
+            &InputIO::PadOutputInformation::mfStickLX,
+            &InputIO::PadOutputInformation::mfStickLY,
+            &InputIO::PadOutputInformation::mfStickRX,
+            &InputIO::PadOutputInformation::mfStickRY,
+            &InputIO::PadOutputInformation::mfAxis10,
+            &InputIO::PadOutputInformation::mfAxis14,
+        };
+        for (u32 luAxis = 0; luAxis < KU_NUMBER_OF_AXES; ++luAxis)
+        {
+            f32& lfAxis = lpPadInfo->*lapAxes[luAxis];
+            lfAxis = rw::math::fpu::Clamp(lfAxis + maPads[liPortIndex].GetAxisValue(luAxis), -1.0f, 1.0f);
         }
     }
 

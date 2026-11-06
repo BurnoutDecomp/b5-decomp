@@ -143,8 +143,8 @@ namespace InputIO
     //
     // ADDITIVE GROW (was an opaque u8[932] placeholder). The fields named below are exactly the
     // ones the bridge funcs + SetButtonPressed + MapActionInfoToDebugController read, each pinned
-    // to its X360 byte offset; untouched spans remain explicit u8 storage so the record stays
-    // 932 bytes (0x3A4, the X360 stride `mulli r11, r22, 0x3A4`) and the maPadOutputInformation[7]
+    // to its X360 byte offset; the full action table reaches the fixed record size, leaving
+    // only the final three bytes explicit padding. The maPadOutputInformation[7]
     // array offsets do not move. FLAG: the precise semantics of most fields (axis identities,
     // which action each ActionInfo slot is) are not DWARF/leak-attested -- they are named from
     // their bridge usage (analogue stick deflections, per-action {value,status} pairs, the
@@ -185,11 +185,8 @@ namespace InputIO
     //     (right stick), 4 E_WHEELAXIS_STEERING, 5 E_WHEELAXIS_PEDALS -- the last two written
     //     only by DeviceX360Pad::Update's wheel arm, which is why the bridges read mfAxis10 /
     //     mfAxis14 exclusively under their meControllerState == 2 branches.
-    // NOT RENAMED HERE: every consumer of these three names lives outside this wave's file scope
-    // (GameSource/Game/GameBridgeControllerToX.cpp and the GUI screens). The rename + the grow
-    // from maActionInfo[96]+pad to maActions[112] is mechanical and belongs to the TU that owns
-    // those callers; nothing addressed today sits above action id 59, so the byte layout is
-    // unaffected either way.
+    // The existing maActionInfo member name remains for current consumers. The full 112-entry
+    // table occupies the X360 span +0x18..+0x398 and leaves the three named tail offsets unchanged.
     struct PadOutputInformation
     {
         // ---- leading analogue axes ---------------------------------------------------------------
@@ -203,12 +200,10 @@ namespace InputIO
         f32 mfAxis10;           // +0x10 (world: ShowtimeIntro steering source pre-curve)
         f32 mfAxis14;           // +0x14
         // ---- per-action {value,status} table @ +0x18 ---------------------------------------------
-        // 96 entries (8-byte stride) spanning +0x18..+0x318. Indexed by-name via maActionInfo[k]; the
-        // bridges read specific slots (k = 4,6,8,..,17) plus MapActionInfoToDebugController copies
-        // maActionInfo[0..21] into the debug-controller image, and SetButtonPressed reads a sparse set
-        // of slots from this same block (it receives &maActionInfo[0] == record+0x18 as its source).
-        ActionInfo maActionInfo[(0x318 - 0x18) / sizeof(ActionInfo)]; // +0x18 .. +0x318 (96 entries)
-        u8  maPad0x318[0x398 - 0x318];   // +0x318 unattested span up to the connection/state tail
+        // 112 entries (8-byte stride) spanning +0x18..+0x398. Indexed by-name via maActionInfo[k];
+        // the bridges read selected slots and MapActionInfoToDebugController copies [0..21].
+        // InputPads::Update uses the full table; its end is the connection/state tail at +0x398.
+        ActionInfo maActionInfo[(0x398 - 0x18) / sizeof(ActionInfo)]; // 112 X360 entries
         // ---- connection / controller-state / connected-this-scan tail ----------------------------
         u32  muConnectionWord;  // +0x398 (GetPadInfoForPlayer0: `*(PadInfo+920)`; 0 => use this pad)
         u32  meControllerState; // +0x39C (==2 test feeds the pressed-bit in ToGameState / ToWorld / ToGui)
@@ -224,6 +219,7 @@ namespace InputIO
     //   GetBindResultQueue()            -> X360 0x828E6D28, write-lock, this+4
     //   GetUnbindResultQueue()          -> X360 0x828E6DD0, write-lock, this+112
     //   GetPadDisconnectedQueue()       -> X360 0x828E6E78, write-lock, this+220
+    //   GetPadInfo(pad)                 -> X360 0x828E6F20, write-lock, this+296+932*pad
     //   GetPadInfo(pad)           const -> X360 0x823B1230, read-lock,  this+296+932*pad
     struct OutputBuffer : public CgsModule::IOBuffer
     {
@@ -243,7 +239,9 @@ namespace InputIO
         UnBindResultQueue*          GetUnbindResultQueue();          // 0x828E6DD0
         PadDisconnectedQueue*       GetPadDisconnectedQueue();       // 0x828E6E78
 
-        // X360 0x823B1230 - read-lock accessor returning the iPort-th pad output record.
+        // X360 0x828E6F20 - write-lock accessor used by InputPads::Update.
+        PadOutputInformation* GetPadInfo(s32 iPort);                 // 0x828E6F20
+        // X360 0x823B1230 - read-lock accessor returning the same iPort-th record.
         const PadOutputInformation* GetPadInfo(s32 iPort) const;     // 0x823B1230
 
     private:
