@@ -36,6 +36,7 @@
 #include "types.hpp"
 #include "GameSource/Replays/Serialisers/BrnReplayTrafficSerialiserFrame.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficLightManager.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPhysicsInfo.h"
 #include <cstddef>
 
 namespace BrnTraffic { class Vehicle; }
@@ -80,12 +81,26 @@ namespace BrnReplays
     static const u32 KU_OFFSET_INFO_VALID        = 148096;  // +0x24280
     static const u32 KU_OFFSET_PREV_PHYSICS_INFO = 148112;  // +0x24290
 
-    // One per-vehicle data record (3 bytes; GetVehicleData / SetVehicleData operate on it).
-    // The internal field breakdown is not separately attested, so it is held as bytes.
+    // ARTIST 0x82713E38 writes these three bytes. RenderTrafficCar loads
+    // the physics index signed, independently of the recorded physical flag.
     struct TrafficVehicleDataRecord
     {
-        u8 maData[3];
+        enum EFlag
+        {
+            E_FLAG_HEADLIGHTS = 0x01,
+            E_FLAG_BRAKELIGHTS = 0x02,
+            E_FLAG_LEFT_INDICATOR = 0x04,
+            E_FLAG_RIGHT_INDICATOR = 0x08,
+            E_FLAG_ALARM = 0x10,
+            E_FLAG_NOT_PHYSICAL = 0x20,
+        };
+
+        u8 muVehicleType;
+        u8 muFlags;
+        s8 miPhysicsIndex;
     };
+
+    CGS_STATIC_ASSERT((sizeof(TrafficVehicleDataRecord) == 3), "ARTIST traffic replay vehicle stride");
 
     // BrnReplays::TrafficVehicleData -- the (de)serialiser for one TrafficVehicleDataRecord.
     // SetVehicleData @0x82714060 calls SetFromVehicle(record, vehicle, physicalPartsIndex)
@@ -102,17 +117,9 @@ namespace BrnReplays
     // record is read as a quat+pos at +608 within the chunk).
     struct TrafficVehicleTransformRecord
     {
-        u8 maTransform[64];
+        Matrix44Affine mTransform;
     };
-
-    // One recorded physics-info record (4112 bytes). Its internal layout is exercised by
-    // ReadPhysicsInfo / WritePhysicsInfo via byte offsets that are not separately
-    // attested as named fields; held as a sized opaque record so the 25-entry array and
-    // the 102800-byte block copies land at the right size.
-    struct TrafficPhysicsInfoRecord
-    {
-        u8 maInfo[4112];
-    };
+    CGS_STATIC_ASSERT((sizeof(TrafficVehicleTransformRecord) == 64), "ARTIST replay transform extent");
 
     // The 251008-byte static-layout buffer GetStaticLayout returns. Only the regions the
     // accessors prove are named; the spans between them are explicit padding.
@@ -123,13 +130,13 @@ namespace BrnReplays
         // 3 vehicle chunks, each KU_VEHICLE_CHUNK_STRIDE (13408) bytes.
         u8                       maVehicleChunks[KU_NUM_VEHICLE_CHUNKS * KU_VEHICLE_CHUNK_STRIDE]; // @0x00100
         // @0x100 + 3*13408 == 40480 == KU_OFFSET_PHYSICS_INFO (the chunks run right up to it).
-        TrafficPhysicsInfoRecord maPhysicsInfo[KU_NUM_PHYSICS_INFO]; // @0x09E20  25 * 4112 == 102800
+        BrnTraffic::TrafficPhysicsInfo maPhysicsInfo[KU_NUM_PHYSICS_INFO]; // @0x09E20  25 * 4112 == 102800
         // ARTIST UpdateSerialiser 0x8272E1F8..E240 copies the native manager here.
         BrnTraffic::TrafficLightManager mTrafficLightManager; // @0x22FB0, 0x12D0 bytes
         u64                      mInfoValid;          // @0x24280  (8-byte snapshot word)
         // @0x24288 .. @0x24290: 8 undecoded bytes before the previous-physics-info copy.
         u8                       maPad24288[KU_OFFSET_PREV_PHYSICS_INFO - (KU_OFFSET_INFO_VALID + 8)];
-        u8                       maPreviousPhysicsInfo[KU_PHYSICS_INFO_TOTAL]; // @0x24290  102800 bytes
+        BrnTraffic::TrafficPhysicsInfo maPreviousPhysicsInfo[KU_NUM_PHYSICS_INFO]; // @0x24290  102800 bytes
         // @0x24290 + 102800 == 250912 .. 251008 : trailing undecoded bytes.
         u8                       maTail[KU_STATIC_BUFFER_SIZE - (KU_OFFSET_PREV_PHYSICS_INFO + KU_PHYSICS_INFO_TOTAL)];
     };
@@ -137,6 +144,7 @@ namespace BrnReplays
     CGS_STATIC_ASSERT((sizeof(BrnTraffic::TrafficLightRuntimeState) == 8), "ARTIST traffic-light state stride");
     CGS_STATIC_ASSERT((offsetof(BrnTraffic::TrafficLightRuntimeState, mxStateBits) == 5), "ARTIST traffic-light flags offset");
     CGS_STATIC_ASSERT((sizeof(BrnTraffic::TrafficLightManager) == 0x12D0), "ARTIST traffic-light manager size");
+    CGS_STATIC_ASSERT((offsetof(TrafficEntitySerialiserStaticLayout, maPhysicsInfo) == 0x9E20), "ARTIST recorded physics offset");
     CGS_STATIC_ASSERT((offsetof(TrafficEntitySerialiserStaticLayout, mTrafficLightManager) == 0x22FB0), "ARTIST traffic-light snapshot");
     CGS_STATIC_ASSERT((offsetof(TrafficEntitySerialiserStaticLayout, mInfoValid) == 0x24280), "ARTIST info-valid offset");
     CGS_STATIC_ASSERT((offsetof(TrafficEntitySerialiserStaticLayout, maPreviousPhysicsInfo) == 0x24290), "ARTIST previous-physics offset");

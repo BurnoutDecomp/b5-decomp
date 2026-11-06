@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h" // K_DefaultSendName
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 #include "rw/math/vpu/vector3_operation.h"
@@ -53,8 +54,6 @@ const u32 KAU_TRAFFIC_SKID_SENDS[2] =
     static_cast<u32>( CgsSound::Playback::Name::MakeHash( "ReverbSend" ) ),
 };
 
-// The shared CRT-hashed send names every traffic voice's CreateParams reads.
-const u32 KU_SEND01      = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "Send01" ) );
 const u32 KU_REVERB_SEND = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "ReverbSend" ) );
 
 // The drift model: the lateral and longitudinal wheel speeds each count 1.0 at these
@@ -154,7 +153,8 @@ bool TrafficSkid::Attach()
     lParams.mpContent            = lpSkidsContent;
     lParams.mContentSpecName     = 0;
     lParams.mSlotName            = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "AEMS_Slot" ) );
-    lParams.mSendName            = KU_SEND01;
+    lParams.mSendName            = static_cast<u32>(
+        CgsSound::Playback::K_DefaultSendName.GetValue());
     lParams.mSubMixVoiceID       = 1;
     lParams.mReverbSendName      = KU_REVERB_SEND;
     lParams.mReverbSubMixVoiceID = 2;

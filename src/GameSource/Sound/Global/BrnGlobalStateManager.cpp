@@ -2,6 +2,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h" // K_DefaultSendName
 #include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"
 
 // =============================================================================
@@ -264,7 +265,8 @@ bool GlobalStateManager::Prepare()
             CgsSound::Playback::Name::MakeHash("ReverbSend"));
         for (s32 liVoice = 0; liVoice < 2; ++liVoice)
         {
-            maSubmixVoices[liVoice].Connect(luSend01, 1);
+            maSubmixVoices[liVoice].Connect(
+                static_cast<u32>(CgsSound::Playback::K_DefaultSendName.GetValue()), 1);
             maSubmixVoices[liVoice].Connect(luReverbSend, 2);
             maSubmixVoices[liVoice].SetGain(1, 0.0f, &luReverbSend);
             maSubmixVoices[liVoice].SetGain(0, 1.0f, &luSend01);

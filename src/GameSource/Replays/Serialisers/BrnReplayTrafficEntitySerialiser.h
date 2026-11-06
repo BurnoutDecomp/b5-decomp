@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"
 #include "GameSource/Replays/Serialisers/BrnReplayTrafficEntitySerialiserFrame.h"
 
-namespace BrnTraffic { struct TrafficPhysicsInfo; class Vehicle; }
+namespace BrnTraffic { class Vehicle; }
 
 namespace BrnReplays
 {
@@ -33,12 +33,12 @@ namespace BrnReplays
         void WriteAsQuatPos(const void* lpTransform);
 
         // @ ReadPhysicsInfo (external TU) / @0x8265AE98 WritePhysicsInfo.
-        void ReadPhysicsInfo(TrafficPhysicsInfoRecord* lpInfo, u8 luIndex, s32 liArg4);
-        void WritePhysicsInfo(const u8* lpInfo, u8 luIndex);
+        void ReadPhysicsInfo(BrnTraffic::TrafficPhysicsInfo* lpInfo, u8 luIndex, s32 liArg4);
+        void WritePhysicsInfo(const BrnTraffic::TrafficPhysicsInfo* lpInfo, u8 luIndex);
 
         // --- per-vehicle accessors (return pointers into the chunked static layout) ---
         // @0x82714118
-        TrafficPhysicsInfoRecord* GetPhysicsInfo(u32 luPhysicsInfo);
+        BrnTraffic::TrafficPhysicsInfo* GetPhysicsInfo(u32 luPhysicsInfo);
         // @0x82707280
         TrafficVehicleDataRecord* GetVehicleData(u32 luVehicle);
         // @0x827071E8

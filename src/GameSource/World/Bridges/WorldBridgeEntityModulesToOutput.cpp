@@ -619,6 +619,10 @@ void BridgeEntityModulesToOutput_PostPhysics(
     // destroyed, preserving the producer's computed ImmediateStreamed and AllStreamed.
     lpOutputBuffer->SetWorldEntityStatusInterface(
         lpWorldEntityOutput_PostPhysics->GetStatusInterface());
+
+    // ARTIST 0x827AF1A8..B8 forwards traffic's registered replay serialiser.
+    lpOutputBuffer->AppendReplayRequestInterface(
+        lpTrafficOutput_PostPhysics->GetReplayRequestInterface());
 }
 
 // ----------------------------------------------------------------------------

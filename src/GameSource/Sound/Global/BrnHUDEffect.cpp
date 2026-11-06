@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"         // CgsSound::Io::Message / MessageHeader
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"        // State -> StateManager walk
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"    // Name::MakeHash / PlayerVoice slot names
+#include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h" // K_DefaultSendName
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameSource/Sound/Global/BrnGlobalStateManager.h"      // GetPresentationSpliceBank
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
@@ -1302,7 +1303,7 @@ void HUDEffect::BuildSplicerVoiceParams(CgsSound::Logic::VoiceWrapper::CreatePar
     arParams.mSlotName = static_cast<u32>(
         CgsSound::Playback::Name::MakeHash("~SplicerPlayerVoice::Slot~"));
     arParams.mSendName = static_cast<u32>(
-        CgsSound::Playback::Name::MakeHash("Send01"));
+        CgsSound::Playback::K_DefaultSendName.GetValue());
     arParams.mSubMixVoiceID = 1;
     arParams.miSendIndex    = 0;
 }

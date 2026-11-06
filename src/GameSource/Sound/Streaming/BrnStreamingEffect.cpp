@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (lpState / IsAttached tripwires)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (FindStreamSettings' own miss print)
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"  // CgsSound::Utils::Curve (Detach's equal-power fade)
+#include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h" // K_DefaultSendName
 #include "rw/math/fpu/scalar_operation.h"                // rw::math::fpu::Clamp (Detach's fsel clamp)
 #include <algorithm>
 
@@ -262,7 +263,8 @@ bool StreamingEffect::Detach()
     case E_DETACH_STATE_NONE:
     {
         mfTimeThroughFade = 0.0f;
-        const s32 liSendName = static_cast<s32>(CgsSound::Playback::Name::MakeHash("Send01"));
+        const s32 liSendName = static_cast<s32>(
+            CgsSound::Playback::K_DefaultSendName.GetValue());
         mfGainPreFade = mVoice.GetGain(&liSendName);
         meDetachState = E_DETACH_STATE_BEGIN;
         // fall through
