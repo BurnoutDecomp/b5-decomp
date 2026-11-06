@@ -47,8 +47,7 @@
 // BrnBehaviourManager.h, whose handle-release bodies it inlines), and its absence here leaked
 // the car-select's camera behaviours on every junkyard exit -- see the body. Two sub-behaviours
 // the X360 inlines are documented ⚠️ GATEs rather than fabricated (each carries its own
-// CONSEQUENCE + DELETE-WHEN): the per-frame impact shake (needs CameraImpactEffect::Update +
-// CameraShake::Parameters), and the car-asset's own unlock movie (needs the burnoutcarasset
+// CONSEQUENCE + DELETE-WHEN): the car-asset's own unlock movie (needs the burnoutcarasset
 // generated field set).
 //
 // All member access is BY NAME (the x64 gate rule); the console byte offsets quoted in
@@ -309,12 +308,7 @@ namespace BrnDirector
         mToGameplayInterpolater.Construct(this);
         mFromGameplayInterpolater.Construct(this);
 
-        // ⚠️ GATE: X360 CameraImpactEffect::Construct(mImpactEffect) -- the member is
-        //   named opaque storage here (see the header FLAG), so the block is zeroed as
-        //   storage. Same observable state; re-point at the real call when the type
-        //   becomes includable.
-        for (u32 luByte = 0; luByte < sizeof(maImpactEffect); ++luByte)
-            maImpactEffect[luByte] = 0;
+        mImpactEffect.Construct();
 
         mfTimeWaitingToLookAtOriginalSelection = 0.0f;
         mbWaitingToLookAtOriginalSelection     = false;
@@ -782,11 +776,7 @@ namespace BrnDirector
                 lrPlayerCar.mRaceCarState.maWheels[3].mRoadContact.mbIsOnGround;
             if (lbAnyWheelOnGround)
             {
-                // ⚠️ GATE: X360 `CameraImpactEffect::RegisterImpact(mImpactEffect,
-                //   KF_IMPACT_AMOUNT)`. The accumulator lives inside the opaque member (header
-                //   FLAG); writing it here would be an offset poke. The latch below is real.
-                //   CONSEQUENCE: no car-drop shake (cosmetic; off the intro path).
-                //   DELETE-WHEN: as the header FLAG.
+                mImpactEffect.RegisterImpact(KF_IMPACT_AMOUNT);
                 mbWaitingForCarToTouchGround = false;
             }
         }
@@ -831,12 +821,7 @@ namespace BrnDirector
             mbSafeToBeAttachedToCar             = true;
             mbWaitingForCarToTouchGround        = false;
             mbWaitingForCarToSpawn              = false;
-            // ⚠️ GATE: X360 CameraImpactEffect::Construct(mImpactEffect) -- the member is
-            //   named opaque storage here (see the header FLAG), so the block is zeroed as
-            //   storage. Same observable state; re-point at the real call when the type
-            //   becomes includable.
-            for (u32 luByte = 0; luByte < sizeof(maImpactEffect); ++luByte)
-                maImpactEffect[luByte] = 0;
+            mImpactEffect.Construct();
 
             if (lrGameState.mbNewProfileIntroActive)
             {
@@ -1010,12 +995,7 @@ namespace BrnDirector
             }
             else
             {
-                // ⚠️ GATE: X360 CameraImpactEffect::Construct(mImpactEffect) -- the member is
-                //   named opaque storage here (see the header FLAG), so the block is zeroed as
-                //   storage. Same observable state; re-point at the real call when the type
-                //   becomes includable.
-                for (u32 luByte = 0; luByte < sizeof(maImpactEffect); ++luByte)
-                    maImpactEffect[luByte] = 0;
+                mImpactEffect.Construct();
                 mbHasCarsToUnlock = false;
                 mToGameplayInterpolater.Release();
                 mCarUnlockCam.Release();
@@ -1415,19 +1395,15 @@ namespace BrnDirector
             }
         }
 
-        // ⚠️ GATE: the per-frame impact shake. X360 (with meState != INACTIVE):
-        //     CameraImpactEffect::Update( mImpactEffect, mCamera,
-        //         <stack Parameters {shake 0.06, 0.0, 1.15, 0.11; decay 0.05;
-        //                            magnitude 15.0; freqScale 5.0}>,
-        //         *info.mpRandom, info.mfTimestep * 5.0f, mImpactFactor * 15.0f );
-        //     mImpactFactor += -mImpactFactor * 0.05f;   // the decay-factor fold
-        //   The committed CameraImpactEffect declares RegisterImpact only -- Update has no
-        //   declaration, its embedded CameraShake is a 16-byte OPAQUE blob, and
-        //   CameraShake::Parameters' four field names are not recovered, so the seven staged
-        //   tunings cannot be assigned to named members. Writing the shake through the opaque
-        //   blob would be an offset hack. The IMPACT REGISTRATION half above is real.
-        //   CONSEQUENCE: the junkyard car-drop shake is registered but never played out.
-        //   DELETE-WHEN: CameraImpactEffect::Update + CameraShake::Parameters are homed.
+        // The per-frame impact shake (..0x82270EC4), on a stack Parameters block.
+        if (meState != E_STATE_INACTIVE)
+        {
+            Camera::Utils::CameraImpactEffect::Parameters lImpactParameters;
+            lImpactParameters.Construct();
+            mImpactEffect.Update(GetNonConstCamera(), lImpactParameters,
+                                 *reinterpret_cast<CgsNumeric::Random*>(lrSharedInfo.mpRandom),
+                                 lrSharedInfo.mfTimestep);
+        }
 
         mfTimeInState += lrSharedInfo.mfTimestep;
     }
