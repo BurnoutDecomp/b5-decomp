@@ -703,6 +703,7 @@ namespace BrnGameState
             CarScoreData();                                       // 0x822A45A8
             void ClearData();                                     // 0x821F2B28
             CarScoreData& operator=(const CarScoreData& lOther);  // 0x821F4740 (ledger "op")
+            void CopyFromNativeRecord(const u8* lpRecord);
             void GetChainableStuntMultipliers(s32 liMaxMultiplier, s32 liSuppliedValue,
                                               Array<ChainableMultiplierInfo, 8>* lpaMultiplierInfo) const; // 0x8231C170
 

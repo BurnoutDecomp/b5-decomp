@@ -27,12 +27,12 @@ namespace
     {
         { 0x0000, 1     },   // muActivePlayerIndex
         { 0x0003, 8     },   // mabVehicleActive
-        { 0x0010, 10112 },   // maVehicleInfos (8 x 1264)
-        { 0x5BA0, 48    },   // maBlock5BA0
+        { 0x0010, 10112 },   // mVehicleInfo (8 x 1264)
+        { 0x5BA0, 48    },   // mPlayerCrashInfo
         { 0x5BD0, 512   },   // maCentreOfMassTransforms (8 x 64)
-        { 0x5DD0, 296   },   // maPlayerData
-        { 0x5EF8, 1     },   // mBlock5EF8
-        { 0x5EFC, 4     },   // maBlock5EFC
+        { offsetof(DirectorBridgeSerialiserStaticLayout, mPlayerScoreData), 296 },
+        { offsetof(DirectorBridgeSerialiserStaticLayout, mbPlayerComboWarningActive), 1 },
+        { 0x5EFC, 4     },   // mfPlayerBoostPercentage
         { 0x0002, 1     },   // mbPlayerWasTakenDown
         { 0x0001, 1     },   // muPlayerKillerIndex
     };

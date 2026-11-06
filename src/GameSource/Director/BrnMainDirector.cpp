@@ -2554,6 +2554,7 @@ namespace BrnDirector
         lSharedInfo.mpWorldMap                = lpIO->mpWorldMap;
         lSharedInfo.mpSceneQueryInterface     = lpIO->mpSceneQueryInterface;
         lSharedInfo.mpRandom                  = const_cast<CgsNumeric::Random*>(&mRandom);
+        lSharedInfo.mbAllStreamed             = lpInput->GetWorldStatusInterface()->GetAllStreamed();
 
         // ---- the six slots that used to be published as null (see the banner) --------------
         // Each is the console's own `this + <offset>`, reached through the named member.
@@ -2998,6 +2999,8 @@ namespace BrnDirector
         lCamera.Construct();
 
         const s32 liPlayerCarIndex = GetLivePlayerCarIndex(lpIO);
+        maGameState.mbComboWarningActive = lpIO->mpInputBuffer->GetPlayerComboWarningActive();
+        maGameState.mfPlayerBoostPercentage = lpIO->mpInputBuffer->GetPlayerBoostPercentage();
 
         if (liPlayerCarIndex == -1)
         {
@@ -3159,6 +3162,13 @@ namespace BrnDirector
                         lrEffects.mbHasStopHookNameString = false;                  // v225 = 0
                     }
                 }
+            }
+
+            // ARTIST 0x82274BB8..0x82274BD4 gives world debug focus priority over screenshots.
+            if (!lpIO->mpInputBuffer->GetWorldWantsDebugControllerFocus() &&
+                lpIO->mpInputBuffer->GetControll()->mbTakeScreenshot)
+            {
+                lCamera.GetEffects().mbRequestingScreenshot = true;
             }
 
             // X360 0x82274C18..0x82274E40 (Update pseudocode 659..800): Show World Map debug

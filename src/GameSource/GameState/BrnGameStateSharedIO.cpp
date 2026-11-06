@@ -515,6 +515,17 @@ CarScoreData& CarScoreData::operator=(const CarScoreData& lOther)
     return *this;
 }
 
+// Byte representation of ARTIST's field assignment, including its seven untouched gaps.
+// This accepts storage that is not a live CarScoreData object.
+void CarScoreData::CopyFromNativeRecord(const u8* lpRecord)
+{
+    u8* const lpDestination = reinterpret_cast<u8*>(this);
+    for (u32 i = 0; i < 0x46; ++i) lpDestination[i] = lpRecord[i];
+    for (u32 i = 0x48; i < 0xbd; ++i) lpDestination[i] = lpRecord[i];
+    for (u32 i = 0xc0; i < 0xda; ++i) lpDestination[i] = lpRecord[i];
+    for (u32 i = 0xdc; i < sizeof(CarScoreData); ++i) lpDestination[i] = lpRecord[i];
+}
+
 // X360 0x8231C170. While a chain is active and the current multiplier is below the supplied ceiling,
 // reserve a ChainableMultiplierInfo and fill it from the chainable fields + the caller's value.
 void CarScoreData::GetChainableStuntMultipliers(s32 liMaxMultiplier, s32 liSuppliedValue,

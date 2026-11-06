@@ -7,12 +7,14 @@
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"            // CgsModule::IOBuffer base + read/write lock-state queries
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<13312,16> (mGameActionQueue @0x3340)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"        // CgsContainers::BitArray<N> (mUsedRaceCars)
+#include "GameSource/GameState/BrnGameStateSharedIO.h" // CarScoreData
 #include "GameSource/BurnoutConstants.h"                          // EActiveRaceCarIndex
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"    // BrnDirector::Camera::VehicleInfo (committed, 1264 bytes)
 #include "GameSource/Director/Camera/Utils/BrnDebugController.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (mTimerInterface @0x6750, exactly 48B)
 #include "GameSource/Director/SharedIO/BrnDirectorVehicleInputInterface.h" // BrnDirector::BrnDirectorVehicleInputInterface (mVehicleDriverInputInterface @0x6780)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityGlobalRaceCarOutputInterface (mGlobalRaceCarInterface @0x0010)
+#include "GameSource/World/EntityModules/WorldEntityModule/SharedIO/BrnWorldEntityStatusInterface.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficDirectorInterfaces.h" // TrafficDirectorOutputInterface (mTrafficOutputInterface @0x6AC0)
 
 // BrnDirector::DirectorIO::InputBuffer -- the Director module's per-frame INPUT payload buffer.
@@ -36,6 +38,7 @@
 //     mControllerInfo            @0x3260 (12896)   SetControllerInfo memcpy 224 bytes
 //     mTimerInterface            @0x6750 (26448)   GetTimerStatusInterface
 //     mVehicleDriverInputIface   @0x6780 (26496)   GetVehicleInputInterface
+//     mWorldStatusInterface      @0x6AB0 (27312)   five world-entity status bytes
 //     mContacts                  @0x6AB8 (27320)   GetContacts / AppendContacts (stores word [6830])
 //     mTrafficOutputInterface    @0x6AC0 (27328)   BridgeWorldToDirector `sth` +0x6AC0 / Array copy +0x6AD0;
 //                                                  PreSceneQueryUpdate `addi +0x6AC0 ; addi +0x10`
@@ -77,9 +80,8 @@
 // a different producer, BrnGameModule::BridgeGameStateToDirector -- see mbPlayerEliminated /
 // mbModeTimeExpired below.
 //
-// The flags with no store site of their own (mbWorldWantsDebugControllerFocus @0x7AC7,
-// mbPlayerCrashbreakerFired @0x7ACA) sit at the offsets the DWARF member order puts them at
-// BETWEEN two attested neighbours, so their placement is forced rather than guessed.
+// BridgeWorldToDirector publishes mbWorldWantsDebugControllerFocus at +0x7AC7.
+// DWARF places mbPlayerCrashbreakerFired between its attested neighbours at +0x7ACA.
 // mbPlayerTakenDown @0x7AC0 was the third; its store site is now reconstructed
 // (SetPlayerKiller, BridgeGameStateToDirector `stb 1, 0x7AC0` @0x823CD3B8).
 //
@@ -89,7 +91,7 @@
 //
 // HONEST PLACEHOLDERS. Several embedded members are large interface aggregates whose full byte
 // layouts are not yet reconstructed (ControllerInfo,
-// TimerStatusInterface, BrnDirectorVehicleInputInterface, the world StatusInterface, the
+// TimerStatusInterface, BrnDirectorVehicleInputInterface, the
 // ContactSpyInterface,
 // CarScoreData, DirectorProfileData, and the GameActionQueue). (PlayerCrashInfo left this list
 // 2026-09-24: it is the typed Camera::PlayerCrashInfo member @0x78E0 now. So did
@@ -159,10 +161,18 @@ namespace DirectorIO
         // console at its one caller, BridgeWorldToDirector @0x823E4FC4..0x823E4FE4, as a bare
         // 48-byte copy (6 x ld/std) into this + 0x78E0 -- with NO lock-bit test, unlike this
         // class's out-of-line mutators, so none is added here.
-        void SetPlayerCrashInfo(const BrnDirector::Camera::PlayerCrashInfo* lpObject)
+        void SetPlayerCrashInfo(const BrnDirector::Camera::PlayerCrashInfo* lpObject);
+
+        const BrnWorld::WorldEntityIO::StatusInterface* GetWorldStatusInterface() const
         {
-            mPlayerCrashInfo = *lpObject;
+            return &mWorldStatusInterface;
         }
+        void SetWorldStatusInterface(const BrnWorld::WorldEntityIO::StatusInterface& lrStatus)
+        {
+            mWorldStatusInterface = lrStatus;
+        }
+        bool GetWorldWantsDebugControllerFocus() const { return mbWorldWantsDebugControllerFocus; }
+        void SetWorldWantsDebugControllerFocus(bool lbWantsFocus) { mbWorldWantsDebugControllerFocus = lbWantsFocus; }
 
         // The simulation-paused flag (@0x7AC8, the second byte of the mid-flag block).
         // MainDirector::UpdateArbitrator passes it to Arbitrator::Update as lbPaused, and
@@ -198,14 +208,30 @@ namespace DirectorIO
             mePlayerKillerCarIndex = lePlayerKillerCarIndex;
         }
 
+        const BrnGameState::GameStateModuleIO::CarScoreData* GetPlayerScoreData() const
+        {
+            return &mPlayerScoreData;
+        }
+        void SetPlayerScoreData(const BrnGameState::GameStateModuleIO::CarScoreData* lpScoreData)
+        {
+            mPlayerScoreData = *lpScoreData;
+        }
+        void SetPlayerScoreFromNativeRecord(const u8* lpRecord)
+        {
+            mPlayerScoreData.CopyFromNativeRecord(lpRecord);
+        }
+
+        bool GetPlayerComboWarningActive() const { return mbPlayerComboWarningActive; }
+        void SetPlayerComboWarningActive(bool lbActive) { mbPlayerComboWarningActive = lbActive; }
+
         // @0x7AD5 / @0x7AD6 -- the player's end-of-event pair (see the members). Both ends are bare
         // byte moves on the console with no lock-bit test: the setters are the stores
         // BridgeGameStateToDirector inlines (0x823CD4DC `stb 0x7AD5` / 0x823CD510 `stb 0x7AD6`),
         // the getters the loads MainDirector::ProcessInputQueue's prologue inlines
         // (0x8223743C `lbz 0x7AD5` / 0x82237430 `lbz 0x7AD6`). The entry points are ours.
-        void SetPlayerEliminated(bool lbPlayerEliminated) { mbPlayerEliminated = lbPlayerEliminated; }
+        void SetPlayerEliminated(u8 luPlayerEliminated) { mbPlayerEliminated = luPlayerEliminated; }
         void SetModeTimeExpired(bool lbModeTimeExpired)   { mbModeTimeExpired  = lbModeTimeExpired; }
-        bool GetPlayerEliminated() const                  { return mbPlayerEliminated; }
+        u8 GetPlayerEliminated() const                  { return mbPlayerEliminated; }
         bool GetModeTimeExpired() const                   { return mbModeTimeExpired; }
 
         // DWARF :230 / :231 -- the world's global race-car table (see mGlobalRaceCarInterface).
@@ -316,7 +342,7 @@ namespace DirectorIO
         // BrnGameModule::BridgeWorldToDirector (the console stores it inline; there is no
         // console setter symbol, so this entry point is ours and the field is the console's).
         void SetPlayerBoostPercentage(f32 lfPercentage);
-        f32  GetPlayerBoostPercentage() const;
+        f32 GetPlayerBoostPercentage() const { return mfPlayerBoostPercentage; }
 
         void SetShortcutMenuEvent(bool lbState);
         void SetGotCrashNavShownEvent();
@@ -366,9 +392,7 @@ namespace DirectorIO
         // @0x0990 (2448): per-active-car published vehicle state. Stride 0x4F0 (1264) confirmed.
         BrnDirector::Camera::VehicleInfo mRaceCarInfo[8]; // @0x0990 .. 0x3110
 
-        // @0x3110 .. : mPlayerScoreData (CarScoreData) + mbPlayerComboWarningActive +
-        // mfPlayerBoostPercentage, ending at the vehicle-info pointer array @0x3238. HONEST opaque.
-        u8  mScoreAndBoostBlock[0x3238 - (0x0990 + 8 * 1264)]; // CarScoreData + combo flag + boost f32
+        BrnGameState::GameStateModuleIO::CarScoreData mPlayerScoreData; // @0x3110 .. 0x3238
 
         // @0x3238 (12856): the per-car TEAMS. The PS3 DWARF's accessor GetVehicleInfoArray (:146)
         // types it as eight VehicleInfo pointers, but on the X360 the eight words are team ids:
@@ -382,15 +406,9 @@ namespace DirectorIO
         //     reads per nearest-car row (`lwzx r10, 4 * car, lpaVehicleTeams` @0x8221DEE4).
         // Stored as eight 4-byte words either way; the name is kept for the DWARF accessor.
         u32 maVehicleInfoArray[8];                       // @0x3238 (32 bytes -> 0x3258)
-        u8  maVehicleInfoArrayPad[0x325C - (0x3238 + 8 * sizeof(u32))]; // 4-byte gap
-        // @0x325C (12892): the player's boost fill fraction. The producer is
-        // BrnGameModule::BridgeWorldToDirector @0x823E3AB0 -- `*(input + 0x325C) =
-        // (fabs(boost.mfMaxBoost) > eps) ? boost.mfBoostAmount / boost.mfMaxBoost : 0`.
-        // ⚠️ FINDING (2026-08-01): the file header above places mfPlayerBoostPercentage in
-        // the mScoreAndBoostBlock span BEFORE maVehicleInfoArray. The only writer proves it
-        // is AFTER it, in what was modelled as an 8-byte pad. Named here without moving any
-        // offset (_AssertLayout still pins 0x3238 / 0x3260); the header prose is corrected
-        // rather than the layout.
+        bool mbPlayerComboWarningActive;                // @0x3258
+        u8 maVehicleInfoArrayPad[3];
+        // BridgeWorldToDirector publishes the player's boost fill fraction.
         f32 mfPlayerBoostPercentage;                     // @0x325C
 
         // @0x3260 (12896): controller snapshot, 224 (0xE0) bytes (SetControllerInfo memcpy). HONEST.
@@ -431,14 +449,10 @@ namespace DirectorIO
         // -- BaseEventQueue::miLength -- then GetEvent(i) at a 16-byte stride, i.e. the
         // interface's FIRST member is the queue, which is exactly this type's only member.
         //
-        // The trailing pad keeps the span exactly 0x338 so every _AssertLayout pin after it
-        // (mContacts @0x6AB8 onward) still holds. On x64 the interface is 816 bytes
-        // (16-byte queue head + 50 * 16 events) against the console's 824-byte span, so the
-        // pad is 8 bytes; it is the un-modelled remainder of the console's own span, NOT
-        // padding we invented for alignment.
         BrnDirector::BrnDirectorVehicleInputInterface mVehicleDriverInputInterface;   // @0x6780
-        u8  maVehicleDriverInputInterfacePad[
-                (0x6AB8 - 0x6780) - sizeof(BrnDirector::BrnDirectorVehicleInputInterface)];
+        // DWARF h:336, ARTIST 0x823E3F80..0x823E3FA4 copies all five bytes.
+        BrnWorld::WorldEntityIO::StatusInterface mWorldStatusInterface;                 // @0x6AB0
+        u8 maWorldStatusInterfacePad[0x6AB8 - 0x6AB0 - sizeof(BrnWorld::WorldEntityIO::StatusInterface)];
 
         // @0x6AB8 (27320): contacts. AppendContacts stores one 32-bit word at member word [0]
         // (this[6830] == 0x6AB8). GetContacts returns its address. HONEST opaque storage.
@@ -512,7 +526,7 @@ namespace DirectorIO
         bool mbGotCrashNavHiddenEvent;                   // @0x7AC4
         bool mbGotColourCalibrationShownEvent;           // @0x7AC5
         bool mbGotColourCalibrationHiddenEvent;          // @0x7AC6
-        bool mbWorldWantsDebugControllerFocus;           // @0x7AC7 (DWARF order; not addressed here)
+        bool mbWorldWantsDebugControllerFocus;           // @0x7AC7
         bool mbSimPaused;                                // @0x7AC8
         bool mbHasNewDirectorProfileData;                // @0x7AC9
         bool mbPlayerCrashbreakerFired;                  // @0x7ACA (DWARF order; not addressed here)
@@ -536,7 +550,7 @@ namespace DirectorIO
         // InputBuffer::Construct seeds both to 0 (0x82239514 / 0x82239518), and
         // MainDirector::ProcessInputQueue's prologue copies them into GameState +0x1D0 / +0x1D1
         // (0x82237430..0x82237440).
-        bool mbPlayerEliminated;                         // @0x7AD5
+        u8 mbPlayerEliminated;                           // @0x7AD5, raw source byte
         bool mbModeTimeExpired;                          // @0x7AD6
 
         // Compile-time pin of every recovered offset (private members -> assert from a member fn).

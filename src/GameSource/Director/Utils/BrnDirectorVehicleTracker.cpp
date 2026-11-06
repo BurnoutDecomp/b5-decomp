@@ -26,25 +26,13 @@ namespace BrnDirector
 // ----------------------------------------------------------------------------
 
 // ----------------------------------------------------------------------------
-// The race-end ramp constants are file-scope statics in the console image (.data at
-// 0x82CDA55x). Their VALUES are not recoverable: Hex-Rays prints them as bare flt_82CDA55x
-// symbols in every export because the region is writable, so there is nothing to read. They are
-// declared here as the named tunables the body reads, with neutral placeholders; the body's
-// STRUCTURE (which threshold gates which band, the ramp blend) is faithful to the asm.
-// FLAG: placeholder values -- the .data floats are not reproduced.
-// (The two CRASH-BAND thresholds are VehicleTracker's own statics -- defined below from the image.)
-// ----------------------------------------------------------------------------
+// The race-end ramp tunables come from ARTIST's writable data at 0x82CDA550..0x82CDA558.
 namespace
 {
-    // Distance to the finish line at which the race-end cinematic effect reaches FULL
-    // strength (amount 1.0). flt_82CDA550.
-    f32 KF_DISTANCE_TO_FINISH_BEFORE_FULL_EFFECTS = 0.0f;  // FLAG: .data value not recovered
-    // Distance to the finish at which the effect STARTS ramping in (amount 0.0). flt_82CDA554.
-    f32 KF_DISTANCE_TO_FINISH_BEFORE_EFFECTS = 0.0f;       // FLAG: .data value not recovered
-    // Per-frame blend factor the effect amount lerps toward its target by. flt_82CDA558.
-    f32 KF_RACE_END_EFFECT_BLEND_FACTOR = 0.0f;            // FLAG: .data value not recovered
+    f32 KF_DISTANCE_TO_FINISH_BEFORE_FULL_EFFECTS = 500.0f;
+    f32 KF_DISTANCE_TO_FINISH_BEFORE_EFFECTS = 1000.0f;
+    f32 KF_RACE_END_EFFECT_BLEND_FACTOR = 0.05f;
 }
-
 // ----------------------------------------------------------------------------
 // DWARF BrnDirectorVehicleTracker.h:65 / :68 -- the crash-energy bands, read out of the image with
 // tools/re/x360rd.py (the "writable .data has nothing to read" note that gated the classifier was
@@ -146,15 +134,7 @@ void VehicleTracker::Update(
             }
         }
 
-        // GATE: `mScoreData = lpInput->GetPlayerScoreData();`. The real InputBuffer models the
-        //   score region as one opaque span (mScoreAndBoostBlock, @0x3110..0x3238) with no
-        //   CarScoreData accessor, so there is nothing to copy BY NAME, and reaching into the
-        //   span by offset is the hack this wave has been retiring rather than adding.
-        //   CONSEQUENCE: mScoreData stays at its Construct() value, so the race-end effect ramp
-        //   below reads a zero distance-to-finish. That ramp runs only while the event state is
-        //   RACING -- which this build does not reach -- and its own three constants are
-        //   unrecovered placeholders too, so nothing observable changes today.
-        //   DELETE-WHEN: InputBuffer grows a named GetPlayerScoreData().
+        mScoreData = *lpInput->GetPlayerScoreData();
     }
 
     // Push this frame's samples into the history journals: seed every slot on the first
@@ -188,24 +168,21 @@ void VehicleTracker::Update(
     {
         const f32 lfDistanceToFinish = mScoreData.GetDistanceToFinishLive(); // ARTIST 8223B6A4: tracker+0x188
 
-        f32 lfDesiredRaceEndAmount;
-        if (lfDistanceToFinish >= KF_DISTANCE_TO_FINISH_BEFORE_EFFECTS)
+        f32 lfDesiredRaceEndAmount = 0.0f;
+        if (lfDistanceToFinish < KF_DISTANCE_TO_FINISH_BEFORE_EFFECTS)
         {
-            lfDesiredRaceEndAmount = 0.0f;
-        }
-        else if (lfDistanceToFinish >= KF_DISTANCE_TO_FINISH_BEFORE_FULL_EFFECTS)
-        {
-            const f32 lfRange = KF_DISTANCE_TO_FINISH_BEFORE_EFFECTS - KF_DISTANCE_TO_FINISH_BEFORE_FULL_EFFECTS;
-            const f32 lfNormalised = (lfDistanceToFinish - KF_DISTANCE_TO_FINISH_BEFORE_FULL_EFFECTS) / lfRange;
-            // The body clamps the 1 - normalised result into [0, 1] (the fsel pair).
-            f32 lfClamped = 1.0f - lfNormalised;
-            if (lfClamped < 0.0f) lfClamped = 0.0f;
-            if (lfClamped > 1.0f) lfClamped = 1.0f;
-            lfDesiredRaceEndAmount = lfClamped;
-        }
-        else
-        {
-            lfDesiredRaceEndAmount = 1.0f;
+            if (lfDistanceToFinish < KF_DISTANCE_TO_FINISH_BEFORE_FULL_EFFECTS)
+            {
+                lfDesiredRaceEndAmount = 1.0f;
+            }
+            else
+            {
+                const f32 lfRange = KF_DISTANCE_TO_FINISH_BEFORE_EFFECTS - KF_DISTANCE_TO_FINISH_BEFORE_FULL_EFFECTS;
+                f32 lfNormalised = (lfDistanceToFinish - KF_DISTANCE_TO_FINISH_BEFORE_FULL_EFFECTS) / lfRange;
+                if (lfNormalised < 0.0f) lfNormalised = 0.0f;
+                if (lfNormalised > 1.0f) lfNormalised = 1.0f;
+                lfDesiredRaceEndAmount = 1.0f - lfNormalised;
+            }
         }
 
         mbFirstFrame = false;
