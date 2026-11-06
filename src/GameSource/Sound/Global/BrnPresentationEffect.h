@@ -6,6 +6,8 @@
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"             // BrnSound::Logic::Streaming::IStreamUser (third base @+0x38)
 #include "GameShared/GameClasses/Sound/Logic/CgsVoiceWrapper.h"    // CgsSound::Logic::VoiceWrapper (embedded in AgingVoice)
 #include "GameSource/AttribSys/Generated/classes/presentationactionlist.h"
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"            // CgsSound::Utils::DataPoint<T> (mMode)
+#include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"          // RootInputBuffer::GameModeOutputInterface (GetMode)
 
 // =============================================================================
 // BrnSound::Logic::PresentationEffect
@@ -56,6 +58,21 @@ extern bool KB_SPEW_PRESENTATION_MESSAGES;
 struct PresentationEffect : public BrnEffectObject,
                             public BrnSound::Logic::Streaming::IStreamUser
 {
+    // DWARF BrnPresentationEffect.h:107. What a PresentationEntry's splice index selects.
+    enum ePresentationContent
+    {
+        E_PRESENTATION_CONTENT_SPLICE    = 0,
+        E_PRESENTATION_CONTENT_WAVE_FILE = 1,
+        E_PRESENTATION_CONTENT_STREAM    = 2,
+    };
+
+    // DWARF BrnPresentationEffect.h:116.
+    enum eMode
+    {
+        E_MODE_NONE            = 0,
+        E_MODE_ONLINE_ENTRANCE = 1,
+    };
+
     // DWARF BrnPresentationEffect.h:132 (struct PresentationEntry). The per-voice
     // resolved presentation request; the parameter type of FindOrStealAVoice. Field
     // NAMES + order are DWARF-authoritative; the Find* compare loop reaches them at the
@@ -66,6 +83,18 @@ struct PresentationEffect : public BrnEffectObject,
     {
         static const u16 KU16_SPECIAL_SPLICE_STREAM = 65534;   // DWARF :133
         static const u16 KU16_SPECIAL_SPLICE_WAVE   = 65535;   // DWARF :134
+
+        // DWARF :160, inlined at 0x826F78EC: lbz 0x17 ; cmplwi 1.
+        bool IsValid() const { return mu8Valid == 1; }
+
+        // DWARF :167, inlined at 0x826F791C..0x826F7940: 0xFFFE -> 2, 0xFFFF -> 1, else 0.
+        ePresentationContent GetContent() const
+        {
+            if (mu16Splice == KU16_SPECIAL_SPLICE_STREAM)
+                return E_PRESENTATION_CONTENT_STREAM;
+            return mu16Splice == KU16_SPECIAL_SPLICE_WAVE ? E_PRESENTATION_CONTENT_WAVE_FILE
+                                                          : E_PRESENTATION_CONTENT_SPLICE;
+        }
 
         u64 mu64StringId;    // +0x00 (:187)
         u64 mu64ScreenId;    // +0x08 (:188)
@@ -130,19 +159,30 @@ struct PresentationEffect : public BrnEffectObject,
     u8 mau8DataEnds[14];
     CgsSound::Logic::VoiceWrapper::CreateParams mStreamParams;
     Attrib::Gen::presentationactionlist mActions;
-    u8 mu8StreamOutput;
+    CgsSound::Utils::DataPoint<eMode> mMode;  // DWARF :292; X360 this+0x29C current, +0x2A0 previous
+    u8 mu8StreamOutput;                       // DWARF :293; X360 this+0x2A4
 
     // FLAG: mau8DataOffsets[14] (:287), mau8DataEnds[14] (:288), mStreamParams
     // (VoiceWrapper::CreateParams, :289), mActions (Attrib::Gen::presentationactionlist,
-    // :290; X360 this+0x28C), mMode (DataPoint<eMode>, :292), mu8StreamOutput (:293) are
-    // DWARF-ordered but their concrete types have NO committed home -> DECLARATION-ONLY /
-    // DEFERRED (NOT emitted as concrete members; same treatment as
-    // StreamingEffect::streamsettings).
+    // :290; X360 this+0x28C) follow the DWARF order; their console offsets are not reproduced
+    // on the 64-bit host.
 
 private:
     bool Resolve(s32 aiAction, u64 auStringId, u64 auScreenId,
                  PresentationEntry& arEntry) const;
     void Play(const PresentationEntry& arEntry);
+
+    // DWARF cpp:694; ARTIST @0x8269E418 (no export file, read from the image). Callers: Play
+    // @0x826F7960 and UpdateParams @0x826D2AC0.
+    void PlayStream(u32 auContentSpec);
+
+    // DWARF cpp:774; inlined in Notify at 0x826FFA58..0x826FFA98.
+    void HandleTick(const PresentationEntry& arEntry);
+
+    // DWARF cpp:732; inlined in UpdateParams at 0x826D2A4C..0x826D2A70.
+    eMode GetMode(const BrnSound::Module::Io::RootInputBuffer::GameModeOutputInterface*
+                      apGameModeInterface) const;
+
     // @ 0x82687D68 (DWARF BrnPresentationEffect.cpp:554). First maVoices[] slot whose
     // per-VoiceWrapper state word (slot+0x4C) is 0 (unused) or 7 (idle), else null.
     AgingVoice* FindFreeVoice();
