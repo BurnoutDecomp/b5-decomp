@@ -25,6 +25,7 @@ namespace BrnResource
             EA::Thread::ThreadParameters lParameters;
             lParameters.mnProcessor = 0;
             lParameters.mnPriority = 100;
+            lParameters.mpName = "DLCNotifyThread";
 
             mDLCMonitorThread.Begin(
                 &DLCManager::X360DLCEnumerationThreadProc,

@@ -114,6 +114,7 @@ namespace BrnResource
         CGS_STATIC_ASSERT((offsetof(GameDataModule, muNumCollisionBlocks) == 0x7432C), "ARTIST collision block count");
         CGS_STATIC_ASSERT((offsetof(GameDataModule, mFileSystemStatus) == 0x74330), "ARTIST filesystem status");
         CGS_STATIC_ASSERT((offsetof(GameDataModule, mDLCManager) == 0x74338), "ARTIST DLC manager");
+        CGS_STATIC_ASSERT((offsetof(GameDataModule, miDLCPatchPackage) == 0x74990), "ARTIST DLC patch package index");
         CGS_STATIC_ASSERT((sizeof(GameDataModule) == 0x74A00), "ARTIST GameData allocation extent");
         CGS_STATIC_ASSERT((__alignof(GameDataModule) == 128), "ARTIST contained job alignment");
     }
@@ -155,7 +156,48 @@ namespace BrnResource
             mePrepareStage = E_PREPARE_ALLOCATORS;
             if (!CreateAllocators(lpInputStack, lpOutputStack))
                 goto Pending;
-            // (X360: DLC stages 16-18 run between the allocators and stage 6 - deferred)
+            // fall through
+        case E_PREPARE_DLC:
+            mePrepareStage = E_PREPARE_DLC;
+            if (!mDLCManager.Prepare(&mAllocatorList))
+                goto Pending;
+            miDLCPatchPackage = 0;
+            // fall through
+        case E_PREPARE_DLC_PATCH:
+            mePrepareStage = E_PREPARE_DLC_PATCH;
+            if (miDLCPatchPackage < mDLCManager.GetPackageCount())
+            {
+                CgsModule::IOHelper<CgsResource::ResourceIO::InputBuffer> lResource(lpInputStack, "Resource");
+                lResource->LockForWrite();
+                // ARTIST 82674158 loads package +0x44 for the patch request's
+                // priority, distinct from the package's own +0x40 priority.
+                const s32 liPatchPriority = mDLCManager.GetPackage(miDLCPatchPackage)->miVersion;
+                const DLCManager::DLCPackage* const lpPackage = mDLCManager.GetPackage(miDLCPatchPackage);
+                CgsResource::Events::AddPatchRequest lRequest;
+                lRequest.Construct(&mReceiverQueue, miDLCPatchPackage, lpPackage->mPath, liPatchPriority);
+                lResource->GetResourceQueue()->AddEvent(
+                    reinterpret_cast<const CgsModule::Event*>(&lRequest), 25, sizeof(lRequest));
+                mReceiverQueue.Clear();
+                lResource->UnlockForWrite();
+                UpdateResourceModule(lpInputStack, lpOutputStack, lResource);
+            }
+            // fall through
+        case E_PREPARE_DLC_PATCH_WAIT:
+            mePrepareStage = E_PREPARE_DLC_PATCH_WAIT;
+            if (miDLCPatchPackage < mDLCManager.GetPackageCount())
+            {
+                if (mReceiverQueue.GetLength() == 0)
+                {
+                    CgsModule::IOHelper<CgsResource::ResourceIO::InputBuffer> lResource(lpInputStack, "Resource");
+                    UpdateResourceModule(lpInputStack, lpOutputStack, lResource);
+                    goto Pending;
+                }
+                if (++miDLCPatchPackage < mDLCManager.GetPackageCount())
+                {
+                    mePrepareStage = E_PREPARE_DLC_PATCH;
+                    goto Pending;
+                }
+            }
             // fall through
         case E_PREPARE_ATTRIBSYS:
         {

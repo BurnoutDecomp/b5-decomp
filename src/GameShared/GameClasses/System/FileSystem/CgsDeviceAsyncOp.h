@@ -25,11 +25,13 @@ namespace CgsFileSystem
 
         // Block until the in-flight operation completes (asserts one is in flight), then clear it.
         void Wait();   // @ 0x828DE338
+        bool IsDone(); // @ 0x828DE3E8
 
-        // Results of the last completed operation (trivial inline accessors; inlined at the X360
-        // call sites).
+        // Results of the last completed operation. The handle and result accessors assert that
+        // the prior operation was waited before exposing the cached values.
         u64    GetLastOperationSize()   const { return muSize; }
-        Handle GetLastOperationHandle() const { return mHandle; }
+        // ARTIST 0x826610A8 asserts the operation was waited before returning its handle.
+        Handle GetLastOperationHandle();
         // ARTIST 0x82661160 and DWARF :93: non-const, with the outstanding-op
         // assertion before loading the result. Defined by the same mounted provider.
         s32    GetLastOperationResult();
