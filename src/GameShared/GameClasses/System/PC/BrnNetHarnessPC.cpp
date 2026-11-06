@@ -165,6 +165,8 @@ namespace
         bool   mbStartModePosted;
         bool   mbStartModeWaitReported;
         f64    mfStartModeAt;
+        f64    mfStartModeAgainAt;      // optional third field: post 257 once more (a second event)
+        bool   mbStartModeAgainPosted;
         s32    miStartMode;
     };
 
@@ -432,12 +434,16 @@ namespace
         {
             double ldAt = 0.0;
             int    liMode = 0;
-            if (std::sscanf(lpcStartMode, "%lf:%d", &ldAt, &liMode) == 2)
+            double ldAgainAt = -1.0;
+            const int liFields = std::sscanf(lpcStartMode, "%lf:%d:%lf", &ldAt, &liMode, &ldAgainAt);
+            if (liFields >= 2)
             {
-                gHarness.mbStartModeArmed = true;
-                gHarness.mfStartModeAt    = ldAt;
-                gHarness.miStartMode      = liMode;
-                BrnNetHarnessPC::Witness("harness", "start mode armed: post 257 mode=%d at in-game+%.1fs", liMode, ldAt);
+                gHarness.mbStartModeArmed   = true;
+                gHarness.mfStartModeAt      = ldAt;
+                gHarness.miStartMode        = liMode;
+                gHarness.mfStartModeAgainAt = (liFields == 3 && ldAgainAt > ldAt) ? ldAgainAt : -1.0;
+                BrnNetHarnessPC::Witness("harness", "start mode armed: post 257 mode=%d at in-game+%.1fs (again at %.1fs)", liMode, ldAt,
+                                         gHarness.mfStartModeAgainAt);
             }
             else
             {
@@ -775,13 +781,17 @@ namespace BrnNetHarnessPC
     void InjectStartMode(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue, const BrnGui::GuiCache* lpGuiCache)
     {
         Resolve();
-        if (!gHarness.mbStartModeArmed || gHarness.mbStartModePosted || lpGuiOutQueue == nullptr ||
-            lpGuiCache == nullptr || !gHarness.mbEverInGame)
+        if (!gHarness.mbStartModeArmed || lpGuiOutQueue == nullptr || lpGuiCache == nullptr || !gHarness.mbEverInGame)
+        {
+            return;
+        }
+        const bool lbAgain = gHarness.mbStartModePosted;
+        if (lbAgain && (gHarness.mfStartModeAgainAt < 0.0 || gHarness.mbStartModeAgainPosted))
         {
             return;
         }
         const f64 lfNow = Now();
-        if ((lfNow - gHarness.mfInGameAt) < gHarness.mfStartModeAt)
+        if ((lfNow - gHarness.mfInGameAt) < (lbAgain ? gHarness.mfStartModeAgainAt : gHarness.mfStartModeAt))
         {
             return;
         }
@@ -822,6 +832,10 @@ namespace BrnNetHarnessPC
             return;
         }
 
+        if (lbAgain)
+        {
+            gHarness.mbStartModeAgainPosted = true;
+        }
         gHarness.mbStartModePosted = true;
 
         BrnGui::GuiEventNetworkGameParams lParamsEvent;

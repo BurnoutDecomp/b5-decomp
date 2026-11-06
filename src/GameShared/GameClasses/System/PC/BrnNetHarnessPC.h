@@ -48,7 +48,9 @@
 //                        (switch team) makes. That event only swaps red and blue, and nothing on
 //                        this build puts a lobby player on a first team, so road rage's launch
 //                        check ("exactly two teams") cannot pass unattended without this.
-//   BRN_NET_START_MODE=<seconds>:<game mode>
+//   BRN_NET_START_MODE=<seconds>:<game mode>[:<again seconds>]
+//                        (the optional third field posts the same record once more, for a second
+//                        event from the post-race lobby)
 //                        post GUI event 257 (GuiEventNetworkGameParams), the record the online game
 //                        options screen posts: one round in that mode, on the first preset online
 //                        event that has landmarks. Its 480-byte payload does not fit BRN_NET_SCRIPT.
