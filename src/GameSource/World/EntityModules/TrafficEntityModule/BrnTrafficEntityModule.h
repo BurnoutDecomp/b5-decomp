@@ -843,7 +843,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
                   BrnTrafficIO::OutputBuffer_PreScene* lpOutput);
         void  PutParamInPurgatory(u32 luParam);                      // @ 0x82716510 (FLAG: Array interior)
         void  RebuildGeneratorList();                                // @ 0x82742DD0 (FLAG)
-        void  UpdateSerialiser();                                    // @ 0x8272DA80 (FLAG)
+        void  UpdateSerialiser();                                    // @ 0x8272DA80
         // @ 0x82707F00. Console defines it here (its assert names BrnTrafficEntityModule.h:2637).
         // The fsel else-value flt_82001CC0 is 0.0f: Param::Construct @0x82751B60 loads it as the
         // SetParamAlong argument `0.0`, ParamListNode::Construct @0x82751C38 as `mfParamAlong = 0.0`.
@@ -1392,6 +1392,11 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
 
         // @0x8274C1A8, DWARF :1479. The cheap frames between decision frames. Body in
         // _wT1_06.cpp, PARTIAL for the same reason.
+        void UpdateTrailers(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+                            BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput);
+        void UpdateTrailers_UpdatePurgatory();
+        void UpdateTrailers_MoveToCab(u32 luTrailer);
+
         void UpdateNonDecisionFrame(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
                                     BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput);
 
@@ -1550,6 +1555,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
                                                       const ::Array<CrashingThingData, 168u>* lpaCrashingThings); // @0x827165D8
 
         // vehicle creation + the kinematic move
+        u32 TryAllocateTrailerId(); // @0x827234B0
         void UpdateVehicles_CreateNewVehicles(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput); // @0x8273A308
         void UpdateVehicles(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
                             BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput); // @0x82744F58

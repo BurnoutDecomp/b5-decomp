@@ -962,7 +962,7 @@ namespace BrnReplays
             if (lpSerialiser != 0)
             {
                 lpSerialiser->SetMode(BaseSerialiser::E_MODE_RESTORING);
-                lpSerialiser->SetDataReady(false);
+                lpSerialiser->SetDataRestored(false);
             }
         }
     }

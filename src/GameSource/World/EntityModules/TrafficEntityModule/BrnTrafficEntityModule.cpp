@@ -373,6 +373,77 @@ namespace BrnTraffic
         mbReplayAssetsReady = false;
     }
 
+    // ARTIST 0x8272DA80. Collect a record frame or publish playback readiness.
+    void TrafficEntityModule::UpdateSerialiser()
+    {
+        typedef BrnReplays::BaseSerialiser ReplaySerialiser;
+        mTrafficEntitySerialiser.Lock();
+
+        if (mTrafficEntitySerialiser.IsRecording())
+        {
+            BrnReplays::TrafficEntitySerialiserStaticLayout* lpFrame =
+                mTrafficEntitySerialiser.GetStaticLayout();
+            lpFrame->Clear();
+            if (meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
+                maaRaceCarHulls[meLocalPlayerIndex].GetLength() != 0)
+            {
+                lpFrame->muLocalPlayerHull = maaRaceCarHulls[meLocalPlayerIndex].GetItem(0);
+                mTrafficEntitySerialiser.SetActiveHullsForLocalPlayer(&mActiveHullsForLocalPlayer);
+            }
+
+            typedef CgsContainers::FastBitArray<KU_MAX_TOTAL_TRAFFIC> TrafficBitArray;
+            TrafficBitArray lVehicleBits;
+            lVehicleBits.SetAnd(mVehicleSoaData.mAliveVehicles, mVehicleSoaData.mVehiclesWithEntities);
+            lpFrame->mVehicleUpdateBits = lVehicleBits;
+
+            CGS_STATIC_ASSERT((sizeof(maVehicleTransforms) == 3 * 0x3200),
+                              "ARTIST traffic replay transform extent");
+            mTrafficEntitySerialiser.SetVehicleTransforms(maVehicleTransforms);
+            for (TrafficBitArray::Iterator lVehicle = lVehicleBits.Begin();
+                 lVehicle != lVehicleBits.End(); ++lVehicle)
+            {
+                const u32 luVehicle = lVehicle.GetIndex();
+                Vehicle* lpVehicle = GetVehicle(luVehicle);
+                if (lpVehicle->IsPhysical())
+                    GetTrafficPhysicsInfoForVehicl(luVehicle);
+                mTrafficEntitySerialiser.SetVehicleData(luVehicle, lpVehicle);
+            }
+
+            CGS_STATIC_ASSERT((sizeof(maTrafficPhysicsInfoList) == BrnReplays::KU_PHYSICS_INFO_TOTAL),
+                              "ARTIST traffic replay physics records extent");
+            mTrafficEntitySerialiser.SetPhysicsData(&maTrafficPhysicsInfoListBits, maTrafficPhysicsInfoList);
+
+            u8 lauBonusAssets[BrnReplays::KU_MAX_BONUS_STREAMED_ASSETS];
+            u32 luNumBonusAssets = 0;
+            mStreamer.GetBonusAssets(lauBonusAssets, &luNumBonusAssets);
+            mTrafficEntitySerialiser.SetBonusAssets(lauBonusAssets, luNumBonusAssets);
+
+            // ARTIST 0x8272E1F8–0x8272E240 copies the full manager, including alignment padding.
+            std::memcpy(&lpFrame->mTrafficLightManager, &mTrafficLightManager, sizeof(mTrafficLightManager));
+        }
+        else
+        {
+            const ReplaySerialiser::EMode leMode = mTrafficEntitySerialiser.GetMode();
+            if (leMode == ReplaySerialiser::E_MODE_RECORDING_PREPARING ||
+                leMode == ReplaySerialiser::E_MODE_PLAYING_PREPARING)
+            {
+                mTrafficEntitySerialiser.SetDataReady(mbReplayAssetsReady);
+            }
+            else if (leMode == ReplaySerialiser::E_MODE_RESTORING)
+            {
+                if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                    (*CgsDev::Log::gpDebugPrint) << "TRAF: Restoring replay; dataready=" << mbReplayAssetsReady << "\n";
+                mTrafficEntitySerialiser.SetDataRestored(mbReplayAssetsReady);
+            }
+            else if (mTrafficEntitySerialiser.IsPlaying())
+            {
+                mTrafficEntitySerialiser.SetDataReady(true);
+            }
+        }
+
+        mTrafficEntitySerialiser.Unlock();
+    }
+
     // @ 0x82708F98 --
     //   lwz   r9, 0x300(r31)          ; meState, read BEFORE the two byte stores
     //   stbx  r11, r31, 0x725E9       ; *(this + 468457) = 1
@@ -462,6 +533,14 @@ namespace BrnTraffic
                       <  offsetof(TrafficEntityModule, meTearingDownState)), "meRunningStateToUseAfterStartup before meTearingDownState");
         CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, meTearingDownState)
                       <  offsetof(TrafficEntityModule, mReceiverQueue)), "meTearingDownState before mReceiverQueue");
+
+#if defined(_XBOX)
+        // ARTIST Reset, ManageTriggers and Construct pin this boundary and the pool that follows.
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, mTrafficLightManager) == 0x53790), "ARTIST light manager");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, mHullsToAddTriggersFor) == 0x54A60), "ARTIST hull trigger array");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, maTrafficPhysicsInfoList) == 0x58210), "ARTIST traffic physics pool");
+        CGS_STATIC_ASSERT((offsetof(TrafficEntityModule, maTrafficPhysicsInfoListBits) == 0x713A0), "ARTIST traffic physics bits");
+#endif
 
         // The three vehicle pools are one array, in the order the console's base element
         // indices (85 / 485 / 684) spell, with the axle array after it.
@@ -6114,6 +6193,7 @@ void TrafficEntityModule::UpdateDecisionFrame(
     // StaticVehicles_CreateNewVehicles(lpInput), which turns an alive static PARAM into an
     // alive static VEHICLE via Vehicle::InitialiseAsStatic.
     StaticVehicles_UpdateVehicles(lpInput);
+    UpdateTrailers(lpInput, lpOutput);
 
     {
 
@@ -6168,6 +6248,7 @@ void TrafficEntityModule::UpdateNonDecisionFrame(
     UpdateVehicles(lpInput, lpOutput);
 
     StaticVehicles_UpdateVehicles(lpInput);
+    UpdateTrailers(lpInput, lpOutput);
 
     {
 
@@ -6760,6 +6841,114 @@ u32 TrafficEntityModule::TryAllocateParamId()
 
     ++miDEBUGOverBudgetness;            // 0x827234A4, this + 0x727C4
     return KU_INVALID_PARAM;
+}
+
+// Native VMX sequence used by UpdateTrailers_MoveToCab @0x82726758.
+namespace
+{
+    __vector4 TrailerNormalizeOr(__vector4 value, __vector4 fallback)
+    {
+        const __vector4 squared = __vmsum3fp(value, value);
+        const __vector4 zero = __vspltisw(0);
+        const __vector4 one = __vcfsx(__vspltisw(1), 0);
+        const __vector4 half = __vcfsx(__vspltisw(1), 1);
+        __vector4 estimate = __vrsqrtefp(squared);
+        for (int i = 0; i < 2; ++i)
+            estimate = __vmaddfp(__vmulfp(estimate, half),
+                                 __vnmsubfp(squared, __vmulfp(estimate, estimate), one), estimate);
+        return __vsel(__vmulfp(value, estimate), fallback, __vcmpeqfp(squared, zero));
+    }
+
+    __vector4 TrailerCross(__vector4 a, __vector4 b)
+    {
+        const __vector4 ayzx = __vpermwi(a, 0x63);
+        const __vector4 byzx = __vpermwi(b, 0x63);
+        return __vpermwi(__vnmsubfp(ayzx, b, __vmulfp(a, byzx)), 0x63);
+    }
+}
+
+void TrafficEntityModule::UpdateTrailers_UpdatePurgatory()
+{
+    u32 index = 0;
+    while (index < mTrailerPurgatoryList.GetLength())
+    {
+        PurgatoryInfo& info = mTrailerPurgatoryList.GetItem(index);
+        --info.muDecisionFramesLeft;
+        if (info.muDecisionFramesLeft != 0)
+        {
+            ++index;
+            continue;
+        }
+        CGS_ASSERT(!GetVehicle(info.muIndex)->IsAlive(), "!GetVehicle( lInfo.muIndex )->IsAlive()");
+        mFreeTrailerStack.Push(info.muIndex);
+        mTrailerPurgatoryList.Erase(index);
+    }
+}
+
+void TrafficEntityModule::UpdateTrailers_MoveToCab(u32 luTrailer)
+{
+    Vehicle* const trailer = GetTrailerVehicle(static_cast<s32>(luTrailer));
+    if (trailer->GetCabIndex() == KU_INVALID_VEHICLE)
+        return;
+    CGS_ASSERT(luTrailer < KU_MAX_TRAILER_TRAFFIC, "luTrailer < KU_MAX_TRAILER_TRAFFIC");
+    const u32 id = KU_TRAILER_TRAFFIC_OFFSET + luTrailer;
+    VehicleAxles* const axles = GetVehicleAxles(id);
+    Vehicle* const cab = GetStandardVehicle(trailer->GetCabIndex());
+    CGS_ASSERT(cab->GetTrailerIndex() == id, "lpCab->GetTrailerIndex() == luTrailerVehicle");
+    Param* const param = GetParam(trailer->GetCabIndex());
+    const Matrix44Affine cabMatrix = GetVehicleTransform(trailer->GetCabIndex());
+    CGS_ASSERT(cab->IsAlive(), "IsAlive()");
+    const u32 cabType = cab->GetVehicleType();
+    CGS_ASSERT(trailer->IsAlive(), "IsAlive()");
+    const u32 trailerType = trailer->GetVehicleType();
+    (void)mpData.operator->();
+    (void)mpData.operator->();
+    const VehicleTypeRuntime* const cabRuntime = GetVehicleTypeRuntime(cabType);
+    const VehicleTypeRuntime* const trailerRuntime = GetVehicleTypeRuntime(trailerType);
+    const Vector3 tow = cab->CalcTowBarPos(cabMatrix, cabRuntime);
+    const __vector4 pivot = trailerRuntime->GetTrailerPivotDistance().mV;
+    const __vector4 initialAt = TrailerNormalizeOr(__vsubfp(tow.mV, axles->mBackAxle.mPosAndWheelRadius.GetVector()), cabMatrix.At().mV);
+    const __vector4 negativePivot = __vmulfp(pivot, __vspltw(__vcfsx(__vspltisw(-1), 0), 0));
+    const __vector4 initialPos = __vmaddfp(initialAt, negativePivot, tow.mV);
+    Vector3 back;
+    back.mV = __vmaddfp(initialAt, trailerRuntime->GetBackAxleOffset().mV, initialPos);
+    axles->mBackAxle.mPosAndWheelRadius.SetVector3(back);
+    axles->UpdateRearAxleForRoadCollision(param, mpData->mpapHulls);
+    const __vector4 at = TrailerNormalizeOr(__vsubfp(tow.mV, axles->mBackAxle.mPosAndWheelRadius.GetVector()), cabMatrix.At().mV);
+    const __vector4 pos = __vsubfp(tow.mV, __vmulfp(at, pivot));
+    const __vector4 upBlend = TrailerNormalizeOr(__vaddfp(cabMatrix.Up().mV, axles->mBackAxle.mUpAndDebug.GetVector()), cabMatrix.Up().mV);
+    const __vector4 right = TrailerNormalizeOr(TrailerCross(upBlend, at), cabMatrix.Right().mV);
+    const __vector4 up = TrailerNormalizeOr(TrailerCross(at, right), cabMatrix.Up().mV);
+    Matrix44Affine transform;
+    transform.Right().mV = right;
+    transform.Up().mV = up;
+    transform.At().mV = at;
+    transform.Pos().mV = pos;
+    SetVehicleTransform(id, transform);
+    axles->mFrontAxle.mUpAndDebug.SetVector3(axles->mBackAxle.mUpAndDebug.GetVector3());
+    Vector3 front;
+    front.mV = __vmaddfp(at, trailerRuntime->GetForwardAxleOffset().mV, pos);
+    axles->mFrontAxle.mPosAndWheelRadius.SetVector3(front);
+    trailer->SetWheelRot(cab->GetWheelRot());
+}
+
+void TrafficEntityModule::UpdateTrailers(const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
+                                          BrnTrafficIO::OutputBuffer_PostPhysics* lpOutput)
+{
+    (void)lpInput;
+    (void)lpOutput;
+    UpdateTrailers_UpdatePurgatory();
+    Vehicle* const trailer = GetTrailerVehicle(0);
+    if (!trailer->IsAlive() || trailer->IsPhysical())
+        return;
+    if (trailer->GetCabIndex() != KU_INVALID_VEHICLE)
+    {
+        const Vehicle* const cab = GetVehicle(trailer->GetCabIndex());
+        trailer->CopyEffectsFromCab(cab);
+        if (cab->IsPhysical())
+            return;
+    }
+    UpdateTrailers_MoveToCab(0);
 }
 
 // ----------------------------------------------------------------------------
@@ -10032,12 +10221,42 @@ namespace
 // TrafficEntityModule::UpdateVehicles_CreateNewVehicles  @ 0x8273A308  PARTIAL  (.cpp 13477)
 //
 // Every param that is alive, not a zombie, and has no live vehicle
-// becomes a standard Vehicle. The candidate set is three FastBitArray terms, not a linear
-// scan (0x8273A468..0x8273A52C): mAliveParams & ~mZombieParams & ~mAliveVehicles.
+// becomes a standard Vehicle. If its type enables a trailer and the module's one full-index
+// trailer slot is available, the same pass also creates the trailer. The candidate set is three
+// FastBitArray terms, not a linear scan (0x8273A468..0x8273A52C):
+// mAliveParams & ~mZombieParams & ~mAliveVehicles.
 //
-// The two RNG draws come off mEffectRand in this order and both must stay: draw 1 is the
-// across-lane offset, draw 2 is mfRandomVal. Swapping them re-phases every car's lights.
+// Cab RNG draws remain ordered: draw 1 is the across-lane offset, draw 2 is the cab's
+// mfRandomVal. If a trailer is created, the third draw follows trailer-flow type selection and
+// supplies the trailer's mfRandomVal. Keep all three in their console order.
 // ----------------------------------------------------------------------------
+u32 TrafficEntityModule::TryAllocateTrailerId()
+{
+    const s32 liNumFreeTrailers = mFreeTrailerStack.GetLength();
+    if (liNumFreeTrailers == 0)
+    {
+        return KU_INVALID_VEHICLE;
+    }
+
+    // Reset seeds this one-entry stack with the full vehicle index KU_TRAILER_TRAFFIC_OFFSET
+    // (599 on the X360), not the trailer's relative index 0.
+    const u32 luFreeTrailer = mFreeTrailerStack.Peek();
+
+    if (GetVehicleSpecies(luFreeTrailer) != Vehicle::E_SPECIES_TRAILER)
+    {
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+        lStream << "Invalid vehicle id in free trailer list: " << luFreeTrailer;
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, __LINE__);
+        CgsDev::Assert::EndAssert();
+    }
+    CGS_ASSERT(!GetVehicle(luFreeTrailer)->IsAlive(),
+               "!GetVehicle( luFreeTrailer )->IsAlive()");
+
+    mFreeTrailerStack.Pop();
+    return luFreeTrailer;
+}
+
 void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
     const BrnTrafficIO::InputBuffer_PostPhysics* lpInput)
 {
@@ -10116,15 +10335,13 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
 
         // The cab test is the console's, byte-for-byte: `mxVehicleFlags != 0` (not a mask test
         // -- Feb-2007's `&&` typo survived to ship) AND a valid trailer flow type.
-        u16 luTrailerIndex = static_cast<u16>(KU_INVALID_VEHICLE);
+        u32 luTrailerIndex = KU_INVALID_VEHICLE;
         if (lpVehicleType->mxVehicleFlags != 0
             && lpVehicleType->muTrailerFlowTypeId != 0xFFFFu)
         {
-            // GATE: the trailer half @0x8273ACA4. BLOCKERS: TryAllocateTrailerId is undeclared
-            // and InitialiseAsTrailer reaches the trapped Vehicle::CalcTowBarPos.
-            // DELETE-WHEN articulated traffic lands.
-
-
+            // ARTIST 0x8273ABD4 allocates the full trailer vehicle id before the cab's second
+            // effect-random draw and initialization.
+            luTrailerIndex = TryAllocateTrailerId();
         }
 
         const f32 lfRandomVal = mEffectRand.RandomFloat();
@@ -10145,10 +10362,41 @@ void TrafficEntityModule::UpdateVehicles_CreateNewVehicles(
                                         lParamDirection,
                                         luParam,
                                         mVehicleSoaData,
-                                        luTrailerIndex);
+                                        static_cast<u16>(luTrailerIndex));
 
- // New driving vehicle in a reused slot.
+        // New driving vehicle in a reused slot.
         SetVehicleTransform(luParam, lOutMatrix);
+
+        if (luTrailerIndex != KU_INVALID_VEHICLE)
+        {
+            CGS_ASSERT(luTrailerIndex < KU_MAX_TOTAL_TRAFFIC,
+                       "luIndex < KU_MAX_TOTAL_TRAFFIC");   // baked .cpp 13602
+            CGS_ASSERT(!maVehicles[luTrailerIndex].IsAlive(),
+                       "!GetVehicle( luFreeTrailer )->IsAlive()"); // baked .cpp 13606
+
+            // GetVehicle supplies the second native index check and the full-index vehicle
+            // pointer passed to InitialiseAsTrailer.
+            Vehicle* const lpTrailerVehicle = GetVehicle(luTrailerIndex);
+            const u8 luTrailerVehicleType =
+                PickVehicleToSpawn(lpVehicleType->muTrailerFlowTypeId);
+            const VehicleTypeUpdateData* const lpTrailerVehicleTypeUpdate =
+                &mpData->mpaVehicleTypesUpdate[luTrailerVehicleType];
+            const VehicleTypeRuntime* const lpTrailerVehicleTypeRuntime =
+                GetVehicleTypeRuntime(luTrailerVehicleType);
+            const f32 lfTrailerRandomVal = mEffectRand.RandomFloat();
+
+            Matrix44Affine lTrailerTransform;
+            lpTrailerVehicle->InitialiseAsTrailer(
+                &maVehicleAxles[luTrailerIndex], lTrailerTransform, lpParam,
+                lfTrailerRandomVal, mpData->mpapHulls, luTrailerVehicleType,
+                lpTrailerVehicleTypeRuntime, lpTrailerVehicleTypeUpdate,
+                lpVehicle, lOutMatrix, lpVehicleTypeUpdate, lpVehicleTypeRuntime,
+                luTrailerIndex, mVehicleSoaData, static_cast<u16>(luParam));
+
+            // InitialiseAsTrailer derives the native articulated transform from the cab's
+            // tow-bar position and trailer axles; publish that result without a PC pose reset.
+            SetVehicleTransform(luTrailerIndex, lTrailerTransform);
+        }
     }
 
     mbDontCreateVehiclesNearAnyPlayers = false;
@@ -11580,18 +11828,17 @@ void TrafficEntityModule::SafeRequestMakeVehiclePhysical(
         return;
     }
 
-    // 0x8274B198..0x8274B204 -- the free-slot budget: the inlined BitArray<25>
-    // GetFirstZeroBit over maTrafficPhysicsInfoListBits must land in [0, 25).
-    // GATE trailers @0x8274B208: when Vehicle::muOtherHalfIndex != KU_INVALID_VEHICLE the
-    // console takes the OTHER budget -- CountSetBits() + 2 <= 25, two slots for the pair.
-    // BLOCKER: muOtherHalfIndex is private with no unconditional accessor and
-    // BrnTrafficVehicle.h is not this cluster's file. Unreachable today (generation is
-    // InitialiseAsStandard only, which seeds it to KU_INVALID_VEHICLE).
-    // DELETE-WHEN Vehicle gains the DWARF :338 GetTrailerIndex / other-half accessor.
-    const s32 liFreeSlot = maTrafficPhysicsInfoListBits.GetFirstClearBit();
-    if (liFreeSlot < 0 || liFreeSlot >= static_cast<s32>(KU_MAX_PHYSICAL_TRAFFIC_VEHICLES))
+    // ARTIST 0x8274B18C..B2B0: a pair needs two slots; a single needs one.
+    if (lpVehicle->GetOtherHalfIndex() != KU_INVALID_VEHICLE)
     {
-        return;
+        if (maTrafficPhysicsInfoListBits.CountSetBits() + 2 > KU_MAX_PHYSICAL_TRAFFIC_VEHICLES)
+            return;
+    }
+    else
+    {
+        const s32 liFreeSlot = maTrafficPhysicsInfoListBits.GetFirstClearBit();
+        if (liFreeSlot < 0 || liFreeSlot >= static_cast<s32>(KU_MAX_PHYSICAL_TRAFFIC_VEHICLES))
+            return;
     }
 
     MakeVehiclePhysical(luVehicle, lpOutput, lpMadePhysical, lTargetEntityId,
@@ -11674,12 +11921,15 @@ void TrafficEntityModule::MakeVehiclePhysical(
     RecordTrafficVehicleIsPhysical(luVehicle, MakeTrafficEntityId(luVehicle), lTargetEntityId,
                                    leCrashType, 0.0f, 0.0f);
 
-    // GATE trailer partner @0x82747414..0x82747478: when Vehicle::muOtherHalfIndex !=
-    // KU_INVALID_VEHICLE the console records the PARTNER too -- GetCabIndex() for a trailer,
-    // GetTrailerIndex() otherwise, then RecordTrafficVehicleIsPhysical on that index.
-    // BLOCKER: muOtherHalfIndex / GetTrailerIndex (DWARF :338) are not on Vehicle's host
-    // surface and BrnTrafficVehicle.h is not this cluster's file. Unreachable today.
-    // DELETE-WHEN the trailer wave lands.
+    // ARTIST 0x82747414..78 records the other half after the requested vehicle.
+    Vehicle* lpVehicle = GetVehicle(luVehicle);
+    if (lpVehicle->GetOtherHalfIndex() != KU_INVALID_VEHICLE)
+    {
+        const u32 luOther = lpVehicle->IsOfTrailerSpecies()
+            ? lpVehicle->GetCabIndex() : lpVehicle->GetTrailerIndex();
+        RecordTrafficVehicleIsPhysical(luOther, MakeTrafficEntityId(luOther), lTargetEntityId,
+                                       leCrashType, 0.0f, 0.0f);
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -11710,12 +11960,70 @@ void TrafficEntityModule::AddVehicleToPhysics(
 
     const Vehicle* lpVehicle = GetVehicle(luVehicle);   // 0x8274262C bound assert .h:2459
 
-    // GATE articulated arm @0x827428C4: when Vehicle::muOtherHalfIndex != KU_INVALID_VEHICLE
-    // the console builds BOTH halves and posts VehicleInputInterface::CreateArticulatedTraffic
-    // (31 arguments) instead, logging "CreateArticulatedTrafficEventQueue is full" when that
-    // queue is full. BLOCKER: muOtherHalfIndex has no unconditional accessor
-    // (BrnTrafficVehicle.h is another cluster's file) and CreateArticulatedTraffic is itself a
-    // keystone gate. Unreachable today. DELETE-WHEN the trailer wave lands.
+    // ARTIST 0x827428C4..2CB8: normalise the pair to cab, trailer and post one event.
+    if (lpVehicle->GetOtherHalfIndex() != KU_INVALID_VEHICLE)
+    {
+        const BrnPhysics::Vehicle::VehicleInputInterface::CreateArticulatedTrafficEventQueue* lpQueue =
+            lpVehicleInput->GetCreateArticulatedTrafficQueue();
+        if (!(lpQueue->GetLength() < lpQueue->GetMaxLength()))
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "CreateArticulatedTrafficEventQueue is full\n";
+            return;
+        }
+
+        u32 luCab = luVehicle;
+        u32 luTrailer;
+        if (lpVehicle->IsOfTrailerSpecies())
+        {
+            luTrailer = luVehicle;
+            luCab = lpVehicle->GetCabIndex();
+        }
+        else
+        {
+            luTrailer = lpVehicle->GetTrailerIndex();
+        }
+        const Vehicle* lpCab = GetVehicle(luCab);
+        const Vehicle* lpTrailer = GetVehicle(luTrailer);
+        Vector3 lCabVelocity, lCabAngularVelocity, lTrailerVelocity, lTrailerAngularVelocity;
+        Matrix44Affine lCabTransform, lTrailerTransform;
+        u8 lu8AttribsId;
+        CalculateInitialPhysicalState(lpCab, GetVehicleTransform(luCab), lCabVelocity,
+                                      lCabAngularVelocity, &lu8AttribsId, lCabTransform);
+        CalculateInitialPhysicalState(lpTrailer, GetVehicleTransform(luTrailer), lTrailerVelocity,
+                                      lTrailerAngularVelocity, &lu8AttribsId, lTrailerTransform);
+
+        const u32 luCabType = lpCab->GetVehicleType();
+        const u8 luCabAsset = mpData->mpaVehicleTypes[luCabType].muAssetId;
+        const CgsID lCabId = mpData->mpaVehicleAssets[luCabAsset].GetVehicleId();
+        const u32 luTrailerType = lpTrailer->GetVehicleType();
+        const u8 luTrailerAsset = mpData->mpaVehicleTypes[luTrailerType].muAssetId;
+        const CgsID lTrailerId = mpData->mpaVehicleAssets[luTrailerAsset].GetVehicleId();
+        const CgsResource::ResourceHandle lTrailerHandle =
+            maTrafficVehiclePhysicsSpecs[luTrailerType].GetResourceHandle();
+        CgsSceneManager::VolumeInstanceId lTrailerVolume;
+        lTrailerVolume.muId = 0;
+        lTrailerVolume.SetEntityIDOwner(static_cast<u8>(BrnPhysics::Vehicle::KU_ENTITYTYPE_TRAFFIC_VEHICLE));
+        lTrailerVolume.SetEntityIDEntityIndex(luTrailer);
+        const CgsResource::ResourceHandle lCabHandle =
+            maTrafficVehiclePhysicsSpecs[luCabType].GetResourceHandle();
+        CgsSceneManager::VolumeInstanceId lCabVolume;
+        lCabVolume.muId = 0;
+        lCabVolume.SetEntityIDOwner(static_cast<u8>(BrnPhysics::Vehicle::KU_ENTITYTYPE_TRAFFIC_VEHICLE));
+        lCabVolume.SetEntityIDEntityIndex(luCab);
+        const VehicleTypeRuntime::AttribKey lTrailerKey = GetCarAssetAttribKey(luTrailer);
+        const VehicleTypeRuntime::AttribKey lCabKey = GetCarAssetAttribKey(luCab);
+
+        lpVehicleInput->CreateArticulatedTraffic(lCabVolume, lCabTransform, lCabVelocity,
+            lCabAngularVelocity, lCabKey, lCabHandle, lCabId, lTrailerVolume,
+            lTrailerTransform, lTrailerVelocity, lTrailerAngularVelocity, lTrailerKey,
+            lTrailerHandle, lTrailerId, leTrafficType);
+        CGS_ASSERT(luCab < KU_MAX_TOTAL_TRAFFIC, "Index: ");
+        lpMadePhysical->SetBit(luCab);
+        CGS_ASSERT(luTrailer < KU_MAX_TOTAL_TRAFFIC, "Index: ");
+        lpMadePhysical->SetBit(luTrailer);
+        return;
+    }
 
     // 0x82742674..0x8274269C / 0x82742894..0x827428C0 -- the queue-full leg (FX-TRAFFIC5; it was a
     // gate on a STALE blocker, "no accessor": GetCreateTrafficBodyEvents() is DWARF
@@ -14621,11 +14929,63 @@ void TrafficEntityModule::HandleExternalResponses(const BrnTrafficIO::InputBuffe
                 GetVehicle(luVehicle)->SetAlarmOn(true);   // @0x8270FC10
             }
 
-            // GATE G-ARTIC: the cab/trailer pairing arms and their
-            // Array<TrafficCrashInfo,160>::Append. BLOCKER: needs Vehicle::GetTrailerIndex, absent
-            // here; and the standard-species arm early-outs on muOtherHalfIndex == KU_INVALID_VEHICLE,
-            // which every generated car has. DELETE-WHEN trailers land.
+            // ARTIST82733100..82733450: the other articulated half is queued
+            // for the existing emergency-crash drain. The two roles validate
+            // their reciprocal links at different points; retain that order.
+            u32 luOtherVehicle;
+            const char* lpcPairSelfCrashMessage;
+            if (lpVehicle->IsOfStandardSpecies())
+            {
+                lpcPairSelfCrashMessage = "Trailer's been told to crash into itself: ";
+                luOtherVehicle = lpVehicle->GetOtherHalfIndex();
+                if (luOtherVehicle == KU_INVALID_VEHICLE)
+                {
+                    continue;
+                }
+                const Vehicle* lpTrailer = GetVehicle(luOtherVehicle);
+                CGS_ASSERT(lpTrailer->IsOfTrailerSpecies(), "IsOfTrailerSpecies()");
+                CGS_ASSERT(lpTrailer->GetOtherHalfIndex() == luVehicle,
+                           "Mismatched artic parts: cab id=");
+                if (lpTrailer->IsCrashing() || EntityIndexOf(lCrasherId) == luOtherVehicle)
+                {
+                    continue;
+                }
+            }
+            else if (lpVehicle->IsOfTrailerSpecies())
+            {
+                lpcPairSelfCrashMessage = "Cab's been told to crash into itself: ";
+                if (lpVehicle->GetOtherHalfIndex() == KU_INVALID_VEHICLE)
+                {
+                    continue;
+                }
+                luOtherVehicle = lpVehicle->GetCabIndex();
+                const Vehicle* lpCab = GetVehicle(luOtherVehicle);
+                if (lpCab->IsCrashing() || EntityIndexOf(lCrasherId) == luOtherVehicle)
+                {
+                    continue;
+                }
+                CGS_ASSERT(lpCab->GetTrailerIndex() == luVehicle,
+                           "Mismatched artic parts: trailer id=");
+            }
+            else
+            {
+                continue;
+            }
 
+            TrafficCrashInfo lPairedCrash;
+            lPairedCrash.mVictimId = MakeTrafficEntityId(luOtherVehicle);
+            lPairedCrash.mCauserId = lCrasherId;
+            if (lPairedCrash.mCauserId.muValue == 0xFFFFFFFFu)
+            {
+                lPairedCrash.mCauserId = MakeTrafficEntityId(luVehicle);
+            }
+            lPairedCrash.muCrashTrafficType =
+                static_cast<u32>(BrnPhysics::Vehicle::eCrashTrafficType_Standard);
+            CGS_ASSERT(lPairedCrash.mVictimId.muValue != lPairedCrash.mCauserId.muValue,
+                       lpcPairSelfCrashMessage);
+            // Original stores only victim, causer and type. The emergency drain
+            // does not consume mbNeedsToBeSentToCrashModule; leave it unwritten.
+            maEmergencyCrashingVehicles.Append(lPairedCrash);
         }
     }
 

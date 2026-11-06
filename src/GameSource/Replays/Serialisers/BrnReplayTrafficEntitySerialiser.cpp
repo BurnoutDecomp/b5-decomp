@@ -62,27 +62,18 @@ namespace BrnReplays
     // On the first frame after (re)start, when the static layout has not yet been
     // cleared and the static buffer exists, zero the whole layout, reset the frame's
     // bit arrays / info-valid words and mark it cleared.
-    TrafficEntitySerialiserStaticLayout* TrafficEntitySerialiser::CheckStaticLayoutCleared()
+    void TrafficEntitySerialiser::CheckStaticLayoutCleared()
     {
         if (!mbStaticLayoutCleared && mpStaticBuffer != 0)
         {
             TrafficEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
             std::memset(lpLayout, 0, KU_STATIC_BUFFER_SIZE);
 
-            // asm: the bit-array fields and the info-valid word are re-zeroed (redundant
-            // after the memset, kept for faithfulness), and the 2-byte traffic-light state
-            // is set to 0xFFFF (`sth -1,0x94(r11)` @0x826534A4 -- an explicit -1, NOT a
-            // clear). The bit arrays start cleared by the memset above; re-assert the empty
-            // state, then stamp the traffic-light state to its 0xFFFF sentinel.
-            lpLayout->mVehicleUpdateBits.UnSetAll();
-            lpLayout->mPhysicsBits.UnSetAll();
-            std::memset(&lpLayout->mInfoValid, 0, sizeof(lpLayout->mInfoValid));
-            lpLayout->maTrafficLightState[0] = 0xFF;
-            lpLayout->maTrafficLightState[1] = 0xFF;
+            lpLayout->Clear();
+            lpLayout->mInfoValid = 0;
 
             mbStaticLayoutCleared = true;
         }
-        return GetStaticLayout();
     }
 
     // @0x82714118
@@ -135,10 +126,10 @@ namespace BrnReplays
 
     // @0x827073C8
     // Copy the 148-byte active-hull header for the local player into the static layout.
-    void TrafficEntitySerialiser::SetActiveHullsForLocalPlayer(const void* lpActiveHulls)
+    void TrafficEntitySerialiser::SetActiveHullsForLocalPlayer(const TrafficSerialiserFrame::ActiveHullSet* lpActiveHulls)
     {
         CGS_ASSERT(lpActiveHulls != 0, "lpActiveHulls");
-        std::memcpy(GetStaticLayout(), lpActiveHulls, 148);
+        std::memcpy(&GetStaticLayout()->mActiveHullsForLocalPlayer, lpActiveHulls, sizeof(*lpActiveHulls));
     }
 
     // @0x82707438
@@ -164,15 +155,17 @@ namespace BrnReplays
     // 64-bit *lpBits is copied unchanged. (The Hex-Rays `HIDWORD(v7) = 0x10000` is a
     // decompiler mis-model of `lis r9,1; ori r31,r9,0x9190` building the 0x19190 == 102800
     // memcpy size in r31; there is no high-dword rewrite in the raw asm.)
-    void TrafficEntitySerialiser::SetPhysicsData(const u64* lpBits, const void* lpaPhysicsInfo)
+    void TrafficEntitySerialiser::SetPhysicsData(const CgsContainers::BitArray<KU_NUM_PHYSICS_INFO>* lpBits,
+                                                  const BrnTraffic::TrafficPhysicsInfo* lpaPhysicsInfo)
     {
         CGS_ASSERT(lpBits != 0, "lpBits");
         CGS_ASSERT(lpaPhysicsInfo != 0, "lpaPhysicsInfo");
 
         TrafficEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
         // asm: ld r10,0(a2) ; std r10,0xF0(layout) -- copy all 8 bytes of *lpBits as-is.
-        const u64 lu64Bits = *lpBits;
-        std::memcpy(&lpLayout->mPhysicsBits, &lu64Bits, sizeof(lu64Bits));
+        CGS_STATIC_ASSERT((sizeof(lpLayout->mPhysicsBits) == sizeof(*lpBits)),
+                          "ARTIST traffic replay physics mask extent");
+        std::memcpy(&lpLayout->mPhysicsBits, lpBits, sizeof(*lpBits));
 
         std::memcpy(lpLayout->maPhysicsInfo, lpaPhysicsInfo, KU_PHYSICS_INFO_TOTAL);
     }
@@ -188,7 +181,7 @@ namespace BrnReplays
         s32 liPhysicalPartsIndex = -1;
         if ((lpVehicle->GetFlags() & BrnTraffic::Vehicle::E_FLAG_PHYSICAL) != 0)
         {
-            liPhysicalPartsIndex = lpVehicle->GetPhysicalPartsIndex();
+            liPhysicalPartsIndex = static_cast<s8>(lpVehicle->GetPhysicalPartsIndex());
         }
 
         TrafficVehicleDataRecord* lpRecord = GetVehicleData(luVehicle);
@@ -258,17 +251,17 @@ namespace BrnReplays
         CGS_ASSERT(lpFrame != 0, "lpFrame");
         // The X360 fires FOUR alignment asserts under the single (ptr & 0xF) != 0 guard
         // (0x8265DD9C-0x8265DE18), each citing a distinct member.
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maHeader) & 0xf) == 0,
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mActiveHullsForLocalPlayer) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0");
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maHeader) & 0xf) == 0,
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mActiveHullsForLocalPlayer) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0");
         CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maPhysicsInfo) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->maPhysicsInfo) & 0xf) == 0");
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maTrafficLightState) & 0xf) == 0,
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0");
 
-        BaseSerialiser::Read(lpFrame->maHeader, 148);
-        BaseSerialiser::Read(lpFrame->maTrafficLightState, 2);
+        BaseSerialiser::Read(&lpFrame->mActiveHullsForLocalPlayer, 148);
+        BaseSerialiser::Read(&lpFrame->muLocalPlayerHull, 2);
         // The bonus-asset count is read with the 1-byte ReadByte primitive (sub_8264FCF0),
         // not the general Read(_,1).
         BaseSerialiser::ReadByte(&lpFrame->muNumBonusAssets);
@@ -297,22 +290,14 @@ namespace BrnReplays
             ReadPhysicsInfo(&lpFrame->maPhysicsInfo[luInfo], luInfo, liArg3);
         }
 
-        // Trailing slot table (loc_8265E780-0x8265E7E0): read KU_NUM_SLOTS one-byte slots
-        // at stride KU_SLOT_STRIDE starting at the slot-table base, read one more byte
-        // into a local, store its inverted-zero test into muReadSlotsValid, then read the
-        // 4-byte muReadSlotsWord.
-        u8* lpSlot = lpFrame->maSlotTable;
-        for (u32 luSlot = 0; luSlot < KU_NUM_SLOTS; ++luSlot)
-        {
-            BaseSerialiser::ReadByte(lpSlot);
-            lpSlot += KU_SLOT_STRIDE;
-        }
-        u8 luByte = 0;
-        BaseSerialiser::ReadByte(&luByte);
-        // asm 0x8265E7C8-0x8265E7DC: cntlzw(byte); extrwi ,1,26 (== (clz>>5)&1 == (byte==0));
-        // xori ,1  -> stored value is (byte != 0) ? 1 : 0.
-        lpFrame->muReadSlotsValid = (luByte != 0) ? 1u : 0u; // ((cntlzw(byte)>>5)&1) ^ 1
-        BaseSerialiser::Read(&lpFrame->muReadSlotsWord, 4);
+        // ARTIST 0x8265E780: only each native light's flags byte is serialized.
+        BrnTraffic::TrafficLightManager& lrLights = lpFrame->mTrafficLightManager;
+        for (u32 i = 0; i < BrnTraffic::KU_MAX_TRAFFIC_LIGHT_INSTANCES; ++i)
+            BaseSerialiser::ReadByte(&lrLights.maLightStates[i].mxStateBits);
+        u8 luCountdown = 0;
+        BaseSerialiser::ReadByte(&luCountdown);
+        lrLights.mbCountdownLights = luCountdown != 0;
+        BaseSerialiser::Read(&lrLights.meCountdownState, 4);
     }
 
     // @0x8265D288
@@ -322,17 +307,17 @@ namespace BrnReplays
         CGS_ASSERT(lpFrame != 0, "lpFrame");
         // The X360 fires FOUR alignment asserts under the single (ptr & 0xF) != 0 guard
         // (0x8265D2EC-0x8265D368), each citing a distinct member.
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maHeader) & 0xf) == 0,
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mActiveHullsForLocalPlayer) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0");
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maHeader) & 0xf) == 0,
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mActiveHullsForLocalPlayer) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0");
         CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maPhysicsInfo) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->maPhysicsInfo) & 0xf) == 0");
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maTrafficLightState) & 0xf) == 0,
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0");
 
-        BaseSerialiser::Write(lpFrame->maHeader, 148);
-        BaseSerialiser::Write(lpFrame->maTrafficLightState, 2);
+        BaseSerialiser::Write(&lpFrame->mActiveHullsForLocalPlayer, 148);
+        BaseSerialiser::Write(&lpFrame->muLocalPlayerHull, 2);
         BaseSerialiser::Write(&lpFrame->muNumBonusAssets, 1);
         BaseSerialiser::Write(lpFrame->maBonusAssets, 2);
         BaseSerialiser::Write(&lpFrame->mVehicleUpdateBits, 80);
@@ -358,17 +343,12 @@ namespace BrnReplays
                              static_cast<u8>(luInfo));
         }
 
-        // Trailing slot table (loc_8265DCD4-0x8265DD28): write KU_NUM_SLOTS one-byte slots at
-        // stride KU_SLOT_STRIDE, then the SAME +148080/+148084 slots-valid scalars the read side
-        // uses (asm r29=a2+143280, Write(+0x12C0,1)/Write(+0x12C4,4) -- no read/write asymmetry).
-        const u8* lpSlot = lpFrame->maSlotTable;
-        for (u32 luSlot = 0; luSlot < KU_NUM_SLOTS; ++luSlot)
-        {
-            BaseSerialiser::Write(lpSlot, 1);
-            lpSlot += KU_SLOT_STRIDE;
-        }
-        BaseSerialiser::Write(&lpFrame->muReadSlotsValid, 1);  // +148080
-        BaseSerialiser::Write(&lpFrame->muReadSlotsWord, 4);   // +148084
+        // ARTIST 0x8265DCD4: flags bytes, countdown bool and state, in that order.
+        const BrnTraffic::TrafficLightManager& lrLights = lpFrame->mTrafficLightManager;
+        for (u32 i = 0; i < BrnTraffic::KU_MAX_TRAFFIC_LIGHT_INSTANCES; ++i)
+            BaseSerialiser::Write(&lrLights.maLightStates[i].mxStateBits, 1);
+        BaseSerialiser::Write(&lrLights.mbCountdownLights, 1);
+        BaseSerialiser::Write(&lrLights.meCountdownState, 4);
     }
 
     // @0x8265F2D8

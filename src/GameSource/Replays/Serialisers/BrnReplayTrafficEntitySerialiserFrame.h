@@ -16,15 +16,15 @@
 // region at +148112.
 //
 // REGION MAP (static-base offsets, all from the accessor ASM):
-//   +0x00000 (0)       mHeader              148 bytes  (Read/Write a2,148)
-//   +0x00094 (148)     mTrafficLightState   2 bytes    (Read/Write a2+148,2)
+//   +0x00000 (0)       mActiveHullsForLocalPlayer 148 bytes  (Read/Write a2,148)
+//   +0x00094 (148)     muLocalPlayerHull    2 bytes    (local-player hull marker; Read/Write a2+148,2)
 //   +0x00096 (150)     muNumBonusAssets     1 byte     (SetBonusAssets stores count here)
 //   +0x00097 (151)     maBonusAssets[ . ]   2 bytes    (SetBonusAssets stores assets +151+i; Read/Write a2+151,2)
 //   +0x000A0 (160)     mVehicleUpdateBits   FastBitArray<600> (80 bytes / 10 u64; Read/Write a2+160,80)
 //   +0x000F0 (240)     mPhysicsBits         FastBitArray<25>  (8 bytes / 1 u64;  Read/Write a2+240,8)
 //   +0x00100 (256)     maVehicleChunks[3]   3 vehicle chunks, stride 13408
-//   +0x242C0 (148096)  mInfoValid (key/restore flags word region used by Read/Write/Check)
-//   +0x242D0 (148112)  maPreviousPhysicsInfo  102800 bytes (25*4112) prev-frame physics copy
+//   +0x24280 (148096)  mInfoValid (key/restore flags word region used by Read/Write/Check)
+//   +0x24290 (148112)  maPreviousPhysicsInfo  102800 bytes (25*4112) prev-frame physics copy
 //
 //   Within a vehicle chunk (stride 13408, base +256):
 //     +0    maVehicleData[200]    3 bytes each   (GetVehicleData: +13408*chunk + 3*local + 256)
@@ -34,7 +34,9 @@
 //     GetPhysicsInfo: 4112*index + base + 40480.
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Containers/CgsFastBitArray.h"
+#include "GameSource/Replays/Serialisers/BrnReplayTrafficSerialiserFrame.h"
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficLightManager.h"
+#include <cstddef>
 
 namespace BrnTraffic { class Vehicle; }
 
@@ -67,9 +69,6 @@ namespace BrnReplays
     // Total recorded physics-info bytes copied by Set/Read/Write (102800 == 25 * 4112).
     static const u32 KU_PHYSICS_INFO_TOTAL = KU_NUM_PHYSICS_INFO * KU_PHYSICS_INFO_STRIDE;
 
-    // KU_MAX_BONUS_STREAMED_ASSETS -- SetBonusAssets asserts the count <= 2.
-    static const u32 KU_MAX_BONUS_STREAMED_ASSETS = 2;
-
     // Max detached parts WritePhysicsInfo asserts (muNumDetachedParts <= 20).
     static const u32 KU_MAX_DETACHED_PARTS = 20;
 
@@ -78,19 +77,8 @@ namespace BrnReplays
     static const u32 KU_OFFSET_VEHICLE_DATA      = 256;     // +0x100
     static const u32 KU_OFFSET_VEHICLE_TRANSFORM = 864;     // +0x360
     static const u32 KU_OFFSET_PHYSICS_INFO      = 40480;   // +0x9E20
-    static const u32 KU_OFFSET_SLOT_TABLE        = 143285;  // +0x22FB5  (== phys-info end +5)
-    static const u32 KU_OFFSET_INFO_VALID        = 148096;  // +0x242C0
-    static const u32 KU_OFFSET_PREV_PHYSICS_INFO = 148112;  // +0x242D0
-
-    // The trailing slot table (ReadFrame loc_8265E780 / WriteFrame loc_8265DCD4):
-    // KU_NUM_SLOTS one-byte entries at stride KU_SLOT_STRIDE, the first at +143285.
-    static const u32 KU_NUM_SLOTS                = 600;     // 0x258
-    static const u32 KU_SLOT_STRIDE              = 8;       // bytes between slot entries
-    // The trailing slots-valid scalars (sub_8264FCF0-derived byte + a 4-byte word). BOTH the
-    // read (ReadFrame 0x8265E7DC) and write (WriteFrame 0x8265DCD4: r29=a2+143280, +0x12C0/+0x12C4)
-    // sides use these SAME offsets -- there is no read/write asymmetry.
-    static const u32 KU_OFFSET_READ_SLOTS_VALID  = 148080;  // +0x242B0  (r29 + 0x12C0)
-    static const u32 KU_OFFSET_READ_SLOTS_WORD   = 148084;  // +0x242B4  (r29 + 0x12C4)
+    static const u32 KU_OFFSET_INFO_VALID        = 148096;  // +0x24280
+    static const u32 KU_OFFSET_PREV_PHYSICS_INFO = 148112;  // +0x24290
 
     // One per-vehicle data record (3 bytes; GetVehicleData / SetVehicleData operate on it).
     // The internal field breakdown is not separately attested, so it is held as bytes.
@@ -102,7 +90,7 @@ namespace BrnReplays
     // BrnReplays::TrafficVehicleData -- the (de)serialiser for one TrafficVehicleDataRecord.
     // SetVehicleData @0x82714060 calls SetFromVehicle(record, vehicle, physicalPartsIndex)
     // to populate the 3-byte record from a live BrnTraffic::Vehicle. No DWARF recovered;
-    // declared here (its home), body in the (not-yet reconstructed) TrafficVehicleData TU.
+    // defined in BrnReplayTrafficEntitySerialiser.cpp.
     namespace TrafficVehicleData
     {
         void SetFromVehicle(TrafficVehicleDataRecord* lpRecord,
@@ -128,41 +116,30 @@ namespace BrnReplays
 
     // The 251008-byte static-layout buffer GetStaticLayout returns. Only the regions the
     // accessors prove are named; the spans between them are explicit padding.
-    struct TrafficEntitySerialiserStaticLayout
+    struct TrafficEntitySerialiserStaticLayout : TrafficSerialiserFrame
     {
-        u8                       maHeader[148];               // @0x00000  mHeader
-        u8                       maTrafficLightState[2];      // @0x00094
-        u8                       muNumBonusAssets;            // @0x00096
-        u8                       maBonusAssets[2];            // @0x00097  (count at +150, assets +151..)
-        u8                       maPad0099[160 - 153];        // @0x00099  -> +0xA0
-        CgsContainers::FastBitArray<600> mVehicleUpdateBits;  // @0x000A0  80 bytes
-        CgsContainers::FastBitArray<25>  mPhysicsBits;        // @0x000F0  8 bytes
         // @0x000F8 .. @0x00100 : 8 undecoded bytes before the vehicle chunks.
         u8                       maPad00F8[256 - 248];        // @0x000F8
         // 3 vehicle chunks, each KU_VEHICLE_CHUNK_STRIDE (13408) bytes.
         u8                       maVehicleChunks[KU_NUM_VEHICLE_CHUNKS * KU_VEHICLE_CHUNK_STRIDE]; // @0x00100
         // @0x100 + 3*13408 == 40480 == KU_OFFSET_PHYSICS_INFO (the chunks run right up to it).
         TrafficPhysicsInfoRecord maPhysicsInfo[KU_NUM_PHYSICS_INFO]; // @0x09E20  25 * 4112 == 102800
-        // @0x9E20 + 102800 == 143280; the slot table begins +5 bytes later, at +143285.
-        u8                       maPad22FB0[KU_OFFSET_SLOT_TABLE - (KU_OFFSET_PHYSICS_INFO + KU_PHYSICS_INFO_TOTAL)]; // @0x22FB0  5 bytes
-        // The slot table: KU_NUM_SLOTS one-byte entries at stride KU_SLOT_STRIDE
-        // (only byte 0 of each 8-byte slot is used; ReadFrame/WriteFrame walk these).
-        // Held as a flat byte region so the strided access lands at maSlotTable[i*8];
-        // the read-side trailing scalars below reuse this region's tail bytes.
-        u8                       maSlotTable[KU_OFFSET_READ_SLOTS_VALID - KU_OFFSET_SLOT_TABLE]; // @0x22FB5
-        u8                       muReadSlotsValid;            // @0x242B0  read-side (cntlzw>>5 ^1)
-        u8                       maPad242B1[KU_OFFSET_READ_SLOTS_WORD - (KU_OFFSET_READ_SLOTS_VALID + 1)]; // 3 bytes
-        u32                      muReadSlotsWord;             // @0x242B4  read-side BaseSerialiser::Read(_,4)
-        u8                       maPad242B8[KU_OFFSET_INFO_VALID - (KU_OFFSET_READ_SLOTS_WORD + 4)]; // -> +0x242C0
-        // The info-valid qword (@0x242C0). Read() snapshots the whole 8 bytes from mPhysicsBits;
-        // Block-A and the Write path memset it to 0. It is NOT a write-side trailing-scalar source:
-        // WriteFrame writes the SAME +148080/+148084 slots-valid scalars the read side uses (the
-        // earlier "asymmetric +148096/+148100" reading was a mis-read of the WriteFrame asm).
-        u64                      mInfoValid;          // @0x242C0  (8-byte snapshot word)
-        // @0x242C8 .. @0x242D0 : 8 undecoded bytes before the previous-physics-info copy.
-        u8                       maPad242C8[KU_OFFSET_PREV_PHYSICS_INFO - (KU_OFFSET_INFO_VALID + 8)];
-        u8                       maPreviousPhysicsInfo[KU_PHYSICS_INFO_TOTAL]; // @0x242D0  102800 bytes
-        // @0x242D0 + 102800 == 250912 .. 251008 : trailing undecoded bytes.
+        // ARTIST UpdateSerialiser 0x8272E1F8..E240 copies the native manager here.
+        BrnTraffic::TrafficLightManager mTrafficLightManager; // @0x22FB0, 0x12D0 bytes
+        u64                      mInfoValid;          // @0x24280  (8-byte snapshot word)
+        // @0x24288 .. @0x24290: 8 undecoded bytes before the previous-physics-info copy.
+        u8                       maPad24288[KU_OFFSET_PREV_PHYSICS_INFO - (KU_OFFSET_INFO_VALID + 8)];
+        u8                       maPreviousPhysicsInfo[KU_PHYSICS_INFO_TOTAL]; // @0x24290  102800 bytes
+        // @0x24290 + 102800 == 250912 .. 251008 : trailing undecoded bytes.
         u8                       maTail[KU_STATIC_BUFFER_SIZE - (KU_OFFSET_PREV_PHYSICS_INFO + KU_PHYSICS_INFO_TOTAL)];
     };
+#if defined(_XBOX)
+    CGS_STATIC_ASSERT((sizeof(BrnTraffic::TrafficLightRuntimeState) == 8), "ARTIST traffic-light state stride");
+    CGS_STATIC_ASSERT((offsetof(BrnTraffic::TrafficLightRuntimeState, mxStateBits) == 5), "ARTIST traffic-light flags offset");
+    CGS_STATIC_ASSERT((sizeof(BrnTraffic::TrafficLightManager) == 0x12D0), "ARTIST traffic-light manager size");
+    CGS_STATIC_ASSERT((offsetof(TrafficEntitySerialiserStaticLayout, mTrafficLightManager) == 0x22FB0), "ARTIST traffic-light snapshot");
+    CGS_STATIC_ASSERT((offsetof(TrafficEntitySerialiserStaticLayout, mInfoValid) == 0x24280), "ARTIST info-valid offset");
+    CGS_STATIC_ASSERT((offsetof(TrafficEntitySerialiserStaticLayout, maPreviousPhysicsInfo) == 0x24290), "ARTIST previous-physics offset");
+    CGS_STATIC_ASSERT((sizeof(TrafficEntitySerialiserStaticLayout) == 0x3D480), "ARTIST traffic replay static size");
+#endif
 }

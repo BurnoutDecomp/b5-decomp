@@ -12,8 +12,8 @@
 //   vrlimi v12,v127,4,0 -> this+0x30 .y    mMass_WheelRadius_Z_W.mV.y       REAL (wheel radius)
 //   vrlimi v12,v13, 8,0 -> this+0x30 .x    mMass_WheelRadius_Z_W.mV.x       REAL
 //   stb 0x5C(r16) + 0x48+i                 miNumPaintColours / maiPaint  REAL
-//   vrlimi v13,v0,8,2 @0x82761F24          .x mCabPivot     (tag 29)     GATED (leg 3)
-//   vrlimi v13,v0,4,1 @0x82761F88          .y mTrailerPivot (tag 28)     GATED (leg 3)
+//   vrlimi v13,v0,8,2 @0x82761F24          .x mCabPivot     (tag 29)     REAL
+//   vrlimi v13,v0,4,1 @0x82761F88          .y mTrailerPivot (tag 28)     REAL
 //
 // Spec offsets resolve to NAMED members through the static_asserts already in
 // BrnStreamedDeformationSpec.h: +64 mHandlingBodyDimensions, +80/+96 +48*i the wheel
@@ -24,8 +24,7 @@
 // VMX lane merges: `vrlimi128 vD, vS, mask, sh` rotates vS and inserts the mask-selected
 // words into vD, mask 8/4/2/1 == words 0/1/2/3. The axle pair uses masks 1 (.w FwdAxle) and
 // 2 (.z BackAxle) with rotates 3 and 0, which put the SAME source lane -- word 2, the wheel's
-// mPosition.z -- into both. Leg 3's masks 8/4 (words 0/1) are disjoint from these, so gating
-// it cannot disturb the axle lanes.
+// mPosition.z -- into both. The locator masks 8/4 (words 0/1) are disjoint from the axle lanes.
 // ============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicleTypeRuntime.h"
@@ -37,7 +36,6 @@
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
-#include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags
 
 #include <cmath>   // fabsf -- the console's `vandc` sign-bit clear on the wheel-size compare
 
@@ -55,22 +53,10 @@ namespace
     // three lanes following it are the shared 0.0174533 / 57.2958 / pi trio.
     const f32 KF_WHEEL_SIZE_EPSILON = 1.52588e-05f;
 
-    // [T1-traffic-leg] one-shot gate log. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    void LogMissingLeg( bool& lrbAlreadyLogged, const char* lpcLegNameAndReason )
-    {
-        if ( lrbAlreadyLogged )
-        {
-            return;
-        }
-        lrbAlreadyLogged = true;
 
-        if ( ( CgsDev::Message::gxMessageFilterFlags & 1 ) != 0 && CgsDev::Log::gpDebugPrint != 0 )
-        {
-        }
-    }
 }
 
-// VehicleTypeRuntime::Prepare @0x82761B10 *** PARTIAL ***
+// VehicleTypeRuntime::Prepare @0x82761B10
 // DWARF :66 `void Prepare(const StreamedDeformationSpec*, Attribute::Key)`; the second
 // parameter takes the console's real 8-byte width (see the header's note).
 //
@@ -149,7 +135,7 @@ void VehicleTypeRuntime::Prepare(
     // FwdAxle  (.w, mask 1) <- maWheelSpecs[1].mPosition longitudinal lane   (a FRONT wheel)
     // BackAxle (.z, mask 2) <- maWheelSpecs[3].mPosition longitudinal lane   (a REAR wheel)
     // .x (CabPivot) and .y (TrailerPivot) are written later in the console body, by the
-    // mGenericTags locator walk (GATED LEG 3 below).
+    // mGenericTags locator walk below.
     mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV.w = laWheelPositions[1].mV.z;
     mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV.z = laWheelPositions[3].mV.z;
 
@@ -171,36 +157,39 @@ void VehicleTypeRuntime::Prepare(
     CGS_ASSERT( lfMass > 0.0f, "lVehicleAttribs.mBaseAttribs.GetMass() > 0.0f" );   // .cpp:125
     mMass_WheelRadius_Z_W.mV.x = lfMass;
 
+    // ARTIST 82761E04..82761FA4: transpose the handling 3x3 and transform
+    // the negated translation in the original VMX product/FMA order.
+    const Matrix44Affine& lrHandling = lpSpec->mCarModelSpaceToHandlingBodySpaceTransform;
+    const __vector4 zero = __vspltisw(0);
+    const __vector4 lowY = __vmrglw(lrHandling.Up().mV, zero);
+    const __vector4 lowXZ = __vmrglw(lrHandling.Right().mV, lrHandling.At().mV);
+    const __vector4 highY = __vmrghw(lrHandling.Up().mV, zero);
+    const __vector4 highXZ = __vmrghw(lrHandling.Right().mV, lrHandling.At().mV);
+    const __vector4 rowZ = __vmrghw(lowXZ, lowY);
+    const __vector4 rowX = __vmrghw(highXZ, highY);
+    const __vector4 rowY = __vmrglw(highXZ, highY);
+    const __vector4 negPos = __vsubfp(zero, lrHandling.Pos().mV);
+    __vector4 inversePos = __vmulfp(__vspltw(negPos, 2), rowZ);
+    inversePos = __vmaddfp(__vspltw(negPos, 1), rowY, inversePos);
+    inversePos = __vmaddfp(__vspltw(negPos, 0), rowX, inversePos);
+
+    const BrnPhysics::Deformation::LocatorPointSpecList& lrTags = lpSpec->mGenericTags;
+    for (u32 luTag = 0; luTag < lrTags.GetNumLocatorPoints(); ++luTag)
     {
-        // GATED LEG 3 -- the LOCATOR walk over mGenericTags (0x82761E00..0x82761E60).
-        //
-        // The console walks mGenericTags' muNumLocators locators for tag types 28 and 29,
-        // transforms each hit's translation by a matrix composed from
-        // mCarModelSpaceToHandlingBodySpaceTransform (spec + 1552) and the negated COM row,
-        // and vrlimi's the results into this+0x20:
-        //     tag 29: 0x82761F24 vrlimi128 v13, v0, 8, 2   mask 8 -> word 0 -> .x mCabPivot
-        //     tag 28: 0x82761F88 vrlimi128 v13, v0, 4, 1   mask 4 -> word 1 -> .y mTrailerPivot
-        //     both:   0x82761F8C stvx128   v13, r0, r29    (r29 == this + 0x20)
-        //
-        // BLOCKERS: (1) the composed matrix comes out of a vmrghw/vmrglw transpose plus a
-        // vsubfp negation of one row, a lane layout this cluster will not guess; (2) tag ids
-        // 28 and 29 have no named enumerator in this tree's ETagPointType.
-        //
-        // CONSEQUENCE: the axle lanes above use masks 1 and 2 (words 3 and 2), disjoint from
-        // this walk's words 0 and 1, so they are unaffected. But on any vehicle type carrying
-        // a type-28/29 locator, mCabPivot and mTrailerPivot keep Construct's {-1.5f, 1.5f}
-        // placeholder. The live reader is BrnTrafficVehicle.cpp:511
-        // (`- lpVehicleTypeRuntime->GetTrailerPivotDistance()`), so a trailered type's
-        // articulation point sits at the placeholder until this walk lands.
-        static bool sbLogged = false;
-        LogMissingLeg( sbLogged,
-            "VehicleTypeRuntime::Prepare mGenericTags locator walk (tag types 28/29, .h:98 "
-            "\"luTag < muNumLocators\") -- it composes a matrix by vmrghw/vmrglw transpose of "
-            "mCarModelSpaceToHandlingBodySpaceTransform against a negated COM row and this "
-            "cluster will not guess a transpose (see the shadow wave). It writes .x mCabPivot "
-            "(tag 29) and .y mTrailerPivot (tag 28) -- NOT the axle lanes -- so types WITHOUT "
-            "such a locator are unaffected and types with one keep Construct's {-1.5f, 1.5f} "
-            "placeholder, which BrnTrafficVehicle.cpp:511 reads via GetTrailerPivotDistance()" );
+        const BrnPhysics::Deformation::ETagPointType leType = lrTags.GetLocatorTy(luTag);
+        if (leType == BrnPhysics::Deformation::E_TAGPOINT_ARTICULATIONPOINT_REAR ||
+            leType == BrnPhysics::Deformation::E_TAGPOINT_ARTICULATIONPOINT_FRONT)
+        {
+            const __vector4 tagPos = lrTags.GetLocatorXf(luTag)->Pos().mV;
+            __vector4 point = __vmaddfp(rowX, __vspltw(tagPos, 0), inversePos);
+            point = __vmaddfp(rowY, __vspltw(tagPos, 1), point);
+            point = __vmaddfp(rowZ, __vspltw(tagPos, 2), point);
+            const int mask = leType == BrnPhysics::Deformation::E_TAGPOINT_ARTICULATIONPOINT_REAR ? 8 : 4;
+            if (mask == 8)
+                mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV = __vrlimi(mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV, point, 8, 2);
+            else
+                mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV = __vrlimi(mCabPivot_TrailerPivot_BackAxle_FwdAxle.mV, point, 4, 1);
+        }
     }
 
     // ---- 0x82761FA8..0x82762070: the random-traffic paint palette (DWARF .cpp:176/:179) ----

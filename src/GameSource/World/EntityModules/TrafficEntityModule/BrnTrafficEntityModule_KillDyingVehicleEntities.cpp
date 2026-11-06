@@ -88,16 +88,33 @@ void TrafficEntityModule::KillDyingVehicleEntity(
     // ---- arm 1: articulation (mArticulatedVehicles, +164880) ---------------------------
     if (mVehicleSoaData.mArticulatedVehicles.IsBitSet(luVehicle))
     {
-        // GATE: the cab/trailer detach pair (.cpp 4478..4508) -- Vehicle::DetachArticulation
-        // @? has no body in this tree (same blocker KillParam's own trailer gate names at
-        // _wT2_01.cpp). DEAD ON THIS BUILD: trailers are wave-gated out of FillNewHull /
-        // GenerateNewVehicle, so nothing ever sets an mArticulatedVehicles bit.
-        // DELETE-WHEN DetachArticulation lands with the trailer wave.
-        static bool sbLogged = false;
-        LogMissingLeg(sbLogged,
-            "KillDyingVehicleEntity articulation arm (.cpp 4478..4508) -- "
-            "Vehicle::DetachArticulation has no body; dead here because trailers are "
-            "wave-gated out of spawning");
+        // ARTIST 8272EF54..8272F09C. A surviving trailer becomes an orphan;
+        // a dying trailer instead requires its cab to be alive. Assertions do not
+        // gate the original detach calls.
+        Vehicle* const lpVehicle = GetVehicle(luVehicle);
+        if (lpVehicle->IsOfStandardSpecies())
+        {
+            CGS_ASSERT(lpVehicle->GetTrailerIndex() != KU_INVALID_VEHICLE,
+                       "lpVehicle->GetTrailerIndex() != KU_INVALID_VEHICLE");
+            const u32 luTrailer = lpVehicle->GetTrailerIndex();
+            Vehicle* const lpTrailer = GetVehicle(luTrailer);
+            if (lpTrailer->IsAlive())
+            {
+                lpTrailer->SetOrphan();
+                lpTrailer->DetachArticulation(luTrailer, mVehicleSoaData);
+            }
+        }
+        else
+        {
+            CGS_ASSERT(lpVehicle->IsOfTrailerSpecies(), "lpVehicle->IsOfTrailerSpecies()");
+            CGS_ASSERT(lpVehicle->GetCabIndex() != KU_INVALID_VEHICLE,
+                       "lpVehicle->GetCabIndex() != KU_INVALID_VEHICLE");
+            const u32 luCab = lpVehicle->GetCabIndex();
+            Vehicle* const lpCab = GetStandardVehicle(luCab);
+            CGS_ASSERT(lpCab->IsAlive(), "lpCab->IsAlive()");
+            lpCab->DetachArticulation(luCab, mVehicleSoaData);
+        }
+        lpVehicle->DetachArticulation(luVehicle, mVehicleSoaData);
     }
 
     // ---- arm 2: physics demotion (mPhysicalVehicles, +164800) --------------------------
