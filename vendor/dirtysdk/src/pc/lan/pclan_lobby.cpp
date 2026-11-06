@@ -84,6 +84,10 @@ namespace
     // the SYSFLAGS bit LockGame sets on the wire record
     const u32 KU_SYSFLAG_LOCKED = 0x1000u;
 
+    // the SYSFLAGS bit of a started game (KU_GAME_FLAGS_STARTED's wire column in
+    // CgsServerInterfaceGameFlags.cpp; the game manager tests the same 0x80000)
+    const u32 KU_SYSFLAG_STARTED = 0x80000u;
+
     // kick reasons (CgsNetwork::EKickReason order)
     const s32 KI_KICK_NOGAME          = 1;
     const s32 KI_KICK_LOST_CONNECTION = 4;
@@ -523,7 +527,21 @@ namespace
     {
         if (iKind == KI_REQ_START)
         {
+            // FLAG PC-platform leaf: the lobby server set this on 'gsta' and this layer stands in
+            // for it. Without it ServerInterfaceGames::IsGameStarted stays false and
+            // LaunchManager::UpdateLaunching waits forever.
+            g_Lobby.Play.uSysflags |= KU_SYSFLAG_STARTED;
             _HostPublish(KI_EVENT_PLAY, true);
+            return 0;
+        }
+        if (iKind == KI_REQ_RANK)
+        {
+            // FLAG PC-platform leaf: the other half of the stand-in above. The game never clears
+            // the started flag itself: PostRoundManager sends its results ('rank') and then waits
+            // for the lobby server to un-start the game (UpdateWaitGameUnstart @0x8256D338). A
+            // client still seeing the flag in the post-race lobby would launch on its own.
+            g_Lobby.Play.uSysflags &= ~KU_SYSFLAG_STARTED;
+            _HostPublish(KI_EVENT_GAME, true);
             return 0;
         }
         if ((iKind == KI_REQ_LEAVE) || (iKind == KI_REQ_DELETE))
@@ -594,7 +612,9 @@ namespace
         }
         if ((pField = TagFieldFind(pRequest, "SYSFLAGS")) != NULL)
         {
-            g_Lobby.Play.uSysflags = (u32)TagFieldGetNumber(pField, 0);
+            // FLAG PC-platform leaf: the started bit is this layer's, as it was the lobby server's.
+            g_Lobby.Play.uSysflags = ((u32)TagFieldGetNumber(pField, 0) & ~KU_SYSFLAG_STARTED)
+                                   | (g_Lobby.Play.uSysflags & KU_SYSFLAG_STARTED);
         }
         if ((pField = TagFieldFind(pRequest, "CUSTFLAGS")) != NULL)
         {
