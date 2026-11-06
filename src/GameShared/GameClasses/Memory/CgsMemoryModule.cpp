@@ -32,25 +32,6 @@ namespace CgsMemory
         return mpu8IdMap[luBankId];
     }
 
-    // Synchronous bank-create helper (see the header): CreateBank then hand back the new bank's per-type
-    // memory. Used by GameDataModule::CreatePools to source pool memory from the MemoryModule banks
-    // instead of the raw debug heap (the faithful async CreateBankRequest dispatch is the follow-on).
-    bool MemoryModule::CreatePoolBank(const MemoryBank::Params* lpParams, rw::Resource& lrOut)
-    {
-        if (CreateBank(lpParams) != 0)   // 0 == success
-            return false;
-        const u8 lu8Index = GetBankIndexFromId(static_cast<u32>(lpParams->mnBankId));
-        if (lu8Index == MemoryBank::KU_INVALID_BANK)
-            return false;
-        MemoryBank* lpBank = GetBank(lu8Index);
-        if (lpBank == 0)
-            return false;
-        // rw::Resource carries 4 base pointers; the pool memory types in use (0=main, 1=graphics) fit.
-        for (s32 lt = 0; lt < MemoryBank::KI_NUM_TYPES; ++lt)
-            lrOut.m_baseResources[lt] = lpBank->GetData(lt);
-        return true;
-    }
-
     // @ 0x828670D0 - reset every bank record to "unused" + clear its id-map slot and name buffer.
     void MemoryModule::InitBanks()
     {
@@ -141,7 +122,7 @@ namespace CgsMemory
             {
                 u32 luFirstBlock;
                 u32 luLastBlock;
-                if (!AllocateBlocks(lrRegion.muNumBlocks, 0, static_cast<u8>(lt), false,
+                if (!AllocateBlocks(lrRegion.muNumBlocks, 0, static_cast<u16>(lt), false,
                                     &luFirstBlock, &luLastBlock))
                 {
                     FireRootBankAssert("Failed to allocate blocks for root bank\n", 1007);
@@ -533,10 +514,10 @@ namespace CgsMemory
     // with the new bank's per-type data pointers. For every memory type in the request's resource
     // descriptor: round the requested size up to the parent bank's block granule (block size in 1KB units
     // -> <<10) and compute the block count; build a one bank Params covering all types; CreateBank; then
-    // gather the created bank's GetData(type) into the response's rw::Resource. This is the async/message-
-    // driven equivalent of the synchronous GameDataModule pool-bank carve (CreatePoolBank); the sizing +
-    // field accessors are faithful to the X360. The canonical request and native rw allocator
-    // descriptor both carry five lanes, matching the original reader traversal.
+    // gather the created bank's GetData(type) into the response's rw::Resource. This is the
+    // async/message-driven resource-bank path. The sizing and field accessors are faithful to the X360;
+    // the canonical request and native rw allocator descriptor both carry five lanes, matching the
+    // original reader traversal.
     void MemoryModule::ProcessCreateResourceRequest(const MemoryIO::MemoryRequest* lpRequest, MemoryIO::OutputBuffer* lpOutput)
     {
         const MemoryIO::CreateResourceRequest* lpReq = static_cast<const MemoryIO::CreateResourceRequest*>(lpRequest);
@@ -778,7 +759,7 @@ namespace CgsMemory
             u32 luFirstBlock = 0;
             u32 luLastBlock  = 0;
             const u32 luNumBlocks = lauNumBlocksNeeded[lt];
-            if (!AllocateBlocks(static_cast<u16>(luNumBlocks), lu8NewSlot, static_cast<u8>(lt),
+            if (!AllocateBlocks(static_cast<u16>(luNumBlocks), lu8NewSlot, static_cast<u16>(lt),
                                 lpRequest->mu8Flag != 0, &luFirstBlock, &luLastBlock))
                 return 6;
 
@@ -800,11 +781,11 @@ namespace CgsMemory
     // @ 0x82869880 - allocate luCount blocks off the FRONT of the global free list: tag each block with
     // its parent bank + type, optionally mark it used, then unlink the run and return its first/last
     // index. Fails (false, outputs = invalid) if there aren't enough free blocks.
-    bool MemoryModule::AllocateBlocks(u16 lu16Count, u8 lu8BankId, u8 lu8Type, bool lbMarkUsed,
+    bool MemoryModule::AllocateBlocks(u16 lu16Count, u16 lu16BankId, u16 lu16Type, bool lbMarkUsed,
                                       u32* lpuOutFirstBlock, u32* lpuOutLastBlock)
     {
         CGS_ASSERT(lpuOutFirstBlock != 0 && lpuOutLastBlock != 0, "Invalid First/Last block output pointers");
-        CGS_ASSERT(lu8BankId < 0xFFu, "Invalid bank index");
+        CGS_ASSERT(lu16BankId < 0xFFu, "Invalid bank index");
 
         if (lu16Count > muNumFreeBlocks)
         {
@@ -822,8 +803,8 @@ namespace CgsMemory
                        "Block layout has become corrupt - free list does not match free count");
             MemoryBlock& lrBlock  = mpBlocks[luBlock];
             lrBlock.mu8ChildBank  = static_cast<u8>(MemoryBank::KU_INVALID_BANK);
-            lrBlock.mu8ParentBank = lu8BankId;
-            lrBlock.mu8Type       = lu8Type;
+            lrBlock.mu8ParentBank = static_cast<u8>(lu16BankId);
+            lrBlock.mu8Type       = static_cast<u8>(lu16Type);
             lrBlock.mxStatus.Clear();
             if (lbMarkUsed)
                 lrBlock.mxStatus.SetBit(1);
@@ -835,7 +816,8 @@ namespace CgsMemory
         muFirstFreeBlock              = luBlock;
         mpBlocks[luFirst].muPrevBlock = MemoryBlock::KU_INVALID_BLOCK;
         mpBlocks[luLast].muNextBlock  = MemoryBlock::KU_INVALID_BLOCK;
-        if (luBlock != MemoryBlock::KU_INVALID_BLOCK)   // (X360 reads 255 here -- decompiler artifact for -1)
+        // Keep the safe full-width terminator check; ARTIST compares against 255.
+        if (luBlock != MemoryBlock::KU_INVALID_BLOCK)
             mpBlocks[luBlock].muPrevBlock = MemoryBlock::KU_INVALID_BLOCK;
 
         muNumFreeBlocks -= lu16Count;

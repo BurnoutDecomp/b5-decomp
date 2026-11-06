@@ -8,7 +8,7 @@
 #include "GameShared/GameClasses/Memory/DebugComponent/CgsDebugComponentMemory.h"  // DebugComponentMemory (by value)
 
 // Pointer/parameter-only types -> forward declarations.
-namespace rw { struct IResourceAllocator; struct Resource; }
+namespace rw { struct IResourceAllocator; }
 namespace CgsModule { struct IOBufferStack; }
 
 // CgsMemory::MemoryModule -- the engine's memory-bank manager (one of the four sub-modules embedded by
@@ -83,13 +83,6 @@ namespace CgsMemory
         void Update(CgsModule::IOBufferStack* lpInStack, CgsModule::IOBufferStack* lpOutStack,
                     const MemoryIO::InputBuffer* lpInput, MemoryIO::OutputBuffer* lpOutput);
 
-        // Synchronous bank-create helper (PC bring-up): CreateBank from Params (sub-allocated from its
-        // parent), then return the new bank's per-type memory in lrOut.m_baseResources[]. The faithful
-        // path is the async CreateBankRequest dispatch (Update -> ProcessCreateBankRequest); this is the
-        // synchronous equivalent used by GameDataModule::CreatePools until the ResourceModule::Update
-        // request/response shuttle lands. Returns false if CreateBank fails or the bank is missing.
-        bool CreatePoolBank(const MemoryBank::Params* lpParams, rw::Resource& lrOut);
-
     private:
         // Internal request CreateBank builds + hands to AllocateIntoBank: the new bank's slot + its parent
         // index, plus per-type block counts/sizes (computed from the parent's block granularity). Layout
@@ -121,7 +114,7 @@ namespace CgsMemory
         // an error code (4 search failed, 5 not divisible, 6 out of blocks, 7 zero block size).
         int AllocateIntoBank(BankAllocRequest* lpRequest);
         // Pull luCount blocks off the front of the free list, tag them (parent bank/type) and unlink.
-        bool AllocateBlocks(u16 lu16Count, u8 lu8BankId, u8 lu8Type, bool lbMarkUsed,
+        bool AllocateBlocks(u16 lu16Count, u16 lu16BankId, u16 lu16Type, bool lbMarkUsed,
                             u32* lpuOutFirstBlock, u32* lpuOutLastBlock);
         // Scan from luStartBlock for luNumWanted contiguous free blocks (frag-locked blocks count as free
         // when lbAllowFragmented). On success outputs the run's start index/block + scan index + end block.

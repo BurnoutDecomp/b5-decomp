@@ -6333,7 +6333,7 @@ void RaceCarEntityModule::PostPhysicsUpdate(
     // BrnRaceCarEntityModule_ScoringMapping.cpp and are not restated at the call site.
     CopyActiveRaceCarToPlayerScoringMappingToOutput(
         lpOutput->GetActiveRaceCarOutputInterface() );
-
+    ProcessRaceCarCrashEvents_PostPhysics( lpInput, lpOutput );
     ProcessCreateVehicleEvents( lpInput, lpOutput );
 
     // Console slot 0x82307604 (between ProcessCreateVehicleEvents @0x823075F8 and the physics
