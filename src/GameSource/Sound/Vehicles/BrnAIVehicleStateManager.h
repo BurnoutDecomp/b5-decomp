@@ -91,8 +91,8 @@ public:
 
     // ---- RTTI hooks. STATIC GetStaticTypeInfo / CreateObject so &CreateObject is
     // storable in ClassTypeInfo<StateManager>::mpfnCreateObject. ----
-    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const;
-    virtual const char* GetTypeName() const;                              // @ 0x82684028
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const override;
+    virtual const char* GetTypeName() const override;                      // @ 0x82684028
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();
     static CgsSound::Logic::StateManager* CreateObject( u32 luType );     // @ 0x82702358
 

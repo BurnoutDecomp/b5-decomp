@@ -162,13 +162,6 @@ public:
     // CgsStateManager.cpp (the old duplicate in CgsStateManagerDtor.cpp is deleted).
     virtual ~StateManager();
 
-    // Returns true when this manager's map-state equals liState. Recovered from the
-    // X360 leaf accessor at 0x82680D48 (member access by name; no offset cast).
-    virtual bool IsStateAlias(s32 liState) const
-    {
-        return meMapState == liState;
-    }
-
     // The map-state / state-type accessor Environment::AddStateManager reads at +0x14
     // (CgsEnvironment.cpp). Same member IsStateAlias compares against. Modelled by name.
     s32 GetStateType() const { return meMapState; }
@@ -180,49 +173,17 @@ public:
     // concrete type the X360 reads it as.
     Module* GetLogicModule() const { return static_cast<Module*>(mpLogicModule); }
 
-    // --- the two virtuals the boot orchestration dispatches -------------------
-    //
-    // PrepareStateManagersOnBoot (0x826837F8) drives each manager through TWO vtable
-    // slots:
-    //   * slot +0x0C -> Prepare(): the per-manager bring-up state machine, called as
-    //     `(*(**mgr + 12))(mgr)`; returns bool (false aborts boot). Every concrete
-    //     manager overrides this (e.g. GlobalStateManager::Prepare @ 0x826F5BF8,
-    //     EmitterStateManager::Prepare @ 0x826F5AC0) -- each is a switch on its
-    //     +0x24 prepare-state that loads bundles then calls PrepareStates(...).
-    //   * slot +0x14 -> GetChildStateManager(int): called ONLY on mapStateManagers[0]
-    //     as `child = (*(**mgr + 20))(mgr, 0); if (child) child->Prepare(0);` -- it
-    //     returns a (possibly null) child StateManager that is itself Prepare()'d.
-    //
-    // FLAG (declared-but-stubbed, bodies cascade into un-reconstructed domains):
-    // the base bodies are NOT reconstructed here. The base Prepare()'s real behaviour
-    // is the per-leaf state machine (each leaf overrides it, pulling in Voice/Content/
-    // World/Traffic/Vehicle audio -- see PART B), and GetChildStateManager()'s real
-    // body indexes a child registry this view does not model. Both are given safe,
-    // non-cascading default bodies so the keystone is instantiable and the vtable is
-    // emitted; leaves override Prepare. X360 addrs above.
-    virtual bool          Prepare();                       // vtable +0x0C
-    virtual State* GetFreeState(void* apvAttachment);       // vtable +0x14
-
-    // Console vtable +0x24 (slot 9, e.g. off_820B87A0+36) @ 0x826C4C60. True when no
-    // attached state is still initialising: walks mpHeadState and fails on the first
-    // state with mbIsAttached set whose update state is not E_UPDATE_ATTACHED.
-    // AIVehicleStateManager::UpdateParams @0x826CA578 gates its attach pass on it.
-    virtual bool IsDataLoaded() const;
-
-    // DWARF :181 / :184 -- the per-frame drive pair Environment::Update @0x826C3F78
-    // dispatches on every registered manager (console vtable +0x18/+0x1C):
-    // UpdateParams(gameDt) between the time-field seeding and the mixer pass, then
-    // the ProcessUpdate() pass after ProcessMixMap. (Added 2026-08-25, phase B2.)
-    // The concrete managers own the overrides; the base slots are NON-pure on the
-    // console (managers exist that leave them un-overridden -- the same
-    // implementer-shape argument as the ISlotImplementation reconcile), so the
-    // base bodies are the empty defaults that shape implies.
-    virtual void UpdateParams(f32 af32GameDt);             // @ 0x8268D800
-    virtual void ProcessUpdate();                          // @ 0x8268D888
-
-    // DWARF :188 -- the message hook Environment::Notify routes through; the DWARF
-    // renders the base body EMPTY inline, so this IS the attested base body.
-    virtual void Notify(const CgsSound::Io::MessageHeader* /*apkMessage*/) {} // DWARF :188 empty inline base body
+    // ARTIST off_820B66E4: complete primary virtual order, after the destructor.
+    virtual ClassTypeInfo<StateManager>* GetTypeInfo() const;
+    virtual const char* GetTypeName() const;
+    virtual bool Prepare();
+    virtual bool Release();
+    virtual State* GetFreeState(void* apvAttachment);
+    virtual void UpdateParams(f32 af32GameDt);
+    virtual void ProcessUpdate();
+    virtual void Notify(const CgsSound::Io::MessageHeader* /*apkMessage*/) {}
+    virtual bool IsDataLoaded();
+    virtual bool IsStateAlias(s32 liState) { return meMapState == liState; }
 
     // DWARF :223 / :226 / :232 -- the time-field setters Environment::Update seeds
     // before the UpdateParams pass (header-inline trivial setters; the Update asm
@@ -252,12 +213,7 @@ public:
     // Returns the registered descriptor.
     static ClassTypeInfo<StateManager>* AddToClassTypeInfoArray(ClassTypeInfo<StateManager>* apTypeInfo);
 
-    // @ 0x8268D798. Returns the address of StateManager's static ClassTypeInfo
-    // descriptor (the X360 returns &unk_82F2FAA0; the sibling GetTypeName @0x8268D7A8
-    // reads "StateManager" from that descriptor's typeName at +4). Same shape as the
-    // EffectControl/EffectObject GetStaticTypeInfo accessors -- a function-local static
-    // descriptor seeded with the recovered type name, so the observable return (the
-    // descriptor whose typeName is "StateManager") matches.
+    // ARTIST 0x8268D798 returns the same static descriptor as GetTypeInfo.
     static ClassTypeInfo<StateManager>* GetStaticTypeInfo();
 
     // CgsStateManager.h:431 (assert site) @ 0x826A5B60. The factory CreateStateManagers
@@ -282,6 +238,8 @@ public:
     EPrepareState GetPrepareState() const { return mePrepareState; }
 
 protected:
+    static ClassTypeInfo<StateManager> sTypeInfo;
+
     // Leading scalar members (DWARF CgsStateManager.h:335..341). Modelled by name so
     // the ctor seeds them by name (mfCurrentTime..meMapState) and meMapState can be
     // read without a raw-offset cast.
@@ -314,6 +272,19 @@ protected:
     // the already-homed ObjectPool<RegisteredContent,4,int>::~ObjectPool @ 0x826EAC90
     // (instantiated in ObjectPool_StateManagerRegisteredContent_4.cpp).
     CgsContainers::ObjectPool<RegisteredContent, KI_NUM_CONTENT_SLOTS, int> mContentPool;
+
+#if defined(D_PLATFORM_X360) && D_PLATFORM_X360
+    static void _AssertNativeLayout()
+    {
+        CGS_STATIC_ASSERT((sizeof(RegisteredContent) == 0x10), "registered content stride");
+        CGS_STATIC_ASSERT((offsetof(RegisteredContent, mContent) == 4), "registered content object");
+        CGS_STATIC_ASSERT((offsetof(StateManager, mePrepareState) == 0x24), "prepare state offset");
+        CGS_STATIC_ASSERT((offsetof(StateManager, meStatePrepareState) == 0x28), "state prepare offset");
+        CGS_STATIC_ASSERT((offsetof(StateManager, mpLogicModule) == 0x2C), "logic module offset");
+        CGS_STATIC_ASSERT((offsetof(StateManager, mContentPool) == 0x30), "registered content pool offset");
+        CGS_STATIC_ASSERT((sizeof(StateManager) == 0x90), "state manager extent");
+    }
+#endif
 
     State* CreateState(s32 liStateType);
     friend struct State;

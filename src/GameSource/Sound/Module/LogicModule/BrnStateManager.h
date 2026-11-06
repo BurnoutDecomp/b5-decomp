@@ -33,13 +33,10 @@
 // (BrnStateManager : public StateManager, public IResourceRequester), never a
 // hand-encoded offset.
 //
-// RTTI surface reconciliation: the full StateManager base does NOT itself declare
-// GetTypeInfo()/GetTypeName() (those were the old minimal slice's two virtuals).
-// They are introduced HERE as BrnStateManager's own virtuals (the leaves override
-// them), exactly as the old minimal base introduced them -- so the override chain
-// the 8 concrete managers rely on (GetTypeInfo/GetTypeName returning
-// ClassTypeInfo<CgsSound::Logic::StateManager>*) is preserved against the
-// canonical ClassTypeInfo.
+// RTTI surface reconciliation: the canonical StateManager owns the GetTypeInfo()
+// and GetTypeName() slots at its ARTIST primary-vtable offsets +0x04/+0x08.
+// BrnStateManager overrides those hooks; each concrete manager overrides them with
+// its own descriptor and name.
 //
 // LAYOUT NOTE (X360 32-bit vs host 64-bit): no member offsets are touched by
 // this TU's function (GetTypeName loads a static string literal and ignores
@@ -80,11 +77,11 @@ struct BrnStateManager : public CgsSound::Logic::StateManager,
     // implicit base-destructor chain, matching the established base-class precedent.
     virtual ~BrnStateManager();
 
-    // BrnStateManager.cpp:34 — per-class RTTI. Introduced here (the full base does
-    // not declare them); the leaves override these. Returns the canonical
-    // CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager> descriptor.
-    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const;
-    virtual const char*                                                   GetTypeName() const;
+    // ARTIST BrnStateManager primary vtable off_820B7C6C +0x04/+0x08.
+    // Returns the canonical CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>
+    // descriptor; each concrete leaf supplies its own descriptor and name.
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const override;
+    virtual const char*                                                   GetTypeName() const override;
 
     // BrnStateManager.h:61 (DWARF) -- the static RTTI descriptor + factory the
     // sTypeInfo descriptor stores as its createObject hook. CreateObject @ X360

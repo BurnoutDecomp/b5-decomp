@@ -89,8 +89,8 @@ public:
     // / CreateObject so &CreateObject is storable in ClassTypeInfo<StateManager>::
     // mpfnCreateObject (the X360 CreateObject @ 0x82700B68 never touches an instance
     // -- its int arg is the operator-new flavour selector, not `this`). ----
-    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const;
-    virtual const char* GetTypeName() const;
+    virtual CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetTypeInfo() const override;
+    virtual const char* GetTypeName() const override;
     static CgsSound::Logic::ClassTypeInfo<CgsSound::Logic::StateManager>* GetStaticTypeInfo();
     static CgsSound::Logic::StateManager* CreateObject( u32 luType );                     // @ 0x82700B68
 

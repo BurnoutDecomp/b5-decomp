@@ -247,6 +247,14 @@ bool EmitterStateManager::Prepare()
     }
 }
 
+// ARTIST 0x826E7080. The second scene reset follows the resource unload.
+bool EmitterStateManager::Release()
+{
+    mSoundScene.Release();
+    mSoundScene.Destruct();
+    return true;
+}
+
 // ---------------------------------------------------------------------------
 // EmitterStateManager::ResourcesAreReady()  @ 0x826867C8  (IResourceRequester completion callback)
 //
