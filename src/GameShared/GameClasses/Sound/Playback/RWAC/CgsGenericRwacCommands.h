@@ -116,6 +116,10 @@ struct RwacCommandPlayerIsRequestDoneParameters : public RwacCommand
 // X360 ctor @0x826816A0: copies words 0,1 (no refcount step).
 struct RwacCommandApplyReverbIRFile : public RwacCommand
 {
+    // CgsGenericRwacFactory.h:556, inlined at DoPostAttach 0x826C1C7C: tag 9, the IR file,
+    // assert "mpvReverbIRFile". ReverbIR1::EventEvent @0x82BA56B8 event 0 reads the file
+    // pointer through the address the factory passes (its ReverbParams is that one word).
+    explicit RwacCommandApplyReverbIRFile(void* apvReverbIRFile);
     // @ 0x826816A0. Copy-construct from a source record of luCommandCount words.
     RwacCommandApplyReverbIRFile(u32 luCommandCount,
                                  const RwacCommandApplyReverbIRFile& arSource);

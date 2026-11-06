@@ -178,6 +178,17 @@ namespace Playback
                                      f32 af32Dt);
     };
 
+    // CgsGenericRwacReverbIRContent.h:69 (DecFIGS). Binds a loaded impulse-response file
+    // to the ReverbIR1 plug-in of an authored submix slot. It overrides only the attach
+    // pair: the slot lives on a submix voice, which never plays.
+    struct GenericRwacReverbIRSlot : public ISlotImplementation
+    {
+        static const Name SK_SLOT_CLASSNAME;   // ARTIST dword_830082FC, sub_82C65658
+
+        virtual void DoPostAttach(const Slot& arSlot, Voice& arVoice, Content& arContent);
+        virtual void DoPreDetach(const Slot& arSlot, Voice& arVoice, Content& arContent);
+    };
+
 } // namespace Playback
 } // namespace CgsSound
 

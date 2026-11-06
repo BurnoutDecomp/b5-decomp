@@ -150,17 +150,20 @@ struct OutputParameter
 // reserved hole; the three content-slot implementers -- GenericRwacContentSlot /
 // AemsContentSlot / SplicerContentSlot -- all override slots 0-2, and only the
 // splicer overrides DoPreDetach, so DoPostAttach/DoPreDetach are NON-pure on the
-// console base. FLAG: their base default bodies are un-attested; modelled as
-// no-ops, the only behaviour consistent with implementers not overriding them.)
+// console base. Base bodies, DecFIGS: DoPlay @0x8E8BA4 and DoStop @0x8E8BAC return
+// false, DoUpdatePlaying @0x8E8BB4 returns true, DoPostAttach @0x8E8BBC and
+// DoPreDetach @0x8E8BC0 do nothing. GenericRwacReverbIRSlot overrides only the
+// attach pair, so none of the five is pure.)
 // ---------------------------------------------------------------------------
 class ISlotImplementation
 {
 public:
     virtual ~ISlotImplementation() {}
 
-    virtual bool DoPlay(const Slot& arSlot, PlayerVoice& arVoice, Content& arContent,
-                        u32 au32Param) = 0;                     // slot 0 (DWARF :101)
-    virtual bool DoStop(const Slot& arSlot, PlayerVoice& arVoice, Content& arContent) = 0; // slot 1 (:110)
+    virtual bool DoPlay(const Slot& /*arSlot*/, PlayerVoice& /*arVoice*/, Content& /*arContent*/,
+                        u32 /*au32Param*/) { return false; }    // slot 0 (DWARF :101)
+    virtual bool DoStop(const Slot& /*arSlot*/, PlayerVoice& /*arVoice*/,
+                        Content& /*arContent*/) { return false; } // slot 1 (:110)
     // GinsuSlot's DecFIGS class shape overrides only DoPlay/DoStop.  The base
     // inline therefore keeps a continuously synthesised slot playing unless a
     // concrete implementation (ordinary streamed RWAC/AEMS/splicer) supplies a

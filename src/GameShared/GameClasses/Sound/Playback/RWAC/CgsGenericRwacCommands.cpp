@@ -179,6 +179,14 @@ RwacCommandPlayerIsRequestDoneParameters::RwacCommandPlayerIsRequestDoneParamete
                "E_RWAC_COMMAND_PLAYER_IS_REQUEST_DONE_PARAMETERS == GetCommandType()");
 }
 
+// Inlined at GenericRwacReverbIRSlot::DoPostAttach 0x826C1C7C..0x826C1CA8.
+RwacCommandApplyReverbIRFile::RwacCommandApplyReverbIRFile(void* apvReverbIRFile)
+{
+    muCommandType = E_RWAC_COMMAND_REVERBIR_APPLY_IR_DATA;
+    maOperand     = reinterpret_cast<uintptr_t>(apvReverbIRFile);
+    CGS_ASSERT(apvReverbIRFile != 0, "mpvReverbIRFile");
+}
+
 // ---------------------------------------------------------------------------
 // RwacCommandApplyReverbIRFile::ctor  @ 0x826816A0
 //   copy 2 words (tag + 1 operand) from arSource; assert count == 2, tag == 9.
