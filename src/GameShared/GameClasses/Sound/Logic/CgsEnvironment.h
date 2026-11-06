@@ -153,6 +153,10 @@ struct Environment
     // its own slice; ProcessMessageQueue calls it BY NAME.
     void Notify(const CgsSound::Io::MessageHeader* apkMessage) const;
 
+    // DWARF h:143 (const); ARTIST @0x826A5178, sole caller Notify @0x826C40C0.
+    void NotifyStateAndEffects(State* apState,
+                               const CgsSound::Io::MessageHeader* apkMessage) const;
+
     // DWARF h:129 / h:132. Accessors for the embedded systems.
     MicrophoneSystem&        GetMicrophoneSystem() { return mMicrophoneSystem; }
     Nicotine::IDynamicMixer& GetDynamicMixer()     { return mDynamicMixer; }

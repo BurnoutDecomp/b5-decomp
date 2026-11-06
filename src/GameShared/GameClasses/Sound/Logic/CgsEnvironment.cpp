@@ -181,8 +181,17 @@ void Environment::Update(f32 af32GameDt, f32 af32SimDt)
     CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miEnvironmentUpdate);
 }
 
-static void NotifyStateAndEffects(State* apState,
-                                  const CgsSound::Io::MessageHeader* apkMessage)
+// ---------------------------------------------------------------------------
+// Environment::NotifyStateAndEffects  @ 0x826A5178
+//
+//   vtbl+0x1C State::Notify; lhz 0xE effect id: 0xFFFF -> done.
+//   lwz 4 effect type: 1 -> head at state+0x20 (object), 2 -> state+0x1C (control),
+//   anything else -> assert "Unknown sound effect type" (:352 / :384) and done.
+//   id 0xFFFE walks every effect (next at +4, vtbl+0x24 Notify); any other id stops at
+//   the first ((+0x14 >> 4) & 0x7F) == id. `this` (r3) is never read.
+// ---------------------------------------------------------------------------
+void Environment::NotifyStateAndEffects(State* apState,
+                                        const CgsSound::Io::MessageHeader* apkMessage) const
 {
     apState->Notify(apkMessage);
     const u16 luEffectId = apkMessage->GetEffectId();
