@@ -397,11 +397,6 @@ void GameStateModule::ProcessGameEvents_Group1(s32 liEventType, const CgsModule:
                 mCarSelectManager.EnterModification(lpActionQueue);
                 break;
             case GameStateModuleIO::E_CAR_SELECT_STATE_EXIT:
-                // [DIAG] harness witness, not console code: flow_run marks the junkyard exit on it.
-                if (CgsDev::Log::gpDebugPrint != 0)
-                {
-                    *CgsDev::Log::gpDebugPrint << "[GameStateModule::ProcessGameEvents case 94] action 4 -> ExitJunkyard" << "\n";
-                }
                 mCarSelectManager.ExitJunkyard(lpActionQueue);
                 break;
             default:

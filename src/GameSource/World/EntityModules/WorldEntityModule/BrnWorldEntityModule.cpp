@@ -1240,16 +1240,16 @@ WorldEntityModule::PrepareZoneCollision(
 
                 while ( lpEventData )
                 {
-                    // The reply is the AcquireResourceListRequest echoed back with the
-                    // handle array filled (X360 reads +24/+28 = mpHandles/miMaxHandles).
-                    const CgsResource::Events::AcquireResourceListRequest* lpResponse =
-                        reinterpret_cast<const CgsResource::Events::AcquireResourceListRequest*>( lpEventData );
+                    // The reply carries the number of handles written into the
+                    // caller-owned array.
+                    const CgsResource::Events::AcquireResourceListResponse* lpResponse =
+                        reinterpret_cast<const CgsResource::Events::AcquireResourceListResponse*>( lpEventData );
 
-                    if ( lpResponse->miMaxHandles > 0 )
+                    if ( lpResponse->miNumHandles > 0 )
                     {
                         AddCollisionZoneToSceneManager(
                             lpRequestInterface, lpSceneInterface,
-                            lpResponse->mpHandles, lpResponse->miMaxHandles );
+                            lpResponse->mpHandles, lpResponse->miNumHandles );
                         miNumCollisonZonesLoaded++;
                     }
 

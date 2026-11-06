@@ -1990,66 +1990,34 @@ GameStateModule::FindPlayerScoringIndexForActiveRaceCar(::EActiveRaceCarIndex le
 // seeds (0,0,0,0) / (1,0,0,0), and ProcessGameEvents case 110 re-runs Construct then this function).
 void GameStateModule::SendSetupPlayerCarEvent(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    const BrnTrigger::TriggerData* lpTriggerData = mTriggerQueryManager.GetTriggerData();
-    if (lpTriggerData == 0)
-    {
-        return;
-    }
-
-    // Step 1 -- 0x8239A934..0x8239A980: the track's authored player-start pose (`lvx128 v127, memory, 0x10`
-    // @0x8239A950, `lvx128 v0, memory, 0x20` @0x8239A978) becomes the profile's car pose.
-    const Vector3 lPlayerStart = lpTriggerData->GetPlayerStartPosition();
+    const Vector3 lPlayerStart = mTriggerQueryManager.GetTriggerData()->GetPlayerStartPosition();
+    const Vector3 lPlayerDirection = mTriggerQueryManager.GetTriggerData()->GetPlayerStartDirection();
     BrnProgression::Profile* const lpProfile = mProgressionManager.GetProfile();
     lpProfile->SetCarPosition(lPlayerStart);
-    lpProfile->SetCarDirection(lpTriggerData->GetPlayerStartDirection());
+    lpProfile->SetCarDirection(lPlayerDirection);
 
-    // [PC GUARD] the console reads both lists unconditionally (a NULL list would fault in GetVehicleData).
-    if (mpVehicleList == 0 || mpWheelList == 0)
-    {
-        return;
-    }
-
-    const BrnResource::VehicleListEntry* lpEntry = mpVehicleList->GetVehicleData(0);
-    if (lpEntry == 0)
-    {
-        return;
-    }
-    const CgsID lCarModelId = lpEntry->GetId();
-
+    const CgsID lCarModelId = mpVehicleList->GetVehicleData(0)->GetId();
     CgsID lWheelId = 0;
-    const s32 liWheelIndex = mpWheelList->FindWheelIndexFromName(lpEntry->GetDefaultWheelName());
-    if (liWheelIndex != -1)
+    const s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lCarModelId);
+    if (liVehicleIndex >= 0)
     {
-        const BrnResource::WheelListEntry* lpWheelEntry = mpWheelList->GetWheelData(liWheelIndex);
-        if (lpWheelEntry != 0)
+        const BrnResource::VehicleListEntry* const lpEntry = mpVehicleList->GetVehicleData(liVehicleIndex);
+        if (lpEntry != 0)
         {
-            lWheelId = lpWheelEntry->mID;
+            const s32 liWheelIndex = mpWheelList->FindWheelIndexFromName(lpEntry->GetDefaultWheelName());
+            if (liWheelIndex != -1)
+            {
+                lWheelId = mpWheelList->GetWheelData(liWheelIndex)->mID;
+            }
         }
     }
 
     const CgsID lJunkyardId = FindNearestJunkyardID(lPlayerStart);
     const GameStateModuleIO::EPlayerScoringIndex leScoringIndex =
-        FindPlayerScoringIndexForActiveRaceCar(mePlayerActiveRaceCarIndex);
-
-    if (CgsDev::Log::gpDebugPrint != 0)
-    {
-        *CgsDev::Log::gpDebugPrint
-            << "[GameStateModule::SendSetupPlayerCarEvent] junkyard=" << static_cast<u64>(lJunkyardId)
-            << " car=" << static_cast<u64>(lCarModelId)
-            << " wheel=" << static_cast<u64>(lWheelId)
-            << " scoringIdx=" << static_cast<s32>(leScoringIndex)
-            << " playerStart=(" << lPlayerStart.mV.x << ", " << lPlayerStart.mV.y << ", "
-            << lPlayerStart.mV.z << ")\n";
-    }
-
+        FindPlayerScoringIndexForActiveRaceCar(GetPlayerActiveRaceCarIndex());
     mCarSelectManager.EnterJunkyardAtStartOfGame(lpActionQueue, lJunkyardId, lCarModelId, lWheelId,
                                                 leScoringIndex, &mCachedCarSelectChangedAction);
-
-    // Step 7 -- the start junkyard counts as a found drive-thru; no queue, so no autosave post.
     mProgressionManager.OnDriveThru(lJunkyardId, BrnTrigger::GenericRegion::E_TYPE_JUNK_YARD, 0);
-
-    // Step 8 -- X360 `li r11,1; stb r11, <this+0x38B72>`. Arm the "waiting to REALLY enter the
-    // junkyard" latch that ProcessGameEvents case 78 tests.
     mbWaitingToPutPlayerInJunkyard = true;
 }
 
