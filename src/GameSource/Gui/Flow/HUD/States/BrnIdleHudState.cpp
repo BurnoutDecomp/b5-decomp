@@ -1,6 +1,12 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnIdleHudState.h"
 
+#include "GameShared/GameClasses/Development/Log/CgsLog.h"                // [FLAG PC witness] [idle-hud]
+#include "GameShared/GameClasses/Containers/CgsHash.h"                   // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface::RegisterForEvents
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // the state's input event queue
+#include "GameSource/Gui/BrnGuiCache.h"                                  // BrnGui::GuiCache
+
+#include <cstring>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The idle HUD state's entry wiring.
 //
@@ -20,6 +26,23 @@
 
 namespace BrnGui
 {
+
+namespace
+{
+    typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
+
+    // Event 64's payload: the first word is the GuiCache (Update: `lwz r11, 0(r20)`).
+    struct GuiEventCache : CgsModule::Event { GuiCache* mpGuiCache; };
+
+    const s32 KI_EVENT_GUI_CACHE = 64;
+
+    // [FLAG PC witness] NOT X360. One line per load-sequence step; bounded by the state machine.
+    void lWitnessIdleHud(const char* lpacStep)
+    {
+        if (CgsDev::Log::gpDebugPrint != 0)
+            *CgsDev::Log::gpDebugPrint << "[idle-hud] " << lpacStep << " [FLAG PC witness]\n";
+    }
+}
 
 // =======================================================================
 //  The observed-event table @0x8205B224 (count @0x8205B228)
@@ -73,6 +96,69 @@ void IdleHudState::OnEnter()
     mbIsLoaded     = false;                   // this+0x168 = 0
 
     mTextField.Construct("text_txt", mpStateInterface, 0);
+    lWitnessIdleHud("enter");
+}
+
+// @ 0x8247E230. The console inlines PlayAptMovie: a GuiEvent<18> on channel 41 whose movie name is
+// the empty string (unk_820046A7) at level 1.
+void IdleHudState::OnLeave()
+{
+    mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
+    mpStateInterface->PlayAptMovie("", 1);
+    lWitnessIdleHud("leave");
+}
+
+// @ 0x8247E070. Walks the input queue and acts only on the cache event: the first one latches
+// mpGuiCache (+0x164), then each one advances the load sequence as far as it can go. The console
+// inlines PlayAptMovie("B5IdleHud", 1) (channel 41, 20 bytes, name off_82F278E0[195]) and the
+// strlen before CalculateHash.
+void IdleHudState::Update()
+{
+    StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+
+    const CgsModule::Event* lpEvent = 0;
+    s32 liSize = 0;
+    for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+         lpEvent != 0;
+         liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+    {
+        if (liEventId != KI_EVENT_GUI_CACHE)
+            continue;
+
+        if (mpGuiCache == 0)
+            mpGuiCache = reinterpret_cast<const GuiEventCache*>(lpEvent)->mpGuiCache;
+
+        if (meCurrentState == E_IDLE_HUD_RESOURCES &&
+            mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
+        {
+            mpStateInterface->PlayAptMovie("B5IdleHud", 1);
+
+            muNumExpectedComponents = 0;
+            mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_HUD);
+            for (u32 luI = 0; luI < KU_MAX_IDLEHUD_COMPONENTS_NUM; ++luI)
+                mauExpectedComponentIds[luI] = 0;
+
+            // The expected component is the text field OnEnter constructed (+0x40 == its name).
+            char* lpacName = const_cast<char*>(mTextField.GetName());
+            mauExpectedComponentIds[muNumExpectedComponents] =
+                CgsContainers::CgsHash::CalculateHash(lpacName, static_cast<s32>(std::strlen(lpacName)));
+            ++muNumExpectedComponents;
+            mpGuiCache->SetExpectedAptComponentList(E_GUIFLOW_HUD, mauExpectedComponentIds,
+                                                    muNumExpectedComponents);
+            meCurrentState = E_IDLE_HUD_COMPONENTS;
+            lWitnessIdleHud("resources loaded, B5IdleHud playing");
+        }
+
+        if (meCurrentState == E_IDLE_HUD_COMPONENTS &&
+            mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_HUD))
+        {
+            meCurrentState = E_IDLE_HUD_LOADED;
+            mTextField.SetText(" ");   // asc_82004094
+            lWitnessIdleHud("components initialised");
+        }
+    }
+
+    lpInQueue->Clear();
 }
 
 } // namespace BrnGui

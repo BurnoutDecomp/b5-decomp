@@ -253,7 +253,7 @@ void CustomRendererManager::Construct()
     // subobject (guest this+0xE520), the in-game boost gauge.
     mapCustomRenderComponents[E_BOOSTBAR]             = &mBoostBarRenderer;
     mapCustomRenderComponents[E_ABOVECAR]             = &mAboveCarRenderer;
-    mapCustomRenderComponents[E_PROGRESSBAR]          = 0;
+    mapCustomRenderComponents[E_PROGRESSBAR]          = &mProgressBarRenderer;
     mapCustomRenderComponents[E_BLACKBAR]             = &mBlackBarRenderer;
     // ⭐ [tut-ticker] slot 8 is LIVE (2026-08-24): the reconstructed InGameMessageRenderer
     // subobject (guest this+0x1E0F0), the bottom-of-screen ticker.

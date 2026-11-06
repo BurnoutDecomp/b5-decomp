@@ -1,6 +1,9 @@
 #include "BrnProgressBarRenderer.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm3dRenderBuffer.h"          // CgsGraphics::Im3dRenderBufferUntex
+#include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h"    // its command stream
+#include "GameShared/GameClasses/Gui/View/ParticleSystem2d/CgsBillboardRenderer.h"                     // the GUI render-state table
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnGui::ProgressBarRenderer::Construct        @ 0x82446C00  (EXECUTED in the boot trace)
@@ -9,6 +12,7 @@
 //   BrnGui::ProgressBarRenderer::Release          @ 0x82446CF8
 //   BrnGui::ProgressBarRenderer::RecvEvent        @ 0x82446DA0
 //   BrnGui::ProgressBarRenderer::RenderQuadUntex  @ 0x8245C828
+//   BrnGui::ProgressBarRenderer::RenderComponent  @ 0x824632C8
 //
 // The boot/loading "progress bar" custom HUD renderer. Construct chains the base
 // constructor and primes the cached progress to -1 (no value yet) with the two one-shot
@@ -35,6 +39,9 @@ namespace
     // RenderQuadUntex colour scale: clamp each float channel to [0,1] then map to 0..255
     // (vmulfp by the 255.0f vector constant unk_8305A950 before the float->int truncation).
     const f32 KF_COLOUR_SCALE = 255.0f;
+
+    // RenderComponent scales the 0..100 percent to a fraction with this (flt_82002138).
+    const f32 KF_PERCENT_TO_FRACTION = 0.01f;
 
     // Triangle-strip topology id passed to ImRenderer::Render (renderengine PRIMITIVETYPE_TRIANGLESTRIPS).
     const s32 KI_PRIMITIVE_TRIANGLESTRIP = 6;
@@ -71,15 +78,15 @@ CgsID ProgressBarRenderer::GetID() const
 // (the 2nd parameter, asm stores r5) and advance to DONE; on DONE do nothing; any other stage
 // value is an error (assert + return false). The queue parameter (1st) and the 2nd allocator
 // (3rd) are unused by the ARTIST body.
-bool ProgressBarRenderer::Prepare(void* /*lpEventQueueSmall*/, void* lpResourceAllocatorA,
-                                  void* lpResourceAllocatorB)
+bool ProgressBarRenderer::Prepare(CgsGui::GuiEventQueueSmall* /*lpEventQueue*/,
+                                  rw::IResourceAllocator* lpHeapAllocator,
+                                  rw::IResourceAllocator* /*lpTextureAllocator*/)
 {
-    (void)lpResourceAllocatorB;  // 3rd param unused by the ARTIST body (asm never reads r6)
 
     if (mePrepareStage == E_PREPARESTAGE_START)
     {
         // asm: *(this+0x10) = r5 (the FIRST rw::IResourceAllocator*, the 2nd declared param).
-        mpHeapAllocator = static_cast<rw::IResourceAllocator*>(lpResourceAllocatorA);
+        mpHeapAllocator = lpHeapAllocator;
         mePrepareStage  = E_PREPARESTAGE_START;  // redundant guest store *(this+8)=0 before the +1 below
     }
     else if (mePrepareStage != E_PREPARESTAGE_DONE)
@@ -112,7 +119,7 @@ bool ProgressBarRenderer::Release()
 
 // 0x82446DA0 -- receive a GUI event. Asserts the event is non-null, then -- only for the
 // render-progress-bar event id -- caches the event's progress percent.
-void ProgressBarRenderer::RecvEvent(const void* lpEvent, s32 liEventType)
+void ProgressBarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType)
 {
     CGS_ASSERT(lpEvent != nullptr, " null event passed ");
 
@@ -121,7 +128,7 @@ void ProgressBarRenderer::RecvEvent(const void* lpEvent, s32 liEventType)
         // asm: this->mRenderProgressBarEvent.mfProgressPercent = *(const float*)event
         // (the incoming GuiEventRenderProgressBar's leading mProgressPercent, at event offset 0).
         const GuiEventRenderProgressBar* lpProgressEvent =
-            static_cast<const GuiEventRenderProgressBar*>(lpEvent);
+            reinterpret_cast<const GuiEventRenderProgressBar*>(lpEvent);
         mRenderProgressBarEvent.mfProgressPercent = lpProgressEvent->mfProgressPercent;
     }
 }
@@ -173,5 +180,40 @@ void ProgressBarRenderer::RenderQuadUntex(CgsGraphics::Im3dRenderBufferUntex* lp
     lpBuffer->SetTransform(lIdentity);
     lpBuffer->Render(static_cast<renderengine::PrimitiveType>(KI_PRIMITIVE_TRIANGLESTRIP),
                      laVertices, 4);
+}
+
+// 0x824632C8 -- the bar, while a progress value is held (Construct's -1 means none): a black
+// background across the full bounds, then a red fill whose right edge sits at the percent.
+void ProgressBarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
+{
+    const f32 lfProgress = mRenderProgressBarEvent.mfProgressPercent;
+    if (lfProgress < 0.0f)
+        return;
+
+    // The three function-local statics are guarded by the console's dword_82FB37E0 bits.
+    static const Vector4 skv4Bounds     = { 0.7f, 0.9f, 0.95f, 0.95f };  // xmmword_82FB37D0
+    static const Vector4 skv4Background = { 0.0f, 0.0f, 0.0f,  1.0f  };  // xmmword_82FB37C0
+    static const Vector4 skv4Fill       = { 1.0f, 0.0f, 0.0f,  1.0f  };  // xmmword_82FB37B0
+
+    CgsGraphics::Im3dRenderBufferUntex* lpBuffer = lpRendererSet->mpIm3dRenderBufferUntex;  // r4+8
+
+    lpBuffer->BeginRendering();
+    lpBuffer->SetState(CgsGui::gpGuiRasterizerStateCullNone);    // dword_83010F3C
+    lpBuffer->SetState(CgsGui::gpBillboardDepthStencilState);    // dword_83010F54
+    lpBuffer->SetState(CgsGui::gpGuiBlendStateStandard);         // dword_83010F20
+
+    // fsel pair @0x82463468 / 0x82463488: clamp the percent to [0,100].
+    const f32 lfNonNegative = (-lfProgress >= 0.0f) ? 0.0f : lfProgress;
+    const f32 lfPercent     = (100.0f - lfNonNegative >= 0.0f) ? lfNonNegative : 100.0f;
+
+    // vperm through unk_8327F140+0x80 (lane 2, source word 0): only the right edge moves.
+    Vector4 lv4Fill = skv4Bounds;
+    lv4Fill.z = skv4Bounds.x + KF_PERCENT_TO_FRACTION * ((skv4Bounds.z - skv4Bounds.x) * lfPercent);
+
+    RenderQuadUntex(lpBuffer, skv4Bounds, skv4Background);
+    RenderQuadUntex(lpBuffer, lv4Fill, skv4Fill);
+
+    lpBuffer->SetState(CgsGui::gpGuiBlendStateStandard);         // dword_83010F20
+    lpBuffer->EndRendering();
 }
 }

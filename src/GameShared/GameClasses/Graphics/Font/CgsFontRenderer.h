@@ -154,6 +154,16 @@ namespace CgsGraphics
         // RenderStringInternal @0x827FFF50 when TextObject::mbDropShadow is set.
         void RenderDropShadow(const RGBA* lpDropShadowColour, EImRenderingType leType);
 
+        // The box behind the text: one 4-vertex strip with the object's four corner colours.
+        // X360 0x827FE5A0; called with the untextured state bound, before the drop shadow.
+        void RenderBackground(const TextVector2& lrTopLeft, const TextVector2& lrBottomRight,
+                              const TextBackground& lrBackground, EImRenderingType leType);
+
+        // The frame around that box: one 10-vertex strip, 3 units thick, outside the box.
+        // X360 0x827FE730; drawn after RenderBackground, before the drop shadow.
+        void RenderBorder(const TextVector2& lrTopLeft, const TextVector2& lrBottomRight,
+                          RGBA lBorderColour, EImRenderingType leType);
+
         // Vertex-buffer helpers the glyph emit drives (X360 TextRenderer privates). RenderBufferRenderStart
         // reserves luVertexCount verts (returns the write pointer), RenderBufferRenderEnd submits them as
         // a primitive, RenderBufferSetTextureState binds the font atlas. Bodies are a follow-on pass.

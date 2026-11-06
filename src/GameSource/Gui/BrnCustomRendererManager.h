@@ -10,6 +10,7 @@
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnBoostBarRenderer.h"           // [boost-bar] the live slot-4 component
 #include "GameSource/Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.h" // embedded controls + override state
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnBlackBarRenderer.h"
+#include "GameSource/Gui/CustomRenderer/Renderers/BrnProgressBarRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnCreditsTextRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnAboveCarRenderer.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnSatNavRenderer.h"             // [H3b] the live slot-1 component (the minimap)
@@ -199,6 +200,7 @@ private:
     // render family). The hollow-shell caveat above no longer applies to it either.
     BoostBarRenderer mBoostBarRenderer;
 
+    ProgressBarRenderer mProgressBarRenderer; // ARTIST manager+1BFF0
     BlackBarRenderer mBlackBarRenderer;
     CreditsTextRenderer mCreditsTextRenderer;
     AboveCarRenderer mAboveCarRenderer; // ARTIST manager+1B930

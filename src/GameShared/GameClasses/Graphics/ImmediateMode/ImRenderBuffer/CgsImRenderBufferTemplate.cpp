@@ -2177,6 +2177,10 @@ namespace CgsGraphics
         renderengine::PrimitiveType, const BasicColouredVertex*, u32);
     template void ImRenderBuffer<BasicColouredVertex>::SetState(
         const renderengine::RasterizerState*);
+    // ARTIST sub_82459AB8 (opcode 4) / sub_82459BB0 (opcode 3), both driven by
+    // ProgressBarRenderer::RenderComponent @0x824632C8.
+    template void ImRenderBuffer<BasicColouredVertex>::SetState(const renderengine::DepthStencilState*);
+    template void ImRenderBuffer<BasicColouredVertex>::SetState(const renderengine::BlendState*);
     template void ImRenderBuffer<BasicColouredVertex>::SetTransform(const Im2dTransform&);
     template void ImRenderBuffer<BasicColouredVertex>::Swap();
     template void ImRenderBuffer<BasicColouredVertex>::SetBufferFullRewindToLastEndRender();
