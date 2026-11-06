@@ -21,10 +21,13 @@
 //     indexes it as 4 * (lePort + 24) == 0x60 + 4*lePort; UnbindFromPort as v4[lePort+24].
 //   * miNumBoundPads @+0x70: bumped on bind (BindToPort ++*(this+0x70)), decremented on
 //     unbind (UnbindFromPort --*(this+0x70)).
+//   * A byte at +0x74 is zeroed by InputPads::InitializePads and InputPads::Destruct. ARTIST
+//     does not establish its meaning; retain it as an unnamed byte so the following pad array
+//     remains at +0x78.
 //
-// All three methods are homed in CgsInputManagerX360.cpp. UnbindFromPort's inlined pad writes
-// reach DeviceX360Pad's private mbConnected/mePort through the `friend class ManagerX360;`
-// grant added to CgsInputDeviceX360Pad.h.
+// UpdateConnectedDevices, Update, BindToPort and UnbindFromPort are homed in
+// CgsInputManagerX360.cpp. UnbindFromPort and Update reach DeviceX360Pad's private members
+// through the `friend class ManagerX360;` grant in CgsInputDeviceX360Pad.h.
 
 #include "types.hpp"
 #include "GameShared/GameClasses/System/Input/Devices/X360/CgsInputDeviceX360Pad.h" // CgsInput::DeviceX360Pad (BindToPort)
@@ -52,15 +55,33 @@ namespace CgsInput
     };
 
     // ============================================================================
-    // CgsInput::ManagerX360 -- head 0x74 bytes (X360).
+    // CgsInput::ManagerX360 -- head 0x78 bytes (X360).
     // ============================================================================
     class ManagerX360
     {
     public:
+        // Stores performed inline by InputPads::InitializePads before it constructs the pads:
+        // zero the bound table, count, +0x74 byte and each record's type/connected fields.
+        // The 16-byte state snapshots are not cleared by the original path.
+        void Construct();
+
+        // Stores performed inline by InputPads::Destruct after the player/port records:
+        // zero each record's type/connected fields, count and +0x74 byte. The bound table is
+        // deliberately left untouched, matching the original destructor.
+        void Destruct();
+
         // X360 0x828DC480. Poll each of the four XInput slots: on a successful XInputGetState,
         // resolve/refresh the device sub-type via XInputGetCapabilities and (re)latch the raw
         // state; on failure clear the slot. Updates each slot record's type + connected flag.
         void UpdateConnectedDevices();
+
+        // X360 0x828F0028. For each bound pad, read its saved port and pass that slot's live
+        // connection flag, device type and XINPUT_STATE snapshot to DeviceX360Pad::Update.
+        void Update();
+
+        // DecFIGS CgsInput::Manager interface returns Device::EType. The X360 inline caller
+        // reads this record field directly; expose the same typed value to the owner.
+        CgsInput::Device::EType GetConnectedDeviceType(s32 liPort);
 
         // X360 0x828E7718. Bind port lePort to physical pad lpPad. Returns true when the slot
         // holds a device (its resolved sub-type is passed to DeviceX360Pad::BindToPort); false
@@ -90,6 +111,11 @@ namespace CgsInput
 
         // ---- number of currently bound pads ----
         s32               miNumBoundPads;                        // +0x70 (X360)
+
+        // The byte's use is not identified by ARTIST. InitializePads/Destruct only establish
+        // that it is zeroed at +0x74. Explicit tail bytes keep the native pad array at +0x78.
+        u8                mu8Unknown74;                          // +0x74 (X360)
+        u8                mau8Pad75[3];                          // +0x75 .. +0x77
     };
 }
 
@@ -103,5 +129,9 @@ namespace CgsInput
         CGS_STATIC_ASSERT((offsetof(ManagerX360Device, maState)      == 0x04), "maState @ +0x04");
         CGS_STATIC_ASSERT((offsetof(ManagerX360Device, mbConnected)  == 0x14), "mbConnected @ +0x14");
         CGS_STATIC_ASSERT((offsetof(ManagerX360, maDevices)    == 0x00), "maDevices @ +0x00");
+        CGS_STATIC_ASSERT((offsetof(ManagerX360, mapBoundPads) == 0x60), "mapBoundPads @ +0x60");
+        CGS_STATIC_ASSERT((offsetof(ManagerX360, miNumBoundPads) == 0x70), "miNumBoundPads @ +0x70");
+        CGS_STATIC_ASSERT((offsetof(ManagerX360, mu8Unknown74) == 0x74), "unknown byte @ +0x74");
+        CGS_STATIC_ASSERT((sizeof(ManagerX360) == 0x78), "ManagerX360 head must be 0x78 bytes");
     }
 }

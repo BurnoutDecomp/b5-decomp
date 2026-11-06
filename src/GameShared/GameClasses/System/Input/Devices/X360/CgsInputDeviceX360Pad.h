@@ -119,6 +119,8 @@ namespace CgsInput
         // Called by InputPads::UpdatePadRumble as `pad.SetRumble(lfLeft, lfRight)`.
         void SetRumble(f32 lfLeftMotor, f32 lfRightMotor);
 
+        s32 GetPort() const { return mePort; }
+
         // Device type (meType @ +0x04); == Device::E_WHEEL_DEVICE_TYPE selects the wheel FF path.
         EDeviceType GetDeviceType() const { return static_cast<EDeviceType>(meType); }
 

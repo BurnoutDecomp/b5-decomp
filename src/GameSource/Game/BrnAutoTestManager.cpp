@@ -3,6 +3,7 @@
 #include "GameSource/Resource/BrnGameDataModule.h"                             // GameDataModule::DebugReportPools
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                        // CgsCore::StrCpy / StrCat
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"                     // HardwareInit::GetFOPENDirectory
+#include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h"              // InputIO::ActionInfo
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"            // CgsResource::PoolStats
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
@@ -68,6 +69,37 @@ namespace BrnGame
         for (s32 i = 0; i < 61; ++i)
             maActions[i] = 0.0f;
         LoadScripts();
+    }
+
+    // ARTIST @0x823A95B8. While the test harness owns the controller, publish its
+    // 61 values into the value half of the port's ActionInfo table; status words are untouched.
+    void AutoTestManager::FillKeyBindings(CgsInput::InputIO::ActionInfo* lpActionInfo)
+    {
+        if (!mbControlPad)
+            return;
+
+        const f32* lpSource = maActions;
+        CgsInput::InputIO::ActionInfo* lpDestination = lpActionInfo;
+        for (u32 luGroup = 0; luGroup < 7; ++luGroup)
+        {
+            lpDestination[0].mfValue = lpSource[0];
+            lpDestination[1].mfValue = lpSource[1];
+            lpDestination[2].mfValue = lpSource[2];
+            lpDestination[3].mfValue = lpSource[3];
+            lpDestination[4].mfValue = lpSource[4];
+            lpDestination[5].mfValue = lpSource[5];
+            lpDestination[6].mfValue = lpSource[6];
+            lpDestination[7].mfValue = lpSource[7];
+            lpSource += 8;
+            lpDestination += 8;
+        }
+
+        for (u32 luTail = 0; luTail < 5; ++luTail)
+        {
+            lpDestination->mfValue = *lpSource;
+            ++lpSource;
+            ++lpDestination;
+        }
     }
 
     void* AutoTestManager::LuaAllocator(void*, void* lpPtr, size_t, size_t luNewSize)

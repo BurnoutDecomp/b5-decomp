@@ -112,12 +112,10 @@ namespace CgsFileSystem
         // FindFirstFile wildcard "\*".
         char lacLogical[256];
         CgsCore::SPrintf(lacLogical, sizeof(lacLogical), "%s%s", lpcPatchFolder, lpcSubFolder);
-
-        char lacPhysical[256];
-        GetPhysicalPath(lacPhysical, sizeof(lacPhysical), lacLogical);
+        GetPhysicalPath(lacLogical, sizeof(lacLogical), lacLogical);
 
         char lacWildcard[256];
-        CgsCore::SPrintf(lacWildcard, sizeof(lacWildcard), "%s\\*", lacPhysical);
+        CgsCore::SPrintf(lacWildcard, sizeof(lacWildcard), "%s\\*", lacLogical);
 
         WIN32_FIND_DATAA lFindData;
         HANDLE lFindHandle = FindFirstFileA(lacWildcard, &lFindData);
@@ -174,6 +172,22 @@ namespace CgsFileSystem
         }
     }
 
+    // ARTIST inlines this checked copy at the remap and path-conversion sites.
+    static __forceinline void CopyPathWithAssert(char* lpcDest, u32 luDestSize, const char* lpcSource)
+    {
+        if (std::strlen(lpcSource) >= luDestSize)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lMessage << "String " << lpcSource << " is too long. Buffer size = " << luDestSize
+                     << ", string length = " << static_cast<u32>(std::strlen(lpcSource)) << "\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
+            CgsDev::Assert::EndAssert();
+        }
+        std::strcpy(lpcDest, lpcSource);
+    }
+
     // @0x828E9488.
     bool PatchManager::RemapFilename(const char* lpcSource, char* lpcDest, u32 luDestSize)
     {
@@ -187,17 +201,7 @@ namespace CgsFileSystem
             return true;
         }
 
-        if (std::strlen(lpcSource) >= luDestSize)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-            lMessage << "String " << lpcSource << " is too long. Buffer size = " << luDestSize
-                     << ", string length = " << static_cast<u32>(std::strlen(lpcSource)) << "\n";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
-                "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 65);
-            CgsDev::Assert::EndAssert();
-        }
-        std::strcpy(lpcDest, lpcSource);
+        CopyPathWithAssert(lpcDest, luDestSize, lpcSource);
         return false;
     }
 
@@ -208,7 +212,7 @@ namespace CgsFileSystem
         // mount prefix; addi r29,r5,7) with the 256-byte length assert, then turns every forward
         // slash into a back-slash.
         char lacWork[256];
-        CgsCore::StrCpy(lacWork, sizeof(lacWork), lpcLogical + 7);
+        CopyPathWithAssert(lacWork, sizeof(lacWork), lpcLogical + 7);
 
         for (char* lpc = lacWork; *lpc; ++lpc)
         {
@@ -223,7 +227,9 @@ namespace CgsFileSystem
         {
             *lpFirstSlash = '\0';
             const char* lpcRest = lpFirstSlash + 1;
-            CgsCore::SPrintf(lpcDest, luDestSize, "%s:\\%s", lacWork, lpcRest);
+            char lacPhysical[256];
+            CgsCore::SPrintf(lacPhysical, sizeof(lacPhysical), "%s:\\%s", lacWork, lpcRest);
+            CopyPathWithAssert(lpcDest, luDestSize, lacPhysical);
         }
         else
         {

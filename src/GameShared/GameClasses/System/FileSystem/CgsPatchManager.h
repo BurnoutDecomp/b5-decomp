@@ -73,7 +73,7 @@ namespace CgsFileSystem
         // @0x828DCF40. Resolve `lpcLogical` to a host physical path in `lpcDest` (capacity
         // `luDestSize`): slash->back-slash, and if the path is "<drive>\..." emit "<drive>:\<rest>",
         // else "<path>:".
-        void GetPhysicalPath(char* lpcDest, u32 luDestSize, const char* lpcLogical);
+        static void GetPhysicalPath(char* lpcDest, u32 luDestSize, const char* lpcLogical);
 
         // ARTIST828EC8DC reads this flag before posting a saved patch response.
         bool IsPatching() const { return mbPatching; }
