@@ -1,0 +1,10 @@
+{
+  "report": "D:\\Reverse\\BP-X360-Experimental-Artifacts\\wave20\\r173-intake\\entropy-frame-verification.json",
+  "report_sha256": "3df8bc433073d4b566932e5d04a51fcb978dee8af77496ce2de7b27e6019365c",
+  "completion_sha256": "53e5b9f455ddb1fe73d7a67930f095acc3899cb2f37cefef7e51135dd53c089c",
+  "source": "vendor/dirtysdk/src/x360/protossl_random_x360.cpp",
+  "source_sha256": "7a5bddfcc1900fe539fbb90dbb21d1a6d6fa7e8b1386f6376453a22d1a99ade7",
+  "object": "D:\\Reverse\\BP-X360-Experimental-Artifacts\\wave20\\r28-intake-final\\native-selected\\protossl_random_x360-5dec86f5.obj",
+  "object_sha256": "8d4749fb6136a26140081bb58f2f729b1717ee3067287bd936d420c5d3164203",
+  "listing_sha256": "f99c5824bd445c0783a2e5f9d2b740cae17d9cc67f593b863ca9df21c8ca9d95"
+}

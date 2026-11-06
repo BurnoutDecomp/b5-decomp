@@ -1,0 +1,2 @@
+import ida_bytes,ida_nalt,ida_typeinf,ida_pro,json
+a=0x8327a600;t=ida_typeinf.tinfo_t();f=ida_nalt.get_tinfo(t,a);out={'address':hex(a),'item_size':ida_bytes.get_item_size(a),'type_found':f,'type':str(t) if f else None,'type_size':t.get_size() if f else None};open(r'D:/Reverse/BP-X360-Experimental-Artifacts/wave7/dac-terra/rawpuller-artist-scratch.json','w').write(json.dumps(out,indent=2));ida_pro.qexit(0)

@@ -1,0 +1,23 @@
+"""One targeted R7 ready-source scan; no collection, compiler, or whole-tree rehash."""
+from datetime import datetime,timezone
+import hashlib,json,subprocess
+from pathlib import Path
+HERE=Path(__file__).resolve().parent;WORK=Path('C:/Users/adri1/.codex/worktrees/bp360/wave4-intake');PARENT=Path('C:/Users/adri1/.codex/worktrees/fbaf/BP-Decomp_Workflow');BASE='ef64014612b510bffa6fa17bebe91461bd95a0ab'
+IDS=['f3694b3d1c5ac10d457d061b0f0d8b041516d3eb','76078826f6d0bf1bddc6c61f28a4cf29f6c8a2ae','f917d64fbff10de969216672c8b9210072f012b2','b327ed23ff9898f3b62a74d9d82beec186ed3aad','cf674493ec7bdf9daca1c3b68a6e0a21c7368f40','3227eb950ccb8f12f5244992a19d5cb8a6a2b597','0175c82f9db6f915c1da8f21a8818de6678300d5','d883c10989a8ffd434c5c0a1d901cf1bf03cd22e','fa6a33d80a5928afca5f0edd4ead243caea905e7','c0386d82990d2898543c53c8ac1d4288c38bae9c','c75b2a721e3dc710841ae7df8aa7f61ef763624c','a3633b1049ee5a5e66376dcd7a503025886a2fa9','9c3f6697d9a74051246a7e2910b7a11de71a94b6','43a4a1e743416ddc5fbdf17ac1be24dee9e78c48','b644235cfa602470df1be1f436fddffdbd12ee9e','25ea4bc1d8b568884044d93f5aacfa119a3f2164']
+def git(*a,cwd=WORK):return subprocess.check_output(['git','--no-optional-locks',*a],cwd=cwd)
+def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+assert git('rev-parse','HEAD').decode().strip()==BASE and not git('status','--porcelain=v1').strip()
+assert git('rev-parse','HEAD',cwd=PARENT/'b5-decomp').decode().strip()=='3534f7f16103a58ff904bbd1604e18e9934868f4' and not git('status','--porcelain=v1',cwd=PARENT/'b5-decomp').strip()
+tree={line.split('\t',1)[1]:line.split('\t',1)[0].split()[2]for line in git('ls-tree','-r','HEAD').decode().splitlines()}
+virtual=dict(tree);seen=set();rows=[];paths=set()
+baseline=json.loads((HERE.parent/'repair-r6/full-stage1/compile-results.json').read_text());index={r['source']:r for r in baseline['results']}
+for c in IDS:
+ info=git('show','-s','--format=%H%n%P%n%B',c).decode().splitlines();assert info[0]==c;changes=[]
+ for line in git('diff-tree','--no-commit-id','--raw','--no-abbrev','-r',c).decode().splitlines():
+  left,p=line.split('\t',1);_,_,old,new,status=left[1:].split();assert status=='M',(c,p,status)
+  changes.append({'path':p,'preimage':old,'postimage':new,'R6_blob':tree.get(p),'first_touch':p not in seen,'planned_predecessor':virtual.get(p),'preimage_matches':old==virtual.get(p),'R6_passed':index.get(p,{}).get('passed')});virtual[p]=new;seen.add(p);paths.add(p)
+ rows.append({'commit':c,'parents':info[1].split(),'message':'\n'.join(info[2:]),'paths':changes})
+alias=git('rev-parse','918541007^{commit}').decode().strip();original='a3633b1049ee5a5e66376dcd7a503025886a2fa9';event='src/GameSource/Gui/Flow/HUD/Components/BrnEventInfo.cpp';assert git('rev-parse',alias+':'+event).strip()==git('rev-parse',original+':'+event).strip()
+out={'state':'R7_READY_ONLY_TARGETED_PREFLIGHT_NOT_FINAL_COLLECTION_PLAN','base':BASE,'originals':IDS,'ready_original_count':len(IDS),'candidates':rows,'unique_paths':sorted(paths),'ready_CPP_paths':sorted(p for p in paths if p.endswith('.cpp')),'ready_header_paths':sorted(p for p in paths if p.endswith(('.h','.hpp'))),'preimage_conflicts':[r for c in rows for r in c['paths']if not r['preimage_matches']],'ready_R6_pass_sources':sorted(p for p in paths if index.get(p,{}).get('passed')),'ready_R6_failed_sources':sorted(p for p in paths if p in index and not index[p]['passed']),'new_files':[],'removed_files':[],'private_alias_to_skip':{'original':original,'private_alias':alias,'one_path_postimage_equal':True,'reason':'Private Root adoption is not a second source node.'},'prospective_ready_only_native_inventory':3615,'prospective_ready_only_code_inputs':6298,'actual_current_global_result':{'passed':3122,'failed':493,'requested':3615,'raw_sha256':sha(HERE.parent/'repair-r6/full-stage1/compile-results.json'),'audit_sha256':sha(HERE.parent/'repair-r6/full-stage1-terminal-audit.json')},'parent_gitlink_index':git('ls-files','--stage','b5-decomp',cwd=PARENT).decode().strip(),'scope':'Targeted Git preimages/planned order only, once. No whole6298-file rehash, source changes, compile or new global count. Private pass counts are not summed into projected gains. Pending cohorts require actual seals and Root cutoff review.','created_utc':datetime.now(timezone.utc).isoformat()}
+with(HERE/'R7_READY_SCAN_01.json').open('x')as f:json.dump(out,f,indent=2)
+print(json.dumps({'head':BASE,'ready_originals':len(IDS),'paths':len(paths),'CPPs':len(out['ready_CPP_paths']),'headers':len(out['ready_header_paths']),'preimage_conflicts':len(out['preimage_conflicts']),'R6_pass_paths':len(out['ready_R6_pass_sources']),'R6_failed_paths':len(out['ready_R6_failed_sources']),'alias':alias,'scan_sha256':sha(HERE/'R7_READY_SCAN_01.json')},indent=2))

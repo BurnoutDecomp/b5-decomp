@@ -1,0 +1,30 @@
+"""Create NEW exact R7 action receipts; do not change reviewed preflight evidence."""
+from datetime import datetime,timezone
+import hashlib,json,subprocess
+from pathlib import Path
+HERE=Path(__file__).resolve().parent;WORK=Path('C:/Users/adri1/.codex/worktrees/bp360/wave4-intake');PARENT=Path('C:/Users/adri1/.codex/worktrees/fbaf/BP-Decomp_Workflow');BASE='ef64014612b510bffa6fa17bebe91461bd95a0ab'
+def read(p):return json.loads(Path(p).read_text())
+def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+def git(p,*a):return subprocess.check_output(['git','--no-optional-locks','-C',str(p),*a]).decode().strip()
+def save(p,d):
+ with Path(p).open('x',encoding='utf-8')as f:json.dump(d,f,indent=2);f.write('\n')
+pp=HERE/'R7_PREFLIGHT_PLAN_01.json';assert sha(pp)=='e259d46afd4b79360591c5d2850eae7ff0419a748727b77200bd6ad79973e4e1';plan=read(pp)
+assert git(WORK,'rev-parse','HEAD')==BASE and not git(WORK,'status','--porcelain=v1')and not git(WORK,'branch','--show-current')
+assert git(PARENT/'b5-decomp','rev-parse','HEAD')==plan['published_base']and not git(PARENT/'b5-decomp','status','--porcelain=v1')
+assert git(PARENT,'ls-files','--stage','b5-decomp')==plan['parent_gitlink_index']
+prior=HERE.parent/'repair-r6';meta=read(prior/'native-parallel-wave8-r6-full-stage1-patch.json')
+for p,h in meta['source_snapshot']['hashes'].items():assert sha(WORK/p)==h,p
+for x in read(HERE/'R7_FINAL_EVIDENCE_BINDINGS_01.json')['primary']:assert sha(x['path'])==x['sha256'],x['path']
+clarification={'Root_GUI_raw_COFF':'Raw comparison excluding ONLY timestamp failed because additional metadata differs; do NOT describe it as timestamp-only.','Root_GUI_runtime_positive':'Separate all874 runtime section/data/named-relocation identity is positive and independently pinned.','R6_AutoTest_TIME':'The R6 AutoTest __TIME__-only exception is distinct from Root GUI metadata; do not conflate them.'}
+approved={**plan,'state':'ROOT_AUTHORIZED_EXACT_R7_COLLECTION_AND_GATES','collectable':True,'collect_now':plan['proposed_originals'],'reviewed_plan':str(pp),'reviewed_plan_sha256':sha(pp),'authorization':'Root authorized only20 original107path collection;335 selected protecting226R6passes plus30changedpasses, fresh namedABI/negative gates;ONE stable full3615/6299 jobs8 after selection/named stability, may overlap remainingCPUowner checks. Source immutable; no unlisted source/candidates/publication/formal review.','receipt_clarification':clarification,'authorized_utc':datetime.now(timezone.utc).isoformat()}
+save(HERE/'intake-plan-approved-01.json',approved)
+config={'campaign':'wave8-repair-r7','base':BASE,'published_base':plan['published_base'],'workspace':str(WORK),'canonical':str(PARENT/'b5-decomp'),'artifact_root':str(HERE),'baseline_metadata':str(prior/'native-parallel-wave8-r6-full-stage1-patch.json'),'baseline_report':str(prior/'full-stage1/compile-results.json'),'baseline_artifact_manifest':str(prior/'full-stage1-terminal-audit.json'),'published_report':str(HERE.parent.parent/'wave7/full-successor1/compile-results.json'),'published_artifact_manifest':str(HERE.parent.parent/'wave7/native-parallel-wave7-final-artifact-manifest.json'),'baseline_passed':3122,'baseline_failed':493,'baseline_requested':3615,'current_plan':str(HERE/'intake-plan-approved-01.json')}
+for k in ['baseline_metadata','baseline_report','baseline_artifact_manifest','published_report','published_artifact_manifest']:config[k+'_sha256']=sha(config[k])
+save(HERE/'campaign.json',config);save(HERE/'repair-r7-receipts.json',{'workspace':str(WORK),'base':BASE,'head':BASE,'state':'complete','queue':[],'todo':[],'receipts':[],'updated_utc':datetime.now(timezone.utc).isoformat()})
+text=(prior/'integrate.py').read_text().replace('repair-r6-receipts.json','repair-r7-receipts.json').replace('wave8_repair_r6','wave8_repair_r7').replace('Wave8 R6','Wave8 R7').replace('native Wave8 R6','native Wave8 R7')
+text=text.replace("        current = git('rev-parse', 'HEAD:' + change['path']).stdout.strip()\n        assert current == change['preimage'], ('Changed preimage; stop before mutation', commit, change['path'], current, change['preimage'])", "        if change['preimage'] == '0' * 40:\n            assert git('cat-file', '-e', 'HEAD:' + change['path'], check=False).returncode != 0\n        else:\n            current = git('rev-parse', 'HEAD:' + change['path']).stdout.strip()\n            assert current == change['preimage'], ('Changed preimage; stop before mutation', commit, change['path'], current, change['preimage'])")
+text=text.replace('Wave8 R7 exact14-original intake,44paths, one failed Boundary removal. Source not frozen; no compiler. Preserve R5 full3105/511 and352published regressions plus published3534. No unlisted candidates/source changes/publication.','Wave8 R7 exact20 originals/107paths, one genuine new Mugshotheader/noCPPinventory change. Source not frozen; no compiler. Preserve R6 full3122/493 and347published regressions plus published3534. All later StuntBridge/Luna/World followups excluded.')
+text=text.replace('Collect only14 originals/44paths in the Root-reviewed R6 plan, preserving all R5/published edits. No newfiles; retire only failed BootLegalBoundary. All unlisted Volume/SAT/LineSeg/later18CPP/RootStuntPolygon/geometry work excluded.','Collect only20 originals/107paths in Root-reviewed R7 plan. Preserve every current R6/published edit. One new genuine Mugshotheader, no new/retiredCPP. No private ancestry or unlisted later source.')
+text=text.replace('Current R5 full baseline remains3105/3616PASS/511FAIL/352published regressions; no new global result.','Current R6 full baseline remains3122/3615PASS/493FAIL/347published regressions; no new global result.')
+with(HERE/'integrate.py').open('x',encoding='utf-8')as f:f.write(text)
+print(json.dumps({'base':BASE,'revalidated_inputs':len(meta['source_snapshot']['hashes']),'approved_originals':20,'approved_paths':107,'approved_plan_sha256':sha(HERE/'intake-plan-approved-01.json'),'raw_COFF_clarification_recorded':True}))

@@ -1,0 +1,6 @@
+{
+  "verify_sha256": "62d5fe0f3250be3d38bba322f59af862027c154eaa27492c2b486533cdbde68a",
+  "reference_receipt_sha256": "ed7da509e1ced60cefb7235c5db7096b2739041605a6b08b78f4d5b97e1420f9",
+  "expected_crt_sha256": "55af4a701977e1f803a5f001c4b01f319db9544cfa984d190aeabecf1b3ed8f5",
+  "r26_origin_sha256": "1055d580ae9fe0fca337b08788fd2662c9e41f6ac2bc56219e7b7b518d9eff71"
+}

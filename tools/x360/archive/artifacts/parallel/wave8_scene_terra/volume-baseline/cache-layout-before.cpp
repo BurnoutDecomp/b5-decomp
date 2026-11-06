@@ -1,0 +1,3 @@
+#include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager.h"
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"
+extern const unsigned cache_layout[] = { sizeof(CgsSceneManager::CacheSlot), __alignof(CgsSceneManager::CacheSlot), offsetof(CgsSceneManager::CacheSlot,mLastCachedSphere), offsetof(CgsSceneManager::CacheSlot,mInnerSpherePositionAndRadius), offsetof(CgsSceneManager::CacheSlot,miIndexIntoTriangleCache), offsetof(CgsSceneManager::CacheSlot,miNumCachedTriangleBatches), offsetof(CgsSceneManager::CacheSlot,miOverflow), sizeof(CgsGeometric::Sphere), __alignof(CgsGeometric::Sphere), sizeof(Vector3Plus), __alignof(Vector3Plus) };
