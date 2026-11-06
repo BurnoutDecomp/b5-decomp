@@ -709,6 +709,8 @@ private:
     CgsGraphics::Im3d                   mIm3dRenderer;
     // FLAG PC-platform leaf: native programs require the dispatch device to exist.
     bool                               mbIm3dRendererConstructedPC = false;
+    bool                               mbIm3dRendererUntexConstructedPC = false;
+    void                               ConstructIm3dRendererUntexPC();
     // FLAG PC-platform leaf: failed command storage cannot be reset or rendered.
     bool                               mbDispatchStorageFailedPC = false;
     CgsGraphics::Im3dRenderBufferUntex  mIm3dRenderBufferUntex;

@@ -214,6 +214,20 @@ namespace CgsGraphics
         const f32 KF_DROPSHADOW_OFFSET_X = 2.0f;
         const f32 KF_DROPSHADOW_OFFSET_Y = 3.0f;
 
+        // RenderBackground / RenderBorder sample the middle of the untextured state's white
+        // texture (flt_82001DA0).
+        const f32 KF_UNTEXTURED_UV = 0.5f;
+
+        // KAV2_BORDER_OFFSETS (DecFIGS name), flt_82F30FE4..flt_82F31000, read out of the ARTIST
+        // image: the outward offset of the frame's outer edge at each corner of the box.
+        const TextVector2 KAV2_BORDER_OFFSETS[4] =
+        {
+            { -3.0f, -3.0f },   // top-left
+            {  3.0f, -3.0f },   // top-right
+            { -3.0f,  3.0f },   // bottom-left
+            {  3.0f,  3.0f },   // bottom-right
+        };
+
         // Write one Im2d vertex. PC: the packed RGBA colour is stored directly (the X360 byte-swaps
         // it for big-endian; little-endian PC keeps it as-is -- see rsi_notes.md).
         void lEmitVertex(CgsGraphics::Basic2dColouredTexturedVertex& lrVtx,
@@ -242,7 +256,7 @@ namespace CgsGraphics
         // the overlay structurally unable to starve the signal.
         enum
         {
-            KU_FONT_DIAG_BUCKETS      = 2,   // 0 = shadow off, 1 = shadow on
+            KU_FONT_DIAG_BUCKETS      = 3,   // 0 = shadow off, 1 = shadow on, 2 = background/border
             KU_FONT_DIAG_SLOTS_PLAIN  = 24,
             KU_FONT_DIAG_SLOTS_SHADOW = 232
         };
@@ -323,13 +337,18 @@ namespace CgsGraphics
             lacText[luLen] = 0;
             luKey = (luKey << 1) | (lrTextObject.mbDropShadow ? 1u : 0u);
 
-            if (!lFontDiagFirstSight(lrTextObject.mbDropShadow ? 1u : 0u, luKey))
+            // The boxes get their own bucket: an Apt field that asks for one must never lose its
+            // line to the plain overlay text.
+            const bool lbBox = (lrTextObject.mbBackground != 0 || lrTextObject.mbBorder != 0);
+            if (!lFontDiagFirstSight(lbBox ? 2u : (lrTextObject.mbDropShadow ? 1u : 0u), luKey))
                 return;
 
             *CgsDev::Log::gpDebugPrint
                 << "[font] path=" << (luPath != 0 ? "apt" : "imm")
                 << " str=\"" << lacText
                 << "\" shadow=" << (lrTextObject.mbDropShadow ? 1u : 0u)
+                << " background=" << (lrTextObject.mbBackground != 0 ? 1u : 0u)
+                << " border=" << (lrTextObject.mbBorder != 0 ? 1u : 0u)
                 << " quads=" << (luGlyphVerts / 6u)
                 << " shadowquads=" << (guFontDiagShadowVerts / 6u)
                 << " colour=" << CgsDev::E_PRINTMODE_HEXONCE << lrTextObject.mTextColour
@@ -346,8 +365,9 @@ namespace CgsGraphics
     //
     // CORE path implemented: scale/layout setup, the per-line loop, the per-glyph quad emit, and the
     // colour codes, plus the DROP-SHADOW pass (0x827FFF1C -> RenderDropShadow @0x827FD968).
-    // NOTE (asm branches still not ported): the background/border/emboss passes
-    // and the gradient colour interpolation are guarded features -- added in a follow-on; the common
+    // The background and border passes are ported too (0x827FFE68 / 0x827FFEC4).
+    // NOTE (asm branches still not ported): the emboss pass and the gradient colour interpolation
+    // are guarded features -- added in a follow-on; the common
     // (plain coloured text) path is complete. The line measurer Font::GetStringStartAndEnd and the
     // RenderBuffer* helpers are declared; their bodies are the next pass (so this displays once those land).
     void TextRenderer::RenderStringInternal(const TextObject& lrTextObject, EImRenderingType leType)
@@ -522,8 +542,21 @@ namespace CgsGraphics
             // The guarded effect passes the console runs over the finished glyph run, in its
             // order: background (0x827FFE68), border (0x827FFEC4), DROP SHADOW (0x827FFF1C),
             // then the main pass -- so each earlier pass lands UNDER the glyphs in the command
-            // stream. Background / border / emboss / the gradient colour ramp are still
-            // unported (see the note above RenderStringInternal).
+            // stream. Emboss and the gradient colour ramp are still unported (see the note above
+            // RenderStringInternal). The box passes sit inside the line loop on the console too,
+            // so a multi-line object draws its box once per line.
+            if (lrTextObject.mbBackground != 0)
+            {
+                RenderBufferSetTextureState(GetIm3dTextureStateUntexturedPC(), leType);   // dword_83010F5C
+                RenderBackground(lrTextObject.mv2TopLeft, lrTextObject.mv2BottomRight,
+                                 lrTextObject.mBackgroundColours, leType);
+            }
+            if (lrTextObject.mbBorder != 0)
+            {
+                RenderBufferSetTextureState(GetIm3dTextureStateUntexturedPC(), leType);   // dword_83010F5C
+                RenderBorder(lrTextObject.mv2TopLeft, lrTextObject.mv2BottomRight,
+                             lrTextObject.mBorderColour, leType);
+            }
             if (lrTextObject.mbDropShadow)
             {
                 RenderBufferSetTextureState(lpFont->mpTextureState, leType);
@@ -613,6 +646,54 @@ namespace CgsGraphics
         guFontDiagShadowVerts += luVertexCount;   // [FLAG PC witness] BRN_FONT_DIAG accounting
     }
 
+    // X360 0x827FE5A0. A triangle strip over the box, corners TL, TR, BL, BR. The colours are stored
+    // verbatim: the console's byte-swap chain is the big-endian store (see lEmitVertex).
+    void TextRenderer::RenderBackground(const TextVector2& lrTopLeft, const TextVector2& lrBottomRight,
+                                        const TextBackground& lrBackground, EImRenderingType leType)
+    {
+        Im2dVertex* const lpVtx = RenderBufferRenderStart(4u, leType);
+        if (lpVtx == 0)
+            return;
+
+        lEmitVertex(lpVtx[0], lrTopLeft.mX,     lrTopLeft.mY,     KF_UNTEXTURED_UV, KF_UNTEXTURED_UV, lrBackground.mTopLeft);
+        lEmitVertex(lpVtx[1], lrBottomRight.mX, lrTopLeft.mY,     KF_UNTEXTURED_UV, KF_UNTEXTURED_UV, lrBackground.mTopRight);
+        lEmitVertex(lpVtx[2], lrTopLeft.mX,     lrBottomRight.mY, KF_UNTEXTURED_UV, KF_UNTEXTURED_UV, lrBackground.mBottomLeft);
+        lEmitVertex(lpVtx[3], lrBottomRight.mX, lrBottomRight.mY, KF_UNTEXTURED_UV, KF_UNTEXTURED_UV, lrBackground.mBottomRight);
+
+        RenderBufferRenderEnd(KU_PRIMITIVE_TRIANGLE_STRIP, lpVtx, 4u, leType);
+    }
+
+    // X360 0x827FE730. A closed triangle strip around the box: each corner of the box followed by
+    // the same corner pushed out by KAV2_BORDER_OFFSETS, walking TL, TR, BR, BL and back to TL.
+    void TextRenderer::RenderBorder(const TextVector2& lrTopLeft, const TextVector2& lrBottomRight,
+                                    RGBA lBorderColour, EImRenderingType leType)
+    {
+        Im2dVertex* const lpVtx = RenderBufferRenderStart(10u, leType);
+        if (lpVtx == 0)
+            return;
+
+        const TextVector2 laCorners[5] =
+        {
+            { lrTopLeft.mX,     lrTopLeft.mY     },
+            { lrBottomRight.mX, lrTopLeft.mY     },
+            { lrBottomRight.mX, lrBottomRight.mY },
+            { lrTopLeft.mX,     lrBottomRight.mY },
+            { lrTopLeft.mX,     lrTopLeft.mY     },
+        };
+        static const u32 skauOffsetIndex[5] = { 0u, 1u, 3u, 2u, 0u };
+
+        for (u32 luI = 0; luI < 5u; ++luI)
+        {
+            const TextVector2& lrOffset = KAV2_BORDER_OFFSETS[skauOffsetIndex[luI]];
+            lEmitVertex(lpVtx[luI * 2u], laCorners[luI].mX, laCorners[luI].mY,
+                        KF_UNTEXTURED_UV, KF_UNTEXTURED_UV, lBorderColour);
+            lEmitVertex(lpVtx[luI * 2u + 1u], laCorners[luI].mX + lrOffset.mX, laCorners[luI].mY + lrOffset.mY,
+                        KF_UNTEXTURED_UV, KF_UNTEXTURED_UV, lBorderColour);
+        }
+
+        RenderBufferRenderEnd(KU_PRIMITIVE_TRIANGLE_STRIP, lpVtx, 10u, leType);
+    }
+
     // --- Render-buffer helpers (faithful X360 ports). Each dispatches to whichever immediate buffer
     //     the TextRenderer holds: mpIm2dRenderBuffer for 2D text (the debug-text path), or
     //     mpIm3dRenderBuffer for 3D text. The X360 reaches the buffer methods at +4 (the render-buffer
@@ -643,9 +724,10 @@ namespace CgsGraphics
 
     // X360 0x82800798. Render the text object's string with a per-glyph vertical fade (the
     // RenderStringInternal layout/glyph/colour-code path with the vertex alpha scaled by the
-    // line's Y within the fade band). NOTE (RenderStringInternal precedent): the CORE path is
-    // implemented; the guarded background/border/drop-shadow/emboss/gradient passes are a
-    // follow-on (the credits caller never enables them). Shares the line measurer + RenderBuffer*
+    // line's Y within the fade band). NOTE (RenderStringInternal precedent): the CORE path and the
+    // background/border passes (0x82800F78 / 0x82800FD0) are implemented; the guarded
+    // drop-shadow/emboss/gradient passes are a follow-on (the credits caller never enables them).
+    // Shares the line measurer + RenderBuffer*
     // helpers with RenderStringInternal (defined above).
     void TextRenderer::RenderStringFadingY(Im2dRenderBuffer* lpRenderBuffer, const TextObject& lrTextObject,
                                            f32 lfFadeTopY, f32 lfFadeTopExtent,
@@ -799,6 +881,21 @@ namespace CgsGraphics
                 lfPenX += lpFc->mfAdvance * lrTextObject.mfCharSpacingMultiplier * lfGlyphX;
                 lpChar = CgsUnicode::IncrementUtf8Pointer(lpChar);
             }
+
+            if (lrTextObject.mbBackground != 0)
+            {
+                RenderBufferSetTextureState(GetIm3dTextureStateUntexturedPC(), EImRenderingType_Buffered);   // dword_83010F5C
+                RenderBackground(lrTextObject.mv2TopLeft, lrTextObject.mv2BottomRight,
+                                 lrTextObject.mBackgroundColours, EImRenderingType_Buffered);
+            }
+            if (lrTextObject.mbBorder != 0)
+            {
+                RenderBufferSetTextureState(GetIm3dTextureStateUntexturedPC(), EImRenderingType_Buffered);   // dword_83010F5C
+                RenderBorder(lrTextObject.mv2TopLeft, lrTextObject.mv2BottomRight,
+                             lrTextObject.mBorderColour, EImRenderingType_Buffered);
+            }
+            if (lrTextObject.mbBackground != 0 || lrTextObject.mbBorder != 0)
+                RenderBufferSetTextureState(lpFont->mpTextureState, EImRenderingType_Buffered);
 
             RenderBufferRenderEnd(KU_PRIMITIVE_TRIANGLE_STRIP, lpVtxBase,
                                   mauVertexCount[EImRenderingType_Buffered], EImRenderingType_Buffered);

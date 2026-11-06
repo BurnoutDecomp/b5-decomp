@@ -5387,6 +5387,16 @@ bool BrnRendererModule::EnsureSkyDomeBringUp()
     return true;
 }
 
+// FLAG PC-platform leaf: native D3D9 program adoption needs the device, so the console's one
+// Construct-time call (ARTIST 8240AA00) waits for it; the occlusion bring-up may get here first.
+void BrnRendererModule::ConstructIm3dRendererUntexPC()
+{
+    if (mbIm3dRendererUntexConstructedPC)
+        return;
+    mIm3dRendererUntex.Construct(&sWorldDispatchAllocator);
+    mbIm3dRendererUntexConstructedPC = mIm3dRendererUntex.HasProgramsPC();
+}
+
 // FLAG PC-platform leaf: ARTIST constructs the immediate query renderers and manager in
 // BrnRendererModule::Construct with mpGraphicsAllocator. PC Construct runs before the D3D9
 // device exists, so create this exact renderer family on the first enabled query pass. The
@@ -5401,8 +5411,8 @@ bool BrnRendererModule::EnsureOcclusionCullManagerPC()
         return false;
 
     mbOcclusionCullManagerAttemptedPC = true;
-    mIm3dRendererUntex.Construct(&sWorldDispatchAllocator);
-    if (!mIm3dRendererUntex.HasProgramsPC())
+    ConstructIm3dRendererUntexPC();
+    if (!mbIm3dRendererUntexConstructedPC)
     {
         CgsDev::Log::WriteToLog(
             "[renderer] occlusion query untextured program unavailable; query culling stays off.\n");
@@ -5615,6 +5625,7 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         mIm3dRenderer.Construct(&sWorldDispatchAllocator);
         mbIm3dRendererConstructedPC = mIm3dRenderer.HasProgramsPC();
         CGS_ASSERT(mbIm3dRendererConstructedPC, "mIm3dRenderer.Construct");
+        ConstructIm3dRendererUntexPC();   // ARTIST 8240AA00, right after Im3d::Construct
         CGS_ASSERT(CgsGraphics::GetImWhiteTexturePC() != nullptr, "Immediate-mode white texture unavailable");
     }
 
@@ -6567,11 +6578,15 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         // BeginRenderAntiAliased's untiled branch (0x823FFB90-0x823FFBD8) deliberately clears
         // nothing -- the previous frame's resolve is what left the surface clean. Drop it and the
         // scene's DEPTH is never cleared again.
-        // ARTIST 8240D520..D538: world immediate buffers and RacePosition
-        // share the textured3D renderer before the scene resolve/post-fx.
+        // ARTIST 8240D514..D538: the untextured buffer on its own renderer, then the world
+        // immediate buffers and RacePosition sharing the textured3D renderer, all before the
+        // scene resolve/post-fx.
         CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miIm3dAndRacePositions);
         if (mbRenderWorldImmediateMode && mbIm3dRendererConstructedPC)
         {
+            // FLAG PC-platform leaf: the host may fail to adopt the untextured program image.
+            if (mbIm3dRendererUntexConstructedPC)
+                mIm3dRenderBufferUntex.Dispatch(&mIm3dRendererUntex);
             mIm3dRenderBuffer.Dispatch(&mIm3dRenderer);
             mIm3dBufferRacePosition.Dispatch(&mIm3dRenderer);
         }

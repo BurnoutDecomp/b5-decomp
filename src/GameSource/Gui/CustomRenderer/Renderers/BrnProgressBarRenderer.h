@@ -20,6 +20,7 @@ namespace rw        { struct IResourceAllocator; }    // Prepare's cached alloca
 //   BrnGui::ProgressBarRenderer::Release          @ 0x82446CF8
 //   BrnGui::ProgressBarRenderer::RecvEvent        @ 0x82446DA0
 //   BrnGui::ProgressBarRenderer::RenderQuadUntex  @ 0x8245C828
+//   BrnGui::ProgressBarRenderer::RenderComponent  @ 0x824632C8
 //
 // Layout (DWARF BrnProgressBarRenderer.h) sits on the real CgsGui::CustomRenderComponentInterface
 // base { _vptr [+0x00]; bool mbRenderEnabled [+0x04] }; the renderer adds, in order:
@@ -67,29 +68,25 @@ namespace BrnGui
         };
 
         // ---- CustomRenderComponentInterface overrides (vtable order per DWARF) ----------------
-        // The base models the lifecycle interface with opaque void*/s32 parameters (the real
-        // GuiEventQueueSmall / rw::IResourceAllocator / CgsModule::Event types are uncommitted in
-        // the base's slice); these overrides keep the base's binding signatures and recover the
-        // real DWARF parameter types in comments.
-        virtual void Construct();                                                  // @ 0x82446C00
-        virtual bool Prepare(void* lpEventQueueSmall, void* lpResourceAllocatorA,  // @ 0x82446C48
-                             void* lpResourceAllocatorB);
-        virtual bool Release();                                                    // @ 0x82446CF8
-        virtual void RecvEvent(const void* lpEvent, s32 liEventType);              // @ 0x82446DA0
-
-        // DWARF `virtual CgsID GetID() const` @ 0x82446E50. The base's component-id slot is typed
-        // u32 in its minimal slice; the ARTIST function returns the full 64-bit CgsID, so the
-        // faithful signature is declared here. FLAG: return widened to CgsID vs the base's u32
-        // GetComponentID slot -- the byte-for-byte vtable index is not load-bearing on the host.
-        virtual CgsID GetID() const;
+        virtual void Construct() override;                                         // @ 0x82446C00
+        virtual bool Prepare(CgsGui::GuiEventQueueSmall* lpEventQueue,             // @ 0x82446C48
+                             rw::IResourceAllocator* lpHeapAllocator,
+                             rw::IResourceAllocator* lpTextureAllocator) override;
+        virtual bool Release() override;                                           // @ 0x82446CF8
+        virtual void RecvEvent(const CgsModule::Event* lpEvent, s32 liEventType) override; // @ 0x82446DA0
+        virtual CgsID GetID() const override;                                      // @ 0x82446E50
 
         // DWARF BrnProgressBarRenderer.h:264 -- draws one untextured coloured quad into the 3D
-        // untextured immediate-render buffer. Non-virtual helper (called by RenderComponent).
+        // untextured immediate-render buffer. Called by RenderComponent. No `this`: both ARTIST
+        // call sites pass the buffer in r3 and the function never reads a member.
         //   lrBounds = screen-rectangle bounds (x=left, y=top, z=right, w=bottom)
         //   lrColour = the quad colour as floats in [0,1] (packed to RGBA8 per vertex)
-        void RenderQuadUntex(CgsGraphics::Im3dRenderBufferUntex* lpBuffer,
-                             const Vector4& lrBounds,
-                             const Vector4& lrColour);
+        static void RenderQuadUntex(CgsGraphics::Im3dRenderBufferUntex* lpBuffer,
+                                    const Vector4& lrBounds,
+                                    const Vector4& lrColour);
+
+    protected:
+        virtual void RenderComponent(CgsGui::ImRendererSet* lpRendererSet) override; // @ 0x824632C8
 
     private:
         EPrepareStage           mePrepareStage;          // guest +0x08

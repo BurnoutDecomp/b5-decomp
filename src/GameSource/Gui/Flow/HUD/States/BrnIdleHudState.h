@@ -33,6 +33,12 @@ namespace BrnGui
         // interface. Overrides CgsGui::State's OnEnter (CgsFsm::State vtable slot).
         virtual void OnEnter();   // BrnIdleHudState.cpp:56
 
+        // @ 0x8247E230 - unregister the observed event and stop this level's apt movie.
+        virtual void OnLeave();
+
+        // @ 0x8247E070 - the load sequence, driven only by the per-frame GuiCache event (64).
+        virtual void Update();
+
         // @ 0x82508530 - hands this state's static resource list to the loader
         // (X360: *r4 = &maResourcesToLoad; *r5 = muNumResourcesToLoad, a runtime count).
         virtual void GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,
