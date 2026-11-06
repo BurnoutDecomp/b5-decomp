@@ -1,4 +1,5 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnRaceMainHudState.h"
+#include "GameSource/Gui/Flow/HUD/BrnHudAudioEventRecord.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                          // CgsID / CgsIDCompress
@@ -1665,13 +1666,11 @@ namespace BrnGui
                 // cues and then pauses; anything else is ignored entirely.
                 if (lpu8Payload[0] == 0)
                 {
-                    // X360 @0x824807C0: OutputGuiEvent<GuiAudioEvent> with { 2, 0, -1 } and a
-                    // zeroed qword tail. FLAG deferred: the GuiAudioEvent record's field
-                    // layout is not homed (BrnGuiDemangledEventTypes.h carries only an opaque
-                    // 24-byte placeholder), and BrnFBurnMainHudState.cpp:1252 already parked
-                    // the identical post for the identical reason. The PAUSE below is the
-                    // load-bearing half and is NOT deferred.
-                    // DELETE-WHEN: BrnGui::GuiAudioEvent gets real fields.
+                    HudAudioEventRecord lAudio(KI_HUD_AUDIO_PAUSE_PARAM0, KI_HUD_AUDIO_PAUSE_PARAM1,
+                                               KI_HUD_AUDIO_PAUSE_PARAM2);   // @0x824807C0
+                    mpStateInterface->GetOutputEventQueue()->AddEvent(
+                        reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
+                        static_cast<s32>(sizeof(lAudio)));
                     SendStateEvent("PAUSE");
                 }
                 break;
@@ -1907,33 +1906,11 @@ namespace BrnGui
         // countdown's four audio posts differ only in the third payload word (3/2/1/0), which
         // is the countdown step. Shape verbatim from the committed
         // BrnInGameMessagesComponent.cpp:160 GuiAudioEventRecord40 (the same X360 record).
-        // ⚠ FLAG payload field NAMES: BrnGui::GuiAudioEvent is still `u8 maPayload[12]` in
-        // BrnGuiDemangledEventTypes.h, so the leading words have no recovered names and are
-        // spelled by role here rather than forked into that header.
-        struct alignas(8) GuiAudioEventRecord40
-        {
-            s32   miOutEventSize;     // +0x00 = 24
-            s32   miOutEventType;     // +0x04 = 456
-            s32   miOutEventOffset;   // +0x08 = 16
-            s32   miHeaderPad;        // +0x0C (uninitialised on the console)
-            s32   miAudioParam0;      // +0x10 = 0 on all four countdown posts
-            s32   miAudioParam1;      // +0x14 = 6 (the countdown audio bank)
-            s32   miAudioParam2;      // +0x18 = the countdown step 3/2/1/0
-            s32   miPayloadPad;       // +0x1C (uninitialised on the console)
-            CgsID mAudioId;           // +0x20 = 0
-
-            GuiAudioEventRecord40(s32 liParam0, s32 liParam1, s32 liParam2)
-                : miOutEventSize(24), miOutEventType(456), miOutEventOffset(16), miHeaderPad(0)
-                , miAudioParam0(liParam0), miAudioParam1(liParam1), miAudioParam2(liParam2)
-                , miPayloadPad(0), mAudioId(0)
-            {
-            }
-        };
 
         void PostCountdownAudio(CgsGui::StateInterface* lpInterface, s32 liStep)
         {
             // X360 @0x8247A734/A79C/A834/A8FC: { 0, 6, liStep } + an 8-byte zero tail.
-            GuiAudioEventRecord40 lAudio(0, 6, liStep);
+            HudAudioEventRecord lAudio(0, 6, liStep);
             lpInterface->GetOutputEventQueue()->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT, 40);
         }
