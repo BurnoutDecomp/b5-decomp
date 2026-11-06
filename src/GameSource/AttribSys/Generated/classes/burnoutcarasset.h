@@ -54,6 +54,9 @@ namespace Gen
         // `addi r3, dataArea, 0x170 ; bl RefSpec::GetCollection` and feeds the result to the
         // burnoutcargraphicsasset ctor. DWARF name: Attrib::Hash::burnoutcarasset::GraphicsAsset.
         static const u32 KU_GRAPHICS_ASSET_REFSPEC_OFFSET = 0x170;  // 368 -> burnoutcargraphicsasset
+        // ArbStateCarSelect::StartCarUnlockCam @0x8226F4C0 does `addi r30, dataArea, 0x188` and
+        // asserts the ref's class is iceanim. DWARF name: Attrib::Hash::burnoutcarasset::CarUnlockShot.
+        static const u32 KU_CAR_UNLOCK_SHOT_REFSPEC_OFFSET = 0x188;  // 392 -> iceanim
 
         // ⭐ THE KEY CTOR -- X360 sub_82204998 (out-of-line here, inlined into
         // ProcessNewVehicleEvents). Resolve this car's burnoutcarasset collection by its
@@ -67,6 +70,9 @@ namespace Gen
         explicit burnoutcarasset(u64 luCarCollectionKey, void* lpOwner);
 
         explicit burnoutcarasset(Collection* lpCollection = nullptr, void* lpOwner = nullptr);
+
+        // X360 @0x822048F0. DWARF `burnoutcarasset(const Attrib::RefSpec&, uint32_t)`.
+        explicit burnoutcarasset(const RefSpec& lrRefSpec, void* lpOwner);
 
         // The base's validity test + layout pointer, re-exported (the generated classes derive
         // Instance PRIVATELY). Both are what the console reads off the stack instance:
@@ -83,6 +89,8 @@ namespace Gen
         { return RefSpecAt(KU_PHYSICS_VEHICLE_HANDLING_REFSPEC_OFFSET); }
         RefSpec* GetGraphicsAssetRefSpec() const
         { return RefSpecAt(KU_GRAPHICS_ASSET_REFSPEC_OFFSET); }
+        RefSpec* GetCarUnlockShotRefSpec() const
+        { return RefSpecAt(KU_CAR_UNLOCK_SHOT_REFSPEC_OFFSET); }
         const char* GetAssetName() const
         {
             const u8* lpData = static_cast<const u8*>(GetLayoutPointer());
@@ -104,6 +112,16 @@ namespace Gen
     inline burnoutcarasset::burnoutcarasset(u64 luCarCollectionKey, void* lpOwner)
         : Instance(FindCollection(KU_BURNOUTCARASSET_CLASS_KEY, luCarCollectionKey), lpOwner)
     {
+        if (!mpAttributeData)
+            mpAttributeData = DefaultDataArea(0x228u);
+    }
+
+    // X360 @0x822048F0: the Instance(RefSpec) chain sub_8280A248, the class check, the default area.
+    inline burnoutcarasset::burnoutcarasset(const RefSpec& lrRefSpec, void* lpOwner)
+        : Instance(lrRefSpec, lpOwner)
+    {
+        if (GetClass() != KI_BURNOUTCARASSET_CLASS_LOW && GetClass() != 0)
+            AssertOnClassCheck(GetClass(), KI_BURNOUTCARASSET_CLASS_LOW, GetCollection());
         if (!mpAttributeData)
             mpAttributeData = DefaultDataArea(0x228u);
     }
