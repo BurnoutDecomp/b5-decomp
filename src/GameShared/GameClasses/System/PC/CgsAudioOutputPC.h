@@ -23,8 +23,9 @@
 //  16-bit PCM; the six-channel RWAC transport is folded to float stereo by
 //  DacOutputPC. Only the completed float sum is saturated to the device range;
 //  samples below full scale retain the authored mix without another dynamics pass.
-//  One OnBufferEnd callback owns production. Priming submits only silence before
-//  starting the voice; capture and diagnostic I/O run on a separate bounded worker.
+//  A producer thread owns production and OnBufferEnd copies its buffers out. Priming submits
+//  only silence before starting the voice; capture and diagnostic I/O run on a separate
+//  bounded worker.
 // ===========================================================================
 
 namespace CgsSystem
@@ -65,6 +66,12 @@ public:
     // Diagnostic: route a finite 440 Hz sine through the backend (lfSeconds) to confirm
     // output works by ear, then fall silent. Opens the device first if needed.
     static void PlayTestTone(float lfSeconds);
+
+    // [FLAG PC witness] Callback-safe (atomics only): the engine fill's split of one refill
+    // -- waiting for the RWAC command lock, running the commands, mixing -- in microseconds.
+    // Published with the [audio-output] prelimit line when a capture knob is set.
+    static void NoteEngineFillTiming(unsigned int luLockUs, unsigned int luCommandsUs,
+                                     unsigned int luMixUs);
 };
 
 } // namespace CgsSystem

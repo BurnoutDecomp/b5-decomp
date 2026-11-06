@@ -254,6 +254,13 @@ struct DiagnosticPacket
 const u32 kDiagnosticPackets = 256;
 DiagnosticPacket g_diagnostics[kDiagnosticPackets];
 std::atomic<u32> g_diagWrite(0), g_diagRead(0), g_diagDropped(0);
+// [FLAG PC witness] device-callback timing, published with the prelimit line (capture knobs only).
+// produce = one OnBufferEnd refill; gap = time between two OnBufferEnd entries. With kBuffers
+// queued, a refill longer than (kBuffers - 1) buffers lets the voice run dry: an audible click.
+std::atomic<u32> g_cbProduceMaxUs(0), g_cbGapMaxUs(0), g_cbSlow(0), g_cbStarved(0);
+std::atomic<u32> g_fillLockMaxUs(0), g_fillCommandsMaxUs(0), g_fillMixMaxUs(0);
+std::atomic<u32> g_ringEmpty(0);
+LARGE_INTEGER    g_cbFreq = {}, g_cbLast = {};
 std::atomic<bool> g_diagStop(false);
 HANDLE g_diagEvent = nullptr;
 HANDLE g_diagThread = nullptr;
@@ -271,6 +278,8 @@ s16 DiagnosticS16(f32 afValue)
 {
     return static_cast<s16>(SaturateDeviceSample(afValue) * 32767.0f);
 }
+
+bool ProducerRunning();
 
 DWORD WINAPI DiagnosticThread(void*)
 {
@@ -299,7 +308,16 @@ DWORD WINAPI DiagnosticThread(void*)
             {
                 AUDIO_LOG << "[audio-output] prelimit peak=" << lfPeak
                           << " overrange=" << luOverRange
-                          << " diagnostic-drops=" << g_diagDropped.load() << "\n";
+                          << " diagnostic-drops=" << g_diagDropped.load()
+                          << " produce-max-us=" << g_cbProduceMaxUs.exchange(0)
+                          << " gap-max-us=" << g_cbGapMaxUs.exchange(0)
+                          << " slow=" << g_cbSlow.exchange(0)
+                          << " starved=" << g_cbStarved.exchange(0)
+                          << " producer=" << (ProducerRunning() ? 1 : 0)
+                          << " ring-empty=" << g_ringEmpty.exchange(0)
+                          << " lock-max-us=" << g_fillLockMaxUs.exchange(0)
+                          << " commands-max-us=" << g_fillCommandsMaxUs.exchange(0)
+                          << " mix-max-us=" << g_fillMixMaxUs.exchange(0) << "\n";
                 luPackets = luOverRange = 0;
                 lfPeak = 0.0f;
             }
@@ -312,6 +330,11 @@ DWORD WINAPI DiagnosticThread(void*)
         ::WaitForSingleObject(g_diagEvent, 250);
     }
     return 0;
+}
+
+void NoteMax(std::atomic<u32>& arMax, u32 luValue)
+{
+    if (luValue > arMax.load(std::memory_order_relaxed)) arMax.store(luValue, std::memory_order_relaxed);
 }
 
 void StartDiagnostics()
@@ -454,14 +477,108 @@ void ProduceBuffer(f32* lpBuf)
     }
 }
 
+// ===========================================================================
+// FLAG PC-platform leaf: THE ENGINE MIX RUNS AHEAD ON ITS OWN THREAD.
+//
+// XAudio2 calls OnBufferEnd on its own processing thread, and Microsoft's rule for that
+// callback is "no heavy work": while it runs, the whole engine waits. The engine fill
+// (DacOutputPC: RWAC commands + Dac::Mix) does the full Burnout mix there, and its cost
+// spikes well past the 5.3 ms a 256-frame buffer lasts (BRN_AUDIO_CAPTURE witness,
+// 2026-11-05: mix-max 30-50 ms, ~3600 XAudio2 output glitches per instance over 215 s,
+// unchanged with 8 source-voice buffers because the stall is the engine thread itself).
+// The console mixed on its own Xenon thread; this restores that shape: a producer thread
+// fills kRing buffers ahead with the same ProduceBuffer, one pass per consumed buffer, so
+// the RWAC cadence is unchanged, and OnBufferEnd only copies the oldest one out.
+// The producer lives between StartDevice and ReleaseDevice, so it never runs next to the
+// device-loss pump. BRN_AUDIO_PRODUCER=0 restores the inline fill (diagnostic A/B).
+// ===========================================================================
+const int               kRing = 8;                       // ~42.7 ms of lead at 48 kHz
+f32                     g_ring[kRing][kFrames * kMaxChannels];
+std::atomic<u32>        g_ringWrite(0), g_ringRead(0);
+std::atomic<bool>       g_producerRun(false);
+HANDLE                  g_producerThread = nullptr;
+HANDLE                  g_producerWake   = nullptr;
+
+DWORD WINAPI ProducerThread(void*)
+{
+    while (g_producerRun.load(std::memory_order_acquire))
+    {
+        while (g_ringWrite.load(std::memory_order_relaxed) -
+               g_ringRead.load(std::memory_order_acquire) < static_cast<u32>(kRing))
+        {
+            const u32 luWrite = g_ringWrite.load(std::memory_order_relaxed);
+            ProduceBuffer(g_ring[luWrite % kRing]);
+            g_ringWrite.store(luWrite + 1, std::memory_order_release);
+            if (!g_producerRun.load(std::memory_order_acquire)) break;
+        }
+        ::WaitForSingleObject(g_producerWake, 5);
+    }
+    return 0;
+}
+
+bool ProducerRunning() { return g_producerThread != nullptr; }
+
+bool ProducerEnabled()
+{
+    const char* lpcValue = std::getenv("BRN_AUDIO_PRODUCER");
+    return !(lpcValue && lpcValue[0] == '0');
+}
+
+void StartProducer()
+{
+    if (g_producerThread || !ProducerEnabled()) return;
+    g_ringWrite.store(0); g_ringRead.store(0);
+    g_producerWake = ::CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    if (!g_producerWake) return;
+    g_producerRun.store(true, std::memory_order_release);
+    g_producerThread = ::CreateThread(nullptr, 0, &ProducerThread, nullptr, 0, nullptr);
+    if (!g_producerThread)
+    {
+        g_producerRun.store(false);
+        ::CloseHandle(g_producerWake); g_producerWake = nullptr;
+        return;
+    }
+    ::SetThreadPriority(g_producerThread, THREAD_PRIORITY_HIGHEST);
+}
+
+void StopProducer()
+{
+    if (!g_producerThread) return;
+    g_producerRun.store(false, std::memory_order_release);
+    ::SetEvent(g_producerWake);
+    ::WaitForSingleObject(g_producerThread, INFINITE);
+    ::CloseHandle(g_producerThread); ::CloseHandle(g_producerWake);
+    g_producerThread = g_producerWake = nullptr;
+}
+
+// The callback side: the oldest produced buffer, or silence when the producer is behind.
+void ConsumeBuffer(f32* lpBuf)
+{
+    const int liValues = kFrames * g_channels;
+    const u32 luRead = g_ringRead.load(std::memory_order_relaxed);
+    if (g_ringWrite.load(std::memory_order_acquire) != luRead)
+    {
+        std::memcpy(lpBuf, g_ring[luRead % kRing], sizeof(f32) * liValues);
+        g_ringRead.store(luRead + 1, std::memory_order_release);
+    }
+    else
+    {
+        std::memset(lpBuf, 0, sizeof(f32) * liValues);
+        g_ringEmpty.fetch_add(1, std::memory_order_relaxed);
+    }
+    ::SetEvent(g_producerWake);
+}
+
 HRESULT SubmitBuffer(int liIndex, bool abPrime = false)
 {
     f32* lpBuf = g_buf[liIndex];
     const int liValues = kFrames * g_channels;
     // Device creation may run under the System lock. Priming is SILENCE ONLY;
-    // the sole engine producer is OnBufferEnd after all buffers are submitted.
+    // the engine producer only starts after all buffers are submitted.
     if (abPrime)
         std::memset(lpBuf, 0, sizeof(f32) * liValues);
+    else if (g_producerThread)
+        ConsumeBuffer(lpBuf);
     else
         ProduceBuffer(lpBuf);
     XAUDIO2_BUFFER lBuf = {};
@@ -487,9 +604,34 @@ public:
     void STDMETHODCALLTYPE OnBufferEnd(void* pBufferContext) override
     {
         RwacCommandTracePC::Mark(RwacCommandTracePC::DeviceCallbackBegin);
+        LARGE_INTEGER lStart = {};
+        if (g_diagThread)
+        {
+            if (g_cbFreq.QuadPart == 0) ::QueryPerformanceFrequency(&g_cbFreq);
+            ::QueryPerformanceCounter(&lStart);
+            if (g_cbLast.QuadPart != 0)
+            {
+                const u32 luGap = static_cast<u32>((lStart.QuadPart - g_cbLast.QuadPart) * 1000000 / g_cbFreq.QuadPart);
+                if (luGap > g_cbGapMaxUs.load(std::memory_order_relaxed)) g_cbGapMaxUs.store(luGap, std::memory_order_relaxed);
+            }
+            g_cbLast = lStart;
+            // Starved: the voice has played every queued buffer, so this refill comes after
+            // the device already ran dry -- an audible gap, not just a slow refill.
+            XAUDIO2_VOICE_STATE lState = {};
+            g_pSource->GetState(&lState, XAUDIO2_VOICE_NOSAMPLESPLAYED);
+            if (lState.BuffersQueued == 0) g_cbStarved.fetch_add(1, std::memory_order_relaxed);
+        }
         // A rejected re-queue drops this slot from the refill chain for good.
         const HRESULT lResult =
             SubmitBuffer(static_cast<int>(reinterpret_cast<intptr_t>(pBufferContext)));
+        if (g_diagThread)
+        {
+            LARGE_INTEGER lEnd = {};
+            ::QueryPerformanceCounter(&lEnd);
+            const u32 luProduce = static_cast<u32>((lEnd.QuadPart - lStart.QuadPart) * 1000000 / g_cbFreq.QuadPart);
+            if (luProduce > g_cbProduceMaxUs.load(std::memory_order_relaxed)) g_cbProduceMaxUs.store(luProduce, std::memory_order_relaxed);
+            if (luProduce > static_cast<u32>(kFrames * 1000000 / 48000)) g_cbSlow.fetch_add(1, std::memory_order_relaxed);
+        }
         if (FAILED(lResult))
             SignalDeviceLost(lResult);
         RwacCommandTracePC::Mark(RwacCommandTracePC::DeviceCallbackEnd);
@@ -662,8 +804,10 @@ UINT32 g_endpointIndex = UINT32_MAX;   // active-endpoint fallback used by the l
 // DestroyVoice waits for the last callback before buffers or bindings are touched.
 void ReleaseDevice()
 {
-    RwacCommandTracePC::MarkDeviceClosed();
+    // DestroyVoice waits for the last OnBufferEnd, which still wakes the producer, so the voice goes first.
     if (g_pSource) { g_pSource->Stop(0); g_pSource->DestroyVoice(); g_pSource = nullptr; }
+    StopProducer();
+    RwacCommandTracePC::MarkDeviceClosed();
     if (g_pMaster) { g_pMaster->DestroyVoice(); g_pMaster = nullptr; }
     if (g_pXAudio2)
     {
@@ -760,9 +904,10 @@ bool CreateDevice(int liSampleRate, int liChannels)
     return true;
 }
 
-// Start the created source voice; from here OnBufferEnd is the producer.
+// Start the producer, then the created source voice.
 bool StartDevice()
 {
+    StartProducer();
     if (FAILED(g_pSource->Start(0)))
     {
         ReleaseDevice();
@@ -954,6 +1099,16 @@ void AudioOutputPC::PlayTestTone(float lfSeconds)
     g_tone.remaining = static_cast<int>(lfSeconds * 48000.0f);
     SetFill(&TestToneFill, &g_tone);
     AUDIO_LOG << "[Audio] test tone: 440 Hz for " << static_cast<int>(lfSeconds) << " s\n";
+}
+
+// [FLAG PC witness] see the declaration. No-op unless the diagnostics thread runs.
+void AudioOutputPC::NoteEngineFillTiming(unsigned int luLockUs, unsigned int luCommandsUs,
+                                         unsigned int luMixUs)
+{
+    if (!g_diagThread) return;
+    NoteMax(g_fillLockMaxUs, luLockUs);
+    NoteMax(g_fillCommandsMaxUs, luCommandsUs);
+    NoteMax(g_fillMixMaxUs, luMixUs);
 }
 
 } // namespace CgsSystem
