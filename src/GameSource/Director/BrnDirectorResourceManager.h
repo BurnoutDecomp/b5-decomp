@@ -372,6 +372,9 @@ enum EShotDirection
 class DirectorResourceManager
 {
 public:
+    // @0x827DEB98. Its one caller is DirectorModule's constructor @0x827E50A4, by member.
+    DirectorResourceManager();
+
     // DWARF BrnDirectorResourceManager.h:245. Prepare's own switch variable; the stage
     // machine falls through 0/1 -> 2 -> 4 -> 5. Stage 3 is an ENTRY POINT only (Prepare
     // never stores it).
