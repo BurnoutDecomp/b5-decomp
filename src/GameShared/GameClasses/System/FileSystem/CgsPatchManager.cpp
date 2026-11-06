@@ -37,6 +37,7 @@ namespace CgsFileSystem
         CGS_STATIC_ASSERT(sizeof(mPatchFileMap) == 16, "ARTIST patch SOA table");
         CGS_STATIC_ASSERT(offsetof(PatchManager, mPatchFileMap) == 0x888, "ARTIST patch table");
         CGS_STATIC_ASSERT(offsetof(PatchManager, mbPatching) == 0x898, "ARTIST patching flag");
+        CGS_STATIC_ASSERT(offsetof(PatchManager, mpSearchScratch) == 0x89C, "ARTIST patch worker scratch pointer");
         CGS_STATIC_ASSERT(offsetof(PatchManager, mDirSearchThread) == 0x8a0, "ARTIST patch-search thread");
         mpAllocator         = lpAllocator;
         muCurrentPatchIndex = 0;
@@ -84,13 +85,19 @@ namespace CgsFileSystem
     {
         PatchManager* lpThis = static_cast<PatchManager*>(lpContext);
 
-        // FLAGGED: the X360 grabs a 26000-byte scratch from the allocator (vtable+16 Alloc), stores
-        // the handle into miSearchHandleCount (+0x89C), runs the walk, then frees it (vtable+20). That
-        // alloc/free pair is NOT reproduced here (the allocator interface for this manager is not yet
-        // modelled, and SearchFolder uses its own fixed stack buffers, so the overlay result is
-        // unaffected) -- left as a documented gap rather than fabricating the vtable calls. As a
-        // consequence miSearchHandleCount stays unwritten until the allocator is modelled.
+        // ARTIST allocates a lane-0 scratch resource through the manager's allocator, keeps its
+        // pointer in the +0x89C slot for the duration of the walk, then frees that lane afterward.
+        rw::ResourceDescriptor lScratchDescriptor;
+        lScratchDescriptor.m_baseResourceDescriptors[0].m_size = 26000;
+        lScratchDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10;
+        rw::Resource lScratchResource = lpThis->mpAllocator->DoAllocate(lScratchDescriptor, 0);
+        lpThis->mpSearchScratch = lScratchResource.m_baseResources[0];
+
         lpThis->SearchFolder(lpThis->maPatches[lpThis->muCurrentPatchIndex].miacFolder, "");
+
+        rw::Resource lScratchToFree;
+        lScratchToFree.m_baseResources[0] = lpThis->mpSearchScratch;
+        lpThis->mpAllocator->DoFree(lScratchToFree);
 
         // Scan finished: advance to the next patch slot and clear the patching flag.
         lpThis->mbPatching = false;

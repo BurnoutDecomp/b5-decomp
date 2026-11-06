@@ -905,13 +905,6 @@ namespace BrnGame
         // game-state module's post-world input GameEventQueue (VariableEventQueue<1536,16>). A handful of
         // events also drive the training manager (RequestTraining / OnEnableTrainingTips). Returns the
         // final queue-walk status. Called by DoUpdate_GameStatePostWorld / LoadingScriptedState::Update.
-        // [P1 sim-pause] SIGNATURE ADAPTED to take the out-event queue directly (the
-        // BridgeGuiToDirector precedent: the PC GuiModule owns the queue, not a console
-        // CgsGuiModuleIO::OutputBuffer), and the walk carries the same channel-40 PC-ABI
-        // adapter that bridge documents.
-        int BridgeGuiToGameState(BrnGameState::GameStateModule* lpGameStateInput,
-                                 const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue);
-        // Original typed target; required by the temporary partial-loading route.
         int BridgeGuiToGameState(BrnGameState::GameStateModuleIO::PostWorldInputBuffer* lpGameStateInput,
                                  const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput);
 

@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress ("GMInvAccept" / "GMStrOffline")
 #include "GameShared/GameClasses/Development/CgsStrStream.h"          // CgsDev::StrStream (the formatted default-case assert)
+#include "GameSource/GameState/Progression/BrnProfile.h"
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"  // BrnGameState::TrainingManager (cases 94 / 473)
 #include "SharedClasses/Progression/BrnTrainingTypes.h"               // BrnProgression::ETrainingType
 
@@ -34,29 +35,16 @@ namespace BrnGame
     // Two events (94 / 473) additionally drive the training manager; two (191 / 494)
     // build/emit their game-state event inline. Returns the final queue-walk status.
     // Called by DoUpdate_GameStatePostWorld / LoadingScriptedState::Update.
-    //
-    // [P1 sim-pause] NOW CALLED (the "DELETE-WHEN it has a caller" flags are retired), with
-    // two PC adaptations at the seam, both precedented:
-    //   * the queue arrives directly (the PC GuiModule owns it; the BridgeGuiToDirector
-    //     precedent) and the walk carries that bridge's channel-40 PC-ABI adapter -- the PC
-    //     GuiModule keeps records on their channel (40) with the type in the record's own
-    //     header word and the payload at its miOutEventOffset, which is exactly what the
-    //     console's GuiEventWrapper::GetRawEvent() unwraps.
-    //   * the training manager is reached through GetTrainingManager() (the PC module holds
-    //     it by pointer), NOT the console's this+0x674B30 raw offset -- a raw console offset
-    //     on a host object is the wheel-blanking defect class. The 64-bit game-flags word
-    //     (console this+0x691E60; bit 41 gates the case-94 training request) has no PC
-    //     member yet -- FLAG'd below, read as 0 (bit clear), which is the console's value
-    //     until something sets it.
     // =========================================================================
-    static int TranslateGuiEventsToGameState(
-        CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue,
-        BrnGameState::TrainingManager* lpTrainingManager,
-        const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue)
+    int BrnGameModule::BridgeGuiToGameState(
+        BrnGameState::GameStateModuleIO::PostWorldInputBuffer* lpGameStateInput,
+        const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput)
     {
-        // FLAG: the 64-bit game-flags word (console this+0x691E60) is un-homed on the PC
-        // module; bit 41 reads 0 (see the banner).
-        const u64 lu64GameFlags = 0;
+        const CgsModule::VariableEventQueue<18432, 16>* const lpGuiEventQueue =
+            lpGuiOutput->GetOutEventQueue();
+        CgsModule::VariableEventQueue<1536, 16>* const lpGameEventQueue =
+            lpGameStateInput->GetGameEventQueue();
+        BrnGameState::TrainingManager* const lpTrainingManager = mGameStateModule.GetTrainingManager();
 
         const CgsModule::Event* lpEvent = 0;
         s32 liEventSize = 0;
@@ -64,21 +52,8 @@ namespace BrnGame
 
         while (lpEvent)
         {
-            // ---- resolve (command, payload) -- the channel-40 PC-ABI adapter (see banner) --
             const unsigned char* lp = reinterpret_cast<const unsigned char*>(lpEvent);
             const s32* lpW = reinterpret_cast<const s32*>(lp);
-            s32 liCommand = liResult;
-            if (liResult == 40 && liEventSize >= 12)
-            {
-                const u32* lpuRecord = reinterpret_cast<const u32*>(lpEvent);
-                liCommand = static_cast<s32>(lpuRecord[1]);
-                const u32 luOffset = lpuRecord[2];
-                if (luOffset >= 12u && static_cast<s32>(luOffset) < liEventSize)
-                {
-                    lp  = reinterpret_cast<const unsigned char*>(lpEvent) + luOffset;
-                    lpW = reinterpret_cast<const s32*>(lp);
-                }
-            }
 
             CGS_ALIGN(16) unsigned char lBuf[512];
             unsigned char* lpOut = lBuf;
@@ -86,7 +61,7 @@ namespace BrnGame
             s32 liSize = 0;
             bool lbEmit = false;
 
-            switch (liCommand)
+            switch (liResult)
             {
                 // ---- switch A (65..191) ----
                 case 65:
@@ -112,8 +87,14 @@ namespace BrnGame
                     // X360 reads a SINGLE BYTE lp[0] (lbz r11,0(r31); cmplwi r11,0) for both the
                     // emitted payload and the training gate -- not the 32-bit word (Hex-Rays _R31 is u8*).
                     lpOut[0] = (lp[0] == 0) ? 1 : 0;
-                    if (lp[0] != 0 && (lu64GameFlags & (1ULL << 41)) == 0)
-                        lpTrainingManager->RequestTraining(static_cast<BrnProgression::ETrainingType>(33));
+                    // ARTIST 823DDFC8 reads the saved profile's first training word.
+                    if (lp[0] != 0)
+                    {
+                        const BrnProgression::Profile* const lpProfile =
+                            mGameStateModule.GetProgressionManager()->GetProfile();
+                        if (!lpProfile->HasPlayerSeenTrainingType(BrnProgression::E_TRAINING_TYPE_INTRO_TO_ONLINE_1))
+                            lpTrainingManager->RequestTraining(BrnProgression::E_TRAINING_TYPE_ACTIVATED_EASY_DRIVE);
+                    }
                     liType = 99; liSize = 1; lbEmit = true;
                     break;
                 case 135:
@@ -429,29 +410,6 @@ namespace BrnGame
         }
 
         return liResult;
-    }
-
-    // Existing host adapter: the full PC post-world seat still targets the carry
-    // queue. Partial loading uses the typed overload below, never this adapter.
-    int BrnGameModule::BridgeGuiToGameState(
-        BrnGameState::GameStateModule* lpGameStateInput,
-        const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue)
-    {
-        return TranslateGuiEventsToGameState(
-            BrnGameState::GameStateModuleIO::PostWorldInput(lpGameStateInput),
-            lpGameStateInput->GetTrainingManager(), lpGuiEventQueue);
-    }
-
-    // ARTIST823DDB84..DBA8: r4 is PostWorldInput, r5 is const GUI output.
-    // Their caller-held write/read locks are checked by these real accessors.
-    int BrnGameModule::BridgeGuiToGameState(
-        BrnGameState::GameStateModuleIO::PostWorldInputBuffer* lpGameStateInput,
-        const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutput)
-    {
-        const CgsModule::VariableEventQueue<18432, 16>* const lpGuiEvents =
-            lpGuiOutput->GetOutEventQueue();
-        return TranslateGuiEventsToGameState(lpGameStateInput->GetGameEventQueue(),
-            mGameStateModule.GetTrainingManager(), lpGuiEvents);
     }
 
 }
