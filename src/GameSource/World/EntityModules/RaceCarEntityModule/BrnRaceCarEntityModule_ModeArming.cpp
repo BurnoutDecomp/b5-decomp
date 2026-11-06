@@ -408,10 +408,13 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
         CGS_ASSERT(liLocalPlayerGridPosition > -1 && liLocalPlayerGridPosition < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                    "( liLocalPlayerGridPosition > -1 ) && ( liLocalPlayerGridPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS )");
 
-        BrnNetHarnessPC::Witness("world", "online grid mode=%d cars=%d lobby=%d localGrid=%d respawnLocal=%d",
-                                 static_cast<s32>(lpGameModeParams->GetGameModeType()), liGridCount,
-                                 lbIsFreeburnLobby ? 1 : 0, liLocalPlayerGridPosition,
-                                 lbRespawnLocalCar ? 1 : 0);
+        if (BrnNetHarnessPC::WitnessEnabled())
+        {
+            BrnNetHarnessPC::Witness("world", "online grid mode=%d cars=%d lobby=%d localGrid=%d respawnLocal=%d",
+                                     static_cast<s32>(lpGameModeParams->GetGameModeType()), liGridCount,
+                                     lbIsFreeburnLobby ? 1 : 0, liLocalPlayerGridPosition,
+                                     lbRespawnLocalCar ? 1 : 0);
+        }
 
         AddRaceCarToStartingGridOrFreeburnLobby(lpPFMAction, lpOutput->GetRaceCarAIInterface(),
                                                 lpGameModeParams, lbIsFreeburnLobby, lbRespawnLocalCar,
@@ -1055,11 +1058,14 @@ void RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby(
         BrnDirector::Camera::Utils::CreateLookAt(lPosition, rw::math::vpu::Add(lPosition, lDirection));
 
     // FLAG PC-platform leaf: bounded, passive observation through the existing LAN witness.
-    BrnNetHarnessPC::Witness("debug-spawn", "lobby=%d force=%d local=%d respawn=%d grid=%d position=(%g,%g,%g)",
-                             lbIsFreeburnLobby ? 1 : 0,
-                             mRCEntityModuleDebugComponent.mbForceOnlineFreeburnSpawnPosition ? 1 : 0,
-                             lbIsLocal ? 1 : 0, lbRespawnLocalCar ? 1 : 0, liGridPosition,
-                             lPosition.x, lPosition.y, lPosition.z);
+    if (BrnNetHarnessPC::WitnessEnabled())
+    {
+        BrnNetHarnessPC::Witness("debug-spawn", "lobby=%d force=%d local=%d respawn=%d grid=%d position=(%g,%g,%g)",
+                                 lbIsFreeburnLobby ? 1 : 0,
+                                 mRCEntityModuleDebugComponent.mbForceOnlineFreeburnSpawnPosition ? 1 : 0,
+                                 lbIsLocal ? 1 : 0, lbRespawnLocalCar ? 1 : 0, liGridPosition,
+                                 lPosition.x, lPosition.y, lPosition.z);
+    }
 
     // ---- 5. the local car's boost strategy + stats -----------------------------------------
     ERaceCarType leRaceCarType = E_RACE_CAR_TYPE_NETWORK;
@@ -1236,10 +1242,13 @@ void RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby(
         }
     }
 
-    BrnNetHarnessPC::Witness("world", "grid car %d net=%d local=%d type=%d active=%d model=%016llX",
-                             liGridPosition, static_cast<s32>(lGridNetworkPlayerID), lbIsLocal ? 1 : 0,
-                             static_cast<s32>(lpRaceCar->GetType()), static_cast<s32>(leActiveRaceCarIndex),
-                             static_cast<unsigned long long>(lModelId));
+    if (BrnNetHarnessPC::WitnessEnabled())
+    {
+        BrnNetHarnessPC::Witness("world", "grid car %d net=%d local=%d type=%d active=%d model=%016llX",
+                                 liGridPosition, static_cast<s32>(lGridNetworkPlayerID), lbIsLocal ? 1 : 0,
+                                 static_cast<s32>(lpRaceCar->GetType()), static_cast<s32>(leActiveRaceCarIndex),
+                                 static_cast<unsigned long long>(lModelId));
+    }
 }
 
 } // namespace BrnWorld

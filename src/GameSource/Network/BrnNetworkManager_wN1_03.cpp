@@ -706,7 +706,10 @@ namespace BrnNetwork
             PlayerMenuData* lpMenuData =
                 static_cast<PlayerMenuData*>(lpNetworkManager->GetPlayerManager()->GetMenuDataByID(lPlayerID));
             CGS_ASSERT(lpMenuData != NULL, "lpMenuData");
-            BrnNetHarnessPC::Witness("player", "added id=%d local=%d name=%.16s", lPlayerID, lbIsLocalPlayer ? 1 : 0, (lpMenuData != NULL) ? lpMenuData->macName : "?");
+            if (BrnNetHarnessPC::WitnessEnabled())
+            {
+                BrnNetHarnessPC::Witness("player", "added id=%d local=%d name=%.16s", lPlayerID, lbIsLocalPlayer ? 1 : 0, (lpMenuData != NULL) ? lpMenuData->macName : "?");
+            }
 
             lPlayerParams.Prepare();
             lpNetworkManager->GetServerInterface()->GetGameComponent()->GetPlayerParametersByPlayerID(lPlayerID,
@@ -752,7 +755,10 @@ namespace BrnNetwork
         }
 
         case CgsNetwork::PlayerManager::E_EVENT_START_PLAYER_REMOVAL:
-            BrnNetHarnessPC::Witness("player", "removing id=%d", lPlayerID);
+            if (BrnNetHarnessPC::WitnessEnabled())
+            {
+                BrnNetHarnessPC::Witness("player", "removing id=%d", lPlayerID);
+            }
             lpNetworkManager->GetHostMigrationManager()->RemovePlayer(lPlayerID);
             lpNetworkManager->GetStartTimeManager()->RemovePlayer(lPlayerID);
             lpNetworkManager->GetVoIPManager()->RemovePlayer(lpNetworkManager->GetServerInterface(), lPlayerID);

@@ -135,6 +135,8 @@ namespace BrnGame
         // [PC HARNESS, not console code] the two-instance LAN test harness posts its next GUI event into
         // the same queue; inert unless BRN_NET_HOST or BRN_NET_JOIN is set.
         BrnNetHarnessPC::Update(lpNetworkInput->GetGuiEventQueue());
+        BrnNetHarnessPC::InjectStartMode(lpNetworkInput->GetGuiEventQueue(), mGuiModule.GetGuiCacheForHarnessPC());
+        BrnNetHarnessPC::InjectGuiOutputBuffer(const_cast<CgsModule::VariableEventQueue<18432, 16>*>(lpGuiOutputBuffer->GetOutEventQueue()));
         TranslateGuiEventsToNetworkEvents(lpNetworkInput->GetNetworkEventQueue(),
                                           lpGuiOutputBuffer->GetOutEventQueue());
 

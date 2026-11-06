@@ -2957,10 +2957,13 @@ void ChallengeManager::PreWorldUpdate(
     static s32 siWitnessedStatus = E_CHALLENGE_MANAGER_STATUS_NONE;
     if (static_cast<s32>(meChallengeManagerStatus) != siWitnessedStatus)
     {
-        BrnNetHarnessPC::Witness("fburn", "status %d -> %d id=%llu host=%d frame=%d",
-                                 siWitnessedStatus, static_cast<s32>(meChallengeManagerStatus),
-                                 static_cast<unsigned long long>(GetCurrentFreeburnChallengeID()),
-                                 lbIsOnline ? 1 : 0, liFramesSinceNetworkStart);
+        if (BrnNetHarnessPC::WitnessEnabled())
+        {
+            BrnNetHarnessPC::Witness("fburn", "status %d -> %d id=%llu host=%d frame=%d",
+                                     siWitnessedStatus, static_cast<s32>(meChallengeManagerStatus),
+                                     static_cast<unsigned long long>(GetCurrentFreeburnChallengeID()),
+                                     lbIsOnline ? 1 : 0, liFramesSinceNetworkStart);
+        }
         siWitnessedStatus = static_cast<s32>(meChallengeManagerStatus);
     }
 }
@@ -3741,18 +3744,24 @@ void ChallengeManager::TriggerFreeburnChallenge(CgsID lChallengeID, TGameActionQ
         const ChallengeCompletionData& lDiagSlot = maChallengeCompletionData[liSlot];
         if (lDiagSlot.mNetworkPlayerID != -1)
         {
-            BrnNetHarnessPC::Witness("fburn", "trigger slot=%d net=%d finalised=%d raceCar=%d",
-                                     liSlot, static_cast<s32>(lDiagSlot.mNetworkPlayerID),
-                                     lDiagSlot.mbFinalised ? 1 : 0,
-                                     static_cast<s32>(mpGameStateModule->GetActiveRaceCarIndex(lDiagSlot.mNetworkPlayerID)));
+            if (BrnNetHarnessPC::WitnessEnabled())
+            {
+                BrnNetHarnessPC::Witness("fburn", "trigger slot=%d net=%d finalised=%d raceCar=%d",
+                                         liSlot, static_cast<s32>(lDiagSlot.mNetworkPlayerID),
+                                         lDiagSlot.mbFinalised ? 1 : 0,
+                                         static_cast<s32>(mpGameStateModule->GetActiveRaceCarIndex(lDiagSlot.mNetworkPlayerID)));
+            }
         }
     }
-    BrnNetHarnessPC::Witness("fburn", "trigger started=[%d %d %d %d %d %d %d] localCar=%d",
-                             mabPlayerStartedChallenge[0] ? 1 : 0, mabPlayerStartedChallenge[1] ? 1 : 0,
-                             mabPlayerStartedChallenge[2] ? 1 : 0, mabPlayerStartedChallenge[3] ? 1 : 0,
-                             mabPlayerStartedChallenge[4] ? 1 : 0, mabPlayerStartedChallenge[5] ? 1 : 0,
-                             mabPlayerStartedChallenge[6] ? 1 : 0,
-                             static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex()));
+    if (BrnNetHarnessPC::WitnessEnabled())
+    {
+        BrnNetHarnessPC::Witness("fburn", "trigger started=[%d %d %d %d %d %d %d] localCar=%d",
+                                 mabPlayerStartedChallenge[0] ? 1 : 0, mabPlayerStartedChallenge[1] ? 1 : 0,
+                                 mabPlayerStartedChallenge[2] ? 1 : 0, mabPlayerStartedChallenge[3] ? 1 : 0,
+                                 mabPlayerStartedChallenge[4] ? 1 : 0, mabPlayerStartedChallenge[5] ? 1 : 0,
+                                 mabPlayerStartedChallenge[6] ? 1 : 0,
+                                 static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex()));
+    }
 
     // Posted id is the PARAMETER here (`std r26` == the r4 CgsID), not the cached entry's.
     GameStateModuleIO::FreeburnChallengeAction lAction;
@@ -3810,9 +3819,12 @@ void ChallengeManager::UpdateResults(f32 lfTimeStep, TGameActionQueue* lpActionQ
         static s32 ssStuckFrames = 0;
         if ((++ssStuckFrames % 300) == 0)
         {
-            BrnNetHarnessPC::Witness("fburn", "RESULTS still pending frames=%d localStatus=%d timer=%.3f running=%d dt=%.5f",
-                                     ssStuckFrames, static_cast<s32>(meLocalChallengeStatus), mfResultsTimer,
-                                     mbResultsTimerRunning ? 1 : 0, lfTimeStep);
+            if (BrnNetHarnessPC::WitnessEnabled())
+            {
+                BrnNetHarnessPC::Witness("fburn", "RESULTS still pending frames=%d localStatus=%d timer=%.3f running=%d dt=%.5f",
+                                         ssStuckFrames, static_cast<s32>(meLocalChallengeStatus), mfResultsTimer,
+                                         mbResultsTimerRunning ? 1 : 0, lfTimeStep);
+            }
         }
     }
 
@@ -5375,12 +5387,15 @@ void ChallengeManager::PostWorldUpdate(
                        "( leCrashedActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");  // X360 line 752
 
             // [PC DIAG] NOT IN THE X360 BINARY -- why a "crash into player" challenge may not count here.
-            BrnNetHarnessPC::Witness("fburn", "crash-evt crasher=%d crashed=%d started[crasher]=%d started[crashed]=%d local=%d",
-                                     static_cast<s32>(leCrasherActiveRaceCarIndex),
-                                     static_cast<s32>(leCrashedActiveRaceCarIndex),
-                                     mabPlayerStartedChallenge[leCrasherActiveRaceCarIndex] ? 1 : 0,
-                                     mabPlayerStartedChallenge[leCrashedActiveRaceCarIndex] ? 1 : 0,
-                                     static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex()));
+            if (BrnNetHarnessPC::WitnessEnabled())
+            {
+                BrnNetHarnessPC::Witness("fburn", "crash-evt crasher=%d crashed=%d started[crasher]=%d started[crashed]=%d local=%d",
+                                         static_cast<s32>(leCrasherActiveRaceCarIndex),
+                                         static_cast<s32>(leCrashedActiveRaceCarIndex),
+                                         mabPlayerStartedChallenge[leCrasherActiveRaceCarIndex] ? 1 : 0,
+                                         mabPlayerStartedChallenge[leCrashedActiveRaceCarIndex] ? 1 : 0,
+                                         static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex()));
+            }
 
             // Both cars must be taking part in the current challenge (X360 tests the CRASHED
             // car's flag first, then the CRASHER's, both off the +0x598 byte array).

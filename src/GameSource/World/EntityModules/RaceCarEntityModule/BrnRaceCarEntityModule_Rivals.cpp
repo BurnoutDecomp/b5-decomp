@@ -297,9 +297,12 @@ void RaceCarEntityModule::RemoveAllNetworkCarsFromWorld(RaceCarEntityModuleIO::O
         {
             lpNetworkCar->SetInCurrentGameMode(false, false);
 
-            BrnNetHarnessPC::Witness("world", "network car removed active=%d global=%d",
-                                     static_cast<s32>(lpNetworkCar->GetActiveRaceCarIndex()),
-                                     static_cast<s32>(leGlobalRaceCarIndex));
+            if (BrnNetHarnessPC::WitnessEnabled())
+            {
+                BrnNetHarnessPC::Witness("world", "network car removed active=%d global=%d",
+                                         static_cast<s32>(lpNetworkCar->GetActiveRaceCarIndex()),
+                                         static_cast<s32>(leGlobalRaceCarIndex));
+            }
             RemoveRaceCar(leGlobalRaceCarIndex, lpOutput);
         }
     }

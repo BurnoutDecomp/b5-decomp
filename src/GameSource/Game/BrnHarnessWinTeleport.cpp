@@ -574,6 +574,13 @@ void PreWorldUpdate(const BrnGameState::ModeManager& lrModeManager,
     const BrnGameState::GameMode* lpMode = lrModeManager.GetCurrentGameMode();
     const s32 liState = (lpMode != 0) ? lpMode->GetCurrentState() : -1;
 
+    // The online free-burn lobby runs (and reaches IN_PROGRESS) before any online event, has no
+    // finish, and is not the event this capability is armed for.
+    if (lrModeManager.GetCurrentGameModeType() == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY)
+    {
+        return;
+    }
+
     Vector3 lPlayerPosition = Vector3{ 0.0f, 0.0f, 0.0f, 0.0f };
     const bool lbHavePosition = ReadPlayerPosition(lpActiveRaceCarOutput, &lPlayerPosition);
 

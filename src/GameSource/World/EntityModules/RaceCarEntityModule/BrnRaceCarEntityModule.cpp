@@ -3767,10 +3767,13 @@ void RaceCarEntityModule::HandleGameActions(
             SetActiveRaceCarForPlayerScoringIndex(lpPlayerAddedAction->mePlayerScoringIndex,
                                                   lpRaceCar->GetActiveRaceCarIndex());
 
-            BrnNetHarnessPC::Witness("world", "network car spawned for net=%d active=%d global=%d",
-                                     static_cast<s32>(lpPlayerAddedAction->mAddedPlayerNetworkID),
-                                     static_cast<s32>(lpRaceCar->GetActiveRaceCarIndex()),
-                                     static_cast<s32>(leGlobalRaceCarIndex));
+            if (BrnNetHarnessPC::WitnessEnabled())
+            {
+                BrnNetHarnessPC::Witness("world", "network car spawned for net=%d active=%d global=%d",
+                                         static_cast<s32>(lpPlayerAddedAction->mAddedPlayerNetworkID),
+                                         static_cast<s32>(lpRaceCar->GetActiveRaceCarIndex()),
+                                         static_cast<s32>(leGlobalRaceCarIndex));
+            }
             break;
         }
 
@@ -4802,8 +4805,11 @@ void RaceCarEntityModule::HandleGameActions(
                        "(lpPlayerDisconnectedAction->GetActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID)");
             maActiveRaceCars[lpPlayerDisconnectedAction->meActiveRaceCarIndex].SetDisconnectedFromNetwork();
 
-            BrnNetHarnessPC::Witness("world", "network car disconnected active=%d",
-                                     static_cast<s32>(lpPlayerDisconnectedAction->meActiveRaceCarIndex));
+            if (BrnNetHarnessPC::WitnessEnabled())
+            {
+                BrnNetHarnessPC::Witness("world", "network car disconnected active=%d",
+                                         static_cast<s32>(lpPlayerDisconnectedAction->meActiveRaceCarIndex));
+            }
             break;
         }
 
@@ -4840,9 +4846,12 @@ void RaceCarEntityModule::HandleGameActions(
                 lpRaceCar->SetInCurrentGameMode(false, false);
                 lpActiveRaceCar->SetInGameMode(false);
 
-                BrnNetHarnessPC::Witness("world", "network car removed active=%d global=%d",
-                                         static_cast<s32>(lpPlayerRemovedAction->meActiveRaceCarIndex),
-                                         static_cast<s32>(lpRaceCar->GetGlobalRaceCarIndex()));
+                if (BrnNetHarnessPC::WitnessEnabled())
+                {
+                    BrnNetHarnessPC::Witness("world", "network car removed active=%d global=%d",
+                                             static_cast<s32>(lpPlayerRemovedAction->meActiveRaceCarIndex),
+                                             static_cast<s32>(lpRaceCar->GetGlobalRaceCarIndex()));
+                }
                 RemoveRaceCar(lpRaceCar->GetGlobalRaceCarIndex(), lpOutput);
             }
             break;
@@ -4966,9 +4975,12 @@ void RaceCarEntityModule::HandleSetupNetworkCarAction(
     SetActiveRaceCarForPlayerScoringIndex( lpSNCAction->mePlayerScoringIndex,
                                            leNewNetworkActiveRaceCarIndex );
 
-    BrnNetHarnessPC::Witness( "world", "network car changed active=%d global=%d",
-                              static_cast<s32>( leNewNetworkActiveRaceCarIndex ),
-                              static_cast<s32>( leNetworkGlobalRaceCarIndex ) );
+    if (BrnNetHarnessPC::WitnessEnabled())
+    {
+        BrnNetHarnessPC::Witness( "world", "network car changed active=%d global=%d",
+                                  static_cast<s32>( leNewNetworkActiveRaceCarIndex ),
+                                  static_cast<s32>( leNetworkGlobalRaceCarIndex ) );
+    }
 }
 
 // ============================================================================
@@ -6506,12 +6518,15 @@ void RaceCarEntityModule::PreSceneUpdate(
                 lpActivateCar->GetGlobalRaceCar()->GetType() == E_RACE_CAR_TYPE_NETWORK)
             {
                 const Vector3 lPos = lpActivateCar->GetPosition();
-                BrnNetHarnessPC::Witness("netcar", "present=%u slot %d online=%d received=%d active=%d scene=%d render=%d pos=(%.1f, %.1f, %.1f)",
-                                         renderengine::guPresentCount, liActivateSlot,
-                                         static_cast<s32>(lpActivateCar->GetOnlineState()),
-                                         lpActivateCar->mbReceivedNetworkDriverControls ? 1 : 0,
-                                         lpActivateCar->IsActive() ? 1 : 0, lpActivateCar->mbAddedToScene ? 1 : 0,
-                                         lpActivateCar->mbRenderThisFrame ? 1 : 0, lPos.x, lPos.y, lPos.z);
+                if (BrnNetHarnessPC::WitnessEnabled())
+                {
+                    BrnNetHarnessPC::Witness("netcar", "present=%u slot %d online=%d received=%d active=%d scene=%d render=%d pos=(%.1f, %.1f, %.1f)",
+                                             renderengine::guPresentCount, liActivateSlot,
+                                             static_cast<s32>(lpActivateCar->GetOnlineState()),
+                                             lpActivateCar->mbReceivedNetworkDriverControls ? 1 : 0,
+                                             lpActivateCar->IsActive() ? 1 : 0, lpActivateCar->mbAddedToScene ? 1 : 0,
+                                             lpActivateCar->mbRenderThisFrame ? 1 : 0, lPos.x, lPos.y, lPos.z);
+                }
             }
         }
         if (lpActivateCar != 0 && lpActivateCar->mbAIToBeActivated && lpActivateCar->IsAttached())

@@ -1,4 +1,5 @@
 #include "GameSource/Network/Managers/BrnNetworkStateManager.h"
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"   // [FLAG PC witness] [net] launch
 
 #include <cstring>                                                                         // memset / memcpy / strlen / strncpy
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                         // CGS_ASSERT
@@ -1080,6 +1081,17 @@ namespace BrnNetwork
 
             case KI_GUI_EVENT_NETWORK_LAUNCH:
             {
+                // [FLAG PC witness] This path has no other trace on the LAN backend.
+                if (BrnNetHarnessPC::WitnessEnabled())
+                {
+                    BrnNetHarnessPC::Witness("launch", "gui 54 state=%d host=%d players=%d connected=%d routes=%d teams=%d",
+                                             static_cast<s32>(meState),
+                                             mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerHost() ? 1 : 0,
+                                             mpNetworkManager->GetServerInterface()->GetGameComponent()->GetNumberPlayersInGame(),
+                                             mpNetworkManager->GetPlayersConnectionManager()->AreAllConnectionsSuccessful() ? 1 : 0,
+                                             mpNetworkManager->GetSelectedRoutesManager()->HaveAllPlayersReceivedRoutes() ? 1 : 0,
+                                             GameModeHasEnoughTeams() ? 1 : 0);
+                }
                 if (meState != E_STATE_COUNT)
                 {
                     break;
@@ -1176,6 +1188,10 @@ namespace BrnNetwork
 
             case KI_GUI_EVENT_NETWORK_FORCE_LAUNCH:
             {
+                if (BrnNetHarnessPC::WitnessEnabled())
+                {
+                    BrnNetHarnessPC::Witness("launch", "gui 56 state=%d", static_cast<s32>(meState));
+                }   // [FLAG PC witness]
                 GameParams                                lGameParams;
                 BrnNetworkModuleIO::NetworkOutLaunchEvent lNetworkLaunchEvent;
 

@@ -266,6 +266,7 @@ namespace BrnGui
         // drains it after the module update -- the PC stand-in for the console GUI module
         // OUTPUT buffer's out-event queue the bridge reads. Cleared by the bridge.
         CgsModule::VariableEventQueue<18432, 16>* GetGuiOutQueue() { return &mGuiOutQueue; }
+        const GuiCache* GetGuiCacheForHarnessPC() const { return &mGuiCache; }   // [PC HARNESS] BRN_NET_START_MODE
 
         // X360 GuiModule::Render(renderOut) -> EffectsArbitrator::GenerateEffectFrameEvents
         // @0x82503060 (on PC BrnGameModule calls it under the renderer output read lock).

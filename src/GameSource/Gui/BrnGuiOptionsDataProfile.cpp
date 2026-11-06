@@ -1,4 +1,5 @@
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"
+#include "GameShared/GameClasses/System/PC/BrnNetHarnessPC.h"   // [FLAG PC witness] [net] save-route
 #include "GameSource/Gui/BrnGuiCache.h"
 #include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"
 
@@ -513,6 +514,12 @@ void OptionsDataProfile::OnlineSaveRoute::SetFromGameParams(
             laLandmarkIds[liLandmark] = lInfo.GetCgsId();
         }
         const s32 liNumLandmarks = lrEvent.GetNumLandmarks();
+        if (BrnNetHarnessPC::WitnessEnabled())
+        {
+            BrnNetHarnessPC::Witness("save-route", "round=%d of %d mode=%d light=%08X landmarks=%d event=%d",   // [FLAG PC witness]
+                                     liRound, lpParams->miNumRounds, lpParams->meGameMode,
+                                     lrEvent.GetTrafficLightTriggerId(), liNumLandmarks, lrEvent.GetEventID());
+        }
         const SatNavEventDisplayInfo* lpStart =
             lpCache->GetPresetEventDisplayInfo(lrEvent.GetTrafficLightTriggerId());
         maEvents[liRound].Construct(lrEvent.GetEventID(), lpStart->muJunctionId,

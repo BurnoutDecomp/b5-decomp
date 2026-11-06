@@ -17,9 +17,13 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                                              // EGameModeType
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                                               // GuiEventNetworkConnect / QuickMatch
+#include "GameSource/Gui/BrnGuiCache.h"                                                            // GuiCache preset online events
+#include "GameSource/Gui/Events/BrnGuiEventNetworkGameParams.h"                                    // BRN_NET_START_MODE (GUI 257)
 #include "GameSource/Gui/Events/BrnGuiEventNetworkCreateGame.h"                                     // GuiEventNetworkCreateGame
 #include "GameSource/Network/BrnNetworkManager.h"
 #include "GameSource/Network/BrnServerInterface.h"
+#include "GameSource/Network/Parameters/BrnNetworkPlayerParams.h"                                  // BRN_NET_TEAM
+#include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"                               // BRN_NET_TEAM
 #include "GameSource/Network/Managers/BrnNetworkStateManager.h"
 #include "GameSource/Network/Managers/X360/BrnNetworkLoginManagerX360.h"
 
@@ -97,6 +101,7 @@ namespace
     {
         E_SCRIPT_TARGET_GUI = 0,   // the GUI out queue (InjectGuiEvents)
         E_SCRIPT_TARGET_NET,       // the network post-simulation GUI queue (Update)
+        E_SCRIPT_TARGET_OUT,       // the GUI output buffer's out queue (InjectGuiOutputBuffer)
     };
 
     struct ScriptEntry
@@ -149,6 +154,18 @@ namespace
         ScriptEntry maScript[KI_MAX_SCRIPT_ENTRIES];
         bool        mbGuiHookSeen;
         bool        mbGuiHookWarned;
+
+        // BRN_NET_TEAM.
+        bool   mbTeamArmed;
+        f64    mfTeamAt;
+        s32    miTeam;
+
+        // BRN_NET_START_MODE.
+        bool   mbStartModeArmed;
+        bool   mbStartModePosted;
+        bool   mbStartModeWaitReported;
+        f64    mfStartModeAt;
+        s32    miStartMode;
     };
 
     HarnessState gHarness = {};
@@ -245,6 +262,10 @@ namespace
         {
             lpEntry->meTarget = E_SCRIPT_TARGET_NET;
         }
+        else if (std::strcmp(lapcField[1], "out") == 0)
+        {
+            lpEntry->meTarget = E_SCRIPT_TARGET_OUT;
+        }
         else
         {
             return false;
@@ -330,7 +351,7 @@ namespace
                     const ScriptEntry& lrEntry = gHarness.maScript[gHarness.miScriptEntries];
                     BrnNetHarnessPC::Witness("harness", "script: armed #%d at in-game+%.1fs %s GUI %d payload=%d bytes%s",
                                              gHarness.miScriptEntries, lrEntry.mfAt,
-                                             lrEntry.meTarget == E_SCRIPT_TARGET_GUI ? "gui" : "net", lrEntry.miEventId,
+                                             lrEntry.meTarget == E_SCRIPT_TARGET_GUI ? "gui" : (lrEntry.meTarget == E_SCRIPT_TARGET_NET ? "net" : "out"), lrEntry.miEventId,
                                              lrEntry.miPayloadBytes, lrEntry.mbAligned8 ? " (8-aligned)" : "");
                     gHarness.miScriptEntries += 1;
                 }
@@ -387,11 +408,48 @@ namespace
         {
             ParseScript(lpcScript);
         }
+
+        const char* lpcTeam = std::getenv("BRN_NET_TEAM");
+        if (lpcTeam != nullptr && lpcTeam[0] != '\0')
+        {
+            double ldAt = 0.0;
+            int    liTeam = 0;
+            if (std::sscanf(lpcTeam, "%lf:%d", &ldAt, &liTeam) == 2)
+            {
+                gHarness.mbTeamArmed = true;
+                gHarness.mfTeamAt    = ldAt;
+                gHarness.miTeam      = liTeam;
+                BrnNetHarnessPC::Witness("harness", "team armed: team %d at in-game+%.1fs", liTeam, ldAt);
+            }
+            else
+            {
+                BrnNetHarnessPC::Witness("harness", "BRN_NET_TEAM='%s' is not <seconds>:<team>; ignored", lpcTeam);
+            }
+        }
+
+        const char* lpcStartMode = std::getenv("BRN_NET_START_MODE");
+        if (lpcStartMode != nullptr && lpcStartMode[0] != '\0')
+        {
+            double ldAt = 0.0;
+            int    liMode = 0;
+            if (std::sscanf(lpcStartMode, "%lf:%d", &ldAt, &liMode) == 2)
+            {
+                gHarness.mbStartModeArmed = true;
+                gHarness.mfStartModeAt    = ldAt;
+                gHarness.miStartMode      = liMode;
+                BrnNetHarnessPC::Witness("harness", "start mode armed: post 257 mode=%d at in-game+%.1fs", liMode, ldAt);
+            }
+            else
+            {
+                BrnNetHarnessPC::Witness("harness", "BRN_NET_START_MODE='%s' is not <seconds>:<mode>; ignored", lpcStartMode);
+            }
+        }
     }
 
     bool IsActive()
     {
-        return gHarness.meRole != E_ROLE_NONE || gHarness.mbLeaveArmed || gHarness.miScriptEntries > 0;
+        return gHarness.meRole != E_ROLE_NONE || gHarness.mbLeaveArmed || gHarness.miScriptEntries > 0 ||
+               gHarness.mbStartModeArmed || gHarness.mbTeamArmed;
     }
 
     void SetStage(EStage leStage, f64 lfNow)
@@ -475,7 +533,7 @@ namespace
             u32 lauWords[4] = { 0, 0, 0, 0 };
             std::memcpy(lauWords, lrEntry.mau8Payload, sizeof(lauWords));
             BrnNetHarnessPC::Witness("harness", "t=%.1fs script #%d post %s GUI %d payload=%d [%08X %08X %08X %08X]%s",
-                                     lfNow, li, leTarget == E_SCRIPT_TARGET_GUI ? "gui" : "net", lrEntry.miEventId,
+                                     lfNow, li, leTarget == E_SCRIPT_TARGET_GUI ? "gui" : (leTarget == E_SCRIPT_TARGET_NET ? "net" : "out"), lrEntry.miEventId,
                                      lrEntry.miPayloadBytes, lauWords[0], lauWords[1], lauWords[2], lauWords[3],
                                      lbQueued ? "" : " QUEUE FULL");
         }
@@ -672,6 +730,25 @@ namespace BrnNetHarnessPC
         gHarness.miPlayersInGame = gHarness.mbInGame ? lpServerInterface->GetGameComponent()->GetNumberPlayersInGame() : 0;
         gHarness.mbObserved  = true;
         TrackState(Now());
+
+        if (gHarness.mbTeamArmed && gHarness.mbInGame && gHarness.mbIdle && gHarness.mbEverInGame &&
+            (Now() - gHarness.mfInGameAt) >= gHarness.mfTeamAt &&
+            lpServerInterface->CgsNetwork::ServerInterfaceDirtySock::GetStatus(CgsNetwork::E_COMPONENTS_GAMES) ==
+                CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)
+        {
+            BrnNetwork::NetworkPlayerID lLocalPlayerID;
+            if (lpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalPlayerID))
+            {
+                gHarness.mbTeamArmed = false;
+                BrnNetwork::PlayerParams lPlayerParams;
+                lPlayerParams.Prepare();
+                lpServerInterface->GetGameComponent()->GetPlayerParametersByPlayerID(lLocalPlayerID, &lPlayerParams);
+                const s32 liOldTeam = static_cast<s32>(lPlayerParams.GetPlayerTeam());
+                lPlayerParams.SetPlayerTeam(static_cast<BrnGameState::GameStateModuleIO::EPlayerTeam>(gHarness.miTeam));
+                lpServerInterface->GetGameComponent()->UpdatePlayerParameters(lLocalPlayerID, &lPlayerParams);
+                Witness("harness", "team %d -> %d", liOldTeam, gHarness.miTeam);
+            }
+        }
     }
 
     void InjectGuiEvents(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue)
@@ -683,6 +760,85 @@ namespace BrnNetHarnessPC
         }
         gHarness.mbGuiHookSeen = true;
         PostDueScript(lpGuiOutQueue, E_SCRIPT_TARGET_GUI, Now());
+    }
+
+    void InjectGuiOutputBuffer(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutputBufferQueue)
+    {
+        Resolve();
+        if (gHarness.miScriptEntries == 0 || lpGuiOutputBufferQueue == nullptr)
+        {
+            return;
+        }
+        PostDueScript(lpGuiOutputBufferQueue, E_SCRIPT_TARGET_OUT, Now());
+    }
+
+    void InjectStartMode(CgsModule::VariableEventQueue<18432, 16>* lpGuiOutQueue, const BrnGui::GuiCache* lpGuiCache)
+    {
+        Resolve();
+        if (!gHarness.mbStartModeArmed || gHarness.mbStartModePosted || lpGuiOutQueue == nullptr ||
+            lpGuiCache == nullptr || !gHarness.mbEverInGame)
+        {
+            return;
+        }
+        const f64 lfNow = Now();
+        if ((lfNow - gHarness.mfInGameAt) < gHarness.mfStartModeAt)
+        {
+            return;
+        }
+
+        typedef BrnGui::GuiEventNetworkGameParams::Event RouteEvent;
+        static_assert(sizeof(RouteEvent) == sizeof(BrnGui::PresetEvent), "the preset list holds round records");
+
+        const BrnGui::PresetEvent* lpPreset = nullptr;
+        const s32 liPresets = lpGuiCache->GetNumPresetEvents();
+        for (s32 li = 0; li < liPresets; ++li)
+        {
+            const BrnGui::PresetEvent* lpCandidate = lpGuiCache->GetPresetEvent(li);
+            if (lpCandidate->GetNumLandmarks() <= 0)
+            {
+                continue;
+            }
+            // The game room resolves the route's light through the event-start table.
+            for (u32 luStart = 0; luStart < lpGuiCache->GetNumEventStarts(); ++luStart)
+            {
+                if (lpGuiCache->GetEventStart(luStart)->muLightTriggerId == lpCandidate->GetPositionLookupId())
+                {
+                    lpPreset = lpCandidate;
+                    break;
+                }
+            }
+            if (lpPreset != nullptr)
+            {
+                break;
+            }
+        }
+        if (lpPreset == nullptr)
+        {
+            if (!gHarness.mbStartModeWaitReported)
+            {
+                gHarness.mbStartModeWaitReported = true;
+                Witness("harness", "t=%.1fs start mode: no preset online event with landmarks and a known event start yet (presets=%d starts=%u), waiting", lfNow, liPresets, lpGuiCache->GetNumEventStarts());
+            }
+            return;
+        }
+
+        gHarness.mbStartModePosted = true;
+
+        BrnGui::GuiEventNetworkGameParams lParamsEvent;
+        lParamsEvent.Construct();
+        std::memcpy(&lParamsEvent.maEvents[0], lpPreset, sizeof(RouteEvent));
+        lParamsEvent.meGameMode         = gHarness.miStartMode;
+        lParamsEvent.mePreviousGameMode = BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY;
+        lParamsEvent.meSecurity         = KI_CREATE_SECURITY;
+        lParamsEvent.miNumRounds        = 1;
+        lParamsEvent.mbRanked           = false;
+
+        CgsGui::GuiEventWrapper<BrnGui::GuiEventNetworkGameParams, KI_GUI_CHANNEL_OUT> lRecord(lParamsEvent);
+        const bool lbQueued = lpGuiOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_GUI_CHANNEL_OUT,
+                                                      static_cast<s32>(sizeof(lRecord)));
+        Witness("harness", "t=%.1fs post 257 mode=%d presets=%d light=%08X landmarks=%d event=%u%s", lfNow, gHarness.miStartMode,
+                liPresets, lpPreset->GetPositionLookupId(), lpPreset->GetNumLandmarks(), lpPreset->GetEventId(),
+                lbQueued ? "" : " QUEUE FULL");
     }
 
     void Update(CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue)
