@@ -53,13 +53,13 @@ namespace CgsDev
         {
             miLineCount = static_cast<s8>(liMaxLines);   // +72 (the ring capacity store)
             mpLinesArray = static_cast<CConsoleTextLine*>(
-                ::operator new[](sizeof(CConsoleTextLine) * static_cast<size_t>(liMaxLines),
+                ::operator new[](Internal::DebugArrayAllocationSize(static_cast<u32>(miLineCount), sizeof(CConsoleTextLine)),
                                  GetAllocator(), Internal::E_ALLOCATION_NORMAL));
             mfCurrentWidth     = 100.0f;   // +84
             mbAutosize         = true;     // +88
             mfHorizontalIndent = 0.0f;     // +76
             mfVerticalIndent   = 0.0f;     // +80
-            for (s32 liLine = 0; liLine < liMaxLines; ++liLine)
+            for (s32 liLine = 0; liLine < miLineCount; ++liLine)
                 mpLinesArray[liLine].macText[0] = 0;
             miLineHead = 0;                // +73
         }

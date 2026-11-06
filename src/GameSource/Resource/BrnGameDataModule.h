@@ -159,13 +159,6 @@ namespace BrnResource
         GameDataEventSlot* GetGameDataEventSlot(const GameDataIO::GameDataAssetEvent* lpEvent,
                                                 s32 liSlotIndex);                      // 0x826664A0
 
-        // PC bring-up scaffolding (NOT an X360 function): shared deferral tail for the
-        // dispatch cases whose ProcessXxxRequest handlers are not yet reconstructed --
-        // log the drop and return the slot to the pool. [marked deviation: the X360
-        // dispatches to the real handler and the slot lives until its
-        // ProcessInternal*Response completion.]
-        void DeferredGameDataRequest(const char* lpcHandlerName, GameDataEventSlot* lpSlot);
-
         // ---- the ProcessInternal*Response completion routing (THIS BATCH) ---------------
         // Update's mReceiverQueue drain (X360 0x82674670: response type 2/3/4/7/8 switch)
         // routes each CgsResource completion back out to the original requester's receiver
@@ -284,6 +277,14 @@ namespace BrnResource
         void ProcessUnloadWorldCollisionRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                                 const GameDataIO::GameDataAssetEvent* lpEvent,
                                                 s32 liEventId, s32 liSlotIndex);       // 0x826712A0
+        void ProcessUnloadTrafficLanesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex);
+        void ProcessUnloadAILanesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex);
+        void ProcessUnloadPropInstancesRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex);
+        void ProcessGetICEMovieRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
+            const GameDataIO::GameDataAssetEvent* lpEvent, s32 liEventId, s32 liSlotIndex);
         void ProcessUnloadPVSRequest(CgsResource::ResourceIO::InputBuffer* lpResourceInput,
                                      const GameDataIO::GameDataAssetEvent* lpEvent,
                                      s32 liEventId, s32 liSlotIndex);                  // 0x82671420
