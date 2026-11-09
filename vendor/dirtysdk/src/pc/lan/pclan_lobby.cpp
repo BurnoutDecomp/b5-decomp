@@ -540,7 +540,9 @@ namespace
             // the started flag itself: PostRoundManager sends its results ('rank') and then waits
             // for the lobby server to un-start the game (UpdateWaitGameUnstart @0x8256D338). A
             // client still seeing the flag in the post-race lobby would launch on its own.
-            g_Lobby.Play.uSysflags &= ~KU_SYSFLAG_STARTED;
+            // The lock LaunchManager set before 'gsta' goes too: the game only unlocks on its
+            // launch error paths, and a game left locked refuses GUI 52 (leave) and new joins.
+            g_Lobby.Play.uSysflags &= ~(KU_SYSFLAG_STARTED | KU_SYSFLAG_LOCKED);
             _HostPublish(KI_EVENT_GAME, true);
             return 0;
         }
