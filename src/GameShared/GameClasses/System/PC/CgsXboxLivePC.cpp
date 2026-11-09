@@ -504,14 +504,57 @@ extern "C" u32 XCancelOverlapped(void* lpOverlapped)
     return KU_ERROR_SUCCESS;
 }
 
-// [PC platform leaf] Reads the next batch from a system enumerator; no enumerator ever exists
-// on PC, so the answer is "no more items" with nothing returned.
-extern "C" u32 XEnumerate(void* /*lhEnum*/, void* /*lpvBuffer*/, u32 /*lcbBuffer*/,
+namespace
+{
+    // [PC platform leaf] The presence enumerator XPresenceCreateEnumerator hands back. There is
+    // no presence service on PC, so the answer it holds is the one Live gives for a peer who is
+    // not online: one XONLINE_PRESENCE record per requested XUID, xuid at +0x00, title id 0 at
+    // +0x14 (164-byte records). Callers never close the handle, so a small ring is reused.
+    struct PresenceEnumeratorPC
+    {
+        static const u32 KU_MAGIC   = 0x50524553u;   // 'PRES'
+        static const u32 KU_MAX     = 100u;          // the console clamps a batch to 100 peers
+        static const u32 KU_STRIDE  = 0xA4u;         // XONLINE_PRESENCE stride
+        u32 muMagic;
+        u32 muCount;
+        bool mbDone;
+        u64 maXuids[KU_MAX];
+    };
+    PresenceEnumeratorPC gaPresenceEnumerators[4];
+    std::atomic<u32> guNextPresenceEnumerator(0u);
+
+    PresenceEnumeratorPC* AsPresenceEnumerator(void* lhEnum)
+    {
+        for (PresenceEnumeratorPC& lrEnum : gaPresenceEnumerators)
+            if (&lrEnum == lhEnum && lrEnum.muMagic == PresenceEnumeratorPC::KU_MAGIC)
+                return &lrEnum;
+        return 0;
+    }
+}
+
+// [PC platform leaf] Reads the next batch from a system enumerator. A presence enumerator
+// returns its offline records once; no other enumerator exists on PC, so those answer
+// "no more items" with nothing returned.
+extern "C" u32 XEnumerate(void* lhEnum, void* lpvBuffer, u32 lcbBuffer,
                           u32* lpcItemsReturned, void* /*lpOverlapped*/)
 {
     if (lpcItemsReturned != 0)
         *lpcItemsReturned = 0u;
-    return KU_ERROR_NO_MORE_FILES;
+    PresenceEnumeratorPC* lpEnum = AsPresenceEnumerator(lhEnum);
+    if (lpEnum == 0 || lpEnum->mbDone || lpvBuffer == 0)
+        return KU_ERROR_NO_MORE_FILES;
+    const u32 luFit = lcbBuffer / PresenceEnumeratorPC::KU_STRIDE;
+    const u32 luItems = lpEnum->muCount < luFit ? lpEnum->muCount : luFit;
+    u8* lpRecord = static_cast<u8*>(lpvBuffer);
+    for (u32 li = 0; li < luItems; ++li, lpRecord += PresenceEnumeratorPC::KU_STRIDE)
+    {
+        std::memset(lpRecord, 0, PresenceEnumeratorPC::KU_STRIDE);
+        std::memcpy(lpRecord, &lpEnum->maXuids[li], sizeof(u64));
+    }
+    lpEnum->mbDone = true;
+    if (lpcItemsReturned != 0)
+        *lpcItemsReturned = luItems;
+    return KU_ERROR_SUCCESS;
 }
 
 // ---------------------------------------------------------------------------
@@ -762,13 +805,27 @@ extern "C" void XUserSetContext(u32 /*uUserIndex*/, u32 /*uContextId*/, u32 /*uC
 // Presence, invites, launch data
 // ---------------------------------------------------------------------------
 
-// [PC platform leaf] Creates a presence enumerator for a set of XUIDs; 87, no presence service.
+// [PC platform leaf] Creates a presence enumerator for a set of XUIDs. With no presence service,
+// every peer reads as offline (see PresenceEnumeratorPC), which is what callers already get
+// from Live for a rival who is not playing.
 extern "C" u32 XPresenceCreateEnumerator(u32 /*luUserIndex*/, u32 /*luPeers*/,
-                                         const u64* /*lpaPeers*/, u32 /*luStartingIndex*/,
-                                         u32 /*luPeersToReturn*/, u32* /*lpcbBuffer*/,
-                                         void** /*lphEnum*/)
+                                         const u64* lpaPeers, u32 luStartingIndex,
+                                         u32 luPeersToReturn, u32* lpcbBuffer,
+                                         void** lphEnum)
 {
-    return KU_ERROR_INVALID_PARAMETER;
+    if (lpaPeers == 0 || lpcbBuffer == 0 || lphEnum == 0 || luPeersToReturn == 0 ||
+        luPeersToReturn > PresenceEnumeratorPC::KU_MAX)
+        return KU_ERROR_INVALID_PARAMETER;
+    PresenceEnumeratorPC& lrEnum =
+        gaPresenceEnumerators[guNextPresenceEnumerator.fetch_add(1u) % 4u];
+    lrEnum.muCount = luPeersToReturn;
+    for (u32 li = 0; li < lrEnum.muCount; ++li)
+        lrEnum.maXuids[li] = lpaPeers[luStartingIndex + li];
+    lrEnum.mbDone = false;
+    lrEnum.muMagic = PresenceEnumeratorPC::KU_MAGIC;
+    *lpcbBuffer = PresenceEnumeratorPC::KU_STRIDE * lrEnum.muCount;
+    *lphEnum = &lrEnum;
+    return KU_ERROR_SUCCESS;
 }
 
 // [PC platform leaf] Reads the invite the user accepted from the system guide; 87, no invites
