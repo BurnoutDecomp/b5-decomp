@@ -422,6 +422,19 @@ void MovieClipInstance::GotoAndStopLabel(u32 luLabelHash,
     GotoFrame(luFrame);
 }
 
+// [PC] NOT IN THE X360 BINARY. The non-asserting form of
+// MovieClip::FindLabelledFrameIndex's scan: does this clip label any frame luLabelHash?
+bool MovieClipInstance::HasFrameLabel(u32 luLabelHash) const
+{
+    CGS_ASSERT(mpMovieClip != 0, "mpMovieClip");
+    for (u32 luLabel = 0; luLabel < mpMovieClip->muNumLabelledFrames; ++luLabel)
+    {
+        if (mpMovieClip->mpaFrameLabels[luLabel].muHash == luLabelHash)
+            return true;
+    }
+    return false;
+}
+
 void MovieClipInstance::SetFrameTriggerCallback(FrameTriggerCallback lpCallback,
                                                 void* lpUserData)
 {

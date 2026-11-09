@@ -100,6 +100,10 @@ namespace BrnFlapt
         // GotoAndStopLabel @ 0x8246F498 : hash lpcLabel, jump to it and stop.
         void GotoAndStopLabel(const char* lpcLabel) const;
 
+        // [PC] NOT IN THE X360 BINARY. Whether the referenced clip has a frame labelled
+        // lpcLabel, i.e. whether a GotoAndPlayLabel/GotoAndStopLabel on it would resolve.
+        bool HasFrameLabel(const char* lpcLabel) const;
+
         // ---- trigger callbacks ---------------------------------------------
         // SetFrameTriggerCallback @ 0x8246CAB8 : install a per-frame callback.
         // lpCallback is MovieClipInstance::FrameTriggerCallback (void(*)(void*,

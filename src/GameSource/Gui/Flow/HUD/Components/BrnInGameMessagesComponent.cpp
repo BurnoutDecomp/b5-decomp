@@ -810,6 +810,27 @@ namespace
         if (BrnReplays::GuiModuleStaticLayout* lpStaticLayout = GetGuiModuleStaticLayout(mpStateInterface))
             lpStaticLayout->StartMessage();   // replay mirror parked -- FLAG at the helper
 
+        // [PC DIVERGENCE] A message whose style this component's movie has no frame for is
+        // retired here, as a finished TRANSOUT is (EndTransition), instead of being animated.
+        // The crash HUD's crashHudMessages_mc has no "SuperJump" frame (the in-game
+        // hudMessages_mc does), yet the jump-name banner posted at take-off is still
+        // transitioning in when a short super jump ends in a crash: CrashedHudState's
+        // SetInGameMessagesQueue rewinds it TRANSIN -> WAITING and its Update re-starts it.
+        // The label miss asserts and returns -1 (0x8246B190) and GotoFrame/ApplyKeyFrame index
+        // the clip's keyframe tables with it: in the console's 32-bit arithmetic that wraps to
+        // the record just before the table, inside the loaded movie; on x64 it lands far past
+        // it and faults. Retiring the message keeps the slot free for the crash HUD's own
+        // messages ("Crashed" queues behind it otherwise and is dropped by OnLeave).
+        if (!mAptRef.HasFrameLabel(
+                mpInGameMessagesQueue->maMessages[mpInGameMessagesQueue->muCurrentMessageIndex]
+                    .macMessageStyle))
+        {
+            mpInGameMessagesQueue->maeMessageState[mpInGameMessagesQueue->muCurrentMessageIndex] =
+                E_MESSAGESTATE_NOMESSAGE;
+            SwitchCurrentIndex();
+            return;
+        }
+
         SendGameMessage("transin", true);
     }
 
