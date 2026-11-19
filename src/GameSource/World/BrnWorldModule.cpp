@@ -116,7 +116,7 @@ namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
 namespace renderengine { extern s32 gDisplayWidth; extern s32 gDisplayHeight; }
 // [FLAG PC bring-up] the config.ini [Settings] EnvironmentMap knob (pc/gcm/renderengine/
 // device.h, reflections step 1). Declared for the same <windows.h> reason. It is the PC seed
-// of the console's RendererIO::RenderSwitches::mbRenderEnvironmentMap, which gates BOTH the
+// of the console's RendererIO::RenderSwitches::mbRenderEnvmap, which gates BOTH the
 // renderer's face pass and this producer's env-map arm (::GenerateDispatchLists :4003) --
 // so the producer reads the same seed the renderer does; verify finding F5 (envproducer):
 // with the knob off, the six queries and dispatch legs must not run either.
@@ -3721,7 +3721,7 @@ WorldModule::GenerateFrustumQueries(
     }
 
     // ---- the six environment-map face queries ------------------------------
-    if ( lpDispatchInputBuffer->GetRenderSwitches()->mbRenderEnvironmentMap )
+    if ( lpDispatchInputBuffer->GetRenderSwitches().mbRenderEnvmap )
     {
         for ( s32 liFace = 0; liFace < 6; liFace++ )
         {
@@ -3820,7 +3820,7 @@ WorldModule::GenerateFrustumQueries(
     // console never asks for it here. (SUSPECT flagged at the bring-up mirror below on
     // 2026-08-12: CONFIRMED REAL, and it was OUR mis-read, not the console's.)
     if ( mShadowMap.IsEnabled() &&
-         lpDispatchInputBuffer->GetRenderSwitches()->mbRenderShadowMap )
+         lpDispatchInputBuffer->GetRenderSwitches().mbRenderShadows )
     {
         for ( s32 liCascade = 0; liCascade < 3; liCascade++ )
         {
@@ -4150,7 +4150,7 @@ WorldModule::GenerateDispatchLists(
         CgsGraphics::mShaderConstantTable.SetShaderConstantData( 18, lCarIrradianceA );
         CgsGraphics::mShaderConstantTable.SetShaderConstantData( 19, lCarIrradianceB );
 
-        if ( lpDispatchInputBuffer->GetRenderSwitches()->mbRenderRaceCars )
+        if ( lpDispatchInputBuffer->GetRenderSwitches().mbRenderRaceCars )
         {
             PerfMonCpu::StartMonitor( miRaceCarGenerateDispListClearPM );
             mRaceCarEntityModule.GenerateDispatchLists(
@@ -4161,7 +4161,7 @@ WorldModule::GenerateDispatchLists(
             PerfMonCpu::StopMonitor( miRaceCarGenerateDispListClearPM );
         }
 
-        if ( lpDispatchInputBuffer->GetRenderSwitches()->mbRenderTraffic )
+        if ( lpDispatchInputBuffer->GetRenderSwitches().mbRenderTraffic )
         {
             PerfMonCpu::StartMonitor( miTrafficGenerateDispListClearPM );
             // Arg 2 is the array INSIDE the buffer (`addi r22, r19, 4` @0x827D24B0). The four
@@ -4189,7 +4189,7 @@ WorldModule::GenerateDispatchLists(
         CgsGraphics::mShaderConstantTable.SetShaderConstantData( 19, lQuadricIrradianceB );
     }
 
-    if ( lpDispatchInputBuffer->GetRenderSwitches()->mbRenderWorld )
+    if ( lpDispatchInputBuffer->GetRenderSwitches().mbRenderWorld )
     {
         PerfMonCpu::StartMonitor( miGenerateDispatchListsPM );
         mWorldEntityModule.GenerateDispatchLists(
@@ -4201,7 +4201,7 @@ WorldModule::GenerateDispatchLists(
         PerfMonCpu::StopMonitor( miGenerateDispatchListsPM );
     }
 
-    if ( lpDispatchInputBuffer->GetRenderSwitches()->mbRenderProps )
+    if ( lpDispatchInputBuffer->GetRenderSwitches().mbRenderProps )
     {
         PerfMonCpu::StartMonitor( miPropGenerateDispListClearPM );
         mPropEntityModule.GenerateDispatchLists(
@@ -4216,7 +4216,7 @@ WorldModule::GenerateDispatchLists(
     PerfMonCpu::StopMonitor( mGlobalCpuMonitors.miUT_RenderMainScreen );
 
     // ---- the six environment-map faces -------------------------------------
-    if ( lpDispatchInputBuffer->GetRenderSwitches()->mbRenderEnvironmentMap )
+    if ( lpDispatchInputBuffer->GetRenderSwitches().mbRenderEnvmap )
     {
         PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RenderEnvMap );
 
@@ -4295,14 +4295,14 @@ WorldModule::GenerateDispatchLists(
             // FLAG PC-platform leaf: optional vehicle feeds use this face's view
             // and query results; they never mutate the main-camera LOD/history.
             if ((CgsPC::Reflections::Rivals().mbEnabled || CgsPC::Reflections::PlayerWheels().mbEnabled)
-                && lpDispatchInputBuffer->GetRenderSwitches()->mbRenderRaceCars)
+                && lpDispatchInputBuffer->GetRenderSwitches().mbRenderRaceCars)
             {
                 CgsPC::Reflections::VehicleScope lScope(CgsPC::Reflections::E_CAPTURE_RIVALS, 5 + liFace);
                 mRaceCarEntityModule.GenerateDispatchLists(lpRaceCarDispatchInput,
                     lpFilteredEntityData->maRaceCarEntityIds, 5 + liFace, 5 + liFace, 5 + liFace,
                     true, lvFogScattering, lvFogColourPlusWhiteLevel, lFaceCamera.GetPosition());
             }
-            if (lpDispatchInputBuffer->GetRenderSwitches()->mbRenderTraffic)
+            if (lpDispatchInputBuffer->GetRenderSwitches().mbRenderTraffic)
                 CgsPC::Reflections::TrafficCapture::Submit(mTrafficEntityModule,
                     lpFilteredEntityData->maTrafficEntityIds, lpTrafficDispatchInput,
                     lFaceCamera, lvFogScattering, lvFogColourPlusWhiteLevel, 5 + liFace);
@@ -4331,7 +4331,7 @@ WorldModule::GenerateDispatchLists(
 
     // ---- shadow map ---------------------------------------------------------
     if ( mShadowMap.IsEnabled() &&
-         lpDispatchInputBuffer->GetRenderSwitches()->mbRenderShadowMap )
+         lpDispatchInputBuffer->GetRenderSwitches().mbRenderShadows )
     {
         PerfMonCpu::StartMonitor( mGlobalCpuMonitors.miUT_RenderShadowMap );
         GenerateShadowMapDispatchLists(
@@ -4413,20 +4413,20 @@ WorldModule::GenerateShadowMapDispatchLists(
 
         // Per-module gates for this cascade (the near-only policies restrict
         // race cars / traffic / props to cascade 0).
-        const BrnWorldIO::DispatchInputBuffer::RenderSwitches* lpSwitches =
+        const RendererIO::RenderSwitches& lrSwitches =
             lpDispatchInputBuffer->GetRenderSwitches();
 
         const bool lbRaceCars = mShadowMap.GetRenderRaceCarsIntoShadowMap() &&
-                                lpSwitches->mbRenderRaceCars &&
+                                lrSwitches.mbRenderRaceCars &&
                                 ( luCascade == 0 || !mShadowMap.GetRenderRaceCarsNearOnly() );
         const bool lbTraffic  = mShadowMap.GetRenderTrafficIntoShadowMap() &&
-                                lpSwitches->mbRenderTraffic &&
+                                lrSwitches.mbRenderTraffic &&
                                 ( luCascade == 0 || !mShadowMap.GetRenderTrafficNearOnly() );
         const bool lbProps    = mShadowMap.GetRenderPropsIntoShadowMap() &&
-                                lpSwitches->mbRenderProps &&
+                                lrSwitches.mbRenderProps &&
                                 ( luCascade == 0 || !mShadowMap.GetRenderPropsNearOnly() );
         const bool lbWorld    = mShadowMap.GetRenderWorldIntoShadowMap() &&
-                                lpSwitches->mbRenderWorld;
+                                lrSwitches.mbRenderWorld;
 
         // FLAG PC-platform leaf: a missing result must never become a null
         // dereference, including when a frame's render switches change live.

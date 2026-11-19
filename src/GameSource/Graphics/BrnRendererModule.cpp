@@ -5229,8 +5229,7 @@ void BrnRendererModule::RenderWorldPasses(const BrnGame::DispatchThreadInputBuff
     // The joined publication copied the world frame into the internal slot.
     // Sky, reflections, coronas and post-FX consume that same immutable frame.
     CgsDev::PerfMonGpu::StartMonitor(mGpuMonitors.miSky);
-    if (mbRenderSky && (lbPreZWork || lbOpaqueWork || lbTransparentWork)
-        && maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal]
+    if (mbRenderSky && maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal]
         && EnsureSkyDomeBringUp())
 
     {
@@ -6096,18 +6095,17 @@ void BrnRendererModule::Render(BrnEffects::EffectsModule* lpEffectsModule,
         && lpDispatchThreadInputBuffer != 0
         && EnsureEnvMapTarget(mAllocatedRenderTargets))
     {
-        // The sky half's own preconditions, evaluated ONCE for the whole loop. On the console the
-        // sky dome's geometry and constants are built in Construct/Prepare and filled by the world;
-        // on PC both are bring-up gates that RenderWorldPasses' main sky pass already carries
-        // (BrnRendererModule.cpp, the mbRenderSky block), and this pass carries the same set so that
-        // the two can never disagree about whether a dome exists.
+        // The sky half's own PC readiness checks, evaluated ONCE for the whole loop. ARTIST calls
+        // BrnSkyDomeManager::RenderToEnvironmentMap inside the environment-map face without reading
+        // the main-screen `Render sky` switch (+0xC415); that switch gates only the main sky pass.
+        // Keep the PC frame/device readiness checks here, but do not let the main-screen toggle
+        // suppress the environment-map sky that the console still captures.
         //
         // ARTIST 0x8240CD34..0x8240CD44 copies the INTERNAL shading frame.
         // The native producer bridge now publishes it at SwapBuffers, after join.
         const bool lbDebugFaceColours = EnvMapDebugFaceColours();
         (void)lbDebugFaceColours;
-        const bool lbSkyReady = mbRenderSky
-                             && maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal]
+        const bool lbSkyReady = maShaderConstantsFrameValidPC[mu8ShaderConstantsFrameInternal]
                              && EnsureSkyDomeBringUp();
         renderengine::SetShadowReceiverReflectionPC(true);
 

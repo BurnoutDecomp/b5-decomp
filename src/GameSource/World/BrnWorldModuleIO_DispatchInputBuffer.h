@@ -85,18 +85,12 @@ namespace BrnWorldIO
 
         // ---- ADDITIVE (WorldModule::GenerateFrustumQueries @0x827DADF8 +
         //      GenerateDispatchLists @0x827D1CE8 gate each render pass on these) ----
-        // X360 byte indices: [0] shadow map, [1] environment map, [2] world,
-        // [3] props, [4] race cars, [5] traffic.
-        struct RenderSwitches
-        {
-            bool mbRenderShadowMap;
-            bool mbRenderEnvironmentMap;
-            bool mbRenderWorld;
-            bool mbRenderProps;
-            bool mbRenderRaceCars;
-            bool mbRenderTraffic;
-        };
-        const RenderSwitches* GetRenderSwitches() const;
+        // X360 byte indices in the canonical DWARF type RendererIO::RenderSwitches:
+        // [0] shadows, [1] environment map, [2] world, [3] props, [4] race cars, [5] traffic.
+        // DecFIGS (BrnWorldModuleIO.h:875): const RenderSwitches & GetRenderSwitches() const.
+        // Keep the exact producer/consumer type instead of aliasing the same six bytes through
+        // a second POD.
+        const RendererIO::RenderSwitches& GetRenderSwitches() const;
         void                               SetCameraInput(const BrnDirector::Camera::Camera* lpCamera); // 0x823C8F28 (W)
 
         // ---- shader-constants frame ----
@@ -125,7 +119,7 @@ namespace BrnWorldIO
         BrnGame::DispatchThreadInputBuffer* GetDispatchThreadInputBuffer() const;                // 0x827BC0E8 (:411 R)
         void SetDispatchThreadInputBuffer(BrnGame::DispatchThreadInputBuffer* lpBuffer);         // 0x823B5408 (W)
 
-        // ---- per-frame render switches (embedded by value) ----
+        // ---- per-frame render switches (embedded by value; exact shared DWARF type) ----
         void SetRenderSwitches(const RendererIO::RenderSwitches& lrSwitches);                    // 0x823B6CB8 (:438 W)
 
         // NOTE: no offsetof _AssertLayout() -- mCameraInput embeds a Camera by value (0x160 span on
