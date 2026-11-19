@@ -1,6 +1,6 @@
 # Burnout Paradise: Xbox 360 byte matching experiment
 
-Branch: `codex/experimental-x360-byte-match`.
+Branch: `x360`.
 
 This experiment removes the PC port from the reconstructed source so work can
 move toward byte matching `BURNOUT_X360_ARTIST.XEX`: 32-bit PowerPC, big-endian.
@@ -23,7 +23,8 @@ Use ARTIST assembly as the authority for all future work, including Apt; DecFIGS
 can corroborate declarations. Do not import Xbox One pointer widths or file layouts.
 
 The parent `BP-Decomp_Workflow` repository retains the references, exports and
-ledger. Do not publish experimental coverage to the shared production ledger.
+ledgers. Byte-match progress is measured with the parent's `work match` and published
+from its `progress/bytematch/` ledger, separate from the reconstruction ledger.
 
 ## Native build tools
 

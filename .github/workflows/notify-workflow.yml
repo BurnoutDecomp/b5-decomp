@@ -1,24 +1,21 @@
 name: Notify workflow repo
 
-# Required event-driven trigger for BP-Decomp_Workflow's "Reconcile status + submodule
-# pointer" Action. Dispatch every newly pushed dev commit, oldest first. The queued
-# workflow audits committed source, reconciles the live ledger, publishes the durable
-# snapshot, and refreshes the dashboard. The hourly repair is a fallback.
+# The native branch's trigger for BP-Decomp_Workflow's "Byte-match summary" Action
+# (.github/workflows/bytematch.yml there). Dispatch every newly pushed x360 commit,
+# oldest first, as `b5-x360-push`; the workflow joins the committed byte-match
+# records with that commit and refreshes the dashboard. dev keeps its own copy of
+# this file, which dispatches `b5-decomp-push` to the reconcile Action instead.
 #
-# Setup (one-time):
-#   1. Create a fine-grained PAT (or classic token with `repo` scope) that can send
-#      repository_dispatch to BurnoutDecomp/BP-Decomp_Workflow. For a fine-grained
-#      PAT, its resource owner must be BurnoutDecomp and it needs access to the
-#      workflow repo with repository Contents write permission.
-#   2. Add it to THIS repo's secrets as WORKFLOW_DISPATCH_TOKEN.
-# Missing credentials fail visibly. The workflow repo's hourly repair is a fallback.
+# Setup (one-time, shared with dev): this repo's WORKFLOW_DISPATCH_TOKEN secret, a
+# token that can send repository_dispatch to BurnoutDecomp/BP-Decomp_Workflow.
+# Missing credentials fail visibly.
 
 on:
   push:
-    branches: [dev]
+    branches: [x360]
 
 concurrency:
-  group: notify-workflow-dev
+  group: notify-workflow-x360
   queue: max
   cancel-in-progress: false
 
@@ -35,7 +32,7 @@ jobs:
           filter: blob:none
           sparse-checkout: .github
 
-      - name: Trigger reconcile in BP-Decomp_Workflow
+      - name: Trigger the byte-match summary in BP-Decomp_Workflow
         env:
           BEFORE: ${{ github.event.before }}
         run: |
@@ -53,12 +50,12 @@ jobs:
             delivered=false
             for attempt in 1 2 3; do
               if gh api --method POST -H "Accept: application/vnd.github+json" \
-                "/repos/${WORKFLOW_REPO}/dispatches" -f event_type=b5-decomp-push \
+                "/repos/${WORKFLOW_REPO}/dispatches" -f event_type=b5-x360-push \
                 -F "client_payload[sha]=$sha"; then
                 delivered=true; break
               fi
               sleep 5
             done
             test "$delivered" = true || exit 1
-            echo "dispatched b5-decomp-push for $sha"
+            echo "dispatched b5-x360-push for $sha"
           done
