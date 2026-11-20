@@ -144,7 +144,7 @@ void ICEController::ChangeKeyElementValue(s32 liChangeIndex)
                 lfDelta = (lrDesc.mfIncDecSpeed * lfTimestep) * lfSum;       // description +0x44
             }
             // FLAG (ICEAuthor base): this->SetKeyElementValueChange via the base cast.
-            reinterpret_cast<ICE::ICEAuthor*>(this)->SetKeyElementValueChange(liChangeIndex, liChangeIndex, lfDelta);
+            reinterpret_cast<ICE::ICEAuthor*>(this)->SetKeyElementValueChange(liChangeIndex, lfDelta);
             break;
         }
 
@@ -163,7 +163,7 @@ void ICEController::ChangeKeyElementValue(s32 liChangeIndex)
             lfDelta = (lfRampB + lfRampA) * lfTimestep;
 
             // FLAG (ICEAuthor base): this->SetKeyElementValueChange via the base cast.
-            reinterpret_cast<ICE::ICEAuthor*>(this)->SetKeyElementValueChange(liChangeIndex, liChangeIndex, lfDelta);
+            reinterpret_cast<ICE::ICEAuthor*>(this)->SetKeyElementValueChange(liChangeIndex, lfDelta);
             break;
         }
 

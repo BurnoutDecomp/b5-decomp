@@ -226,8 +226,10 @@ void EnvironmentManager::PerformBlend(BlendFrame& lrBlendFrame)
 // @ 0x827C5018. Tool blend setup. Once every 30 frames (miToolUpdateFrameCounter gate)
 // re-parse the light-setup text file into a fresh keyframe and stamp four copies of it
 // into the manager's tool-keyframe slots; then point the blend frame at those four slots
-// with an equal 0.25 weight each. Returns whether the file was re-read this frame.
-bool EnvironmentManager::SetupUpdateFromToolBlend(BlendFrame& lrBlendFrame)
+// with an equal 0.25 weight each. Returns whether the file was re-read this frame. The
+// caller's output buffer is not read (r5 is first written at 0x827C506C).
+bool EnvironmentManager::SetupUpdateFromToolBlend(BlendFrame& lrBlendFrame,
+                                                  BrnWorldIO::UpdateOutputBuffer* /*lpOutput*/)
 {
     const bool lbReloaded = (miToolUpdateFrameCounter == 0);
     miToolUpdateFrameCounter = (miToolUpdateFrameCounter + 1) % 30;
@@ -1399,7 +1401,7 @@ bool EnvironmentManager::SetupBlend( BlendFrame& lrBlendFrame, f32 lfTimeStep,
             return false;
 
         case KI_BLENDMODE_TOOL:
-            SetupUpdateFromToolBlend( lrBlendFrame );
+            SetupUpdateFromToolBlend( lrBlendFrame, lpOutput );
             return true;
 
         default:

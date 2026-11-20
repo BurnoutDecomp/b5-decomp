@@ -221,10 +221,13 @@ void ICEAuthor::SetKeyElementValue(s32 liElement, f32 lfValue)
 // when the delta is zero. Adds lfDelta to the cached element value, clamps the
 // result to the element's [mMin, mMax] range (the description's min/max fields at
 // +0x18/+0x1C), re-caches it, then writes the clamped value through to the take at
-// the active key edge -- same key-edge resolution as SetKeyElementValue. liChange is
-// the schema-token disambiguator carried by callers.
+// the active key edge -- same key-edge resolution as SetKeyElementValue.
+//
+// Two parameters: 0x8252DE28 reads r4 and f1 (r5, the f32's integer shadow slot, is first
+// written at 0x8252DF28), and every call site in ChangeKeyElementValue and Update loads
+// r4 and f1 only.
 // ---------------------------------------------------------------------------
-void ICEAuthor::SetKeyElementValueChange(s32 liElement, s32 /*liChange*/, f32 lfDelta)
+void ICEAuthor::SetKeyElementValueChange(s32 liElement, f32 lfDelta)
 {
     if (lfDelta == 0.0f)
     {
@@ -304,7 +307,9 @@ s32 ICEAuthor::GetElementIndexByTag(const char* lpcTag) const
 //   4. Commit the new state.
 //   5. ENTER-to-key (new state > INTERVAL_SETTINGS): snapshot the play range, move
 //      the take parameter onto the active key edge of the current interval bracket,
-//      and re-fit the zoom window.
+//      and re-fit the zoom window. Entering SELECT_COPY_MODE keeps the edge of the
+//      state it was entered from: 0x8253CEE4..0x8253CEF0 call IsEndKeyState with
+//      miPrevState (`lwz r4, 0xE9C(r31)`), which ResolveEndKey reproduces.
 //   6. ENTER per-new-state setup (switch on the new state):
 //        OFF (0)        -> free the edit buffer
 //        ASSEMBLY_MARK(8)-> select assembly channel 0, bind the sub-take
@@ -316,7 +321,7 @@ s32 ICEAuthor::GetElementIndexByTag(const char* lpcTag) const
 //                          key edge (over the current channel's elements), then push
 //                          an undo snapshot
 // ---------------------------------------------------------------------------
-void ICEAuthor::SetState(s32 liState, f32 lfKey)
+void ICEAuthor::SetState(s32 liState)
 {
     const s32 liOldState = miState;
     if (liOldState == liState)
@@ -382,17 +387,7 @@ void ICEAuthor::SetState(s32 liState, f32 lfKey)
 
         const u16 lu16Interval = mEditTake.GetCurrentInterval(miCurrentChannel);
 
-        bool lbEndKey;
-        if (liState == E_ICE_AUTHOR_STATE_SELECT_COPY_MODE)
-        {
-            lbEndKey = IsEndKeyState((s32)lfKey);
-        }
-        else
-        {
-            lbEndKey = (liState == E_ICE_AUTHOR_STATE_END_KEY_SELECTED)
-                    || (liState == E_ICE_AUTHOR_STATE_EDIT_END_KEY)
-                    || (liState == E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_END);
-        }
+        const bool lbEndKey = ResolveEndKey(*this, liState, miPrevState);
 
         f32 lfStart = 0.0f;
         f32 lfEnd   = 1.0f;
@@ -430,13 +425,13 @@ void ICEAuthor::SetState(s32 liState, f32 lfKey)
 
         case E_ICE_AUTHOR_STATE_START_KEY_SELECTED:
         case E_ICE_AUTHOR_STATE_END_KEY_SELECTED:
-            RefreshElementValueCache(lfKey);
+            RefreshElementValueCache();
             mEditTake.PushUndo();
             break;
 
         case E_ICE_AUTHOR_STATE_EDIT_START_KEY:
         case E_ICE_AUTHOR_STATE_EDIT_END_KEY:
-            RefreshElementValueCache(lfKey);
+            RefreshElementValueCache();
             mEditTake.PushUndo();
             break;
 
@@ -451,9 +446,10 @@ void ICEAuthor::SetState(s32 liState, f32 lfKey)
 // Reload the per-element value cache (the widget side-table) from the live take at
 // the active key edge, over the elements that drive the current channel. The active
 // key is the current interval's bracket key plus the end-key offset (resolved with
-// the same SELECT_COPY_MODE indirection as the rest of the state machine). Each
-// element-description whose channel matches the current channel has its take value
-// (read as float at that key) written into its cache slot.
+// the same SELECT_COPY_MODE indirection as the rest of the state machine: both inline
+// copies, 0x8253CFE8..0x8253CFF4 and 0x8253D0A8..0x8253D0B4, read miPrevState for it).
+// Each element-description whose channel matches the current channel has its take
+// value (read as float at that key) written into its cache slot.
 //
 // FLAG (PLACEHOLDER element selector): the runtime sweeps the FIRST 28 element
 // descriptions (ICEElementDescriptions[0..27], the editor's widget-element region)
@@ -462,7 +458,7 @@ void ICEAuthor::SetState(s32 liState, f32 lfKey)
 // (KI_ICE_AUTHOR_ELEMENTS); modeled directly from the schema rather than from a
 // recovered data-segment selector table.
 // ---------------------------------------------------------------------------
-void ICEAuthor::RefreshElementValueCache(f32 lfKey)
+void ICEAuthor::RefreshElementValueCache()
 {
     const u16 lu16Interval = mEditTake.GetCurrentInterval(miCurrentChannel);
     u16 lu16BracketKey = 0;
@@ -471,17 +467,7 @@ void ICEAuthor::RefreshElementValueCache(f32 lfKey)
         lu16BracketKey = (u16)mEditTake.GetIntervalKey(miCurrentChannel, lu16Interval);
     }
 
-    bool lbEndKey;
-    if (miState == E_ICE_AUTHOR_STATE_SELECT_COPY_MODE)
-    {
-        lbEndKey = IsEndKeyState((s32)lfKey);
-    }
-    else
-    {
-        lbEndKey = (miState == E_ICE_AUTHOR_STATE_END_KEY_SELECTED)
-                || (miState == E_ICE_AUTHOR_STATE_EDIT_END_KEY)
-                || (miState == E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT_END);
-    }
+    const bool lbEndKey = ResolveEndKey(*this, miState, miPrevState);
     const u16 lu16Key = (u16)(lu16BracketKey + (u16)(lbEndKey ? 1 : 0));
 
     f32* lpfCache = ElementValueCache();

@@ -6,6 +6,7 @@
 #include "SDKs/Packages/ICE/ICEWidget/ICEWidget.hpp"     // ICE::ICEWidget base
 #include "rw/math/vpu/types.h"                            // rw::math::vpu::Matrix44Affine (the world transform @+0x10)
 #include "SDKs/Packages/ICE/ICEMath.hpp"                 // ICE::Vector3 / Vector4
+#include "SDKs/Packages/ICE/ICERender.hpp"               // ICE::ICERender (Render's parameter)
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"  // CgsDev::DebugInterface (3D GetRender)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"         // CgsDev::DebugRender::DrawBox (3D)
 
@@ -50,9 +51,12 @@ namespace ICE
         // Draw the fixed-size target box: build a stack DebugInterface, acquire
         // its 3D DebugRender, DrawBox a +/-0.05 cube in mTransform's space (i.e. at
         // the take's look-at point) in white, then thread-safe-release the manager.
+        // `lpRender` is the editor's render context: RenderTargetBox loads it into r4
+        // (controller + 0xF6C, 0x8253A154) like the sibling widgets' Render calls, and
+        // the body never reads it (r4 is first written at 0x8252D348).
         // OWNED here (body in the .cpp). @0x8252D2B8.
         // ------------------------------------------------------------------
-        void Render();
+        void Render(ICERender* lpRender);
 
         // --- layout (offset proven by the Render asm + the caller's matrix stores) ---
         u8                          mPad0[0x10];   // 0x00  leading region (caller-filled; unread here)

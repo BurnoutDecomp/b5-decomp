@@ -253,14 +253,13 @@ struct ICEAuthor
     void EditAssembly(ICETakeData* lpAssemblyTakeData);
 
     // --- state machine ---
-    // SetState's third arg (a3, double) is only consumed on the SELECT_COPY_MODE
-    // path (passed to IsEndKeyState as the "current key" disambiguator). Callers
-    // EditorOn/EditAssembly invoke the 2-arg form; the trailing param defaults so
-    // both call shapes bind. FLAG: a3 default value is a reconstruction choice (the
-    // runtime leaves the FP arg register undefined on the 2-arg calls); 0.0 is safe
-    // because the only consumer (IsEndKeyState) treats it as a key index that the
-    // SELECT_COPY path overrides.
-    void        SetState(s32 liState, f32 lfKey = 0.0f);
+    // SetState takes the new state only. Every X360 call site loads r3/r4 alone (EditorOn
+    // 0x8253F41C, EditAssembly 0x8253F4A4, JoyHandler 0x8253EA48, ICEWrapper::EditorOff
+    // 0x82540418), and 0x8253CD78 never reads f1 on entry: it first writes f1 at
+    // 0x8253CDA8, and its later f1 stores (0x8253D068, 0x8253D128) store the return of
+    // ICETake::GetValueFloat. Entering SELECT_COPY_MODE takes the key edge of the PREVIOUS
+    // state (IsEndKeyState(miPrevState), 0x8253CEEC).
+    void        SetState(s32 liState);
     const char* GetStateName(s32 liState) const;
     // IsEndKeyState: liKey == -1 walks back to the live state; returns true for the
     // END_KEY_SELECTED / EDIT_END_KEY / ASSEMBLY_EDIT_END states. Called with a key
@@ -310,12 +309,12 @@ struct ICEAuthor
     bool CopyKeyElements();
     bool PasteKeyElements();
     void SetKeyElementValue(s32 liElement, f32 lfValue);
-    void SetKeyElementValueChange(s32 liElement, s32 liChange, f32 lfDelta);
+    void SetKeyElementValueChange(s32 liElement, f32 lfDelta);
     s32  GetElementIndexByTag(const char* lpcTag) const;
     // SetState helper (body in ICEAuthorKeyElementOps.cpp): reload the per-element
     // value cache from the live take at the resolved key edge, over the current
     // channel's elements. Used by the key-selected / edit-key state entries.
-    void RefreshElementValueCache(f32 lfKey);
+    void RefreshElementValueCache();
 
     // --- segment ops ---
     bool InsertTakeSegment(f32 lfTangent, f32 lfSegmentLength);

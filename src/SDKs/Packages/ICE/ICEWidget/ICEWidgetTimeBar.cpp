@@ -154,13 +154,8 @@ namespace ICE
     // ------------------------------------------------------------------------
     // ICEWidgetTimeBar::Construct
     // ------------------------------------------------------------------------
-    void ICEWidgetTimeBar::Construct(f32 lfX, f32 lfY, f32 lfStart,
-                                     s32 liArg5, s32 liArg6, s32 liArg7, u8 lbCompact)
+    void ICEWidgetTimeBar::Construct(f32 lfX, f32 lfY, f32 lfStart, bool lbCompact)
     {
-        (void)liArg5;   // the three int args seed marker/read-out state that Reset
-        (void)liArg6;   // immediately overwrites; kept in the signature for the call
-        (void)liArg7;   // shape (they arrive in the trailing integer arg slots).
-
         // Store the compact flag and the screen origin + window start times. lfStart
         // is written into both the bar-length lane and the time-min lane, and
         // lfX/lfY into the screen origin lanes.
@@ -430,9 +425,11 @@ namespace ICE
     // text buffer (the reserved block at +12065). Each time is converted to frames
     // at the ICE 30 fps rate with a 0.0005 round-half bias, then split into minutes
     // (frames/30/60-ish), seconds and milliseconds. The exact split is kept faithful:
-    // total frames -> min/sec, sub-frame remainder -> ms.
+    // total frames -> min/sec, sub-frame remainder -> ms. The callers' frame-rate
+    // argument is not read: the console body uses its own literal 30 (r6 is written at
+    // 0x8252D518 before any read).
     // ------------------------------------------------------------------------
-    void ICEWidgetTimeBar::SetTimeInfo(f32 lfTime, f32 lfTotal)
+    void ICEWidgetTimeBar::SetTimeInfo(f32 lfTime, f32 lfTotal, s32 /*liFrameRate*/)
     {
         // Total length: (current * total) frames is the formed product, rounded.
         const s32 liTotalFrames = (s32)((lfTime * lfTotal) * KF_ICE_TIMEBAR_FPS + KF_ICE_TIMEBAR_ROUND);

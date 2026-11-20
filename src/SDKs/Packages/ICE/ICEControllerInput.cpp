@@ -1127,7 +1127,7 @@ void ICEController::Update()
             {
                 // Non-matched look spaces: a plain pitch value-change.
                 reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(
-                    1, 0, ((JoyVelocity(36) - JoyVelocity(35)) * (*mpMenuB)) * 5.0f);  // 29384-29376
+                    1, ((JoyVelocity(36) - JoyVelocity(35)) * (*mpMenuB)) * 5.0f);  // 29384-29376
             }
 
             const s32 liLook = mEditTake.GetValueInt(31);
@@ -1202,15 +1202,15 @@ void ICEController::Update()
                 s32 liBaseElement;
                 if (miFlagOrient)
                 {
-                    reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(5, 0, lfV);
+                    reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(5, lfV);
                     liBaseElement = 3;
                 }
                 else
                 {
-                    reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(2, 0, lfV);
+                    reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(2, lfV);
                     liBaseElement = 0;
                 }
-                reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(liBaseElement, 0, laPlane[0]);
+                reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(liBaseElement, laPlane[0]);
                 this->FromBubble();
             }
             else
@@ -1219,13 +1219,13 @@ void ICEController::Update()
                 // the joystick velocities (no bubble transform).
                 const f32 lfTimestep = *mpMenuB;
                 reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(
-                    0, 0, ((JoyVelocity(31) - JoyVelocity(32)) * lfTimestep) * -20.0f);   // 29404-29408
+                    0, ((JoyVelocity(31) - JoyVelocity(32)) * lfTimestep) * -20.0f);   // 29404-29408
                 reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(
-                    2, 0, ((JoyVelocity(32) - JoyVelocity(31)) * lfTimestep) *  20.0f);   // 29416-29412
+                    2, ((JoyVelocity(32) - JoyVelocity(31)) * lfTimestep) *  20.0f);   // 29416-29412
                 reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(
-                    3, 0, ((JoyVelocity(33) - JoyVelocity(34)) * lfTimestep) * -20.0f);   // 29420-29424
+                    3, ((JoyVelocity(33) - JoyVelocity(34)) * lfTimestep) * -20.0f);   // 29420-29424
                 reinterpret_cast<ICEAuthor*>(this)->SetKeyElementValueChange(
-                    5, 0, ((JoyVelocity(36) - JoyVelocity(35)) * lfTimestep) * -20.0f);   // 29432-29428
+                    5, ((JoyVelocity(36) - JoyVelocity(35)) * lfTimestep) * -20.0f);   // 29432-29428
             }
 
             // One-shot reset request: zero the orientation elements and re-enter the bubble.

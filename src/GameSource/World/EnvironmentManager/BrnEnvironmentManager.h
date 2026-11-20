@@ -319,8 +319,12 @@ private:
 
     // @ 0x827C5018. Tool path: re-read d:\LightSetup.txt once every 30 frames, then set
     // the blend frame to a uniform 0.25-weight blend of four copies of the parsed
-    // keyframe. Returns whether the file was re-read this call.
-    bool SetupUpdateFromToolBlend(BlendFrame& lrBlendFrame);
+    // keyframe. Returns whether the file was re-read this call. SetupBlend passes its
+    // output buffer as the second argument (r5 = r20 at 0x827D527C, r20 = its own r6 at
+    // 0x827D5024), as it does to SetupSeasonsBlend; the body never reads it (r5 is first
+    // written at 0x827C506C).
+    bool SetupUpdateFromToolBlend(BlendFrame& lrBlendFrame,
+                                  BrnWorldIO::UpdateOutputBuffer* lpOutput);
 
     // ---- STEP 9 "the environment manager goes live", BLEND half (group envblend) ----
     // The three blend-setup bodies Update @0x827D6060 drives. Signatures are the DecFIGS

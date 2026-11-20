@@ -67,6 +67,10 @@ namespace ICE
 // ICE frame rate: time(seconds) -> frames (the marker/read-out maths scale by 30).
 static const f32 KF_ICE_FRAME_RATE = 30.0f;
 
+// The same rate as the integer third argument of ICEWidgetTimeBar::SetTimeInfo: both
+// RenderBars call sites load r6 = 30 (0x825396D0, 0x82539BC4).
+static const s32 KI_ICE_FRAME_RATE = 30;
+
 // Round-to-nearest bias added before the frame-count truncation.
 static const f32 KF_ICE_ROUND_BIAS = 0.00050000002f;
 
@@ -412,7 +416,8 @@ void ICEController::RenderBars()
     (void)lfSelectedTime;
 
     // Hand the (current-time, total-time) read-out to the main bar.
-    mTimeBar.SetTimeInfo(lfBarParam, lfTakeLength * KF_ICE_FRAME_RATE + KF_ICE_ROUND_BIAS);
+    mTimeBar.SetTimeInfo(lfBarParam, lfTakeLength * KF_ICE_FRAME_RATE + KF_ICE_ROUND_BIAS,
+                         KI_ICE_FRAME_RATE);
 
     // (6) The secondary / assembly bar: Reset + the same per-marker fill (channel 10
     // = the assembly channel in the assembly-edit states, else channel 0). Summarised
@@ -445,7 +450,8 @@ void ICEController::RenderBars()
         }
     }
     if (liState == E_ICE_AUTHOR_STATE_ASSEMBLY_EDIT)                     // 9
-        mTimeBar2.SetTimeInfo(mEditTake.GetParameter(), lfTakeLength * KF_ICE_FRAME_RATE);
+        mTimeBar2.SetTimeInfo(mEditTake.GetParameter(), lfTakeLength * KF_ICE_FRAME_RATE,
+                              KI_ICE_FRAME_RATE);
 
     // (7) Refresh + draw the read-outs and both bars.
     RefreshInfoList();
@@ -625,13 +631,10 @@ void ICEController::RenderTargetBox()
                       + lTransform.zAxis.z * lLookAt.z;
     lrTranslation.w = 0.0f;
 
-    // Draw the box. The editor threads its render context to the widget; the committed
-    // ICEWidgetTargetBox::Render builds its own debug-render context, so it takes no
-    // argument here.
-    // FLAG: the editor passes its render context (controller +0xF6C) to the widget;
-    //       the committed target-box Render ignores it (it acquires the 3D debug
-    //       renderer itself), so no context is forwarded.
-    mTargetBox.Render();
+    // Draw the box. The editor passes its render context (controller +0xF6C, loaded into
+    // r4 at 0x8253A154), the same address the wide-screen marker gets; the target-box
+    // Render does not read it (it acquires the 3D debug renderer itself).
+    mTargetBox.Render(reinterpret_cast<ICERender*>(&mRenderContext));
 }
 
 } // namespace ICE

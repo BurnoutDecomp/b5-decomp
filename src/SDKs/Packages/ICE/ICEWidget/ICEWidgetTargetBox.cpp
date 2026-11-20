@@ -30,7 +30,7 @@ namespace ICE
     // zero w lane).
     static const f32 KF_TARGET_BOX_HALF_EXTENT = 0.05f;
 
-    void ICEWidgetTargetBox::Render()
+    void ICEWidgetTargetBox::Render(ICERender* /*lpRender*/)
     {
         // The two world-space corner offsets relative to the box centre: a +/-0.05
         // cube (w lane zero). The X360 builds these as two stack vectors and passes

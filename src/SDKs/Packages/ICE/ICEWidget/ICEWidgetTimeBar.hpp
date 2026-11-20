@@ -111,12 +111,13 @@ namespace ICE
         // Build the time bar: store the screen origin (lfX/lfY) and the window
         // start times, clear the read-out state, then Reset(). The float args arrive
         // in order (lfX, lfY, lfStart): `lfX`/`lfY` are the screen origin; `lfStart`
-        // seeds both the bar-length and time-min lanes; the three int args + the char
-        // are the initial marker count / flags / compact flag. OWNED here (body in
-        // the .cpp).
+        // seeds both the bar-length and time-min lanes; `lbCompact` is the compact
+        // flag. Four parameters: 0x82531078 reads f1-f3 and stores r7 as a byte
+        // (0x82531088); r4-r6, the floats' integer shadow slots, are written before
+        // any read, and ConstructMenus loads only f1-f3 and r7 (0x825320C8,
+        // 0x825320EC). OWNED here (body in the .cpp).
         // ------------------------------------------------------------------
-        void Construct(f32 lfX, f32 lfY, f32 lfStart,
-                       s32 liArg5, s32 liArg6, s32 liArg7, u8 lbCompact);
+        void Construct(f32 lfX, f32 lfY, f32 lfStart, bool lbCompact);
 
         // ------------------------------------------------------------------
         // Draw the whole bar: track background, the per-marker segment boxes, the
@@ -138,9 +139,12 @@ namespace ICE
         // Format the "min:sec.ms / min:sec" caption from a (time, totalTime) pair
         // into the read-out text buffer. `lfTime` is the current time and
         // `lfTotal` the take length (both in seconds); the ICE frame rate (30) maps
-        // them to frames/ms. OWNED here.
+        // them to frames/ms. `liFrameRate` is the third argument both RenderBars
+        // call sites pass (r6 = 30 at 0x825396D0 and 0x82539BC4); the body never
+        // reads it (0x8252D4E0 writes r6 at 0x8252D518 first) and formats at its own
+        // literal 30. OWNED here.
         // ------------------------------------------------------------------
-        void SetTimeInfo(f32 lfTime, f32 lfTotal);
+        void SetTimeInfo(f32 lfTime, f32 lfTotal, s32 liFrameRate);
 
         // --- layout (offsets the bodies touch are pinned below) -----------
         ICEWidgetTimeBarMarker  maMarkers[KI_ICE_TIMEBAR_MAX_MARKERS];    // +0x0000  per-take marker array (80B stride)

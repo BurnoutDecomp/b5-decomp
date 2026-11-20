@@ -88,16 +88,11 @@ static const f32 KF_ICE_MENU_ICON_H   = 10.0f;    // 0xF98 height          (plac
 // FLAG (placeholder pixels): a data-segment float with no symbol; value is a placeholder.
 static const f32 KF_ICE_COPY_MENU_Y_OFFSET = 0.0f;
 
-// The default int/flags arguments the time-bar Construct takes after its three float
-// args. FLAG: the source-spine pseudocode preserves only the float arguments (origin
-// x/y + start time); the trailing marker-count / flags arguments are not recoverable,
-// so they are zeroed. The final trailing flag IS recovered per bar (0 vs 1, below).
-static const s32 KI_ICE_TIMEBAR_ARG_DEFAULT = 0;
-
-// The recovered trailing flag (the 7th Construct arg): 0 for the main bar, 1 for the
-// secondary/assembly bar.
-static const u8  KU_ICE_TIMEBAR_FLAG_MAIN = 0;   // mTimeBar  trailing flag = 0
-static const u8  KU_ICE_TIMEBAR_FLAG_2    = 1;   // mTimeBar2 trailing flag = 1
+// The compact flag each time bar is built with (Construct's last argument):
+// ConstructMenus loads r7 = 0 for the main bar (0x825320C8) and r7 = 1 for the
+// secondary/assembly bar (0x825320EC).
+static const bool KB_ICE_TIMEBAR_COMPACT_MAIN = false;   // mTimeBar
+static const bool KB_ICE_TIMEBAR_COMPACT_2    = true;    // mTimeBar2
 
 // The two time-bar screen origins + the main bar's start-time seed ConstructMenus
 // passes. FLAG: the source spine reads the bar origin floats from the ICE data
@@ -231,17 +226,13 @@ void ICEController::ConstructMenus()
 
     // The two embedded time bars (built in place, NOT heap-allocated -- they live by
     // value inside the controller). The main bar takes the fixed HUD origin + start;
-    // the second bar is offset +32 vertically below it. The trailing Construct flag is
-    // 0 for the main bar and 1 for the second bar (the recovered per-bar immediate).
-    // FLAG (time-bar args): the origin/start floats are placeholders; the trailing
-    // marker-count / flags args are zeroed; only the final flag (0 vs 1) is recovered.
+    // the second bar is offset +32 vertically below it. The compact flag is false for
+    // the main bar and true for the second bar (the per-bar r7 immediates).
+    // FLAG (time-bar args): the origin/start floats are placeholders.
     mTimeBar.Construct(KF_ICE_TIMEBAR_X, KF_ICE_TIMEBAR_Y, KF_ICE_TIMEBAR_START,
-                       KI_ICE_TIMEBAR_ARG_DEFAULT, KI_ICE_TIMEBAR_ARG_DEFAULT,
-                       KI_ICE_TIMEBAR_ARG_DEFAULT, KU_ICE_TIMEBAR_FLAG_MAIN);
+                       KB_ICE_TIMEBAR_COMPACT_MAIN);
     mTimeBar2.Construct(KF_ICE_TIMEBAR_X, KF_ICE_TIMEBAR_Y + KF_ICE_TIMEBAR2_Y_STEP,
-                        KF_ICE_TIMEBAR_START,
-                        KI_ICE_TIMEBAR_ARG_DEFAULT, KI_ICE_TIMEBAR_ARG_DEFAULT,
-                        KI_ICE_TIMEBAR_ARG_DEFAULT, KU_ICE_TIMEBAR_FLAG_2);
+                        KF_ICE_TIMEBAR_START, KB_ICE_TIMEBAR_COMPACT_2);
 
     // Seed the logo / wide-screen-marker / info-list geometry the editor HUD draws.
     // The source spine writes a block of fixed layout floats into the target-box /
