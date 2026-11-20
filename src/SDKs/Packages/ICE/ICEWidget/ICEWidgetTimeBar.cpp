@@ -125,12 +125,12 @@ namespace ICE
         // `lpColour4` (per-channel [0,255]). Mirrors the ICEWidgetIcon /
         // ICEWidgetMenu quad-build / RenderPoly convention: corners wound
         // top-left -> top-right -> bottom-right -> bottom-left, and RenderPoly
-        // reads V0 + the opposite corner V2. The take->screen context left to the
-        // debug renderer is an identity Matrix4 (RenderPoly's static box path
-        // ignores it).
+        // reads V0 + the opposite corner V2. The box is drawn through the editor's
+        // render context with the one colour in all four corner slots, as at every
+        // X360 RenderPoly call site.
         // ------------------------------------------------------------------
-        void DrawBox(f32 lfLeft, f32 lfTop, f32 lfRight, f32 lfBottom, f32 lfZ,
-                     const f32* lpColour4)
+        void DrawBox(ICERender* lpRender, f32 lfLeft, f32 lfTop, f32 lfRight, f32 lfBottom,
+                     f32 lfZ, const f32* lpColour4)
         {
             Poly lQuad;
             lQuad.maVertices[0] = { lfLeft,  lfTop,    lfZ, 0.0f };
@@ -144,10 +144,7 @@ namespace ICE
             lColour.z = lpColour4[2];
             lColour.w = lpColour4[3];
 
-            Matrix4 lLocalWorld;
-            ICEMath::Identity(&lLocalWorld);
-
-            ICERender::RenderPoly(&lQuad, &lColour, &lColour, &lLocalWorld);
+            lpRender->RenderPoly(&lQuad, &lColour, &lColour, &lColour, &lColour);
         }
     } // anonymous namespace
 
@@ -262,9 +259,8 @@ namespace ICE
     // markers, then the numeric read-outs. The time->screen mapping is the affine
     // described in the file header.
     // ------------------------------------------------------------------------
-    void ICEWidgetTimeBar::Render(s32 liRenderContext)
+    void ICEWidgetTimeBar::Render(ICERender* lpRender)
     {
-        (void)liRenderContext;   // editor-render context; the static draw path ignores it
 
         if (miNumMarkers == 0)
         {
@@ -301,7 +297,7 @@ namespace ICE
             // Full bar as one background box (the per-segment loop collapses into a
             // single span once the count saturates the array).
             const f32 lfLeft  = lfBarRight - (lfBias + (lfScale * 0.0f));
-            DrawBox(lfLeft, lfTop, lfBarRight, lfBottom, KF_ICE_TIMEBAR_Z_SEG,
+            DrawBox(lpRender, lfLeft, lfTop, lfBarRight, lfBottom, KF_ICE_TIMEBAR_Z_SEG,
                     KAF_ICE_TIMEBAR_COL_TRACK);
         }
         else
@@ -325,10 +321,10 @@ namespace ICE
                                                            : KAF_ICE_TIMEBAR_COL_SEG;
 
                 // Segment body box.
-                DrawBox(lfStartX, lfTop, lfEndX, lfBottom, KF_ICE_TIMEBAR_Z_SEG, lpColour);
+                DrawBox(lpRender, lfStartX, lfTop, lfEndX, lfBottom, KF_ICE_TIMEBAR_Z_SEG, lpColour);
 
                 // Thin boundary tick (half-line thick) at the segment start.
-                DrawBox(lfStartX - KF_ICE_TIMEBAR_HALF_LINE, lfTop,
+                DrawBox(lpRender, lfStartX - KF_ICE_TIMEBAR_HALF_LINE, lfTop,
                         lfStartX + KF_ICE_TIMEBAR_HALF_LINE, lfBottom,
                         KF_ICE_TIMEBAR_Z_TICK, KAF_ICE_TIMEBAR_COL_SEG);
             }
@@ -343,13 +339,13 @@ namespace ICE
             const f32 lfCursorX = (mfScreenLeft * lfScale) + lfBias;
             const f32 lfSelTop  = mfBarY;
             const f32 lfSelBot  = mfBarY + lfHalfHeight;
-            DrawBox(lfBarLeft, lfSelTop, lfCursorX, lfSelBot,
+            DrawBox(lpRender, lfBarLeft, lfSelTop, lfCursorX, lfSelBot,
                     KF_ICE_TIMEBAR_Z_TICK, KAF_ICE_TIMEBAR_COL_SELECT);
 
             // Domain-min/-max boundary ticks.
             const f32 lfMinX = (mfDomainLo * lfScale) + lfBias;
             const f32 lfMaxX = (mfTimeMin * mfDomainHi) + lfBarLeft;
-            DrawBox(lfMinX, lfSelTop, lfMaxX, lfSelBot,
+            DrawBox(lpRender, lfMinX, lfSelTop, lfMaxX, lfSelBot,
                     KF_ICE_TIMEBAR_Z_PLAY, KAF_ICE_TIMEBAR_COL_PLAY);
         }
 
@@ -361,14 +357,14 @@ namespace ICE
             if (mfLoopStart >= 0.0f)
             {
                 const f32 lfX = (mfLoopStart * lfScale) + lfBias;
-                DrawBox(lfX - KF_ICE_TIMEBAR_HALF_LINE, mfBarY,
+                DrawBox(lpRender, lfX - KF_ICE_TIMEBAR_HALF_LINE, mfBarY,
                         lfX + KF_ICE_TIMEBAR_HALF_LINE, mfBarY + lfHalfHeight + KF_ICE_TIMEBAR_HALF_LINE,
                         KF_ICE_TIMEBAR_Z_MARKER, KAF_ICE_TIMEBAR_COL_LOOP);
             }
             if (mfLoopEnd >= 0.0f)
             {
                 const f32 lfX = (mfLoopEnd * lfScale) + lfBias;
-                DrawBox(lfX - KF_ICE_TIMEBAR_HALF_LINE, mfBarY,
+                DrawBox(lpRender, lfX - KF_ICE_TIMEBAR_HALF_LINE, mfBarY,
                         lfX + KF_ICE_TIMEBAR_HALF_LINE, mfBarY + lfHalfHeight + KF_ICE_TIMEBAR_HALF_LINE,
                         KF_ICE_TIMEBAR_Z_MARKER, KAF_ICE_TIMEBAR_COL_LOOP);
             }
@@ -382,39 +378,41 @@ namespace ICE
         {
             const f32 lfHeadStart = (mfScreenLeft * lfScale) + lfBias;
             const f32 lfHeadEnd   = ((mfScreenLeft + mfBarLength) * lfScale) + lfBias;
-            DrawBox(lfHeadStart, mfBarY, lfHeadEnd, mfBarY + lfHalfHeight,
+            DrawBox(lpRender, lfHeadStart, mfBarY, lfHeadEnd, mfBarY + lfHalfHeight,
                     KF_ICE_TIMEBAR_Z_CURSOR, KAF_ICE_TIMEBAR_COL_CURSOR);
         }
         else if (!lbCompact)
         {
             const f32 lfCursorX = (mfScreenLeft * lfScale) + lfBias;
-            DrawBox(lfCursorX - KF_ICE_TIMEBAR_MARK_MED, mfBarY,
+            DrawBox(lpRender, lfCursorX - KF_ICE_TIMEBAR_MARK_MED, mfBarY,
                     lfCursorX + KF_ICE_TIMEBAR_MARK_MED, mfBarY + lfHalfHeight,
                     KF_ICE_TIMEBAR_Z_CURSOR, KAF_ICE_TIMEBAR_COL_CURSOR);
         }
 
         // --- numeric read-outs -------------------------------------------------
-        // The frame-number captions, gated on whether each marker is inside the
-        // visible window. The exact per-digit placement maths over the reserved
-        // read-out block is summarised here as the visible draw: each read-out is a
-        // shadowed text line at the bar origin. (See the file-header FLAG.)
+        // FLAG (placeholder read-outs): the X360 draws six read-outs here, all at
+        // Y = (s32)(mfBarY - 25) through the render context (0x82537A14..0x82537B5C):
+        // "<%.1f>" once or twice at mfBarX + 200 when miMarkerSelA != -1, "(x%.1f)" and
+        // "%.1f x" at mfBarX + 100 (+90) when mbShowAux is set, and the SetTimeInfo
+        // caption at mfBarX + 260 followed by a scrolling "--". Their values live in the
+        // still-unnamed read-out block (+0x2F10..+0x2F67), so the text below stays a
+        // placeholder; only the positions are the console's. (See the file-header FLAG.)
         const s32 liReadoutY = (s32)(mfBarY - 25.0f);
         if (!mbCompact)
         {
             if (miMarkerSelA != -1)
             {
-                ICERender::ScrShadowPrintf(liRenderContext, (s32)(mfBarX + 200.0f),
-                                           KF_ICE_TIMEBAR_TEXT_SIZE, "%s", "");
+                lpRender->ScrShadowPrintf((s32)(mfBarX + 200.0f), liReadoutY,
+                                          KF_ICE_TIMEBAR_TEXT_SIZE, "%s", "");
             }
             if (mbShowAux)
             {
-                ICERender::ScrShadowPrintf(liRenderContext, (s32)(mfBarX + 100.0f),
-                                           KF_ICE_TIMEBAR_TEXT_SIZE, "%s", "");
+                lpRender->ScrShadowPrintf((s32)(mfBarX + 100.0f), liReadoutY,
+                                          KF_ICE_TIMEBAR_TEXT_SIZE, "%s", "");
             }
-            // The "min:sec.ms / min:sec" caption (built by SetTimeInfo) is drawn
-            // below the bar centre line.
-            ICERender::ScrShadowPrintf(liRenderContext, liReadoutY,
-                                       KF_ICE_TIMEBAR_TEXT_SIZE, "%s", "");
+            // The "min:sec.ms / min:sec" caption (built by SetTimeInfo).
+            lpRender->ScrShadowPrintf((s32)(mfBarX + 260.0f), liReadoutY,
+                                      KF_ICE_TIMEBAR_TEXT_SIZE, "%s", "");
         }
     }
 

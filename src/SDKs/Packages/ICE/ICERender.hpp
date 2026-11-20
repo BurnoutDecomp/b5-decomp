@@ -19,7 +19,7 @@
 // surface -- screenshot control (StartScreenShot / IsScreenShotDone / ...), camera
 // queries (IsWidescreen / IsCameraPaused), and extra RenderPoly/ScrPrintf overloads.
 // Only the FOUR functions the X360 ARTIST ledger attests for this TU are declared
-// here (RenderPoly(Poly*,V4*,V4*,Matrix4*) / ScrPrintf / ScrShadowPrintf /
+// here (RenderPoly(Poly*,V4*,V4*,V4*,V4*) / ScrPrintf / ScrShadowPrintf /
 // ScrPrintfArg); the PS3-only members are left out (a using-TU GROWS this header
 // when the X360 build attests them).
 //
@@ -36,27 +36,30 @@ namespace ICE
         Vector3 maVertices[4];
     };
 
+    // The editor's draw context. Every X360 call site passes the ICERender it was given
+    // (the controller's +0xF6C) in r3, so the draws are member functions; their bodies
+    // never read `this`, and their own parameters start at r4.
     struct ICERender
     {
         // Format `lpcFormat` with the variadic args and draw the resulting text at
         // (liX, liY) at scale lfSize in WHITE (the ScrPrintfArg default colour).
         // The format param stays `const char*` (matches ICEFileHandler::FilePrintf;
         // /permissive- rejects passing a string literal to a `char*` vararg sink).
-        static void ScrPrintf(s32 liX, s32 liY, f32 lfSize, const char* lpcFormat, ...);
+        void ScrPrintf(s32 liX, s32 liY, f32 lfSize, const char* lpcFormat, ...);
 
         // Two-pass shadowed text: a dark/offset shadow pass then the white main pass.
-        static void ScrShadowPrintf(s32 liX, s32 liY, f32 lfSize, const char* lpcFormat, ...);
+        void ScrShadowPrintf(s32 liX, s32 liY, f32 lfSize, const char* lpcFormat, ...);
 
         // The shared core: vsnprintf the args into a stack buffer and draw it as 2D
         // debug text in `lpColour`. `lrArgs` is the caller's started va_list.
-        static void ScrPrintfArg(s32 liX, s32 liY, f32 lfSize, const Vector4* lpColour,
-                                 const char* lpcFormat, va_list& lrArgs);
+        void ScrPrintfArg(s32 liX, s32 liY, f32 lfSize, const Vector4* lpColour,
+                          const char* lpcFormat, va_list& lrArgs);
 
-        // Draw a 2D debug box around `lpPoly` in a colour blended from the two colour
-        // params, offset by the ICE menu shift. `lpLocalWorld` is the take->screen
-        // transform context (unused by the box-draw maths, kept for the call shape).
-        static void RenderPoly(const Poly* lpPoly, const Vector4* lpColour0,
-                               const Vector4* lpColour1, const Matrix4* lpLocalWorld);
+        // Draw a 2D debug box around `lpPoly` in colour0, offset by the ICE menu shift.
+        // The four colour pointers are the corner colours: every X360 call site passes
+        // the same pointer in r5-r8, and the body reads colour0 (r5) only.
+        void RenderPoly(const Poly* lpPoly, const Vector4* lpColour0, const Vector4* lpColour1,
+                        const Vector4* lpColour2, const Vector4* lpColour3);
     };
 }
 

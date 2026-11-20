@@ -88,12 +88,9 @@ namespace ICE
         lColour.z = 0.0f;
         lColour.w = 0.0f;
 
-        // The take->screen context. The committed RenderPoly does not read it; an
-        // identity transform stands in for the X360's editor-render context carried
-        // through `lpRender` (the X360 passes r4 as RenderPoly's first arg).
-        Matrix4 lLocalWorld;
-        ICEMath::Identity(&lLocalWorld);
-        (void)lpRender;   // editor-render context; RenderPoly's static path ignores it
+        // Both quads are drawn through the editor's render context with the one colour
+        // in all four corner slots (0x82537D38 / 0x82537E90: r3 = lpRender, r5-r8 = the
+        // colour).
 
         // --- Quad 0 (depth 1.0): left-edge marker rectangle ------------------
         // V0 corner = (-2, 480), V2 opposite = (0, 0); V1/V3 close the box.
@@ -102,7 +99,7 @@ namespace ICE
         lQuad0.maVertices[1] = { KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_NEAR, 0.0f };
         lQuad0.maVertices[2] = { KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_NEAR, 0.0f };
         lQuad0.maVertices[3] = { KF_ICE_WIDESCR_X_LEFT, KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_NEAR, 0.0f };
-        ICERender::RenderPoly(&lQuad0, &lColour, &lColour, &lLocalWorld);
+        lpRender->RenderPoly(&lQuad0, &lColour, &lColour, &lColour, &lColour);
 
         // --- Quad 1 (depth 0.0): complementary marker rectangle --------------
         // V0 corner = (480, 0), V2 opposite = (1, 480); V1/V3 close the box.
@@ -111,6 +108,6 @@ namespace ICE
         lQuad1.maVertices[1] = { KF_ICE_WIDESCR_X_ONE,  KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_FAR, 0.0f };
         lQuad1.maVertices[2] = { KF_ICE_WIDESCR_X_ONE,  KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_FAR, 0.0f };
         lQuad1.maVertices[3] = { KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_FAR, 0.0f };
-        ICERender::RenderPoly(&lQuad1, &lColour, &lColour, &lLocalWorld);
+        lpRender->RenderPoly(&lQuad1, &lColour, &lColour, &lColour, &lColour);
     }
 }

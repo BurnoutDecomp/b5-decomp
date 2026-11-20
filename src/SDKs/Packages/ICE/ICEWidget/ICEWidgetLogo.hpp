@@ -37,11 +37,11 @@ namespace ICE
     struct ICEWidgetLogo : public ICEWidget
     {
         // ------------------------------------------------------------------
-        // Draw the animated "ICE" logo. `liScreenX` is the caller-supplied base
-        // X (r4 in the X360 call from ICEController::Render). OWNED here (body in
-        // ICEWidgetLogo.cpp). @0x825346E0.
+        // Draw the animated "ICE" logo at (mfX, mfY) through the editor's render
+        // context (r4 in the X360 call from ICEController::Render: controller +
+        // 0xF6C). OWNED here (body in ICEWidgetLogo.cpp). @0x825346E0.
         // ------------------------------------------------------------------
-        void Render(s32 liScreenX);
+        void Render(ICERender* lpRender);
 
         // --- layout (offsets proven by the Render asm) --------------------
         f32 mfX;        // @0x00  screen-space X

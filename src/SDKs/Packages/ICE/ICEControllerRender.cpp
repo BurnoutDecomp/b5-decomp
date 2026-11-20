@@ -88,6 +88,11 @@ static const f32 KF_ICE_BAR_BASE_Y = 40.0f;
 // Status-line text size (the editor sub-take name caption uses 16.0).
 static const f32 KF_ICE_STATUS_TEXT_SIZE = 16.0f;
 
+// The status caption's position: ICEController::Render loads r4 = 150 and r5 = 180
+// (0x8253B2D4 / 0x8253B2D0).
+static const s32 KI_ICE_STATUS_TEXT_X = 150;
+static const s32 KI_ICE_STATUS_TEXT_Y = 180;
+
 // The look-at target box is built from the take's element-description indices 3/4/5
 // (the look-at X/Y/Z target-offset elements) sampled at the resolved key.
 static const s32 KI_ICE_ELEM_LOOKAT_X = 3;
@@ -189,35 +194,32 @@ void ICEController::Render()
         lBackdrop.maVertices[liVert].w = 0.0f;
     }
 
-    // The editor render context is passed BY ADDRESS to the static draw entry points
-    // (the editor threads `this + mRenderContext` as the draw context). The committed
-    // all-static RenderPoly ignores its localWorld/context slot.
-    // FLAG: the render context is an opaque editor draw-context word; the committed
-    //       static draw path does not read it, so it is mapped to the ignored slot.
-    (void)mRenderContext;
-    ICERender::RenderPoly(&lBackdrop, &KV_ICE_COLOUR_BACKDROP,
-                          &KV_ICE_COLOUR_BACKDROP, /*localWorld*/ 0);
+    // Every draw goes through the editor's render context, this + 0xF6C (r30 from
+    // 0x8253B1DC): the backdrop, the status caption and the two HUD widgets.
+    ICERender* const lpRender = reinterpret_cast<ICERender*>(&mRenderContext);
+    lpRender->RenderPoly(&lBackdrop, &KV_ICE_COLOUR_BACKDROP, &KV_ICE_COLOUR_BACKDROP,
+                         &KV_ICE_COLOUR_BACKDROP, &KV_ICE_COLOUR_BACKDROP);
 
     if (!miShowUi)
         return;
 
     // Status caption: only when a status line is live (count > 0) and the status mode
-    // selects the print (mode == 2). The status text base is miStatusText (the buffer
-    // at +0x720C); the render context rides as the first ScrShadowPrintf arg (the
-    // committed convention used by the widget Render bodies).
+    // selects the print (mode == 2). The status text (the buffer at +0x720C) is drawn
+    // as its own format at (150, 180) (0x8253B2CC..0x8253B2E8: r4 = 150, r5 = 180, r7 =
+    // the text, and nothing more).
     if (miStatusCount > 0 && miStatusMode == 2)
     {
         const char* lpcStatus = reinterpret_cast<const char*>(&miStatusText);
-        ICERender::ScrShadowPrintf((s32)mRenderContext, 150,
-                                   KF_ICE_STATUS_TEXT_SIZE, "%s", lpcStatus);
+        lpRender->ScrShadowPrintf(KI_ICE_STATUS_TEXT_X, KI_ICE_STATUS_TEXT_Y,
+                                  KF_ICE_STATUS_TEXT_SIZE, lpcStatus);
     }
 
     // The animated logo and the widescreen/letterbox marker (both 2D screen-space) are
     // TWO SEPARATE widget members (mLogo @+0x71E4, mWideScrMarker @+0x71E0; see
     // ICEController.hpp). Each is drawn through its own committed widget Render entry
     // point against the editor render context. The logo is drawn first, then the marker.
-    mLogo.Render((s32)mRenderContext);
-    mWideScrMarker.Render(reinterpret_cast<ICERender*>(&mRenderContext));
+    mLogo.Render(lpRender);
+    mWideScrMarker.Render(lpRender);
 
     // Snapshot the state across the bar/menu draws (the target-box gate compares the
     // state captured before the menu draw).
@@ -310,11 +312,13 @@ void ICEController::RenderBars()
                 : "";
         }
 
-        ICERender::ScrShadowPrintf((s32)(KF_ICE_BAR_BASE_X + 2.0f), 16,
-                                   KF_ICE_STATUS_TEXT_SIZE, "%s", lpcName);
-        ICERender::ScrShadowPrintf((s32)(KF_ICE_BAR_BASE_X + 2.0f),
-                                   (s32)(KF_ICE_BAR_BASE_Y + 55.0f),
-                                   KF_ICE_STATUS_TEXT_SIZE, "%s", lpcCategory);
+        // Both lines draw through the editor's render context (r31 = this + 0xF6C).
+        ICERender* const lpRender = reinterpret_cast<ICERender*>(&mRenderContext);
+        lpRender->ScrShadowPrintf((s32)(KF_ICE_BAR_BASE_X + 2.0f), 16,
+                                  KF_ICE_STATUS_TEXT_SIZE, "%s", lpcName);
+        lpRender->ScrShadowPrintf((s32)(KF_ICE_BAR_BASE_X + 2.0f),
+                                  (s32)(KF_ICE_BAR_BASE_Y + 55.0f),
+                                  KF_ICE_STATUS_TEXT_SIZE, "%s", lpcCategory);
 
         // Clear the bar's auxiliary read-out gate after the caption.
         mTimeBar.mbShowAux = 0;
@@ -508,9 +512,12 @@ void ICEController::RenderBars()
         break;
     }
 
-    mInfoList.Render((s32)KF_ICE_BAR_BASE_X);
-    mTimeBar.Render((s32)mRenderContext);
-    mTimeBar2.Render((s32)mRenderContext);
+    // The list and both bars draw through the editor's render context (this + 0xF6C,
+    // 0x82539EAC / 0x82539EB8).
+    ICERender* const lpRender = reinterpret_cast<ICERender*>(&mRenderContext);
+    mInfoList.Render(lpRender);
+    mTimeBar.Render(lpRender);
+    mTimeBar2.Render(lpRender);
 }
 
 // ============================================================================
@@ -526,29 +533,32 @@ void ICEController::RenderBars()
 // ============================================================================
 void ICEController::RenderMenus()
 {
+    // Every menu draws through the editor's render context, this + 0xF6C (0x82539F6C).
+    ICERender* const lpRender = reinterpret_cast<ICERender*>(&mRenderContext);
+
     switch (miState)
     {
     case E_ICE_AUTHOR_STATE_BROWSER:                                    // 1
     case E_ICE_AUTHOR_STATE_DELETE_CONFIRM:                            // 3
         RefreshMenu(0);
-        mpMenuMain->Render((s32)mRenderContext);
+        mpMenuMain->Render(lpRender);
         if (miState == E_ICE_AUTHOR_STATE_DELETE_CONFIRM)
         {
             RefreshMenu(5);
-            mpMenuCancel->Render((s32)mRenderContext);
+            mpMenuCancel->Render(lpRender);
         }
         break;
     case E_ICE_AUTHOR_STATE_EXIT_CONFIRM:                              // 2
         RefreshMenu(4);
-        mpMenuAssembly->Render((s32)mRenderContext);
+        mpMenuAssembly->Render(lpRender);
         break;
     case E_ICE_AUTHOR_STATE_INTERVAL_SETTINGS:                         // 11
         RefreshMenu(1);
-        mpMenuIntervalMain->Render((s32)mRenderContext);
+        mpMenuIntervalMain->Render(lpRender);
         break;
     case E_ICE_AUTHOR_STATE_SELECT_COPY_MODE:                         // 16
         RefreshMenu(3);
-        mpMenuCommit->Render((s32)mRenderContext);
+        mpMenuCommit->Render(lpRender);
         break;
     default:
         break;

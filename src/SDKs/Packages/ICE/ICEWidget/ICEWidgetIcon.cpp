@@ -83,13 +83,8 @@ namespace ICE
         lColour.z = KF_ICE_ICON_GREY;
         lColour.w = KF_ICE_ICON_ALPHA;
 
-        // The take->screen context. The committed RenderPoly does not read it; an
-        // identity transform stands in for the X360's editor-render context (carried
-        // through `lpRender`, which RenderPoly's static box-draw path ignores).
-        Matrix4 lLocalWorld;
-        ICEMath::Identity(&lLocalWorld);
-        (void)lpRender;   // editor-render context; RenderPoly's static box-draw ignores it
-
-        ICERender::RenderPoly(&lQuad, &lColour, &lColour, &lLocalWorld);
+        // Drawn through the editor's render context with the one colour in all four
+        // corner slots (0x8253462C: r3 = lpRender, r4 = the quad, r5-r8 = the colour).
+        lpRender->RenderPoly(&lQuad, &lColour, &lColour, &lColour, &lColour);
     }
 }

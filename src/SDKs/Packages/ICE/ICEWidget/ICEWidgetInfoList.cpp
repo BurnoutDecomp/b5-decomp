@@ -9,11 +9,11 @@
 //     there bounded to 40 bytes, then the count is advanced. Called by
 //     ICEController::RefreshInfoList.
 //
-//   * Render -- draw every filled row as shadowed on-screen text, top-down. The
-//     two screen-coordinate floats are converted to int once; mfBaseY is held
-//     constant as the liY-style coordinate while the per-row vertical position
-//     starts at mfFirstLineY and drops 18 each row. The row text pointer advances
-//     40 bytes per row. Called by ICEController::RenderBars.
+//   * Render -- draw every filled row as shadowed on-screen text, top-down,
+//     through the editor's render context. The two screen-coordinate floats are
+//     converted to int once: every row is drawn at X = mfX, starting at Y =
+//     mfFirstLineY and dropping 18 each row. The row text pointer advances 40 bytes
+//     per row. Called by ICEController::RenderBars.
 //
 // FLAG: no layout reference for this widget; the layout/constants (40-byte stride,
 //       15-slot capacity, the 16.0 text size, the -18 per-line step, the two float
@@ -64,24 +64,20 @@ namespace ICE
     // ------------------------------------------------------------------------
     // ICEWidgetInfoList::Render
     // ------------------------------------------------------------------------
-    void ICEWidgetInfoList::Render(s32 liScreenX)
+    void ICEWidgetInfoList::Render(ICERender* lpRender)
     {
-        // Both screen coordinates are converted to int once up front: mfBaseY is
-        // the constant liY-style coordinate, mfFirstLineY is the first row's
-        // vertical position (stepped down per row below).
-        const s32 liBaseY = (s32)mfBaseY;
+        // Both screen coordinates are converted to int once up front: mfX is the X
+        // of every row, mfFirstLineY the first row's Y (stepped down per row below).
+        const s32 liX     = (s32)mfX;
         s32       liLineY = (s32)mfFirstLineY;
 
-        // Draw each filled row top-down. The pre-formatted row text is passed as
-        // the format string and the per-row vertical position rides along as a
-        // trailing vararg -- the rows carry no `%` specifiers, so it is inert in
-        // the formatted output and only satisfies the variadic call shape (the
-        // same marshaling ICEWidgetLogo::Render uses). The row pointer advances
-        // one 40-byte slot per iteration; the line position drops 18 each row.
+        // Draw each filled row top-down, its pre-formatted text as the format string
+        // (0x825346B8: r3 = the render context, r4 = X, r5 = the row's Y, f1 = the
+        // size, r7 = the row text, and nothing more). The row pointer advances one
+        // 40-byte slot per iteration; the line position drops 18 each row.
         for (s32 liRow = 0; liRow < miItemCount; ++liRow)
         {
-            ICERender::ScrShadowPrintf(liScreenX, liBaseY, KF_ICE_INFOLIST_LINE_SIZE,
-                                       macItemText[liRow], liLineY);
+            lpRender->ScrShadowPrintf(liX, liLineY, KF_ICE_INFOLIST_LINE_SIZE, macItemText[liRow]);
 
             liLineY -= KI_ICE_INFOLIST_LINE_STEP;
         }

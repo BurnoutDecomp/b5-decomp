@@ -105,10 +105,10 @@ namespace ICE
         // (r,g,b,a), per-channel in [0,255]. Mirrors the ICEWidgetIcon quad-build /
         // RenderPoly convention: the four corners are wound top-left -> top-right ->
         // bottom-right -> bottom-left, RenderPoly reads corner + opposite-corner.
-        // The take->screen context the asm leaves to the debug renderer is modelled
-        // as an identity Matrix4 (RenderPoly's static box path ignores it).
-        void DrawBox(f32 lfLeft, f32 lfTop, f32 lfRight, f32 lfBottom, f32 lfZ,
-                     f32 lfR, f32 lfG, f32 lfB, f32 lfA)
+        // The box is drawn through the editor's render context with the one colour in
+        // all four corner slots, as at every X360 RenderPoly call site.
+        void DrawBox(ICERender* lpRender, f32 lfLeft, f32 lfTop, f32 lfRight, f32 lfBottom,
+                     f32 lfZ, f32 lfR, f32 lfG, f32 lfB, f32 lfA)
         {
             Poly lQuad;
             lQuad.maVertices[0] = { lfLeft,  lfTop,    lfZ, 0.0f };
@@ -122,10 +122,7 @@ namespace ICE
             lColour.z = lfB;
             lColour.w = lfA;
 
-            Matrix4 lLocalWorld;
-            ICEMath::Identity(&lLocalWorld);
-
-            ICERender::RenderPoly(&lQuad, &lColour, &lColour, &lLocalWorld);
+            lpRender->RenderPoly(&lQuad, &lColour, &lColour, &lColour, &lColour);
         }
     } // anonymous namespace
 
@@ -308,13 +305,11 @@ namespace ICE
     //
     // The box geometry is built with collapsed vector-lane packing (the corner
     // cross product assembled in packed float lanes); de-collapsed here to the same
-    // scalar arithmetic via the DrawBox helper. The cell-text draw mirrors the
-    // ICEWidgetLogo / ICEWidgetInfoList convention: the cell string is the displayed
-    // text and the screen coordinates ride as inert trailing varargs.
+    // scalar arithmetic via the DrawBox helper. Each cell's string is drawn as its own
+    // format string, through the editor's render context like every other draw.
     // ------------------------------------------------------------------------
-    void ICEWidgetMenu::Render(s32 liRenderContext)
+    void ICEWidgetMenu::Render(ICERender* lpRender)
     {
-        (void)liRenderContext;   // editor-render context; the static draw path ignores it
 
         const s32 liNumNonEmpty = GetNumNonEmptyItems();
         if (liNumNonEmpty == 0)
@@ -340,7 +335,7 @@ namespace ICE
             const f32 lfTop    = mfY;
             const f32 lfRight  = mfX + lfWidth;
             const f32 lfBottom = mfY + ((f32)liVisible * KF_ICE_MENU_ROW_HEIGHT) + KF_ICE_MENU_MARGIN;
-            DrawBox(lfLeft, lfTop, lfRight, lfBottom, KF_ICE_MENU_BG_Z,
+            DrawBox(lpRender, lfLeft, lfTop, lfRight, lfBottom, KF_ICE_MENU_BG_Z,
                     0.0f, 0.0f, 0.0f, KF_ICE_MENU_BG_ALPHA);
         }
 
@@ -372,7 +367,7 @@ namespace ICE
                 const f32 lfRowBottom = lfRowTop + KF_ICE_MENU_ROW_HEIGHT;
                 const f32 lfLeft      = mfX;
                 const f32 lfRight     = mfX + lfWidth;
-                DrawBox(lfLeft, lfRowTop, lfRight, lfRowBottom, KF_ICE_MENU_HILITE_Z,
+                DrawBox(lpRender, lfLeft, lfRowTop, lfRight, lfRowBottom, KF_ICE_MENU_HILITE_Z,
                         0.0f, 0.0f, 0.0f, KF_ICE_MENU_HILITE_A);
             }
 
@@ -387,7 +382,7 @@ namespace ICE
                 const f32 lfThumbTop    = lfThumbHeight + lfTrackTop;
                 const f32 lfBarRight    = mfX + lfWidth + 4.0f;
                 const f32 lfBarLeft     = lfBarRight - 2.0f;
-                DrawBox(lfBarLeft, lfThumbTop, lfBarRight, lfTrackTop + lfTrackHeight,
+                DrawBox(lpRender, lfBarLeft, lfThumbTop, lfBarRight, lfTrackTop + lfTrackHeight,
                         KF_ICE_MENU_THUMB_Z,
                         KF_ICE_MENU_THUMB_RGB, KF_ICE_MENU_THUMB_RGB, KF_ICE_MENU_THUMB_RGB,
                         KF_ICE_MENU_THUMB_A);
@@ -435,11 +430,9 @@ namespace ICE
 
                 if (rw::core::stdc::StringCompare(lpcCell, KPC_ICE_MENU_ICON_MARKER) != 0)
                 {
-                    // A normal cell: draw the cell text. The cell string is the
-                    // displayed text; the screen coordinates ride as inert trailing
-                    // varargs (the ICEWidgetLogo / ICEWidgetInfoList convention).
-                    ICERender::ScrPrintf((s32)lfColumnX, (s32)lfRowY, KF_ICE_MENU_TEXT_SIZE,
-                                         lpcCell, (s32)lfColumnX, (s32)lfRowY);
+                    // A normal cell: draw the cell text, the cell string as the format
+                    // (0x8253528C passes nothing after it).
+                    lpRender->ScrPrintf((s32)lfColumnX, (s32)lfRowY, KF_ICE_MENU_TEXT_SIZE, lpcCell);
                 }
                 else
                 {

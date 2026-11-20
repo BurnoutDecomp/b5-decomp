@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include <cstddef>                                       // offsetof
 #include "SDKs/Packages/ICE/ICEWidget/ICEWidget.hpp"     // ICE::ICEWidget base
+#include "SDKs/Packages/ICE/ICERender.hpp"               // ICE::ICERender (Render's parameter)
 #include "SDKs/Packages/ICE/ICEWidget/ICEWidgetIcon.hpp" // ICE::ICEWidgetIcon (the embedded play-head icon)
 
 // ============================================================================
@@ -122,10 +123,10 @@ namespace ICE
         // ------------------------------------------------------------------
         // Draw the whole bar: track background, the per-marker segment boxes, the
         // play head, optional selection span + loop markers, and the numeric time
-        // read-outs. `liRenderContext` is the editor-render context the static
-        // draw path threads to RenderPoly/ScrPrintf. OWNED here.
+        // read-outs, through the editor's render context (RenderBars passes
+        // controller + 0xF6C). OWNED here.
         // ------------------------------------------------------------------
-        void Render(s32 liRenderContext);
+        void Render(ICERender* lpRender);
 
         // ------------------------------------------------------------------
         // Clear the bar back to its empty state: zero each live marker element,

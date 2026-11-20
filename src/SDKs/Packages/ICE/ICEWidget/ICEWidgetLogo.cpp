@@ -36,19 +36,19 @@
 //     as the trailing varargs the X360 builds.
 //
 //   * TEXT DRAW -- ICE::ICERender::ScrShadowPrintf at the widget position, size 64:
-//       r3 = a2                 -> liX  (the caller-supplied base X)
-//       r4 = (s32)mfX           -> liY  (fctiwz f13 ; stfiwx ; lwz r4)
+//       r3 = a2                 -> the render context (`this` of the member call)
+//       r4 = (s32)mfX           -> liX  (fctiwz f13 ; stfiwx ; lwz r4)
+//       r5 = (s32)mfY           -> liY  (fctiwz f0, f12 ; stfiwx ; lwz r5)
 //       64.0 (flt_82020A7C)     -> lfSize
 //       aIce "ICE"              -> the format/text
-//     (mfY is converted to int and marshaled as a trailing vararg alongside the
-//     pulse spans; "ICE" consumes none of them.)
+//     (the pulse spans are marshaled as trailing varargs; "ICE" consumes none.)
 //
 // FLAG: the member names/offsets (mfX@0/mfY@4/miTimer@8), the 60-step wrap, the
 //       1/60 & 2*pi phase scale, the pulse map constants (0.2 / 0.8 / 32.0), the
 //       pulse lower-clamp floor (KF_ICE_LOGO_PULSE_FLOOR, the fsel `flt_82001CC0`
 //       operand -- modelled as 0.0, the natural lower clamp; value not in the
-//       exports), the size 64.0, the "ICE" literal, and the (liX=a2, liY=(s32)mfX)
-//       call layout are all DERIVED FROM ASM (DWARF-sparse).
+//       exports), the size 64.0, the "ICE" literal, and the (liX=(s32)mfX,
+//       liY=(s32)mfY) call layout are all DERIVED FROM ASM (DWARF-sparse).
 // ============================================================================
 
 #include "SDKs/Packages/ICE/ICEWidget/ICEWidgetLogo.hpp"
@@ -82,7 +82,7 @@ namespace ICE
     // ------------------------------------------------------------------------
     // ICEWidgetLogo::Render @0x825346E0
     // ------------------------------------------------------------------------
-    void ICEWidgetLogo::Render(s32 liScreenX)
+    void ICEWidgetLogo::Render(ICERender* lpRender)
     {
         // --- animation phase: timer -> radians -> u16 Angle -> Sin -------------
         const f32 lfRadians = (f32)miTimer * KF_ICE_LOGO_INV_PERIOD * KF_ICE_LOGO_TWO_PI;
@@ -113,10 +113,11 @@ namespace ICE
         const s32 liPulseBottom = (s32)(mfY + lfHalfHeight);
 
         // --- draw the shadowed "ICE" text -------------------------------------
-        // liX = the caller-supplied base X (a2); liY = the widget's X-derived line;
-        // size 64; the pulsed span + mfY ride along as the trailing varargs the
-        // X360 marshals (inert for the specifier-free "ICE").
-        ICERender::ScrShadowPrintf(liScreenX, (s32)mfX, KF_ICE_LOGO_SIZE, KS_ICE_LOGO_TEXT,
-                                   (s32)mfX, (s32)mfY, liPulseTop, liPulseBottom);
+        // At (mfX, mfY), size 64, through the editor's render context (0x82534934:
+        // r3 = the context, r4 = (s32)mfX, r5 = (s32)mfY). The pulsed span rides along
+        // as the trailing varargs the X360 marshals (inert for the specifier-free
+        // "ICE").
+        lpRender->ScrShadowPrintf((s32)mfX, (s32)mfY, KF_ICE_LOGO_SIZE, KS_ICE_LOGO_TEXT,
+                                  liPulseTop, liPulseBottom);
     }
 }

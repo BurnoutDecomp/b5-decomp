@@ -94,15 +94,19 @@ static const f32 KF_ICE_COPY_MENU_Y_OFFSET = 0.0f;
 static const bool KB_ICE_TIMEBAR_COMPACT_MAIN = false;   // mTimeBar
 static const bool KB_ICE_TIMEBAR_COMPACT_2    = true;    // mTimeBar2
 
-// The two time-bar screen origins + the main bar's start-time seed ConstructMenus
-// passes. FLAG: the source spine reads the bar origin floats from the ICE data
-// segment (the editor's fixed HUD layout constants); reconstructed here as the
-// attested literal layout values (bar left 8.0 / top 388.0, second bar offset +32
-// vertically). The values are the editor's fixed on-screen bar placement.
-static const f32 KF_ICE_TIMEBAR_X       = 8.0f;     // bar screen left
-static const f32 KF_ICE_TIMEBAR_Y       = 388.0f;   // bar screen top
+// The HUD origin ConstructMenus lays the time bars and the read-out list out from: the
+// two .data floats it loads, flt_82F28848 = 32.0 (X, 0x825320E4) and flt_82F2884C =
+// 418.0 (Y, 0x825320D8). The main bar's start seed is flt_8207B5FC = 560.0 and the
+// second bar sits flt_8207ACE0 = 32.0 below the first (0x825320F0).
+static const f32 KF_ICE_TIMEBAR_X       = 32.0f;    // bar screen left
+static const f32 KF_ICE_TIMEBAR_Y       = 418.0f;   // bar screen top
 static const f32 KF_ICE_TIMEBAR_START   = 560.0f;   // main bar start-time / length seed
 static const f32 KF_ICE_TIMEBAR2_Y_STEP = 32.0f;    // second bar vertical offset
+
+// The read-out list sits at the HUD origin + (415, -25): flt_8207B5F8 = 415.0 is added to
+// the X (0x82532118) and flt_82004FD8 = 25.0 taken from the Y (0x82532104).
+static const f32 KF_ICE_INFOLIST_X_OFFSET = 415.0f;
+static const f32 KF_ICE_INFOLIST_Y_OFFSET = 25.0f;
 
 // The menu-string clamp diagnostic: RefreshMenu substitutes it for any candidate
 // label whose length exceeds the cell stride (kept faithful to the body's guard).
@@ -228,11 +232,15 @@ void ICEController::ConstructMenus()
     // value inside the controller). The main bar takes the fixed HUD origin + start;
     // the second bar is offset +32 vertically below it. The compact flag is false for
     // the main bar and true for the second bar (the per-bar r7 immediates).
-    // FLAG (time-bar args): the origin/start floats are placeholders.
     mTimeBar.Construct(KF_ICE_TIMEBAR_X, KF_ICE_TIMEBAR_Y, KF_ICE_TIMEBAR_START,
                        KB_ICE_TIMEBAR_COMPACT_MAIN);
     mTimeBar2.Construct(KF_ICE_TIMEBAR_X, KF_ICE_TIMEBAR_Y + KF_ICE_TIMEBAR2_Y_STEP,
                         KF_ICE_TIMEBAR_START, KB_ICE_TIMEBAR_COMPACT_2);
+
+    // The read-out list's position (stored to +0x713C / +0x7140 at 0x82532120 /
+    // 0x82532108); nothing else writes it.
+    mInfoList.mfX          = KF_ICE_TIMEBAR_X + KF_ICE_INFOLIST_X_OFFSET;
+    mInfoList.mfFirstLineY = KF_ICE_TIMEBAR_Y - KF_ICE_INFOLIST_Y_OFFSET;
 
     // Seed the logo / wide-screen-marker / info-list geometry the editor HUD draws.
     // The source spine writes a block of fixed layout floats into the target-box /
@@ -240,8 +248,8 @@ void ICEController::ConstructMenus()
     // inside the embedded widgets' reserved heads (see ICEController.hpp's mTargetBox
     // note); they are the editor's fixed on-screen HUD-element placement.
     // FLAG (HUD geometry): the exact split of these fixed layout floats between the
-    // logo, the wide-screen marker, the info-list and the target box is summarised in
-    // the widget reserved heads; ConstructMenus seeds them as the fixed editor HUD
+    // logo, the wide-screen marker and the target box is summarised in the widget
+    // reserved heads (the info-list position is seeded above); ConstructMenus seeds them as the fixed editor HUD
     // layout. They are not driven by named members here (the widgets own those
     // lanes); the seeding is a fixed-layout init the Render path consumes.
 }

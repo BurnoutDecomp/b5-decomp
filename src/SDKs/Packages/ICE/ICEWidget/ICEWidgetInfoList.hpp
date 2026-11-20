@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include <cstddef>                                       // offsetof
 #include "SDKs/Packages/ICE/ICEWidget/ICEWidget.hpp"     // ICE::ICEWidget base
+#include "SDKs/Packages/ICE/ICERender.hpp"               // ICE::ICERender (Render's parameter)
 
 // ============================================================================
 // SDKs/Packages/ICE/ICEWidget/ICEWidgetInfoList.hpp
@@ -26,17 +27,16 @@
 //   miItemCount        @0x258    -- number of filled rows (read/compared and
 //                                  incremented in AddFormattedItem; loop bound in
 //                                  Render).
-//   mfBaseY            @0x25C    -- a screen coordinate converted to int and passed
-//                                  to ScrShadowPrintf as the (constant-across-rows)
-//                                  liY-style coordinate.
+//   mfX                @0x25C    -- the list's screen X, converted to int and passed
+//                                  to ScrShadowPrintf as X for every row
+//                                  (ConstructMenus seeds it, 0x82532120).
 //   mfFirstLineY       @0x260    -- the first row's vertical position; converted to
 //                                  int and stepped -18 per row (the per-line drop).
 //
 // FLAG: there is no layout reference for this widget. The member names/types and
-//       offsets are DERIVED from the field accesses + draw wiring. The exact roles
-//       of the two floats (mfBaseY vs mfFirstLineY) are inferred from how they feed
-//       ScrShadowPrintf -- mfBaseY is held constant for every row while
-//       mfFirstLineY is the stepped per-row position. Names follow the project
+//       offsets are DERIVED from the field accesses + draw wiring: ScrShadowPrintf
+//       takes the render context in r3, so mfX feeds r4 (X) and the stepped
+//       mfFirstLineY feeds r5 (Y) (0x825346A4..0x825346B4). Names follow the project
 //       Hungarian convention + the ICEWidgetIcon mfX/mfY precedent.
 //
 // FLAG: the row capacity is 15 slots (indices 0..14). AddFormattedItem's guard
@@ -64,15 +64,16 @@ namespace ICE
 
         // ------------------------------------------------------------------
         // Draw every filled row as shadowed on-screen text, top-down, stepping
-        // the vertical position down each row. `liScreenX` is the caller-supplied
-        // base X. OWNED here (body in the .cpp).
+        // the vertical position down each row, through the editor's render context
+        // (ICEController::RenderBars passes controller + 0xF6C, 0x82539EAC). OWNED
+        // here (body in the .cpp).
         // ------------------------------------------------------------------
-        void Render(s32 liScreenX);
+        void Render(ICERender* lpRender);
 
         // --- layout (offsets proven by the function bodies) ----------------
         char macItemText[KI_ICE_INFOLIST_MAX_ITEMS][KI_ICE_INFOLIST_ITEM_TEXT_LENGTH]; // @0x00
         s32  miItemCount;     // @0x258  number of filled rows
-        f32  mfBaseY;         // @0x25C  constant liY-style coordinate (per draw)
+        f32  mfX;             // @0x25C  screen X of every row (seeded by ConstructMenus)
         f32  mfFirstLineY;    // @0x260  first row's vertical position (stepped -18/row)
     };
 
@@ -82,7 +83,7 @@ namespace ICE
     // members (if any) are left unmodelled.
     static_assert(offsetof(ICEWidgetInfoList, macItemText)  == 0x000, "ICEWidgetInfoList::macItemText offset");
     static_assert(offsetof(ICEWidgetInfoList, miItemCount)  == 0x258, "ICEWidgetInfoList::miItemCount offset");
-    static_assert(offsetof(ICEWidgetInfoList, mfBaseY)      == 0x25C, "ICEWidgetInfoList::mfBaseY offset");
+    static_assert(offsetof(ICEWidgetInfoList, mfX)          == 0x25C, "ICEWidgetInfoList::mfX offset");
     static_assert(offsetof(ICEWidgetInfoList, mfFirstLineY) == 0x260, "ICEWidgetInfoList::mfFirstLineY offset");
 }
 

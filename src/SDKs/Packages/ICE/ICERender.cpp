@@ -66,11 +66,12 @@ namespace ICE
     // Draw a 2D debug box for the projected poly. 1st Draw2DBox vector = vertex 0
     // shifted by the menu anchor; 2nd vector = the V2 - V0 geometry delta (NO menu
     // shift -- the X360 vsubfp128 v127 = Vertices[2] - Vertices[0]). Colour = clamp
-    // of colour0 only. lpColour1 / lpLocalWorld are passed for call-shape but the
-    // X360 never reads them.
+    // of colour0 only. The other three colour pointers (every X360 call site passes the
+    // same one in r5-r8) are never read.
     // ------------------------------------------------------------------------
     void ICERender::RenderPoly(const Poly* lpPoly, const Vector4* lpColour0,
-                               const Vector4* /*lpColour1*/, const Matrix4* /*lpLocalWorld*/)
+                               const Vector4* /*lpColour1*/, const Vector4* /*lpColour2*/,
+                               const Vector4* /*lpColour3*/)
     {
         const Vector3& lrV0 = lpPoly->maVertices[0];
         const Vector3& lrV2 = lpPoly->maVertices[2];
@@ -83,7 +84,7 @@ namespace ICE
 
         // Box colour = clamp(*lpColour0) packed to RGBA. The X360 reads ONLY colour0
         // (the 255.0 it subtracts is the [0,255] clamp upper bound, not a 2nd colour
-        // operand); lpColour1 and lpLocalWorld are unused.
+        // operand); the other three colour pointers are unused.
         const CgsDev::RGBA lColour = PackColourRGBA(*lpColour0);
 
         CgsDev::DebugInterface lDebugInterface;

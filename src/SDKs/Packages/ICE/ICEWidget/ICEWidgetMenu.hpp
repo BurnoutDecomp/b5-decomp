@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include <cstddef>                                            // offsetof
 #include "SDKs/Packages/ICE/ICEWidget/ICEWidget.hpp"          // ICE::ICEWidget base
+#include "SDKs/Packages/ICE/ICERender.hpp"                    // ICE::ICERender (Render's parameter)
 #include "SDKs/Packages/ICE/ICEWidget/ICEWidgetMenuItem.hpp"  // ICE::ICEWidgetMenuItem (the row entries)
 
 // ============================================================================
@@ -113,9 +114,10 @@ namespace ICE
         // ------------------------------------------------------------------
         // Draw the menu: background box, selection highlight + scrollbar, then each
         // visible cell as on-screen text (or an icon for the "<ICON>" marker).
-        // OWNED here.
+        // OWNED here. `lpRender` is the editor's render context (RenderMenus passes
+        // controller + 0xF6C, 0x82539F6C); every draw goes through it.
         // ------------------------------------------------------------------
-        void Render(s32 liRenderContext);
+        void Render(ICERender* lpRender);
 
         // --- layout (offsets proven by the seven bodies) ------------------
         s32  miStyle;            // +0x00  style index (key into the per-style tables)
