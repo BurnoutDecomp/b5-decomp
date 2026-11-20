@@ -70,7 +70,7 @@ namespace ICE
     // w lane is unused by RenderPoly).  FLAG: all values asm-derived inline rodata.
     static const f32 KF_ICE_WIDESCR_X_LEFT   = -2.0f;   // flt_82006D70
     static const f32 KF_ICE_WIDESCR_X_ZERO   = 0.0f;    // flt_82001CC0
-    static const f32 KF_ICE_WIDESCR_X_ONE    = 1.0f;    // flt_82057930 (quad 1)
+    static const f32 KF_ICE_WIDESCR_X_RIGHT  = 640.0f;  // flt_82057930 (quad 1 right edge)
     static const f32 KF_ICE_WIDESCR_EXTENT   = 480.0f;  // flt_82056DC0 / flt_8207B974
     static const f32 KF_ICE_WIDESCR_Z_NEAR   = 1.0f;    // flt_82001C98 (quad 0 depth)
     static const f32 KF_ICE_WIDESCR_Z_FAR    = 0.0f;    // (quad 1 depth)
@@ -102,11 +102,11 @@ namespace ICE
         lpRender->RenderPoly(&lQuad0, &lColour, &lColour, &lColour, &lColour);
 
         // --- Quad 1 (depth 0.0): complementary marker rectangle --------------
-        // V0 corner = (480, 0), V2 opposite = (1, 480); V1/V3 close the box.
+        // V0 corner = (480, 0), V2 opposite = (640, 480); V1/V3 close the box.
         Poly lQuad1;
         lQuad1.maVertices[0] = { KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_FAR, 0.0f };
-        lQuad1.maVertices[1] = { KF_ICE_WIDESCR_X_ONE,  KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_FAR, 0.0f };
-        lQuad1.maVertices[2] = { KF_ICE_WIDESCR_X_ONE,  KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_FAR, 0.0f };
+        lQuad1.maVertices[1] = { KF_ICE_WIDESCR_X_RIGHT, KF_ICE_WIDESCR_X_ZERO, KF_ICE_WIDESCR_Z_FAR, 0.0f };
+        lQuad1.maVertices[2] = { KF_ICE_WIDESCR_X_RIGHT, KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_FAR, 0.0f };
         lQuad1.maVertices[3] = { KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_EXTENT, KF_ICE_WIDESCR_Z_FAR, 0.0f };
         lpRender->RenderPoly(&lQuad1, &lColour, &lColour, &lColour, &lColour);
     }

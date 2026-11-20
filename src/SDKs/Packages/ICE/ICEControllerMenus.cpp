@@ -98,15 +98,20 @@ static const bool KB_ICE_TIMEBAR_COMPACT_2    = true;    // mTimeBar2
 // two .data floats it loads, flt_82F28848 = 32.0 (X, 0x825320E4) and flt_82F2884C =
 // 418.0 (Y, 0x825320D8). The main bar's start seed is flt_8207B5FC = 560.0 and the
 // second bar sits flt_8207ACE0 = 32.0 below the first (0x825320F0).
-static const f32 KF_ICE_TIMEBAR_X       = 32.0f;    // bar screen left
-static const f32 KF_ICE_TIMEBAR_Y       = 418.0f;   // bar screen top
-static const f32 KF_ICE_TIMEBAR_START   = 560.0f;   // main bar start-time / length seed
-static const f32 KF_ICE_TIMEBAR2_Y_STEP = 32.0f;    // second bar vertical offset
+static const f32 KF_ICE_TIMEBAR_X       = 32.0f;    // flt_82F28848  bar screen left
+static const f32 KF_ICE_TIMEBAR_Y       = 418.0f;   // flt_82F2884C  bar screen top
+static const f32 KF_ICE_TIMEBAR_START   = 560.0f;   // flt_8207B5FC  main bar start-time / length seed
+static const f32 KF_ICE_TIMEBAR2_Y_STEP = 32.0f;    // flt_8207ACE0  second bar vertical offset
 
 // The read-out list sits at the HUD origin + (415, -25): flt_8207B5F8 = 415.0 is added to
 // the X (0x82532118) and flt_82004FD8 = 25.0 taken from the Y (0x82532104).
-static const f32 KF_ICE_INFOLIST_X_OFFSET = 415.0f;
-static const f32 KF_ICE_INFOLIST_Y_OFFSET = 25.0f;
+static const f32 KF_ICE_INFOLIST_X_OFFSET = 415.0f;   // flt_8207B5F8
+static const f32 KF_ICE_INFOLIST_Y_OFFSET = 25.0f;    // flt_82004FD8
+
+// The logo's position (stored at 0x825321B4 / 0x825321B8; its phase starts at 0,
+// 0x825321B0). ScrPrintfArg adds (10, 120), so "ICE" is drawn at (610, 35).
+static const f32 KF_ICE_LOGO_X = 600.0f;   // flt_8207ACC4
+static const f32 KF_ICE_LOGO_Y = -85.0f;   // flt_8207ACC8
 
 // The menu-string clamp diagnostic: RefreshMenu substitutes it for any candidate
 // label whose length exceeds the cell stride (kept faithful to the body's guard).
@@ -242,16 +247,21 @@ void ICEController::ConstructMenus()
     mInfoList.mfX          = KF_ICE_TIMEBAR_X + KF_ICE_INFOLIST_X_OFFSET;
     mInfoList.mfFirstLineY = KF_ICE_TIMEBAR_Y - KF_ICE_INFOLIST_Y_OFFSET;
 
+    // The logo's position and animation phase; nothing else writes them.
+    mLogo.mfX     = KF_ICE_LOGO_X;
+    mLogo.mfY     = KF_ICE_LOGO_Y;
+    mLogo.miTimer = 0;
+
     // Seed the logo / wide-screen-marker / info-list geometry the editor HUD draws.
     // The source spine writes a block of fixed layout floats into the target-box /
     // logo / info-list head region (the +0x713C..+0x71E4 lanes). Those lanes live
     // inside the embedded widgets' reserved heads (see ICEController.hpp's mTargetBox
     // note); they are the editor's fixed on-screen HUD-element placement.
-    // FLAG (HUD geometry): the exact split of these fixed layout floats between the
-    // logo, the wide-screen marker and the target box is summarised in the widget
-    // reserved heads (the info-list position is seeded above); ConstructMenus seeds them as the fixed editor HUD
-    // layout. They are not driven by named members here (the widgets own those
-    // lanes); the seeding is a fixed-layout init the Render path consumes.
+    // FLAG (HUD geometry): the rest of these fixed layout floats (the wide-screen marker
+    // and target-box lanes) is summarised in the widget reserved heads; the info-list and
+    // logo positions are seeded above. They are not driven by named members here (the
+    // widgets own those lanes); the seeding is a fixed-layout init the Render path
+    // consumes.
 }
 
 // ---------------------------------------------------------------------------

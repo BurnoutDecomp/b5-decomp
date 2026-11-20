@@ -78,15 +78,19 @@ static const f32 KF_ICE_ROUND_BIAS = 0.00050000002f;
 // into the unit interval [0,1]. The marker times are stored as quantized u16s.
 static const f32 KF_ICE_PARAM_UNPACK = 0.000015259022f; // == 1.0f / 65535.0f
 
-// The editor bar's screen-space origin (the X/Y the main time bar is built at by
-// ConstructMenus, and the base ScrShadowPrintf position for the status line). PLACEHOLDER:
-// the two base coordinates are ICE data-segment floats with no symbol/reference.
-// FLAG: placeholder origin (the exact screen position is not recoverable).
-static const f32 KF_ICE_BAR_BASE_X = 40.0f;
-static const f32 KF_ICE_BAR_BASE_Y = 40.0f;
+// The editor bar's screen-space origin: the two .data floats RenderBars loads for the
+// status lines (0x82538EEC / 0x82538EE0), the pair ConstructMenus builds the main time bar at.
+static const f32 KF_ICE_BAR_BASE_X = 32.0f;    // flt_82F28848
+static const f32 KF_ICE_BAR_BASE_Y = 418.0f;   // flt_82F2884C
+
+// The status lines' offsets from that origin: X + 2 for both, the sub-take name 25 above
+// the origin and the category 55 below it (0x82538EF8, 0x82538EE8, 0x82538F60).
+static const f32 KF_ICE_STATUS_X_OFFSET          = 2.0f;    // flt_82001D9C
+static const f32 KF_ICE_STATUS_NAME_Y_OFFSET     = 25.0f;   // flt_82004FD8
+static const f32 KF_ICE_STATUS_CATEGORY_Y_OFFSET = 55.0f;   // flt_8200805C
 
 // Status-line text size (the editor sub-take name caption uses 16.0).
-static const f32 KF_ICE_STATUS_TEXT_SIZE = 16.0f;
+static const f32 KF_ICE_STATUS_TEXT_SIZE = 16.0f;   // flt_82004000
 
 // The status caption's position: ICEController::Render loads r4 = 150 and r5 = 180
 // (0x8253B2D4 / 0x8253B2D0).
@@ -314,10 +318,11 @@ void ICEController::RenderBars()
 
         // Both lines draw through the editor's render context (r31 = this + 0xF6C).
         ICERender* const lpRender = reinterpret_cast<ICERender*>(&mRenderContext);
-        lpRender->ScrShadowPrintf((s32)(KF_ICE_BAR_BASE_X + 2.0f), 16,
+        lpRender->ScrShadowPrintf((s32)(KF_ICE_BAR_BASE_X + KF_ICE_STATUS_X_OFFSET),
+                                  (s32)(KF_ICE_BAR_BASE_Y - KF_ICE_STATUS_NAME_Y_OFFSET),
                                   KF_ICE_STATUS_TEXT_SIZE, "%s", lpcName);
-        lpRender->ScrShadowPrintf((s32)(KF_ICE_BAR_BASE_X + 2.0f),
-                                  (s32)(KF_ICE_BAR_BASE_Y + 55.0f),
+        lpRender->ScrShadowPrintf((s32)(KF_ICE_BAR_BASE_X + KF_ICE_STATUS_X_OFFSET),
+                                  (s32)(KF_ICE_BAR_BASE_Y + KF_ICE_STATUS_CATEGORY_Y_OFFSET),
                                   KF_ICE_STATUS_TEXT_SIZE, "%s", lpcCategory);
 
         // Clear the bar's auxiliary read-out gate after the caption.
