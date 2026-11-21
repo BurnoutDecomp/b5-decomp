@@ -1,6 +1,6 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/B5PhysicsHandlingDebugComponent.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"   // RaceCarPhysics / Wheel::RoadContact
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
@@ -893,7 +893,10 @@ namespace Vehicle
     //   whole 80-byte AOSTriangle, which is exactly the member assign.
     void DebugComponent::SetLastWallTriangle(const CgsGeometric::Triangle4::AOSTriangle* lpTriangle)
     {
-        CGS_ASSERT(lpTriangle != 0, "lpTriangle != NULL");
+        CGS_ASSERT(lpTriangle != 0,
+            CgsDev::Assert::MessageAt(
+                "lpTriangle != NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\VehiclePhysics/B5PhysicsHandlingDebugComponent.h", 762 /* ARTIST 0x825B4D8C */));
 
         mLastWallTriangle = *lpTriangle;
     }

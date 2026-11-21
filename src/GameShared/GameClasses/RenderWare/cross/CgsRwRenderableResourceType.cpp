@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/RenderWare/cross/CgsRwRenderableResourceType.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include "SDKs/RenderEngineClub/MAIN/components/src/indexbuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
@@ -8,6 +8,9 @@
 #include "GameShared/GameClasses/Graphics/CgsMaterialAssembly.h"      // CgsGraphics::MaterialAssembly
 // ARTIST renderable metadata and graph relocation. Native meshes use four-byte
 // pointer slots; FixUp forwards the original resource lanes to the mesh helper.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\cross/CgsRwRenderableResourceType.cpp";
 
 namespace CgsResource
 {
@@ -107,7 +110,9 @@ namespace CgsResource
     {
         (void)lpResource;
         (void)lrResource;
-        CGS_ASSERT(false, "Don't call this function at runtime");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "Don't call this function at runtime", KAC_ARTIST_ASSERT_FILE, 445 /* ARTIST 0x828A7D74 */));
     }
 
     void RwRenderableResourceType::GetImportPointer(const void* lpResource, uint32_t luIndex, uint32_t* lpuOffset, const void** lppValue) const
@@ -116,7 +121,9 @@ namespace CgsResource
         (void)luIndex;
         (void)lpuOffset;
         (void)lppValue;
-        CGS_ASSERT(false, "Should not be called at runtime");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "Should not be called at runtime", KAC_ARTIST_ASSERT_FILE, 1005 /* ARTIST 0x828A7DB4 */));
     }
 
     bool RwRenderableResourceType::DebugValidate(const void* lpResource) const

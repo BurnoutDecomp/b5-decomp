@@ -22,7 +22,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"        // the REAL State (mpStateManager @ X360 +0x24)
 #include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h" // the REAL StateManager (GetLogicModule / +0x2C)
 
@@ -170,7 +170,10 @@ f32 EffectBase::GetRWACMixerOutputValue(int aiSlot, int aiPreset)
 // ---------------------------------------------------------------------------
 void EffectBase::SetDMixIOPtr(Nicotine::DMixIO* apDmixIO)
 {
-    CGS_ASSERT(apDmixIO != 0, "lpDmixIO");
+    CGS_ASSERT(apDmixIO != 0,
+        CgsDev::Assert::MessageAt(
+            "lpDmixIO",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEffectBase.h", 916 /* ARTIST 0x82680904 */));
     mpDynamicMixIo = apDmixIO; // stw r31,0x30(this)
 }
 

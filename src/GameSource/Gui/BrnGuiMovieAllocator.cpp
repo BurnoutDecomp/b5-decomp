@@ -1,5 +1,5 @@
 #include "GameSource/Gui/BrnGuiMovieAllocator.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGui
 {
@@ -63,6 +63,9 @@ namespace BrnGui
 
     void MovieAllocator::DoFreeDisposable(rw::Resource&)
     {
-        CGS_ASSERT(false, "Not implemented"); // ARTIST 824F1900.
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "Not implemented",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 1151 /* ARTIST 0x824F1914 */)); // ARTIST 824F1900.
     }
 }

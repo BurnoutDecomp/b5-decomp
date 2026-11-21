@@ -1,6 +1,6 @@
 #include "GameSource/Sound/Explosions/BrnExplosionState.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 // =============================================================================
 // BrnSound::Logic::Explosion::ExplosionState::Attach  @ 0x826891B8
@@ -28,7 +28,11 @@ namespace Explosion
 
 void ExplosionState::Attach(void* lpvAttachment)
 {
-    CGS_ASSERT(lpvAttachment != 0, "lpvAttachment");
+    CGS_ASSERT(lpvAttachment != 0,
+        CgsDev::Assert::MessageAt(
+            "lpvAttachment",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Sound/Explosions/BrnExplosionState.cpp", 69 /* ARTIST 0x826891D4 */));
 }
 
 // ARTIST 0x826D5740 uses the base State teardown.

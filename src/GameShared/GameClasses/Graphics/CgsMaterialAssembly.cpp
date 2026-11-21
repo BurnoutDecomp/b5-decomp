@@ -8,7 +8,7 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsTextureScopeTable.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsMaterialAnimation.h"
 #include <cstdlib>
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // the one-shot boot-gate log
 
 namespace CgsGraphics
@@ -56,7 +56,10 @@ namespace CgsGraphics
     //   r11 = *this (mappMaterials @+0); return *(r11 + 4*luIndex).
     MaterialTechnique* MaterialAssembly::GetMaterial(u32 luIndex) const
     {
-        CGS_ASSERT(luIndex < mu8NumMaterials, "Material technique index out of range."); // CgsMaterialAssembly.h:174
+        CGS_ASSERT(luIndex < mu8NumMaterials,
+            CgsDev::Assert::MessageAt(
+                "Material technique index out of range.",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\CgsMaterialAssembly.h", 174 /* ARTIST 0x827E6750 */)); // CgsMaterialAssembly.h:174
         return mappMaterials[luIndex];
     }
 }

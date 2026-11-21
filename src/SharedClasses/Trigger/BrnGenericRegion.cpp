@@ -1,5 +1,5 @@
 #include "SharedClasses/Trigger/BrnGenericRegion.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 namespace BrnTrigger
 {
@@ -50,7 +50,10 @@ const char* GenericRegion::KAPC_GENERIC_REGION_TYPE_STRINGS[GenericRegion::E_TYP
 const char*
 GenericRegion::GetTypeName() const
 {
-    CGS_ASSERT( meType < E_TYPE_COUNT, "meType < E_TYPE_COUNT" );
+    CGS_ASSERT( meType < E_TYPE_COUNT,
+        CgsDev::Assert::MessageAt(
+            "meType < E_TYPE_COUNT",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\trigger\\BrnGenericRegion.h", 231 /* ARTIST 0x82354788 */));
     return KAPC_GENERIC_REGION_TYPE_STRINGS[meType];
 }
 

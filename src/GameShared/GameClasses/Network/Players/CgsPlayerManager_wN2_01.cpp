@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"                  // NetworkPlayer virtuals / Destruct
 #include "GameShared/GameClasses/Network/Packeting/CgsNetworkAdapterBase.h"          // NetworkAdapter::mpMessageSentCallbackFunction
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"            // CgsDev::PerfMonCpu
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "types.hpp"   // intptr_t
 
@@ -299,7 +299,10 @@ void PlayerManager::PostUpdate(u16 lu16CurrentFrame)
         return;
     }
 
-    CGS_ASSERT(mu16CurrentFrame == lu16CurrentFrame, "mu16CurrentFrame == lu16CurrentFrame");
+    CGS_ASSERT(mu16CurrentFrame == lu16CurrentFrame,
+        CgsDev::Assert::MessageAt(
+            "mu16CurrentFrame == lu16CurrentFrame",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsPlayerManager.cpp", 451 /* ARTIST 0x8289B8F0 */));
     mu16CurrentFrame = lu16CurrentFrame;
     SendMessages();
 }

@@ -10,6 +10,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"   // BehaviourManager (the two GetCamera resolves)
 
 
@@ -88,7 +89,10 @@ BehaviourInterpolate::GetCollisionPolicy()
 f32
 BehaviourInterpolate::GetParametricTime() const
 {
-    CGS_ASSERT(mfDuration != 0.0f, "mfDuration != 0.0f");
+    CGS_ASSERT(mfDuration != 0.0f,
+        CgsDev::Assert::MessageAt(
+            "mfDuration != 0.0f",
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 158 /* ARTIST 0x8220662C */));
 
     f32 lfRatio = mfRunningTime / mfDuration;
 

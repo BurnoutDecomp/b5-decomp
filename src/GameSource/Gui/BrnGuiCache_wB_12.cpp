@@ -1,5 +1,5 @@
 #include "GameSource/Gui/BrnGuiCache.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cstdlib>   // qsort (replay-players-active sort)
 
@@ -39,7 +39,10 @@ namespace BrnGui
     // entries of maReplayPlayersActive (@0x141E0) by _SortReplayPlayersActiveByCount.
     void GuiCache::SortReplayPlayersActive()
     {
-        CGS_ASSERT(!mbReplayHasBeenSorted, "mbReplayHasBeenSorted == false");
+        CGS_ASSERT(!mbReplayHasBeenSorted,
+            CgsDev::Assert::MessageAt(
+                "mbReplayHasBeenSorted == false",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp", 4501 /* ARTIST 0x824F8C8C */));
         mbReplayHasBeenSorted = true;
         qsort(maReplayPlayersActive, 16, 32, _SortReplayPlayersActiveByCount);
     }

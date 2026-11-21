@@ -17,7 +17,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectMain.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"              // CgsID / CgsIDConvertToString
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"     // CgsCore::SPrintf
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"        // CgsLanguage::LanguageManager
@@ -145,7 +145,10 @@ namespace BrnGui
     {
         mDesiredSetupInfo = *lpSetupInfo;  // copies mCarId + mbSelectable (X360 two-qword store)
 
-        CGS_ASSERT(mDesiredSetupInfo.mbSelectable, "mDesiredSetupInfo.mbSelectable");   // cpp:600
+        CGS_ASSERT(mDesiredSetupInfo.mbSelectable,
+            CgsDev::Assert::MessageAt(
+                "mDesiredSetupInfo.mbSelectable",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectMain.cpp", 600 /* ARTIST 0x824B5584 */));   // cpp:600
 
         mbCarChangeInProgress = true;
     }

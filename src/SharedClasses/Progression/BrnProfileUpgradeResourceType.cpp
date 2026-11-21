@@ -1,5 +1,5 @@
 #include "SharedClasses/Progression/BrnProfileUpgradeResourceType.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (GetImportPointer NOT-IMPLEMENTED)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (GetImportPointer NOT-IMPLEMENTED)
 #include "rw/rwcore_structs.h"                         // rw::BaseResourceDescriptor[5] (CgsResource::ResourceDescriptor)
 #include "types.hpp"                                     // uintptr_t (self-relative pointer relocation)
 
@@ -70,7 +70,11 @@ void ProfileUpgradeResourceType::FixDown(void* lpResource, const rw::Resource& /
 void ProfileUpgradeResourceType::GetImportPointer(const void* /*lpResource*/, u32 /*luIndex*/,
                                                   u32* /*lpuOffset*/, const void** /*lppValue*/) const
 {
-    CGS_ASSERT(false, "NOT IMPLEMENTED YET");
+    CGS_ASSERT(false,
+        CgsDev::Assert::MessageAt(
+            "NOT IMPLEMENTED YET",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../../SharedClasses/Progression/BrnProfileUpgradeResourceType.cpp", 90 /* ARTIST 0x82676BBC */));
 }
 
 }

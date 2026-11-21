@@ -1,6 +1,6 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
 #include "GameSource/Effects/Particles/EffectsVertexBufferManager.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h" // CgsResource::ResourceDescriptor
 #include "rw/rwcore_structs.h"                                      // rw::IResourceAllocator, rw::Resource
@@ -12,7 +12,10 @@
 //      rotlwi r11,r11,2 (index*4); lwzx r3,r11,r31 -> mapVertexBuffer[index].
 renderengine::VertexBuffer* EffectsVertexBufferManager::GetVertexBuffer() const
 {
-    CGS_ASSERT(!mbLocked, "!mbLocked");
+    CGS_ASSERT(!mbLocked,
+        CgsDev::Assert::MessageAt(
+            "!mbLocked",
+            "..\\..\\..\\GameSource\\Effects/Particles/EffectsVertexBufferManager.h", 97 /* ARTIST 0x82278348 */));
     return mapVertexBuffer[muCurrentBuffer];
 }
 

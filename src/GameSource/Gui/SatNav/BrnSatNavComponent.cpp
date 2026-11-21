@@ -17,7 +17,7 @@
 // ===================================================================================
 #include "GameSource/Gui/SatNav/BrnSatNavComponent.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                 // CgsCore::SPrintf
 #include "GameShared/GameClasses/Containers/CgsHash.h"                  // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface (access pointers / queues)
@@ -581,7 +581,10 @@ void SatNavComponent::SetViewParamsFromPlayerCar(const GuiPlayerInfo* lpPlayerIn
 // real GuiCache now the full class exists).
 void SatNavComponent::SetCachePointer(GuiCache* lpGuiCache)
 {
-    CGS_ASSERT(lpGuiCache != 0, "lpCache");   // BrnSatNav.h:342 (non-gating)
+    CGS_ASSERT(lpGuiCache != 0,
+        CgsDev::Assert::MessageAt(
+            "lpCache",
+            "..\\..\\..\\GameSource\\Gui/SatNav/BrnSatNav.h", 342 /* ARTIST 0x82473664 */));   // BrnSatNav.h:342 (non-gating)
     mpGuiCache = lpGuiCache;
 }
 

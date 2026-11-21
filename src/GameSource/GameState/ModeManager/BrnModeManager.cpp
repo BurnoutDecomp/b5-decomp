@@ -23,6 +23,7 @@
 // fabricated in this TU.
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/GameState/BrnGameStateModule.h"   // GameStateModule::GetPlayerActiveRaceCarIndex (SendModeResults)
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // paused GameModeOutputInterface snapshot
@@ -304,7 +305,10 @@ void ModeManager::OnProfileLoaded()
 void ModeManager::SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liScore)
 {
     CarData* lpCarData = mScoringSystem.GetCarData(lNetworkPlayerID);
-    CGS_ASSERT(lpCarData != 0, "lpCarData != NULL");
+    CGS_ASSERT(lpCarData != 0,
+        CgsDev::Assert::MessageAt(
+            "lpCarData != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/BrnModeManager.h", 1778 /* ARTIST 0x82363578 */));
 
     // Snapshot the prior online stunt score (CarData+0xD4 == CarScoreData::miOnlineStuntScore) and the
     // car's active-race-car index (CarData+0x144 == meRaceCarIndex) into the network-stunt cache.

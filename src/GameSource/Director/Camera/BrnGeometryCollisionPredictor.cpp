@@ -12,6 +12,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Camera.h"                   // Camera (the position lane)
 #include "GameSource/Director/Utils/BrnSceneQueryInterface.h"   // BrnDirector::SceneQueryInterface::LineTestNearest
 
@@ -34,7 +35,10 @@ const f32 GeometryCollisionPredictor::KF_LOOKAHEAD_TIME_FLOAT = 1.0f;
 // ----------------------------------------------------------------------------
 f32 GeometryCollisionPredictor::GetTimeUntilCollision() const
 {
-    CGS_ASSERT(mbWillCollide, "mbWillCollide");   // lbz 0x64; assert set
+    CGS_ASSERT(mbWillCollide,
+        CgsDev::Assert::MessageAt(
+            "mbWillCollide",
+            "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.h", 206 /* ARTIST 0x821F36E8 */));   // lbz 0x64; assert set
     return mfTimeUntilCollision;                  // lfs f1, 0x60(this)
 }
 

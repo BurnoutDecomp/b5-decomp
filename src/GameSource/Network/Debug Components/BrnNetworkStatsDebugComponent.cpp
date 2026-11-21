@@ -20,7 +20,10 @@
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"             // GetCustomCommandsComponent
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // EStatus
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log::gpDebugPrint
-#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                       // CGS_ASSERT
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkStatsDebugComponent.cpp";
 
 namespace BrnNetwork
 {
@@ -75,10 +78,12 @@ namespace BrnNetwork
     bool StatsDebugComponent::Prepare(CgsNetwork::ServerInterface* lpServerInterface,
                                       NetworkPlayerStatsManager* lpStatsManager)
     {
-        CGS_ASSERT(lpServerInterface != 0, "lpServerInterface");
+        CGS_ASSERT(lpServerInterface != 0,
+            CgsDev::Assert::MessageAt("lpServerInterface", KAC_ARTIST_ASSERT_FILE, 91 /* ARTIST 0x82585260 */));
         mpServerInterface = lpServerInterface;
 
-        CGS_ASSERT(lpStatsManager != 0, "lpStatsManager");
+        CGS_ASSERT(lpStatsManager != 0,
+            CgsDev::Assert::MessageAt("lpStatsManager", KAC_ARTIST_ASSERT_FILE, 95 /* ARTIST 0x82585288 */));
         mpStatsManager = lpStatsManager;
 
         miRaceElo           = 0;

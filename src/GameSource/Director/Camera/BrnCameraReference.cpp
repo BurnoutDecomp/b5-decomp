@@ -1,6 +1,6 @@
 #include "GameSource/Director/Camera/BrnCameraReference.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"         // CGS_ASSERT
 #include "GameSource/Director/BrnDirectorICEWrapper.h"     // BrnDirector::ICEWrapper (GetCamera @ +0x11D70)
 
 // BrnDirector::Camera::CameraReference -- reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -12,6 +12,8 @@
 //   Setup(Camera)
 // All asserts are the X360's non-gating tripwires (the bodies fall through after
 // firing, exactly as the console does).
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Director/Camera/BrnCameraReference.cpp";
 
 namespace BrnDirector
 {
@@ -45,12 +47,14 @@ void CameraReference::Construct()
 // stores the wrapper/type BEFORE the null tripwire fires -- order preserved.
 void CameraReference::Setup(const BrnDirector::ICEWrapper* lpIceWrapper)
 {
-    CGS_ASSERT(meType == E_TYPE_INVALID, "meType == E_TYPE_INVALID");   // :95
+    CGS_ASSERT(meType == E_TYPE_INVALID,
+        CgsDev::Assert::MessageAt("meType == E_TYPE_INVALID", KAC_ARTIST_ASSERT_FILE, 95 /* ARTIST 0x821F8538 */));   // :95
 
     mpIceWrapper = lpIceWrapper;
     meType       = E_TYPE_ICE;
 
-    CGS_ASSERT(mpIceWrapper != 0, "mpIceWrapper != NULL");              // :99
+    CGS_ASSERT(mpIceWrapper != 0,
+        CgsDev::Assert::MessageAt("mpIceWrapper != NULL", KAC_ARTIST_ASSERT_FILE, 99 /* ARTIST 0x821F8568 */));              // :99
 }
 
 // ----------------------------------------------------------------------------

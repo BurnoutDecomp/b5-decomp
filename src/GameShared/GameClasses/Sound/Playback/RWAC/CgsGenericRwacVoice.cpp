@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacVoice.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacVoiceConfig.h"
@@ -85,7 +86,10 @@ rw::audio::core::PlugIn* GenericRwacVoice::GetSendPlugin(u32 au32I)
 
 GenericRwacFactory& GenericRwacVoice::GetRwacFactory()
 {
-    CGS_ASSERT(mpFactory != 0, "mpFactory");
+    CGS_ASSERT(mpFactory != 0,
+        CgsDev::Assert::MessageAt(
+            "mpFactory",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Rwac/CgsGenericRwacVoice.h", 598 /* ARTIST 0x82682868 */));
     return *mpFactory;
 }
 

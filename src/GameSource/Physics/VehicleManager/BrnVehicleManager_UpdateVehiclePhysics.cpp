@@ -44,7 +44,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"  // VehicleInputInterface (queues)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleOutputInterface / VehicleManagerOutputInterface / VehicleOutputRequestInterface
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"         // CgsDev::PerfMonCpu::Start/StopMonitor
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                // CGS_ASSERT
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTestNearest.h" // InEventLineTestNearest (GenerateAboveGroundLineTests)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                  // CgsModule::VariableEventQueue<1536,16> (the GameEventQueue)
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                          // CgsSystem::Time (mCurrentTime = lrCurrentTime)
@@ -54,6 +54,9 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
 #include "GameSource/GameState/BrnGameEvents.h"                                   // JustBouncedEvent / JustAppliedExtraSpinEvent (events 52 / 53)
 #include <cstddef>                                                                // offsetof (the event 52 layout asserts)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnVehicleManager.cpp";
 
 namespace BrnPhysics
 {
@@ -104,8 +107,11 @@ namespace Vehicle
     // ------------------------------------------------------------------------------------
     bool VehicleManager::IsRaceCarCrashing(s32 liRaceCarIndex)
     {
-        CGS_ASSERT(liRaceCarIndex >= 0, "liRaceCarIndex >= 0");                    // :8272
-        CGS_ASSERT(liRaceCarIndex < 8, "liRaceCarIndex < ku8MaxNumRaceCars");      // :8273
+        CGS_ASSERT(liRaceCarIndex >= 0,
+            CgsDev::Assert::MessageAt("liRaceCarIndex >= 0", KAC_ARTIST_ASSERT_FILE, 8272 /* ARTIST 0x825B56BC */));                    // :8272
+        CGS_ASSERT(liRaceCarIndex < 8,
+            CgsDev::Assert::MessageAt(
+                "liRaceCarIndex < ku8MaxNumRaceCars", KAC_ARTIST_ASSERT_FILE, 8273 /* ARTIST 0x825B56E0 */));      // :8273
         return maRaceCarVehicles[liRaceCarIndex].IsCrashing();                     // lbz 0xE50(rec)
     }
 

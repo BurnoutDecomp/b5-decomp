@@ -16,6 +16,7 @@
 // ============================================================================
 
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/GameState/StreetData/BrnStreetManagerDebugComponent.h"  // embedded debug component
 #include "GameSource/GameState/BrnGameEvents.h"                              // OnlineRoadRules* event layouts
@@ -60,7 +61,10 @@ void StreetManager::ProcessUploadEvent(
 void StreetManager::ProcessDownloadEvent(
     const GameStateModuleIO::OnlineRoadRulesDownloadedEvent* lpDownloadedEvent )
 {
-    CGS_ASSERT( lpDownloadedEvent, "lpDownloadedEvent" );
+    CGS_ASSERT( lpDownloadedEvent,
+        CgsDev::Assert::MessageAt(
+            "lpDownloadedEvent",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3065 /* ARTIST 0x82324B5C */));
 }
 
 // ----------------------------------------------------------------------------

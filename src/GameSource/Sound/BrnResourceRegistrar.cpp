@@ -1,4 +1,5 @@
 #include "GameSource/Sound/BrnResourceRegistrar.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
 
 #include <cstring>   // strncpy
@@ -911,7 +912,11 @@ namespace Logic
                                        const char* lpcResourceName,
                                        ResourceRegistrar::EType leType)
     {
-        CGS_ASSERT(lpcBundleName, "lpFilename");
+        CGS_ASSERT(lpcBundleName,
+            CgsDev::Assert::MessageAt(
+                "lpFilename",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../Sound/BrnResourceRegistrar.cpp", 1086 /* ARTIST 0x826E2374 */));
         ResourceRegistrar::QueuedResource lRequest(
             lpcResourceName, lpcBundleName, this, 6, leType);
         GetResourceRegistrar().AddRequest(lRequest);

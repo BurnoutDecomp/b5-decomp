@@ -18,7 +18,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostStrategy.h"
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // EGameModeType
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleIOQueues.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/vector3_operation.h"
 
 #include <algorithm>
@@ -139,7 +139,11 @@ void BoostStrategy::SetForceBoost(bool lbForceBoost) // 0x822A5DC8
 
 bool BoostStrategy::GetIsChainNotifyPending(u32* lpOutNumChained) // 0x822A5DF0
 {
-    CGS_ASSERT(lpOutNumChained != 0, "lpOutNumChained");
+    CGS_ASSERT(lpOutNumChained != 0,
+        CgsDev::Assert::MessageAt(
+            "lpOutNumChained",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostStrategy.cpp", 471 /* ARTIST 0x822A5E14 */));
     *lpOutNumChained = 0;
     return false;
 }

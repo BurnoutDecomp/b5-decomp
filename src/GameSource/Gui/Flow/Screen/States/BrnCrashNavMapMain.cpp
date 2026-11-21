@@ -38,7 +38,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMapMain.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent / GuiEventWrapper
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface, GuiEventNetworkSuspension
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / VariableEventQueue
@@ -250,7 +250,10 @@ namespace BrnGui
     // =================================================================================
     void CrashNavMapMain::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
-        CGS_ASSERT(lpFsm != 0, "lpFsm");                                   // cpp:78
+        CGS_ASSERT(lpFsm != 0,
+            CgsDev::Assert::MessageAt(
+                "lpFsm",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMapMain.cpp", 78 /* ARTIST 0x824B7600 */));                                   // cpp:78
 
         CrashNavMap::Construct(liId, lpFsm);
 

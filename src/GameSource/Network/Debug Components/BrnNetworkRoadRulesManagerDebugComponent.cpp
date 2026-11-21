@@ -18,7 +18,10 @@
 #include "GameSource/Network/Managers/BrnNetworkRoadRulesManager.h"   // NetworkRoadRulesManager (method calls)
 #include "SharedClasses/StreetData/BrnChallengeData.h"                // ChallengePlayerScoreEntry / ScoreList / ScoreType
 #include "GameSource/Network/BrnNetworkInEventTypeDefs.h"             // BrnNetworkModuleIO::NetworkInRoadRulesPBEvent (TriggerPersonalBest)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                    // CGS_ASSERT
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkRoadRulesManagerDebugComponent.cpp";
 
 namespace BrnNetwork
 {
@@ -86,9 +89,12 @@ namespace BrnNetwork
     // @ 0x825863A8. Request the latest road-rules high scores from the server.
     void RoadRulesManagerDebugComponent::RequestRoadRulesHighScores( void* lpData )
     {
-        CGS_ASSERT( lpData != 0, "lpData" );
+        CGS_ASSERT( lpData != 0,
+            CgsDev::Assert::MessageAt("lpData", KAC_ARTIST_ASSERT_FILE, 141 /* ARTIST 0x825863D0 */));
         RoadRulesManagerDebugComponent* lpThis = static_cast<RoadRulesManagerDebugComponent*>( lpData );
-        CGS_ASSERT( lpThis != 0, "lpRoadRulesManagerDebugCmpt" );
+        CGS_ASSERT( lpThis != 0,
+            CgsDev::Assert::MessageAt(
+                "lpRoadRulesManagerDebugCmpt", KAC_ARTIST_ASSERT_FILE, 143 /* ARTIST 0x825863F4 */));
 
         lpThis->mpRoadRulesManager->StartDownloadingRoadRulesScoresFromServer();
     }

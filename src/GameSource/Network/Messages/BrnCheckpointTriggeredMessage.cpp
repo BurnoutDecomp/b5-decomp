@@ -1,6 +1,6 @@
 #include "types.hpp"
 #include "GameSource/Network/Messages/BrnCheckpointTriggeredMessage.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::CheckpointTriggeredMessage::GetName              @ 0x8257CEC8
@@ -27,7 +27,10 @@ namespace BrnNetwork
 
     CgsNetwork::PackOrUnpackResult CheckpointTriggeredMessage::PackOrUnpack()
     {
-        CGS_ASSERT(miCheckpointIndex != -1, "miCheckpointIndex != -1");
+        CGS_ASSERT(miCheckpointIndex != -1,
+            CgsDev::Assert::MessageAt(
+                "miCheckpointIndex != -1",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnCheckpointTriggeredMessage.cpp", 91 /* ARTIST 0x8257CE78 */));
 
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
         return CgsNetwork::PackOrUnpackInt(this, &miCheckpointIndex, 0, 16) | lxBase;

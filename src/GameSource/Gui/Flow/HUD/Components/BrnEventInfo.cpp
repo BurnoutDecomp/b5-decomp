@@ -1,6 +1,6 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnEventInfo.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface::IsUsingMetricUnits
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                         // BrnFlapt::FileRef::FindComponent
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"               // MovieClipInstance::ResetTimeline
@@ -723,7 +723,10 @@ void EventInfoComponent::BankingTransitionCompleteCallback(void* lpUserData, u16
 {
     (void)luArg;
 
-    CGS_ASSERT(lpUserData != 0, "lpUserData");   // cpp:736 (non-gating)
+    CGS_ASSERT(lpUserData != 0,
+        CgsDev::Assert::MessageAt(
+            "lpUserData",
+            "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnEventInfo.cpp", 736 /* ARTIST 0x824214EC */));   // cpp:736 (non-gating)
 
     EventInfoComponent* const lpThis = static_cast<EventInfoComponent*>(lpUserData);
 

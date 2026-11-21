@@ -4,7 +4,7 @@
 #include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (SetTransform/SetProgram/SetTextureState/SetTexture/RenderFromStaticVertexBuffer)
 #include "rw/rwcore_structs.h"                        // rw::ResourceAllocatorRegistry::GetDefaultAllocator + rw::Resource
 
@@ -124,7 +124,10 @@ namespace CgsGui
     // -------------------------------------------------------------------------
     AptIm2dRenderBuffer* AptRenderHandler::GetIm2dRendererType() const
     {
-        CGS_ASSERT(mpImRenderers != 0, "mpImRenderers");
+        CGS_ASSERT(mpImRenderers != 0,
+            CgsDev::Assert::MessageAt(
+                "mpImRenderers",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptRender.h", 424 /* ARTIST 0x828467AC */));
         return mpImRenderers->mpIm2dRenderBuffer;
     }
 

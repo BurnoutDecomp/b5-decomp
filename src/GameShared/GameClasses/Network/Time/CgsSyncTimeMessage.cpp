@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeMessage.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   (CgsNetwork::SyncTimeMessage)
@@ -52,7 +53,10 @@ namespace CgsNetwork
                                   MessageWithPlayerIDs::NetworkPlayerID liHostPlayerID,
                                   CgsSystem::Time lHostTime)
     {
-        CGS_ASSERT(!IsMessageValid(), "!IsMessageValid()");
+        CGS_ASSERT(!IsMessageValid(),
+            CgsDev::Assert::MessageAt(
+                "!IsMessageValid()",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeMessage.cpp", 79 /* ARTIST 0x8287D430 */));
 
         mClientPlayerID = liClientPlayerID;
         mClientSendTime = lClientSendTime;

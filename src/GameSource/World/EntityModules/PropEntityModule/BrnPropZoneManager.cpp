@@ -30,7 +30,7 @@
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropZoneManager.h"
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h" // PropPhysicsDataHeader::GetType, PropTypeData
 #include "SharedClasses/Physics/Props/BrnPropConstants.h"        // BrnPhysics::Props::KVF_PROP_FLOOR (NEW 2026-08-18)
 #include "SharedClasses/Physics/Props/BrnPhysicsPropZoneData.h"   // PropZoneData, PropCellData, PropCellId
@@ -343,7 +343,10 @@ namespace BrnWorld
     // A zone is loaded iff its prop start index is not the unloaded sentinel.
     bool PropZoneManager::IsZoneLoaded(u16 lu16ZoneId) const
     {
-        CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES, "luZoneIndex < BrnPhysics::Props::KU_MAX_ZONES");
+        CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES,
+            CgsDev::Assert::MessageAt(
+                "luZoneIndex < BrnPhysics::Props::KU_MAX_ZONES",
+                "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropZoneManager.h", 645 /* ARTIST 0x822A43BC */));
         return mauStartIndexOfZone[lu16ZoneId] != KU_UNLOADED_ZONE;
     }
 

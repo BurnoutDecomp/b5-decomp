@@ -12,7 +12,9 @@
 
 #include "GameShared/GameClasses/Gui/CgsSaveLoadX360.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h" // CGS_ASSERT
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.cpp";
 
 namespace CgsGui
 {
@@ -26,13 +28,16 @@ namespace CgsGui
     // X360 0x8284CB80. Realmc find-entry callback -- never expected on X360.
     void SaveLoadSystem::FoundEntry(const void*)
     {
-        CGS_ASSERT(false, "FoundEntry called");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt("FoundEntry called", KAC_ARTIST_ASSERT_FILE, 1252 /* ARTIST 0x8284CB94 */));
     }
 
     // X360 0x8284CBC0. Realmc find-entries-done callback -- never expected on X360.
     void SaveLoadSystem::FindEntriesDone(u32, u32)
     {
-        CGS_ASSERT(false, "FindEntriesDone called");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "FindEntriesDone called", KAC_ARTIST_ASSERT_FILE, 1274 /* ARTIST 0x8284CBD4 */));
     }
 
     // X360 0x8284C648. Realmc delete result callback -- streamed assert stub.

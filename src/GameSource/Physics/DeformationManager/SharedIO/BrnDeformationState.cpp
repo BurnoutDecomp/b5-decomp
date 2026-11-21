@@ -1,4 +1,5 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include <cstddef>   // offsetof
 
 // X360-attested shape (CarState::GetSensor): 80-byte per-sensor stride and the count byte
@@ -22,7 +23,10 @@ namespace Deformation
 {
     CarSensorState& CarState::GetSensor(u8 luSensorIndex)
     {
-        CGS_ASSERT(luSensorIndex < mu8NumSensors, "luSensorIndex < mu8NumSensors");
+        CGS_ASSERT(luSensorIndex < mu8NumSensors,
+            CgsDev::Assert::MessageAt(
+                "luSensorIndex < mu8NumSensors",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\deformationmanager\\sharedio\\BrnDeformationState.h", 62 /* ARTIST 0x825B36A8 */));
         return maSensors[luSensorIndex];
     }
 }

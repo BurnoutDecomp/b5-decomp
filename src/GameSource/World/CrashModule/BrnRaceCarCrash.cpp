@@ -1,6 +1,6 @@
 #include "GameSource/World/CrashModule/BrnRaceCarCrash.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/BurnoutConstants.h"              // E_ACTIVE_RACE_CAR_INDEX_COUNT
 
@@ -43,7 +43,11 @@ namespace BrnWorld
     // performs -- the value is held/compared/stored as a single-precision float.
     void RaceCarCrash::SetSecondsBeforeCleanup(f32 lfSeconds)
     {
-        CGS_ASSERT(lfSeconds > 0.0f, "lfSeconds > 0.0f");
+        CGS_ASSERT(lfSeconds > 0.0f,
+            CgsDev::Assert::MessageAt(
+                "lfSeconds > 0.0f",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../World/CrashModule/BrnCrashModule.cpp", 194 /* ARTIST 0x827B15D4 */));
         mfSecondsBeforeCleanup = lfSeconds;   // stfs @0xC
     }
 

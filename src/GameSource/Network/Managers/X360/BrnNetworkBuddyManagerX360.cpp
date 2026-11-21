@@ -2,7 +2,7 @@
 #include "GameSource/Network/Managers/X360/BrnNetworkBuddyManagerX360.h"
 
 #include <cstring>   // strncpy, memcpy, strlen
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // CgsModule::VariableEventQueue<14000,16>
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"    // CgsNetwork::PlayerManager::AmIHost
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h" // IsLocalPlayerInGame / GetGameParameters
@@ -105,7 +105,10 @@ namespace BrnNetwork
         BuddyManagerBase::Construct(lpNetworkModule, lpServerInterface);
 
         mhNotifier = XNotifyCreateListener(KU_NOTIFY_LISTENER_AREAS);
-        CGS_ASSERT(mhNotifier, "mhNotifier");
+        CGS_ASSERT(mhNotifier,
+            CgsDev::Assert::MessageAt(
+                "mhNotifier",
+                "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkBuddyManagerX360.cpp", 67 /* ARTIST 0x82557A2C */));
 
         macPendingSessionID[0] = 0;
         miPendingInviteUserPort = 0;

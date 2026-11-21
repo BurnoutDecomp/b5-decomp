@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/CgsNetworkManager.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::NetworkManagerPrepareParams::Construct                              @ 0x82581468
@@ -55,7 +55,10 @@ void NetworkManagerPrepareParams::PlayerManagerPrepareParams::Construct(
         void* lpConnectionFinalisedUserData,
         CgsMemory::HeapMalloc* lpNetworkHeapAllocator)
 {
-    CGS_ASSERT(lpServerInterface != 0, "lpServerInterface");
+    CGS_ASSERT(lpServerInterface != 0,
+        CgsDev::Assert::MessageAt(
+            "lpServerInterface",
+            "..\\..\\..\\GameShared\\GameClasses\\Network/CgsNetworkManager.h", 486 /* ARTIST 0x82581624 */));
 
     mpServerInterface                = lpServerInterface;
     mpfOnReceivedFromWrongIPCallback = lpfOnReceivedFromWrongIPCallback;

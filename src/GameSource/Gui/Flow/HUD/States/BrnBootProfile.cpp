@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::StrCpy / SPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log (stage log)
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // CgsLanguage::LanguageManager (no-space formatting)
@@ -345,7 +345,10 @@ namespace BrnGui
     void BootProfile::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm,
                                 ProfileManager& lrProfileManager)
     {
-        CGS_ASSERT(lpFsm != 0, "lpFsm");   // cpp:282
+        CGS_ASSERT(lpFsm != 0,
+            CgsDev::Assert::MessageAt(
+                "lpFsm",
+                "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnBootProfile.cpp", 282 /* ARTIST 0x82474424 */));   // cpp:282
         CgsGui::State::Construct(liId, lpFsm);
         mpProfileManager = &lrProfileManager;
         mpGuiCache       = 0;

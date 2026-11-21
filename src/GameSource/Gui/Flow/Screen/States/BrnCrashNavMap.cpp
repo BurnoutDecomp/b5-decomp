@@ -75,7 +75,7 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavMap.h"
 #include <cstdlib>   // getenv ([cnav-diag])
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT + Begin/Fire/EndAssert
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT + Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream (the streamed default-arm assert)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEventWrapper
@@ -1253,7 +1253,10 @@ namespace BrnGui
     void CrashNavMap::SetupComponents()
     {
         // cpp:556 -- non-fatal on the X360 (the manager is dereferenced regardless).
-        CGS_ASSERT(mpIconManager != 0, "mpIconManager");
+        CGS_ASSERT(mpIconManager != 0,
+            CgsDev::Assert::MessageAt(
+                "mpIconManager",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMap.cpp", 556 /* ARTIST 0x824D8C68 */));
 
         mpIconManager->SetupComponent();
         mCrashNavPanel.SetupComponent();

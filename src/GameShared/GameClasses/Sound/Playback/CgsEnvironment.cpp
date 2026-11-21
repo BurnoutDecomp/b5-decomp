@@ -22,6 +22,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"     // complete Factory (GetR's name compare)
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
@@ -189,7 +190,10 @@ u32 Environment::AddContent(Environment& arEnvironment, Content* apContent)
 // @ 0x82680EA0. Return the owned entity registry (asserted present).
 Registry* Environment::GetRegistry()
 {
-    CGS_ASSERT(mpRegistry, "mpRegistry");
+    CGS_ASSERT(mpRegistry,
+        CgsDev::Assert::MessageAt(
+            "mpRegistry",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsEnvironment.h", 661 /* ARTIST 0x82680EC8 */));
     return mpRegistry;
 }
 

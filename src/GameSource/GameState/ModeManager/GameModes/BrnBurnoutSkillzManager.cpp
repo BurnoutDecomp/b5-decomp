@@ -21,7 +21,7 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.h"
 #include "GameSource/GameState/BrnGameStateModule.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                // CGS_ASSERT
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"            // ScoringSystem + CarData
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"                      // ModeManager::GetScoringSystem
 #include "GameSource/GameState/MugshotManager/BrnMugshotManager.h"                // MugshotManager::ProcessBeatenRoadRuleEvent
@@ -229,7 +229,11 @@ void BurnoutSkillzManager::OnEnterRoad(BrnNetwork::Road::ChallengeIndex liRoadIn
 // ----------------------------------------------------------------------------
 ::EActiveRaceCarIndex BurnoutSkillzManager::GetActiveRaceCarIndex(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
-    CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
+    CGS_ASSERT(mpScoringSystem,
+        CgsDev::Assert::MessageAt(
+            "mpScoringSystem",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 1221 /* ARTIST 0x82322B48 */));
 
     CarData* lpData = mpScoringSystem->GetCarData(lNetworkPlayerID);
     if (lpData)

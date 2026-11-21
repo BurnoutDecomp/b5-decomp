@@ -29,7 +29,7 @@
 
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -757,7 +757,10 @@ namespace BrnGui
     // AppendAllExpectedComponents  @0x824BB458  (cpp:753, 31 instructions)
     void InstantResultsState::AppendAllExpectedComponents()
     {
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");     // cpp:755
+        CGS_ASSERT(mpGuiCache,
+            CgsDev::Assert::MessageAt(
+                "mpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.cpp", 755 /* ARTIST 0x824BB480 */));     // cpp:755
 
         AppendExpectedScreenComponents();
 

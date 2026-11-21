@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Console/CgsConsole.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/ScriptInterface/CgsScriptInterface.h"
@@ -39,7 +39,10 @@ namespace CgsDev
     //   return *this;
     DebugManager& DebugInterface::GetDebugManager()
     {
-        CGS_ASSERT(mpDebugManager, "mpDebugManager");
+        CGS_ASSERT(mpDebugManager,
+            CgsDev::Assert::MessageAt(
+                "mpDebugManager",
+                "..\\..\\..\\GameShared\\GameClasses\\Development/DebugSystem/Interface/CgsDebugInterface.h", 163 /* ARTIST 0x823A61D8 */));
         return *mpDebugManager;
     }
 

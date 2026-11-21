@@ -2,7 +2,10 @@
 
 #include "types.hpp"
 #include "BrnCommonTypes.h"   // Vector3, Vector4
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/Sound/World/BrnStaticSoundMap.cpp";
 
 namespace BrnSound
 {
@@ -86,8 +89,11 @@ const SubRegionDescriptor* StaticSoundMap::GetSubRegionDescrip(const rw::math::f
 // retired (2026-08-25, audio-faithfulness wave 2).
 const StaticSoundEntity& StaticSoundMap::GetEntity(s32 liEntityIndex) const
 {
-    CGS_ASSERT(mpEntities != 0, "mpEntities");
-    CGS_ASSERT(liEntityIndex < miNumEntities, "liEntityIndex < miNumEntities");
+    CGS_ASSERT(mpEntities != 0,
+        CgsDev::Assert::MessageAt("mpEntities", KAC_ARTIST_ASSERT_FILE, 222 /* ARTIST 0x826755A8 */));
+    CGS_ASSERT(liEntityIndex < miNumEntities,
+        CgsDev::Assert::MessageAt(
+            "liEntityIndex < miNumEntities", KAC_ARTIST_ASSERT_FILE, 223 /* ARTIST 0x826755D0 */));
 
     return mpEntities[liEntityIndex];
 }

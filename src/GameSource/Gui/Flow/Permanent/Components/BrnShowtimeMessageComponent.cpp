@@ -32,7 +32,7 @@
 #include "GameSource/Gui/Flow/Permanent/Components/BrnShowtimeMessageComponent.h"
 
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"            // BrnFlapt::FileRef (Prepare param)
-#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"           // CGS_ASSERT
 
 namespace BrnGui
 {
@@ -148,7 +148,10 @@ namespace BrnGui
     // and forward to the component's transition-complete handler.
     void BrnShowtimeMessageComponent::TransitionCompleteCallback(void* lpUserData, u16 /*luFrame*/)
     {
-        CGS_ASSERT(lpUserData != 0, "lpUserData");
+        CGS_ASSERT(lpUserData != 0,
+            CgsDev::Assert::MessageAt(
+                "lpUserData",
+                "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnShowtimeMessageComponent.cpp", 190 /* ARTIST 0x8241665C */));
 
         static_cast<BrnShowtimeMessageComponent*>(lpUserData)->HandleTransitionComplete();
     }

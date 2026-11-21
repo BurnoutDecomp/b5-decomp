@@ -2,7 +2,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/indexbuffer.h"
 #include "SharedClasses/Graphics/BrnVFXMeshCollectionResourceType.h"
 #include "rw/rwcore_structs.h"                            // rw::Resource / BaseResourceDescriptors complete
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // the stale-asset line (IsUnconvertedPC)
 #include "types.hpp"
 
@@ -28,6 +28,10 @@
 //   [1] GetNumVertexBuffers() (must be 1)
 //   [2] 0x8 m_buffers[0] -> IndexBuffer  (file-relative, rebased to load base)
 //   [3] 0xC m_buffers[1] -> VertexBuffer (file-relative, rebased to load base)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../../SharedClasses/Graphics/BrnVFXMeshCollectionResourceType.cpp";
 
 namespace BrnParticle
 {
@@ -139,12 +143,16 @@ namespace BrnParticle
     // single assert and (for Serialise) returns null.
     void BrnVFXMeshCollectionResourceType::FixDown(void* /*lpResource*/, const rw::Resource& /*lrResource*/) const
     {
-        CGS_ASSERT(false, "This code is not expected at runtime.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "This code is not expected at runtime.", KAC_ARTIST_ASSERT_FILE, 394 /* ARTIST 0x8267592C */));
     }
 
     void* BrnVFXMeshCollectionResourceType::Serialise(const void* /*lpResource*/, const rw::Resource& /*lrDest*/) const
     {
-        CGS_ASSERT(false, "This code is not expected at runtime.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "This code is not expected at runtime.", KAC_ARTIST_ASSERT_FILE, 85 /* ARTIST 0x826758DC */));
         return 0;
     }
 }

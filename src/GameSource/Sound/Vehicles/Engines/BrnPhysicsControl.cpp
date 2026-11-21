@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Sound/Vehicles/Brn3dCarPosition.h"
 #include "GameSource/Sound/Vehicles/Wheels/BrnWheelControl.h"
 #include "GameSource/Sound/Vehicles/BrnVehicleStateManager.h"
@@ -1084,7 +1084,10 @@ const char* PhysicsControl::GetEngineComponentName(
 {
     const BrnSound::Vehicles::VehicleState* lpVehicleState =
         static_cast<const BrnSound::Vehicles::VehicleState*>(GetStateBase());
-    CGS_ASSERT(lpVehicleState != 0, "lpVehicleState");
+    CGS_ASSERT(lpVehicleState != 0,
+        CgsDev::Assert::MessageAt(
+            "lpVehicleState",
+            "..\\..\\..\\GameSource\\Sound/Vehicles/Engines/BrnPhysicsControl.h", 435 /* ARTIST 0x82682CD4 */));
     return lpVehicleState->GetEngineComponentName(aeComponentType);
 }
 

@@ -25,7 +25,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavTrax.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"            // CgsIDCompress
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"       // CgsGui::GuiEvent<N> / CgsModule::Event
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"   // StateInterface
@@ -460,7 +460,10 @@ namespace BrnGui
     // ---- HandleOverlayCompleteEvent @0x824DEF60 -------------------------------------
     void CrashNavTrax::HandleOverlayCompleteEvent(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "lpOverlayCompleteEvent");   // cpp:544
+        CGS_ASSERT(lpEvent != 0,
+            CgsDev::Assert::MessageAt(
+                "lpOverlayCompleteEvent",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavTrax.cpp", 544 /* ARTIST 0x824DEF8C */));   // cpp:544
 
         const GuiOverlayCompletePayload* lpComplete =
             reinterpret_cast<const GuiOverlayCompletePayload*>(lpEvent);

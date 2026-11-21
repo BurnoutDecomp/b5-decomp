@@ -3,7 +3,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include <cmath>
 
 namespace BrnSound
@@ -121,7 +121,10 @@ void MusicStream::Update(Streaming::StreamingStateManager* apStreamingManager, f
 
 void MusicStream::SetSongQueued(bool abSongQueued)
 {
-    CGS_ASSERT(abSongQueued != mbSongQueued, "lbSongQueued != mbSongQueued");
+    CGS_ASSERT(abSongQueued != mbSongQueued,
+        CgsDev::Assert::MessageAt(
+            "lbSongQueued != mbSongQueued",
+            "..\\..\\..\\GameSource\\Sound/Global/BrnMusicEffect.h", 1080 /* ARTIST 0x8268323C */));
     mbSongQueued = abSongQueued;
 }
 

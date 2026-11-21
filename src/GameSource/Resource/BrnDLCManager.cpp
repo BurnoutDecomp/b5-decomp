@@ -1,5 +1,5 @@
 #include "GameSource/Resource/BrnDLCManager.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT + Begin/Fire/EndAssert
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT + Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (GetPackage runtime-streamed assert)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // message filter and debug stream
@@ -23,6 +23,8 @@
 // The shared debug-HUD text helper (a global function, bodied in CgsDebug2DImmediateRender.cpp).
 void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Resource/BrnDLCManager.h";
 
 namespace BrnResource
 {
@@ -350,8 +352,12 @@ namespace BrnResource
     // mask: mauPackMask[liPack]. The asm indexes *(this + 4*(lPack+2)), i.e. mauPackMask at +0x08.
     u32 DLCFeatureAvailability::GetPackMask(s32 liPack) const
     {
-        CGS_ASSERT(liPack >= E_DLC_DATA_PACK_START, "lPack >= E_DLC_DATA_PACK_START");
-        CGS_ASSERT(liPack < E_DLC_DATA_PACK_COUNT,  "lPack < E_DLC_DATA_PACK_COUNT");
+        CGS_ASSERT(liPack >= E_DLC_DATA_PACK_START,
+            CgsDev::Assert::MessageAt(
+                "lPack >= E_DLC_DATA_PACK_START", KAC_ARTIST_ASSERT_FILE, 351 /* ARTIST 0x82661654 */));
+        CGS_ASSERT(liPack < E_DLC_DATA_PACK_COUNT,
+            CgsDev::Assert::MessageAt(
+                "lPack < E_DLC_DATA_PACK_COUNT", KAC_ARTIST_ASSERT_FILE, 352 /* ARTIST 0x82661678 */));
 
         return mauPackMask[liPack];
     }

@@ -24,7 +24,7 @@
 
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                                         // gpDebugPrint (the solve boot witness)
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"                                       // CgsModule::IOBufferStack::CreateIOBuffer<T>
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                          // CgsDev::PerfMonCpu::Start/StopMonitor
@@ -270,7 +270,10 @@ namespace Deformation
     void DeformationManager::GetDeformedBBox(EntityId lEntityId, CgsGeometric::Box* lpBoxOut) const
     {
         const s32 liIndex = FindModelIndexByEntityID(lEntityId);
-        CGS_ASSERT(liIndex != -1, "liIndex != -1");
+        CGS_ASSERT(liIndex != -1,
+            CgsDev::Assert::MessageAt(
+                "liIndex != -1",
+                "..\\..\\..\\GameSource\\Physics/DeformationManager/BrnDeformationManager.h", 551 /* ARTIST 0x825E87CC */));
         mpaModels[liIndex].GetBoundingBox(lpBoxOut);
     }
 

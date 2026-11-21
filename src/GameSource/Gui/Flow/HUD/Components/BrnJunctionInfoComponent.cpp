@@ -1,6 +1,6 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnJunctionInfoComponent.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT + CgsDev::Assert::{Begin,Fire,End}Assert
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                 // CGS_ASSERT + CgsDev::Assert::{Begin,Fire,End}Assert
 #include "GameShared/GameClasses/Core/CgsID.h"                                     // CgsIDConvertToString
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                            // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                        // CgsDev::StrStream (streamed assert message)
@@ -298,7 +298,10 @@ namespace BrnGui
     // Refresh is just the argument assert.
     void JunctionInfoComponent::Refresh(const char* lpComponentName)
     {
-        CGS_ASSERT(lpComponentName != NULL, "lpComponentName != NULL");
+        CGS_ASSERT(lpComponentName != NULL,
+            CgsDev::Assert::MessageAt(
+                "lpComponentName != NULL",
+                "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnJunctionInfoComponent.cpp", 289 /* ARTIST 0x82414D74 */));
     }
 
     // @0x82423F40 -- play the named animation on the panel's own apt clip (base mAptRef)

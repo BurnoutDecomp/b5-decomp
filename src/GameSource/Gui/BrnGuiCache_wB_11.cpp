@@ -1,5 +1,5 @@
 #include "GameSource/Gui/BrnGuiCache.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/BrnCgsPlayerName.h"   // CgsNetwork::PlayerName::Construct (append path)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. GuiCache replay-player-active table
@@ -12,6 +12,8 @@
 // External DirtySDK lobby C-API name comparator (vendor SDK; not yet homed in vendor/).
 // A not-yet-homed callee is satisfied by its declaration under cl /c; no body needed.
 extern "C" s32 LobbyNameCmp(const char* pNameA, const char* pNameB);
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp";
 
 namespace BrnGui
 {
@@ -76,8 +78,11 @@ namespace BrnGui
     // ReplayCredits::OnEnter reads both the name (+0x00) and the count (+0x18) off it.
     const ReplayPlayerActive* GuiCache::GetSortedReplayPlayerActive(u32 luIndex) const
     {
-        CGS_ASSERT(mbReplayHasBeenSorted == true, "mbReplayHasBeenSorted == true");
-        CGS_ASSERT(luIndex < 16, "luIndex < 16");
+        CGS_ASSERT(mbReplayHasBeenSorted == true,
+            CgsDev::Assert::MessageAt(
+                "mbReplayHasBeenSorted == true", KAC_ARTIST_ASSERT_FILE, 4516 /* ARTIST 0x824EEFD8 */));
+        CGS_ASSERT(luIndex < 16,
+            CgsDev::Assert::MessageAt("luIndex < 16", KAC_ARTIST_ASSERT_FILE, 4517 /* ARTIST 0x824EEFFC */));
         return &maReplayPlayersActive[luIndex];
     }
 }

@@ -18,7 +18,7 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineStats.h"
 
 #include <cstddef>                                                        // offsetof (wire records)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> / GuiEventWrapper
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface
@@ -327,7 +327,10 @@ namespace BrnGui
     // ================================================================================
     void OnlineStats::ClearExpectedComponent()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt(
+                "mpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineStats.cpp", 229 /* ARTIST 0x824875B8 */));
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 

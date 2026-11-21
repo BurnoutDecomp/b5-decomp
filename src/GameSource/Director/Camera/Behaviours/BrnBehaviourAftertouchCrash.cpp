@@ -18,6 +18,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/Director/Camera/Camera.h"                  // Camera (Update publishes into it)
 #include "GameSource/Director/Camera/BrnCameraState.h"          // CameraState::E_FLAG_VALID
@@ -424,7 +425,10 @@ bool BehaviourAftertouchCrash::Prepare(const BehaviourSharedPrepareReleaseInfo& 
 {
     SetNotPrepared();                                       // stb 0, +0x08
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");
+    CGS_ASSERT(mpParameters != 0,
+        CgsDev::Assert::MessageAt(
+            "mpParameters != NULL",
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.cpp", 140 /* ARTIST 0x821FA8A0 */));
 
     mfBlendFactor = mpParameters->mfMinimumBlendFactor;     // +0x48 -> +0x38C
     mfHeight      = mpParameters->mfFastHeight;             // +0x38 -> +0x384

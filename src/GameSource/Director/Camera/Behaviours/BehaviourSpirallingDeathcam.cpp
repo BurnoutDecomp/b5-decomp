@@ -21,6 +21,7 @@
 //   mbRoadRageTotalled reachable.
 // ============================================================================
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/Director/Camera/Camera.h"                     // Camera (mTransform / mState_uFlags / effects / DoF)
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"     // VehicleInfo (mRaceCarState / mAABB)
@@ -292,7 +293,10 @@ const char* BehaviourSpirallingDeathcam::GetName() const
 // ----------------------------------------------------------------------------
 void BehaviourSpirallingDeathcam::Start()
 {
-    CGS_ASSERT(!mbStarted, "!mbStarted");   // lbz 0x2F4; assert clear
+    CGS_ASSERT(!mbStarted,
+        CgsDev::Assert::MessageAt(
+            "!mbStarted",
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h", 99 /* ARTIST 0x821F5648 */));   // lbz 0x2F4; assert clear
     mbStarted = true;                       // stb 1, 0x2F4(this)
 }
 

@@ -1,7 +1,7 @@
 #include "types.hpp"
 
 #include "GameSource/Network/Messages/BrnStuntScoreUpdatedMessage.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::StuntScoreUpdatedMessage::PackOrUnpack    @ 0x8257D0E0
@@ -25,7 +25,10 @@ namespace BrnNetwork
 
     CgsNetwork::PackOrUnpackResult StuntScoreUpdatedMessage::PackOrUnpack()
     {
-        CGS_ASSERT(miStuntScore != -1, "miStuntScore != -1");
+        CGS_ASSERT(miStuntScore != -1,
+            CgsDev::Assert::MessageAt(
+                "miStuntScore != -1",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnStuntScoreUpdatedMessage.cpp", 91 /* ARTIST 0x8257D108 */));
 
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
         return CgsNetwork::PackOrUnpackInt(this, &miStuntScore, 0, 0x7FFFFFFF) | lxBase;
