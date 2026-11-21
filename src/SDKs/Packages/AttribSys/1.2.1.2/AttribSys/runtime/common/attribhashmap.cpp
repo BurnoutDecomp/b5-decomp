@@ -304,18 +304,7 @@ Attrib::HashMap::Bucket* Attrib::HashMap::Find(u64 luKey) const
 {
     const unsigned int luIndex = FindIndex(luKey);
 
-    bool lbValid = true;
-    if (luIndex >= muCapacity)
-    {
-        lbValid = false;
-    }
-    else
-    {
-        Bucket* lpBucket = &mpBuckets[luIndex];
-        if (!lpBucket->IsOccupied())
-            lbValid = false;
-    }
-
+    const bool lbValid = luIndex < muCapacity && mpBuckets[luIndex].IsOccupied();
     if (lbValid)
         return &mpBuckets[luIndex];
     return NULL;
@@ -375,24 +364,11 @@ unsigned int Attrib::HashMap::FindIndex(u64 luKey) const
 // bucket first. A free bucket (flag bit clear) reads back key 0.
 u64 Attrib::HashMap::GetKeyAtIndex(u32 luIndex) const
 {
-    bool lbValid = true;
-    if (luIndex >= muCapacity)
-    {
-        lbValid = false;
-    }
-    else
-    {
-        Bucket* lpBucket = &mpBuckets[luIndex];
-        if (!lpBucket->IsOccupied())
-            lbValid = false;
-    }
-
-    CGS_ASSERT(lbValid, "Attrib::HashMap invalid index used.");
-
-    Bucket* lpBucket = &mpBuckets[luIndex];
-    if (!lpBucket->IsOccupied())
-        return 0;
-    return lpBucket->mKey;
+    const bool lbValid = luIndex < muCapacity && mpBuckets[luIndex].IsOccupied();
+    CGS_ASSERT(lbValid, CgsDev::Assert::MessageAt("Attrib::HashMap invalid index used.",
+        "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/common/attribhashmap.h",
+        418 /* ARTIST 0x828026C0 */));
+    return mpBuckets[luIndex].Key();
 }
 
 // ============================================================================
@@ -445,23 +421,18 @@ bool Attrib::HashMap::Release() const
     // used the named member) bumped the real muRefCount. Symptom: "Too many releases of
     // object!" on the first Instance destructor that ever ran against a real collection --
     // i.e. the moment DirectorResourceManager::Prepare landed. Read it BY NAME.
-    u16* lpuRefCount = &muRefCount;
-    const unsigned int luRefs = *lpuRefCount;
+    const u16 lu16Refs = muRefCount;
+    if (lu16Refs > 1)
+    {
+        muRefCount = static_cast<u16>(lu16Refs - 1);
+        return false;
+    }
 
-    bool lbReleased;
-    u16 lu16NewCount;
-    if (luRefs <= 1)
-    {
-        lbReleased = (luRefs == 1);
-        CGS_ASSERT(*lpuRefCount != 0, "Too many releases of object!\n");
-        lu16NewCount = 0;
-    }
-    else
-    {
-        lbReleased = false;
-        lu16NewCount = static_cast<u16>(luRefs - 1);
-    }
-    *lpuRefCount = lu16NewCount;
+    const bool lbReleased = (lu16Refs == 1);
+    CGS_ASSERT(lu16Refs != 0, CgsDev::Assert::MessageAt("Too many releases of object!\n",
+        "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/common/attribhashmap.h",
+        623 /* ARTIST 0x82802768 */));
+    muRefCount = 0;
     return lbReleased;
 }
 

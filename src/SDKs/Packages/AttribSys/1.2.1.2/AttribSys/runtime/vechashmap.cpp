@@ -133,14 +133,9 @@ Attrib::Class* VecHashMap_Attrib_Class_TablePolicy_0_16::Find(u64 luKey) const
 {
     const u32 luIndex = FindIndex(luKey);
 
-    if (luIndex >= muTableSize)
-        return NULL;
-
-    Node& lrNode = mpTable[luIndex];
-    if (!lrNode.IsValid())
-        return NULL;
-
-    return lrNode.Get();
+    if (ValidIndex(luIndex))
+        return mpTable[luIndex].Get();
+    return NULL;
 }
 
 // @ 0x82808A98: vacate the class bucket and repair its probe run.
@@ -151,7 +146,9 @@ Attrib::Class* VecHashMap_Attrib_Class_TablePolicy_0_16::RemoveIndex(u32 luIndex
 
     Node& lrNode = mpTable[luIndex];
     Attrib::Class* lpRemoved = lrNode.Get();
-    const u64 luKey = lrNode.Key();
+    // FAKEMATCH: ARTIST reloads the bucket pointer when reading its key.
+    Attrib::Class* const volatile& lrpBucket = lrNode.mpPtr;
+    const u64 luKey = lrpBucket != reinterpret_cast<Attrib::Class*>(&lrNode) ? lrNode.mKey : 0;
     lrNode.mpPtr = reinterpret_cast<Attrib::Class*>(&lrNode);
     lrNode.mKey = 0;
     --muNumEntries;
@@ -167,7 +164,9 @@ Attrib::Class* VecHashMap_Attrib_Class_TablePolicy_0_16::RemoveIndex(u32 luIndex
 // non-sentinel node), then return that node's key (Node::Key() yields 0 for a sentinel).
 u64 VecHashMap_Attrib_Class_TablePolicy_0_16::GetKeyAtIndex(u32 luIndex) const
 {
-    CGS_ASSERT(ValidIndex(luIndex), "GetKeyAtIndex passed invalid index.");
+    CGS_ASSERT(ValidIndex(luIndex), CgsDev::Assert::MessageAt("GetKeyAtIndex passed invalid index.",
+        "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/vechashmap.h",
+        168 /* ARTIST 0x8280748C */));
 
     return mpTable[luIndex].Key();
 }
@@ -898,7 +897,9 @@ Collection* CollectionHashMap::RemoveIndex(u32 luIndex)
 
     Node* lpNode = &mTable[luIndex];
     Collection* lpRemoved = lpNode->Get();
-    const u64   luKey     = lpNode->Key();
+    // FAKEMATCH: ARTIST reloads the bucket pointer when reading its key.
+    Collection* const volatile& lrpBucket = lpNode->mPtr;
+    const u64 luKey = lrpBucket != reinterpret_cast<Collection*>(lpNode) ? lpNode->mKey : 0;
 
     // Vacate: the payload slot points back at the node (the X360 free sentinel) and the
     // key word is zeroed.

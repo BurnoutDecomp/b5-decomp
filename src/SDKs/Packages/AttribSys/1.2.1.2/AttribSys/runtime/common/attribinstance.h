@@ -319,7 +319,7 @@ namespace Attrib
         // that, plus call-site comments claiming "the staged key/selector are dead in the
         // called body". They are not dead. The no-argument overload is retired.
         void*       GetAttributePointer(u64 luAttributeKey, u32 luIndex) const;
-        int         GetClass() const;
+        u64         GetClass() const;  // @0x82802F18 reads the owning class's full key
         // @0x82802F40 -- the referenced collection's 64-bit KEY (`ld r3,0x10(r11)`),
         // 0 when the instance holds no collection. (Was modelled as a `void*`
         // sub-collection pointer; the load ctor pins +0x10 as Collection::mKey.)

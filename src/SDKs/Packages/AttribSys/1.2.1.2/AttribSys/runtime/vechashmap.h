@@ -128,7 +128,8 @@ public:
     }
 
     // In-range AND non-sentinel test the asserting index accessors guard on.
-    bool ValidIndex(u32 luIndex) const
+    // FAKEMATCH: ARTIST inlines the sentinel check into the key and value accessors.
+    __forceinline bool ValidIndex(u32 luIndex) const
     {
         return luIndex < muTableSize && mpTable[luIndex].IsValid();
     }

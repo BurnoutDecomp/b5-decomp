@@ -1,4 +1,5 @@
 #include "attribinstance.h"
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/vechashmap.h"  // Class::GetKey
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include <cstring>
 
@@ -244,15 +245,12 @@ namespace Attrib
         return mpCollection->GetData(luAttributeKey, luIndex);
     }
 
-    int Instance::GetClass() const
+    u64 Instance::GetClass() const
     {
         if (!mpCollection)
             return 0;
-        // X360 reads the owning class's leading key word (Class +0). Kept as the raw
-        // leading-word read the recovered body performs; Attrib::Class is only
-        // forward-declared in this TU.
-        const int* lpClass = reinterpret_cast<const int*>(mpCollection->mpClass);
-        return lpClass ? *lpClass : 0;
+        const Class* lpClass = mpCollection->mpClass;
+        return lpClass ? lpClass->GetKey() : 0;
     }
 
     u64 Instance::GetCollection() const
