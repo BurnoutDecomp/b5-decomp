@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (CgsIOBufferStack.h:139)
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include <new>
 #include <cstring>                                   // memset (BRN_IOBUF_ZERO diagnostic only)
 
@@ -13,6 +13,11 @@
 // bodies + per-type template instantiations are their own TU.
 namespace CgsModule
 {
+    namespace detail
+    {
+        const char* const KAC_IO_STACK_FILE =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsIOBufferStack.h";
+    }
 
     struct IOBufferStack
     {
@@ -68,18 +73,19 @@ namespace CgsModule
         template <typename T>
         bool CreateIOBuffer(T** lpOutBuffer, const char* lpcDebugName)
         {
-            CGS_ASSERT(lpOutBuffer, "Must pass in pointer to pointer to buffer\n");   // :139
+            CGS_ASSERT(lpOutBuffer, CgsDev::Assert::StreamMessageAt(
+                "Must pass in pointer to pointer to buffer\n", detail::KAC_IO_STACK_FILE, 139));
 
-            void* lpMem = Alloc(sizeof(T), lpcDebugName);
-            if (lpMem == 0)
+            // ARTIST 0x8285A27C stores the allocation before calling Construct.
+            T* lpBuffer = static_cast<T*>(Alloc(sizeof(T), lpcDebugName));
+            *lpOutBuffer = lpBuffer;
+            if (lpBuffer != 0)
             {
-                *lpOutBuffer = 0;
-                return false;
+                new (lpBuffer) T;
+                lpBuffer->Construct();
+                return true;
             }
-
-            *lpOutBuffer = new (lpMem) T;
-            (*lpOutBuffer)->Construct();
-            return true;
+            return false;
         }
 
         // Pop the T this stack handed out. CgsIOBufferStack.h:176-186, verified verbatim on
@@ -98,12 +104,14 @@ namespace CgsModule
         template <typename T>
         bool DestroyIOBuffer(T** lpInOutBuffer)
         {
-            CGS_ASSERT(lpInOutBuffer && *lpInOutBuffer, "Must pass in pointer to pointer to buffer\n");   // :180
+            CGS_ASSERT(lpInOutBuffer && *lpInOutBuffer, CgsDev::Assert::StreamMessageAt(
+                "Must pass in pointer to pointer to buffer\n", detail::KAC_IO_STACK_FILE, 180));
 
             (*lpInOutBuffer)->Destruct();
-            const bool lbFreed = Free(*lpInOutBuffer, sizeof(T));
+            // ARTIST 0x8285A3B8 normalizes the low byte of the Free result.
+            const u8 luFreed = Free(*lpInOutBuffer, sizeof(T));
             *lpInOutBuffer = 0;
-            return lbFreed;
+            return luFreed != 0;
         }
 
     private:
