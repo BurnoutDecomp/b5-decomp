@@ -10,12 +10,15 @@
 
 #include "GameSource/Gui/Flow/Screen/Components/BrnLargeCarComponent.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDConvertToString
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
 
 #include <cstring>   // memset / strcmp
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLargeCarComponent.cpp";
 
 namespace BrnGui
 {
@@ -37,7 +40,8 @@ namespace BrnGui
     // @ 0x8241B6B0
     void LargeCarComponent::SetCarInfo(CgsID lCarId, BrnGuiResourceId luResourceIdType)
     {
-        CGS_ASSERT(lCarId != 0, "kCGSID_NULL != lCarId");
+        CGS_ASSERT(lCarId != 0,
+            CgsDev::Assert::MessageAt("kCGSID_NULL != lCarId", KAC_ARTIST_ASSERT_FILE, 78 /* ARTIST 0x8241B6D8 */));
 
         muResourceIdType = static_cast<u32>(luResourceIdType);   // this+0xBC
         mCurrentCarId    = lCarId;                                // this+0xC0 (full 64-bit CgsID)
@@ -145,12 +149,15 @@ namespace BrnGui
     // @ 0x8243DB98
     void LargeCarComponent::ReleaseResources()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 146 /* ARTIST 0x8243DBCC */));
 
         if (meCurrentState >= E_INTERNAL_STATE_RESOURCES_REQUESTED &&
             meCurrentState <  E_INTERNAL_STATE_UNLOAD_REQUESTED)
         {
-            CGS_ASSERT(muResourceIdType != 0, "muResourceIdType != 0");
+            CGS_ASSERT(muResourceIdType != 0,
+                CgsDev::Assert::MessageAt(
+                    "muResourceIdType != 0", KAC_ARTIST_ASSERT_FILE, 151 /* ARTIST 0x8243DC08 */));
 
             mpStateInterface->PlayAptMovie("", 4);
             mpStateInterface->RequestResource(
@@ -165,7 +172,10 @@ namespace BrnGui
     // @ 0x824B3740
     void LargeCarComponent::SetCachePointer(GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0, "NULL != lpGuiCache");
+        CGS_ASSERT(lpGuiCache != 0,
+            CgsDev::Assert::MessageAt(
+                "NULL != lpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLargeCarComponent.h", 187 /* ARTIST 0x824B376C */));
 
         mpGuiCache = lpGuiCache;   // this+0xB8
     }

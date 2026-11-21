@@ -1,4 +1,5 @@
 #include "CgsMessage.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // CgsNetwork frame-wrapping free functions (declared in CgsMessage.h in the
 // reference; part of the class:CgsNetwork translation unit).
@@ -9,6 +10,9 @@
 //
 // 16-bit frame numbers wrap modulo 2^16; KU16_INVALID_FRAME (0xFFFF) is reserved
 // and asserted against on entry. Store-for-store faithful to the X360 asm.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h";
 
 namespace CgsNetwork
 {
@@ -49,8 +53,12 @@ namespace CgsNetwork
     // the unsigned forward distance (lu16A - lu16B) is in the near half.
     bool UInt16IsLargerOrEqualWrapped(u16 lu16A, u16 lu16B)
     {
-        CGS_ASSERT(lu16A != KU16_INVALID_FRAME, "lu16A != KU16_INVALID_FRAME");
-        CGS_ASSERT(lu16B != KU16_INVALID_FRAME, "lu16B != KU16_INVALID_FRAME");
+        CGS_ASSERT(lu16A != KU16_INVALID_FRAME,
+            CgsDev::Assert::MessageAt(
+                "lu16A != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 522 /* ARTIST 0x82540F54 */));
+        CGS_ASSERT(lu16B != KU16_INVALID_FRAME,
+            CgsDev::Assert::MessageAt(
+                "lu16B != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 523 /* ARTIST 0x82540F7C */));
         return static_cast<u16>(lu16A - lu16B) < KU16_HALF_OF_FRAMES;
     }
 
@@ -58,8 +66,12 @@ namespace CgsNetwork
     // Strict version: equal frames are not "larger".
     bool UInt16IsLargerWrapped(u16 lu16A, u16 lu16B)
     {
-        CGS_ASSERT(lu16A != KU16_INVALID_FRAME, "lu16A != KU16_INVALID_FRAME");
-        CGS_ASSERT(lu16B != KU16_INVALID_FRAME, "lu16B != KU16_INVALID_FRAME");
+        CGS_ASSERT(lu16A != KU16_INVALID_FRAME,
+            CgsDev::Assert::MessageAt(
+                "lu16A != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 544 /* ARTIST 0x82540FE8 */));
+        CGS_ASSERT(lu16B != KU16_INVALID_FRAME,
+            CgsDev::Assert::MessageAt(
+                "lu16B != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 545 /* ARTIST 0x82541010 */));
         if (lu16A == lu16B)
         {
             return false;

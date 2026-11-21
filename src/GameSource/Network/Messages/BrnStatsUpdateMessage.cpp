@@ -1,7 +1,7 @@
 #include "types.hpp"
 
 #include "GameSource/Network/Messages/BrnStatsUpdateMessage.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::StatsUpdateMessage::Construct             @ 0x8257CF90
@@ -25,6 +25,9 @@
 // re-setting the VALID flag, then stamps frame/type/VALID by hand). Type id 40 (0x28).
 // Reproduced store-for-store against the named base fields. The frame-validity assert keeps
 // the X360 message-base wording.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Messages/BrnStatsUpdateMessage.cpp";
 
 namespace BrnNetwork
 {
@@ -102,10 +105,15 @@ namespace BrnNetwork
                                       s32* lpiNumberOfAchievements,
                                       s32* lpiNumberOfTakedowns)
     {
-        CGS_ASSERT(lpiNumberOfChallenges, "lpiNumberOfChallenges");
-        CGS_ASSERT(lpiNumberOfRivals, "lpiNumberOfRivals");
-        CGS_ASSERT(lpiNumberOfAchievements, "lpiNumberOfAchievements");
-        CGS_ASSERT(lpiNumberOfTakedowns, "lpiNumberOfTakedowns");
+        CGS_ASSERT(lpiNumberOfChallenges,
+            CgsDev::Assert::MessageAt("lpiNumberOfChallenges", KAC_ARTIST_ASSERT_FILE, 101 /* ARTIST 0x8257FF38 */));
+        CGS_ASSERT(lpiNumberOfRivals,
+            CgsDev::Assert::MessageAt("lpiNumberOfRivals", KAC_ARTIST_ASSERT_FILE, 102 /* ARTIST 0x8257FF5C */));
+        CGS_ASSERT(lpiNumberOfAchievements,
+            CgsDev::Assert::MessageAt(
+                "lpiNumberOfAchievements", KAC_ARTIST_ASSERT_FILE, 103 /* ARTIST 0x8257FF80 */));
+        CGS_ASSERT(lpiNumberOfTakedowns,
+            CgsDev::Assert::MessageAt("lpiNumberOfTakedowns", KAC_ARTIST_ASSERT_FILE, 104 /* ARTIST 0x8257FFA4 */));
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {

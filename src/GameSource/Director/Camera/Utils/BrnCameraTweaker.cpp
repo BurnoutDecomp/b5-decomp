@@ -9,10 +9,14 @@
 // caller and a body for that one binder land.
 
 #include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h" // DebugPrinter
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                       // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h" // CGS_ASSERT
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraTweaker.cpp";
 
 namespace BrnDirector
 {
@@ -115,11 +119,21 @@ namespace BrnDirector
             void Tweaker::AddMapping(const char* lpcName, f32* lpfVariableToTweak, f32* lpfScale,
                                      EAxis leAxisToMapTo, EMap leMap)
             {
-                CGS_ASSERT(lpcName != 0, "lpcName != NULL");
-                CGS_ASSERT(lpfVariableToTweak != 0, "lpfVariableToTweak != NULL");
-                CGS_ASSERT(lpfScale != 0, "lpfScale != NULL");
-                CGS_ASSERT(leAxisToMapTo < E_AXIS_COUNT, "leAxisToMapTo < E_AXIS_COUNT");
-                CGS_ASSERT(leMap < E_MAP_COUNT, "leMap < E_MAP_COUNT");
+                CGS_ASSERT(lpcName != 0,
+                    CgsDev::Assert::MessageAt(
+                        "lpcName != NULL", KAC_ARTIST_ASSERT_FILE, 169 /* ARTIST 0x821F861C */));
+                CGS_ASSERT(lpfVariableToTweak != 0,
+                    CgsDev::Assert::MessageAt(
+                        "lpfVariableToTweak != NULL", KAC_ARTIST_ASSERT_FILE, 170 /* ARTIST 0x821F8640 */));
+                CGS_ASSERT(lpfScale != 0,
+                    CgsDev::Assert::MessageAt(
+                        "lpfScale != NULL", KAC_ARTIST_ASSERT_FILE, 171 /* ARTIST 0x821F8664 */));
+                CGS_ASSERT(leAxisToMapTo < E_AXIS_COUNT,
+                    CgsDev::Assert::MessageAt(
+                        "leAxisToMapTo < E_AXIS_COUNT", KAC_ARTIST_ASSERT_FILE, 172 /* ARTIST 0x821F8688 */));
+                CGS_ASSERT(leMap < E_MAP_COUNT,
+                    CgsDev::Assert::MessageAt(
+                        "leMap < E_MAP_COUNT", KAC_ARTIST_ASSERT_FILE, 173 /* ARTIST 0x821F86AC */));
 
                 AxisMapping& lrMapping = maAxisMapping[leMap][leAxisToMapTo];
                 lrMapping.mfScale            = 0.0f;

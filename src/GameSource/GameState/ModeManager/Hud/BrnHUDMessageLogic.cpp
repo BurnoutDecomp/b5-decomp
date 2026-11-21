@@ -1,7 +1,7 @@
 #include "GameSource/GameState/ModeManager/Hud/BrnHUDMessageLogic.h"
 #include "GameSource/GameState/ModeManager/BrnModeManager.h" // CountCheckpointsRemaining / GetGlobalRaceCarOutputInterface
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // StuntModeScoring::IsComboInProgress
 #include "GameSource/GameState/ModeManager/Scoring/BrnRoadRageModeScoring.h" // RoadRageModeScoring::DoesDamageCriticalMessageNeedToBeSent / ResetDamageCriticalMessageFlag
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityActiveRaceCarOutputInterface::IsPlayerCarCrashing (inline)
@@ -37,6 +37,9 @@
 // here as the call (BrnScoringSystem_Timer.cpp documents the same lowering). The
 // `lpCarData != NULL` asserts fire at BrnHUDMessageLogic.cpp:1026 / :1120 / :1120 in the
 // X360 build; preserved via CGS_ASSERT.
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp";
+
 namespace BrnGameState
 {
 namespace
@@ -208,7 +211,9 @@ void HUDMessageLogic::Prepare()
 // `a1` is the object itself because mActionQueue is its first member; here it is named.
 void HUDMessageLogic::PreWorldUpdate(GameStateModuleIO::GameActionQueue* lpOutputGameActionQueue)
 {
-    CGS_ASSERT(lpOutputGameActionQueue != NULL, "lpOutputGameActionQueue != NULL");
+    CGS_ASSERT(lpOutputGameActionQueue != NULL,
+        CgsDev::Assert::MessageAt(
+            "lpOutputGameActionQueue != NULL", KAC_ARTIST_ASSERT_FILE, 116 /* ARTIST 0x82389274 */));
 
     lpOutputGameActionQueue->Append(mActionQueue);
     mActionQueue.Clear();
@@ -1095,7 +1100,8 @@ void HUDMessageLogic::GenerateOnlineStuntRunScoreMessages(ScoringSystem* lpScori
     if (miScoreSampleThisFrame >= KI_SCORE_MILESTONE && miScoreSampleLastFrame < KI_SCORE_MILESTONE)
     {
         const CarData* lpCarData = lpScoringSystem->GetCarData(leWatchedCar);
-        CGS_ASSERT(lpCarData != NULL, "lpCarData != NULL");
+        CGS_ASSERT(lpCarData != NULL,
+            CgsDev::Assert::MessageAt("lpCarData != NULL", KAC_ARTIST_ASSERT_FILE, 1120 /* ARTIST 0x82394D18 */));
 
         StuntRunScoreMessage lMessage;
         lMessage.mNetworkPlayerID = lpCarData->GetNetworkPlayerID();

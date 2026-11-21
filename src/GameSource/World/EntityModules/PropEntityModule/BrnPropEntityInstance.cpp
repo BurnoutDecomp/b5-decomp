@@ -21,11 +21,14 @@
 #include "SharedClasses/Physics/Props/BrnPhysicsPropInstanceData.h" // PropInstanceData (the serialised record)
 #include "SharedClasses/Physics/Props/BrnPhysicsPropTypeData.h"   // PropTypeData (mCOMOffset / parts / IsLamppost)
 #include "SharedClasses/Physics/Props/BrnPropEntityID.h"          // BrnWorld::PropEntityID (by-value param -- needs complete type)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"                        // rw::math::vpu::Dot (UpdateConstraints axis dots)
 
 #include <cmath>    // std::acos / std::fabs
 #include <cstddef>  // offsetof (the host layout pins at the foot of this file)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\World\\EntityModules\\PropEntityModule\\BrnPropEntityInstance.h";
 
 namespace BrnWorld
 {
@@ -156,14 +159,18 @@ namespace BrnWorld
     // X360 (subfc/subfe carry trick) -> a plain unsigned compare here.
     bool PropEntityInstance::IsSmashed() const
     {
-        CGS_ASSERT(mu8State < E_STATE_COUNT, "mu8State < E_STATE_COUNT");
+        CGS_ASSERT(mu8State < E_STATE_COUNT,
+            CgsDev::Assert::MessageAt(
+                "mu8State < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 653 /* ARTIST 0x822B82F0 */));
         return mu8State >= E_SMASHED;
     }
 
     // @ 0x822B8338. True when the prop is in the plain physical state (state == E_PHYSICAL).
     bool PropEntityInstance::IsPhysical() const
     {
-        CGS_ASSERT(mu8State < E_STATE_COUNT, "mu8State < E_STATE_COUNT");
+        CGS_ASSERT(mu8State < E_STATE_COUNT,
+            CgsDev::Assert::MessageAt(
+                "mu8State < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 653 /* ARTIST 0x822B8360 */));
         return mu8State == E_PHYSICAL;
     }
 
@@ -228,14 +235,18 @@ namespace BrnWorld
     // EndAssert triple), after which it returns the same byte.
     EPropState PropEntityInstance::GetState() const
     {
-        CGS_ASSERT(mu8State < E_STATE_COUNT, "mu8State < E_STATE_COUNT");
+        CGS_ASSERT(mu8State < E_STATE_COUNT,
+            CgsDev::Assert::MessageAt(
+                "mu8State < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 653 /* ARTIST 0x822A1B90 */));
         return static_cast<EPropState>(mu8State);
     }
 
     // @ 0x822A1BC0. Set the prop's simulation state (range-checked against E_STATE_COUNT).
     void PropEntityInstance::SetState(EPropState leState)
     {
-        CGS_ASSERT(leState < E_STATE_COUNT, "leState < E_STATE_COUNT");
+        CGS_ASSERT(leState < E_STATE_COUNT,
+            CgsDev::Assert::MessageAt(
+                "leState < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 666 /* ARTIST 0x822A1BEC */));
         mu8State = static_cast<u8>(leState);   // +77
     }
 

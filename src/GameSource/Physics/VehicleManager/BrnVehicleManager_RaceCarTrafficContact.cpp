@@ -59,7 +59,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"   // GetVehicleSpecies
 #include "GameSource/World/BrnEntityTypes.h"                                       // BrnWorld::EEntityTypeID
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "vendor/renderware/collision/CollisionVolume.hpp"   // rw::collision::BoxVolume (PredictCarCarIntersection)
 #include "vendor/renderware/collision/GPInstance.hpp"        // rw::collision::PrimitivePairIntersect(+Result)
@@ -70,6 +70,9 @@
 #include <cstdlib>   // getenv (BRN_TRAFFIC_DIAG)
 #include <cmath>     // sqrtf / fabsf
 #include <cstddef>   // std::ptrdiff_t (the memo identity)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnVehicleManager.cpp";
 
 namespace BrnPhysics
 {
@@ -823,11 +826,17 @@ void VehicleManager::HandleCrashPredictionForRaceCarAndTrafficVehicle(
     VehicleManagerOutputInterface* lpManagerOutputInterface,
     BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface)
 {
-    CGS_ASSERT(lpContactPairAverager != 0, "lpContactPairAverager");
-    CGS_ASSERT(lpVehicleOutputInterface != 0, "lpVehicleOutputInterface");
-    CGS_ASSERT(lpManagerOutputInterface != 0, "lpVehicleManagerOutputInterface");
-    CGS_ASSERT(lpRequestOutputInterface != 0, "lpRequestOutputInterface");
-    CGS_ASSERT(lpDeformationInterface != 0, "lpDeformationInterface");
+    CGS_ASSERT(lpContactPairAverager != 0,
+        CgsDev::Assert::MessageAt("lpContactPairAverager", KAC_ARTIST_ASSERT_FILE, 9523 /* ARTIST 0x82640AF4 */));
+    CGS_ASSERT(lpVehicleOutputInterface != 0,
+        CgsDev::Assert::MessageAt("lpVehicleOutputInterface", KAC_ARTIST_ASSERT_FILE, 9524 /* ARTIST 0x82640B18 */));
+    CGS_ASSERT(lpManagerOutputInterface != 0,
+        CgsDev::Assert::MessageAt(
+            "lpVehicleManagerOutputInterface", KAC_ARTIST_ASSERT_FILE, 9525 /* ARTIST 0x82640B3C */));
+    CGS_ASSERT(lpRequestOutputInterface != 0,
+        CgsDev::Assert::MessageAt("lpRequestOutputInterface", KAC_ARTIST_ASSERT_FILE, 9526 /* ARTIST 0x82640B60 */));
+    CGS_ASSERT(lpDeformationInterface != 0,
+        CgsDev::Assert::MessageAt("lpDeformationInterface", KAC_ARTIST_ASSERT_FILE, 9527 /* ARTIST 0x82640B84 */));
 
     for (u32 luPair = 0; luPair < lpContactPairAverager->muContactPairCount; ++luPair)
     {

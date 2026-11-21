@@ -1,6 +1,6 @@
 #include "GameSource/Director/Utils/BrnICEMoviePlayer.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"    // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint (boot witness)
 #include "GameSource/Director/BrnDirectorICEWrapper.h"     // BrnDirector::ICEWrapper (PlayMovie / IsPlayingMovie / GetCamera)
@@ -16,6 +16,8 @@
 // (FLAGGED there); the calls below name the methods those bodies will land with when the
 // real Camera TUs are reconstructed.
 // ============================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp";
 
 namespace BrnDirector
 {
@@ -379,7 +381,8 @@ void ICEMoviePlayer::Construct()
 // ----------------------------------------------------------------------------
 bool ICEMoviePlayer::Prepare(ICEWrapper* lpICEWrapper)
 {
-    CGS_ASSERT(lpICEWrapper != 0, "lpICEWrapper != NULL");
+    CGS_ASSERT(lpICEWrapper != 0,
+        CgsDev::Assert::MessageAt("lpICEWrapper != NULL", KAC_ARTIST_ASSERT_FILE, 460 /* ARTIST 0x821F7CF4 */));
     mpICEWrapper = lpICEWrapper;
     return true;
 }
@@ -454,8 +457,10 @@ void ICEMoviePlayer::Play()
 // ----------------------------------------------------------------------------
 void ICEMoviePlayer::Loop()
 {
-    CGS_ASSERT(mpICEWrapper != 0, "mpICEWrapper != NULL");
-    CGS_ASSERT(!mbIsPlaying, "!mbIsPlaying");
+    CGS_ASSERT(mpICEWrapper != 0,
+        CgsDev::Assert::MessageAt("mpICEWrapper != NULL", KAC_ARTIST_ASSERT_FILE, 494 /* ARTIST 0x82251374 */));
+    CGS_ASSERT(!mbIsPlaying,
+        CgsDev::Assert::MessageAt("!mbIsPlaying", KAC_ARTIST_ASSERT_FILE, 495 /* ARTIST 0x8225139C */));
 
     Play();
     mbIsLooping = true;
@@ -469,10 +474,14 @@ void ICEMoviePlayer::Loop()
 // ----------------------------------------------------------------------------
 void ICEMoviePlayer::CutToInterpolateOut()
 {
-    CGS_ASSERT(mpICEWrapper != 0, "mpICEWrapper != NULL");
-    CGS_ASSERT(mbIsPlaying, "mbIsPlaying");
-    CGS_ASSERT(mbIsLooping, "mbIsLooping");
-    CGS_ASSERT(mbShouldInterpolateOut, "mbShouldInterpolateOut");
+    CGS_ASSERT(mpICEWrapper != 0,
+        CgsDev::Assert::MessageAt("mpICEWrapper != NULL", KAC_ARTIST_ASSERT_FILE, 506 /* ARTIST 0x821F7D64 */));
+    CGS_ASSERT(mbIsPlaying,
+        CgsDev::Assert::MessageAt("mbIsPlaying", KAC_ARTIST_ASSERT_FILE, 507 /* ARTIST 0x821F7D8C */));
+    CGS_ASSERT(mbIsLooping,
+        CgsDev::Assert::MessageAt("mbIsLooping", KAC_ARTIST_ASSERT_FILE, 508 /* ARTIST 0x821F7DB4 */));
+    CGS_ASSERT(mbShouldInterpolateOut,
+        CgsDev::Assert::MessageAt("mbShouldInterpolateOut", KAC_ARTIST_ASSERT_FILE, 509 /* ARTIST 0x821F7DDC */));
 
     mbInterpolateOutNow = true;
 }
@@ -632,7 +641,10 @@ void ICEMoviePlayer::Update(Camera::BehaviourManager& lrBehaviourManager)
 // ----------------------------------------------------------------------------
 const Camera::Camera& ICEMoviePlayer::GetCamera() const
 {
-    CGS_ASSERT(mbIsPlaying, "mbIsPlaying");
+    CGS_ASSERT(mbIsPlaying,
+        CgsDev::Assert::MessageAt(
+            "mbIsPlaying",
+            "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.h", 434 /* ARTIST 0x821F59C8 */));
     return mCamera;
 }
 

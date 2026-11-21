@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Graphics/CgsModel.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"  // ShaderConstantTable
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h" // DrawRenderable::AddToBin
 
@@ -13,6 +13,8 @@
 //
 // All member reads are BY NAME; offsets quoted in CgsModel.h match the asm
 // (lbz 0x10/0x12, lwz 0/4/8 of `this`).
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsModel.h";
 
 namespace CgsGraphics
 {
@@ -39,10 +41,13 @@ namespace CgsGraphics
     //     -> mppRenderables[index]  (rotlwi by 2 == *4 byte stride of a 32-bit pointer table)
     const Renderable* Model::GetRenderable(State leState) const
     {
-        CGS_ASSERT(leState < mu8NumStates, "leState < mu8NumStates");
+        CGS_ASSERT(leState < mu8NumStates,
+            CgsDev::Assert::MessageAt(
+                "leState < mu8NumStates", KAC_ARTIST_ASSERT_FILE, 309 /* ARTIST 0x822A0AF8 */));
 
         const u32 luIndex = mpu8StateRenderableIndices[static_cast<u32>(leState)];
-        CGS_ASSERT(!(luIndex == 255u || luIndex >= mu8NumRenderables), "State does not exist");
+        CGS_ASSERT(!(luIndex == 255u || luIndex >= mu8NumRenderables),
+            CgsDev::Assert::MessageAt("State does not exist", KAC_ARTIST_ASSERT_FILE, 310 /* ARTIST 0x822A0B30 */));
 
         return mppRenderables[static_cast<u32>(mpu8StateRenderableIndices[static_cast<u32>(leState)])];
     }
@@ -76,7 +81,8 @@ namespace CgsGraphics
     //     -> mpfLodDistances[luLodIndex]  (single-precision load; returned in f1)
     f32 Model::GetLodDistance(u32 luLodIndex) const
     {
-        CGS_ASSERT(luLodIndex < mu8NumStates, "Invalid LOD index");
+        CGS_ASSERT(luLodIndex < mu8NumStates,
+            CgsDev::Assert::MessageAt("Invalid LOD index", KAC_ARTIST_ASSERT_FILE, 367 /* ARTIST 0x822A0C30 */));
 
         return mpfLodDistances[luLodIndex];
     }

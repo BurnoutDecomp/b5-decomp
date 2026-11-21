@@ -18,7 +18,7 @@
 #include "SharedClasses/Traffic/Junctions/BrnJunctionLogicBox.h" // JunctionLogicBox
 #include "SharedClasses/Traffic/Junctions/BrnTrafficStopLine.h" // StopLine
 #include "GameShared/GameClasses/Core/CgsID.h"           // CgsIDUnCompress
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"   // GetHull / GetHullRuntime / maaRaceCarHulls
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"      // traffic capacities / sentinels
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"          // Param, transforms, history and slow data
@@ -84,6 +84,10 @@ void TrafficDrawState(bool state, u32 colour, CgsDev::Debug3DImmediateRender* di
     transform.Pos() = transform.Pos() + row;
 }
 }
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.cpp";
 
 namespace BrnTraffic
 {
@@ -273,7 +277,8 @@ namespace BrnTraffic
     // @0x82760AB0. Preserve the X360 HUD ordering and its module-owned perfmon gate.
     void DebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay)
     {
-        CGS_ASSERT(mpModule != 0, "mpModule != NULL");
+        CGS_ASSERT(mpModule != 0,
+            CgsDev::Assert::MessageAt("mpModule != NULL", KAC_ARTIST_ASSERT_FILE, 495 /* ARTIST 0x82760AE0 */));
 
         if (mbDrawPlayerHullId)
             DrawPlayerCarHullId(lpDisplay);
@@ -502,7 +507,8 @@ namespace BrnTraffic
     void DebugComponent::FireAirRam(void* lpUserData)
     {
         DebugComponent* const lpComponent = static_cast<DebugComponent*>(lpUserData);
-        CGS_ASSERT(lpComponent != 0, "lpComponent");
+        CGS_ASSERT(lpComponent != 0,
+            CgsDev::Assert::MessageAt("lpComponent", KAC_ARTIST_ASSERT_FILE, 2719 /* ARTIST 0x8275052C */));
         lpComponent->mpModule->meDEBUGAirRamToFire = lpComponent->miAirRamTypeToFire;
     }
 
@@ -540,7 +546,8 @@ namespace BrnTraffic
     void DebugComponent::ReloadBehaviourData(void* lpUserData)
     {
         DebugComponent* const lpComponent = static_cast<DebugComponent*>(lpUserData);
-        CGS_ASSERT(lpComponent != 0, "lpComponent");
+        CGS_ASSERT(lpComponent != 0,
+            CgsDev::Assert::MessageAt("lpComponent", KAC_ARTIST_ASSERT_FILE, 3593 /* ARTIST 0x827614FC */));
         lpComponent->mpModule->mFuzzyBehaviours.ReloadBehaviours();
     }
 

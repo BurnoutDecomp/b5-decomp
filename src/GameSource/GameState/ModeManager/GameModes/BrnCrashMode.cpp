@@ -1,6 +1,6 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnCrashMode.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGameState
 {
@@ -75,7 +75,11 @@ void CrashMode::SendEvent(EGameModeEvent leEvent)
         case 5:   // Quit -- terminal
             return;
         default:
-            CGS_ASSERT(false, "Should not be in this state in Showtime mode!");
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt(
+                    "Should not be in this state in Showtime mode!",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                    "../GameState/ModeManager/GameModes/BrnCrashMode.cpp", 151 /* ARTIST 0x82330B60 */));
             break;
     }
 }

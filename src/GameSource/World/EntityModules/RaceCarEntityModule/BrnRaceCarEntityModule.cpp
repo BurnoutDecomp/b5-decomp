@@ -47,7 +47,7 @@
 // the remaining 79 methods.
 // ============================================================================
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "SharedClasses/Progression/BrnTrainingTypes.h"   // BrnProgression::ETrainingType
 
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h" // OutputBuffer_Prepare
@@ -100,6 +100,10 @@
 #include <cmath>     // sqrtf
 #include <cstddef>   // offsetof (the action-276 record pin)
 #include <limits>    // numeric_limits<f32>::max() (the original nearest-AI sentinel)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.cpp";
 
 namespace BrnWorld
 {
@@ -6942,7 +6946,8 @@ void RaceCarEntityModule::UpdateActiveCars( f32 lfTimeStep, f32 lfTimeStepMultip
 // ============================================================================
 void RaceCarEntityModule::SendAddedForCollisionStateToPhysics( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput )
 {
-    CGS_ASSERT( lpVehicleInput != 0, "lpVehicleOutput != NULL" );
+    CGS_ASSERT( lpVehicleInput != 0,
+        CgsDev::Assert::MessageAt("lpVehicleOutput != NULL", KAC_ARTIST_ASSERT_FILE, 4381 /* ARTIST 0x822BD754 */));
 
     for( s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar )
     {
@@ -7710,7 +7715,8 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
 void RaceCarEntityModule::StorePlayerRoutePortalPositions(
         const RaceCarEntityModuleIO::InputBuffer_PostPhysics* lpInput)
 {
-    CGS_ASSERT(lpInput != 0, "lpInput != NULL");
+    CGS_ASSERT(lpInput != 0,
+        CgsDev::Assert::MessageAt("lpInput != NULL", KAC_ARTIST_ASSERT_FILE, 2832 /* ARTIST 0x822BD6C4 */));
     mPlayersCurrentRouteNodePosition = lpInput->GetAIRaceCarInterface()->mCurrentNodePosition;
     mPlayersNextRouteNodePosition = lpInput->GetAIRaceCarInterface()->mNextNodePosition;
 }

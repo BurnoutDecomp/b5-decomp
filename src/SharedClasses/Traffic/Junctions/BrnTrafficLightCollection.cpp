@@ -20,12 +20,16 @@
 // ============================================================================
 
 #include "SharedClasses/Traffic/Junctions/BrnTrafficLightCollection.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream
 #include "rw/math/vpu/vector3_operation.h"                    // IsValid
 #include "rw/math/vpu/matrix44affine_operation.h"             // TransformPoint
 
 #include <cmath>                                              // std::floor
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\Junctions/BrnTrafficLightCollection.h";
 
 namespace BrnTraffic
 {
@@ -116,8 +120,11 @@ namespace BrnTraffic
     // -- CalcInstanceTransform @ 0x82753910 ---------------------------------------
     Matrix44Affine TrafficLightCollection::CalcInstanceTransform(u32 luInstance) const
     {
-        CGS_ASSERT(luInstance < muNumTrafficLights, "luInstance < muNumTrafficLights");
-        CGS_ASSERT(mpaPosAndYRotations, "mpaPosAndYRotations");
+        CGS_ASSERT(luInstance < muNumTrafficLights,
+            CgsDev::Assert::MessageAt(
+                "luInstance < muNumTrafficLights", KAC_ARTIST_ASSERT_FILE, 248 /* ARTIST 0x82753944 */));
+        CGS_ASSERT(mpaPosAndYRotations,
+            CgsDev::Assert::MessageAt("mpaPosAndYRotations", KAC_ARTIST_ASSERT_FILE, 249 /* ARTIST 0x8275396C */));
 
         return ExpandPosPlusYRotToTransform(mpaPosAndYRotations[luInstance]);
     }
@@ -235,7 +242,9 @@ namespace BrnTraffic
     // -- GetInstanceType @ 0x8274F438 ---------------------------------------------
     u32 TrafficLightCollection::GetInstanceType(u32 luInstance) const
     {
-        CGS_ASSERT(luInstance < muNumTrafficLights, "luInstance < muNumTrafficLights");
+        CGS_ASSERT(luInstance < muNumTrafficLights,
+            CgsDev::Assert::MessageAt(
+                "luInstance < muNumTrafficLights", KAC_ARTIST_ASSERT_FILE, 208 /* ARTIST 0x8274F468 */));
 
         return mpauInstanceTypes[luInstance];
     }
@@ -243,7 +252,9 @@ namespace BrnTraffic
     // -- GetTrafficLightType @ 0x8274F4A0 -----------------------------------------
     const TrafficLightType* TrafficLightCollection::GetTrafficLightType(u32 luType) const
     {
-        CGS_ASSERT(luType < muNumTrafficLightTypes, "luType < muNumTrafficLightTypes");
+        CGS_ASSERT(luType < muNumTrafficLightTypes,
+            CgsDev::Assert::MessageAt(
+                "luType < muNumTrafficLightTypes", KAC_ARTIST_ASSERT_FILE, 215 /* ARTIST 0x8274F4D0 */));
 
         return &mpaTrafficLightTypes[luType];
     }

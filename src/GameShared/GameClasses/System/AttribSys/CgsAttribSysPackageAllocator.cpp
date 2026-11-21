@@ -1,9 +1,12 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"          // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // CgsDev::StrStream (OOM message build)
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"     // CgsMemory::HeapMalloc
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h" // AttribSysMemoryManager::HasMemoryBuffer (deallocate)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysPackageAllocator.h";
 
 namespace CgsAttribSys
 {
@@ -26,9 +29,12 @@ void AttribSysPackageAllocator::Construct(EAttribSysUserPackage leUserPackage)
 // +0x0C=0, +0x04=1, +0x10=0; returns 1.)
 bool AttribSysPackageAllocator::Prepare(CgsMemory::HeapMalloc* lpHeapAllocator, s32 liAlignment)
 {
-    CGS_ASSERT(mbHasAllocator == false, "mbHasAllocator == false");
-    CGS_ASSERT(lpHeapAllocator != NULL, "lpHeapAllocator != NULL");
-    CGS_ASSERT(GetUserPackageName(), "GetUserPackageName()");
+    CGS_ASSERT(mbHasAllocator == false,
+        CgsDev::Assert::MessageAt("mbHasAllocator == false", KAC_ARTIST_ASSERT_FILE, 214 /* ARTIST 0x828041E4 */));
+    CGS_ASSERT(lpHeapAllocator != NULL,
+        CgsDev::Assert::MessageAt("lpHeapAllocator != NULL", KAC_ARTIST_ASSERT_FILE, 215 /* ARTIST 0x82804208 */));
+    CGS_ASSERT(GetUserPackageName(),
+        CgsDev::Assert::MessageAt("GetUserPackageName()", KAC_ARTIST_ASSERT_FILE, 216 /* ARTIST 0x82804234 */));
 
     mpHeapAllocator = lpHeapAllocator;
     miAlignment     = liAlignment;
@@ -94,7 +100,8 @@ void AttribSysPackageAllocator::Free(void* lpBlock, size_t /*lnSize*/)
 // is live, then hands the block straight back to the adopted heap.
 void AttribSysPackageAllocator::Free(void* lpBlock)
 {
-    CGS_ASSERT(mbHasAllocator, "mbHasAllocator");
+    CGS_ASSERT(mbHasAllocator,
+        CgsDev::Assert::MessageAt("mbHasAllocator", KAC_ARTIST_ASSERT_FILE, 324 /* ARTIST 0x828020F8 */));
 
     mpHeapAllocator->Free(lpBlock);
 }

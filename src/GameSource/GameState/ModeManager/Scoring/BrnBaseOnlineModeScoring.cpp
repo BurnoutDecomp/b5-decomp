@@ -1,11 +1,17 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 // UpdatePlayerTeams (below) reads the scoring system's per-car team through
 // ScoringSystem::GetPlayerTeam. The class header only forward-declares ScoringSystem
 // (deliberately -- BrnScoringSystem.h embeds the online scorers BY VALUE, so the
 // HEADERS may not include each other); this .cpp can and must complete the type.
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.cpp";
+static const char KAC_ARTIST_ASSERT_HEADER[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\scoring\\BrnBaseOnlineModeScoring.h";
 
 namespace BrnGameState
 {
@@ -14,8 +20,11 @@ namespace BrnGameState
 // then upper-bound), each with its own baked-in message string and source line (343 / 344).
 s32 BaseOnlineModeScoring::GetPlayerPosition(s32 liRaceCarIndex)
 {
-    CGS_ASSERT(liRaceCarIndex >= 0, "liRaceCarIndex >= 0");
-    CGS_ASSERT(liRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS, "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+    CGS_ASSERT(liRaceCarIndex >= 0,
+        CgsDev::Assert::MessageAt("liRaceCarIndex >= 0", KAC_ARTIST_ASSERT_HEADER, 343 /* ARTIST 0x82310724 */));
+    CGS_ASSERT(liRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS,
+        CgsDev::Assert::MessageAt(
+            "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_HEADER, 344 /* ARTIST 0x82310748 */));
     return maiPlayerPositions[liRaceCarIndex];
 }
 
@@ -197,7 +206,8 @@ void BaseOnlineModeScoring::CompareFinishTime(const CgsSystem::Time* lpTime1,
 void BaseOnlineModeScoring::CompareCheckpointsReached(s32 liCheckpoints1, s32 liCheckpoints2,
                                                       s32* lpiResult)
 {
-    CGS_ASSERT(lpiResult != NULL, "lpiResult != NULL");
+    CGS_ASSERT(lpiResult != NULL,
+        CgsDev::Assert::MessageAt("lpiResult != NULL", KAC_ARTIST_ASSERT_FILE, 1134 /* ARTIST 0x82314950 */));
 
     if (*lpiResult == 0)
     {
@@ -217,7 +227,8 @@ void BaseOnlineModeScoring::CompareCheckpointsReached(s32 liCheckpoints1, s32 li
 // less/equal branch as CompareCheckpointsReached.
 void BaseOnlineModeScoring::CompareTakedowns(s32 liTakedowns1, s32 liTakedowns2, s32* lpiResult)
 {
-    CGS_ASSERT(lpiResult != NULL, "lpiResult != NULL");
+    CGS_ASSERT(lpiResult != NULL,
+        CgsDev::Assert::MessageAt("lpiResult != NULL", KAC_ARTIST_ASSERT_FILE, 1168 /* ARTIST 0x823149D0 */));
 
     if (*lpiResult == 0)
     {
@@ -240,7 +251,8 @@ void BaseOnlineModeScoring::CompareTakedowns(s32 liTakedowns1, s32 liTakedowns2,
 void BaseOnlineModeScoring::CompareTimeAsRunner(CgsSystem::Time lTime1, CgsSystem::Time lTime2,
                                                 s32* lpiResult)
 {
-    CGS_ASSERT(lpiResult != NULL, "lpiResult != NULL");
+    CGS_ASSERT(lpiResult != NULL,
+        CgsDev::Assert::MessageAt("lpiResult != NULL", KAC_ARTIST_ASSERT_FILE, 1236 /* ARTIST 0x82314A50 */));
 
     if (*lpiResult == 0)
     {

@@ -1,6 +1,6 @@
 #include "GameSource/GameState/BrnGameActions.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::K_INVALID_PLAYER_ID
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // OnlineGameResults round-index runtime asserts
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
@@ -24,6 +24,8 @@ const float KF_QUERY_POS_EPSILON = 1.1920928955078125e-07f;
 // It compiled only because NOTHING EVER LINKED THIS FILE: mounting it in build_game_exe.bat
 // turned the fork into eight hard compile errors on the first try. The real
 // `*CgsDev::Log::gpDebugPrint << ...` chain is used below instead.
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\GameState/BrnGameActions.h";
 
 namespace BrnGameState
 {
@@ -135,8 +137,12 @@ void OnlinePlayerRemovedAction::SetActiveRaceCarIndex(EActiveRaceCarIndex leActi
 void RankInfoResponseAction::SetProgressionRanks(s32 liPlayerRank, s32 liRankCount, s32 liOfflineRace,
                                                  s32 liRoadRage, s32 liStuntAttack, s32 liMarkedMan)
 {
-    CGS_ASSERT(liPlayerRank < liRankCount, "liPlayerRank < liRankCount");
-    CGS_ASSERT(liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK, "liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK");
+    CGS_ASSERT(liPlayerRank < liRankCount,
+        CgsDev::Assert::MessageAt(
+            "liPlayerRank < liRankCount", KAC_ARTIST_ASSERT_FILE, 6879 /* ARTIST 0x823554EC */));
+    CGS_ASSERT(liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK,
+        CgsDev::Assert::MessageAt(
+            "liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK", KAC_ARTIST_ASSERT_FILE, 6880 /* ARTIST 0x82355510 */));
 
     miPlayerRank  = liPlayerRank;
     miOfflineRace = liOfflineRace;
@@ -171,7 +177,8 @@ void PrepareForModeAction::Construct(const GameModeParams* lpGameModeParams,
                                      s32                    liCurrentRound,
                                      bool                   lbComingFromOnlineLobbyMode)
 {
-    CGS_ASSERT(lpGameModeParams, "lpGameModeParams");
+    CGS_ASSERT(lpGameModeParams,
+        CgsDev::Assert::MessageAt("lpGameModeParams", KAC_ARTIST_ASSERT_FILE, 1183 /* ARTIST 0x8230FE1C */));
 
     mePrepareForModeStage             = E_PFM_STAGE_ALL_IN_ONE;
     mGameModeParams                   = *lpGameModeParams;
@@ -229,8 +236,12 @@ bool PrepareForModeAction::GetPlayerDisconnected(BrnNetwork::NetworkPlayerID lNe
 // list, then bump the count. The two asserts bound the count (>= 0 and < KI_MAX_ACTIVE_RACE_CARS - 1).
 void PrepareForModeAction::SetPlayerDisconnected(BrnNetwork::NetworkPlayerID lPlayerID)
 {
-    CGS_ASSERT(miNumPlayersDisconnected >= 0, "miNumPlayersDisconnected >= 0");
-    CGS_ASSERT(miNumPlayersDisconnected < 7, "miNumPlayersDisconnected < (BrnWorld::KI_MAX_ACTIVE_RACE_CARS - 1)");
+    CGS_ASSERT(miNumPlayersDisconnected >= 0,
+        CgsDev::Assert::MessageAt(
+            "miNumPlayersDisconnected >= 0", KAC_ARTIST_ASSERT_FILE, 1160 /* ARTIST 0x8230FD90 */));
+    CGS_ASSERT(miNumPlayersDisconnected < 7,
+        CgsDev::Assert::MessageAt(
+            "miNumPlayersDisconnected < (BrnWorld::KI_MAX_ACTIVE_RACE_CARS - 1)", KAC_ARTIST_ASSERT_FILE, 1161 /* ARTIST 0x8230FDB8 */));
 
     maDisconnectedNetworkPlayerID[miNumPlayersDisconnected] = lPlayerID;
     ++miNumPlayersDisconnected;

@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"  // CgsResource::LuaCodeResource
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"              // CgsMemory::HeapMalloc
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress / CgsIDUnCompress
-#include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT (flagged assert substitute)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                    // CGS_ASSERT (flagged assert substitute)
 
 #include <cstring>   // strncpy
 
@@ -21,6 +21,9 @@ extern "C" {
 //  signatures (CgsLuaState.cpp).
 // ===========================================================================
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fsm\\CgsLuaState.cpp";
+
 namespace CgsFsm
 {
 
@@ -34,7 +37,8 @@ void LuaState::Construct()
 // @ 0x82835D60 -- the Lua allocator. lua_Alloc contract: nsize==0 frees, else (re)allocates.
 void* LuaState::LuaAllocator(void* lpData, void* lpPointer, usize /*luOldSize*/, usize luNewSize)
 {
-    CGS_ASSERT(lpData != 0, "lpData != NULL");
+    CGS_ASSERT(lpData != 0,
+        CgsDev::Assert::MessageAt("lpData != NULL", KAC_ARTIST_ASSERT_FILE, 412 /* ARTIST 0x82835D88 */));
     CgsMemory::HeapMalloc* lpHeap = static_cast<CgsMemory::HeapMalloc*>(lpData);
     if (luNewSize == 0)
     {
@@ -77,7 +81,8 @@ bool LuaState::IsLuaResourceValid() const
 // @ 0x82835DD0 -- uncompress the CgsID to its printable form, drop the space padding, push it.
 void LuaState::LuaPushId(CgsID lId)
 {
-    CGS_ASSERT(mpLuaState != 0, "mpLuaState");
+    CGS_ASSERT(mpLuaState != 0,
+        CgsDev::Assert::MessageAt("mpLuaState", KAC_ARTIST_ASSERT_FILE, 438 /* ARTIST 0x82835E00 */));
     char lacId[KI_CGSID_STRING_LEN];
     CgsIDUnCompress(lId, lacId);
     for (int li = 0; li < KI_CGSID_STRING_LEN; ++li)

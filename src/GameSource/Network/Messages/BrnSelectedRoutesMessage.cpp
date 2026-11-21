@@ -2,7 +2,7 @@
 
 #include "GameSource/Network/Messages/BrnSelectedRoutesMessage.h"
 #include "GameSource/GameState/BrnGameStateTypes.h"       // BrnGameState::LandmarkIndex
-#include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"         // CGS_ASSERT
 
 #include <cstring>                                          // memcpy (the X360 44-byte payload moves)
 
@@ -36,6 +36,9 @@
 // names; reproduced here as the plain integer arithmetic the asm emits (the 0x39000000
 // is the `lis r9, 0x3900` / `oris r11, r11, 0x3900` immediate in the instruction stream,
 // not an undecoded rodata constant).
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Messages/BrnSelectedRoutesMessage.cpp";
 
 namespace BrnNetwork
 {
@@ -105,15 +108,21 @@ namespace BrnNetwork
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
             return;
 
-        CGS_ASSERT(lpEvent != 0, "lpEvent");
-        CGS_ASSERT(liRoundNumber >= KI_MIN_ROUND_NUM, "liRoundNumber>=KI_MIN_ROUND_NUM");
-        CGS_ASSERT(liRoundNumber <= KI_MAX_ROUND_NUM, "liRoundNumber<=KI_MAX_ROUND_NUM");
+        CGS_ASSERT(lpEvent != 0,
+            CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 95 /* ARTIST 0x8257AFC4 */));
+        CGS_ASSERT(liRoundNumber >= KI_MIN_ROUND_NUM,
+            CgsDev::Assert::MessageAt(
+                "liRoundNumber>=KI_MIN_ROUND_NUM", KAC_ARTIST_ASSERT_FILE, 96 /* ARTIST 0x8257AFE8 */));
+        CGS_ASSERT(liRoundNumber <= KI_MAX_ROUND_NUM,
+            CgsDev::Assert::MessageAt(
+                "liRoundNumber<=KI_MAX_ROUND_NUM", KAC_ARTIST_ASSERT_FILE, 97 /* ARTIST 0x8257B00C */));
 
         miRoundNumber = liRoundNumber;          // stw, +0x54
         mEvent        = *lpEvent;               // 44-byte payload copy in (memcpy +0x28, 0x2C)
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_SELECTED_ROUTES_MESSAGE_TYPE, lu16Frame);
-        CGS_ASSERT(IsReliable(), "IsReliable()");
+        CGS_ASSERT(IsReliable(),
+            CgsDev::Assert::MessageAt("IsReliable()", KAC_ARTIST_ASSERT_FILE, 103 /* ARTIST 0x8257B06C */));
     }
 
     // ---------------------------------------------------------------------------------

@@ -1,7 +1,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/texture2d.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMovieVideoRenderer.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMoviePlayer.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
 #include <cstring>
@@ -13,6 +13,9 @@
 // transform: position queries assert-false and return 0, scale queries assert-false and return the
 // identity 1, the position setters accept only 0 (flt_82001CC0), the scale setters accept only 1
 // (flt_82001C98), and the renderer adds no rendering delay.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\movieplayer\\CgsMovieVideoRenderer.h";
 
 namespace CgsGraphics
 {
@@ -241,14 +244,16 @@ namespace CgsGraphics
     // @ 0x827EAC30. Position-X query is unsupported: asserts-false and returns 0.
     float MovieVideoRenderer::GetPositionX()
     {
-        CGS_ASSERT(false, "false");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 112 /* ARTIST 0x827EAC44 */));
         return 0.0f;
     }
 
     // @ 0x827EACC0. Position-Z query is unsupported: asserts-false and returns 0.
     float MovieVideoRenderer::GetPositionZ()
     {
-        CGS_ASSERT(false, "false");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 114 /* ARTIST 0x827EACD4 */));
         return 0.0f;
     }
 
@@ -261,14 +266,16 @@ namespace CgsGraphics
     // @ 0x827EADA8. Scale-X query is unsupported: asserts-false and returns identity 1.
     float MovieVideoRenderer::GetScaleX()
     {
-        CGS_ASSERT(false, "false");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 117 /* ARTIST 0x827EADBC */));
         return 1.0f;
     }
 
     // @ 0x827EADF0. Scale-Y query is unsupported: asserts-false and returns identity 1.
     float MovieVideoRenderer::GetScaleY()
     {
-        CGS_ASSERT(false, "false");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 118 /* ARTIST 0x827EAE04 */));
         return 1.0f;
     }
 
@@ -278,32 +285,37 @@ namespace CgsGraphics
     {
         if (lfPositionX != 0.0f)
         {
-            CGS_ASSERT(false, "false");
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 109 /* ARTIST 0x827EAB64 */));
         }
     }
 
     // @ 0x827EAB90. Default position Y is 0.0f (flt_82001CC0); any other value asserts.
     void MovieVideoRenderer::SetPositionY(float lfPositionY)
     {
-        CGS_ASSERT(lfPositionY == 0.0f, "false");
+        CGS_ASSERT(lfPositionY == 0.0f,
+            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 110 /* ARTIST 0x827EABB4 */));
     }
 
     // @ 0x827EABE0. Default position Z is 0.0f (flt_82001CC0); any other value asserts.
     void MovieVideoRenderer::SetPositionZ(float lfPositionZ)
     {
-        CGS_ASSERT(lfPositionZ == 0.0f, "false");
+        CGS_ASSERT(lfPositionZ == 0.0f,
+            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 111 /* ARTIST 0x827EAC04 */));
     }
 
     // @ 0x827EAD08. Default X scale is 1.0f (flt_82001C98); any other value asserts.
     void MovieVideoRenderer::SetScaleX(float lfScaleX)
     {
-        CGS_ASSERT(lfScaleX == 1.0f, "false");
+        CGS_ASSERT(lfScaleX == 1.0f,
+            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 115 /* ARTIST 0x827EAD2C */));
     }
 
     // @ 0x827EAD58. Default Y scale is 1.0f (flt_82001C98); any other value asserts.
     void MovieVideoRenderer::SetScaleY(float lfScaleY)
     {
-        CGS_ASSERT(lfScaleY == 1.0f, "false");
+        CGS_ASSERT(lfScaleY == 1.0f,
+            CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 116 /* ARTIST 0x827EAD7C */));
     }
 
     // MovieVideoRenderer::'vector deleting destructor' @ 0x827EF3A0. The X360 emits the standard

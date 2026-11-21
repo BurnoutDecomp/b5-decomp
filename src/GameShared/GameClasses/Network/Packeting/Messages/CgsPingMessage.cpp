@@ -26,7 +26,10 @@
 // left as named TU constants with placeholder 0.0f; CONSOLIDATOR: pin from rodata.
 
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsPingMessage.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsPingMessage.cpp";
 
 namespace CgsNetwork
 {
@@ -60,7 +63,8 @@ namespace CgsNetwork
         {
             mfPingTime = lfPingTime;                                 // stfs @ +0x20
             Message::PrepareForSend(KI_E_MESSAGE_TYPE_PING, lu16Frame);
-            CGS_ASSERT(!IsReliable(), "!IsReliable()");              // vtable slot0
+            CGS_ASSERT(!IsReliable(),
+                CgsDev::Assert::MessageAt("!IsReliable()", KAC_ARTIST_ASSERT_FILE, 88 /* ARTIST 0x82882684 */));              // vtable slot0
         }
     }
 
@@ -112,7 +116,8 @@ namespace CgsNetwork
         {
             mfPingTime = lfPingTime;                                 // stfs @ +0x20
             Message::PrepareForSend(KI_E_MESSAGE_TYPE_PING_REPLY, lu16Frame);
-            CGS_ASSERT(!IsReliable(), "!IsReliable()");              // vtable slot0
+            CGS_ASSERT(!IsReliable(),
+                CgsDev::Assert::MessageAt("!IsReliable()", KAC_ARTIST_ASSERT_FILE, 253 /* ARTIST 0x8288271C */));              // vtable slot0
         }
     }
 

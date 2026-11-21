@@ -20,7 +20,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"                // RaceCarState
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // active race cars
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h" // PlayerVehicleControls
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include <cmath>   // fmaf
 
 // ===================================================================================
@@ -39,6 +39,9 @@
 // Every reliable message is stamped with the running network frame folded into the 16-bit
 // wire space (TimeManager::GetU16FrameCount, which the console inlines at each sender).
 // ===================================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkPlayer.cpp";
 
 namespace BrnNetwork
 {
@@ -544,7 +547,8 @@ namespace BrnNetwork
     void BrnNetworkPlayer::SendNewBurnoutSkillzData(const BrnGameState::BurnoutSkillzData* lpBurnoutSkillzData,
                                                     bool lbIsInitial)
     {
-        CGS_ASSERT(lpBurnoutSkillzData != 0, "lpBurnoutSkillzData");
+        CGS_ASSERT(lpBurnoutSkillzData != 0,
+            CgsDev::Assert::MessageAt("lpBurnoutSkillzData", KAC_ARTIST_ASSERT_FILE, 1936 /* ARTIST 0x82582840 */));
 
         mCachedBurnoutSkillzData = *lpBurnoutSkillzData;
 
@@ -684,8 +688,10 @@ namespace BrnNetwork
     {
         BrnNetworkPlayer* lpNetPlayer        = static_cast<BrnNetworkPlayer*>(lpUserData);
         CarSelectMessage* lpCarSelectMessage = static_cast<CarSelectMessage*>(lpMessage);
-        CGS_ASSERT(lpNetPlayer != 0, "lpNetPlayer");
-        CGS_ASSERT(lpCarSelectMessage != 0, "lpCarSelectMessage");
+        CGS_ASSERT(lpNetPlayer != 0,
+            CgsDev::Assert::MessageAt("lpNetPlayer", KAC_ARTIST_ASSERT_FILE, 2109 /* ARTIST 0x82582AAC */));
+        CGS_ASSERT(lpCarSelectMessage != 0,
+            CgsDev::Assert::MessageAt("lpCarSelectMessage", KAC_ARTIST_ASSERT_FILE, 2110 /* ARTIST 0x82582AD0 */));
 
         CgsID lCarId;
         CgsID lWheelId;

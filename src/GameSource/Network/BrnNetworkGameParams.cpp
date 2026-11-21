@@ -1,6 +1,6 @@
 #include "GameSource/Network/BrnNetworkGameParams.h"
 #include "GameSource/Network/Parameters/BrnNetworkParameterData.h"   // AmendGameModeContexts / MatchmakingContext
-#include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT (range/round-trip tripwires)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                   // CGS_ASSERT (range/round-trip tripwires)
 
 #include <cstring>   // std::memcpy
 
@@ -14,6 +14,9 @@
 //   ~GameParams  (the `scalar deleting destructor' @ 0x82567338 forwards to it)
 //   operator=    @ 0x82566A00
 // =============================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkGameParams.cpp";
 
 namespace BrnNetwork
 {
@@ -161,7 +164,8 @@ void GameParams::SetGameMode(s32 liGameMode)
                           &miContextCount,
                           reinterpret_cast<MatchmakingContext*>(maRankedContexts));
 
-    CGS_ASSERT(GameMode() == liGameMode, "GameMode() == leGameMode");
+    CGS_ASSERT(GameMode() == liGameMode,
+        CgsDev::Assert::MessageAt("GameMode() == leGameMode", KAC_ARTIST_ASSERT_FILE, 309 /* ARTIST 0x8258A7E8 */));
 }
 
 // X360 @ 0x82583EA8. Pack the 1-bit infinite-boost flag (base bit 7) into the leaf
@@ -183,8 +187,11 @@ void GameParams::SetNumRunnerCrashes(s32 liNumRunnerCrashes)
 // (insrwi r11,r30,4,17 -> mask 0x7800). Two range asserts.
 void GameParams::SetNumberRounds(s32 liNumRounds)
 {
-    CGS_ASSERT(liNumRounds > 0, "liNumRounds > 0");
-    CGS_ASSERT(liNumRounds < 16, "liNumRounds < (1<<KI_GAME_PARAMS_ROUNDS_NUM_BITS)");
+    CGS_ASSERT(liNumRounds > 0,
+        CgsDev::Assert::MessageAt("liNumRounds > 0", KAC_ARTIST_ASSERT_FILE, 272 /* ARTIST 0x82583F74 */));
+    CGS_ASSERT(liNumRounds < 16,
+        CgsDev::Assert::MessageAt(
+            "liNumRounds < (1<<KI_GAME_PARAMS_ROUNDS_NUM_BITS)", KAC_ARTIST_ASSERT_FILE, 273 /* ARTIST 0x82583F98 */));
 
     mGameData.muUser1 = ((static_cast<u32>(liNumRounds) << 11) & 0x7800u)
                       | (mGameData.muUser1 & 0xFFFF87FFu);
@@ -202,8 +209,11 @@ void GameParams::SetPreviousGameMode(s32 liGameMode)
 // (insrwi r11,r30,4,25 == (8 * liLevelLimit) & 0x78). Two range asserts.
 void GameParams::SetRagerVehicleLevelLimit(s32 liLevelLimit)
 {
-    CGS_ASSERT(liLevelLimit >= 0, "liLevelLimit >= 0");
-    CGS_ASSERT(liLevelLimit < 16, "liLevelLimit < (1<<KI_GAME_PARAMS_VEHICLE_LEVEL_NUM_BITS)");
+    CGS_ASSERT(liLevelLimit >= 0,
+        CgsDev::Assert::MessageAt("liLevelLimit >= 0", KAC_ARTIST_ASSERT_FILE, 194 /* ARTIST 0x82583E5C */));
+    CGS_ASSERT(liLevelLimit < 16,
+        CgsDev::Assert::MessageAt(
+            "liLevelLimit < (1<<KI_GAME_PARAMS_VEHICLE_LEVEL_NUM_BITS)", KAC_ARTIST_ASSERT_FILE, 195 /* ARTIST 0x82583E80 */));
 
     mGameData.muUser1 = ((static_cast<u32>(liLevelLimit) << 3) & 0x78u)
                       | (mGameData.muUser1 & 0xFFFFFF87u);

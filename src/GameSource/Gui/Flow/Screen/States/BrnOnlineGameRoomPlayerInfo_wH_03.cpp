@@ -20,9 +20,12 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiCache.h"              // BrnGui::GuiCache (Clear/AppendExpectedAptComponent)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiFlow (E_GUIFLOW_SCREEN)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp";
 
 namespace BrnGui
 {
@@ -32,7 +35,8 @@ namespace BrnGui
     // 1 (true) as MenuToggle::AppendExpectedAptComponent's trailing argument.
     void OnlineGameRoomPlayerInfo::SetExpectedChallengesComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:3962
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 3962 /* ARTIST 0x824850AC */));   // cpp:3962
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -50,7 +54,8 @@ namespace BrnGui
     // the whole page, and its AppendExpectedAptComponent walks its own live rows.
     void OnlineGameRoomPlayerInfo::SetExpectedSettingsComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:4354
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 4354 /* ARTIST 0x8248C65C */));   // cpp:4354
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 

@@ -1,6 +1,6 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineShowtimeMode.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"      // complete GameModeParams/StartGameModeParams/ScoringSystem
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"                   // GetNetworkRoundManager / SetOnlineRaceCars
 #include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h"   // GetNetworkGameEvent + StartNetworkGameEvent
@@ -79,7 +79,11 @@ void OnlineShowtimeMode::SendEvent(EGameModeEvent leEvent)
         case KI_GMS_QUIT:
             break;
         default:
-            CGS_ASSERT(false, "Should not be in this state in Showtime mode!");
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt(
+                    "Should not be in this state in Showtime mode!",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                    "../GameState/ModeManager/GameModes/BrnOnlineShowtimeMode.cpp", 161 /* ARTIST 0x82331438 */));
             break;
     }
 }

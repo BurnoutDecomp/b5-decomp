@@ -29,7 +29,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/Components/BrnEventPanel.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDConvertToString
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // ParameterFormatType
@@ -43,6 +43,9 @@
 #include "SharedClasses/Progression/BrnProgressionRankData.h"             // BrnProgression::ProgressionRankData
 
 #include <cmath>   // std::floor
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnEventPanel.h";
 
 namespace BrnGui
 {
@@ -200,7 +203,10 @@ namespace BrnGui
 // @ 0x82417B40 -----------------------------------------------------------------------
     void EventPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");   // cpp:134
+        CGS_ASSERT(lpGuiCache != 0,
+            CgsDev::Assert::MessageAt(
+                "lpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEventPanel.cpp", 134 /* ARTIST 0x82417B68 */));   // cpp:134
 
         lpGuiCache->AppendExpectedAptComponent(leFlow, GetNameHash());     // lwz +0x84
 
@@ -633,7 +639,8 @@ namespace BrnGui
 // @ 0x82417A10 -----------------------------------------------------------------------
     void EventPanel::SetPlayerRank(s32 iRank)
     {
-        CGS_ASSERT(iRank >= 0, "0<=liCurrentRank");   // @0x82417A4C  h:258
+        CGS_ASSERT(iRank >= 0,
+            CgsDev::Assert::MessageAt("0<=liCurrentRank", KAC_ARTIST_ASSERT_FILE, 258 /* ARTIST 0x82417A3C */));   // @0x82417A4C  h:258
 
         miPlayerRank = iRank;   // +0x8B4
     }
@@ -642,10 +649,17 @@ namespace BrnGui
     void EventPanel::SetModeRanks(s32 iRaceRank, s32 iRoadRageRank,
                                   s32 iStuntAttackRank, s32 iMarkedManRank)
     {
-        CGS_ASSERT(iRaceRank >= 0,        "0<=liCurrentRaceRank");        // @0x82417AB4  h:279
-        CGS_ASSERT(iRoadRageRank >= 0,    "0<=liCurrentRoadRageRank");    // @0x82417AD8  h:280
-        CGS_ASSERT(iStuntAttackRank >= 0, "0<=liCurrentStuntAttackRank"); // @0x82417AFC  h:281
-        CGS_ASSERT(iMarkedManRank >= 0,   "0<=liCurrentMarkedManRank");   // @0x82417B20  h:282
+        CGS_ASSERT(iRaceRank >= 0,
+            CgsDev::Assert::MessageAt("0<=liCurrentRaceRank", KAC_ARTIST_ASSERT_FILE, 279 /* ARTIST 0x82417AA8 */));        // @0x82417AB4  h:279
+        CGS_ASSERT(iRoadRageRank >= 0,
+            CgsDev::Assert::MessageAt(
+                "0<=liCurrentRoadRageRank", KAC_ARTIST_ASSERT_FILE, 280 /* ARTIST 0x82417ACC */));    // @0x82417AD8  h:280
+        CGS_ASSERT(iStuntAttackRank >= 0,
+            CgsDev::Assert::MessageAt(
+                "0<=liCurrentStuntAttackRank", KAC_ARTIST_ASSERT_FILE, 281 /* ARTIST 0x82417AF0 */)); // @0x82417AFC  h:281
+        CGS_ASSERT(iMarkedManRank >= 0,
+            CgsDev::Assert::MessageAt(
+                "0<=liCurrentMarkedManRank", KAC_ARTIST_ASSERT_FILE, 282 /* ARTIST 0x82417B14 */));   // @0x82417B20  h:282
 
         miCurrentRaceRank        = iRaceRank;        // +0x8B8
         miCurrentRoadRageRank    = iRoadRageRank;    // +0x8BC

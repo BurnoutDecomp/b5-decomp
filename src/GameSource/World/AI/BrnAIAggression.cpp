@@ -3,7 +3,7 @@
 #include "GameSource/World/AI/BrnAICar_Constants.h"    // the .bss tunables, recovered from their start-up initialisers
 #include "GameSource/World/AI/BrnAIUtils.h"                 // BrnAI::StepTo (step-toward helper)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"       // CgsNumeric::Random (mRandom.RandomFloat)
 #include "rw/math/vpu/vector3_operation.h"                  // rw::math::vpu vector ops
 
@@ -149,7 +149,10 @@ const f32 KF_SPURT_PASSING_SPEED_SCALE = 0.44704f; // .data 0x82F31928 == 0x3EE4
     // here so the whole AIAggression body set lives in one file.)
     Vector3 AIAggression::GetTargetPos()
     {
-        CGS_ASSERT(mbTargetPosValid, "mbTargetPosValid");
+        CGS_ASSERT(mbTargetPosValid,
+            CgsDev::Assert::MessageAt(
+                "mbTargetPosValid",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIAggression.h", 442 /* ARTIST 0x82765700 */));
         return mTargetPos;
     }
 
@@ -517,7 +520,11 @@ f32 AIAggression::GetAcrossSeparation(const AICar* lpThisCar, const AICar* lpOth
 // only the offset is flattened, the direction is normalised un-flattened.
 f32 AIAggression::GetAheadness(const AICar* lpPlayerCar, Vector3 lPosition)
 {
-    CGS_ASSERT(lpPlayerCar != NULL, "lpPlayerCar != NULL");
+    CGS_ASSERT(lpPlayerCar != NULL,
+        CgsDev::Assert::MessageAt(
+            "lpPlayerCar != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/AI/BrnAIAggression.cpp", 1715 /* ARTIST 0x82771050 */));
 
     Vector3 lvOffset = lPosition - lpPlayerCar->GetPosition();
     lvOffset.mV.y = 0.0f;

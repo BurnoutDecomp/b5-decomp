@@ -26,7 +26,7 @@
 
 #include <cstring>  // std::memcpy
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                              // CGS_ASSERT
 #include "GameSource/Network/BrnServerInterface.h"                              // BrnServerInterface::GetStatus / EStatus
 #include "GameSource/Network/BrnServerInterfaceBase.h"                          // GetCustomCommandsComponent()
 #include "GameSource/Network/Components/BrnServerInterfaceCustomCommands.h"     // ServerInterfaceCustomCommands::UploadOfflineProgress
@@ -50,6 +50,9 @@
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"                  // TimeManager::GetU16FrameCount
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // ::LobbyNameCmp
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // CgsDev::Log::gpDebugPrint
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp";
 
 namespace BrnNetwork
 {
@@ -106,7 +109,8 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     const NetworkPlayerStats* NetworkPlayerStatsManager::GetPlayerStatsByName(const char* lpcName)
     {
-        CGS_ASSERT(lpcName != 0, "lpcName");
+        CGS_ASSERT(lpcName != 0,
+            CgsDev::Assert::MessageAt("lpcName", KAC_ARTIST_ASSERT_FILE, 597 /* ARTIST 0x82562478 */));
 
         return mPlayerStatsCache.GetPlayerStats(lpcName);
     }
@@ -250,11 +254,17 @@ namespace BrnNetwork
             return false;
         }
 
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager != NULL");
+        CGS_ASSERT(mpNetworkManager != 0,
+            CgsDev::Assert::MessageAt(
+                "mpNetworkManager != NULL", KAC_ARTIST_ASSERT_FILE, 99 /* ARTIST 0x82559E38 */));
         mpServerInterface = mpNetworkManager->GetServerInterface();
-        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface != NULL");
+        CGS_ASSERT(mpServerInterface != 0,
+            CgsDev::Assert::MessageAt(
+                "mpServerInterface != NULL", KAC_ARTIST_ASSERT_FILE, 101 /* ARTIST 0x82559E64 */));
         mpServerInterfacePlayerInfo = mpServerInterface->GetPlayerInfoComponent();
-        CGS_ASSERT(mpServerInterfacePlayerInfo != 0, "mpServerInterfacePlayerInfo != NULL");
+        CGS_ASSERT(mpServerInterfacePlayerInfo != 0,
+            CgsDev::Assert::MessageAt(
+                "mpServerInterfacePlayerInfo != NULL", KAC_ARTIST_ASSERT_FILE, 104 /* ARTIST 0x82559E94 */));
 
         mEventQueue.miReadIndex  = 0;
         meCurrentStatus          = E_STATS_STATUS_IDLE;
@@ -367,7 +377,8 @@ namespace BrnNetwork
     // Queue a stats request for a player known only by name.
     void NetworkPlayerStatsManager::RequestPlayerStats(const char* lpcPlayerName)
     {
-        CGS_ASSERT(lpcPlayerName != 0, "lpcPlayerName");
+        CGS_ASSERT(lpcPlayerName != 0,
+            CgsDev::Assert::MessageAt("lpcPlayerName", KAC_ARTIST_ASSERT_FILE, 676 /* ARTIST 0x8255275C */));
 
         StatsRequestEvent lEvent;
         lEvent.Construct(lpcPlayerName, CgsNetwork::K_INVALID_PLAYER_ID);
@@ -471,7 +482,9 @@ namespace BrnNetwork
 
     const NetworkPlayerStats* NetworkPlayerStatsManager::GetPlayerStatsByID(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
+            CgsDev::Assert::MessageAt(
+                "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", KAC_ARTIST_ASSERT_FILE, 622 /* ARTIST 0x82562444 */));
         return GetPlayerStatsByName(GetPlayerNameFromID(lPlayerID));
     }
 

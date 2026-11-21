@@ -17,10 +17,13 @@
 
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"   // CgsNetwork::NetworkTexture
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"                // CgsMemory::HeapMalloc (Malloc/Free + GetAllocator)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT + the Begin/Fire/End assert front-end
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                      // CGS_ASSERT + the Begin/Fire/End assert front-end
 #include "GameShared/GameClasses/Development/CgsStrStream.h"            // CgsDev::StrStream (streamed "Invalid pixel format!" asserts)
 
 #include <cstring>   // std::memcpy (the X360 XMemCpy)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network/CgsNetworkTexture.cpp";
 
 namespace CgsNetwork
 {
@@ -164,7 +167,8 @@ namespace CgsNetwork
     {
         if (mbTextureAllocatedFromHeap)
         {
-            CGS_ASSERT(mpcTexture, "mpcTexture");
+            CGS_ASSERT(mpcTexture,
+                CgsDev::Assert::MessageAt("mpcTexture", KAC_ARTIST_ASSERT_FILE, 144 /* ARTIST 0x8287E60C */));
             mpHeapMalloc->Free(mpcTexture);
             mpcTexture                 = 0;
             mbTextureAllocatedFromHeap = false;
@@ -255,8 +259,12 @@ namespace CgsNetwork
     void NetworkTexture::CopyPixelData(const char* lpcPixelData, s32 liDataSizeInBytes,
                                        renderengine::PixelFormat lePixelFormat)
     {
-        CGS_ASSERT(liDataSizeInBytes == GetTextureSize(), "liDataSizeInBytes == GetTextureSize()");
-        CGS_ASSERT(lePixelFormat == GetFormat(), "lePixelFormat == GetFormat()");
+        CGS_ASSERT(liDataSizeInBytes == GetTextureSize(),
+            CgsDev::Assert::MessageAt(
+                "liDataSizeInBytes == GetTextureSize()", KAC_ARTIST_ASSERT_FILE, 369 /* ARTIST 0x8287E8E4 */));
+        CGS_ASSERT(lePixelFormat == GetFormat(),
+            CgsDev::Assert::MessageAt(
+                "lePixelFormat == GetFormat()", KAC_ARTIST_ASSERT_FILE, 370 /* ARTIST 0x8287E90C */));
 
         std::memcpy(mpcTexture, lpcPixelData, static_cast<size_t>(liDataSizeInBytes));
     }

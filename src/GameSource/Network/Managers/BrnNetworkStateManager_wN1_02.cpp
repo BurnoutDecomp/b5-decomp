@@ -12,7 +12,7 @@
 
 #include "GameSource/Network/Managers/BrnNetworkStateManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                        // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                                // CgsContainers::BitArray (scalp slots)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                                // the memory checks' log line
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                              // CgsDev::StrStream (streamed asserts)
@@ -61,6 +61,9 @@
 #include <cstring>   // std::memcpy / std::strlen / std::strncpy
 
 // Platform sign-in state query (provided by the platform layer).
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStateManager.cpp";
 
 namespace BrnNetwork
 {
@@ -130,7 +133,8 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------------
     void StateManager::ResumeFinishedCallback(bool lbSuccess, void* lpUserData)
     {
-        CGS_ASSERT(lbSuccess, "lbSuccess");
+        CGS_ASSERT(lbSuccess,
+            CgsDev::Assert::MessageAt("lbSuccess", KAC_ARTIST_ASSERT_FILE, 3612 /* ARTIST 0x825632D8 */));
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
         lpStateManager->meState = E_STATE_COUNT;
@@ -248,7 +252,9 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------------
     void StateManager::RefreshFreeBurnLobbyGameMode()
     {
-        CGS_ASSERT(mbRefreshingFreeburnLobbyThisFrame, "mbRefreshingFreeburnLobbyThisFrame");
+        CGS_ASSERT(mbRefreshingFreeburnLobbyThisFrame,
+            CgsDev::Assert::MessageAt(
+                "mbRefreshingFreeburnLobbyThisFrame", KAC_ARTIST_ASSERT_FILE, 4647 /* ARTIST 0x8256A6E4 */));
 
         CgsNetwork::ServerInterfaceGames* lpGames = mpNetworkManager->GetServerInterface()->GetGameComponent();
         const bool lbInLobby = lpGames->IsLocalPlayerInGame() && !lpGames->IsGameStarted();

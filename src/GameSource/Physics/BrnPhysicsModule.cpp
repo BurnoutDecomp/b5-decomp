@@ -1,7 +1,7 @@
 #include "GameSource/Physics/BrnPhysicsModule.h"
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"                             // PhysicsModuleIO::InputBuffer (PropPrepareTypes)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu::AddMonitor
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"        // GetRWLinearResourceAllocator (Prepare stage 3)
 // The AllocatorList header only FORWARD-DECLARES rw::LinearResourceAllocator, so without this
@@ -629,7 +629,11 @@ namespace BrnPhysics
     void PhysicsModule::UpdateCachedPositions(
         CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer )
     {
-        CGS_ASSERT( lpSceneInputBuffer != NULL, "lpSceneInputBuffer_Update != NULL" );   // :617
+        CGS_ASSERT( lpSceneInputBuffer != NULL,
+            CgsDev::Assert::MessageAt(
+                "lpSceneInputBuffer_Update != NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../Physics/BrnPhysicsModule.cpp", 617 /* ARTIST 0x8259C39C */));   // :617
 
         mVehicleManager.UpdateTriangleCache( lpSceneInputBuffer );
         mPropManager.UpdateTriangleCache( lpSceneInputBuffer );
@@ -766,7 +770,11 @@ namespace BrnPhysics
                                              BrnUpdateSet /*lUpdateSet*/)
     {
         mVehicleManager.CheckState();
-        CGS_ASSERT(lpInputBuffer != NULL, "lpInputBuffer != NULL");
+        CGS_ASSERT(lpInputBuffer != NULL,
+            CgsDev::Assert::MessageAt(
+                "lpInputBuffer != NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../Physics/BrnPhysicsModuleUpdateFunctions.cpp", 1049 /* ARTIST 0x825A153C */));
 
         lpInputBuffer->LockForRead();
         const Vehicle::VehicleDriverInputInterface* const lpDriverInterface =

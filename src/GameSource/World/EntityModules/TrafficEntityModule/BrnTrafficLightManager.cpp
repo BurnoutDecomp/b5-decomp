@@ -1,4 +1,5 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficLightManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "SharedClasses/Traffic/Junctions/BrnTrafficLightCollection.h"   // TrafficLightCollection::GetInstanceIndexForInstanceID
 #include "SharedClasses/Traffic/BrnTrafficHull.h"                         // Hull::muFirstTrafficLight / muLastTrafficLight
                                                                           // (the corona renderers; one ETrafficLightState
@@ -19,6 +20,10 @@
 // Reproduced with CGS_ASSERT (the baked d:\p4 path + line 209 are dropped per project policy).
 // The pointer arithmetic is expressed through the named array member so there are no raw
 // offset casts: &maLightStates[instance] == (u8*)this + 8*instance (8 == sizeof record).
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../World/EntityModules/TrafficEntityModule/BrnTrafficLightManager.cpp";
 
 namespace BrnTraffic
 {
@@ -42,13 +47,15 @@ TrafficLightRuntimeState* TrafficLightManager::GetLightState(u32 luInstance)
 void TrafficLightManager::TrafficLightGotSmashed(const TrafficLightCollection* lpTrafficLightData,
                                                  u32 luInstanceID)
 {
-    CGS_ASSERT(lpTrafficLightData, "lpTrafficLightData");
+    CGS_ASSERT(lpTrafficLightData,
+        CgsDev::Assert::MessageAt("lpTrafficLightData", KAC_ARTIST_ASSERT_FILE, 417 /* ARTIST 0x827519D0 */));
 
     const s32 liInstanceIndex = lpTrafficLightData->GetInstanceIndexForInstanceID(luInstanceID);
     if (liInstanceIndex != -1)
     {
         TrafficLightRuntimeState* lpState = GetLightState(static_cast<u32>(liInstanceIndex));
-        CGS_ASSERT(lpState, "lpState");
+        CGS_ASSERT(lpState,
+            CgsDev::Assert::MessageAt("lpState", KAC_ARTIST_ASSERT_FILE, 425 /* ARTIST 0x82751A18 */));
 
         lpState->mxStateBits |= 0x80u;
 
@@ -192,7 +199,9 @@ void TrafficLightManager::SetCountdownValue(s32 liCountdownDisplay)
 // down to RED in TrafficLightRuntimeState::Update @0x827515D8.
 void TrafficLightManager::ChangeLightState(u32 luInstance, bool lbChangeToRed)
 {
-    CGS_ASSERT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES, "luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES");
+    CGS_ASSERT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES,
+        CgsDev::Assert::MessageAt(
+            "luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES", KAC_ARTIST_ASSERT_FILE, 391 /* ARTIST 0x82751908 */));
 
     if (lbChangeToRed)
     {

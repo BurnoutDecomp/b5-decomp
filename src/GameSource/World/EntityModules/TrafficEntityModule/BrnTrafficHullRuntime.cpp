@@ -16,7 +16,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficHullRuntime.h"
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficConstants.h"  // KU_INVALID_PARAM
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "SharedClasses/Traffic/BrnTrafficHull.h"
 // [stuntrace waveB CLOSURE round, 2026-08-26] BrnTraffic::JunctionLogicBox + TrafficLightController
 // now have a real header home and are INCLUDED, not re-declared. Until this round both types were
@@ -32,6 +32,10 @@
 
 #include <cstddef>   // offsetof, for the never-called HullRuntime::_AssertLayout pin below
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../World/EntityModules/TrafficEntityModule/BrnTrafficHullRuntime.cpp";
+
 namespace BrnTraffic
 {
 // @ 0x82751428
@@ -45,8 +49,10 @@ void HullRuntime::Construct()
 // bakes are 70 (lpHull) and 71 (mbPrepared == false).
 void HullRuntime::Prepare(const Hull* lpHull, u16 luHull)
 {
-    CGS_ASSERT(lpHull != 0, "lpHull");
-    CGS_ASSERT(mbPrepared == false, "mbPrepared == false");
+    CGS_ASSERT(lpHull != 0,
+        CgsDev::Assert::MessageAt("lpHull", KAC_ARTIST_ASSERT_FILE, 71 /* ARTIST 0x82751468 */));
+    CGS_ASSERT(mbPrepared == false,
+        CgsDev::Assert::MessageAt("mbPrepared == false", KAC_ARTIST_ASSERT_FILE, 72 /* ARTIST 0x82751490 */));
 
     for (u32 luStopline = 0; luStopline < lpHull->muNumStoplines; ++luStopline)
     {
@@ -74,7 +80,8 @@ void HullRuntime::Prepare(const Hull* lpHull, u16 luHull)
 // @ 0x82751578
 void HullRuntime::Release()
 {
-    CGS_ASSERT(mbPrepared == true, "mbPrepared == true");
+    CGS_ASSERT(mbPrepared == true,
+        CgsDev::Assert::MessageAt("mbPrepared == true", KAC_ARTIST_ASSERT_FILE, 110 /* ARTIST 0x827515A0 */));
     mbPrepared = false;
 }
 

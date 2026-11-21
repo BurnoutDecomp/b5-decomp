@@ -130,7 +130,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleOutputRequestInterface (InRemoveRigidBody)
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationInputInterface.h" // the five posted queues
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h"  // BrnWorld::ERaceCarType
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                        // gpDebugPrint / gxMessageFilterFlags
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"                // gbReadSurfaceProperties / KAB_SURFACE_IS_WATER
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h" // GetSimpleVehicleBox / GetAboveGroundTestResult
@@ -152,6 +152,9 @@ namespace
         }
     }
 }
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnVehicleManager.cpp";
 
 namespace BrnPhysics
 {
@@ -187,13 +190,27 @@ namespace Vehicle
         VehicleOutputInterface* lpVehicleOutputInterface,
         Deformation::DeformationInputInterface* lpDeformationInterface)
     {
-        CGS_ASSERT(lpInputBufferStack        != 0, "lpInputBufferStack != NULL");        // :1141
-        CGS_ASSERT(lpOutputBufferStack       != 0, "lpOutputBufferStack != NULL");       // :1142
-        CGS_ASSERT(lpInputInterface          != 0, "lpInputInterface != NULL");          // :1143
-        CGS_ASSERT(lpOutputInterface         != 0, "lpOutputInterface != NULL");         // :1144
-        CGS_ASSERT(lpManagerOutputInterface  != 0, "lpManagerOutputInterface != NULL");  // :1145
-        CGS_ASSERT(lpVehicleOutputInterface  != 0, "lpVehicleOutputInterface != NULL");  // :1146
-        CGS_ASSERT(lpDeformationInterface    != 0, "lpDeformationInterface != NULL");    // :1147
+        CGS_ASSERT(lpInputBufferStack        != 0,
+            CgsDev::Assert::MessageAt(
+                "lpInputBufferStack != NULL", KAC_ARTIST_ASSERT_FILE, 1141 /* ARTIST 0x8264AB7C */));        // :1141
+        CGS_ASSERT(lpOutputBufferStack       != 0,
+            CgsDev::Assert::MessageAt(
+                "lpOutputBufferStack != NULL", KAC_ARTIST_ASSERT_FILE, 1142 /* ARTIST 0x8264ABA0 */));       // :1142
+        CGS_ASSERT(lpInputInterface          != 0,
+            CgsDev::Assert::MessageAt(
+                "lpInputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1143 /* ARTIST 0x8264ABC4 */));          // :1143
+        CGS_ASSERT(lpOutputInterface         != 0,
+            CgsDev::Assert::MessageAt(
+                "lpOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1144 /* ARTIST 0x8264ABE8 */));         // :1144
+        CGS_ASSERT(lpManagerOutputInterface  != 0,
+            CgsDev::Assert::MessageAt(
+                "lpManagerOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1145 /* ARTIST 0x8264AC0C */));  // :1145
+        CGS_ASSERT(lpVehicleOutputInterface  != 0,
+            CgsDev::Assert::MessageAt(
+                "lpVehicleOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1146 /* ARTIST 0x8264AC30 */));  // :1146
+        CGS_ASSERT(lpDeformationInterface    != 0,
+            CgsDev::Assert::MessageAt(
+                "lpDeformationInterface != NULL", KAC_ARTIST_ASSERT_FILE, 1147 /* ARTIST 0x8264AC54 */));    // :1147
 
         RecordNetworkRaceCarsAddedForCollision(lpInputInterface);
 
