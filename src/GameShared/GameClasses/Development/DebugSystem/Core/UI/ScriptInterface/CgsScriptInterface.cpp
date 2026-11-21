@@ -252,45 +252,44 @@ namespace CgsDev
                 ++lpcRead;
             }
 
-            const char* lpacScriptParameters[KI_MAX_PARAMETERS];
-            s32 liParameterCount = 0;
-
             if (*lpcRead)
             {
-                // Terminate the command word and skip the whitespace after it.
+                // Terminate the command word at its separator.
                 *lpcRead = 0;
                 ++lpcRead;
-                while (*lpcRead == ' ' || *lpcRead == '\t')
+            }
+            while (*lpcRead == ' ' || *lpcRead == '\t')
+                ++lpcRead;
+
+            const char* lpacScriptParameters[KI_MAX_PARAMETERS];
+            s32 liParameterCount = 0;
+            while (*lpcRead && liParameterCount < KI_MAX_PARAMETERS)
+            {
+                bool lbQuote = (*lpcRead == '"');
+                if (lbQuote)
                     ++lpcRead;
 
-                while (*lpcRead && liParameterCount < KI_MAX_PARAMETERS)
+                lpacScriptParameters[liParameterCount++] = lpcRead;
+
+                if (lbQuote)
                 {
-                    bool lbQuote = (*lpcRead == '"');
-                    if (lbQuote)
+                    while (*lpcRead && *lpcRead != '"')
                         ++lpcRead;
-
-                    lpacScriptParameters[liParameterCount++] = lpcRead;
-
-                    if (lbQuote)
-                    {
-                        while (*lpcRead && *lpcRead != '"')
-                            ++lpcRead;
-                        if (*lpcRead)
-                            *lpcRead++ = 0;
-                    }
-
-                    while (*lpcRead && *lpcRead != ' ' && *lpcRead != '\t' && *lpcRead != ',')
-                        ++lpcRead;
-
                     if (*lpcRead)
-                    {
-                        *lpcRead = 0;
-                        ++lpcRead;
-                    }
-
-                    while (*lpcRead == ' ' || *lpcRead == '\t')
-                        ++lpcRead;
+                        *lpcRead++ = 0;
                 }
+
+                while (*lpcRead && *lpcRead != ' ' && *lpcRead != '\t' && *lpcRead != ',')
+                    ++lpcRead;
+
+                if (*lpcRead)
+                {
+                    *lpcRead = 0;
+                    ++lpcRead;
+                }
+
+                while (*lpcRead == ' ' || *lpcRead == '\t')
+                    ++lpcRead;
             }
 
             // Pad the unused parameter slots with the shared empty string.
