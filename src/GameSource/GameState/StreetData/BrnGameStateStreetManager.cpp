@@ -3,7 +3,7 @@
 #include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h"  // ChallengeHighScoreEntry::Construct/SetScore
 #include "SharedClasses/StreetData/BrnChallengeData.h"                    // ChallengePlayerScoreEntry, ChallengeData::SetScore, ScoreType, operator++
 #include "GameSource/GameState/BrnCgsPlayerName.h"                        // CgsNetwork::PlayerName
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 
 // includes folded in from the BrnGameStateStreetManager_w*.cpp partfiles (2026-09-15)
 #include "GameSource/GameState/StreetData/BrnStreetManagerDebugComponent.h"
@@ -42,6 +42,9 @@
 // record handed in. The full member layout is now committed in the frozen header
 // (StreetManager keystone, wave B); the remaining 36 ledger methods land as
 // BrnGameStateStreetManager_wB_* partfiles.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\GameState/StreetData/BrnGameStateStreetManager.h";
 
 namespace BrnGameState
 {
@@ -1774,8 +1777,12 @@ namespace BrnGameState {
 // ARTIST 0x8230F990 / 0x8230FA20, the bounded portal-walk stack.
 void StreetManager::PushSectionIndex(u16 section)
 {
-    CGS_ASSERT(miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK, "miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK");
-    CGS_ASSERT(section != 0x7FFF, "luNewSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX");
+    CGS_ASSERT(miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK,
+        CgsDev::Assert::MessageAt(
+            "miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK", KAC_ARTIST_ASSERT_FILE, 1062 /* ARTIST 0x8230F9C0 */));
+    CGS_ASSERT(section != 0x7FFF,
+        CgsDev::Assert::MessageAt(
+            "luNewSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", KAC_ARTIST_ASSERT_FILE, 1063 /* ARTIST 0x8230F9E8 */));
     mauWalkedSections[miNextFreeSectionSlot++] = section;
 }
 bool StreetManager::CanContinueWalking() { return miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK; }

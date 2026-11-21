@@ -8,7 +8,7 @@
 
 #include "GameSource/Gui/Flow/Screen/Components/BrnSelectRoutes.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiCache.h"              // GuiCache (preset events, landmark info, online game mode)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // GuiEventUpdateSatNav::SatNavIconInfo
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // SpecificGameModeEventInterface::Event
@@ -731,7 +731,10 @@ namespace BrnGui
     void SelectRoutes::SetStartLightTriggerID(s32 liRoundNumber, u32 luStartLightTriggerID)
     {
         const SatNavEventDisplayInfo* lpStart = mpGuiCache->GetPresetEventDisplayInfo(luStartLightTriggerID);
-        CGS_ASSERT(lpStart, "lpEventStart");
+        CGS_ASSERT(lpStart,
+            CgsDev::Assert::MessageAt(
+                "lpEventStart",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnSelectRoutes.h", 360 /* ARTIST 0x824838B0 */));
         maCheckpointData[0].maeSelectedCounty[liRoundNumber] = static_cast<BrnWorld::ECounty>(lpStart->muCounty);
         maCheckpointData[0].maStartLightTriggerID[liRoundNumber] = luStartLightTriggerID;
         if (mpGuiCache->GetOnlineGameMode() == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE)

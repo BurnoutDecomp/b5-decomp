@@ -27,7 +27,7 @@
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"                 // CgsNetwork::TimeManager
 #include <cfloat>   // FLT_MAX
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // CgsDev::Log::gpDebugPrint (nack warning)
 
 namespace BrnNetwork
@@ -128,7 +128,10 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     StandingsData* StandingsManager::GetStandingsDataEntry(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID, "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID,
+            CgsDev::Assert::MessageAt(
+                "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStandingsManager.cpp", 264 /* ARTIST 0x8254520C */));
 
         for (s32 liIndex = 0; liIndex < KI_MAX_PLAYERS; ++liIndex)
         {

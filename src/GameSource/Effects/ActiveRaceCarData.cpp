@@ -6,7 +6,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"            // BrnPhysics::Vehicle::RaceCarState / WheelLite
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h" // StreamedDeformationSpec / LocatorPointSpecList
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"                  // CgsResource::ResourcePtr / NULLResourcePtr
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                  // CGS_ASSERT
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                               // CgsNumeric::Random
 #include "GameSource/Effects/Particles/Native/BrnParticleMath.h"
 #include <cfloat>                                                                   // FLT_MAX
@@ -19,6 +19,8 @@
 //   ActiveRaceCarData::Tick @0x82287ED8
 // =============================================================================
 
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Effects/ActiveRaceCarData.h";
+
 namespace BrnEffects
 {
 
@@ -30,8 +32,11 @@ namespace BrnEffects
 // next-burst time to 0.0f.
 void BurstAccumulator::Construct(f32 lfMinBurstSize, f32 lfMaxBurstSize, f32 lfBurstTimeout)
 {
-    CGS_ASSERT(lfMaxBurstSize > lfMinBurstSize, "lfMaxBurstSize > lfMinBurstSize");
-    CGS_ASSERT(lfBurstTimeout > 0.0f, "lfBurstTimeout > 0.0f");
+    CGS_ASSERT(lfMaxBurstSize > lfMinBurstSize,
+        CgsDev::Assert::MessageAt(
+            "lfMaxBurstSize > lfMinBurstSize", KAC_ARTIST_ASSERT_FILE, 51 /* ARTIST 0x82278574 */));
+    CGS_ASSERT(lfBurstTimeout > 0.0f,
+        CgsDev::Assert::MessageAt("lfBurstTimeout > 0.0f", KAC_ARTIST_ASSERT_FILE, 52 /* ARTIST 0x822785A0 */));
 
     mfMinBurstSize       = lfMinBurstSize;
     mfMaxBurstSize       = lfMaxBurstSize;

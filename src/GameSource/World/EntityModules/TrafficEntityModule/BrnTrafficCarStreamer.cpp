@@ -35,10 +35,15 @@
 // =============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficCarStreamer.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cstring>   // strstr, strlen
 
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDUnCompress, KI_CGSID_STRING_LEN
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../World/EntityModules/TrafficEntityModule/BrnTrafficCarStreamer.cpp";
 
 namespace BrnTraffic
 {
@@ -172,8 +177,11 @@ void TrafficCarStreamer::SetAssetList( u32 luNumAssets, const VehicleAsset* lpaA
 // -----------------------------------------------------------------------------
 void TrafficCarStreamer::AddVehiclesToTargetList( u32 luNumVehicles, const u8* lpauVehicleAssetIds )
 {
-    CGS_ASSERT( luNumVehicles <= muNumAssets, "luNumVehicles <= muNumAssets" );
-    CGS_ASSERT( lpauVehicleAssetIds != 0, "lpauVehicleAssetIds" );
+    CGS_ASSERT( luNumVehicles <= muNumAssets,
+        CgsDev::Assert::MessageAt(
+            "luNumVehicles <= muNumAssets", KAC_ARTIST_ASSERT_FILE, 169 /* ARTIST 0x8274F6D4 */));
+    CGS_ASSERT( lpauVehicleAssetIds != 0,
+        CgsDev::Assert::MessageAt("lpauVehicleAssetIds", KAC_ARTIST_ASSERT_FILE, 170 /* ARTIST 0x8274F6F8 */));
 
     for( u32 luVehicle = 0; luVehicle < luNumVehicles; luVehicle++ )
     {

@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Geometric/Primitives/PolygonSoup/CgsPolygonSoup.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include <cstring>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. CgsGeometric::PolygonSoup:
@@ -11,6 +11,9 @@
 // Behaviour-faithful to the X360 pseudocode. The asm reads the index into r31 (after the
 // clrlwi width truncation), bounds-checks it against the u8 count, then computes
 // base + stride*index and returns that byte cursor. The leading int arg = `this`.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\geometric\\primitives\\polygonsoup\\CgsPolygonSoup.h";
 
 namespace CgsGeometric
 {
@@ -34,7 +37,9 @@ namespace CgsGeometric
     // Index widened from u8 (clrlwi r,24); stride 12 (slwi/add/slwi == index*3*4).
     u8* PolygonSoup::GetPolygon(u8 lu8PolyIndex) const
     {
-        CGS_ASSERT(lu8PolyIndex < mu8NumPolygons, "lu8PolyIndex < GetNumPolygons()");
+        CGS_ASSERT(lu8PolyIndex < mu8NumPolygons,
+            CgsDev::Assert::MessageAt(
+                "lu8PolyIndex < GetNumPolygons()", KAC_ARTIST_ASSERT_FILE, 183 /* ARTIST 0x8283A9A8 */));
         return mpPolygons + KI_POLYGON_STRIDE * static_cast<s32>(lu8PolyIndex);
     }
 
@@ -44,7 +49,9 @@ namespace CgsGeometric
     // stride 6 (slwi/add/slwi == index*3*2).
     u8* PolygonSoup::GetVertex(u16 lu16VertexIndex) const
     {
-        CGS_ASSERT(lu16VertexIndex < mu8NumVertices, "lu8VertexIndex < GetNumVertices()");
+        CGS_ASSERT(lu16VertexIndex < mu8NumVertices,
+            CgsDev::Assert::MessageAt(
+                "lu8VertexIndex < GetNumVertices()", KAC_ARTIST_ASSERT_FILE, 192 /* ARTIST 0x8283AA20 */));
         return mpVertices + KI_VERTEX_STRIDE * static_cast<s32>(lu16VertexIndex);
     }
 }

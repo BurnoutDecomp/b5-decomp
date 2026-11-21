@@ -2,7 +2,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/indexbuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/vertexdescriptor.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "BrnCommonTypes.h"                                          // Matrix44 / Vector3 / Vector3Plus / Vector4
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"             // the per-frame sky/cloud constants
@@ -53,7 +53,11 @@ bool BrnSkyDomeManager::Prepare(
     BrnGraphics::Im3dSkyDome* lpRenderer,
     rw::IResourceAllocator* lpAlloc)
 {
-    CGS_ASSERT(lpAlloc != NULL, "lpAlloc != NULL");
+    CGS_ASSERT(lpAlloc != NULL,
+        CgsDev::Assert::MessageAt(
+            "lpAlloc != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Graphics/BrnSkyDomeManager.cpp", 68 /* ARTIST 0x82408E18 */));
 
     // X360 Prepare @0x82408E30/E54: li r9(liSliceCount)=22/5, r10(liSectorCount)=45/10 -- the
     // committed literals were slice<->sector swapped (yielded indexCount 2158 vs 2066 + wrong

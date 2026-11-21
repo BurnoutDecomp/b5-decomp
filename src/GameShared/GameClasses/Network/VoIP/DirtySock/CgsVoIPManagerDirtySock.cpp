@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Network/VoIP/DirtySock/CgsVoIPManagerDirtySock.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/CgsNetworkManager.h"
 #include "GameShared/GameClasses/Network/CgsNetworkUtils.h"
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"
@@ -22,6 +22,9 @@ extern "C"
 {
     u32  XUserMuteListQuery(u32 luUserIndex, u64 luXuidRemoteTalker, s32* lpbOnMuteList);
 }
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network/VoIP/DirtySock/CgsVoIPManagerDirtySock.cpp";
 
 namespace CgsNetwork
 {
@@ -230,7 +233,8 @@ namespace CgsNetwork
             return;
         }
 
-        CGS_ASSERT(mpVoiceRef, "mpVoiceRef");
+        CGS_ASSERT(mpVoiceRef,
+            CgsDev::Assert::MessageAt("mpVoiceRef", KAC_ARTIST_ASSERT_FILE, 269 /* ARTIST 0x8289B2F4 */));
 
         UpdateLocalPlayer();
         UpdateHeadsetStatusMessages(lbIsLocalPlayerInGame);
@@ -518,7 +522,8 @@ namespace CgsNetwork
     // Never while voice is not allowed; otherwise the voice layer's headset bit.
     bool VoIPManager::DoesLocalPlayerHaveHeadset()
     {
-        CGS_ASSERT(mpVoiceRef, "mpVoiceRef");
+        CGS_ASSERT(mpVoiceRef,
+            CgsDev::Assert::MessageAt("mpVoiceRef", KAC_ARTIST_ASSERT_FILE, 758 /* ARTIST 0x8287E270 */));
 
         if (!mbIsVoiceAllowed)
         {

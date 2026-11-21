@@ -3,7 +3,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"                 // GuiCache accessors the six handlers read
 #include "GameSource/GameState/BrnGameActions.h"        // BrnWorld::EPowerParkOutcome (E_PPO_SUCCESS / _FAILURE)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiHudMessage.h"  // CgsGui::E_HUDMESSAGEPARAMTYPES_*
 
@@ -42,6 +42,8 @@
 // Prove it the way the verdict asked: `dumpbin /SYMBOLS` this object and look for six
 // SECT-External `Handle*` rows. No row means the file went dark again.
 // =====================================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.cpp";
 
 namespace BrnGui
 {
@@ -329,8 +331,10 @@ void HudMessageAnalyzer::HandleRaceCheckpointReached(const GuiRaceCheckpointReac
 {
     // Non-gating tripwires (cpp:1882/1883 -- note the cache assert comes FIRST here,
     // the reverse of every other handler in this partfile).
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
-    CGS_ASSERT(lpEvent != NULL, "lpEvent");
+    CGS_ASSERT(mpGuiCache != NULL,
+        CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 1882 /* ARTIST 0x8251B380 */));
+    CGS_ASSERT(lpEvent != NULL,
+        CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 1883 /* ARTIST 0x8251B3A4 */));
 
     if (!mpGuiCache->IsOnlineStartInProgress())
         return;

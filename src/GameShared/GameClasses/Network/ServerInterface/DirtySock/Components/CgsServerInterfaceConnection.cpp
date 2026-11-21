@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "lobbyapi.h"       // LobbyApiStatus / LobbyApiInfo / LobbyApiRequestCB / LobbyApiSetCallback / ...
 #include "lobbytagfield.h"  // TagFieldFind / TagFieldGetEpoch / TagFieldSetString / TagFieldSetNumber
 #include "netconn.h"       // NetConnStatus
@@ -129,7 +129,10 @@ void ServerInterfaceConnection::Destruct()
 
 bool ServerInterfaceConnection::Prepare(ServerInterfaceDirtySock* lpServerInterface)
 {
-    CGS_ASSERT(miConnectCallback == -1, "miConnectCallback == -1");
+    CGS_ASSERT(miConnectCallback == -1,
+        CgsDev::Assert::MessageAt(
+            "miConnectCallback == -1",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceConnection.cpp", 192 /* ARTIST 0x82886330 */));
 
     mpServerInterface = lpServerInterface;
     meCurrentAction   = E_ACTION_COUNT;

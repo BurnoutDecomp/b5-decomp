@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/Packeting/CgsCompressionAndEncryptionUtils.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"          // CgsSystem::TimerStatus
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessageWithPlayerIDs.h"
@@ -20,6 +20,9 @@
 //
 // Log lines stream through CgsDev::Log::gpDebugPrint; assert messages the console built in
 // the assert buffer keep their literal text.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsCompressionAndEncryptionUtils.cpp";
 
 namespace CgsNetwork
 {
@@ -203,8 +206,11 @@ void CompressionAndEncryptionUtils::RecordBitsTransmitted(ESendRecv leSendRecv,
                                                           s32 leMessageType, s32 liBits)
 {
     const s32 liEntryIndex = GetEntryIndex(liPlayerID);
-    CGS_ASSERT(liEntryIndex >= 0, "liEntryIndex >= 0");
-    CGS_ASSERT(liEntryIndex < KI_MAX_PLAYERS, "liEntryIndex < KI_MAX_PLAYERS");
+    CGS_ASSERT(liEntryIndex >= 0,
+        CgsDev::Assert::MessageAt("liEntryIndex >= 0", KAC_ARTIST_ASSERT_FILE, 647 /* ARTIST 0x828805F4 */));
+    CGS_ASSERT(liEntryIndex < KI_MAX_PLAYERS,
+        CgsDev::Assert::MessageAt(
+            "liEntryIndex < KI_MAX_PLAYERS", KAC_ARTIST_ASSERT_FILE, 648 /* ARTIST 0x82880618 */));
 
     maaaiBitsTransmitted[leSendRecv][liEntryIndex][leMessageType]          += liBits;
     maaaiBitsTransmitted[leSendRecv][liEntryIndex][KE_ALL_MESSAGE_TYPES]   += liBits;

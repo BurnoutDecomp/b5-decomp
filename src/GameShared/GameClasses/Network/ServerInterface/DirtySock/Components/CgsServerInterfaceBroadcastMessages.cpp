@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceBroadcastMessages.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "lobbyapi.h"                                 // DirtySDK LobbyApiSetCallback / LobbyApiClearCallback + LobbyApiRefT / LobbyApiMsgT / LobbyApiCallbackT
 #include "lobbytagfield.h"                            // DirtySDK TagFieldFind / Get*
 
@@ -95,7 +95,10 @@ namespace CgsNetwork
     // @ 0x82886030 -- bind the server interface and register the lobby chat callback.
     bool ServerInterfaceBroadcastMessages::Prepare(ServerInterfaceDirtySock* lpServerInterface)
     {
-        CGS_ASSERT(miChatCallback == KI_NO_CHAT_CALLBACK, "miChatCallback == -1");
+        CGS_ASSERT(miChatCallback == KI_NO_CHAT_CALLBACK,
+            CgsDev::Assert::MessageAt(
+                "miChatCallback == -1",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceBroadcastMessages.cpp", 136 /* ARTIST 0x82886060 */));
 
         mpServerInterface = lpServerInterface;                              // +0x584
         meCurrentAction   = E_ACTION_COUNT;                                // +0x588 (== 1)

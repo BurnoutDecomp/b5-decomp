@@ -19,8 +19,11 @@
 
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                        // CGS_ASSERT
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h" // DeformableObject
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Physics/DeformationManager/BrnDeformationManager.h";
 
 namespace BrnPhysics
 {
@@ -57,7 +60,8 @@ namespace Deformation
                                                   const CgsGeometric::SweptSphere** lppSpheresOut)
     {
         const s32 liIndex = FindModelIndexByEntityID(lEntityId);
-        CGS_ASSERT(liIndex != -1, "liIndex != -1");
+        CGS_ASSERT(liIndex != -1,
+            CgsDev::Assert::MessageAt("liIndex != -1", KAC_ARTIST_ASSERT_FILE, 530 /* ARTIST 0x825C22FC */));
         return mpaModels[liIndex].GetSweptSpheres(lppSpheresOut);
     }
 
@@ -69,7 +73,8 @@ namespace Deformation
     bool DeformationManager::IsUsingSweptSpheres(EntityId lEntityId)
     {
         const s32 liIndex = FindModelIndexByEntityID(lEntityId);
-        CGS_ASSERT(liIndex != -1, "liIndex != -1");
+        CGS_ASSERT(liIndex != -1,
+            CgsDev::Assert::MessageAt("liIndex != -1", KAC_ARTIST_ASSERT_FILE, 540 /* ARTIST 0x825C2368 */));
         return mpaModels[liIndex].IsUsingSweptSpheres();
     }
 }

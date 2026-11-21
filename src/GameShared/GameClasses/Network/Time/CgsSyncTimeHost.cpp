@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeHost.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeBase.h"
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeMessage.h"
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"
@@ -18,6 +18,9 @@
 // the inlined GetNextLocalPlayerID read @ +0x23FC of the player manager, and the inlined
 // receive-message scan over the manager's 0x38-byte slots) are the platform layout the
 // natively-laid-out C++ structs stand in for.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeHost.cpp";
 
 namespace CgsNetwork
 {
@@ -44,7 +47,9 @@ namespace CgsNetwork
     // slots are keyed by the client id.
     bool SyncTimeHost::Prepare()
     {
-        CGS_ASSERT(mpSyncTimeMessageManager != 0, "mpSyncTimeMessageManager");
+        CGS_ASSERT(mpSyncTimeMessageManager != 0,
+            CgsDev::Assert::MessageAt(
+                "mpSyncTimeMessageManager", KAC_ARTIST_ASSERT_FILE, 70 /* ARTIST 0x8288B0A0 */));
 
         mpSyncTimeMessageManager->SwitchMode(SyncTimeMessageManager::E_MESSAGE_MODE_HOST);
         return true;
@@ -54,7 +59,9 @@ namespace CgsNetwork
     // Leave the session: park the shared message manager back in the idle mode.
     bool SyncTimeHost::Release()
     {
-        CGS_ASSERT(mpSyncTimeMessageManager != 0, "mpSyncTimeMessageManager");
+        CGS_ASSERT(mpSyncTimeMessageManager != 0,
+            CgsDev::Assert::MessageAt(
+                "mpSyncTimeMessageManager", KAC_ARTIST_ASSERT_FILE, 137 /* ARTIST 0x8288B108 */));
 
         mpSyncTimeMessageManager->SwitchMode(SyncTimeMessageManager::E_MESSAGE_MODE_NONE);
         return true;

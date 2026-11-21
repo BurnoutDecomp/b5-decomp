@@ -12,7 +12,9 @@
 // per project convention; the stringized conditions match the X360 message text.
 
 #include "GameSource/Director/Utils/BrnAbstractPool.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Director/Utils/BrnAbstractPool.cpp";
 
 namespace BrnDirector
 {
@@ -20,10 +22,15 @@ namespace BrnDirector
 bool AbstractPoolVoidHandle::Prepare(IAbstractPoolFreeObject* lpFreeObjectInterface,
                                      void* lpObject, s32 liIndex, s32 liSize)
 {
-    CGS_ASSERT( lpObject != 0,              "lpObject != NULL" );
-    CGS_ASSERT( lpFreeObjectInterface != 0, "lpFreeObjectInterface != NULL" );
-    CGS_ASSERT( liIndex >= 0,               "liIndex >= 0" );
-    CGS_ASSERT( liSize >= 0,                "liSize >= 0" );
+    CGS_ASSERT( lpObject != 0,
+        CgsDev::Assert::MessageAt("lpObject != NULL", KAC_ARTIST_ASSERT_FILE, 33 /* ARTIST 0x821F76F8 */));
+    CGS_ASSERT( lpFreeObjectInterface != 0,
+        CgsDev::Assert::MessageAt(
+            "lpFreeObjectInterface != NULL", KAC_ARTIST_ASSERT_FILE, 34 /* ARTIST 0x821F771C */));
+    CGS_ASSERT( liIndex >= 0,
+        CgsDev::Assert::MessageAt("liIndex >= 0", KAC_ARTIST_ASSERT_FILE, 35 /* ARTIST 0x821F7740 */));
+    CGS_ASSERT( liSize >= 0,
+        CgsDev::Assert::MessageAt("liSize >= 0", KAC_ARTIST_ASSERT_FILE, 36 /* ARTIST 0x821F7764 */));
 
     mpObject              = lpObject;
     mpFreeObjectInterface = lpFreeObjectInterface;

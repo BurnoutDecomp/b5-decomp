@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 // CgsMemory::HeapMalloc - the engine's general-purpose heap. A thin wrapper over an embedded
 // EA::Allocator::GeneralAllocator (vendor/PPMalloc): Construct initialises the allocator over the
@@ -8,6 +8,9 @@
 // fixed-memory-budget semantics.)
 //
 // HeapMallocCoreAllocator is the EA::Allocator::ICoreAllocator front-end onto a HeapMalloc.
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsHeapMalloc.cpp";
+
 namespace CgsMemory
 {
     // --- HeapMalloc ----------------------------------------------------------------------------
@@ -18,8 +21,10 @@ namespace CgsMemory
     // so the heap is fixed to the supplied buffer and never grows via the OS.
     void HeapMalloc::Construct(void* lpBuffer, s32 lnBufferSize)
     {
-        CGS_ASSERT(lpBuffer, "lpBuffer");           // CgsHeapMalloc.cpp:52
-        CGS_ASSERT(lnBufferSize > 0, "lnBufferSize>0"); // CgsHeapMalloc.cpp:53
+        CGS_ASSERT(lpBuffer,
+            CgsDev::Assert::MessageAt("lpBuffer", KAC_ARTIST_ASSERT_FILE, 52 /* ARTIST 0x828666B0 */));           // CgsHeapMalloc.cpp:52
+        CGS_ASSERT(lnBufferSize > 0,
+            CgsDev::Assert::MessageAt("lnBufferSize>0", KAC_ARTIST_ASSERT_FILE, 53 /* ARTIST 0x828666D4 */)); // CgsHeapMalloc.cpp:53
 
         mpBuffer     = lpBuffer;
         mnBufferSize = lnBufferSize;

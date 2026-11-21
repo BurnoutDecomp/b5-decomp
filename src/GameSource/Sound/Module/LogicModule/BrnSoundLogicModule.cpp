@@ -7,7 +7,7 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (attached-buffer guard)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (attached-buffer guard)
 #include <cstdlib>   // std::getenv (the [music] GUI-33 witness)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log / Message filter
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // the "Resource Registrar" monitor (Prepare case 0)
@@ -1540,7 +1540,10 @@ bool SoundLogicModule::PrepareStateManagersOnBoot(s32 luSkipMask)
 // pointer -- a non-gating tripwire).
 Io::LogicInputBuffer* SoundLogicModule::GetBrnInputStructure()
 {
-    CGS_ASSERT(mpBrnLogicInputBuffer, "mpBrnLogicInputBuffer");
+    CGS_ASSERT(mpBrnLogicInputBuffer,
+        CgsDev::Assert::MessageAt(
+            "mpBrnLogicInputBuffer",
+            "..\\..\\..\\GameSource\\Sound/Module/LogicModule/BrnSoundLogicModule.h", 432 /* ARTIST 0x82682540 */));
     return mpBrnLogicInputBuffer;
 }
 
@@ -1550,7 +1553,11 @@ Io::LogicInputBuffer* SoundLogicModule::GetBrnInputStructure()
 // (@0x826E0C10 -- the two memcpy spans + the car-data Clear+Append), unlock.
 void SoundLogicModule::PreUpdate(Io::LogicPreUpdateOutputBuffer* apLogicPreUpdateOutput)
 {
-    CGS_ASSERT(apLogicPreUpdateOutput != 0, "lpLogicPreUpdateOutput");
+    CGS_ASSERT(apLogicPreUpdateOutput != 0,
+        CgsDev::Assert::MessageAt(
+            "lpLogicPreUpdateOutput",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Sound/Module/LogicModule/BrnSoundLogicModule.cpp", 495 /* ARTIST 0x826E1F3C */));
     apLogicPreUpdateOutput->LockForWrite();
     apLogicPreUpdateOutput->SetPreUpdateOutput(mPreUpdateOutput);
     apLogicPreUpdateOutput->UnlockForWrite();

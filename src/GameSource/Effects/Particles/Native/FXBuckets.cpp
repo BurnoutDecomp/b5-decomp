@@ -40,7 +40,7 @@
 #include "GameSource/Effects/Particles/Native/BrnDebrisArray.h"  // BrnDebris  -> FXBucket<BrnDebris,32>
 #include "GameSource/Effects/Particles/Native/BrnSparkRenderer.h"// BrnSpark   -> FXBucket<BrnSpark,4>
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h" // CgsMemory::HeapMalloc::Malloc
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 
 namespace BrnParticle
 {
@@ -61,7 +61,11 @@ namespace BrnParticle
     {
         // 128-byte-aligned block holding the whole bucket budget.
         mpData = static_cast<u8*>(lpHeapMalloc->Malloc(static_cast<s32>(luTotalSize), 128));
-        CGS_ASSERT(mpData != NULL, "mpData != NULL");
+        CGS_ASSERT(mpData != NULL,
+            CgsDev::Assert::MessageAt(
+                "mpData != NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../Effects/Particles/Native/FXBuckets.cpp", 76 /* ARTIST 0x8227B1B8 */));
 
         FXBucketBase* lpCurrentBucket = reinterpret_cast<FXBucketBase*>(mpData); // r11 = first bucket
         const u32 luNumBuckets = luTotalSize >> 13; // totalSize / 8192

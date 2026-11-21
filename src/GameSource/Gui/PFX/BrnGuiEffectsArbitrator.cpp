@@ -7,7 +7,7 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"  // GuiEventLoadRequest / GuiEventLoadNotification
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"  // CgsDev::DebugInterface
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // gpDebugPrint / gxMessageFilterFlags
-#include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                    // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"               // CgsCore::SPrintf
 #include "SharedClasses/Graphics/BrnEffectsData.h"                    // BrnEffectsFrame
 #include <cstring>                                                    // _strnicmp
@@ -635,7 +635,10 @@ namespace BrnGui
     // ------------------------------------------------------------------------------------
     ColourCubeInfo* EffectsArbitrator::LookupColourCube(u64 luResourceId)
     {
-        CGS_ASSERT(muColourCubeCount <= KU_MAX_NUM_COLOURCUBES, "muColourCubeCount <= KU_MAX_NUM_COLOURCUBES");   // :1214
+        CGS_ASSERT(muColourCubeCount <= KU_MAX_NUM_COLOURCUBES,
+            CgsDev::Assert::MessageAt(
+                "muColourCubeCount <= KU_MAX_NUM_COLOURCUBES",
+                "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 1214 /* ARTIST 0x824F5BC8 */));   // :1214
         for (u32 luCube = 0; luCube < muColourCubeCount; ++luCube)
         {
             if (maColourCubes[luCube].muResourceId == luResourceId)

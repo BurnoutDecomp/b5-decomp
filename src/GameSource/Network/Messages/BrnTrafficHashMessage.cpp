@@ -1,7 +1,7 @@
 #include "types.hpp"
 
 #include "GameSource/Network/Messages/BrnTrafficHashMessage.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::TrafficHashMessage::Construct            @ 0x8257A3B8
@@ -55,7 +55,10 @@ namespace BrnNetwork
             mu16TrafficHash           = lu16TrafficHash;
             mu16Update10HzFrame       = lu16Update10HzFrame;
             CgsNetwork::Message::PrepareForSend(14, lu16FrameCount);
-            CGS_ASSERT(!IsReliable(), "!IsReliable()");
+            CGS_ASSERT(!IsReliable(),
+                CgsDev::Assert::MessageAt(
+                    "!IsReliable()",
+                    "..\\..\\..\\GameSource\\Network/Messages/BrnTrafficHashMessage.cpp", 100 /* ARTIST 0x8257DF20 */));
         }
     }
 

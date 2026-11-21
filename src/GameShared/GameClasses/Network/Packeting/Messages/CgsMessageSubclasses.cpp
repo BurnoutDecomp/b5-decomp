@@ -1,4 +1,5 @@
 #include "CgsMessage.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "CgsReliableMessage.h"   // CgsNetwork::ReliableMessage (moved out of CgsMessage.h)
 #include "GameShared/GameClasses/Network/Players/CgsHostMigrationManager.h"  // real HostMigrationManager (IsHostAlive)
 #include "BrnMessageSubclasses.h"
@@ -17,6 +18,9 @@
 // Store-for-store faithful to the X360 asm; members referenced by name; asserts
 // use the house CGS_ASSERT machinery (declared via CgsAssert.h, pulled by
 // CgsMessage.h).
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h";
 
 namespace BrnNetwork
 {
@@ -62,9 +66,12 @@ namespace CgsNetwork
     // mx8Flags |= VALID                    (ori r11,r11,1 / stb @+0x19)
     void ReliableMessage::PrepareForSend(s32 leType, u16 lu16Frame)
     {
-        CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0, "!IsMessageValid()");
+        CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
+            CgsDev::Assert::MessageAt("!IsMessageValid()", KAC_ARTIST_ASSERT_FILE, 940 /* ARTIST 0x82882138 */));
         mx8Flags |= KX8_FLAGS_RELIABLE;
-        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME, "lu16Frame != KU16_INVALID_FRAME");
+        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
+            CgsDev::Assert::MessageAt(
+                "lu16Frame != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 594 /* ARTIST 0x8288216C */));
         SetType(leType);
         mu16Frame = lu16Frame;
         mx8Flags |= KX8_FLAGS_VALID;

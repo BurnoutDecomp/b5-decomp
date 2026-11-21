@@ -4,7 +4,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h" // InGamePlayerStatusData
 #include "GameSource/GameState/BrnGameStateSharedIO.h"  // GameStateModuleIO::EGameModeType
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT
 
 // BrnGui::HudMessageAnalyzer -- reconstructed from BURNOUT_X360_ARTIST.XEX
 // (gateui wave partfile 02). Six more of the fan-out's declaration-only arms, landed to
@@ -159,7 +159,10 @@ void HudMessageAnalyzer::HandleAllJunctionsOfTypeFound(
 // E_MODE_ONLINE_FREE_BURN_LOBBY (`cmpwi r11, 0xF` against mpGuiCache+0x9E58).
 void HudMessageAnalyzer::HandlePlayerLeftLobby(const GuiEventNetworkPlayerLeftLobby* lpEvent)
 {
-    CGS_ASSERT(lpEvent != NULL, "lpEvent");   // cpp:5059
+    CGS_ASSERT(lpEvent != NULL,
+        CgsDev::Assert::MessageAt(
+            "lpEvent",
+            "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.cpp", 5059 /* ARTIST 0x824F3374 */));   // cpp:5059
 
     if (!lpEvent->mbIsLocalPlayerInGame)
         return;

@@ -1,9 +1,12 @@
 #include "GameSource/Network/BrnNetworkServers.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Network/BrnNetworkManager.h"
 #include "GameSource/Network/BrnServerInterface.h"   // BrnServerInterface::GetConnectionComponent
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h" // DisconnectFromServer
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkServers.cpp";
 
 namespace BrnNetwork
 {
@@ -21,13 +24,15 @@ namespace BrnNetwork
 
     const char* NetworkServers::GetServerIP() const
     {
-        CGS_ASSERT(mpcServerIP, "mpcServerIP");
+        CGS_ASSERT(mpcServerIP,
+            CgsDev::Assert::MessageAt("mpcServerIP", KAC_ARTIST_ASSERT_FILE, 171 /* ARTIST 0x82582BC0 */));
         return mpcServerIP;
     }
 
     s32 NetworkServers::GetServerPort() const
     {
-        CGS_ASSERT(miServerPort > 0, "miServerPort > 0");
+        CGS_ASSERT(miServerPort > 0,
+            CgsDev::Assert::MessageAt("miServerPort > 0", KAC_ARTIST_ASSERT_FILE, 189 /* ARTIST 0x82582C18 */));
         return miServerPort;
     }
 

@@ -25,7 +25,7 @@
 
 #include "GameSource/Network/Debug Components/BrnNetworkScoreboardDebugComponent.h"
 #include "GameSource/Network/Managers/BrnNetworkScoreboardManager.h"   // ScoreboardManager::HandleScoreboardEvent
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // original streamed assert messages
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint (PrintScoreboard)
 #include <cstring>                                    // std::strlen / std::strncpy
@@ -57,6 +57,9 @@ namespace
     }
 }
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp";
+
 namespace BrnNetwork
 {
     using CgsDev::DebugUI::StringList;
@@ -70,7 +73,8 @@ namespace BrnNetwork
     // selections to "none" and register the component with the debug menu.
     void ScoreboardDebugComponent::Construct(ScoreboardManager* lpScoreboardManager)
     {
-        CGS_ASSERT(lpScoreboardManager != 0, "lpScoreboardManager");
+        CGS_ASSERT(lpScoreboardManager != 0,
+            CgsDev::Assert::MessageAt("lpScoreboardManager", KAC_ARTIST_ASSERT_FILE, 45 /* ARTIST 0x82585884 */));
         mpScoreboardManager = lpScoreboardManager;
 
         mScoreboard.Construct();
@@ -281,7 +285,8 @@ namespace BrnNetwork
     // it. The X360 memcpy's the whole 0xB6C-byte Scoreboard payload, then calls PrintScoreboard(this).
     void ScoreboardDebugComponent::HandleScoreboardEvent(const Scoreboard* lpScoreboard)
     {
-        CGS_ASSERT(lpScoreboard != 0, "lpScoreboardEvent");
+        CGS_ASSERT(lpScoreboard != 0,
+            CgsDev::Assert::MessageAt("lpScoreboardEvent", KAC_ARTIST_ASSERT_FILE, 378 /* ARTIST 0x8258AE64 */));
         mScoreboard = *lpScoreboard;   // X360: memcpy(this+0xC, src, 0xB6C) -- whole Scoreboard payload
         PrintScoreboard();             // tail call: render the freshly copied scoreboard
     }

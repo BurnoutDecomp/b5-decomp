@@ -19,7 +19,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfo.h" // ServerInterfacePlayerInfo (GetStatus / GetLastError / ClearLastError)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"      // ServerInterfaceGames (IsLocalPlayerInGame / IsPlayerInGame / GetPlayerParametersByPlayerName)
 #include "GameSource/Network/Parameters/BrnNetworkPlayerParamsClass.h" // BrnNetwork::PlayerParams (stack params object for ShowGamerCard)
-#include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"  // CGS_ASSERT
 
 #include <cstring>   // std::memcpy (X360 GetXuidForPlayer / ShowGamerCard)
 
@@ -116,7 +116,10 @@ namespace BrnNetwork
         InitialiseActionArray();
         InitialiseProcessArray();
 
-        CGS_ASSERT(lpServerInterface != 0, "lpServerInterface");
+        CGS_ASSERT(lpServerInterface != 0,
+            CgsDev::Assert::MessageAt(
+                "lpServerInterface",
+                "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerCardManagerX360.cpp", 58 /* ARTIST 0x825618D0 */));
 
         mpServerInterface          = lpServerInterface;   // *(a1 + 148) = a2
         maRequestedPlayerName.macName[0] = '\0';          // stb 0, 0x68

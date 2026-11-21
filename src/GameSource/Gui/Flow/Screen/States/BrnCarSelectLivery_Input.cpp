@@ -22,7 +22,7 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectLivery.h"
 #include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface out-queue
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // AddEvent
@@ -433,7 +433,10 @@ namespace BrnGui
     void CarSelectLivery::HandlePlayerCarColourResponseEvent(const CgsModule::Event* lpEvent,
                                                              s32 liEventType)
     {
-        CGS_ASSERT(lpEvent != 0, "lpEvent");   // cpp:1068
+        CGS_ASSERT(lpEvent != 0,
+            CgsDev::Assert::MessageAt(
+                "lpEvent",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectLivery.cpp", 1068 /* ARTIST 0x824C0E40 */));   // cpp:1068
 
         if (liEventType != 414 || mbDisableCarModifyInteraction)
         {

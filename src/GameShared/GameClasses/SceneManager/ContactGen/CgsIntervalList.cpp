@@ -15,11 +15,14 @@
 
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsIntervalList.h"
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsIntervalStack.h"  // IntervalStack (sweep scratch)
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/fpu/scalar_operation.h"     // rw::math::fpu::IsZero (scalar box-extent tests)
 #include "rw/math/vpu/vector3_operation.h"    // rw::math::vpu::IsValid (Vector3)
 
 #include <algorithm>                          // std::sort (the console's own std::_Sort)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\ContactGen/CgsIntervalList.cpp";
 
 namespace CgsSceneManager
 {
@@ -31,8 +34,12 @@ namespace CgsSceneManager
                                ObjectToIntervalMap* lpaObjectToIntervalMapMem,
                                u32 luMaxNumIntervals)
     {
-        CGS_ASSERT(lpaIntervalsMem != NULL, "lpaIntervalsMem != NULL");
-        CGS_ASSERT(lpaObjectToIntervalMapMem != NULL, "lpaObjectToIntervalMapMem != NULL");
+        CGS_ASSERT(lpaIntervalsMem != NULL,
+            CgsDev::Assert::MessageAt(
+                "lpaIntervalsMem != NULL", KAC_ARTIST_ASSERT_FILE, 94 /* ARTIST 0x828B468C */));
+        CGS_ASSERT(lpaObjectToIntervalMapMem != NULL,
+            CgsDev::Assert::MessageAt(
+                "lpaObjectToIntervalMapMem != NULL", KAC_ARTIST_ASSERT_FILE, 95 /* ARTIST 0x828B46B0 */));
 
         mpaIntervals           = lpaIntervalsMem;
         mpaObjectToIntervalMap = lpaObjectToIntervalMapMem;

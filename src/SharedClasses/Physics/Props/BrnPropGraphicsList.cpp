@@ -1,5 +1,5 @@
 #include "SharedClasses/Physics/Props/BrnPropGraphicsList.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/rwcore_structs.h"   // rw::Resource (m_baseResources[])
 
 #include <cstddef>
@@ -14,6 +14,10 @@
 //
 // Both fix-ups walk the native serialised records at their declared strides.
 // =============================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../../SharedClasses/Physics/Props/BrnPropGraphicsList.cpp";
 
 namespace BrnPhysics
 {
@@ -107,7 +111,9 @@ namespace Props
     // no early-out).
     PropPartGraphics* PropGraphicsList::GetPartGraphics(u32 luIndex)
     {
-        CGS_ASSERT(luIndex < muNumberOfPropPartModels, "luIndex < muNumberOfPropPartModels");
+        CGS_ASSERT(luIndex < muNumberOfPropPartModels,
+            CgsDev::Assert::MessageAt(
+                "luIndex < muNumberOfPropPartModels", KAC_ARTIST_ASSERT_FILE, 314 /* ARTIST 0x826756F0 */));
         return &mpaPropPartGraphics[luIndex];
     }
 
@@ -115,7 +121,9 @@ namespace Props
     // return &mpaPropGraphics[luIndex] (X360 stride 12). Non-gating tripwire assert (no early-out).
     PropGraphics* PropGraphicsList::GetPropGraphics(u32 luIndex)
     {
-        CGS_ASSERT(luIndex < muNumberOfPropModels, "luIndex < muNumberOfPropModels");
+        CGS_ASSERT(luIndex < muNumberOfPropModels,
+            CgsDev::Assert::MessageAt(
+                "luIndex < muNumberOfPropModels", KAC_ARTIST_ASSERT_FILE, 303 /* ARTIST 0x82675678 */));
         return &mpaPropGraphics[luIndex];
     }
 

@@ -15,6 +15,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"
@@ -547,7 +548,10 @@ void Voice::SetParameter(s32 as32Index, f32 af32Value, Name akParamName)
     InputParameter& lrParam = GetInputParameter(static_cast<u32>(as32Index));
 
     // *a5 == *result : the caller's name must equal the resolved parameter's name.
-    CGS_ASSERT(akParamName == lrParam.GetName(), "lParam.GetName() == lParamName");
+    CGS_ASSERT(akParamName == lrParam.GetName(),
+        CgsDev::Assert::MessageAt(
+            "lParam.GetName() == lParamName",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsVoice.h", 1288 /* ARTIST 0x826ACD78 */));
 
     bool lbChanged = (lrParam.GetValueRaw() != af32Value);   // fcmpu mf32Value(@0xC) vs value
     lrParam.SetValueRaw(af32Value);                          // stfs @0xC

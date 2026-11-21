@@ -1,6 +1,6 @@
 #include "GameSource/Game/BrnLUACallbackHelper.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 extern "C" int lua_gettop(lua_State* lpLuaState);
 
@@ -50,7 +50,10 @@ namespace BrnGame
             return E_BOOL;
         }
 
-        CGS_ASSERT(false, "Could not derive arg type");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "Could not derive arg type",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\game\\BrnLUACallbackHelper.h", 197 /* ARTIST 0x823C0404 */));
         return E_UNKNOWN;
     }
 

@@ -13,7 +13,7 @@
 #include "GameSource/Network/Managers/BrnNetworkScoreboardManager.h"
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                              // CgsDev::StrStream (download asserts)
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"       // E_SERVER_INTERFACE_RANKINGS_ERROR_START
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                                    // CgsCore::SPrintf (variation heading formatter)
@@ -35,6 +35,9 @@
 
 #include <cstdlib>   // atoi, qsort
 #include "types.hpp"   // uintptr_t (this <-> s32 user-data round-trip)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboardManager.cpp";
 
 namespace BrnNetwork
 {
@@ -152,15 +155,18 @@ namespace BrnNetwork
     bool ScoreboardManager::Prepare(CgsNetwork::ServerInterface* lpServerInterface,
                                     BrnNetwork::BrnNetworkModule* lpModule)
     {
-        CGS_ASSERT(lpModule != 0, "lpModule");
+        CGS_ASSERT(lpModule != 0,
+            CgsDev::Assert::MessageAt("lpModule", KAC_ARTIST_ASSERT_FILE, 128 /* ARTIST 0x825471E0 */));
         mpNetworkModule   = lpModule;
         mpServerInterface = lpServerInterface;
-        CGS_ASSERT(lpServerInterface != 0, "mpServerInterface");
+        CGS_ASSERT(lpServerInterface != 0,
+            CgsDev::Assert::MessageAt("mpServerInterface", KAC_ARTIST_ASSERT_FILE, 132 /* ARTIST 0x8254720C */));
 
         // X360: mpRankings = mpServerInterface->maComponents[E_COMPONENTS_RANKINGS].mpComponent.
         mpRankings = reinterpret_cast<CgsNetwork::ServerInterfaceRankings*>(
             lpServerInterface->GetRankingsComponent());
-        CGS_ASSERT(mpRankings != 0, "mpRankings");
+        CGS_ASSERT(mpRankings != 0,
+            CgsDev::Assert::MessageAt("mpRankings", KAC_ARTIST_ASSERT_FILE, 135 /* ARTIST 0x82547238 */));
 
         miCurrentView      = KI_INVALID_HEADING;
         miCurrentVariation = KI_INVALID_HEADING;

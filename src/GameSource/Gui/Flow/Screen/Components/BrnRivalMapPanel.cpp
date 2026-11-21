@@ -18,7 +18,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/Components/BrnRivalMapPanel.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf, LobbyNameCmp
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDConvertToString
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // ParameterFormatType
@@ -151,7 +151,10 @@ namespace BrnGui
     // @ 0x82417738 -------------------------------------------------------------------
     void RivalMapPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");   // cpp:91
+        CGS_ASSERT(lpGuiCache != 0,
+            CgsDev::Assert::MessageAt(
+                "lpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnRivalMapPanel.cpp", 91 /* ARTIST 0x82417760 */));   // cpp:91
 
         lpGuiCache->AppendExpectedAptComponent(leFlow, GetNameHash());            // lwz +0x84
 
@@ -420,7 +423,10 @@ namespace BrnGui
     // @ 0x824176C0 -------------------------------------------------------------------
     void RivalMapPanel::StorePlayerInfo(const void* lpStatsResponseEvent)
     {
-        CGS_ASSERT(lpStatsResponseEvent != 0, "NULL != lpStatsResponseEvent");   // @0x824176E4
+        CGS_ASSERT(lpStatsResponseEvent != 0,
+            CgsDev::Assert::MessageAt(
+                "NULL != lpStatsResponseEvent",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnRivalMapPanel.h", 153 /* ARTIST 0x824176EC */));   // @0x824176E4
 
         std::memcpy(maStatsResponse, lpStatsResponseEvent, KI_STATS_RESPONSE_SIZE); // @0x82417710
         mbHasPlayerInfo = true;                                                      // @0x82417718 (stb 1)

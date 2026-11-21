@@ -9,7 +9,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineMarkMan.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsHash.h"    // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                         // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                        // CgsGui::GuiAccessPointers::GetGuiCache
@@ -141,7 +141,10 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
         }
         muNumExpectedComponents = 0;
 
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt(
+                "mpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineMarkMan.h", 196 /* ARTIST 0x82483BF0 */));
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
     }
@@ -290,7 +293,10 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
     // ---- UpdateSetup -----------------------------------------------------------
     void OnlineMarkMan::UpdateSetup()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache != NULL");
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt(
+                "mpGuiCache != NULL",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineMarkMan.cpp", 314 /* ARTIST 0x82487220 */));
         mTimeFieldIcon.SetState("idle");
     }
 

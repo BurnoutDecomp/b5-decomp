@@ -16,10 +16,14 @@
 // raw-offset arithmetic.
 
 #include "GameSource/Network/Managers/BrnNetworkScoreboard.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (the bounded-copy assert)
 
 #include <cstring>   // std::strlen / std::strncpy (the cell and title copies)
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboard.h";
+static const char KAC_ARTIST_ASSERT_SOURCE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboard.cpp";
 
 namespace BrnNetwork
 {
@@ -84,8 +88,11 @@ namespace BrnNetwork
 
     const char* ScoreboardRow::GetData(s32 liColumnNumber) const
     {
-        CGS_ASSERT(liColumnNumber < miNumberOfColumns, "liColumnNumber < miNumberOfColumns");
-        CGS_ASSERT(liColumnNumber >= 0, "liColumnNumber >= 0");
+        CGS_ASSERT(liColumnNumber < miNumberOfColumns,
+            CgsDev::Assert::MessageAt(
+                "liColumnNumber < miNumberOfColumns", KAC_ARTIST_ASSERT_SOURCE, 402 /* ARTIST 0x82547164 */));
+        CGS_ASSERT(liColumnNumber >= 0,
+            CgsDev::Assert::MessageAt("liColumnNumber >= 0", KAC_ARTIST_ASSERT_SOURCE, 403 /* ARTIST 0x82547188 */));
         return maacData[liColumnNumber];
     }
 
@@ -149,8 +156,11 @@ namespace BrnNetwork
 
     const ScoreboardRow* Scoreboard::GetRow(s32 liRowNumber) const
     {
-        CGS_ASSERT(liRowNumber >= 0, "liRowNumber >= 0");
-        CGS_ASSERT(liRowNumber < miNumberOfRows, "liRowNumber < miNumberOfRows");
+        CGS_ASSERT(liRowNumber >= 0,
+            CgsDev::Assert::MessageAt("liRowNumber >= 0", KAC_ARTIST_ASSERT_FILE, 309 /* ARTIST 0x8240E9D4 */));
+        CGS_ASSERT(liRowNumber < miNumberOfRows,
+            CgsDev::Assert::MessageAt(
+                "liRowNumber < miNumberOfRows", KAC_ARTIST_ASSERT_FILE, 310 /* ARTIST 0x8240EA00 */));
         return &maRows[liRowNumber];
     }
 }

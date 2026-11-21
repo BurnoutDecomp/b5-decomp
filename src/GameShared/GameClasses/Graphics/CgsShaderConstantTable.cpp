@@ -1,8 +1,12 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h" // DispatchBin::AllocateMemoryFast
 #include "rw/math/vpu/types.h"                             // rw::math::vpu::Vector4
 #include <cstring>                                         // strlen / strcpy
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Graphics/CgsShaderConstants.h";
+
 
 // CgsShaderConstantTable.cpp - the runtime-side ShaderConstantTable methods that
 // build and update the per-frame named-constant register:
@@ -79,10 +83,13 @@ void ShaderConstantTable::FastNonOverlappedVectorMemcpy(Vector4* lpDest, const r
 // the 4th memcpy arg is the per-element entry count read from maConstants[luIndex] offset 3.)
 void ShaderConstantTable::SetShaderConstantArrayData(u32 luIndex, const rw::math::vpu::Vector4* lpaValues)
 {
-    CGS_ASSERT(luIndex < mu8NumUsedConstants, "luIndex < mu8NumUsedConstants");
+    CGS_ASSERT(luIndex < mu8NumUsedConstants,
+        CgsDev::Assert::MessageAt(
+            "luIndex < mu8NumUsedConstants", KAC_ARTIST_ASSERT_FILE, 474 /* ARTIST 0x822B348C */));
 
     Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
-    CGS_ASSERT(lpDest, "lpDest");
+    CGS_ASSERT(lpDest,
+        CgsDev::Assert::MessageAt("lpDest", KAC_ARTIST_ASSERT_FILE, 478 /* ARTIST 0x822B34C0 */));
 
     FastNonOverlappedVectorMemcpy(lpDest, lpaValues, maConstants[luIndex].GetNumEntries());
 }

@@ -51,7 +51,7 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h" // BrnGameState::GameStateModuleIO::EGameModeType
 #include "GameSource/BurnoutConstants.h"               // EActiveRaceCarIndex
 #include "GameShared/GameClasses/Core/CgsID.h"               // native CgsIDConvertToString
-#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // [H3c] CgsCore::SPrintf (the icon-name pass)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Message::gxMessageFilterFlags / CgsDev::Log::gpDebugPrint
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // [H3c] StateInterface::GetAccessPointers
@@ -112,7 +112,10 @@ void MapIconManager::ResetOwnerParameter()
 //   (the X360 reaches it at this+0x7090). The pointer is asserted non-null first.
 void MapIconManager::SetRoadRuleBatchData(const GuiEventRoadRuleBatchDataResponse* lpRoadRules)
 {
-    CGS_ASSERT(lpRoadRules != 0, "lpRoadRules");
+    CGS_ASSERT(lpRoadRules != 0,
+        CgsDev::Assert::MessageAt(
+            "lpRoadRules",
+            "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapIconManager.h", 789 /* ARTIST 0x824B2FAC */));
 
     mRoadSignIconManager.SetRoadRuleBatchData(lpRoadRules);
 }
@@ -2204,7 +2207,10 @@ void MapIconManager::SetAllowRivalSelection(bool lbAllowRivalSelection)
 // the unchanged path latches nothing (the console falls straight through to the epilogue).
 void MapIconManager::SetUseRoadSigns(bool lbUseRoadSigns, CgsGui::StateInterface* lpStateInterface)
 {
-    CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");   // cpp:3457
+    CGS_ASSERT(lpStateInterface != 0,
+        CgsDev::Assert::MessageAt(
+            "lpStateInterface",
+            "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapIconManager.cpp", 3457 /* ARTIST 0x82512404 */));   // cpp:3457
 
     if (mbUseRoadSigns != lbUseRoadSigns)
     {

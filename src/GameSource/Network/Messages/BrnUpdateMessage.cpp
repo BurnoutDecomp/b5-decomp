@@ -1,5 +1,5 @@
 #include "GameSource/Network/Messages/BrnUpdateMessage.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (UpdateMessage validity guards)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (UpdateMessage validity guards)
 #include "rw/math/vpu/vector3_operation.h"          // Magnitude / Normalize / Min / Max
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -13,6 +13,8 @@
 // three control floats (lfs/stfs), the two status words (lwz/stw), and the eight trailing
 // bool flags (lbz/stb). Reproduced here as plain named-member assignments; the aggregate
 // vector/matrix members copy as 16-byte units exactly as the SIMD load/store pairs do.
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Network/Messages/BrnUpdateMessage.h";
 
 namespace BrnNetwork
 {
@@ -118,7 +120,8 @@ namespace BrnNetwork
     // (the embedded payload at +0x20, i.e. `this + 0x20`).
     const UpdateData* UpdateMessage::GetUpdateData()
     {
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0, "IsMessageValid()");
+        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0,
+            CgsDev::Assert::MessageAt("IsMessageValid()", KAC_ARTIST_ASSERT_FILE, 131 /* ARTIST 0x82580BCC */));
         return &mUpdateData;
     }
 
@@ -127,7 +130,8 @@ namespace BrnNetwork
     // Asserts valid, then returns the payload's mu16FramesSinceStart (lhz +0x22 == mUpdateData+2).
     u16 UpdateMessage::GetU16FramesSinceStart()
     {
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0, "IsMessageValid()");
+        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0,
+            CgsDev::Assert::MessageAt("IsMessageValid()", KAC_ARTIST_ASSERT_FILE, 138 /* ARTIST 0x82580C2C */));
         return mUpdateData.mu16FramesSinceStart;
     }
 

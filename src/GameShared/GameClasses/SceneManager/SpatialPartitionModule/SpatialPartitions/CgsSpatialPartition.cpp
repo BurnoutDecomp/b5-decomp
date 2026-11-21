@@ -1,11 +1,14 @@
 #include "GameShared/GameClasses/SceneManager/SpatialPartitionModule/SpatialPartitions/CgsSpatialPartition.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 // CgsSceneManager::SpatialPartition member functions, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. The partition owns a fixed pool of broad-phase entity
 // links (X360 this + 0x80, 8-byte stride) and a parallel pool of bounding spheres
 // (X360 this + 0x13900, 16-byte stride); both are named members here (see the header).
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\SpatialPartitionModule/SpatialPartitions/CgsSpatialPartition.h";
 
 namespace CgsSceneManager
 {
@@ -79,14 +82,18 @@ u16 SpatialPartition::CalcEntityIndex(const SpatialPartitionEntityLink& lrEntity
 // the byte base of the sphere pool. Bounds-asserts against KI_MAX_NUM_ENTITIES first.
 CgsGeometric::Sphere& SpatialPartition::GetEntityBoundingSphere(u16 lu16Index)
 {
-    CGS_ASSERT(lu16Index < KI_MAX_NUM_ENTITIES, "lu16Index < KI_MAX_NUM_ENTITIES");
+    CGS_ASSERT(lu16Index < KI_MAX_NUM_ENTITIES,
+        CgsDev::Assert::MessageAt(
+            "lu16Index < KI_MAX_NUM_ENTITIES", KAC_ARTIST_ASSERT_FILE, 392 /* ARTIST 0x828A9F94 */));
     return maEntityBoundingSpheres[lu16Index];
 }
 
 // 0x828A9FD0 -- GetEntityBoundingSphereConst: const twin of GetEntityBoundingSphere.
 const CgsGeometric::Sphere& SpatialPartition::GetEntityBoundingSphereConst(u16 lu16Index) const
 {
-    CGS_ASSERT(lu16Index < KI_MAX_NUM_ENTITIES, "lu16Index < KI_MAX_NUM_ENTITIES");
+    CGS_ASSERT(lu16Index < KI_MAX_NUM_ENTITIES,
+        CgsDev::Assert::MessageAt(
+            "lu16Index < KI_MAX_NUM_ENTITIES", KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x828A9FFC */));
     return maEntityBoundingSpheres[lu16Index];
 }
 

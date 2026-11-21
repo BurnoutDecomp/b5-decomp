@@ -4537,7 +4537,11 @@ void ChallengeManager::OutputFreeburnChallengeEveryPlayerStatusEvent(TGameAction
         }
     }
 
-    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue");   // BrnChallengeManager.cpp:5113
+    CGS_ASSERT(lpActionQueue != 0,
+        CgsDev::Assert::MessageAt(
+            "lpActionQueue",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../GameState/ModeManager/ChallengeManager/BrnChallengeManager.cpp", 5113 /* ARTIST 0x823480EC */));   // BrnChallengeManager.cpp:5113
 
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lStatusData),
                             GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE_EVERY_PLAYER_COMPLETION_STATUS,

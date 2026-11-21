@@ -1,6 +1,6 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnVehicleLocatorData.h" // VehicleLocatorData (SetLightLocators' source)
 
 #include <cstddef>   // offsetof
@@ -35,6 +35,9 @@
 // asserts spell the glass bound "( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )" but the
 // actual compiled bound is `n < 8` (8 glass panes); the part bound is `luPart < 96`.
 // ============================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnActiveRaceCar.h";
 
 namespace BrnWorld
 {
@@ -87,7 +90,9 @@ namespace BrnWorld
 // X360 0x822A3220: &maWheelTransforms[luWheel] via ((luWheel+33)<<6)+this.
 const Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelTransform(u32 luWheel) const
 {
-    CGS_ASSERT(luWheel < 6, "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
+    CGS_ASSERT(luWheel < 6,
+        CgsDev::Assert::MessageAt(
+            "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS", KAC_ARTIST_ASSERT_FILE, 2050 /* ARTIST 0x822A324C */));
     return mWheelTransforms[luWheel];
 }
 
@@ -107,7 +112,9 @@ const Vector3* ActiveRaceCar::RenderParams::GetAxlePosition(u32 luWheel) const
 // X360 0x822A31B8: &maWheelScaleMatrices[luWheel] via ((luWheel+39)<<6)+this.
 const Matrix44Affine& ActiveRaceCar::RenderParams::GetWheelScaleMatrix(u32 luWheel) const
 {
-    CGS_ASSERT(luWheel < 6, "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS");
+    CGS_ASSERT(luWheel < 6,
+        CgsDev::Assert::MessageAt(
+            "luWheelIndex < BrnPhysics::Deformation::KU_DEFORMATION_MODEL_DATA_MAX_WHEELS", KAC_ARTIST_ASSERT_FILE, 1917 /* ARTIST 0x822A31E4 */));
     return mWheelScaleTransforms[luWheel];
 }
 

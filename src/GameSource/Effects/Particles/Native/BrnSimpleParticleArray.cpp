@@ -26,7 +26,7 @@
 #include "GameSource/AttribSys/Generated/classes/nativeparticleparams.h"   // Attrib::Gen::nativeparticleparams
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"                   // CgsMemory::HeapMalloc::Malloc
 #include "SharedClasses/Graphics/TextureNameMapResourceType.h"             // TextureNameMap::Entry::HashString
-#include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                         // CGS_ASSERT
 
 namespace BrnParticle
 {
@@ -129,7 +129,11 @@ namespace Native
         const u32 luConsoleSize = luNumParticles * static_cast<u32>(sizeof(CB4Particle));
         mpaParticles = static_cast<CB4Particle*>(
             lpHeapMalloc->Malloc(static_cast<s32>(luConsoleSize), KI_PARTICLE_ALIGNMENT));
-        CGS_ASSERT(mpaParticles != 0, "mpaParticles");   // BrnSimpleParticleRenderer.cpp:293
+        CGS_ASSERT(mpaParticles != 0,
+            CgsDev::Assert::MessageAt(
+                "mpaParticles",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../Effects/Particles/Native/BrnSimpleParticleRenderer.cpp", 293 /* ARTIST 0x8227ADA4 */));   // BrnSimpleParticleRenderer.cpp:293
         return luConsoleSize;
     }
 

@@ -1,6 +1,6 @@
 
 #include "GameSource/Network/X360/BrnServerInterfaceX360.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePrepareParams.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"  // CgsNetwork::E_COMPONENTS_GAMES
 
@@ -51,7 +51,11 @@ namespace BrnNetwork
 
         default:
             // BrnServerInterfaceX360.cpp:120 -- expression string "0" verbatim.
-            CGS_ASSERT( false, "0" );
+            CGS_ASSERT( false,
+                CgsDev::Assert::MessageAt(
+                    "0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                    "../Network/X360/BrnServerInterfaceX360.cpp", 120 /* ARTIST 0x8258B2BC */));
             return false;
         }
     }

@@ -19,11 +19,16 @@
 // ----------------------------------------------------------------------------
 
 #include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/GameState/Progression/BrnProgressionManager.h" // mpProgressionManager accessors
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h" // mpScoringSystem accessors / takedown query
 #include "GameSource/GameState/BrnGameStateModule.h"                 // mpGameStateModule accessors
 #include "GameSource/BurnoutConstants.h"                             // EActiveRaceCarIndex
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp";
 
 namespace BrnGameState
 {
@@ -96,16 +101,20 @@ void AchievementManagerBase::Construct(BrnProgression::ProgressionManager* lpPro
                                        ScoringSystem* lpScoringSystem,
                                        GameStateModule* lpGameStateModule)
 {
-    CGS_ASSERT(lpProgressionManager, "lpProgressionManager");
+    CGS_ASSERT(lpProgressionManager,
+        CgsDev::Assert::MessageAt("lpProgressionManager", KAC_ARTIST_ASSERT_FILE, 64 /* ARTIST 0x8235A980 */));
     mpProgressionManager = lpProgressionManager;
 
-    CGS_ASSERT(lpStreetManager, "lpStreetManager");
+    CGS_ASSERT(lpStreetManager,
+        CgsDev::Assert::MessageAt("lpStreetManager", KAC_ARTIST_ASSERT_FILE, 67 /* ARTIST 0x8235A9A8 */));
     mpStreetManager = lpStreetManager;
 
-    CGS_ASSERT(lpScoringSystem, "lpScoringSystem");
+    CGS_ASSERT(lpScoringSystem,
+        CgsDev::Assert::MessageAt("lpScoringSystem", KAC_ARTIST_ASSERT_FILE, 70 /* ARTIST 0x8235A9D0 */));
     mpScoringSystem = lpScoringSystem;
 
-    CGS_ASSERT(lpGameStateModule, "lpGameStateModule");
+    CGS_ASSERT(lpGameStateModule,
+        CgsDev::Assert::MessageAt("lpGameStateModule", KAC_ARTIST_ASSERT_FILE, 73 /* ARTIST 0x8235A9F8 */));
     mpGameStateModule = lpGameStateModule;
 }
 

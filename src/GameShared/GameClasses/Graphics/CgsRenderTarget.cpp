@@ -28,10 +28,14 @@
 
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/device.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\CgsRenderTarget.cpp";
+
 
 // One surface record's default state, as the X360 ctor (0x823F47A0) seeds it: "unused, no
 // compression, no ZCull" - filter mode 1, not-in-use, no system memory, texture type 1, and all of
@@ -216,14 +220,16 @@ void CgsRenderTarget::End()
 // The resolved colour texture for colour section luIndex.
 renderengine::Texture* CgsRenderTarget::GetTexture(u32 luIndex)
 {
-    CGS_ASSERT(mpRenderTarget != 0, "mpRenderTarget");
+    CGS_ASSERT(mpRenderTarget != 0,
+        CgsDev::Assert::MessageAt("mpRenderTarget", KAC_ARTIST_ASSERT_FILE, 240 /* ARTIST 0x827E74D8 */));
     return mpRenderTarget->maColourTargets[luIndex].mpTextureState->mpRaster;
 }
 
 // The resolved depth/stencil texture.
 renderengine::Texture* CgsRenderTarget::GetDepthTexture()
 {
-    CGS_ASSERT(mpRenderTarget != 0, "mpRenderTarget");
+    CGS_ASSERT(mpRenderTarget != 0,
+        CgsDev::Assert::MessageAt("mpRenderTarget", KAC_ARTIST_ASSERT_FILE, 257 /* ARTIST 0x827E7550 */));
     return mpRenderTarget->mDepthTarget.mpTexture;
 }
 

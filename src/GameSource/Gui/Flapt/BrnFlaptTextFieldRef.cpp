@@ -2,7 +2,7 @@
 
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldInstance.h"       // BrnFlapt::TextFieldInstance (SetText)
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"   // CgsLanguage::LanguageManager (FormatText / Obsolete_FormatTextByArray)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                // CGS_ASSERT
 #include <cstdarg>                                                // va_list (the varargs SetLocalisedText)
 
 // BrnFlapt::TextFieldRef member functions, reconstructed from
@@ -27,6 +27,8 @@
 // then stores them into the ref (stw at +0x00, +0x04, +0x08) and returns the ref.
 // The X360-baked BrnFlaptTextFieldRef.h file/line cites are discarded per project
 // convention.
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptTextFieldRef.cpp";
 
 namespace BrnFlapt
 {
@@ -76,7 +78,8 @@ void TextFieldRef::SetAutoSize(bool lbAutoSize)
 // the link found it the moment JunctionInfoComponent::SetEventNameText mounted.
 void TextFieldRef::ClearText()
 {
-    CGS_ASSERT(mpTextFieldInstance != 0, "mpTextFieldInst");
+    CGS_ASSERT(mpTextFieldInstance != 0,
+        CgsDev::Assert::MessageAt("mpTextFieldInst", KAC_ARTIST_ASSERT_FILE, 61 /* ARTIST 0x8246CC00 */));
     static_cast<TextFieldInstance*>(mpTextFieldInstance)->SetText(
         reinterpret_cast<const CgsUnicode::CgsUtf8*>(""), false);
 }
@@ -292,7 +295,8 @@ void TextFieldRef::SetColour(Vector4 lv4Colour)
 // re-spelled -- no conversion happens on the console either.
 const char* TextFieldRef::GetText() const
 {
-    CGS_ASSERT(mpTextFieldInstance != 0, "mpTextFieldInst");   // cpp:408 (non-gating)
+    CGS_ASSERT(mpTextFieldInstance != 0,
+        CgsDev::Assert::MessageAt("mpTextFieldInst", KAC_ARTIST_ASSERT_FILE, 408 /* ARTIST 0x8246E0E8 */));   // cpp:408 (non-gating)
 
     return reinterpret_cast<const char*>(
         static_cast<const TextFieldInstance*>(mpTextFieldInstance)->GetAptString().GetText());

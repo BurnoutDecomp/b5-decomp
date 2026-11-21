@@ -18,9 +18,13 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Logic/CgsSoundLogicModule.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"    // IOBuffer Lock/Unlock
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"   // Io::MessageHeader (Notify dispatch)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsSoundLogicModule.h";
 
 namespace CgsSound
 {
@@ -286,8 +290,10 @@ void Module::DetachBuffers()
 // ---------------------------------------------------------------------------
 u32 Module::GetUniqueId()
 {
-    CGS_ASSERT(muInstanceIndex == 0, "muInstanceIndex == 0");
-    CGS_ASSERT(muUniqueId != 0xFFFFFFFFu, "muUniqueId != 0xffffffff");
+    CGS_ASSERT(muInstanceIndex == 0,
+        CgsDev::Assert::MessageAt("muInstanceIndex == 0", KAC_ARTIST_ASSERT_FILE, 379 /* ARTIST 0x827E10AC */));
+    CGS_ASSERT(muUniqueId != 0xFFFFFFFFu,
+        CgsDev::Assert::MessageAt("muUniqueId != 0xffffffff", KAC_ARTIST_ASSERT_FILE, 380 /* ARTIST 0x827E10D4 */));
 
     ++muUniqueId;
     return muUniqueId;

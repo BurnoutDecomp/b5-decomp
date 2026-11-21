@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Time/CgsStartTimeMessage.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   (CgsNetwork::StartTimeMessage)
@@ -59,7 +60,10 @@ namespace CgsNetwork
                                           const StartTime* lpStartTime,
                                           MessageWithPlayerIDs::NetworkPlayerID* lpaReceivedClientsIDs)
     {
-        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME, "lu16Frame != KU16_INVALID_FRAME");
+        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
+            CgsDev::Assert::MessageAt(
+                "lu16Frame != KU16_INVALID_FRAME",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsStartTimeMessage.cpp", 75 /* ARTIST 0x8288A4C8 */));
 
         mStartTime = *lpStartTime;
         for (s32 liClient = 0; liClient < KI_START_TIME_CLIENT_COUNT; ++liClient)

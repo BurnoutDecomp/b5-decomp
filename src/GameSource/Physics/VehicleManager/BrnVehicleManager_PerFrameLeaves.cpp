@@ -21,7 +21,7 @@
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint / gxMessageFilterFlags (the boot gate, 2026-08-09)
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"               // IOBufferStack::DestroyIOBuffer<T>
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h" // InChangeRigidBodyInertia (80B; mID/mInertia/mu32Flags)
@@ -104,7 +104,11 @@ namespace Vehicle
             }
             else
             {
-                CGS_ASSERT(false, "Invalid Entity type in air ram UpdateVehicleEffects Effects");   // :3544
+                CGS_ASSERT(false,
+                    CgsDev::Assert::MessageAt(
+                        "Invalid Entity type in air ram UpdateVehicleEffects Effects",
+                        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                        "../Physics/VehicleManager/BrnVehicleManager.cpp", 3544 /* ARTIST 0x82629EF0 */));   // :3544
             }
         }
     }

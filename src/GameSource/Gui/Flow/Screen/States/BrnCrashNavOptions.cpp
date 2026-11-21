@@ -582,7 +582,10 @@ namespace BrnGui
     // discards: restore the live audio to the profile's values and leave.
     void CrashNavOptions::HandleOverlayCompleteEvent(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "lpOverlayCompleteEvent");   // cpp:1017
+        CGS_ASSERT(lpEvent != 0,
+            CgsDev::Assert::MessageAt(
+                "lpOverlayCompleteEvent",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavOptions.cpp", 1017 /* ARTIST 0x824D961C */));   // cpp:1017
 
         const GuiOverlayCompletePayload* lpComplete =
             reinterpret_cast<const GuiOverlayCompletePayload*>(lpEvent);

@@ -16,13 +16,16 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfo.h" // ServerInterfacePlayerInfo::GetPlayerInfoByName
 #include "GameShared/GameClasses/System/CgsHardwareInit.h" // CgsSystem::HardwareInit::IsHardDiskAvailable
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<1536,16> / <14000,16>
-#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"             // CgsDev::StrStream (unknown-state assert)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h" // IsLocalPlayerInGame / GetGameID
 #include "GameSource/Network/Managers/BrnNetworkStateManager.h"         // StateManager::GetState
 #include "GameSource/Network/BrnNetworkOutEventTypeDefs.h"              // NetworkOutInviteFailed
 
 #include <cstring>   // std::memcpy (X360 StartInviteOrJoin / DownloadPlayersGameIDFromServer)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkInviteManager.cpp";
 
 namespace BrnNetwork
 {
@@ -187,10 +190,15 @@ namespace BrnNetwork
     // sub-machine off from its start state.
     void NetworkInviteManager::DownloadPlayersGameIDFromServer(const PlayerName* lpPlayerName)
     {
-        CGS_ASSERT(meGetGameIDState == E_GET_ID_STATE_IDLE, "meGetGameIDState == E_GET_ID_STATE_IDLE");
-        CGS_ASSERT(lpPlayerName != 0, "lpPlayerName");
+        CGS_ASSERT(meGetGameIDState == E_GET_ID_STATE_IDLE,
+            CgsDev::Assert::MessageAt(
+                "meGetGameIDState == E_GET_ID_STATE_IDLE", KAC_ARTIST_ASSERT_FILE, 423 /* ARTIST 0x82548AD8 */));
+        CGS_ASSERT(lpPlayerName != 0,
+            CgsDev::Assert::MessageAt("lpPlayerName", KAC_ARTIST_ASSERT_FILE, 425 /* ARTIST 0x82548AFC */));
         // X360 checks the first name byte is non-zero (the inlined PlayerName::IsEmpty()).
-        CGS_ASSERT(lpPlayerName->macName[0] != '\0', "!lpPlayerName->IsEmpty()");
+        CGS_ASSERT(lpPlayerName->macName[0] != '\0',
+            CgsDev::Assert::MessageAt(
+                "!lpPlayerName->IsEmpty()", KAC_ARTIST_ASSERT_FILE, 426 /* ARTIST 0x82548B24 */));
 
         std::memcpy(&mPlayerNameToGetGameID, lpPlayerName, sizeof(PlayerName)); // memcpy(a1 + 416, a2, 16)
         meGetGameIDState = E_GET_ID_STATE_START;       // *(a1 + 432) = 0

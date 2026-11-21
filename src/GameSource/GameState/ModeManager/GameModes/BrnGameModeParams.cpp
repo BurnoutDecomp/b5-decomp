@@ -1,6 +1,6 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert::Begin/Fire/EndAssert
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CgsDev::Assert::Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
 #include "GameSource/Math/BrnMathUtils.h"            // BrnMath::IsNormal (AddStartLocation's own guard)
 
@@ -19,6 +19,9 @@
 // fills it from the event/progression data, and hands it to the world / AI / traffic
 // modules when a mode starts. It owns no resources (plain value type).
 // =============================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h";
 
 namespace BrnGameState
 {
@@ -359,7 +362,9 @@ void StartGameModeParams::SetTrafficLightTriggerId(LightTriggerId lTriggerId)
 // -----------------------------------------------------------------------------
 void StartGameModeParams::SetProgressionRankData(const BrnProgression::ProgressionRankData* lpProgressionRankData)
 {
-    CGS_ASSERT(lpProgressionRankData != NULL, "lpProgressionRankData != NULL");
+    CGS_ASSERT(lpProgressionRankData != NULL,
+        CgsDev::Assert::MessageAt(
+            "lpProgressionRankData != NULL", KAC_ARTIST_ASSERT_FILE, 953 /* ARTIST 0x823544BC */));
     mpProgressionRankData = lpProgressionRankData;
 }
 
@@ -388,7 +393,9 @@ void StartGameModeParams::SetProgressionRankAsRatio(f32 lfProgressionRankAsRatio
 // -----------------------------------------------------------------------------
 void StartGameModeParams::SetPlayerVehicleGamePlayData(const BrnResource::VehicleListEntry* lpPlayerCarVehicleListEntry)
 {
-    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, "lpPlayerCarVehicleListEntry != NULL");
+    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL,
+        CgsDev::Assert::MessageAt(
+            "lpPlayerCarVehicleListEntry != NULL", KAC_ARTIST_ASSERT_FILE, 985 /* ARTIST 0x823545BC */));
     mpPlayerCarVehicleListEntry = lpPlayerCarVehicleListEntry;
 }
 

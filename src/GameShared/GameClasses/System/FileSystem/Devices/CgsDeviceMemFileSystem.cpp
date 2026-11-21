@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDeviceMemFileSystem.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/core/stdc/stdc.h"
 #include <cstring>
 #include <cstddef>
@@ -35,7 +35,10 @@ namespace CgsFileSystem
     // ARTIST828DD428. Registration names use exact-case comparison here.
     bool DeviceMemFileSystem::UnregisterMemFile(const char* lpcName)
     {
-        CGS_ASSERT(mbConstructed, "mbConstructed");
+        CGS_ASSERT(mbConstructed,
+            CgsDev::Assert::MessageAt(
+                "mbConstructed",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\Drivers/CgsDeviceMemFileSystem.cpp", 134 /* ARTIST 0x828DD458 */));
         for (u32 lu = 0; lu < KU_MAX_MEM_FILES; ++lu)
         {
             if (strcmp(maMemFiles[lu].macName, lpcName) != 0) continue;

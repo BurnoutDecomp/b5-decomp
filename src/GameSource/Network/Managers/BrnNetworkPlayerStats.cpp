@@ -2,7 +2,7 @@
 #include "BrnCommonTypes.h"                                   // s32 / f32
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"      // CgsSystem::Time
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT / CgsDev::Assert
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"            // CGS_ASSERT / CgsDev::Assert
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (the name-copy assert)
 #include "GameSource/GameState/BrnCgsPlayerName.h"            // CgsNetwork::KI_USERNAME_LENGTH
 
@@ -50,6 +50,9 @@ BrnNetwork::NetworkPlayerStats::operator=(const NetworkPlayerStats& lOther)
 
     return *this;
 }
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStats.cpp";
 
 namespace BrnNetwork
 {
@@ -110,9 +113,14 @@ namespace BrnNetwork
     // Parse one downloaded stat string into its value slot and record how it is displayed.
     void NetworkPlayerStats::SetStat(EStatsValue leValue, const char* lpcStat, EStatType leType)
     {
-        CGS_ASSERT(leValue >= E_STATS_VALUE_START, "leValue >= E_STATS_VALUE_START");
-        CGS_ASSERT(leValue < E_STATS_VALUE_COUNT, "leValue < E_STATS_VALUE_COUNT");
-        CGS_ASSERT(lpcStat != 0, "lpcStat");
+        CGS_ASSERT(leValue >= E_STATS_VALUE_START,
+            CgsDev::Assert::MessageAt(
+                "leValue >= E_STATS_VALUE_START", KAC_ARTIST_ASSERT_FILE, 195 /* ARTIST 0x825469DC */));
+        CGS_ASSERT(leValue < E_STATS_VALUE_COUNT,
+            CgsDev::Assert::MessageAt(
+                "leValue < E_STATS_VALUE_COUNT", KAC_ARTIST_ASSERT_FILE, 196 /* ARTIST 0x82546A00 */));
+        CGS_ASSERT(lpcStat != 0,
+            CgsDev::Assert::MessageAt("lpcStat", KAC_ARTIST_ASSERT_FILE, 197 /* ARTIST 0x82546A24 */));
 
         maiValues[leValue]   = std::atoi(lpcStat);
         maeStatType[leValue] = leType;

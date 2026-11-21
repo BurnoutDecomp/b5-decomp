@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // CgsGui::sResourceTuple
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"         // CgsNetwork::NetworkTexture::GetFormat
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h" // CgsNetwork::NetworkImageConverter
-#include "GameShared/GameClasses/Core/CgsAssert.h"                           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                           // CGS_ASSERT
 #include <cstring>   // memset
 #include "rw/rwcore_structs.h"
 
@@ -18,6 +18,9 @@
 // images are unpacked (per pixel format: A1R5G5B5 -> normal, G8B8 -> YUY2, DXT1 ->
 // compressed) and surfaced to the Flapt GUI as a named special texture.
 // ============================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/CustomRenderer/Renderers/BrnNetworkPlayerImageRenderer.cpp";
 
 namespace BrnGui
 {
@@ -544,10 +547,13 @@ namespace BrnGui
     // Fetch the baked default texture from the GuiCache into mpDefaultTexture.
     void NetworkPlayerImageRenderer::PrepareDefaultTexture()
     {
-        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_ARTIST_ASSERT_FILE, 758 /* ARTIST 0x824461D4 */));
         mpDefaultTexture = const_cast<renderengine::Texture2D*>(
             static_cast<const renderengine::Texture2D*>(
                 mpGuiCache->GetLoadedResource(KU_DEFAULT_TEXTURE_RESOURCE_ID)));
-        CGS_ASSERT(mpDefaultTexture != 0, "NULL != mpDefaultTexture");
+        CGS_ASSERT(mpDefaultTexture != 0,
+            CgsDev::Assert::MessageAt(
+                "NULL != mpDefaultTexture", KAC_ARTIST_ASSERT_FILE, 763 /* ARTIST 0x82446208 */));
     }
 }

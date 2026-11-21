@@ -1,4 +1,5 @@
 #include "GameSource/Sound/Vehicles/Engines/BrnPhysicsControl.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Sound/Vehicles/BrnPlayerVehicleStateManager.h"
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/Passby/BrnPassbyStateManager.h"
@@ -18,6 +19,10 @@
 // are instantiated in CgsArrayStaticPassbyRecord5.cpp (the generic body is inline in
 // CgsArray.h).
 // =============================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../Sound/Vehicles/Environment/BrnStaticPassbyControl.cpp";
 
 namespace BrnSound
 {
@@ -183,9 +188,11 @@ void StaticPassbyControl::UpdateParams(f32 afTimeStep)
     const Vector3 lPosition = lrPhysics.mPosition3d.GetCurrent();
     const f32 lfSpeed = lrPhysics.mSpeedMPH.GetCurrent();
     CgsSound::Logic::State* lpStateBase = GetStateBase();
-    CGS_ASSERT(lpStateBase != 0, "lpStateBase");
+    CGS_ASSERT(lpStateBase != 0,
+        CgsDev::Assert::MessageAt("lpStateBase", KAC_ARTIST_ASSERT_FILE, 148 /* ARTIST 0x826FE214 */));
     const PlayerVehicleStateManager* lpPlayerStateMan = static_cast<const PlayerVehicleStateManager*>(lpStateBase->GetStateManager());
-    CGS_ASSERT(lpPlayerStateMan != 0, "lpPlayerStateMan");
+    CGS_ASSERT(lpPlayerStateMan != 0,
+        CgsDev::Assert::MessageAt("lpPlayerStateMan", KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x826FE23C */));
     ProcessPassbys(lPosition, lfSpeed, lpPlayerStateMan);
     UpdateHistory(afTimeStep);
 }

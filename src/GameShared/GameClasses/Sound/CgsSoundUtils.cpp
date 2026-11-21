@@ -345,7 +345,10 @@ s32 PathLine<2>::AddStage(f32 lfStart, f32 lfFinish, f32 lfLength, Curve::ECurve
 template <>
 s32 PathLine<2>::AddLinkedStage(f32 lfFinish, f32 lfLength, Curve::ECurveType leCurve)
 {
-    CGS_ASSERT(mnNumStages, "mnNumStages");
+    CGS_ASSERT(mnNumStages,
+        CgsDev::Assert::MessageAt(
+            "mnNumStages",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/CgsSoundUtils.cpp", 364 /* ARTIST 0x826A8518 */));
 
     // A linked stage always ramps from the previous stage's finish level, so the
     // start is seeded to 0.0f here and carried over at stage-advance time (Update).

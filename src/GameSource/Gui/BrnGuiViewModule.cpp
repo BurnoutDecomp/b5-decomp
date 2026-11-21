@@ -37,7 +37,7 @@
 #include "GameSource/Gui/BrnGuiAlwaysAvailableComponentsManager.h" // AlwaysAvailableComponentsManager + accessor
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                  // BrnFlapt::FileRef (GetFile out-buffer)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // CgsGui::GuiEventLoadNotification
-#include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                 // CGS_ASSERT
 
 namespace BrnGui
 {
@@ -66,7 +66,10 @@ void ViewModule::Construct(BrnGui::GuiModule* lpGuiModule, const char* lpcName, 
     // through to the base; the X360 reuses the same name/int/colour/int args).
     CgsGui::ViewModule::Construct(lpcName, liArg2, lfArg3, lpColour, liArg5);
 
-    CGS_ASSERT(lpGuiModule != 0, "lpGuiModule");
+    CGS_ASSERT(lpGuiModule != 0,
+        CgsDev::Assert::MessageAt(
+            "lpGuiModule",
+            "..\\..\\..\\GameSource\\Gui/BrnGuiViewModule.cpp", 61 /* ARTIST 0x824F13F8 */));
     mpGuiModule = lpGuiModule;
 
     // Build the FlaptManager from the base module's owned sub-objects (the ImRendererSet,

@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"              // GetFrameDiffWrapped16 / UInt16IsLargerWrapped / IsReliable / OldMessagesAreValid
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessageWithPlayerIDs.h" // MessageWithPlayerIDs::GetSendingPlayerID
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"                    // CgsMemory::HeapMalloc::Free
-#include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // CgsDev::Log::gpDebugPrint
 
 // CgsNetwork::ReliableMessageManager -- reconstructed method bodies (BURNOUT_X360_ARTIST.XEX).
@@ -64,7 +64,10 @@ bool ReliableMessageManager::Release()
 
     if (mpReliableMessageBuffer)
     {
-        CGS_ASSERT(mpHeapAllocator, "mpHeapAllocator");
+        CGS_ASSERT(mpHeapAllocator,
+            CgsDev::Assert::MessageAt(
+                "mpHeapAllocator",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsReliableMessageManager.cpp", 160 /* ARTIST 0x82890A50 */));
         mpHeapAllocator->Free(mpReliableMessageBuffer);
         mpReliableMessageBuffer = 0;
     }
