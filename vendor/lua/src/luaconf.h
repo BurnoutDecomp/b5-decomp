@@ -11,6 +11,13 @@
 #include <limits.h>
 #include <stddef.h>
 
+#if defined(_XBOX) && defined(_MSC_VER) && (defined(LUA_CORE) || defined(LUA_LIB))
+/* ARTIST's Lua library uses unoptimized code and CRT string and memory calls. */
+#include <string.h>
+#pragma optimize("", off)
+#pragma function(memcpy, memset, memcmp, strlen, strcpy, strcmp, strcat)
+#endif
+
 
 /*
 ** ==================================================================
