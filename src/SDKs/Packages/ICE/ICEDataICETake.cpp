@@ -9,7 +9,7 @@
 // ============================================================================
 
 #include "SDKs/Packages/ICE/ICEData.hpp"           // ICETake, ICEChannel, ICE_INVALID_INTERVAL
-#include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"  // CGS_ASSERT
 #include "SDKs/Packages/ICE/ICEMemory.hpp"          // ICE::spICEMemory (GetMemory / mEditHeap.Free)
 #include "rw/core/stdc/stdc.h"                       // rw::core::stdc::MemCopy / MemCompare
 
@@ -128,7 +128,10 @@ namespace ICE
     // ------------------------------------------------------------------------
     void ICETake::MarkChannelFromSubTake(s32 liChannel)
     {
-        CGS_ASSERT(liChannel < 32, "liChannel < 32");
+        CGS_ASSERT(liChannel < 32,
+            CgsDev::Assert::MessageAt("liChannel<32",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\sdks\\packages\\ice\\ICEData.hpp",
+                336 /* ARTIST 0x8252ADB4 */));
         mxSubTakeChannels |= (1 << liChannel);
     }
 

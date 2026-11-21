@@ -20,7 +20,7 @@
 // ============================================================================
 
 #include "SDKs/Packages/ICE/ICEData.hpp"          // pulls ICEDataEnums.hpp + ICEPoint.hpp
-#include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h" // CGS_ASSERT
 #include "SDKs/Packages/ICE/ICEMath.hpp"           // ICE::ICEMath::Round / Clamp (minimal slice)
 #include "SDKs/Packages/ICE/ICEMemory.hpp"         // ICE::spICEMemory (ICE::ICEMemory*) / ICEMemory::GetMemory / mEditHeap
 #include "rw/core/stdc/stdc.h"                      // rw::core::stdc::MemClear / MemCopy (minimal slice)
@@ -1363,7 +1363,9 @@ ICETakeData& ICETakeData::operator=(const ICETakeData& lrOther)
     const u32 luSize = lrOther.ComputeActualSize() - 52;
     rw::core::stdc::MemCopy(&mElementCounts[0], &lrOther.mElementCounts[0], luSize);
 
-    CGS_ASSERT(luSize < (2 * 1024), "luSize < (2*1024)");
+    CGS_ASSERT(luSize < (2 * 1024),
+        CgsDev::Assert::MessageAt("luSize < (2*1024)",
+            "..\\..\\..\\SDKs\\Packages\\ICE\\ICEData.cpp", 1013 /* ARTIST 0x82532BC0 */));
     return *this;
 }
 

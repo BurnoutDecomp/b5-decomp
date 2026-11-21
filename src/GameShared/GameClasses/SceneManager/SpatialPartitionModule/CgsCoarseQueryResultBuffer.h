@@ -129,7 +129,10 @@ namespace CgsSceneManager
     u16* CoarseQueryResultBuffer<KU_MaxResults>::GetResultsBatch()
     {
         CGS_ASSERT(mbInABatch,
-                   "GetResultsBatch called outside of a BeginResultsBatch/EndResultsBatch pair");
+            CgsDev::Assert::MessageAt(
+                "GetResultsBatch called outside of a BeginResultsBatch/EndResultsBatch pair",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\"
+                "SpatialPartitionModule/CgsCoarseQueryResultBuffer.h", 200 /* ARTIST 0x828AD910 */));
 
         return &mau16Buffer[miCurrentResultsStartPosition];
     }
@@ -218,7 +221,10 @@ namespace CgsSceneManager
     s32 CoarseQueryResultBuffer<KU_MaxResults>::GetNumResultsWritten() const
     {
         CGS_ASSERT(mbInABatch,
-                   "GetNumResultsWritten called outside of a BeginResultsBatch/EndResultsBatch pair");
+            CgsDev::Assert::MessageAt(
+                "GetNumResultsWritten called outside of a BeginResultsBatch/EndResultsBatch pair",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\"
+                "SpatialPartitionModule/CgsCoarseQueryResultBuffer.h", 328 /* ARTIST 0x828ADC90 */));
 
         return miTotalBufferSize - miCurrentResultsStartPosition;
     }

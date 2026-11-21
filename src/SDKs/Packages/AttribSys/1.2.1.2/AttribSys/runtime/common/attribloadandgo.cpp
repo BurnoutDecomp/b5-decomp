@@ -1,5 +1,5 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttribHashMapTablePolicy.h" // FreeWithCensusIf
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/export/attribexportmanager.h" // Attrib::ExportManager
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"          // Attrib::Database (Initialize/Deinitialize GC pass)
@@ -101,7 +101,10 @@ void Attrib::Vault::ResolveDependency(unsigned int luIndex, void* lpData,
 void Attrib::ExportManager::AddExportPolicy(TypeID luType, IExportPolicy* lpPolicy)
 {
     CGS_ASSERT(mNumPolicies < mMaxPolicies,
-               "ExportManager::AddExportPolicy -- insufficient entries reserved in policy table.");
+        CgsDev::Assert::MessageAt(
+            "ExportManager::AddExportPolicy -- insufficient entries reserved in policy table.",
+            "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribloadandgo.cpp",
+            46 /* ARTIST 0x82803168 */));
 
     ExportPolicyPair& lrSlot = mpPolicies[mNumPolicies];
     ++mNumPolicies;
