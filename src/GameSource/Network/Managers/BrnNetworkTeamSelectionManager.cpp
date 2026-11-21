@@ -120,7 +120,7 @@ namespace BrnNetwork
         mpNetworkManager         = lpNetworkManager;
         CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
 
-        miActionIndex         = 0;
+        mu8ActionIndex        = 0;
         mpfCompletionCallback = 0;
         mpCompletionUserData  = 0;
         meUpdateState         = 0;
@@ -156,7 +156,7 @@ namespace BrnNetwork
         meUpdateState         = 0;
         mpfCompletionCallback = 0;
         mpCompletionUserData  = 0;
-        miActionIndex         = 0;
+        mu8ActionIndex        = 0;
         mpNetworkManager      = 0;
 
         for (s32 liPlayer = 0; liPlayer < KI_MAX_PLAYERS; ++liPlayer)
@@ -290,7 +290,7 @@ namespace BrnNetwork
         mpfCompletionCallback = lpfCompletionCallback;
         mpCompletionUserData  = lpUserData;
         meCurrentProcess      = leProcess;
-        miActionIndex         = 0;
+        mu8ActionIndex        = 0;
         meUpdateState         = 1;
     }
 
@@ -341,10 +341,10 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     void TeamSelectionManager::SetNextAction()
     {
-        const s32 liActionCursor = miActionIndex;
-        const s32 leAction = maProcessActions[KI_ACTIONS_PER_PROCESS * meCurrentProcess + liActionCursor];
+        const u32 luActionCursor = mu8ActionIndex;
+        const s32 leAction = maProcessActions[KI_ACTIONS_PER_PROCESS * meCurrentProcess + luActionCursor];
 
-        if (liActionCursor == KI_ACTIONS_PER_PROCESS || leAction == KI_NO_ACTION)
+        if (luActionCursor == KI_ACTIONS_PER_PROCESS || leAction == KI_NO_ACTION)
         {
             CompletionCallback lpfCallback = mpfCompletionCallback;
             void*              lpUserData  = mpCompletionUserData;
@@ -358,7 +358,7 @@ namespace BrnNetwork
 
         if ((this->*maActionFunctions[leAction])())
         {
-            ++miActionIndex;
+            ++mu8ActionIndex;
             return;
         }
 

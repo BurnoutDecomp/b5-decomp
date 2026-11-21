@@ -28,7 +28,7 @@
 //   +0x6F4  meSubState               (s32)  -- output/idle substate (Construct: 2)
 //   +0x6F8  meUpdateState            (s32)  -- index into maUpdateFunctions (Construct: 0)
 //   +0x6FC  meCurrentProcess         (s32)  -- index into maProcessActions  (Construct: 4)
-//   +0x700  miActionIndex            (s32)  -- action cursor within the current process
+//   +0x700  mu8ActionIndex           (u8)   -- action cursor within the current process
 //   +0x704  mpfCompletionCallback    (CompletionCallback)
 //   +0x708  mpCompletionUserData     (s32)
 //   +0x70C  mpNetworkManager         (BrnNetworkManager*)
@@ -214,7 +214,7 @@ namespace BrnNetwork
         s32                meSubState;                                             // +0x6F4
         s32                meUpdateState;                                          // +0x6F8
         s32                meCurrentProcess;                                       // +0x6FC
-        s32                miActionIndex;                                          // +0x700
+        u8                 mu8ActionIndex;                                         // ARTIST 0x8254BA88, +0x700
         CompletionCallback mpfCompletionCallback;                                  // +0x704
         void*              mpCompletionUserData;                                   // +0x708
         BrnNetworkManager* mpNetworkManager;                                       // +0x70C

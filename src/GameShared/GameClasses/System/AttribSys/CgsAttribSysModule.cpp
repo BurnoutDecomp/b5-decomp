@@ -3,13 +3,16 @@
 #include <cstddef>                                                 // native layout assertions
 #include <new>                                                     // placement new (RegisterSchema)
 #include <string.h>                                                // strcmp (channel match)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h" // AttribSysIO::InputBuffer + requests + Inp
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"          // LinearMalloc::Malloc (schema vault)
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h" // the debug log window
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsys.h"   // Attrib::Database
 #include "SDKs/EA/GameTalk/GameTalk.h"                              // EA::GameTalk::GameTalkMessage accessors
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attriblivelink.h" // Attrib::DecodeLiveLinkMessage
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModule.cpp";
 
 namespace CgsAttribSys
 {
@@ -138,11 +141,21 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
         case E_PREPARESTAGE_MEMORY:
             mePrepareStage = E_PREPARESTAGE_MEMORY;
 
-            CGS_ASSERT(lpLinearAlloc   != 0, "lpLinearAlloc != NULL");
-            CGS_ASSERT(lpAttribSysHeap != 0, "lpAttribSysHeap != NULL");
-            CGS_ASSERT(lpGameTalkHeap  != 0, "lpGameTalkHeap != NULL");
-            CGS_ASSERT(lpEastlHeap     != 0, "lpEastlHeap != NULL");
-            CGS_ASSERT(liMaxNumVaults > 0,         "liMaxNumVaults > 0");
+            CGS_ASSERT(lpLinearAlloc   != 0,
+                CgsDev::Assert::MessageAt(
+                    "lpLinearAlloc != NULL", KAC_ARTIST_ASSERT_FILE, 133 /* ARTIST 0x828076C8 */));
+            CGS_ASSERT(lpAttribSysHeap != 0,
+                CgsDev::Assert::MessageAt(
+                    "lpAttribSysHeap != NULL", KAC_ARTIST_ASSERT_FILE, 134 /* ARTIST 0x828076EC */));
+            CGS_ASSERT(lpGameTalkHeap  != 0,
+                CgsDev::Assert::MessageAt(
+                    "lpGameTalkHeap != NULL", KAC_ARTIST_ASSERT_FILE, 135 /* ARTIST 0x82807710 */));
+            CGS_ASSERT(lpEastlHeap     != 0,
+                CgsDev::Assert::MessageAt(
+                    "lpEastlHeap != NULL", KAC_ARTIST_ASSERT_FILE, 136 /* ARTIST 0x82807734 */));
+            CGS_ASSERT(liMaxNumVaults > 0,
+                CgsDev::Assert::MessageAt(
+                    "liMaxNumVaults > 0", KAC_ARTIST_ASSERT_FILE, 137 /* ARTIST 0x82807758 */));
 
             mMemoryManager.Prepare(lpLinearAlloc, lpAttribSysHeap,
                                             lpGameTalkHeap, lpEastlHeap);
@@ -150,7 +163,9 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
 
             mpSchemaVault = static_cast<Attrib::Vault*>(
                 lpLinearAlloc->Malloc(KI_SCHEMA_VAULT_BYTES));
-            CGS_ASSERT(mpSchemaVault != 0, "mpSchemaVault != NULL");
+            CGS_ASSERT(mpSchemaVault != 0,
+                CgsDev::Assert::MessageAt(
+                    "mpSchemaVault != NULL", KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x828077B4 */));
 
             mePrepareStage++;
             // fall through
@@ -159,7 +174,9 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
             mePrepareStage = E_PREPARESTAGE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid prepare state.\n");
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt(
+                    "Invalid prepare state.\n", KAC_ARTIST_ASSERT_FILE, 169 /* ARTIST 0x828077F4 */));
             return false;
     }
 }
@@ -185,7 +202,9 @@ bool AttribSysModule::Release()
             meReleaseStage = E_RELEASESTAGE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Invalid release state.\n");
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt(
+                    "Invalid release state.\n", KAC_ARTIST_ASSERT_FILE, 226 /* ARTIST 0x828025B4 */));
             return false;
     }
 }

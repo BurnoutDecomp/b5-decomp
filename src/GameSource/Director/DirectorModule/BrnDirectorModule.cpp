@@ -26,7 +26,7 @@
 
 #include "GameSource/Director/BrnDirectorModule.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu::AddMonitor
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"          // DirectorIO::InputBuffer
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOOutputBuffer.hpp" // DirectorIO::OutputBuffer
@@ -269,7 +269,10 @@ bool DirectorModule::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
         return true;
 
     default:
-        CGS_ASSERT(false, "Invalid Stage\n");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "Invalid Stage\n",
+                "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModule.cpp", 140 /* ARTIST 0x82271408 */));
         break;
     }
 
