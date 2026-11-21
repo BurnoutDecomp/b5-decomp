@@ -1,3 +1,7 @@
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma auto_inline(off)
+#endif
+
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // full ServerInterfaceDirtySock (GetLobbyAPIRef/GetGameManagerRef/GetConnAPIRef/GetMessageBuffer/GetSKU)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceComponent.h" // ServerInterfaceComponent (StartActionCore/EndActionCore/ConvertError)

@@ -35,6 +35,10 @@
 // ("E_PANEL_EVENT == mePanelType", "mePrepareStage == E_PREPARESTAGE_CONSTRUCTED",
 // "E_FILTER_LEVEL_SECOND == liCurrentlySelectedFilter", ...), which are reproduced verbatim.
 // ===================================================================================
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma auto_inline(off)
+#endif
+
 #include "GameSource/Gui/Flow/Screen/Components/BrnCrashNavPanel.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // ([cnav-diag])
 #include <cstdlib>   // ([cnav-diag])

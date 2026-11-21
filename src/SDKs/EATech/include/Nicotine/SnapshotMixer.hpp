@@ -66,7 +66,7 @@ class SnapshotHeader
 {
 public:
     u8  maHead[8];                     // +0x00 (owned by the loader / DMixIO)
-    u32 meType;                        // +0x08  1 = active-state data, 2 = recall data
+    s32 meType;                        // +0x08  1 = active-state data, 2 = recall data
     u32 mField0C;                      // +0x0C
     SnapshotChannelDesc maChannels[1]; // +0x10  (miNumChannels entries; flexible)
 };

@@ -1,3 +1,7 @@
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma auto_inline(off)
+#endif
+
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/ScriptInterface/CgsScriptInterface.h"
 #include <string.h>   // _stricmp, strstr, strchr, strncpy, memcpy, strlen
 #include <stdlib.h>   // atoi

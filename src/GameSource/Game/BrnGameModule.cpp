@@ -1,3 +1,7 @@
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma auto_inline(off)
+#endif
+
 #include <xtl.h>
 #include "GameShared/GameClasses/Development/PerfMon/Gpu/CgsPerfMonGpu.h"
 #ifdef AddMonitor
