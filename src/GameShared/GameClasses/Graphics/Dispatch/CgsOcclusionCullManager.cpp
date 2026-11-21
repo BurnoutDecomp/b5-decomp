@@ -4,7 +4,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/vertexbuffer.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/indexbuffer.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "rw/math/vpu/vector4_operation.h"            // Splat / lane-wise * and +
 #include "rw/rwcore_structs.h"                        // IResourceAllocator / Resource
 
@@ -34,6 +34,9 @@
 // the SIGN-EXTENDED value against -1 (extsh + cmpwi -1); End compares the raw u16
 // against 0xFFFF (cmplwi 0xFFFF). Both pick out the same 0xFFFF "trivially
 // accepted / no query" sentinel; the widths are reproduced exactly.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\dispatch\\./CgsOcclusionCullManager.h";
 
 namespace CgsGraphics
 {
@@ -288,12 +291,18 @@ namespace CgsGraphics
 
     void OcclusionCullManager::BeginMeshConditionalRender()
     {
-        CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_RENDER, "meOcclusionMode == OCCLUSIONMODE_RENDER");
-        CGS_ASSERT(mbOcclusionEnabled, "mbOcclusionEnabled");
-        CGS_ASSERT(!mbRenderingMesh, "!mbRenderingMesh");
+        CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_RENDER,
+            CgsDev::Assert::MessageAt(
+                "meOcclusionMode == OCCLUSIONMODE_RENDER", KAC_ARTIST_ASSERT_FILE, 282 /* ARTIST 0x827E8F4C */));
+        CGS_ASSERT(mbOcclusionEnabled,
+            CgsDev::Assert::MessageAt("mbOcclusionEnabled", KAC_ARTIST_ASSERT_FILE, 283 /* ARTIST 0x827E8F74 */));
+        CGS_ASSERT(!mbRenderingMesh,
+            CgsDev::Assert::MessageAt("!mbRenderingMesh", KAC_ARTIST_ASSERT_FILE, 286 /* ARTIST 0x827E8F9C */));
 
         mbRenderingMesh = 1;
-        CGS_ASSERT(miOccludeeIndex < KI_MAX_NUM_QUERIES, "miOccludeeIndex < KI_MAX_NUM_QUERIES");
+        CGS_ASSERT(miOccludeeIndex < KI_MAX_NUM_QUERIES,
+            CgsDev::Assert::MessageAt(
+                "miOccludeeIndex < KI_MAX_NUM_QUERIES", KAC_ARTIST_ASSERT_FILE, 291 /* ARTIST 0x827E8FCC */));
 
         const s16 li16QueryId = static_cast<s16>(maQueryIds[miOccludeeIndex]);
         if (li16QueryId != -1)
@@ -304,12 +313,18 @@ namespace CgsGraphics
 
     void OcclusionCullManager::EndMeshConditionalRender()
     {
-        CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_RENDER, "meOcclusionMode == OCCLUSIONMODE_RENDER");
-        CGS_ASSERT(mbOcclusionEnabled, "mbOcclusionEnabled");
-        CGS_ASSERT(mbRenderingMesh, "mbRenderingMesh");
+        CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_RENDER,
+            CgsDev::Assert::MessageAt(
+                "meOcclusionMode == OCCLUSIONMODE_RENDER", KAC_ARTIST_ASSERT_FILE, 328 /* ARTIST 0x827E9054 */));
+        CGS_ASSERT(mbOcclusionEnabled,
+            CgsDev::Assert::MessageAt("mbOcclusionEnabled", KAC_ARTIST_ASSERT_FILE, 329 /* ARTIST 0x827E907C */));
+        CGS_ASSERT(mbRenderingMesh,
+            CgsDev::Assert::MessageAt("mbRenderingMesh", KAC_ARTIST_ASSERT_FILE, 332 /* ARTIST 0x827E90A4 */));
 
         mbRenderingMesh = 0;
-        CGS_ASSERT(miOccludeeIndex < KI_MAX_NUM_QUERIES, "miOccludeeIndex < KI_MAX_NUM_QUERIES");
+        CGS_ASSERT(miOccludeeIndex < KI_MAX_NUM_QUERIES,
+            CgsDev::Assert::MessageAt(
+                "miOccludeeIndex < KI_MAX_NUM_QUERIES", KAC_ARTIST_ASSERT_FILE, 337 /* ARTIST 0x827E90D4 */));
 
         if (maQueryIds[miOccludeeIndex] != 0xFFFF)
         {
@@ -320,7 +335,9 @@ namespace CgsGraphics
 
     void OcclusionCullManager::TrivialAcceptOccludeeBoundingBox()
     {
-        CGS_ASSERT(miOccludeeIndex < KI_MAX_NUM_QUERIES, "miOccludeeIndex < KI_MAX_NUM_QUERIES");
+        CGS_ASSERT(miOccludeeIndex < KI_MAX_NUM_QUERIES,
+            CgsDev::Assert::MessageAt(
+                "miOccludeeIndex < KI_MAX_NUM_QUERIES", KAC_ARTIST_ASSERT_FILE, 377 /* ARTIST 0x827E9158 */));
 
         maQueryIds[miOccludeeIndex] = static_cast<u16>(0xFFFF);
         ++miOccludeeIndex;

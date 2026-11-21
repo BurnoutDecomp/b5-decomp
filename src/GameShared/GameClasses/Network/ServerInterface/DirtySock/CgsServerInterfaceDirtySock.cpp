@@ -1,5 +1,5 @@
 #include "CgsServerInterfaceDirtySock.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
@@ -56,6 +56,9 @@
 // off_820CDBD0.
 // ---------------------------------------------------------------------------
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\CgsServerInterfaceDirtySock.cpp";
+
 namespace CgsNetwork
 {
     ServerInterfaceDirtySock::~ServerInterfaceDirtySock()
@@ -64,7 +67,10 @@ namespace CgsNetwork
 
     char* ServerInterfaceDirtySock::GetMessageBuffer() const
     {
-        CGS_ASSERT(mpacMessageBuffer != 0, "mpacMessageBuffer");
+        CGS_ASSERT(mpacMessageBuffer != 0,
+            CgsDev::Assert::MessageAt(
+                "mpacMessageBuffer",
+                "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface\\DirtySock\\CgsServerInterfaceDirtySock.h", 719 /* ARTIST 0x82580B70 */));
         return mpacMessageBuffer;
     }
 }
@@ -293,11 +299,16 @@ namespace CgsNetwork
 
     bool ServerInterfaceDirtySock::Prepare(ServerInterfacePrepareParams* lpParams)
     {
-        CGS_ASSERT(mpMemoryBlock, "Set a memory buffer before preparing the lobby");
-        CGS_ASSERT(mpacMessageBuffer == 0, "mpacMessageBuffer == NULL");
+        CGS_ASSERT(mpMemoryBlock,
+            CgsDev::Assert::MessageAt(
+                "Set a memory buffer before preparing the lobby", KAC_ARTIST_ASSERT_FILE, 330 /* ARTIST 0x828980DC */));
+        CGS_ASSERT(mpacMessageBuffer == 0,
+            CgsDev::Assert::MessageAt(
+                "mpacMessageBuffer == NULL", KAC_ARTIST_ASSERT_FILE, 334 /* ARTIST 0x82898104 */));
 
         mpacMessageBuffer = static_cast<char*>(MemAlloc(KI_MESSAGE_BUFFER_SIZE, 0, KI_DIRTY_MEM_GROUP_DEFAULT));
-        CGS_ASSERT(mpacMessageBuffer, "mpacMessageBuffer");
+        CGS_ASSERT(mpacMessageBuffer,
+            CgsDev::Assert::MessageAt("mpacMessageBuffer", KAC_ARTIST_ASSERT_FILE, 336 /* ARTIST 0x82898140 */));
 
         miLanguage            = lpParams->mLobbyParams.miLanguage;
         mpcVersion            = lpParams->mLobbyParams.mpcVersion;
@@ -616,15 +627,21 @@ namespace CgsNetwork
         CreateLobbyApi();
 
         mpLobbyLoginRef = LobbyLoginCreate(mpLobbyAPIRef, KA_LOBBY_LOGIN_ALERT_TEXT);
-        CGS_ASSERT(mpLobbyLoginRef, "Lobby Login reference creation failed!");
+        CGS_ASSERT(mpLobbyLoginRef,
+            CgsDev::Assert::MessageAt(
+                "Lobby Login reference creation failed!", KAC_ARTIST_ASSERT_FILE, 491 /* ARTIST 0x82890D40 */));
 
         CreateConnApi();
 
         mpGameManagerRef = GameManagerCreate(mpLobbyAPIRef, mpConnApiRef);
-        CGS_ASSERT(mpGameManagerRef, "Failed to allocate GameManager");
+        CGS_ASSERT(mpGameManagerRef,
+            CgsDev::Assert::MessageAt(
+                "Failed to allocate GameManager", KAC_ARTIST_ASSERT_FILE, 587 /* ARTIST 0x82890D7C */));
 
         mpSettingRef = LobbySettingCreate(mpLobbyAPIRef);
-        CGS_ASSERT(mpSettingRef, "Failed to allocate SettingRef");
+        CGS_ASSERT(mpSettingRef,
+            CgsDev::Assert::MessageAt(
+                "Failed to allocate SettingRef", KAC_ARTIST_ASSERT_FILE, 602 /* ARTIST 0x82890DAC */));
 
         OnEvent(E_SERVER_INTERFACE_GENERAL_EVENT_LOBBY_API_CREATED, 0);
     }
@@ -698,7 +715,9 @@ namespace CgsNetwork
     {
         mpConnApiRef = ConnApiCreate(mConnApiPrepareParams.miPort, mConnApiPrepareParams.miMaxPlayers,
                                      &ServerInterfaceDirtySock::ConnApiCallback, this);
-        CGS_ASSERT(mpConnApiRef, "Failed to allocate ConnAPI");
+        CGS_ASSERT(mpConnApiRef,
+            CgsDev::Assert::MessageAt(
+                "Failed to allocate ConnAPI", KAC_ARTIST_ASSERT_FILE, 563 /* ARTIST 0x82885C20 */));
 
         ConnApiControl(mpConnApiRef, 0x70656572 /* 'peer' */, mConnApiPrepareParams.mbPeerToPeer, 0, 0);
         ConnApiControl(mpConnApiRef, 0x6D776964 /* 'mwid' */, 1000, 0, 0);

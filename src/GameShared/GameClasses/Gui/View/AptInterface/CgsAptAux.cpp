@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"       // CgsGui::AptDataHeader (LoadAnimation's FindAptData result)
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"     // CgsGui::AptCommunicator (the ext-object phase + the flush)
 #include "SDKs/EATech/include/Apt/Apt.h"                                         // AptUserFunctions gAptFuncs (the host table)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (the host-callback asserts)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                              // CGS_ASSERT (the host-callback asserts)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"        // CgsDev::PerfMonCpu (the Update phase brackets)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf (the "_level%d" target path)
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"                          // BrnFlapt::TextFieldRef (its GetLanguageManager is bridged here)
@@ -91,6 +91,9 @@ AptUserFunctions::AptUserFunctions()
     // slot" the guest ctor performs.
     std::memset(this, 0, sizeof(*this));
 }
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptAux.cpp";
 
 namespace CgsGui
 {
@@ -522,13 +525,17 @@ namespace CgsGui
     // X360 0x82849528 (CgsGui::AptCallbackDebug::AddSavedInput). Guarded not-yet-implemented.
     void AptCallbackDebug::AddSavedInput(AptSavedInputRecord* /*lpRecord*/, s32 /*liCount*/)
     {
-        CGS_ASSERT(false, "AptCallbackDebug::AddSavedInput() has not been implemented but is being used, please implement before utilising.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "AptCallbackDebug::AddSavedInput() has not been implemented but is being used, please implement before utilising.", KAC_ARTIST_ASSERT_FILE, 799 /* ARTIST 0x8284953C */));
     }
 
     // X360 0x82849568 (CgsGui::AptCallbackDebug::SetScreenGrabPending). Guarded not-yet-implemented.
     void AptCallbackDebug::SetScreenGrabPending(const char* /*lpacName*/)
     {
-        CGS_ASSERT(false, "AptCallbackDebug::SetScreenGrabPending() has not been implemented but is being used, please implement before utilising.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "AptCallbackDebug::SetScreenGrabPending() has not been implemented but is being used, please implement before utilising.", KAC_ARTIST_ASSERT_FILE, 812 /* ARTIST 0x8284957C */));
     }
 
     // X360 0x82849470 (CgsGui::AptCallbackDebug::Print, gAptFuncs pfnDebugPrint). Format the
@@ -554,14 +561,18 @@ namespace CgsGui
     // X360 0x828495E0 (CgsGui::AptCallbackFile::GetBytesTotal). Guarded not-yet-implemented.
     s32 AptCallbackFile::GetBytesTotal(const char* /*lpacFileName*/, AptGetBytesEnum /*leWhich*/)
     {
-        CGS_ASSERT(false, "AptCallbackFile::GetBytesTotal() has not been implemented but is being used, please implement before utilising.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "AptCallbackFile::GetBytesTotal() has not been implemented but is being used, please implement before utilising.", KAC_ARTIST_ASSERT_FILE, 921 /* ARTIST 0x828495F4 */));
         return 0;
     }
 
     // X360 0x82849620 (CgsGui::AptCallbackFile::GetBytesLoaded). Guarded not-yet-implemented.
     s32 AptCallbackFile::GetBytesLoaded(const char* /*lpacFileName*/, AptGetBytesEnum /*leWhich*/)
     {
-        CGS_ASSERT(false, "AptCallbackFile::GetBytesLoaded() has not been implemented but is being used, please implement before utilising.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "AptCallbackFile::GetBytesLoaded() has not been implemented but is being used, please implement before utilising.", KAC_ARTIST_ASSERT_FILE, 936 /* ARTIST 0x82849634 */));
         return 0;
     }
 
@@ -642,13 +653,17 @@ namespace CgsGui
     // X360 0x82849660 (CgsGui::AptCallbackVariable::SetExternVariable). Guarded not-yet-implemented.
     void AptCallbackVariable::SetExternVariable(const char* /*lpacName*/, const char* /*lpacValue*/)
     {
-        CGS_ASSERT(false, "AptCallbackVariable::SetExternVariable() has not been implemented but is being used, please implement before utilising.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "AptCallbackVariable::SetExternVariable() has not been implemented but is being used, please implement before utilising.", KAC_ARTIST_ASSERT_FILE, 951 /* ARTIST 0x82849674 */));
     }
 
     // X360 0x828496A0 (CgsGui::AptCallbackVariable::GetExternVariable). Guarded not-yet-implemented.
     AptValue* AptCallbackVariable::GetExternVariable(const char* /*lpacName*/)
     {
-        CGS_ASSERT(false, "AptCallbackVariable::GetExternVariable() has not been implemented but is being used, please implement before utilising.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "AptCallbackVariable::GetExternVariable() has not been implemented but is being used, please implement before utilising.", KAC_ARTIST_ASSERT_FILE, 964 /* ARTIST 0x828496B4 */));
         return 0;
     }
 
@@ -658,13 +673,17 @@ namespace CgsGui
                                               const char* /*lpacVariables*/, const char* /*lpacMethod*/,
                                               s32 /*liFlags*/)
     {
-        CGS_ASSERT(false, "SendVariables() has not been implemented but is being used, please implement before utilising.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "SendVariables() has not been implemented but is being used, please implement before utilising.", KAC_ARTIST_ASSERT_FILE, 1114 /* ARTIST 0x828496F4 */));
     }
 
     // X360 0x82849720 (CgsGui::AptCallbackDeprecated::FsCommand). Guarded not-yet-implemented.
     void AptCallbackDeprecated::FsCommand(const char* /*lpacCommand*/, const char* /*lpacArgs*/)
     {
-        CGS_ASSERT(false, "Command() has not been implemented but is being used, please implement before utilising.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "Command() has not been implemented but is being used, please implement before utilising.", KAC_ARTIST_ASSERT_FILE, 1128 /* ARTIST 0x82849734 */));
     }
 
     // CgsGui::AptCallbackDeprecated::LoadVariables (gAptFuncs pfnLoadVariables). Guarded not-yet-implemented.
@@ -677,21 +696,27 @@ namespace CgsGui
     // X360 0x828497A0 (CgsGui::AptCallbackDeprecated::LoadVariablesNULL). Guarded not-yet-implemented.
     AptValue* AptCallbackDeprecated::LoadVariablesNULL()
     {
-        CGS_ASSERT(false, "LoadVariablesNULL() has not been implemented but is being used, please implement before utilising.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "LoadVariablesNULL() has not been implemented but is being used, please implement before utilising.", KAC_ARTIST_ASSERT_FILE, 1154 /* ARTIST 0x828497B4 */));
         return 0;
     }
 
     // X360 0x828497E0 (CgsGui::AptCallbackDeprecated::PointHitTest). Guarded not-yet-implemented.
     s32 AptCallbackDeprecated::PointHitTest(f32 /*lfX*/, f32 /*lfY*/, AptAssetMoiveClip /*leClip*/)
     {
-        CGS_ASSERT(false, "PointHitTest() has not been implemented but is being used, please implement before utilising.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "PointHitTest() has not been implemented but is being used, please implement before utilising.", KAC_ARTIST_ASSERT_FILE, 1204 /* ARTIST 0x828497F4 */));
         return 0;
     }
 
     // X360 0x82849820 (CgsGui::AptCallbackDeprecated::GetRealTimeClock). Guarded not-yet-implemented.
     void AptCallbackDeprecated::GetRealTimeClock(AptSysClock* /*lpSysClock*/, bool /*lbUseUtc*/)
     {
-        CGS_ASSERT(false, "GetRealTimeClock() has not been implemented but is being used, please implement before utilising.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "GetRealTimeClock() has not been implemented but is being used, please implement before utilising.", KAC_ARTIST_ASSERT_FILE, 1224 /* ARTIST 0x82849834 */));
     }
 
     // The language-manager accessor CgsAptString::Prepare (CgsAptString.cpp) reaches the manager

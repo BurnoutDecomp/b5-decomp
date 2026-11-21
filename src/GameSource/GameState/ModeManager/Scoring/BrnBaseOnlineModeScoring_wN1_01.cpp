@@ -8,12 +8,16 @@
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
 #include <stdlib.h> // qsort
 #include <cstring>  // memset
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.cpp";
 
 namespace BrnGameState
 {
@@ -213,14 +217,20 @@ int BaseOnlineModeScoring::_RaceWinnerCompare(const void* lpData1, const void* l
 // Most takedowns first.
 int BaseOnlineModeScoring::_TakedownsForCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL, "lpData1");
-    CGS_ASSERT(lpData2 != NULL, "lpData2");
+    CGS_ASSERT(lpData1 != NULL,
+        CgsDev::Assert::MessageAt("lpData1", KAC_ARTIST_ASSERT_FILE, 433 /* ARTIST 0x82313A0C */));
+    CGS_ASSERT(lpData2 != NULL,
+        CgsDev::Assert::MessageAt("lpData2", KAC_ARTIST_ASSERT_FILE, 434 /* ARTIST 0x82313A30 */));
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
 
-    CGS_ASSERT(lpPlayer1->miTakedownsFor >= 0, "lpPlayer1->miTakedownsFor >= 0");
-    CGS_ASSERT(lpPlayer2->miTakedownsFor >= 0, "lpPlayer2->miTakedownsFor >= 0");
+    CGS_ASSERT(lpPlayer1->miTakedownsFor >= 0,
+        CgsDev::Assert::MessageAt(
+            "lpPlayer1->miTakedownsFor >= 0", KAC_ARTIST_ASSERT_FILE, 439 /* ARTIST 0x82313A58 */));
+    CGS_ASSERT(lpPlayer2->miTakedownsFor >= 0,
+        CgsDev::Assert::MessageAt(
+            "lpPlayer2->miTakedownsFor >= 0", KAC_ARTIST_ASSERT_FILE, 440 /* ARTIST 0x82313A80 */));
 
     if (lpPlayer1->miTakedownsFor > lpPlayer2->miTakedownsFor)
     {
@@ -232,14 +242,20 @@ int BaseOnlineModeScoring::_TakedownsForCompare(const void* lpData1, const void*
 // Most takedowns suffered first.
 int BaseOnlineModeScoring::_TakedownsAgainstCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL, "lpData1");
-    CGS_ASSERT(lpData2 != NULL, "lpData2");
+    CGS_ASSERT(lpData1 != NULL,
+        CgsDev::Assert::MessageAt("lpData1", KAC_ARTIST_ASSERT_FILE, 468 /* ARTIST 0x82313AF4 */));
+    CGS_ASSERT(lpData2 != NULL,
+        CgsDev::Assert::MessageAt("lpData2", KAC_ARTIST_ASSERT_FILE, 469 /* ARTIST 0x82313B18 */));
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
 
-    CGS_ASSERT(lpPlayer1->miTakedownsAgainst >= 0, "lpPlayer1->miTakedownsAgainst >= 0");
-    CGS_ASSERT(lpPlayer2->miTakedownsAgainst >= 0, "lpPlayer2->miTakedownsAgainst >= 0");
+    CGS_ASSERT(lpPlayer1->miTakedownsAgainst >= 0,
+        CgsDev::Assert::MessageAt(
+            "lpPlayer1->miTakedownsAgainst >= 0", KAC_ARTIST_ASSERT_FILE, 474 /* ARTIST 0x82313B40 */));
+    CGS_ASSERT(lpPlayer2->miTakedownsAgainst >= 0,
+        CgsDev::Assert::MessageAt(
+            "lpPlayer2->miTakedownsAgainst >= 0", KAC_ARTIST_ASSERT_FILE, 475 /* ARTIST 0x82313B68 */));
 
     if (lpPlayer1->miTakedownsAgainst > lpPlayer2->miTakedownsAgainst)
     {
@@ -251,14 +267,20 @@ int BaseOnlineModeScoring::_TakedownsAgainstCompare(const void* lpData1, const v
 // Most crashes first.
 int BaseOnlineModeScoring::_MostCrashesCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL, "lpData1");
-    CGS_ASSERT(lpData2 != NULL, "lpData2");
+    CGS_ASSERT(lpData1 != NULL,
+        CgsDev::Assert::MessageAt("lpData1", KAC_ARTIST_ASSERT_FILE, 503 /* ARTIST 0x82313BDC */));
+    CGS_ASSERT(lpData2 != NULL,
+        CgsDev::Assert::MessageAt("lpData2", KAC_ARTIST_ASSERT_FILE, 504 /* ARTIST 0x82313C00 */));
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
 
-    CGS_ASSERT(lpPlayer1->miNumberOfCrashes >= 0, "lpPlayer1->miNumberOfCrashes >= 0");
-    CGS_ASSERT(lpPlayer2->miNumberOfCrashes >= 0, "lpPlayer2->miNumberOfCrashes >= 0");
+    CGS_ASSERT(lpPlayer1->miNumberOfCrashes >= 0,
+        CgsDev::Assert::MessageAt(
+            "lpPlayer1->miNumberOfCrashes >= 0", KAC_ARTIST_ASSERT_FILE, 509 /* ARTIST 0x82313C28 */));
+    CGS_ASSERT(lpPlayer2->miNumberOfCrashes >= 0,
+        CgsDev::Assert::MessageAt(
+            "lpPlayer2->miNumberOfCrashes >= 0", KAC_ARTIST_ASSERT_FILE, 510 /* ARTIST 0x82313C50 */));
 
     if (lpPlayer1->miNumberOfCrashes > lpPlayer2->miNumberOfCrashes)
     {
@@ -270,8 +292,10 @@ int BaseOnlineModeScoring::_MostCrashesCompare(const void* lpData1, const void* 
 // Shortest fastest-lap time first.
 int BaseOnlineModeScoring::_FastestLapCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL, "lpData1");
-    CGS_ASSERT(lpData2 != NULL, "lpData2");
+    CGS_ASSERT(lpData1 != NULL,
+        CgsDev::Assert::MessageAt("lpData1", KAC_ARTIST_ASSERT_FILE, 538 /* ARTIST 0x82313CC4 */));
+    CGS_ASSERT(lpData2 != NULL,
+        CgsDev::Assert::MessageAt("lpData2", KAC_ARTIST_ASSERT_FILE, 539 /* ARTIST 0x82313CE8 */));
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
@@ -348,8 +372,10 @@ int BaseOnlineModeScoring::_LongestDistanceLapCompare(const void* lpData1, const
 // Longest time in first place first.
 int BaseOnlineModeScoring::_TimeInFirstPlaceCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL, "lpData1");
-    CGS_ASSERT(lpData2 != NULL, "lpData2");
+    CGS_ASSERT(lpData1 != NULL,
+        CgsDev::Assert::MessageAt("lpData1", KAC_ARTIST_ASSERT_FILE, 655 /* ARTIST 0x82313FB4 */));
+    CGS_ASSERT(lpData2 != NULL,
+        CgsDev::Assert::MessageAt("lpData2", KAC_ARTIST_ASSERT_FILE, 656 /* ARTIST 0x82313FD8 */));
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
@@ -364,8 +390,10 @@ int BaseOnlineModeScoring::_TimeInFirstPlaceCompare(const void* lpData1, const v
 // Longest time in last place first.
 int BaseOnlineModeScoring::_TimeInLastPlaceCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL, "lpData1");
-    CGS_ASSERT(lpData2 != NULL, "lpData2");
+    CGS_ASSERT(lpData1 != NULL,
+        CgsDev::Assert::MessageAt("lpData1", KAC_ARTIST_ASSERT_FILE, 686 /* ARTIST 0x823140CC */));
+    CGS_ASSERT(lpData2 != NULL,
+        CgsDev::Assert::MessageAt("lpData2", KAC_ARTIST_ASSERT_FILE, 687 /* ARTIST 0x823140F0 */));
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
@@ -380,8 +408,10 @@ int BaseOnlineModeScoring::_TimeInLastPlaceCompare(const void* lpData1, const vo
 // Longest time boosting first.
 int BaseOnlineModeScoring::_MostTimeBoostingAwardCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL, "lpData1");
-    CGS_ASSERT(lpData2 != NULL, "lpData2");
+    CGS_ASSERT(lpData1 != NULL,
+        CgsDev::Assert::MessageAt("lpData1", KAC_ARTIST_ASSERT_FILE, 717 /* ARTIST 0x823141E4 */));
+    CGS_ASSERT(lpData2 != NULL,
+        CgsDev::Assert::MessageAt("lpData2", KAC_ARTIST_ASSERT_FILE, 718 /* ARTIST 0x82314208 */));
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
@@ -397,8 +427,10 @@ int BaseOnlineModeScoring::_MostTimeBoostingAwardCompare(const void* lpData1, co
 // The matching give test and award parameter do use mfLongestDrift.
 int BaseOnlineModeScoring::_LongestDriftCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL, "lpData1");
-    CGS_ASSERT(lpData2 != NULL, "lpData2");
+    CGS_ASSERT(lpData1 != NULL,
+        CgsDev::Assert::MessageAt("lpData1", KAC_ARTIST_ASSERT_FILE, 748 /* ARTIST 0x823142FC */));
+    CGS_ASSERT(lpData2 != NULL,
+        CgsDev::Assert::MessageAt("lpData2", KAC_ARTIST_ASSERT_FILE, 749 /* ARTIST 0x82314320 */));
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);

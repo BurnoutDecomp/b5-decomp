@@ -37,7 +37,10 @@
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"        // TimeManager::GetU16FrameCount / GetFramesSinceStart
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // VariableEventQueue<14000,16> (GetFirstEvent/GetNextEvent/AddEvent)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // CgsDev::Log::gpDebugPrint (nack warning)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                     // CGS_ASSERT
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnChallengeSuccessManager.cpp";
 
 namespace BrnNetwork
 {
@@ -161,9 +164,12 @@ namespace BrnNetwork
         mpPlayerManager = lpPlayerManager;
         mpTimeManager   = lpTimeManager;
 
-        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
-        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
-        CGS_ASSERT(mpTimeManager != 0, "mpTimeManager");
+        CGS_ASSERT(mpNetworkModule != 0,
+            CgsDev::Assert::MessageAt("mpNetworkModule", KAC_ARTIST_ASSERT_FILE, 68 /* ARTIST 0x8255DD0C */));
+        CGS_ASSERT(mpPlayerManager != 0,
+            CgsDev::Assert::MessageAt("mpPlayerManager", KAC_ARTIST_ASSERT_FILE, 69 /* ARTIST 0x8255DD34 */));
+        CGS_ASSERT(mpTimeManager != 0,
+            CgsDev::Assert::MessageAt("mpTimeManager", KAC_ARTIST_ASSERT_FILE, 70 /* ARTIST 0x8255DD5C */));
 
         for (s32 liIndex = 0; liIndex < KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
@@ -238,7 +244,8 @@ namespace BrnNetwork
     void ChallengeSuccessManager::ProcessAfterSimulation(
         const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
-        CGS_ASSERT(lpInput != 0, "lpInput");
+        CGS_ASSERT(lpInput != 0,
+            CgsDev::Assert::MessageAt("lpInput", KAC_ARTIST_ASSERT_FILE, 290 /* ARTIST 0x8256FEA4 */));
         ProcessNetworkEvents(lpInput->GetNetworkEventQueue());
         CheckForNewUpdateMessages();
     }
@@ -271,13 +278,15 @@ namespace BrnNetwork
     // -------------------------------------------------------------------------------------------
     void ChallengeSuccessManager::AddPlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0,
+            CgsDev::Assert::MessageAt("mpPlayerManager", KAC_ARTIST_ASSERT_FILE, 607 /* ARTIST 0x8256BF50 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
         if (lpNetworkPlayer != 0)
         {
             ChallengeSuccessData* lpEntry = GetChallengeSuccessDataEntry(CgsNetwork::KI_INVALID_PLAYER_ID);
-            CGS_ASSERT(lpEntry != 0, "lpEntry");
+            CGS_ASSERT(lpEntry != 0,
+                CgsDev::Assert::MessageAt("lpEntry", KAC_ARTIST_ASSERT_FILE, 619 /* ARTIST 0x8256BF9C */));
 
             // Unreliable per-frame update message pair (no arrival/delivery callbacks).
             lpNetworkPlayer->RegisterMessageType(KI_UPDATE_MESSAGE_TYPE,
@@ -305,7 +314,8 @@ namespace BrnNetwork
     // -------------------------------------------------------------------------------------------
     void ChallengeSuccessManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0,
+            CgsDev::Assert::MessageAt("mpPlayerManager", KAC_ARTIST_ASSERT_FILE, 654 /* ARTIST 0x82556A28 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
         if (lpNetworkPlayer != 0)
@@ -314,7 +324,8 @@ namespace BrnNetwork
             lpNetworkPlayer->UnRegisterMessageType(KI_CHALLENGE_SUCCESS_MESSAGE_TYPE);
 
             ChallengeSuccessData* lpEntry = GetChallengeSuccessDataEntry(lPlayerID);
-            CGS_ASSERT(lpEntry != 0, "lpEntry");
+            CGS_ASSERT(lpEntry != 0,
+                CgsDev::Assert::MessageAt("lpEntry", KAC_ARTIST_ASSERT_FILE, 669 /* ARTIST 0x82556A88 */));
             lpEntry->mPlayerID = CgsNetwork::KI_INVALID_PLAYER_ID;
         }
     }

@@ -1,4 +1,5 @@
 #include <xtl.h>
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 // ===================================================================================
 // BrnNetwork::NetworkImageManager -- sibling .cpp
 //   b5-decomp/src/GameSource/Network/Managers/BrnNetworkImageManager.cpp
@@ -48,6 +49,9 @@
 
 // Vendor XDK mute-list query used by AreMugshotsDisabledForPlayer (same convention).
 
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkImageManager.cpp";
 
 namespace BrnNetwork
 {
@@ -252,10 +256,12 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------
     void NetworkImageManager::AddPlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager,
+            CgsDev::Assert::MessageAt("mpPlayerManager", KAC_ARTIST_ASSERT_FILE, 1158 /* ARTIST 0x82576140 */));
 
         MugshotData* lpMugshotDataEntry = GetMugshotDataEntry(-1);
-        CGS_ASSERT(lpMugshotDataEntry, "lpMugshotDataEntry");
+        CGS_ASSERT(lpMugshotDataEntry,
+            CgsDev::Assert::MessageAt("lpMugshotDataEntry", KAC_ARTIST_ASSERT_FILE, 1161 /* ARTIST 0x82576174 */));
 
         lpMugshotDataEntry->mReceivedPhotoPackets.UnSetAll();
         lpMugshotDataEntry->mTakedownAggressorPlayerID = lPlayerID;  // stw r28,0x28 -- slot KEY
@@ -269,7 +275,8 @@ namespace BrnNetwork
         if ( lpNetworkPlayer )
         {
             ImageMessageData* lpDataEntry = GetImageMessageDataEntry(-1);
-            CGS_ASSERT(lpDataEntry, "lpDataEntry");
+            CGS_ASSERT(lpDataEntry,
+                CgsDev::Assert::MessageAt("lpDataEntry", KAC_ARTIST_ASSERT_FILE, 1176 /* ARTIST 0x825761E4 */));
 
             lpNetworkPlayer->RegisterMessageType(
                 KI_IMAGE_MESSAGE_TYPE,
@@ -291,7 +298,8 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------
     void NetworkImageManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager,
+            CgsDev::Assert::MessageAt("mpPlayerManager", KAC_ARTIST_ASSERT_FILE, 1207 /* ARTIST 0x8255DB68 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
         if ( lpNetworkPlayer )
@@ -344,7 +352,9 @@ namespace BrnNetwork
         MugshotData* lpMugshotDataEntry = GetMugshotDataEntry(lTakedownAggressorID);
         if ( !lpMugshotDataEntry )
         {
-            CGS_ASSERT(lpMugshotDataEntry, "lpMugshotDataEntry");
+            CGS_ASSERT(lpMugshotDataEntry,
+                CgsDev::Assert::MessageAt(
+                    "lpMugshotDataEntry", KAC_ARTIST_ASSERT_FILE, 1825 /* ARTIST 0x8254AC48 */));
             return 0;
         }
 
@@ -361,7 +371,8 @@ namespace BrnNetwork
     NetworkPlayerID NetworkImageManager::GetMugshotVictimID(NetworkPlayerID lTakedownAggressorID)
     {
         MugshotData* lpMugshotDataEntry = GetMugshotDataEntry(lTakedownAggressorID);
-        CGS_ASSERT(lpMugshotDataEntry, "lpMugshotDataEntry");
+        CGS_ASSERT(lpMugshotDataEntry,
+            CgsDev::Assert::MessageAt("lpMugshotDataEntry", KAC_ARTIST_ASSERT_FILE, 1951 /* ARTIST 0x8254AE38 */));
         return lpMugshotDataEntry->mTakedownVictimPlayerID;
     }
 
@@ -373,8 +384,10 @@ namespace BrnNetwork
     void NetworkImageManager::_ImageMessageArrivedCallback(CgsNetwork::ReliableMessage* lpMessage,
                                                            NetworkPlayerID liFromPlayerID, void* lpUserData)
     {
-        CGS_ASSERT(lpMessage, "lpImageMessage");
-        CGS_ASSERT(lpMessage, "lpImageMessage");
+        CGS_ASSERT(lpMessage,
+            CgsDev::Assert::MessageAt("lpImageMessage", KAC_ARTIST_ASSERT_FILE, 1721 /* ARTIST 0x82573728 */));
+        CGS_ASSERT(lpMessage,
+            CgsDev::Assert::MessageAt("lpImageMessage", KAC_ARTIST_ASSERT_FILE, 1722 /* ARTIST 0x8257374C */));
 
         NetworkImageManager* lpThis = static_cast<NetworkImageManager*>(lpUserData);
         lpThis->ReceiveImageMessage(liFromPlayerID, reinterpret_cast<ImageMessage*>(lpMessage));
@@ -388,11 +401,13 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------
     void NetworkImageManager::ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
-        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule,
+            CgsDev::Assert::MessageAt("mpNetworkModule", KAC_ARTIST_ASSERT_FILE, 498 /* ARTIST 0x8256BB68 */));
 
         if ( mTakedownVictimPlayerID == -1 )
         {
-            CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
+            CGS_ASSERT(mpPlayerManager,
+                CgsDev::Assert::MessageAt("mpPlayerManager", KAC_ARTIST_ASSERT_FILE, 507 /* ARTIST 0x8256BBA0 */));
             const NetworkPlayerID lLocalPlayerID = mpPlayerManager->GetLocalPlayerID();
             if ( lLocalPlayerID != -1 )
             {

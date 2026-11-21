@@ -15,9 +15,12 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
 #include "GameSource/BurnoutConstants.h"            // EActiveRaceCarIndex / EGlobalRaceCarIndex enumerators
-#include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint (the demoted player-index tripwire)
 #include <cstring>                                  // std::memcpy (RaceCarState payload copy)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h";
 
 namespace BrnWorld
 {
@@ -257,24 +260,36 @@ u16 RCEntityActiveRaceCarOutputInterface::GetRaceCarAISection(EActiveRaceCarInde
 // X360 0x82310050 -- GetRivalId (maRivalIds[idx], CgsID stride 8).
 CgsID RCEntityActiveRaceCarOutputInterface::GetRivalId(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 824 /* ARTIST 0x8231007C */));
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 825 /* ARTIST 0x823100A0 */));
     return maRivalIds[leActiveRaceCarIndex];
 }
 
 // X360 0x823A7BC8 -- HasCrashedIntoWater (mbHasCrashedIntoWater[idx], byte stride 1).
 bool RCEntityActiveRaceCarOutputInterface::HasCrashedIntoWater(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 1325 /* ARTIST 0x823A7BF4 */));
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 1326 /* ARTIST 0x823A7C18 */));
     return mbHasCrashedIntoWater[leActiveRaceCarIndex];
 }
 
 // X360 0x82310140 -- IsRaceCarNetwork: bit 3 of the per-car flags word (maxRaceCarFlags[idx]).
 bool RCEntityActiveRaceCarOutputInterface::IsRaceCarNetwork(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 898 /* ARTIST 0x8231016C */));
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 899 /* ARTIST 0x82310190 */));
     return ((maxRaceCarFlags[leActiveRaceCarIndex] >> 3) & 1) != 0;
 }
 
@@ -306,8 +321,12 @@ bool RCEntityActiveRaceCarOutputInterface::IsCarInShowtime(EActiveRaceCarIndex l
 // X360 0x82705690 -- IsRaceCarRival: bit 2 of the per-car flags word (maxRaceCarFlags[idx]).
 bool RCEntityActiveRaceCarOutputInterface::IsRaceCarRival(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 876 /* ARTIST 0x827056BC */));
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 877 /* ARTIST 0x827056E0 */));
     return ((maxRaceCarFlags[leActiveRaceCarIndex] >> 2) & 1) != 0;
 }
 
@@ -342,8 +361,12 @@ void RCEntityActiveRaceCarOutputInterface::SetBoostOutputInfoN(EActiveRaceCarInd
 void RCEntityActiveRaceCarOutputInterface::SetPlayerActiveRaceCarData(EActiveRaceCarIndex leActiveRaceCarIndex,
                                                                      EActiveRaceCarEngineState leEngineState)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 1206 /* ARTIST 0x822A11B0 */));
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 1207 /* ARTIST 0x822A11D4 */));
     mePlayerActiveRaceCarIndex = leActiveRaceCarIndex;   // @+0x2858
     mePlayerEngineState        = leEngineState;          // @+0x285C
     mbIsPlayerCarActive        = true;                   // @+0x2860 (stb 1)
@@ -546,8 +569,12 @@ bool RCEntityActiveRaceCarOutputInterface::IsPlayerCarActive() const
 // ============================================================================
 bool RCEntityActiveRaceCarOutputInterface::IsRaceCarActive(EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 854 /* ARTIST 0x82277B3C */));
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 855 /* ARTIST 0x82277B60 */));
     return (maxRaceCarFlags[leActiveRaceCarIndex] & 1) != 0;
 }
 

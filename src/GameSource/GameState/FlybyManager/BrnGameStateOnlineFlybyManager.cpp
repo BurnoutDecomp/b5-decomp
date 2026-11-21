@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <stdlib.h> // qsort
 
@@ -19,6 +20,10 @@
 // miss the record pointer is null and the caller fires its own "lpPlayerStatusData" /
 // "lpRelationship" assert.
 // ===========================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp";
 
 namespace BrnGameState
 {
@@ -402,7 +407,8 @@ void OnlineFlybyManager::CalculateRivalryRating(FlybyManager::RivalRating* lpRat
 s32 OnlineFlybyManager::GetOngoingStat(FlybyManager::RivalRating* lpRating,
                                        EOngoingRivalryCompare leStatType, EMessageStyle leStyle)
 {
-    CGS_ASSERT(lpRating, "lpRating");
+    CGS_ASSERT(lpRating,
+        CgsDev::Assert::MessageAt("lpRating", KAC_ARTIST_ASSERT_FILE, 983 /* ARTIST 0x823582D4 */));
 
     const BrnNetwork::LiveRevengeRelationship* lpRelationship =
         GetLiveRevengeRelationship(lpRating->mPlayerID);
@@ -411,7 +417,8 @@ s32 OnlineFlybyManager::GetOngoingStat(FlybyManager::RivalRating* lpRating,
         (leStyle != E_MESSAGE_STYLE_POSITIVE) ? &lpRelationship->GetOverallStats()->mRivalStats
                                               : &lpRelationship->GetOverallStats()->mPlayerStats;
 
-    CGS_ASSERT(lpCommonRelationship, "lpCommonRelationship");
+    CGS_ASSERT(lpCommonRelationship,
+        CgsDev::Assert::MessageAt("lpCommonRelationship", KAC_ARTIST_ASSERT_FILE, 996 /* ARTIST 0x82358344 */));
 
     switch (leStatType)
     {
@@ -428,7 +435,8 @@ s32 OnlineFlybyManager::GetOngoingStat(FlybyManager::RivalRating* lpRating,
     case E_ONGOING_RIVALRY_PAYBACKS_ESCAPED:
         return lpCommonRelationship->miPaybacksDealt - lpCommonRelationship->miPaybacksScored;
     default:
-        CGS_ASSERT(false, "Unknow stat type");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt("Unknow stat type", KAC_ARTIST_ASSERT_FILE, 1041 /* ARTIST 0x823583F4 */));
         return 0;
     }
 }
@@ -495,7 +503,8 @@ s32 OnlineFlybyManager::GetNoRivalryStat(FlybyManager::RivalRating* lpRating,
     case E_NO_RIVALRY_WINS:
         return GetPlayerStats(lPlayerID)->GetStatAsInt(BrnNetwork::NetworkPlayerStats::E_STATS_VALUE_WINS);
     default:
-        CGS_ASSERT(false, "Unknown stat type");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt("Unknown stat type", KAC_ARTIST_ASSERT_FILE, 1198 /* ARTIST 0x823646B0 */));
         return 0;
     }
 }

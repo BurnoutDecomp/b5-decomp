@@ -38,7 +38,7 @@
 #include "GameSource/Gui/Flow/Screen/Components/BrnCrashNavPanel.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // ([cnav-diag])
 #include <cstdlib>   // ([cnav-diag])
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                              // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"                       // CgsGui::GuiEventControllerInputPressed
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"          // CgsGui::StateInterface (OutputGuiEvent)
@@ -51,6 +51,9 @@
 #include "SharedClasses/Progression/BrnProgressionData.h"                         // BrnProgression::ProgressionData
 
 #include <cstring>   // std::strstr / std::strcmp
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnCrashNavPanel.cpp";
 
 namespace BrnGui
 {
@@ -244,7 +247,8 @@ namespace BrnGui
     // @ 0x82425EC8
     void CrashNavPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");   // cpp:250
+        CGS_ASSERT(lpGuiCache != 0,
+            CgsDev::Assert::MessageAt("lpGuiCache", KAC_ARTIST_ASSERT_FILE, 250 /* ARTIST 0x82425EF0 */));   // cpp:250
 
         mFilterToggles.AppendExpectedAptComponent(leFlow, lpGuiCache, true);   // `li r6, 1`
         mEventPanel.AppendExpectedAptComponents(leFlow, lpGuiCache);
@@ -353,7 +357,8 @@ namespace BrnGui
     // @ 0x82440258 -- re-apply the saved triple over a freshly-built top-level row.
     void CrashNavPanel::RestoreSettings()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:190
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 190 /* ARTIST 0x8244027C */));   // cpp:190
 
         // The live road rule decides which of the two score types the panel comes back on:
         // rules 1/2 map to score type 0, rules 3/4 to score type 1. Any other value leaves
@@ -549,7 +554,9 @@ namespace BrnGui
     void CrashNavPanel::SetEventPanelData(u32 luEventId, const ChallengedEventScore* lpScores,
                                           bool lbShowPanel)
     {
-        CGS_ASSERT(mePanelType == E_PANEL_EVENT, "E_PANEL_EVENT == mePanelType");   // cpp:637
+        CGS_ASSERT(mePanelType == E_PANEL_EVENT,
+            CgsDev::Assert::MessageAt(
+                "E_PANEL_EVENT == mePanelType", KAC_ARTIST_ASSERT_FILE, 637 /* ARTIST 0x8243A8A8 */));   // cpp:637
 
         ChangeVisiblePanelState(E_PANEL_EVENT, RivalMapPanel::E_RIVAL_TYPE_COUNT);
         mEventPanel.SetEventData(luEventId, lpScores, mpGuiCache, lbShowPanel);
@@ -745,7 +752,8 @@ namespace BrnGui
     // @ 0x82418828
     void CrashNavPanel::HandleAptEvents(const CgsGui::GuiEventAptTriggerPayload* lpAptEvent)
     {
-        CGS_ASSERT(lpAptEvent != 0, "lpAptEvent");   // cpp:807
+        CGS_ASSERT(lpAptEvent != 0,
+            CgsDev::Assert::MessageAt("lpAptEvent", KAC_ARTIST_ASSERT_FILE, 807 /* ARTIST 0x82418854 */));   // cpp:807
 
         if (lpAptEvent->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
         {

@@ -10,7 +10,7 @@
 
 #include <cstdlib>   // std::qsort
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                 // CgsDev::StrStream (streamed asserts)
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 #include "GameShared/GameClasses/Network/CgsNetworkUtils.h"                  // CgsNetwork::UsernameCompare
@@ -31,6 +31,11 @@
 #include "GameSource/Network/Parameters/BrnNetworkPlayerParamsClass.h"         // PlayerParams (GetUniqueIDByName)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h" // GetPlayerParametersByPlayerName
 #include <cstring>                                                            // strlen / strncpy (rival name copy)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLiveRevengeManager.cpp";
+static const char KAC_ARTIST_ASSERT_HEADER[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLiveRevengeManager.h";
 
 namespace BrnNetwork
 {
@@ -92,8 +97,10 @@ namespace BrnNetwork
 
     bool LiveRevengeManager::Release()
     {
-        CGS_ASSERT(mpLiveRevengeProfile, "mpLiveRevengeProfile");
-        CGS_ASSERT(mpAllocator, "mpAllocator");
+        CGS_ASSERT(mpLiveRevengeProfile,
+            CgsDev::Assert::MessageAt("mpLiveRevengeProfile", KAC_ARTIST_ASSERT_FILE, 140 /* ARTIST 0x8255AA54 */));
+        CGS_ASSERT(mpAllocator,
+            CgsDev::Assert::MessageAt("mpAllocator", KAC_ARTIST_ASSERT_FILE, 141 /* ARTIST 0x8255AA7C */));
 
         mpLiveRevengeProfile->Clear();
         mpAllocator->Free(mpLiveRevengeProfile);
@@ -204,7 +211,8 @@ namespace BrnNetwork
 
     void LiveRevengeManager::ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInputBuffer)
     {
-        CGS_ASSERT(lpInputBuffer, "lpInputBuffer");
+        CGS_ASSERT(lpInputBuffer,
+            CgsDev::Assert::MessageAt("lpInputBuffer", KAC_ARTIST_ASSERT_FILE, 294 /* ARTIST 0x82568C3C */));
         mTakedownEventQueue.Append(*lpInputBuffer->GetTakedownEventInputQueue());
         ProcessGameDirtyTrickInterface();
     }
@@ -271,7 +279,9 @@ namespace BrnNetwork
     {
         const BrnNetworkModuleIO::GameStateToNetworkInterface::DirtyTrickQueue* lpDirtyTrickEventQueue =
             mpNetworkModule->GetGameStateToNetworkInterface()->GetDirtyTrickQueue();
-        CGS_ASSERT(lpDirtyTrickEventQueue, "lpDirtyTrickEventQueue");
+        CGS_ASSERT(lpDirtyTrickEventQueue,
+            CgsDev::Assert::MessageAt(
+                "lpDirtyTrickEventQueue", KAC_ARTIST_ASSERT_FILE, 318 /* ARTIST 0x82562FAC */));
 
         for (s32 liIndex = 0; liIndex < lpDirtyTrickEventQueue->GetLength(); ++liIndex)
         {
@@ -868,7 +878,8 @@ namespace BrnNetwork
     // Header inline on the console (see the class declaration).
     void LiveRevengeManager::HandlePaybackInitialisedEvent(const BrnNetworkModuleIO::NetworkInPaybackIntialised* lpPaybackEvent)
     {
-        CGS_ASSERT(lpPaybackEvent, "lpPaybackEvent");
+        CGS_ASSERT(lpPaybackEvent,
+            CgsDev::Assert::MessageAt("lpPaybackEvent", KAC_ARTIST_ASSERT_HEADER, 581 /* ARTIST 0x8256195C */));
         UpdatePaybacksData(lpPaybackEvent->mePaybackAggressorIndex, lpPaybackEvent->mePaybackVictimIndex,
                            static_cast<EDirtyTrickStatus>(2));   // E_DIRTY_TRICK_STATUS_INITIALISED
     }
@@ -876,7 +887,8 @@ namespace BrnNetwork
     // Header inline on the console (see the class declaration).
     void LiveRevengeManager::HandlePaybackSucceededEvent(const BrnNetworkModuleIO::NetworkInPaybackSucceeded* lpPaybackEvent)
     {
-        CGS_ASSERT(lpPaybackEvent, "lpPaybackEvent");
+        CGS_ASSERT(lpPaybackEvent,
+            CgsDev::Assert::MessageAt("lpPaybackEvent", KAC_ARTIST_ASSERT_HEADER, 595 /* ARTIST 0x825619CC */));
         UpdatePaybacksData(lpPaybackEvent->mePaybackAggressorIndex, lpPaybackEvent->mePaybackVictimIndex,
                            static_cast<EDirtyTrickStatus>(4));   // E_DIRTY_TRICK_STATUS_CRASHED
     }
@@ -1148,11 +1160,15 @@ namespace BrnNetwork
     {
         LiveRevengeRelationship lRemoteRelationship;
 
-        CGS_ASSERT(lpMessage, "lpMessage");
-        CGS_ASSERT(lpMessage->Retrieve(&lRemoteRelationship), "lpMessage->Retrieve(&lRemoteRelationship)");
+        CGS_ASSERT(lpMessage,
+            CgsDev::Assert::MessageAt("lpMessage", KAC_ARTIST_ASSERT_FILE, 1364 /* ARTIST 0x8255B2A8 */));
+        CGS_ASSERT(lpMessage->Retrieve(&lRemoteRelationship),
+            CgsDev::Assert::MessageAt(
+                "lpMessage->Retrieve(&lRemoteRelationship)", KAC_ARTIST_ASSERT_FILE, 1366 /* ARTIST 0x8255B2DC */));
 
         LiveRevengeRelationship* lpLocalRelationship = GetNonConstRevengeRelationship(lRemotePlayerID);
-        CGS_ASSERT(lpLocalRelationship, "lpLocalRelationship");
+        CGS_ASSERT(lpLocalRelationship,
+            CgsDev::Assert::MessageAt("lpLocalRelationship", KAC_ARTIST_ASSERT_FILE, 1369 /* ARTIST 0x8255B310 */));
 
         lpLocalRelationship->Merge(&lRemoteRelationship);
         AutoSaveLiveRevengeProfile();
@@ -1163,8 +1179,10 @@ namespace BrnNetwork
     {
         LiveRevengeManager*     lpManager            = static_cast<LiveRevengeManager*>(lpData);
         LiveRevengeSyncMessage* lpLiveRevengeMessage = static_cast<LiveRevengeSyncMessage*>(lpMessage);
-        CGS_ASSERT(lpManager, "lpManager");
-        CGS_ASSERT(lpMessage, "lpMessage");
+        CGS_ASSERT(lpManager,
+            CgsDev::Assert::MessageAt("lpManager", KAC_ARTIST_ASSERT_FILE, 1343 /* ARTIST 0x82560210 */));
+        CGS_ASSERT(lpMessage,
+            CgsDev::Assert::MessageAt("lpMessage", KAC_ARTIST_ASSERT_FILE, 1344 /* ARTIST 0x82560234 */));
 
         lpManager->SyncMessageArrivedCallback(lpLiveRevengeMessage, lSendingPlayerID);
     }

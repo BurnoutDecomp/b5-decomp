@@ -17,11 +17,14 @@
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h"
 
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"   // CgsNetwork::NetworkTexture
-#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT + the assert front-end
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                      // CGS_ASSERT + the assert front-end
 #include "GameShared/GameClasses/Development/CgsStrStream.h"            // CgsDev::StrStream (streamed asserts)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu
 
 #include <cstring>   // std::memset / std::memcpy (the X360 XMemSet / XMemCpy)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\Utilities\\CgsNetworkImageConverter.cpp";
 
 namespace CgsNetwork
 {
@@ -49,14 +52,23 @@ namespace CgsNetwork
         miUnpackToImage    = CgsDev::PerfMonCpu::AddMonitor("DXT1 Unpack",    CgsDev::E_PMP_8, false, 1.0f, false);
         miPackToTexture    = CgsDev::PerfMonCpu::AddMonitor("DXT1 Pack",      CgsDev::E_PMP_8, false, 1.0f, false);
 
-        CGS_ASSERT(miConvertPM        >= 0, "miConvertPM >= 0");
-        CGS_ASSERT(miCopyPM           >= 0, "miCopyPM >= 0");
-        CGS_ASSERT(miResizePM         >= 0, "miResizePM >= 0");
-        CGS_ASSERT(miUnpackToBufferPM >= 0, "miUnpackToBufferPM >= 0");
-        CGS_ASSERT(miXToRPM           >= 0, "miXToRPM >= 0");
-        CGS_ASSERT(miCompressPM       >= 0, "miCompressPM >= 0");
-        CGS_ASSERT(miUnpackToImage    >= 0, "miUnpackToImage >= 0");
-        CGS_ASSERT(miPackToTexture    >= 0, "miPackToTexture >= 0");
+        CGS_ASSERT(miConvertPM        >= 0,
+            CgsDev::Assert::MessageAt("miConvertPM >= 0", KAC_ARTIST_ASSERT_FILE, 78 /* ARTIST 0x828719D0 */));
+        CGS_ASSERT(miCopyPM           >= 0,
+            CgsDev::Assert::MessageAt("miCopyPM >= 0", KAC_ARTIST_ASSERT_FILE, 79 /* ARTIST 0x828719F8 */));
+        CGS_ASSERT(miResizePM         >= 0,
+            CgsDev::Assert::MessageAt("miResizePM >= 0", KAC_ARTIST_ASSERT_FILE, 80 /* ARTIST 0x82871A20 */));
+        CGS_ASSERT(miUnpackToBufferPM >= 0,
+            CgsDev::Assert::MessageAt(
+                "miUnpackToBufferPM >= 0", KAC_ARTIST_ASSERT_FILE, 81 /* ARTIST 0x82871A48 */));
+        CGS_ASSERT(miXToRPM           >= 0,
+            CgsDev::Assert::MessageAt("miXToRPM >= 0", KAC_ARTIST_ASSERT_FILE, 82 /* ARTIST 0x82871A70 */));
+        CGS_ASSERT(miCompressPM       >= 0,
+            CgsDev::Assert::MessageAt("miCompressPM >= 0", KAC_ARTIST_ASSERT_FILE, 83 /* ARTIST 0x82871A98 */));
+        CGS_ASSERT(miUnpackToImage    >= 0,
+            CgsDev::Assert::MessageAt("miUnpackToImage >= 0", KAC_ARTIST_ASSERT_FILE, 84 /* ARTIST 0x82871AC0 */));
+        CGS_ASSERT(miPackToTexture    >= 0,
+            CgsDev::Assert::MessageAt("miPackToTexture >= 0", KAC_ARTIST_ASSERT_FILE, 85 /* ARTIST 0x82871AE8 */));
     }
 
     // ---- Convert @ 0x828943A8 -------------------------------------------------------------------
