@@ -1,6 +1,6 @@
 #include "GameSource/Gui/BrnGuiProfile.h"
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                    // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsHash.h"                // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"              // CgsMemory::HeapMalloc::Malloc
@@ -533,8 +533,8 @@ void ProfileManager::AttachMessageDisplay(ProfileMessageDisplay* lpMessageDispla
 // ---------------------------------------------------------------------------
 void ProfileManager::DetachMessageDisplay(ProfileMessageDisplay& lrMessageDisplay)
 {
-    CGS_ASSERT(mpMessageDisplay == &lrMessageDisplay,
-               "DetachMessageDisplay: MessageDisplay was not attached");
+    CGS_ASSERT(mpMessageDisplay == &lrMessageDisplay, CgsDev::Assert::StreamMessageAt("DetachMessageDisplay: MessageDisplay was not attached", "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.h", 627));
+
 
     mpMessageDisplay = 0;
 }
@@ -612,7 +612,7 @@ void ProfileManager::ShowNoSpaceMessage(CgsGui::MessageDisplay::OptionHandler* l
 // ---------------------------------------------------------------------------
 void ProfileManager::HideMessage()
 {
-    CGS_ASSERT(mpOptionHandler != 0, "SaveLoad::HideMessage: a message is not being shown");
+    CGS_ASSERT(mpOptionHandler != 0, CgsDev::Assert::StreamMessageAt("SaveLoad::HideMessage: a message is not being shown", "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.cpp", 1420));
 
     mpOptionHandler = 0;
     muOptionCount   = 0;

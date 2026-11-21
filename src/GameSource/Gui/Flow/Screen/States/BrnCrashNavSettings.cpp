@@ -47,7 +47,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavSettings.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // CgsDev::Log::WriteToLog
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                        // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"   // StateInterface, GuiEventNetworkSuspension
@@ -325,7 +325,7 @@ namespace BrnGui
     void CrashNavSettings::HandleTriggers(const CgsModule::Event* lpAptTrigger)
     {
         CGS_ASSERT(lpAptTrigger != 0,
-                   "Invalid event in CrashNavMapMain::HandleTriggers");   // cpp:940
+            CgsDev::Assert::StreamMessageAt("Invalid event in CrashNavMapMain::HandleTriggers", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavSettings.cpp", 940)); // cpp:940
     }
 
     // ---- ShowMenu @0x824BCDF8 ------------------------------------------------------

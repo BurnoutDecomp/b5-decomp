@@ -1,5 +1,5 @@
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameSource/Replays/Serialisers/BrnReplayEffectsSerialiser.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -39,8 +39,8 @@ namespace BrnReplays
 
     EffectsSerialiserStaticLayout* EffectsSerialiser::GetStaticLayout()
     {
-        CGS_ASSERT(miStaticBufferSize >= EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE,
-                   "Static buffer size is too small\n");
+        CGS_ASSERT(miStaticBufferSize >= EffectsSerialiserStaticLayout::KI_STATIC_LAYOUT_SIZE, CgsDev::Assert::StreamMessageAt("Static buffer size is too small\n", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 418));
+
         return reinterpret_cast<EffectsSerialiserStaticLayout*>(mpStaticBuffer);
     }
 

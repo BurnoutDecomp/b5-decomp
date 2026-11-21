@@ -23,7 +23,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface out-queue
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / AddEvent
@@ -93,8 +93,8 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::HandleControllerInputPressed(const CgsModule::Event* lpEvent)
     {
         // cpp:1294. Streamed into the assert buffer by the X360; non-fatal.
-        CGS_ASSERT(lpEvent != 0,
-                   "Invalid event sent to OnlineGameRoomPlayerInfo::HandleControllerInputPressed");
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineGameRoomPlayerInfo::HandleControllerInputPressed", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 1294));
+
 
         switch (meSubState)
         {
@@ -135,8 +135,8 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::HandleControllerInputReleased(const CgsModule::Event* lpEvent)
     {
         // cpp:1373. Streamed into the assert buffer by the X360; non-fatal.
-        CGS_ASSERT(lpEvent != 0,
-                   "Invalid event sent to OnlineGameRoomPlayerInfo::HandleControllerInputReleased");
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineGameRoomPlayerInfo::HandleControllerInputReleased", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 1373));
+
 
         if (meSubState == E_SUBSTATE_MAP)
         {

@@ -64,6 +64,10 @@ namespace CgsGui
         friend class AptAux;
         friend class AptCallbackRender;
     public:
+        static s32 miCgsAptFlashRender;
+        static s32 miCgsAptStringRender;
+        static s32 miCgsAptDrawRenderingUnit;
+
         // X360 0x827DFBD8. Brings the two per-shape texture-state caches up empty, clears the
         // batch transform, marks every AptString slot free, and seeds the renderer/white-texture
         // slots. (The X360 ctor's 0x7FFFFFFF seeding of the 12-byte cache bins is the

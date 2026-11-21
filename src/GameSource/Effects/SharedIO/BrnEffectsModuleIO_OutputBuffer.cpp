@@ -1,5 +1,5 @@
 #include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_OutputBuffer.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 #include <cstring>                                    // std::memset (the replay slots)
 
 // BrnEffects::EffectsIO::OutputBuffer member functions, reconstructed from
@@ -85,7 +85,7 @@ OutputBuffer::ReplayRequestInterface* OutputBuffer::GetReplayRequestInterface()
 // the particle module's PrepareOutputBuffer queue through here while the FX bundle loads.
 void OutputBuffer::SetResourceRequestInterface(const EffectsModuleResourceQueue* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 290));
     mResourceRequestInterface = *lpInterface;
 }
 

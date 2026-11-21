@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/CgsSaveLoadX360.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 namespace CgsGui
 {
@@ -8,7 +8,7 @@ MemcardAllocator::~MemcardAllocator() {}
 void* MemcardAllocator::Alloc(size_t nSize, const char*, unsigned int)
 {
     void* pBlock = mpHeap->Malloc(static_cast<s32>(nSize), KI_DEFAULT_ALIGNMENT);
-    CGS_ASSERT(pBlock != 0, "CgsMemory::HeapMalloc::Malloc failed.");
+    CGS_ASSERT(pBlock != 0, CgsDev::Assert::StreamMessageAt("CgsMemory::HeapMalloc::Malloc failed.", "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.h", 649));
     return pBlock;
 }
 // 827DBBB0: mr r6,r7; tail-dispatch plain Alloc at +8. Alignment is forwarded

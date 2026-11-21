@@ -15,7 +15,7 @@
 // vacuous machinery the substitution elides.
 
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMoviePlayerChunkBuffer.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gxMessageFilterFlags / gpDebugPrint
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // CgsDev::StrStreamBase
 #include "rw/rwcore_structs.h"                         // rw::IResourceAllocator / Resource / ResourceDescriptor
@@ -95,7 +95,7 @@ namespace CgsGraphics
     void* MoviePlayerCoreAllocator::Alloc(size_t /*nSize*/, const char* /*pName*/, unsigned int /*nFlags*/,
                                           unsigned int /*nAlignment*/, unsigned int /*nAlignmentOffset*/)
     {
-        CGS_ASSERT(false, "Invalid allocation\n");
+        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Invalid allocation\n", "..\\..\\..\\GameShared\\GameClasses\\Graphics/MoviePlayer/CgsMoviePlayer.h", 137));
         return 0;
     }
 

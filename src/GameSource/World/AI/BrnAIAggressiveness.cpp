@@ -1,6 +1,6 @@
 #include "GameSource/World/AI/BrnAIAggressiveness.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 // BrnAI::Aggressiveness -- the three speed-match setters. Each one bounds-checks its
 // argument to [0,1] and stores it into the matching f32 member. The X360 build fires a
@@ -50,7 +50,7 @@ namespace BrnAI
     // AIDebugComponent state-table draws.
     f32 Aggressiveness::GetAggressionLevel() const
     {
-        CGS_ASSERT(mbAggressionLevelSet, "Aggression levels need to be set up\n");
+        CGS_ASSERT(mbAggressionLevelSet, CgsDev::Assert::StreamMessageAt("Aggression levels need to be set up\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIAggressiveness.cpp", 86));
         return mfAggressionLevel;
     }
 }

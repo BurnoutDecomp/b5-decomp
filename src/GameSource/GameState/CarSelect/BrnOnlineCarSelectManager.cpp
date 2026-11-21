@@ -1,6 +1,6 @@
 #include "GameSource/GameState/CarSelect/BrnOnlineCarSelectManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"             // CgsDev::Assert Begin/Fire/EndAssert
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"             // CgsDev::Assert Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::E_PRINTMODE_HEXONCE
 #include "GameShared/GameClasses/Containers/CgsArray.h"        // Array<CgsID,128> (the selectable-car list)
@@ -65,7 +65,7 @@ void OnlineCarSelectManager::Construct(GameStateModule* lpGameStateModule,
 // directly as the CGS_ASSERT message.
 void OnlineCarSelectManager::EnterModification(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    CGS_ASSERT(meInternalState == E_INTERNAL_STATE_CAR_SELECT, "OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.");
+    CGS_ASSERT(meInternalState == E_INTERNAL_STATE_CAR_SELECT, CgsDev::Assert::StreamMessageAt("OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnOnlineCarSelectManager.h", 340));
 
     StartCarModificationState(lpActionQueue);
 }
@@ -76,7 +76,7 @@ void OnlineCarSelectManager::EnterModification(GameStateModuleIO::GameActionQueu
 // elided it), so it is left unnamed-but-present.
 void OnlineCarSelectManager::EnterWaitForHost(GameStateModuleIO::GameActionQueue* /*lpActionQueue*/)
 {
-    CGS_ASSERT(meInternalState == E_INTERNAL_STATE_CAR_SELECT, "OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.");
+    CGS_ASSERT(meInternalState == E_INTERNAL_STATE_CAR_SELECT, CgsDev::Assert::StreamMessageAt("OnlineCarSelectManager: Need to be in E_INTERNAL_STATE_CAR_SELECT state.", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnOnlineCarSelectManager.h", 354));
 
     meInternalState = E_INTERNAL_STATE_WAIT_FOR_HOST_TO_CHOOSE;
 }

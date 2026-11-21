@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // overhead / per-pool allocators (InitPool)
-#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint (the null-type boot gate)
 #include "GameShared/Jobs/Relocator/CgsRelocator.h"          // Relocator / RelocationParams / RelocateOp
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"
@@ -167,7 +167,7 @@ namespace CgsResource
     // resource was found in via lppOutPool.
     Entry* Pool::FindResourceWithDependencies(ID lID, Pool** lppOutPool, bool lbCheckRefCount, u16 luStatusMask, s32* lpiOutIndex)
     {
-        CGS_ASSERT(mbIsValid, "Pool is not valid\n");   // :848
+        CGS_ASSERT(mbIsValid, CgsDev::Assert::StreamMessageAt("Pool is not valid\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourcePool.cpp", 848));   // :848
 
         Entry* lpEntry = FindResource(lID, lbCheckRefCount, luStatusMask, lpiOutIndex);
         if (lpEntry != 0)
@@ -355,7 +355,7 @@ namespace CgsResource
     // then mark the pool valid.
     bool Pool::Validate()
     {
-        CGS_ASSERT(!mbIsValid, "Pool is not invalid\n");
+        CGS_ASSERT(!mbIsValid, CgsDev::Assert::StreamMessageAt("Pool is not invalid\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourcePool.cpp", 456));
 
         InitManagementData();
         for (s32 liHeap = 0; liHeap < 3; ++liHeap)

@@ -1,6 +1,6 @@
 #include "GameSource/Replays/Stream/BrnReplayDiskReadStream.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h" // DeviceManager, GetDeviceManager
 #include <cstddef>
@@ -370,7 +370,7 @@ namespace BrnReplays
     // =====================================================================================
     void DiskReadStream::CloseCallback(s32 liResult, CgsFileSystem::Handle lHandle, u64 luSize, void* lpContext)
     {
-        CGS_ASSERT(lpContext != 0, "Invalid stream\n");
+        CGS_ASSERT(lpContext != 0, CgsDev::Assert::StreamMessageAt("Invalid stream\n", "..\\..\\..\\GameSource\\Replays/Stream/BrnReplayDiskReadStream.cpp", 962));
         static_cast<DiskReadStream*>(lpContext)->OnClose(liResult, lHandle, luSize, lpContext);
     }
 

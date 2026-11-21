@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAnimator.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 // CgsGui::Animator - apt display-object animation driver.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (CgsAptAnimator.cpp):
@@ -78,7 +78,7 @@ namespace CgsGui
     // X360 0x82850280.
     void Animator::Destruct()
     {
-        CGS_ASSERT(mpObjectController != 0, "Must have valid ObjectController first");
+        CGS_ASSERT(mpObjectController != 0, CgsDev::Assert::StreamMessageAt("Must have valid ObjectController first", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptAnimator.cpp", 98));
 
         mpObjectController->UnRegister();
         mpObjectController = 0;

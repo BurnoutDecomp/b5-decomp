@@ -1,7 +1,7 @@
 // wave-I partfile
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavEnterOnline.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"               // CgsGui::ELoginQuestion
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (PlayAptMovie / OutputGuiEvent)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event
@@ -132,7 +132,7 @@ namespace BrnGui
         // cpp:451 -- the streamed-message form of the assert in the X360 image. The test
         // is on the CACHE the event carries, not on the event pointer, and it is
         // non-fatal: the adoption below runs either way.
-        CGS_ASSERT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update");
+        CGS_ASSERT(lpPayload->mpCache != 0, CgsDev::Assert::StreamMessageAt("Invalid cache in HandleGuiCacheEvent::Update", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavEnterOnline.cpp", 451));
 
         // Only the first cache offered is taken; a screen that already has one ignores
         // the event entirely (@0x824BC4C8 branches straight to the epilogue).

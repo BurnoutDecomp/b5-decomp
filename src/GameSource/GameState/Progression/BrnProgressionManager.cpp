@@ -16,7 +16,7 @@
 
 #include "BrnProgressionManager.h"
 #include "BrnProfile.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress (AddCar's "CARBEAGT" test)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // CgsDev::Log::gpDebugPrint (the two FLAG lines)
 #include "BrnProgressionCarData.h"                                    // BrnProgression::CarData (colour/palette/unlock type)
@@ -509,8 +509,8 @@ s32 ProgressionManager::GetEvent(s32 liGameType)
         case 4: return 5;
         case 5: return 4;
         default:
-            CGS_ASSERT(false,
-                "I dont know what this game type is! Maybe its new mode and needs adding this switch statement?\n");
+            CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("I dont know what this game type is! Maybe its new mode and needs adding this switch statement?\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 906));
+
             return -1;
     }
 }

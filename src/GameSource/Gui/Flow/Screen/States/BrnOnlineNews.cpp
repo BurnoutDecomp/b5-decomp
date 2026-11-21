@@ -20,7 +20,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineNews.h"
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStreamBase (unexpected-event log)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEventWrapper
@@ -314,7 +314,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineNews::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineNews::HandleControllerInput");
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineNews::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineNews.cpp", 328));
 
         if (meSubState == E_SUBSTATE_SELECTING_PARAMS)
         {
@@ -361,7 +361,7 @@ namespace BrnGui
     {
         const GuiCachePayload* lpPayload = static_cast<const GuiCachePayload*>(lpEvent);
 
-        CGS_ASSERT(lpPayload->mpCache != 0, "Invalid cache in OnlineNews::HandleGuiCacheEvent");
+        CGS_ASSERT(lpPayload->mpCache != 0, CgsDev::Assert::StreamMessageAt("Invalid cache in OnlineNews::HandleGuiCacheEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineNews.cpp", 443));
 
         if (mpGuiCache == 0)
         {
@@ -412,7 +412,7 @@ namespace BrnGui
     void OnlineNews::HandleControllerAxis(const CgsModule::Event* lpEvent)
     {
         // The console's text names SelectRoutes (the same pooled string).
-        CGS_ASSERT(lpEvent != 0, "Invalid event in SelectRoutes::HandleControllerAxis");
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event in SelectRoutes::HandleControllerAxis", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineNews.cpp", 409));
 
         if (meSubState < E_SUBSTATE_SELECTING_PARAMS)
         {

@@ -13,7 +13,7 @@
 //   (write-lock, returns &mSceneInputInterface at this+29856), NOT a non-const GetContactSpyInterface.
 // CORRECTION (2): there is no non-const GetContactSpyInterface in the DWARF, so none is emitted.
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 #include <cstring>                                    // std::memcpy (SetTrafficToRaceCarInterface_PreScene)
 
 namespace BrnWorld
@@ -1029,7 +1029,7 @@ void
 InputBuffer_PostScene::SetTrafficToRaceCarInterface_PreScene(
         const TrafficToRaceCarInterface_PreScene* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnRaceCarEntityModuleIO.h", 356));
     std::memcpy(&mTrafficToRaceCarInterface_PreScene, lpInterface,
                 sizeof(mTrafficToRaceCarInterface_PreScene));   // X360: 0x220 (544) bytes
 }

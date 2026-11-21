@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 #include <cstring>   // memcpy
 
@@ -96,8 +96,8 @@ namespace CgsGui
     // @ 0x82846F90 - install the event observer (the X360 asserts on a null pointer).
     void StateInterface::SetEventObserver(CgsGui::EventObserver* lpObserver)
     {
-        CGS_ASSERT(lpObserver != 0,
-                   "Invalid event observer pointer in StateInterface::SetEventObserver");
+        CGS_ASSERT(lpObserver != 0, CgsDev::Assert::StreamMessageAt("Invalid event observer pointer in StateInterface::SetEventObserver", "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiStateInterface.h", 478));
+
         mpObserver = lpObserver;
     }
 

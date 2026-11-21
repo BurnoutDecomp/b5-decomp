@@ -23,7 +23,7 @@
 // included here for the compile-only gate.
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameSource/Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.h"
 #include "GameSource/Replays/Serialisers/BrnReplayRaceCarSerialiserFrame.h"
 
@@ -52,8 +52,8 @@ namespace BrnReplays
     {
         // asm: `lwz r11,0x24(this)` (miStaticBufferSize) compared `< 0x1B000`; named-member
         // access is what matters on the 64-bit host.
-        CGS_ASSERT(GetStaticBufferSize() >= KI_STATIC_BUFFER_SIZE,
-                   "Static buffer size is too small\n");
+        CGS_ASSERT(GetStaticBufferSize() >= KI_STATIC_BUFFER_SIZE, CgsDev::Assert::StreamMessageAt("Static buffer size is too small\n", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.h", 151));
+
         return reinterpret_cast<RaceCarEntitySerialiserStaticLayout*>(GetStaticBuffer());
     }
 

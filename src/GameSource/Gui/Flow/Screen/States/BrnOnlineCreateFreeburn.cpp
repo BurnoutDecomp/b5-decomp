@@ -21,7 +21,7 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineCreateFreeburn.h"
 
 #include <cstddef>                                                        // offsetof (wire records)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> / GuiEventWrapper
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / OutputViewState
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue / AddEvent
@@ -368,7 +368,7 @@ namespace BrnGui
     void OnlineCreateFreeburn::HandleInGameFailedEvent(const CgsModule::Event* lpEvent)
     {
         // The console's text names HandleInGameEvent (the same pooled string).
-        CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineCreateFreeburn::HandleInGameEvent");
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineCreateFreeburn::HandleInGameEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineCreateFreeburn.cpp", 361));
 
         SendStateEvent(KAC_GO_BACK_EVENT);
     }
@@ -378,6 +378,6 @@ namespace BrnGui
     // ================================================================================
     void OnlineCreateFreeburn::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineCreateFreeburn::HandleControllerInput");
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineCreateFreeburn::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineCreateFreeburn.cpp", 297));
     }
 }

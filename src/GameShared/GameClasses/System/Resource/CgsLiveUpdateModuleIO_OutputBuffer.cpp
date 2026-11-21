@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsLiveUpdateModuleIO.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 #include <cstddef>   // offsetof
 
@@ -50,7 +50,7 @@ namespace LiveUpdateIO
     // write-locked handle LiveUpdateModule::Update obtains to AddEvent its LoadBundleRequest.
     OutputBuffer::OutputQueue* OutputBuffer::Get()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsLiveUpdateModuleIO.h", 113));
         return &mOutputQueue;
     }
 
@@ -58,7 +58,7 @@ namespace LiveUpdateIO
     // const accessor to the live-update in-progress status byte. DWARF CgsLiveUpdateModuleIO.h:108.
     const u8* OutputBuffer::GetSt() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsLiveUpdateModuleIO.h", 108));
         return &mStatus;
     }
 
@@ -67,7 +67,7 @@ namespace LiveUpdateIO
     // whether a live-update is still in flight. DWARF CgsLiveUpdateModuleIO.h:109.
     void OutputBuffer::SetStatus(const u8* lpStatus)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsLiveUpdateModuleIO.h", 109));
         mStatus = *lpStatus;   // lbz r11,0(a2) ; stb r11,0x214(this)
     }
 }

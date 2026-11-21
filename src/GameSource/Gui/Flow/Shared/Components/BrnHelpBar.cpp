@@ -6,7 +6,7 @@
 // output throughout. The constructor is compiler-generated (member construction only).
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnHelpBar.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                                // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                           // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptObjectController.h" // ObjectController
 #include "GameSource/Gui/BrnGuiCache.h"                                           // GuiCache
@@ -103,7 +103,7 @@ namespace BrnGui
     // ------------------------------------------------------------ GetItemNameHash
     s32 HelpBar::GetItemNameHash(s32 liItem) const
     {
-        CGS_ASSERT(liItem >= 0 && liItem < KI_MAX_HELPITEMS, "Invalid item index");
+        CGS_ASSERT(liItem >= 0 && liItem < KI_MAX_HELPITEMS, CgsDev::Assert::StreamMessageAt("Invalid item index", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\shared\\components\\BrnHelpBar.h", 197));
 
         return static_cast<s32>(maItems[liItem].GetNameHash());
     }
@@ -111,7 +111,7 @@ namespace BrnGui
     // ------------------------------------------------------------ GetAnimator
     Animator* HelpBar::GetAnimator(s32 liItem)
     {
-        CGS_ASSERT(liItem >= 0 && liItem < KI_MAX_HELPITEMS, "Invalid item index");
+        CGS_ASSERT(liItem >= 0 && liItem < KI_MAX_HELPITEMS, CgsDev::Assert::StreamMessageAt("Invalid item index", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\shared\\components\\BrnHelpBar.h", 241));
 
         return &maAnimators[liItem];
     }
@@ -209,7 +209,7 @@ namespace BrnGui
     void HelpBar::InvalidateItemInfo(s32 liItem)
     {
         CgsGui::ObjectController* lpObjectController = maAnimators[liItem].GetObjectController();
-        CGS_ASSERT(lpObjectController != 0, "Invalid ObjectController");
+        CGS_ASSERT(lpObjectController != 0, CgsDev::Assert::StreamMessageAt("Invalid ObjectController", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnHelpBar.cpp", 411));
 
         mafItemWidths[liItem] = KF_ITEMWIDTH_INVALID;
         lpObjectController->SetObjectVariableFloat(KAC_WIDTHVAR_NAME, KF_ITEMWIDTH_INVALID);

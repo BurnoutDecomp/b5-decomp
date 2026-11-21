@@ -4,7 +4,7 @@
 #include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsImRenderBufferTemplate.h" // ImRenderBuffer<V> (SetTransform/SetProgram/SetTextureState/SetTexture/RenderFromStaticVertexBuffer)
 #include "rw/rwcore_structs.h"                        // rw::ResourceAllocatorRegistry::GetDefaultAllocator + rw::Resource
 
@@ -38,6 +38,10 @@ namespace CgsContainers
 
 namespace CgsGui
 {
+    s32 AptRenderHandler::miCgsAptFlashRender;
+    s32 AptRenderHandler::miCgsAptStringRender;
+    s32 AptRenderHandler::miCgsAptDrawRenderingUnit;
+
     // -------------------------------------------------------------------------
     // AptRenderHandler() - X360 0x827DFBD8.
     // -------------------------------------------------------------------------
@@ -111,8 +115,8 @@ namespace CgsGui
     // -------------------------------------------------------------------------
     void AptRenderHandler::SetWhiteTexture(renderengine::Texture* lpWhiteTexture)
     {
-        CGS_ASSERT(lpWhiteTexture != 0,
-                   "Invalid texture pointer sent to AptRenderHandler::SetWhiteTexture");
+        CGS_ASSERT(lpWhiteTexture != 0, CgsDev::Assert::StreamMessageAt("Invalid texture pointer sent to AptRenderHandler::SetWhiteTexture", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptRender.h", 314));
+
         mpWhiteTexture = lpWhiteTexture;
     }
 
@@ -164,7 +168,7 @@ namespace CgsGui
     // -------------------------------------------------------------------------
     void AptRenderHandler::Render(CgsResource::GuiGeometryFile* lpGeometry, int liShaderIndex)
     {
-        CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miCgsAptFlashRender);
+        CgsDev::PerfMonCpu::StartMonitor(AptRenderHandler::miCgsAptFlashRender);
         // Validate the render set up front (the X360 fires these five debug asserts BEFORE the
         // alpha early-out): the set pointer (this+108588), the 2D renderer (*set), and the 3D
         // renderer (*(set+16)) must all be non-null. (The duplicate "mpImRenderers" asserts are the
@@ -186,7 +190,7 @@ namespace CgsGui
         // FoldIm2dColourChannel note.
         if (!(std::fabs(mVertexTransform.mColourScale.mV.w) >= 0.00000011920929f))
         {
-            CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miCgsAptFlashRender);
+            CgsDev::PerfMonCpu::StopMonitor(AptRenderHandler::miCgsAptFlashRender);
             return;
         }
 
@@ -276,7 +280,7 @@ namespace CgsGui
 
         // Reset the program to 0 at the end of the batch (sub_4F6DB4 with 0).
         lpBuffer->SetProgram(static_cast<s8>(0));
-        CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miCgsAptFlashRender);
+        CgsDev::PerfMonCpu::StopMonitor(AptRenderHandler::miCgsAptFlashRender);
     }
 
     // -------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 #include <cstddef>   // offsetof
 
@@ -47,21 +47,21 @@ namespace PhysicsSimulationIO
     // X360 0x825BD0A8. Read-lock guarded; returns the post-step time-step-used scalar (this+4).
     f32 OutputBuffer::GetTimeStepUsed() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameShared\\GameClasses\\Physics/CgsPhysicsSimulationModuleIO.h", 1317));
         return mfTimeStepUsed;
     }
 
     // X360 0x8289F088. Write-lock guarded setter for muMaxIterationsUsed (this+8).
     void OutputBuffer::SetMaxIterationsUsed(s32 luMaxIterationsUsed)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\physics\\CgsPhysicsSimulationModuleIO.h", 1333));
         muMaxIterationsUsed = luMaxIterationsUsed;
     }
 
     // X360 0x8289EFD8. Write-lock guarded setter for mfTimeStepUsed (this+4).
     void OutputBuffer::SetTimeStepUsed(f32 fTimeStepUsed)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\physics\\CgsPhysicsSimulationModuleIO.h", 1303));
         mfTimeStepUsed = fTimeStepUsed;
     }
 

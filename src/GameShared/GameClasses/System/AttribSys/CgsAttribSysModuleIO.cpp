@@ -16,7 +16,7 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysSharedIOImpl.h" // generic template method bodies
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 namespace CgsAttribSys
 {
@@ -46,7 +46,7 @@ namespace AttribSysIO
     // AttribSysEventQueue* so ProcessInputs' generic GetFirstEvent/GetNextEvent path compiles.
     const AttribSysEventQueue* Inp(const InputBuffer* lpInputBuffer)
     {
-        CGS_ASSERT(lpInputBuffer->IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(lpInputBuffer->IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModuleIO.h", 85));
         return reinterpret_cast<const AttribSysEventQueue*>(
             &lpInputBuffer->mVaultRequestInterface.mRequestQueue);
     }
@@ -56,7 +56,7 @@ namespace AttribSysIO
     // non-const writer variant used by the request builders taking the exclusive write lock.
     AttribSysEventQueue* InputBuff(InputBuffer* lpInputBuffer)
     {
-        CGS_ASSERT(lpInputBuffer->IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(lpInputBuffer->IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModuleIO.h", 88));
         return reinterpret_cast<AttribSysEventQueue*>(
             &lpInputBuffer->mVaultRequestInterface.mRequestQueue);
     }

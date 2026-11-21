@@ -8,7 +8,7 @@
 
 #include "GameSource/GameState/CarSelect/BrnOnlineCarSelectManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // AddEvent
 #include "GameSource/GameState/BrnGameStateModule.h"                     // GameStateModule::RequestStreamingForVehicleSelection
@@ -34,8 +34,8 @@ void OnlineCarSelectManager::StartCarSelectState(GameStateModuleIO::GameActionQu
         *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "StartCarSelectState\n" << "\n";
     }
 
-    CGS_ASSERT(!(meInternalState == E_INTERNAL_STATE_COUNT || meInternalState == E_INTERNAL_STATE_WAIT_FOR_ONLINE),
-               "OnlineCarSelectManager: Invalid state on entering car select state.");
+    CGS_ASSERT(!(meInternalState == E_INTERNAL_STATE_COUNT || meInternalState == E_INTERNAL_STATE_WAIT_FOR_ONLINE), CgsDev::Assert::StreamMessageAt("OnlineCarSelectManager: Invalid state on entering car select state.", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 264));
+
 
     if (meInternalState == E_INTERNAL_STATE_CAR_SELECT || meInternalState == E_INTERNAL_STATE_WAIT_FOR_HOST_TO_CHOOSE)
     {

@@ -6,7 +6,7 @@
 #include "GameSource/World/AI/BrnAIUtils.h"                           // DistancePosVelToOrigin
 #include "GameSource/World/AI/Route/BrnRacingLine.h"                  // RacingLine
 #include "GameSource/Math/BrnMathUtils.h"                             // BrnMath::Flatten
-#include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                    // CGS_ASSERT
 
 #include <cfloat>   // FLT_MAX (flt_8204F664, FindNeabyAIInTraffic's lfBestProximity seed)
 #include <cmath>    // std::sqrt / std::fabs (the vrsqrtefp and vandc sequences)
@@ -319,7 +319,7 @@ const NearbyVehicle* SteeringFan::FindNeabyAIInTraffic(const NearbyVehicles* lpN
 void SteeringFan::IncludeSmashIntoPlayer(AICar* lpCar, const NearbyVehicles* lpNearbyVehicles,
                                          EGlobalRaceCarIndex leAggressionVictim)
 {
-    CGS_ASSERT(leAggressionVictim != -1, "Invalid global race car ID used in slam\n");
+    CGS_ASSERT(leAggressionVictim != -1, CgsDev::Assert::StreamMessageAt("Invalid global race car ID used in slam\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/RacingLine/BrnAISteeringFan.cpp", 1952));
 
     const NearbyVehicle* lpPlayer = FindVictimInTraffic(lpNearbyVehicles, leAggressionVictim);
     if (lpPlayer == 0)

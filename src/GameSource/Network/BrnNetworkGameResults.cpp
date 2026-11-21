@@ -1,5 +1,5 @@
 #include "GameSource/Network/BrnNetworkGameResults.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (GameModeToEvent diagnostic)
 
@@ -220,7 +220,7 @@ namespace BrnNetwork
     // pattern ("lll") that is never consumed.
     const char* GameResults::GetPattern() const
     {
-        CGS_ASSERT(false, "These results are serialised differently.  You should be using SeraliseToString!!!");
+        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("These results are serialised differently.  You should be using SeraliseToString!!!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkGameResults.cpp", 96));
         return "lll";
     }
 
@@ -228,7 +228,7 @@ namespace BrnNetwork
     // asserts then returns 4 (li r3,4 -- not derived from the 3-char "lll").
     s32 GameResults::GetPatternLength() const
     {
-        CGS_ASSERT(false, "These results are serialised differently.  You should be using SeraliseToString!!!");
+        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("These results are serialised differently.  You should be using SeraliseToString!!!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkGameResults.cpp", 112));
         return 4;
     }
 
@@ -237,7 +237,7 @@ namespace BrnNetwork
     // SerialiseToString, never through the generic sized-blob path.
     u32 GameResults::GetDataSize() const
     {
-        CGS_ASSERT(false, "These results are serialised differently.  You should be using SeraliseToString!!!");
+        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("These results are serialised differently.  You should be using SeraliseToString!!!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkGameResults.cpp", 127));
         return 12u;
     }
 
@@ -246,7 +246,7 @@ namespace BrnNetwork
     // assert -- but it still returns the address of the result payload (console +0x04).
     void* GameResults::GetData()
     {
-        CGS_ASSERT(false, "These results are serialised differently.  You should be using SeraliseToString!!!");
+        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("These results are serialised differently.  You should be using SeraliseToString!!!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkGameResults.cpp", 142));
         return mGameData;
     }
 

@@ -10,7 +10,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineRivals.h"
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStreamBase (unexpected-event log)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface
@@ -175,7 +175,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineRivals::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineRivals::HandleControllerInput");
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineRivals::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineRivals.cpp", 217));
 
         if (meSubState == E_SUBSTATE_SELECTING_PARAMS)
         {
@@ -188,8 +188,8 @@ namespace BrnGui
     // ================================================================================
     void OnlineRivals::HandleControllerInputSelectParams(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0,
-                   "Invalid event sent to OnlineRivals::HandleControllerInputSelectParams");
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineRivals::HandleControllerInputSelectParams", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineRivals.cpp", 247));
+
 
         const ControllerButtonPayload* lpInput =
             static_cast<const ControllerButtonPayload*>(lpEvent);
@@ -206,7 +206,7 @@ namespace BrnGui
     {
         const GuiCachePayload* lpPayload = static_cast<const GuiCachePayload*>(lpEvent);
 
-        CGS_ASSERT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update");
+        CGS_ASSERT(lpPayload->mpCache != 0, CgsDev::Assert::StreamMessageAt("Invalid cache in HandleGuiCacheEvent::Update", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineRivals.cpp", 291));
 
         if (mpGuiCache == 0)
         {

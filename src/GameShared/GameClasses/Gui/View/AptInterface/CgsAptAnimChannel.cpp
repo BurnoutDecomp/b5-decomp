@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAnimChannel.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (flagged substitute for the StrStream assert path)
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT (flagged substitute for the StrStream assert path)
 #include <cfloat>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -91,7 +91,7 @@ namespace CgsGui
         }
 
         mpCurrentInterpolator = GetInterpolator(lAnimData.meInterpolator);
-        CGS_ASSERT(mpCurrentInterpolator != 0, "Invalid interpolator");
+        CGS_ASSERT(mpCurrentInterpolator != 0, CgsDev::Assert::StreamMessageAt("Invalid interpolator", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptAnimChannel.cpp", 64));
 
         mpCurrentInterpolator->SetInterpolator(lAnimData.mStartTime, lAnimData.mEndTime,
                                                lAnimData.mfStartValue, lAnimData.mfEndValue);
@@ -102,7 +102,7 @@ namespace CgsGui
     // once lTime passes the interpolator's end lambda the binding is dropped.
     void AnimChannel::Update(AnimChannelData::Time lTime)
     {
-        CGS_ASSERT(lTime >= 0.0f, "Invalid time specified");
+        CGS_ASSERT(lTime >= 0.0f, CgsDev::Assert::StreamMessageAt("Invalid time specified", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptAnimChannel.cpp", 86));
 
         if (mpCurrentInterpolator && mbActive)
         {

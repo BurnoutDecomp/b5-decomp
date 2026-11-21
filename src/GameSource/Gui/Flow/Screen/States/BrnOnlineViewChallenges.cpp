@@ -3,7 +3,7 @@
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstdlib>
 
@@ -149,7 +149,7 @@ void OnlineViewChallenges::HandleControllerInputSelectParams(const s32* event)
 // ARTIST 0x824AB580.
 void OnlineViewChallenges::HandleControllerInput(const s32* event)
 {
-    CGS_ASSERT(event != 0, "Invalid event sent to OnlineViewChallenges::HandleControllerInput");
+    CGS_ASSERT(event != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineViewChallenges::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineViewChallenges.cpp", 268));
     if (meSubState == E_SUBSTATE_SELECTING_PARAMS) HandleControllerInputSelectParams(event);
 }
 

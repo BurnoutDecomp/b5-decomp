@@ -1,6 +1,6 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineFreeBurnMode.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 namespace BrnGameState
 {
@@ -29,7 +29,7 @@ void OnlineFreeBurnMode::Start(const StartGameModeParams* /*lpStartGameModeParam
                                GameModeParams* /*lpGameModeParams*/,
                                ScoringSystem* /*lpScoringSystem*/)
 {
-    CGS_ASSERT(false, "Trying to start online freeburn mode when it doesn't exist!\n");
+    CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Trying to start online freeburn mode when it doesn't exist!\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineFreeBurnMode.cpp", 52));
 }
 
 // X360: BrnGameState::OnlineFreeBurnMode::SendEvent (0x82331460). The online-freeburn state

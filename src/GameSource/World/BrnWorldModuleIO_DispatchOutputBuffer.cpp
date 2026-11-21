@@ -17,7 +17,7 @@
 // ============================================================================
 #include "GameSource/World/BrnWorldModuleIO_DispatchOutputBuffer.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 namespace BrnWorldIO
 {
@@ -62,7 +62,7 @@ void DispatchOutputBuffer::SetQuadricIrradianceB(rw::math::vpu::Matrix44 lmQuadr
 // Incoming Vector4 spilled v1->v127 across the assert, one stvx128 stores it.
 void DispatchOutputBuffer::SetFogColourPlusWhiteLevel(rw::math::vpu::Vector4 lvFogColourPlusWhiteLevel)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 467));
     mvFogColourPlusWhiteLevel = lvFogColourPlusWhiteLevel;
 }
 
@@ -86,7 +86,7 @@ Vector4 DispatchOutputBuffer::GetFogColourPlusWhiteLevel() const
 // spilled v1->v127 across the assert, one stvx128 stores it.
 void DispatchOutputBuffer::SetFogScattering(rw::math::vpu::Vector4 lvFogScattering)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 469));
     mvFogScattering = lvFogScattering;
 }
 
@@ -103,7 +103,7 @@ Vector3 DispatchOutputBuffer::GetKeyLightDirection() const
 // Vector3 spilled v1->v127 across the assert, one stvx128 stores it.
 void DispatchOutputBuffer::SetKeyLightDirection(rw::math::vpu::Vector3 lvKeyLightDirection)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 471));
     mvKeyLightDirection = lvKeyLightDirection;
 }
 
@@ -118,7 +118,7 @@ Vector3 DispatchOutputBuffer::GetKeyLightColour() const
 // spilled v1->v127 across the assert, one stvx128 stores it.
 void DispatchOutputBuffer::SetKeyLightColour(rw::math::vpu::Vector3 lvKeyLightColour)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 473));
     mvKeyLightColour = lvKeyLightColour;
 }
 
@@ -134,7 +134,7 @@ Vector3 DispatchOutputBuffer::GetAverageIrradianceColour() const
 // Incoming Vector3 spilled v1->v127 across the assert, one stvx128 stores it.
 void DispatchOutputBuffer::SetAverageIrradianceColour(rw::math::vpu::Vector3 lvAverageIrradianceColour)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 475));
     mvAverageIrradianceColour = lvAverageIrradianceColour;
 }
 
@@ -144,7 +144,7 @@ void DispatchOutputBuffer::SetAverageIrradianceColour(rw::math::vpu::Vector3 lvA
 // `lfs f1,0xE0(r28)` returns the float in f1. (This getter's rodata DOES carry the trailing \n.)
 f32 DispatchOutputBuffer::GetWhiteLevel() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 476));
     return mfWhiteLevel;
 }
 
@@ -152,7 +152,7 @@ f32 DispatchOutputBuffer::GetWhiteLevel() const
 // (this+0xE0). The X360 spills the incoming f1 to f31 across the assert call, then stfs it.
 void DispatchOutputBuffer::SetWhiteLevel(f32 lfWhiteLevel)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 477));
     mfWhiteLevel = lfWhiteLevel;
 }
 

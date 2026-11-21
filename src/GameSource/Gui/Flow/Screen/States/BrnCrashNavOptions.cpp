@@ -12,7 +12,7 @@
 #include "GameSource/Gui/BrnGuiShared.h"                                   // gGuiResourceIdentifier (the apt movie name)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                            // GuiOverlayRequest
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // getenv ([opt])
@@ -573,7 +573,7 @@ namespace BrnGui
     void CrashNavOptions::HandleTriggers(const CgsModule::Event* lpEvent)
     {
         CGS_ASSERT(lpEvent != 0,
-                   "Invalid event in CrashNavOptions::HandleTriggers");   // cpp:706
+            CgsDev::Assert::StreamMessageAt("Invalid event in CrashNavOptions::HandleTriggers", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavOptions.cpp", 706)); // cpp:706
         (void)lpEvent;
     }
 

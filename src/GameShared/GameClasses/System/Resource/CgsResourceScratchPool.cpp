@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceScratchPool.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include <cstdlib>
 #include "types.hpp"
@@ -115,7 +115,7 @@ namespace CgsResource
     // ARTIST 828D7E50; native ScratchEntry widens its three pointers.
     ScratchEntry* ScratchPool::GetEntry(u32 luIndex)
     {
-        CGS_ASSERT(luIndex < muNumEntries, "Entry out of range\n");
+        CGS_ASSERT(luIndex < muNumEntries, CgsDev::Assert::StreamMessageAt("Entry out of range\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceScratchPool.h", 254));
         return &mpEntries[luIndex];
     }
 

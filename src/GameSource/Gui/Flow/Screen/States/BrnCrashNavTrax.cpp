@@ -25,7 +25,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavTrax.h"
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"            // CgsIDCompress
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"       // CgsGui::GuiEvent<N> / CgsModule::Event
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"   // StateInterface
@@ -453,7 +453,7 @@ namespace BrnGui
     // trigger it acts on.
     void CrashNavTrax::HandleTriggers(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "Invalid event in CrashNavTrax::HandleTriggers");   // cpp:636
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event in CrashNavTrax::HandleTriggers", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavTrax.cpp", 636));   // cpp:636
         (void)lpEvent;
     }
 

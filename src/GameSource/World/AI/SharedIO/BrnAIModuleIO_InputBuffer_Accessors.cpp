@@ -1,5 +1,5 @@
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                     // CGS_ASSERT
 
 #include <cstring>   // std::memcpy (the timer block copy; see SetTimerInterface)
 
@@ -121,7 +121,7 @@ namespace AIModuleIO
     // X360 0x8276D920 (R, :130) -- the timer-status interface (console +0xFB80).
     const CgsSystem::TimerStatusInterface* InputBuffer::GetTimerInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 394));
         return &mTimerInterface;
     }
 
@@ -206,7 +206,7 @@ namespace AIModuleIO
     // X360 0x8276D5D8 (R, :154) -- the player vehicle controls block (console +0x1B9E8).
     const InputBuffer::PlayerVehicleControls* InputBuffer::GetPlayerVehicleControls() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 154));
         return &mPlayerVehicleControls;
     }
 
@@ -270,7 +270,7 @@ namespace AIModuleIO
     // 0x8279C4D0..0x8279C4E8) into the race-distance block (console +0x13860).
     void InputBuffer::SetRaceCarRaceDistanceInterface(const RaceCarRaceDistanceInterface* lpObject)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 143));
         CGS_STATIC_ASSERT((sizeof(RaceCarRaceDistanceInterface) == 40),
                       "RaceCarRaceDistanceInterface is the console's 10-word block");
         mRaceCarRaceDistanceInterface = *lpObject;
@@ -288,7 +288,7 @@ namespace AIModuleIO
     // X360 0x8279C5A0 (W, :155) -- memcpy(60) into the player vehicle controls (console +0x1B9E8).
     void InputBuffer::SetPlayerVehicleControls(const PlayerVehicleControls* lpControls)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 155));
         CGS_STATIC_ASSERT((sizeof(PlayerVehicleControls) == 60),
                       "PlayerVehicleControls is the console's 60-byte block");
         mPlayerVehicleControls = *lpControls;

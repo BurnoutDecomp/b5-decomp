@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"   // CgsGui::State (+ ScriptedState base, StateInterface fwd, sResourceTuple fwd)
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"       // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf
 #include "GameShared/GameClasses/Fsm/CgsEvent.h"         // CgsFsm::Event
 #include "GameShared/GameClasses/Fsm/CgsScriptedFsm.h"   // CgsFsm::ScriptedFsm::IsLuaResourceValid (mpFsm's concrete type)
@@ -106,8 +106,8 @@ namespace CgsGui
     // X360 0x82846838. Validate the interface pointer, then store it (this+0x1C).
     void State::SetStateInterface(StateInterface* lpStateInterface)
     {
-        CGS_ASSERT(lpStateInterface != 0,
-                   "Invalid state interface sent to State::SetStateInterface");
+        CGS_ASSERT(lpStateInterface != 0, CgsDev::Assert::StreamMessageAt("Invalid state interface sent to State::SetStateInterface", "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiState.h", 140));
+
         mpStateInterface = lpStateInterface;
     }
 

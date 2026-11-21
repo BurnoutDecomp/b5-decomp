@@ -24,7 +24,7 @@
 #include "GameShared/GameClasses/System/FileSystem/CgsStreamDeviceDiskRead.h"
 
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"  // DeviceManager / GetDeviceManager / Handle
-#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT / Assert::{Begin,Fire,End}Assert
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                      // CGS_ASSERT / Assert::{Begin,Fire,End}Assert
 #include "GameShared/GameClasses/Development/CgsStrStream.h"            // CgsDev::StrStream (dynamic assert messages)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // Log::gpDebugPrint / Message::gxMessageFilterFlags
 #include "rw/core/stdc/stdc.h"                                          // rw::core::stdc::StringnCopy
@@ -156,8 +156,8 @@ namespace CgsFileSystem
     {
         StreamLockGuard lGuard(mFutex.mCriticalSection);
 
-        CGS_ASSERT(meStatus == E_STATUS_OPEN, "Invalid state to do seek\n");
-        CGS_ASSERT(!mbIsOutputing, "Can not seek while locked for read\n");
+        CGS_ASSERT(meStatus == E_STATUS_OPEN, CgsDev::Assert::StreamMessageAt("Invalid state to do seek\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsStreamDeviceDiskRead.cpp", 558));
+        CGS_ASSERT(!mbIsOutputing, CgsDev::Assert::StreamMessageAt("Can not seek while locked for read\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsStreamDeviceDiskRead.cpp", 559));
 
         mbWaitingToSeek  = true;
         muInputPosition  = luPosition;
@@ -654,7 +654,7 @@ namespace CgsFileSystem
     {
         StreamDeviceDiskRead* lpStream = static_cast<StreamDeviceDiskRead*>(lpContext);
         lpStream->OnOpen(liResult, lHandle, luSize, lpContext);
-        CGS_ASSERT(lpContext != 0, "Invalid stream\n");
+        CGS_ASSERT(lpContext != 0, CgsDev::Assert::StreamMessageAt("Invalid stream\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsStreamDeviceDiskRead.cpp", 1158));
     }
 
     // ReadCallback @ 0x82900DA8 — device read-completion trampoline: the context is the block; its
@@ -675,7 +675,7 @@ namespace CgsFileSystem
     {
         StreamDeviceDiskRead* lpStream = static_cast<StreamDeviceDiskRead*>(lpContext);
 
-        CGS_ASSERT(lpContext != 0, "Invalid stream\n");
+        CGS_ASSERT(lpContext != 0, CgsDev::Assert::StreamMessageAt("Invalid stream\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsStreamDeviceDiskRead.cpp", 1190));
         lpStream->OnClose(liResult, lHandle, luSize, lpContext);
     }
 

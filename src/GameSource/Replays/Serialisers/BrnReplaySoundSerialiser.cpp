@@ -7,7 +7,7 @@
 
 #include "GameSource/Replays/Serialisers/BrnReplaySoundSerialiser.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameSource/Replays/BrnReplayQuantisedQuatPos.h"
 #include "vendor/renderware/physics/JointFrames.hpp"   // rw::math::vpu::QuaternionFromMatrix33 (WriteAsQuatPos)
@@ -30,8 +30,8 @@ namespace BrnReplays
     // SoundSerialiser static layout (asserting the buffer is large enough).
     SoundSerialiserStaticLayout* SoundSerialiser::GetStaticLayout()
     {
-        CGS_ASSERT(GetStaticBufferSize() >= SoundSerialiserStaticLayout::KI_MIN_STATIC_BUFFER_SIZE,
-                   "Static buffer size is too small\n");
+        CGS_ASSERT(GetStaticBufferSize() >= SoundSerialiserStaticLayout::KI_MIN_STATIC_BUFFER_SIZE, CgsDev::Assert::StreamMessageAt("Static buffer size is too small\n", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h", 294));
+
         return reinterpret_cast<SoundSerialiserStaticLayout*>(GetStaticBuffer());
     }
 

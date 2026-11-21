@@ -1,6 +1,6 @@
 #include "GameSource/Resource/BrnGameDataModuleIO.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 // BrnResource::GameDataIO::InputBuffer / OutputBuffer -- the lock-guarded IO-buffer accessors:
 //   InputBuffer::GetRequestInterface() const/non-const     @ 0x82663F90 / 0x823B1788  -> &mRequestInterface
@@ -120,7 +120,7 @@ namespace GameDataIO
     // the assert. Stores the list pointer into mpAllocatorList (this+4; asm `stw r27,4(r28)`).
     void OutputBuffer::SetAllocatorList(const AllocatorList* lpAllocatorList)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\resource\\BrnGameDataModuleIO.h", 265));
         mpAllocatorList = lpAllocatorList;
     }
 
@@ -145,7 +145,7 @@ namespace GameDataIO
     // `lbz r11,0(r27); stb r11,8(r28)`). X360 symbol SetLiveUpdateStatus.
     void OutputBuffer::SetLiveUpdateStatus(const u8* lpStatus)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\resource\\BrnGameDataModuleIO.h", 175));
         mbLiveUpdateStatus = *lpStatus;
     }
 

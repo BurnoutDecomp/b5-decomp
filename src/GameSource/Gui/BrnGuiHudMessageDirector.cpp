@@ -7,7 +7,7 @@
 // passes the director `this` straight to VariableEventQueue<18432,16>::AddEvent).
 // ===================================================================================
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"            // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // gpDebugPrint, gxMessageFilterFlags
 
 namespace BrnGui
@@ -50,8 +50,8 @@ namespace BrnGui
     // non-null (BrnGuiHudMessageDirector.h:174).
     void HudMessageDirector::SetController(const BrnResource::HudMessageController* lpController)
     {
-        CGS_ASSERT(lpController != 0,
-                   "Invalid controller passed in to HudMessageDirector::SetController");
+        CGS_ASSERT(lpController != 0, CgsDev::Assert::StreamMessageAt("Invalid controller passed in to HudMessageDirector::SetController", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageDirector.h", 174));
+
         mpController = lpController;
     }
 

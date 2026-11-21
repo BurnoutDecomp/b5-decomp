@@ -1,5 +1,5 @@
 #include "BrnReplayGuiModuleSerialiser.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 namespace BrnReplays
 {
@@ -12,7 +12,7 @@ namespace BrnReplays
 
     GuiModuleStaticLayout* GuiModuleSerialiser::GetStaticLayout()
     {
-        CGS_ASSERT(GetStaticBufferSize() >= 992, "Static buffer size is too small\n");
+        CGS_ASSERT(GetStaticBufferSize() >= 992, CgsDev::Assert::StreamMessageAt("Static buffer size is too small\n", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayGuiModuleSerialiser.h", 155));
         return reinterpret_cast<GuiModuleStaticLayout*>(GetStaticBuffer());
     }
 

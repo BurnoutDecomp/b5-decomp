@@ -2,7 +2,7 @@
 // Online mugshot and road-rule-shot dispatch remain un-reconstructed.
 #include "GameSource/Gui/Flow/HUD/States/BrnCrashedHudState.h"
 #include "GameShared/GameClasses/Containers/CgsHash.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h"
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"
@@ -91,8 +91,8 @@ const u32 CrashedHudState::muNumResourcesToLoad = 4;
     // observable effect is the store into mauExpectedComponentIds[count] + count++.
     void CrashedHudState::SetExpectedComponent(const char* lpacComponentName)
     {
-        CGS_ASSERT(muNumExpectedComponents < KU_MAX_INIT_COMPONENTS_NUM,
-                   "No space for new expected component");
+        CGS_ASSERT(muNumExpectedComponents < KU_MAX_INIT_COMPONENTS_NUM, CgsDev::Assert::StreamMessageAt("No space for new expected component", "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnCrashedHudState.h", 291));
+
 
         // X360: inline strlen (char* walk to the NUL) then CalculateHash(name, len).
         const s32 liLength = static_cast<s32>(std::strlen(lpacComponentName));

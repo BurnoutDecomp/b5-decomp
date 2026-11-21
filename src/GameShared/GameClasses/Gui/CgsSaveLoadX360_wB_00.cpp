@@ -12,7 +12,7 @@
 
 #include "GameShared/GameClasses/Gui/CgsSaveLoadX360.h"
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h" // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h" // CGS_ASSERT
 
 static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.cpp";
 
@@ -44,6 +44,6 @@ namespace CgsGui
     // X360 0x8284C648. Realmc delete result callback -- streamed assert stub.
     void SaveLoadSystem::DeleteDone()
     {
-        CGS_ASSERT(false, "DeleteDone: not implemented.");
+        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("DeleteDone: not implemented.", "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.cpp", 775));
     }
 }

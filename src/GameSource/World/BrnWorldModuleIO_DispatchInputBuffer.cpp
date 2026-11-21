@@ -12,7 +12,7 @@
 // ============================================================================
 #include "GameSource/World/BrnWorldModuleIO_DispatchInputBuffer.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 namespace BrnWorldIO
 {
@@ -62,14 +62,14 @@ void DispatchInputBuffer::Construct()
 // X360 0x827A4EB0 (:383 R) -- read-lock handle to the graphics dispatch frame (this+0x04).
 CgsGraphics::DispatchFrame* DispatchInputBuffer::GetDispatchFrame() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 857));
     return mpDispatchFrame;
 }
 
 // X360 0x823B6B30 -- write-lock store of the graphics dispatch frame (this+0x04).
 void DispatchInputBuffer::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 850));
     mpDispatchFrame = lpDispatchFrame;
 }
 
@@ -78,7 +78,7 @@ void DispatchInputBuffer::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatc
 // X360 0x827A4248 (:385 R) -- read-lock handle to the embedded director camera (this+0x10).
 const BrnDirector::Camera::Camera* DispatchInputBuffer::GetCameraInput() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 385));
     return &mCameraInput;
 }
 
@@ -86,7 +86,7 @@ const BrnDirector::Camera::Camera* DispatchInputBuffer::GetCameraInput() const
 // (this+0x10, BrnDirector::Camera::Camera::operator=).
 void DispatchInputBuffer::SetCameraInput(const BrnDirector::Camera::Camera* lpCamera)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 386));
     mCameraInput = *lpCamera;
 }
 
@@ -95,14 +95,14 @@ void DispatchInputBuffer::SetCameraInput(const BrnDirector::Camera::Camera* lpCa
 // X360 0x827BBEF0 -- read-lock handle to the shader-constants frame (this+0x170).
 BrnShaderConstantsFrame* DispatchInputBuffer::GetShaderConstantsFrame() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 388));
     return mpShaderConstantsFrame;
 }
 
 // X360 0x823B50B0 -- write-lock store of the shader-constants frame (this+0x170).
 void DispatchInputBuffer::SetShaderConstantsFrame(BrnShaderConstantsFrame* lpFrame)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 389));
     mpShaderConstantsFrame = lpFrame;
 }
 
@@ -140,7 +140,7 @@ BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* DispatchInputBuffer::GetBlobbySha
 // X360 0x823B5158 -- write-lock store of the blobby-shadow buffer (this+0x184).
 void DispatchInputBuffer::SetBlobbyShadowBuffer(BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* lpBuffer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 399));
     mpBlobbyShadowBuffer = lpBuffer;
 }
 
@@ -156,7 +156,7 @@ BrnCoronaManager::BrnSubmissionInterface* DispatchInputBuffer::GetCoronaSubmissi
 // X360 0x823B5200 -- write-lock store of the corona submission interface (this+0x188).
 void DispatchInputBuffer::SetCoronaSubmissionInterface(BrnCoronaManager::BrnSubmissionInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 402));
     mpCoronaSubmissionInterface = lpInterface;
 }
 
@@ -165,28 +165,28 @@ void DispatchInputBuffer::SetCoronaSubmissionInterface(BrnCoronaManager::BrnSubm
 // X360 0x827BBF98 -- read-lock read of the game-time scalar (this+0x18C).
 f32 DispatchInputBuffer::GetGameTime() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 405));
     return mfGameTime;
 }
 
 // X360 0x823B52A8 -- write-lock store of the game-time scalar (this+0x18C).
 void DispatchInputBuffer::SetGameTime(f32 lfGameTime)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 406));
     mfGameTime = lfGameTime;
 }
 
 // X360 0x827BC040 -- read-lock read of the sim-time scalar (this+0x190).
 f32 DispatchInputBuffer::GetSimTime() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 407));
     return mfSimTime;
 }
 
 // X360 0x823B5358 -- write-lock store of the simulation-time scalar (this+0x190).
 void DispatchInputBuffer::SetSimTime(f32 lfSimTime)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 408));
     mfSimTime = lfSimTime;
 }
 
@@ -202,7 +202,7 @@ BrnGame::DispatchThreadInputBuffer* DispatchInputBuffer::GetDispatchThreadInputB
 // X360 0x823B5408 -- write-lock store of the dispatch-thread input buffer handle (this+0x194).
 void DispatchInputBuffer::SetDispatchThreadInputBuffer(BrnGame::DispatchThreadInputBuffer* lpBuffer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 412));
     mpDispatchThreadInputBuffer = lpBuffer;
 }
 
@@ -213,7 +213,7 @@ void DispatchInputBuffer::SetDispatchThreadInputBuffer(BrnGame::DispatchThreadIn
 // RenderSwitches struct, reproduced here as struct assignment.
 void DispatchInputBuffer::SetRenderSwitches(const RendererIO::RenderSwitches& lrSwitches)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 882));
     mRenderSwitches = lrSwitches;
 }
 

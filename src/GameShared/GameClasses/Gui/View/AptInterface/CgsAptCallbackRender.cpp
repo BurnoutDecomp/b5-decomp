@@ -53,26 +53,26 @@ namespace CgsGui
                                               AptMaskRenderOperation leMaskOperation, s32 liLevel)
     {
         (void)liLevel;
-        CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miCgsAptDrawRenderingUnit);
+        CgsDev::PerfMonCpu::StartMonitor(AptRenderHandler::miCgsAptDrawRenderingUnit);
         CGS_ASSERT(AptAuxPointer::mpAptAuxInst != 0, "Invalid pointer to AptAux in AptCallbackRender::DrawRenderingUnit");
         CGS_ASSERT(lpRenderingUnit != 0, "Invalid geometry in AptCallbackRender::DrawRenderingUnit");
         AptRenderHandler& lrHandler = AptAuxPointer::mpAptAuxInst->mRenderHandler;
         if (leMaskOperation == AptMaskRenderOperation_Normal)
         {
             lrHandler.Render(reinterpret_cast<CgsResource::GuiGeometryFile*>(lpRenderingUnit), 0);
-            CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miCgsAptDrawRenderingUnit);
+            CgsDev::PerfMonCpu::StopMonitor(AptRenderHandler::miCgsAptDrawRenderingUnit);
             return;
         }
         if (leMaskOperation == AptMaskRenderOperation_Subtract)
         {
             lrHandler.GetIm2dRendererType()->PopMask();
-            CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miCgsAptDrawRenderingUnit);
+            CgsDev::PerfMonCpu::StopMonitor(AptRenderHandler::miCgsAptDrawRenderingUnit);
             return;
         }
         if (leMaskOperation != AptMaskRenderOperation_Add)
         {
             CGS_ASSERT(false, "Unknown mask operation in AptCallbackRender::DrawRenderingUnit");
-            CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miCgsAptDrawRenderingUnit);
+            CgsDev::PerfMonCpu::StopMonitor(AptRenderHandler::miCgsAptDrawRenderingUnit);
             return;
         }
 
@@ -148,7 +148,7 @@ namespace CgsGui
             laCorners[1].mv2Pos.y = laResult[0];
             lpRenderer->PushMask(lpTexture, laCorners);
         }
-        CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miCgsAptDrawRenderingUnit);
+        CgsDev::PerfMonCpu::StopMonitor(AptRenderHandler::miCgsAptDrawRenderingUnit);
     }
 
     // -------------------------------------------------------------------------

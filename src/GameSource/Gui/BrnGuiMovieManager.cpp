@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // original state diagnostic
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"           // E_RESOURCETYPE_VIDEODATA
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                // CGS_ASSERT (VideoDefinition::Copy)
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                                // CGS_ASSERT (VideoDefinition::Copy)
 #include "GameSource/Sound/Global/BrnMusicEffect.h"                                // MusicEffect::IsCustomSoundtrackActive (Update @0x82507A98)
 
 #include <cstring>   // strlen / memset (X360 QueueNextMovie path construction)
@@ -206,7 +206,7 @@ namespace BrnGui
     // ---- events (ARTIST RecvEvent 0x824F9688: 504 audio / 508 play / 509 stop) -----------------------
     void MovieManager::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventId)
     {
-        CGS_ASSERT(lpEvent != 0, "invalid event passed through ");
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("invalid event passed through ", "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 633));
         switch (liEventId)
         {
         case KI_GUIEVENT_AUDIO_READY:   // 504

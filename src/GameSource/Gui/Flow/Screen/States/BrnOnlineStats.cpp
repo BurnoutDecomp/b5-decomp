@@ -18,7 +18,7 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineStats.h"
 
 #include <cstddef>                                                        // offsetof (wire records)
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> / GuiEventWrapper
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface
@@ -346,7 +346,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineStats::HandleControllerInputPressed(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineStats::HandleControllerInput");
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineStats::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineStats.cpp", 442));
 
         const ControllerButtonPayload* lpInput =
             static_cast<const ControllerButtonPayload*>(lpEvent);

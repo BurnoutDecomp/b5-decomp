@@ -1,7 +1,7 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuItem.h"
 
 #include <cstring>                                        // std::memset
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 
 // BrnGui::MenuItem -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -47,7 +47,7 @@ void MenuItem::Clear()
 // pseudocode's `| 0x100000000` is wrong).
 void MenuItem::Set(const char* lpacText, s32 liId)
 {
-    CGS_ASSERT(lpacText != 0, "invalid text specified");   // :101 (streamed on the X360; folded static)
+    CGS_ASSERT(lpacText != 0, CgsDev::Assert::StreamMessageAt("invalid text specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuItem.cpp", 101));   // :101 (streamed on the X360; folded static)
 
     CgsCore::SPrintf(macItemText, KU_MAX_NAME_LENGTH, "%s", lpacText);
     SetDirty();
@@ -59,7 +59,7 @@ void MenuItem::Set(const char* lpacText, s32 liId)
 // bit; the update-text latch re-pushes just the label next Update.
 void MenuItem::SetText(const char* lpacText)
 {
-    CGS_ASSERT(lpacText != 0, "invalid text specified");   // :119
+    CGS_ASSERT(lpacText != 0, CgsDev::Assert::StreamMessageAt("invalid text specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuItem.cpp", 119));   // :119
 
     CgsCore::SPrintf(macItemText, KU_MAX_NAME_LENGTH, "%s", lpacText);
     mbUpdateText = true;

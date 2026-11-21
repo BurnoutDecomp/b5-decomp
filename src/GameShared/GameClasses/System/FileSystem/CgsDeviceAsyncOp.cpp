@@ -13,7 +13,7 @@
 
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceAsyncOp.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "eathread/eathread.h"                      // EA::Thread::kTimeoutNone
 
@@ -22,7 +22,7 @@ namespace CgsFileSystem
     // @ 0x828F2300.
     void AsyncOp::Open(const char* lpcFileName, u32 luFlags, s32 liPriority)
     {
-        CGS_ASSERT(!mbOperating, "Last operation has not been waited before\n");
+        CGS_ASSERT(!mbOperating, CgsDev::Assert::StreamMessageAt("Last operation has not been waited before\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.cpp", 56));
         mbOperating = true;
         GetDeviceManager()->Open(lpcFileName, luFlags, &AsyncOp::CompletionCallback, this, liPriority);
     }
@@ -30,7 +30,7 @@ namespace CgsFileSystem
     // @ 0x828F23D8.
     void AsyncOp::Read(Handle lHandle, u64 luPosition, void* lpBuffer, u32 luBufferSize, s32 liPriority)
     {
-        CGS_ASSERT(!mbOperating, "Last operation has not been waited before\n");
+        CGS_ASSERT(!mbOperating, CgsDev::Assert::StreamMessageAt("Last operation has not been waited before\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.cpp", 69));
         mbOperating = true;
         GetDeviceManager()->Read(lHandle, luPosition, lpBuffer, luBufferSize, &AsyncOp::CompletionCallback, this, liPriority);
     }
@@ -38,7 +38,7 @@ namespace CgsFileSystem
     // @ 0x828F24C0.
     void AsyncOp::Close(Handle lHandle, s32 liPriority)
     {
-        CGS_ASSERT(!mbOperating, "Last operation has not been waited before\n");
+        CGS_ASSERT(!mbOperating, CgsDev::Assert::StreamMessageAt("Last operation has not been waited before\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceAsyncOp.cpp", 92));
         mbOperating = true;
         GetDeviceManager()->Close(lHandle, &AsyncOp::CompletionCallback, this, liPriority);
     }

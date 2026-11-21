@@ -22,7 +22,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectVehicle.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (register / play-apt / out-queue)
@@ -212,7 +212,7 @@ namespace BrnGui
     {
         // cpp:119 -- the X360 streams this message through StrStream; the call site passes
         // a plain string, so CGS_ASSERT forwards it directly.
-        CGS_ASSERT(lpFsm != 0, "Invalid ScriptedFsm ptr");
+        CGS_ASSERT(lpFsm != 0, CgsDev::Assert::StreamMessageAt("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectVehicle.cpp", 119));
 
         CarSelectMain::Construct(liId, lpFsm);
 

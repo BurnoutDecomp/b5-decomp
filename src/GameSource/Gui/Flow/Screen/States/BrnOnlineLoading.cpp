@@ -20,7 +20,7 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineLoading.h"
 
 #include <cstring>                                                        // std::memcpy / std::memset
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStreamBase (unexpected-event log)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint / gxMessageFilterFlags
@@ -614,7 +614,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::HandlePlayerLobbyListEvent(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineLoading::HandlePlayerLobbyListEvent");
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineLoading::HandlePlayerLobbyListEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineLoading.cpp", 543));
 
         std::memcpy(&mLobbyPlayerInfoList, lpEvent, sizeof(mLobbyPlayerInfoList));
 

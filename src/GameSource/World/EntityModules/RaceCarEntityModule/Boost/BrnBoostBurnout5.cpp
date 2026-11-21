@@ -18,7 +18,7 @@
 
 // the union of the BoostBurnout5_w*.cpp partfiles' #include lines, first occurrence wins, mount order (2026-09-15)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout5.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (the X360 Begin/Fire/EndAssert triple)
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT (the X360 Begin/Fire/EndAssert triple)
 #include "GameSource/AttribSys/Generated/classes/boostparamsasset.h"                 // Attrib::Gen::boostparamsasset
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"   // Attrib::StringToKey
 #include "rw/core/stdc/stdc.h"                                                       // rw::core::stdc::ConvertI64ToA
@@ -250,8 +250,8 @@ BoostBurnout5::BlueModeRequestBoost()
     // 0x15D). Reported, then execution continues into the body below -- the
     // console streams the literal into CgsDev::Assert::gpcMessageBuffer and calls
     // FireAssert with the buffer; there is no early-out on either path.
-    CGS_ASSERT(meBoostMode == E_BOOSTMODE_B2_BLUE,
-               "Incorrect Boost Mode when using a Blue-Mode-specific function");
+    CGS_ASSERT(meBoostMode == E_BOOSTMODE_B2_BLUE, CgsDev::Assert::StreamMessageAt("Incorrect Boost Mode when using a Blue-Mode-specific function", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout5.cpp", 349));
+
 
     if (mbLeaveBlueDueToCrash)
     {

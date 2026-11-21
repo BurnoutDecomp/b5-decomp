@@ -10,7 +10,7 @@
 // then returns the address of its embedded member.
 
 #include "GameSource/Network/BrnNetworkModule.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                         // CgsDev::PerfMonCpu::AddMonitor
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"            // CgsDev::DebugInterface (the two update-message toggles)
@@ -467,7 +467,7 @@ namespace BrnNetwork
     // -> &mCrashNetworkInputInterface (+800576).
     BrnWorld::CrashIO::NetworkInputInterface* BrnNetworkModule::GetCrashInputInterface()
     {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+        CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt("Can not use this function unless module is updating\n", "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 408));
         return &mCrashNetworkInputInterface;
     }
 
@@ -495,7 +495,7 @@ namespace BrnNetwork
     // -> &mPlayerVehicleControls (+827880).
     BrnWorld::PlayerVehicleControls* BrnNetworkModule::GetPlayerVehicleControls()
     {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+        CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt("Can not use this function unless module is updating\n", "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 431));
         return &mPlayerVehicleControls;
     }
 
@@ -509,7 +509,7 @@ namespace BrnNetwork
     // -> &mInputGuiEventQueue (+829832).
     CgsModule::VariableEventQueue<18432, 16>* BrnNetworkModule::GetInputGuiEventQueue()
     {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+        CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt("Can not use this function unless module is updating\n", "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 458));
         return &mInputGuiEventQueue;
     }
 
@@ -525,14 +525,14 @@ namespace BrnNetwork
     // -> mbOutputSendUpdateMessages (+614664).
     bool BrnNetworkModule::IsSendUpdateMessageToBeShown() const
     {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+        CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt("Can not use this function unless module is updating\n", "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 514));
         return mbOutputSendUpdateMessages;
     }
 
     // -> mbOutputRecvUpdateMessages (+614665).
     bool BrnNetworkModule::IsRecvUpdateMessageToBeShown() const
     {
-        CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+        CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt("Can not use this function unless module is updating\n", "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 522));
         return mbOutputRecvUpdateMessages;
     }
 

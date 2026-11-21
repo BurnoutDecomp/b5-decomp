@@ -38,7 +38,7 @@
 #include "GameSource/Gui/Flow/Screen/Components/BrnCrashNavPanel.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // ([cnav-diag])
 #include <cstdlib>   // ([cnav-diag])
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                              // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"                       // CgsGui::GuiEventControllerInputPressed
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"          // CgsGui::StateInterface (OutputGuiEvent)
@@ -1008,8 +1008,8 @@ namespace BrnGui
     // @ 0x824185C8
     s32 CrashNavPanel::GetPanelActiveRoadRuleType() const
     {
-        CGS_ASSERT(mePanelType == E_PANEL_ROADSIGN,
-                   "Cannot get active road rules type if not showing road rules");   // @0x824185C8 (beq on +0x90==2)
+        CGS_ASSERT(mePanelType == E_PANEL_ROADSIGN, CgsDev::Assert::StreamMessageAt("Cannot get active road rules type if not showing road rules", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnCrashNavPanel.h", 349));
+   // @0x824185C8 (beq on +0x90==2)
 
         // Inlined RoadPanel::GetCurrentRule() -- a bare `lwz` at mRoadPanel +0xD9C.
         return mRoadPanel.GetCurrentRule();
@@ -1018,8 +1018,8 @@ namespace BrnGui
     // @ 0x82418668
     s32 CrashNavPanel::GetRoadPanelScoreMode() const
     {
-        CGS_ASSERT(mePanelType == E_PANEL_ROADSIGN,
-                   "Cannot get active road rules scoring mode if not showing road rules");   // @0x82418668 (beq on +0x90==2)
+        CGS_ASSERT(mePanelType == E_PANEL_ROADSIGN, CgsDev::Assert::StreamMessageAt("Cannot get active road rules scoring mode if not showing road rules", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnCrashNavPanel.h", 366));
+   // @0x82418668 (beq on +0x90==2)
 
         // Inlined RoadPanel::GetScoringMode() -- a bare `lwz` at mRoadPanel +0xDA0.
         return mRoadPanel.GetScoringMode();

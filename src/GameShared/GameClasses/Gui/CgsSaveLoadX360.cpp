@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Gui/CgsSaveLoadX360.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 // includes folded in from the CgsSaveLoadX360_w*.cpp partfiles (2026-09-15)
 #include "SDKs/Realmc/RealmcMemcardInterface.h"
@@ -35,7 +35,7 @@ namespace CgsGui
     // X360 0x8284BD88.
     s32 XenonFileInputStream::GetSize() const
     {
-        CGS_ASSERT(mhFile != INVALID_HANDLE_VALUE, "File open failed!");
+        CGS_ASSERT(mhFile != INVALID_HANDLE_VALUE, CgsDev::Assert::StreamMessageAt("File open failed!", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsSaveLoadX360.h", 596));
         return miSize;
     }
 

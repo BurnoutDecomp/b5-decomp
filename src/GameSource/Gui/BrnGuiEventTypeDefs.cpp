@@ -13,7 +13,7 @@
 // condition matches the X360 assert message text.
 
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
 #include "GameSource/Gui/BrnGuiRaceCarInfoEvent.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf / SnPrintf
@@ -315,7 +315,7 @@ void GuiEventUpdateSatNav::DoWorstCase()
 
 void GuiOverlayRequest::Construct(const char* lpcOverlayId)
 {
-    CGS_ASSERT(lpcOverlayId != 0, "Invalid Overlay Id");
+    CGS_ASSERT(lpcOverlayId != 0, CgsDev::Assert::StreamMessageAt("Invalid Overlay Id", "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7404));
     mOverlayID = CgsIDCompress(lpcOverlayId);
     miNumMessages = 0;
     mbButton1Used = false;
@@ -360,14 +360,14 @@ void GuiOverlayRequest::GetMessageParam(CgsGui::GuiPopupParameter* lpOut, s32 li
 
 void GuiOverlayRequest::GetButton1Param(CgsGui::GuiPopupParameter* lpOut) const
 {
-    CGS_ASSERT(mbButton1Used, "button 1 param isn't used in Overlay.");
+    CGS_ASSERT(mbButton1Used, CgsDev::Assert::StreamMessageAt("button 1 param isn't used in Overlay.", "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7528));
     CgsCore::SPrintf(lpOut->macParameter, sizeof(lpOut->macParameter), "%s", mButton1Param.macParameter);
     lpOut->meParamType = mButton1Param.meParamType;
 }
 
 void GuiOverlayRequest::GetButton2Param(CgsGui::GuiPopupParameter* lpOut) const
 {
-    CGS_ASSERT(mbButton2Used, "button 2 param isn't used in Overlay.");
+    CGS_ASSERT(mbButton2Used, CgsDev::Assert::StreamMessageAt("button 2 param isn't used in Overlay.", "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7547));
     CgsCore::SPrintf(lpOut->macParameter, sizeof(lpOut->macParameter), "%s", mButton2Param.macParameter);
     lpOut->meParamType = mButton2Param.meParamType;
 }
@@ -397,7 +397,7 @@ void GuiOverlayRequest::GetButton2Param(CgsGui::GuiPopupParameter* lpOut) const
 // the null pointer exactly as written.
 void GuiHudMessage::Construct(const char* lpcMessageId)
 {
-    CGS_ASSERT( lpcMessageId != NULL, "Invalid Message Id" );
+    CGS_ASSERT(lpcMessageId != NULL, CgsDev::Assert::StreamMessageAt("Invalid Message Id", "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7225));
 
     mMessageIdHash = CgsIDCompress( lpcMessageId );
     maiNoOfParams[0] = 0;

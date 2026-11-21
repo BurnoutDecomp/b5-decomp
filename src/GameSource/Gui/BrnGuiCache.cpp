@@ -5,7 +5,7 @@
 #include "GameSource/Gui/BrnGuiShared.h"               // BrnGui::EGuiResourceId + gGuiResourceIdentifier (this TU defines the table)
 #include "GameSource/Gui/BrnGuiOptionsDataProfile.h"   // BrnGui::OptionsDataProfile (types the opaque +0xB878 reservation)
 #include "GameShared/GameClasses/Containers/CgsHash.h" // CgsContainers::CgsHash::CalculateHash (AppendExpectedAptComponent name entry)
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Containers/CgsArray.h"           // Array<ProfileEvent,175> (RecEvent 556)
 #include "GameSource/GameState/Progression/BrnProfile.h"          // BrnProgression::ProfileEvent (RecEvent 556)
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"          // GuiTracker::ClearTracker (RecEvent 321/322 tail)
@@ -3538,7 +3538,7 @@ namespace BrnGui
     // mpMapIconManager @0x4060). Asserts the incoming pointer is non-null.
     void GuiCache::SetMapIconManager(MapIconManager* lpMapIconManager)
     {
-        CGS_ASSERT(lpMapIconManager != 0, "Invalid map icon manager");
+        CGS_ASSERT(lpMapIconManager != 0, CgsDev::Assert::StreamMessageAt("Invalid map icon manager", "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 2102));
         mpMapIconManager = lpMapIconManager;
     }
 

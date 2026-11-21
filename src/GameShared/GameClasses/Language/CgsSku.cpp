@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Language/CgsSku.h"
 #include "GameShared/GameClasses/System/CgsHardwareSku.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                              // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"                     // GuiEventSetSku / GuiEventSetLanguageNotification
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                          // CgsGuiModuleIO::OutputBuffer::AddGuiOutEvent<>
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"                  // ModelIO::InputBuffer::AddResourceRequests
@@ -43,7 +43,7 @@ namespace CgsLanguage
     // E_LANGUAGE_ENGLISH_US slot.
     void Sku::Construct(CgsGui::GuiModule* lpGuiModule)
     {
-        CGS_ASSERT(lpGuiModule != 0, "Invalid gui module pointer");
+        CGS_ASSERT(lpGuiModule != 0, CgsDev::Assert::StreamMessageAt("Invalid gui module pointer", "..\\..\\..\\GameShared\\GameClasses\\Language/CgsSku.cpp", 158));
 
         mpGuiModule     = lpGuiModule;        // +0x10  stw r26, 0x10(r27)
         mbLoaded        = false;              // +0x14  stb r29(0), 0x14(r27)

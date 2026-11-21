@@ -8,7 +8,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuComponent.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"  // CgsGui::GuiComponent (item base construct/name)
 #include "GameSource/Gui/BrnGuiCache.h"                // BrnGui::GuiCache (AppendExpectedAptComponent)
@@ -119,15 +119,15 @@ namespace BrnGui
     // @0x8240FE20 -- bounds-check [0,16), return the row pointer.
     MenuItem* MenuComponent::GetSelectable(s32 liIndex)
     {
-        CGS_ASSERT(liIndex >= 0 && liIndex < KI_MAX_MENU_ITEMS,
-                   "MenuComponent::GetSelectable() invalid index specified");
+        CGS_ASSERT(liIndex >= 0 && liIndex < KI_MAX_MENU_ITEMS, CgsDev::Assert::StreamMessageAt("MenuComponent::GetSelectable() invalid index specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuComponent.h", 171));
+
         return static_cast<MenuItem*>(SelectableGroup::GetSelectable(liIndex));
     }
 
     // @0x82488FC0 -- set the row's id + dirty it.
     MenuItem* MenuComponent::SetId(s32 liIndex, u64 luId)
     {
-        CGS_ASSERT(GetSelectable(liIndex) != 0, "Invalid selectable specified");
+        CGS_ASSERT(GetSelectable(liIndex) != 0, CgsDev::Assert::StreamMessageAt("Invalid selectable specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuComponent.h", 156));
         MenuItem* lpItem = GetSelectable(liIndex);
         lpItem->SetId(luId);
         lpItem->SetDirty();

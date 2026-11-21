@@ -1,6 +1,6 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnTableCell.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                     // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiTextField.h"                            // BrnGui::TextField (GetText/SetText/SetColour)
 #include "GameSource/Gui/Flow/Shared/Components/BrnIcon.h"             // BrnGui::IconComponent (SetState)
 
@@ -43,9 +43,9 @@ TableCell::TableCell()
 // the field's text buffer.
 const char* TableCell::GetText() const
 {
-    CGS_ASSERT(mpComponent != NULL, "TableCell::GetText() Invalid cell component");
-    CGS_ASSERT(meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD,
-               "TableCell::GetText() Cannot get text from a non-TextField cell");
+    CGS_ASSERT(mpComponent != NULL, CgsDev::Assert::StreamMessageAt("TableCell::GetText() Invalid cell component", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableCell.h", 173));
+    CGS_ASSERT(meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD, CgsDev::Assert::StreamMessageAt("TableCell::GetText() Cannot get text from a non-TextField cell", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTableCell.h", 174));
+
 
     return static_cast<const TextField*>(mpComponent)->GetText();
 }
@@ -54,9 +54,9 @@ const char* TableCell::GetText() const
 // (+0x04 == 1); forwards straight to TextField::SetText.
 void TableCell::SetText(const char* lpacText)
 {
-    CGS_ASSERT(mpComponent != NULL, "TableCell::SetText() Invalid cell component");
-    CGS_ASSERT(meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD,
-               "TableCell::SetText() Cannot set text in a non-TextField cell");
+    CGS_ASSERT(mpComponent != NULL, CgsDev::Assert::StreamMessageAt("TableCell::SetText() Invalid cell component", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\shared\\components\\BrnTableCell.h", 190));
+    CGS_ASSERT(meComponentType == E_TABLECELLCOMPONENTTYPES_TEXTFIELD, CgsDev::Assert::StreamMessageAt("TableCell::SetText() Cannot set text in a non-TextField cell", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\shared\\components\\BrnTableCell.h", 191));
+
 
     static_cast<TextField*>(mpComponent)->SetText(lpacText);
 }

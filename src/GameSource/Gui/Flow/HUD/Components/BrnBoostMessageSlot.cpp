@@ -1,6 +1,6 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnBoostMessageSlot.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"     // CgsCore::SPrintf
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"           // BrnFlapt::FileRef
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h" // MovieClipInstance::GetCurrentFrameOneBased
@@ -105,8 +105,8 @@ void BoostMessageSlot::Prepare(const char* lpacName, const BrnFlapt::FileRef& lr
 void BoostMessageSlot::SetMessage(const char* lpcText, s32 liMessageId, f32 lfTimeToLive,
                                   s32 leBoostType, s32 liBoostAmount)
 {
-    CGS_ASSERT(!mbInTransition && !mbInUse,
-               "Slot must be available and not in transition");   // :152 (streamed; folded, non-gating)
+    CGS_ASSERT(!mbInTransition && !mbInUse, CgsDev::Assert::StreamMessageAt("Slot must be available and not in transition", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnBoostMessageSlot.cpp", 152));
+   // :152 (streamed; folded, non-gating)
 
     mfTimeToLive = lfTimeToLive;   // stfs f31, 0x40
     miMessageId  = liMessageId;    // stw  r26,  0x38
@@ -125,7 +125,7 @@ void BoostMessageSlot::SetMessage(const char* lpcText, s32 liMessageId, f32 lfTi
 // ===================================================================================
 void BoostMessageSlot::SetMessageText(const char* lpcText, s32 liBoostAmount)
 {
-    CGS_ASSERT(mbInUse, "Setting text on an expired object is nonsensical");   // :177 (streamed; folded, non-gating)
+    CGS_ASSERT(mbInUse, CgsDev::Assert::StreamMessageAt("Setting text on an expired object is nonsensical", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnBoostMessageSlot.cpp", 177));   // :177 (streamed; folded, non-gating)
 
     mMessageItem.SetText(lpcText, liBoostAmount);   // @0x82411ED8
 }
@@ -161,9 +161,9 @@ void BoostMessageSlot::Refresh(f32 lfTimeToLive, bool lbPlayRefreshAnim)
 // ===================================================================================
 void BoostMessageSlot::ShuffleUp()
 {
-    CGS_ASSERT(!mbInTransition, "Cannot shuffle when already shuffling");               // :283
-    CGS_ASSERT(miSlotPosition < KI_MAX_SLOT_POSITION, "Shuffling beyond our bounds");   // :284
-    CGS_ASSERT(mbInUse, "Cannot shuffle when not in use");                              // :285
+    CGS_ASSERT(!mbInTransition, CgsDev::Assert::StreamMessageAt("Cannot shuffle when already shuffling", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnBoostMessageSlot.cpp", 283));               // :283
+    CGS_ASSERT(miSlotPosition < KI_MAX_SLOT_POSITION, CgsDev::Assert::StreamMessageAt("Shuffling beyond our bounds", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnBoostMessageSlot.cpp", 284));   // :284
+    CGS_ASSERT(mbInUse, CgsDev::Assert::StreamMessageAt("Cannot shuffle when not in use", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnBoostMessageSlot.cpp", 285));                              // :285
 
     char lacLabel[KI_SHUFFLE_LABEL_LENGTH];
     CgsCore::SPrintf(lacLabel, KI_SHUFFLE_LABEL_LENGTH, "%d-%d", miSlotPosition, miSlotPosition + 1);
@@ -182,9 +182,9 @@ void BoostMessageSlot::ShuffleUp()
 // ===================================================================================
 void BoostMessageSlot::ShuffleDown()
 {
-    CGS_ASSERT(!mbInTransition, "Cannot shuffle when already shuffling");   // :313
-    CGS_ASSERT(miSlotPosition > 0, "Shuffling below the baseline");         // :314
-    CGS_ASSERT(mbInUse, "Cannot shuffle when not in use");                  // :315
+    CGS_ASSERT(!mbInTransition, CgsDev::Assert::StreamMessageAt("Cannot shuffle when already shuffling", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnBoostMessageSlot.cpp", 313));   // :313
+    CGS_ASSERT(miSlotPosition > 0, CgsDev::Assert::StreamMessageAt("Shuffling below the baseline", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnBoostMessageSlot.cpp", 314));         // :314
+    CGS_ASSERT(mbInUse, CgsDev::Assert::StreamMessageAt("Cannot shuffle when not in use", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnBoostMessageSlot.cpp", 315));                  // :315
 
     char lacLabel[KI_SHUFFLE_LABEL_LENGTH];
     CgsCore::SPrintf(lacLabel, KI_SHUFFLE_LABEL_LENGTH, "%d-%d", miSlotPosition, miSlotPosition - 1);
@@ -202,8 +202,8 @@ void BoostMessageSlot::ShuffleDown()
 // ===================================================================================
 void BoostMessageSlot::ResetSlotPosition()
 {
-    CGS_ASSERT(!mbInTransition,
-               "Please wait for all transitions to complete before changing slot position");   // :343 (streamed; folded)
+    CGS_ASSERT(!mbInTransition, CgsDev::Assert::StreamMessageAt("Please wait for all transitions to complete before changing slot position", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnBoostMessageSlot.cpp", 343));
+   // :343 (streamed; folded)
 
     mAptRef.GotoAndStopLabel("Position0");   // @0x82412330
     miSlotPosition = 0;

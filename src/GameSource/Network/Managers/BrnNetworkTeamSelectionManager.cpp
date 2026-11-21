@@ -9,7 +9,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h" // ServerInterfaceGames
 #include "GameSource/Network/Parameters/BrnNetworkPlayerParamsClass.h" // BrnNetwork::PlayerParams (stack lobby params)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // CgsModule::VariableEventQueue<14000,16>
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"         // CGS_ASSERT
 
 #include <cstddef>                                         // offsetof (uncalled layout pin)
 
@@ -379,8 +379,8 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     void TeamSelectionManager::ProcessAfterSimulation()
     {
-        CGS_ASSERT(maUpdateFunctions[meUpdateState] != 0,
-                   "No update function supplied for the current process substate");
+        CGS_ASSERT(maUpdateFunctions[meUpdateState] != 0, CgsDev::Assert::StreamMessageAt("No update function supplied for the current process substate", "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 349));
+
         (this->*maUpdateFunctions[meUpdateState])();
     }
 

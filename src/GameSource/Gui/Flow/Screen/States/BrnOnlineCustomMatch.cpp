@@ -39,7 +39,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / the out-queue
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / AddEvent
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache (friend)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include <cstddef>                                                       // offsetof (wire pins)
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsID / CgsIDCompress
@@ -637,7 +637,7 @@ namespace BrnGui
         // Non-fatal (BeginAssert / FireAssert / EndAssert, no early-out) -- the X360 falls
         // straight through into the dispatch even with a null event.
         CGS_ASSERT(lpEvent != 0,
-                   "Invalid event sent to OnlineCustomMatch::HandleControllerInput");   // cpp:503
+            CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineCustomMatch::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineCustomMatch.cpp", 503)); // cpp:503
 
         switch (meSubState)   // X360 this+0x38
         {

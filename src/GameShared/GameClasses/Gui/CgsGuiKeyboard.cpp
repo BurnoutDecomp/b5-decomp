@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/CgsGuiKeyboard.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX:
 //   CgsGui::GuiKeyboard::Show   @ 0x8284CFD8
@@ -40,7 +40,7 @@ namespace CgsGui
                           GuiKeyboardListener& lListener)
     {
         // X360: assert no dialog already active (mpListener at +0x41C is null), at :205.
-        CGS_ASSERT(mpListener == 0, "GuiKeyboard::Show: already being shown.");
+        CGS_ASSERT(mpListener == 0, CgsDev::Assert::StreamMessageAt("GuiKeyboard::Show: already being shown.", "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiKeyboard.cpp", 205));
 
         mpListener = &lListener;
 

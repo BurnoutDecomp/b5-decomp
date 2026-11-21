@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"     // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // streamed assert message buffer
 #include "GameShared/GameClasses/Module/CgsEventQueue.h" // CgsModule::EventQueue<T,N>
 
@@ -127,7 +127,7 @@ void PostWorldInputBuffer::PostMappingRequest(const ActionMapping* lpMapping, s3
 // Caller: CgsInput::InputModule::PostWorldUpdate (copies the two spring words into its module state).
 const CgsInput::Device::WheelFFSpring* PostWorldInputBuffer::GetWheelFFSpring() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h", 1122));
     return &mWheelFFSpring;
 }
 
@@ -136,7 +136,7 @@ const CgsInput::Device::WheelFFSpring* PostWorldInputBuffer::GetWheelFFSpring() 
 // WheelFFSpring sub-record). The X360 body copies the two source words verbatim into this+632/+636.
 void PostWorldInputBuffer::SetWheelFFSpring(const CgsInput::Device::WheelFFSpring& lSpring)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h", 1137));
     mWheelFFSpring = lSpring;
 }
 
@@ -400,7 +400,7 @@ PreWorldInputBuffer::GetStopRumbleEffectEventQueue() const
 // "GetTimerStatusInt"; it returns the TimerStatusInterface pointer at this+868.)
 const CgsSystem::TimerStatusInterface* PreWorldInputBuffer::GetTimerStatusInt() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h", 969));
     return &mTimerStatusInterface;
 }
 

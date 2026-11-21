@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsEmergencyFragPoolModuleState.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"  // Pool::BeginEmergencyDefragmentation / GetHeapAlignment, AllocListSet
-#include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"           // gpDebugPrint / gxMessageFilterFlags
 
 // The emergency defragmentation strategy: Begin / RunDefragAlgorithm / RunPoolDefragmentation /
@@ -29,7 +29,7 @@ namespace CgsResource
     {
         BaseDefragPoolModuleState::Begin(lpParams);
 
-        CGS_ASSERT(meState == E_STATE_IDLE, "Can not defrag unless in idle state\n");
+        CGS_ASSERT(meState == E_STATE_IDLE, CgsDev::Assert::StreamMessageAt("Can not defrag unless in idle state\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsEmergencyFragPoolModuleState.cpp", 64));
 
         meState            = E_STATE_START_DEFRAGMENTING;
         miCountdown        = 2;                             // the arm-up countdown, a literal

@@ -52,6 +52,12 @@ namespace CgsGui
     class AptAux
     {
     public:
+        static s32 miAptAuxRenderTargetPM;
+        static s32 miAptAuxUpdateTargetPM;
+        static s32 miAptAuxUpdateComponentsPM;
+        static s32 miAptAuxUpdateFlashComponentReservedPM;
+        static s32 miAptAuxUpdateFlashComponentNonReservedPM;
+
         // PS3 0x5C4B6C (CgsGui::AptAux::Construct). The singleton bring-up the GUI's view
         // module calls (ViewModule::Construct @0x5C4C84 is its only xref): seed the two
         // leading state words, construct the embedded AptDataHandler (+12), construct the

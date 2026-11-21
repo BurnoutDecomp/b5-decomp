@@ -20,7 +20,7 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptionsSummary.h"
 
 #include <cstring>                                                        // std::memcpy
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> / GuiEventWrapper
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface
@@ -414,7 +414,7 @@ namespace BrnGui
     {
         const GuiCachePayload* lpPayload = static_cast<const GuiCachePayload*>(lpEvent);
 
-        CGS_ASSERT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update");
+        CGS_ASSERT(lpPayload->mpCache != 0, CgsDev::Assert::StreamMessageAt("Invalid cache in HandleGuiCacheEvent::Update", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameOptionsSummary.cpp", 688));
 
         if (mpGuiCache == 0)
         {

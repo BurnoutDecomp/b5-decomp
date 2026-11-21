@@ -2,7 +2,7 @@
 
 #include "GameSource/Gui/BrnCustomRendererManager.h"                              // BrnGui::CustomRendererManager (owning manager)
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // CgsDev::Debug2DImmediateRender (DrawValue)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                                // CGS_ASSERT
 
 // BrnGui::GuiCustRendererDebugComponent -- the "Gui Custom Renderer" in-game debug-menu component.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. This TU owns the registration, HUD, and callback
@@ -261,7 +261,7 @@ void GuiCustRendererDebugComponent::ToggleBoostBarDebugScreen()
 // ================= SetBoostColourDangerCallback  @0x824FC900 =================
 void GuiCustRendererDebugComponent::SetBoostColourDangerCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != 0, "Invalid data in the callback");
+    CGS_ASSERT(lpUserData != 0, CgsDev::Assert::StreamMessageAt("Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.cpp", 293));
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
     lpComponent->SetBoostColour(BrnWorld::E_BOOST_TYPE_DANGER);
@@ -269,7 +269,7 @@ void GuiCustRendererDebugComponent::SetBoostColourDangerCallback(void* lpUserDat
 
 void GuiCustRendererDebugComponent::SetBoostColourAggressionCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != 0, "Invalid data in the callback");
+    CGS_ASSERT(lpUserData != 0, CgsDev::Assert::StreamMessageAt("Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.cpp", 307));
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
     lpComponent->SetBoostColour(BrnWorld::E_BOOST_TYPE_AGGRESSION);
@@ -277,7 +277,7 @@ void GuiCustRendererDebugComponent::SetBoostColourAggressionCallback(void* lpUse
 
 void GuiCustRendererDebugComponent::SetBoostColourStuntsCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != 0, "Invalid data in the callback");
+    CGS_ASSERT(lpUserData != 0, CgsDev::Assert::StreamMessageAt("Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.cpp", 321));
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
     lpComponent->SetBoostColour(BrnWorld::E_BOOST_TYPE_STUNT);
@@ -290,7 +290,7 @@ void GuiCustRendererDebugComponent::SetBoostColourStuntsCallback(void* lpUserDat
 // ================================================================================================
 void GuiCustRendererDebugComponent::SetBoostColourToCustomCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != 0, "Invalid data in the callback");
+    CGS_ASSERT(lpUserData != 0, CgsDev::Assert::StreamMessageAt("Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.cpp", 335));
 
     static_cast<GuiCustRendererDebugComponent*>(lpUserData)->SetBoostColourToCustom();
 }
@@ -304,7 +304,7 @@ void GuiCustRendererDebugComponent::SetBoostColourToCustomCallback(void* lpUserD
 // ================================================================================================
 void GuiCustRendererDebugComponent::ToggleBoostBarDebugScreenCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != 0, "Invalid data in the callback");
+    CGS_ASSERT(lpUserData != 0, CgsDev::Assert::StreamMessageAt("Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/CustomRenderer/BrnGuiCustRendererDebugComponent.cpp", 349));
 
     GuiCustRendererDebugComponent* lpComponent = static_cast<GuiCustRendererDebugComponent*>(lpUserData);
 

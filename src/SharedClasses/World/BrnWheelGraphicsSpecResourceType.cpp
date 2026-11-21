@@ -2,7 +2,7 @@
 
 #include "types.hpp"
 #include "rw/rwcore_structs.h"   // rw::BaseResourceDescriptors<5> complete for the descriptor body
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "SharedClasses/World/BrnWheelGraphicsSpec.h"   // BrnWheel::GraphicsSpec (the record)
 
 namespace BrnWheel
@@ -49,8 +49,8 @@ void GraphicsSpecResourceType::FixUp(void* lpResource, const rw::Resource& lrRes
 
     const GraphicsSpec* lpGraphicsSpec = static_cast<const GraphicsSpec*>(lpResource);
 
-    CGS_ASSERT(lpGraphicsSpec->muVersion == KU_WHEEL_GRAPHICS_SPEC_VERSION,
-               "Incorrect version for wheel Graphics Spec.  Get latest code/tools and rebuild data.  If that doesn't work, grab Keef! \n");
+    CGS_ASSERT(lpGraphicsSpec->muVersion == KU_WHEEL_GRAPHICS_SPEC_VERSION, CgsDev::Assert::StreamMessageAt("Incorrect version for wheel Graphics Spec.  Get latest code/tools and rebuild data.  If that doesn't work, grab Keef! \n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/World/BrnWheelGraphicsSpecResourceType.cpp", 205));
+
 }
 
 // The 12-byte descriptor above is the record's own size: three 32-bit slots, no

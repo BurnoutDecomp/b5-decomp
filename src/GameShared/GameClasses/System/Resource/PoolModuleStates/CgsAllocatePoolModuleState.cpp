@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"        // Pool / AllocListSet / NewResource / Entry / SmallResource
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"  // PoolModule::FindResourceType / KI_MAX_ALLOCATION_REQUESTS
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -152,7 +152,7 @@ namespace CgsResource
                                                   AllocListSet* lpAllocListSet, bool* lpOutNeeds,
                                                   SmallResource* lpOutResources, bool lbAllowFailiure)
     {
-        CGS_ASSERT(meState == E_STATE_IDLE, "Can not begin allocation during none-idle state\n");   // :88
+        CGS_ASSERT(meState == E_STATE_IDLE, CgsDev::Assert::StreamMessageAt("Can not begin allocation during none-idle state\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsAllocatePoolModuleState.cpp", 88));   // :88
 
         mpPool         = lpPool;
         mListId        = lListId;

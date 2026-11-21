@@ -1,5 +1,5 @@
 #include "GameSource/Effects/SharedIO/BrnEffectsModuleIO_InputBuffer.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 #include <cstring>                                    // std::memcpy (the console's XMemCpy / memcpy setters)
 
 // ============================================================================
@@ -80,19 +80,19 @@ const InputBuffer::InTriangleCacheInterface* InputBuffer::GetTriangleCacheInterf
 
 const BrnDirector::Camera::Camera* InputBuffer::GetCameraInput() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 119));
     return &mCameraInput;
 }
 
 const CgsSystem::TimerStatusInterface* InputBuffer::GetTimerStatusInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 123));
     return &mTimerStatusInterface;
 }
 
 const BrnPhysics::ContactSpy::ContactSpyInterface* InputBuffer::GetContactSpyInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 127));
     return &mContactSpyInterface;
 }
 
@@ -168,7 +168,7 @@ void InputBuffer::SetVehiclePhysicalStateQueue(const PhysicalTrafficStateQueue* 
 // X360 0x823C9770 (:100) -- mCameraInput = *lpCameraInput (Camera::operator=).
 void InputBuffer::SetCameraInput(const BrnDirector::Camera::Camera* lpCameraInput)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 117));
     mCameraInput = *lpCameraInput;
 }
 
@@ -182,7 +182,7 @@ void InputBuffer::SetTimerStatusInterface(const CgsSystem::TimerStatusInterface*
 // X360 0x823BA658 (:118) -- one word: the interface IS its ContactSpyData pointer.
 void InputBuffer::SetContactSpyInterface(const BrnPhysics::ContactSpy::ContactSpyInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 125));
     mContactSpyInterface = *lpInterface;
 }
 
@@ -204,14 +204,14 @@ void InputBuffer::SetBoostInfoN(s32 liIndex, const BoostOutputInfo* lpBoostInfo)
 // X360 0x823BA7B0 (:151) -- mReplayStatusInterface = *lpStatus (its operator=).
 void InputBuffer::SetReplayStatusInterface(const ReplayStatusInterface* lpStatus)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 141));
     mReplayStatusInterface = *lpStatus;
 }
 
 // X360 0x823BA868 (:154) -- the 16-byte (one Vector2) copy.
 void InputBuffer::SetEffectsEnvironmentInterface(const EffectsEnvironmentInterface* lpEnv)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 143));
     mEffectsEnvironmentInterface = *lpEnv;
 }
 
@@ -226,7 +226,7 @@ void InputBuffer::SetPropVFXLocatorQueue(const PropVFXLocatorQueue* lpQueue)
 // X360 0x823BA928 (:172) -- one word: the interface IS its TriangleCacheManager pointer.
 void InputBuffer::SetTriangleCacheInterface(const InTriangleCacheInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 151));
     mTriangleCacheInterface = *lpInterface;
 }
 
@@ -234,7 +234,7 @@ void InputBuffer::SetTriangleCacheInterface(const InTriangleCacheInterface* lpIn
 // copy of the whole VariableEventQueue<128,16> (its buffer is inline -- no pointer to alias).
 void InputBuffer::SetAudioEffectsMessageQueue(const AudioEffectsMessageQueue* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 154));
     std::memcpy(&mAudioEffectsMessageQueue, lpQueue, sizeof(mAudioEffectsMessageQueue));
 }
 

@@ -9,7 +9,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavStats.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Core/CgsID.h"            // CgsID / CgsIDConvertToString
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"   // CgsLanguage::LanguageManager::ParameterFormatType
@@ -210,7 +210,7 @@ namespace BrnGui
     // ---- HandleTriggers @ 0x824B6370 ----------------------------------------------
     void CrashNavStats::HandleTriggers(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0, "Invalid event in CrashNavStats::HandleTriggers");   // cpp:615
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event in CrashNavStats::HandleTriggers", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavStats.cpp", 615));   // cpp:615
     }
 
     // ---- SetExpectedAptComponents @ 0x824B6408 ------------------------------------

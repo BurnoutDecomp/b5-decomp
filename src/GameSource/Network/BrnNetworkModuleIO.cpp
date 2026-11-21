@@ -21,7 +21,7 @@
 #include "GameSource/Network/BrnNetworkModuleIO.h"
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h"   // BrnGameState::GameStateModuleIO::GameEventQueue (OutputBuffer storage)
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include <cstring>   // std::memcpy (SetActiveRaceCarInterface) / std::strncpy (SetGameName)
 
 namespace BrnNetwork
@@ -69,37 +69,37 @@ namespace BrnNetworkModuleIO
 
     void PreSimulationInputBuffer::SetPadIdle(bool lbPadIdle)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 478));
         mbPadIdle = lbPadIdle;
     }
 
     bool PreSimulationInputBuffer::IsPadIdle() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 485));
         return mbPadIdle;
     }
 
     s32 PreSimulationInputBuffer::GetControllerPort() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 500));
         return miControllerPort;
     }
 
     void PreSimulationInputBuffer::SetControllerPort(s32 liControllerPort)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 493));
         miControllerPort = liControllerPort;
     }
 
     void PreSimulationInputBuffer::SetSysMenuOnScreen(bool lbSysMenuOnScreen)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 523));
         mbSysMenuOnScreen = lbSysMenuOnScreen;
     }
 
     bool PreSimulationInputBuffer::IsSysMenuOnScreen() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 530));
         return mbSysMenuOnScreen;
     }
 
@@ -293,7 +293,7 @@ namespace BrnNetworkModuleIO
     // Write lock, then GameStateToNetworkInterface::Append.
     void PostSimulationInputBuffer::AppendGameStateToNetworkInterface(const GameStateToNetworkInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 680));
         mGameStateToNetworkInterface.Append(lpInterface);
     }
 
@@ -362,7 +362,7 @@ namespace BrnNetworkModuleIO
 
     EActiveRaceCarIndex OutputBuffer::GetPlayerActiveRaceCarIndex() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 719));
         return mePlayerActiveRaceCarIndex;
     }
 
@@ -404,37 +404,37 @@ namespace BrnNetworkModuleIO
 
     void OutputBuffer::SetIsPlaying(bool lbIsPlaying)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 783));
         mbIsPlaying = lbIsPlaying;
     }
 
     bool OutputBuffer::IsPlaying() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 790));
         return mbIsPlaying;
     }
 
     void OutputBuffer::SetConnected(bool lbIsConnected)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 798));
         mbIsConnected = lbIsConnected;
     }
 
     bool OutputBuffer::IsConnected() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 805));
         return mbIsConnected;
     }
 
     void OutputBuffer::SetIsInInvite(bool lbIsInInvite)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 813));
         mbIsInInvite = lbIsInInvite;
     }
 
     bool OutputBuffer::IsInInvite() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 820));
         return mbIsInInvite;
     }
 

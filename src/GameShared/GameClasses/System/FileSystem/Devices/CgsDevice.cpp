@@ -13,7 +13,7 @@
 // yields the calling thread for 5ms.
 
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDevice.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 // X360 EA::Thread facade (home: src/SDKs/EATech/eathread/BrnEAThreadX360.cpp).
 // The X360 ABI is ThreadSleep(const u32* pMilliseconds) @0x82B42610 — it takes a
@@ -85,7 +85,7 @@ namespace CgsFileSystem
 
     int Device::GetFileSize(Handle::DeviceHandle /*lpHandle*/, u64* /*lpu64OutSize*/)   // @0x828DDE50 (default)
     {
-        CGS_ASSERT(false, "Not implemented\n");
+        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Not implemented\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDevice.cpp", 91));
         return -2;
     }
 
@@ -93,20 +93,20 @@ namespace CgsFileSystem
     int Device::OpenDirectory(const char* /*lpcPath*/, void* /*lpEntryBuffer*/, u32 /*luMaxEntries*/,
                               u32* /*lpuOutCount*/, Handle::DeviceHandle* /*lppOutHandle*/)  // @0x828DDEE0
     {
-        CGS_ASSERT(false, "Not implemented\n");
+        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Not implemented\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDevice.cpp", 103));
         return -2;
     }
 
     int Device::CloseDirectory(Handle::DeviceHandle /*lpHandle*/)   // @0x828DDF70
     {
-        CGS_ASSERT(false, "Not implemented\n");
+        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Not implemented\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDevice.cpp", 111));
         return -2;
     }
 
     int Device::ReadDirectory(Handle::DeviceHandle /*lpHandle*/, void* /*lpEntryBuffer*/,
                               u32 /*luMaxEntries*/, u32* /*lpuOutCount*/)  // @0x828DE000
     {
-        CGS_ASSERT(false, "Not implemented\n");
+        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Not implemented\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDevice.cpp", 122));
         return -2;
     }
 

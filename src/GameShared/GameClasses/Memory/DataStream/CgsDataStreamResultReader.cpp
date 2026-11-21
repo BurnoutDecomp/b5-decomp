@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Memory/DataStream/CgsDataStreamResultReader.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (End's users-connected assert)
 
 #include <xtl.h>  // native lwsync
@@ -65,7 +65,7 @@ namespace CgsMemory
     void DataStreamResultReader::Begin()
     {
         __lwsync();
-        CGS_ASSERT(!mbStreaming, "Already streaming\n");
+        CGS_ASSERT(!mbStreaming, CgsDev::Assert::StreamMessageAt("Already streaming\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\DataStream/CgsDataStreamResultReader.cpp", 104));
 
         miNextResult      = 0;   // this[9]
         miNumResultsAtEnd = 0;   // this[10]

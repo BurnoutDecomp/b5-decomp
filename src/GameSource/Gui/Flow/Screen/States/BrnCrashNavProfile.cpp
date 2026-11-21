@@ -30,7 +30,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavProfile.h"
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
@@ -205,7 +205,7 @@ namespace BrnGui
     // inventing behaviour the build does not have.
     void CrashNavProfile::HandleTriggers(const CgsModule::Event* lpAptTrigger)
     {
-        CGS_ASSERT(lpAptTrigger != 0, "Invalid event in CrashNavMapMain::HandleTriggers");
+        CGS_ASSERT(lpAptTrigger != 0, CgsDev::Assert::StreamMessageAt("Invalid event in CrashNavMapMain::HandleTriggers", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavProfile.cpp", 395));
     }
 
     // ---- HandleControllerInput -----------------------------------------------------

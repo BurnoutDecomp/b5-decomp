@@ -37,7 +37,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavDriverDetails.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                     // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                // CgsDev::StrStreamBase (the two <<-asserts)
@@ -844,7 +844,7 @@ void CrashNavDriverDetails::ShowMenu()
 void CrashNavDriverDetails::HandleTriggers(const CgsModule::Event* lpAptTrigger)
 {
     CGS_ASSERT(lpAptTrigger != 0,
-               "Invalid event in CrashNavDriverDetails::::HandleTriggers");   // cpp:1023
+        CgsDev::Assert::StreamMessageAt("Invalid event in CrashNavDriverDetails::::HandleTriggers", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavDriverDetails.cpp", 1023)); // cpp:1023
 
     const CgsGui::GuiEventAptTriggerPayload* lpPayload =
         reinterpret_cast<const CgsGui::GuiEventAptTriggerPayload*>(lpAptTrigger);

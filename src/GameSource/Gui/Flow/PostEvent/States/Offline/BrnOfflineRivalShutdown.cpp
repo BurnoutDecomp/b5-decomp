@@ -44,7 +44,7 @@
 
 #include <cstring>                                                        // strcmp / memcpy
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDConvertToString
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream
@@ -172,7 +172,7 @@ const s32 OfflineRivalShutdown::miNumEventsObserved = 5;
 // run the base Construct, then zero the state word (+0x38) and the cache pointer (+0x40).
 void OfflineRivalShutdown::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
 {
-    CGS_ASSERT(lpFsm != 0, "Invalid ScriptedFsm ptr");   // cpp:88
+    CGS_ASSERT(lpFsm != 0, CgsDev::Assert::StreamMessageAt("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineRivalShutdown.cpp", 88));   // cpp:88
 
     CgsGui::State::Construct(liId, lpFsm);
 

@@ -28,7 +28,7 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuToggle.h"       // BrnGui::MenuToggle
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h"  // BrnGui::SelectableGroup (base)
 #include "GameSource/Gui/BrnGuiCache.h"                                // BrnGui::GuiCache / GuiFlow (AppendExpectedAptComponent forwards)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // CgsDev::Log::gpDebugPrint
 #include "GameShared/GameClasses/Development/MessageSystem/CgsMessage.h" // CgsDev::Message::gxMessageFilterFlags / KX_FILTER_GLOBAL
@@ -164,8 +164,8 @@ namespace BrnGui
     template <s32 TI_SIZE>
     MenuToggle* MenuToggleGroupVarSize<TI_SIZE>::GetSelectable(s32 liIndex)
     {
-        CGS_ASSERT(liIndex >= 0 && liIndex < TI_SIZE,
-                   "MenuToggleGroup::GetSelectable() invalid index specified");
+        CGS_ASSERT(liIndex >= 0 && liIndex < TI_SIZE, CgsDev::Assert::StreamMessageAt("MenuToggleGroup::GetSelectable() invalid index specified", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnMenuToggleGroup.h", 241));
+
         return static_cast<MenuToggle*>(SelectableGroup::GetSelectable(liIndex));
     }
 

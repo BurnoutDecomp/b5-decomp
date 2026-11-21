@@ -18,7 +18,7 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 #include <cmath>                                                          // route-time rounding / map-icon distance
 #include <cstring>                                                        // tracker and event payloads
@@ -530,8 +530,8 @@ namespace
 
     void OnlineSelectRoute::HandleInGameFailedEvent(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0,
-                   "Invalid event sent to OnlineSelectRoute::HandleInGameEvent");
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineSelectRoute::HandleInGameEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineSelectRoute.cpp", 1384));
+
         SendStateEvent(KAC_STATE_GO_BACK);
     }
 
@@ -568,8 +568,8 @@ namespace
 
     void OnlineSelectRoute::HandleControllerInput(const CgsModule::Event* lpEvent)
     {
-        CGS_ASSERT(lpEvent != 0,
-                   "Invalid event sent to OnlineSelectRoute::HandleControllerInput");
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineSelectRoute::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineSelectRoute.cpp", 517));
+
 
         switch (meSubState)
         {

@@ -34,7 +34,7 @@
 #include <cstddef>                                                        // offsetof
 #include <cstring>                                                        // strstr
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface
@@ -196,7 +196,7 @@ CompletedGame::CompletedGame()
 // presentation ladders overwrite it before the first EnsureResourceIsLoaded.
 void CompletedGame::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
 {
-    CGS_ASSERT(lpFsm != 0, "Invalid ScriptedFsm ptr");   // cpp:82
+    CGS_ASSERT(lpFsm != 0, CgsDev::Assert::StreamMessageAt("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnCompletedGame.cpp", 82));   // cpp:82
 
     CgsGui::State::Construct(liId, lpFsm);
 

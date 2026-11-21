@@ -19,7 +19,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfo.h" // ServerInterfacePlayerInfo (GetStatus / GetLastError / ClearLastError)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"      // ServerInterfaceGames (IsLocalPlayerInGame / IsPlayerInGame / GetPlayerParametersByPlayerName)
 #include "GameSource/Network/Parameters/BrnNetworkPlayerParamsClass.h" // BrnNetwork::PlayerParams (stack params object for ShowGamerCard)
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"  // CGS_ASSERT
 
 #include <cstring>   // std::memcpy (X360 GetXuidForPlayer / ShowGamerCard)
 
@@ -183,8 +183,8 @@ namespace BrnNetwork
     // X360 0x8254CC50 -- dispatch the update function for the current sub-state.
     s32 NetworkGamerCardManagerX360::ProcessBeforeSimulation()
     {
-        CGS_ASSERT(mapUpdateFunctions[meSubState] != 0,
-                   "No update function supplied for the current substate");
+        CGS_ASSERT(mapUpdateFunctions[meSubState] != 0, CgsDev::Assert::StreamMessageAt("No update function supplied for the current substate", "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerCardManagerX360.cpp", 375));
+
         return (this->*mapUpdateFunctions[meSubState])();
     }
 

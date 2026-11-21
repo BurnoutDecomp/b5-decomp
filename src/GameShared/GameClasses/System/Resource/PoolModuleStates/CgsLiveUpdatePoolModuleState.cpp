@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourcePoolModule.h"  // PoolModule::FindResourceType / GetPoolByIndex / KI_MAX_POOLS
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"        // Type::GetCachedId (type-id compare)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"    // Events::AllocateResourceListResponse
-#include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags
 
 #include <cstddef>   // offsetof (layout pin for the entry-list resource-memory view)
@@ -75,7 +75,7 @@ namespace
                                                     const BundleV2::ResourceEntry* lpEntries, s32 liNumEntries,
                                                     bool* lpOutNeeds, SmallResource* lpOutResources)
     {
-        CGS_ASSERT(meState == E_STATE_IDLE, "Can not begin allocation during none-idle state\n");   // :75
+        CGS_ASSERT(meState == E_STATE_IDLE, CgsDev::Assert::StreamMessageAt("Can not begin allocation during none-idle state\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsLiveUpdatePoolModuleState.cpp", 75));   // :75
 
         miElapsedWaitFrames = 0;              // stw 0, 0x38
         mpPool              = lpPool;          // stw r4, 0x04

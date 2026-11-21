@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Memory/CgsMemoryModuleIO.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"  // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::StrCpy
 
 #include <cstring>  // std::strncpy (models the X360 strncpy default-name fill)
@@ -30,7 +30,7 @@ namespace MemoryIO
     // X360 0x828E1040 (non-const): assert write-locked (status bit 3), then hand back the queue.
     InputBuffer::MemoryRequestQueue* InputBuffer::GetMemoryRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameShared\\GameClasses\\Memory/CgsMemoryModuleIO.h", 754));
         return &mMemoryRequestQueue;
     }
 

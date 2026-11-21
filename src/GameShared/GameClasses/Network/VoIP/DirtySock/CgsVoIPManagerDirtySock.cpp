@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Network/VoIP/DirtySock/CgsVoIPManagerDirtySock.h"
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Network/CgsNetworkManager.h"
 #include "GameShared/GameClasses/Network/CgsNetworkUtils.h"
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"
@@ -62,7 +62,7 @@ namespace CgsNetwork
                 return &maRegisteredTalkers[liIndex];
         }
 
-        CGS_ASSERT(false, "Failed to find registered talker\n");
+        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Failed to find registered talker\n", "..\\..\\..\\GameShared\\GameClasses\\Network/VoIP/DirtySock/CgsVoIPManagerDirtySock.cpp", 947));
         return 0;
     }
 

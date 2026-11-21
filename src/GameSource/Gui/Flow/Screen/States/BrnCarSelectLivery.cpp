@@ -22,7 +22,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectLivery.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (register / play-apt / out-queue)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / VariableEventQueue
@@ -187,7 +187,7 @@ namespace BrnGui
     void CarSelectLivery::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
         // cpp:107 -- streamed on the console; the call site passes a plain string.
-        CGS_ASSERT(lpFsm != 0, "Invalid ScriptedFsm ptr");
+        CGS_ASSERT(lpFsm != 0, CgsDev::Assert::StreamMessageAt("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectLivery.cpp", 107));
 
         CarSelectMain::Construct(liId, lpFsm);
     }

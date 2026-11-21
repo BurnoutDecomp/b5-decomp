@@ -1,3 +1,5 @@
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"
+#include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptRenderHandler.h"
 #include "GameSource/Gui/BrnGuiPerfmons.h"
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h"
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModule.h"
@@ -63,16 +65,6 @@ int32_t GuiPerfmons::miCgsAptFlashRender;
 int32_t GuiPerfmons::miCgsAptStringRender;
 int32_t GuiPerfmons::miCgsAptDrawRenderingUnit;
 
-// --- Alias handle copies (X360 dword_82F330xx / 82F331xx; addresses decompiler-named) ---
-static int32_t giAliasFlashObjectRender;  // dword_82F33168 = miCgsAptFlashRender
-static int32_t giAliasFlashStringRender;  // dword_82F3316C = miCgsAptStringRender
-static int32_t giAliasFlashDrawRendUnit;  // dword_82F33170 = miCgsAptDrawRenderingUnit
-static int32_t giAliasAptAuxRndrTgt;      // dword_82F33130 = miAptAuxRenderTarget
-static int32_t giAliasAptAuxUpdTgt;       // dword_82F33134 = miAptAuxUpdateTarget
-static int32_t giAliasAptAuxUpdComps;     // dword_82F33138 = miAptAuxUpdateComponents
-static int32_t giAliasAptAuxUpdFlshRes;   // dword_82F33140 = miAptAuxUpdateFlashComponentRes
-static int32_t giAliasAptAuxUpdFlshNRes;  // dword_82F3313C = miAptAuxUpdateFlashComponentNRes
-
 void GuiPerfmons::Initialise()
 {
     // --- Root: GUI MODULE PRE-WORLD UPDATE ---
@@ -120,18 +112,18 @@ void GuiPerfmons::Initialise()
     CgsGui::GuiModule::miModelViewBridgePM = miModelViewBridge;
     CgsGui::GuiModule::miViewUpdatePM = miViewUpdate;
     CgsGui::GuiModule::miGuiRenderPM = miGuiRender;
-    giAliasFlashObjectRender = miCgsAptFlashRender;
-    giAliasFlashStringRender = miCgsAptStringRender;
-    giAliasFlashDrawRendUnit = miCgsAptDrawRenderingUnit;
+    CgsGui::AptRenderHandler::miCgsAptFlashRender = miCgsAptFlashRender;
+    CgsGui::AptRenderHandler::miCgsAptStringRender = miCgsAptStringRender;
+    CgsGui::AptRenderHandler::miCgsAptDrawRenderingUnit = miCgsAptDrawRenderingUnit;
     CgsGui::ModelModule::miUpdateInputPM = miModelUpdate_Input;
     CgsGui::ModelModule::miUpdateMainPM = miModelUpdate_Main;
     CgsGui::ModelModule::miUpdateOutputPM = miModelUpdate_Output;
     CgsGui::ViewModule::miAptAuxUpdatePM = miAptAuxUpdate;
     CgsGui::ViewModule::miViewProcessIncomingEventsPM = miViewProcessIncomingEvents;
-    giAliasAptAuxRndrTgt = miAptAuxRenderTarget;
-    giAliasAptAuxUpdTgt = miAptAuxUpdateTarget;
-    giAliasAptAuxUpdComps = miAptAuxUpdateComponents;
-    giAliasAptAuxUpdFlshRes = miAptAuxUpdateFlashComponentRes;
-    giAliasAptAuxUpdFlshNRes = miAptAuxUpdateFlashComponentNRes;
+    CgsGui::AptAux::miAptAuxRenderTargetPM = miAptAuxRenderTarget;
+    CgsGui::AptAux::miAptAuxUpdateTargetPM = miAptAuxUpdateTarget;
+    CgsGui::AptAux::miAptAuxUpdateComponentsPM = miAptAuxUpdateComponents;
+    CgsGui::AptAux::miAptAuxUpdateFlashComponentReservedPM = miAptAuxUpdateFlashComponentRes;
+    CgsGui::AptAux::miAptAuxUpdateFlashComponentNonReservedPM = miAptAuxUpdateFlashComponentNRes;
 }
 } // namespace BrnGui

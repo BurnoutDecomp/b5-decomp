@@ -1,6 +1,6 @@
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (lock-state guards)
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT (lock-state guards)
 
 #include <cstring>   // std::memcpy (PreUpdateOutput POD-span copies; models the Xbox block copy)
 
@@ -35,7 +35,7 @@ RootInputBuffer::GetVehicleInterface() const
 // into the root sound input at +0x2F20.
 const RootInputBuffer::DirectorCamera* RootInputBuffer::GetDirectorCamera() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Sound/Module/BrnRootSoundModuleIo.h", 374));
     return &mDirectorCamera;
 }
 
@@ -197,14 +197,14 @@ const RootInputBuffer::GuiEventQueue* RootInputBuffer::GetGuiEventQueue() const
 // X360 0x82694F28 -- read-lock accessor for the player's active-race-car slot @ +0x2F10.
 EActiveRaceCarIndex RootInputBuffer::GetPlayerActiveRaceCarIndex() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Sound/Module/BrnRootSoundModuleIo.h", 456));
     return mePlayerActiveRaceCarIndex;
 }
 
 // X360 0x82694550 -- read-lock accessor for the per-frame update info @ +0xEBBC.
 const RootInputBuffer::UpdateInfo* RootInputBuffer::GetUpdateInfo() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Sound/Module/BrnRootSoundModuleIo.h", 165));
     return &mUpdateInfo;
 }
 
@@ -289,14 +289,14 @@ void RootInputBuffer::SetReplayStatusInterface(const ReplayStatusInterface* lpIn
 // X360 0x823C9140 @ +0x2F20.
 void RootInputBuffer::SetCameraInput(const DirectorCamera* lpCamera)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Sound/Module/BrnRootSoundModuleIo.h", 366));
     mDirectorCamera = *lpCamera;
 }
 
 // X360 0x823B8908 @ +0x3080.
 void RootInputBuffer::SetContactSpyQueueInterface(const InputContactSpyQueueInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Sound/Module/BrnRootSoundModuleIo.h", 485));
     mContactSpyQueueInterface = *lpInterface;
 }
 
@@ -338,7 +338,7 @@ void RootInputBuffer::SetScoringInterface(const ScoringOutputInterface* lpInterf
 // X360 0x823B8258 @ +0xEA30.
 void RootInputBuffer::SetOnlineScoringInterface(const OnlineScoringOutputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Sound/Module/BrnRootSoundModuleIo.h", 200));
     std::memcpy(&mOnlineScoringInterface, lpInterface, sizeof(OnlineScoringOutputInterface));
 }
 
@@ -353,14 +353,14 @@ void RootInputBuffer::SetWorldLoadInterface(const SoundWorldLoadInterface* lpInt
 // X360 0x823B89B8 @ +0xEBA8 -- stores the caller's queue pointer (not a copy).
 void RootInputBuffer::SetGuiEventQueue(const GuiEventQueue* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Sound/Module/BrnRootSoundModuleIo.h", 521));
     mpGuiEventQueue = lpQueue;
 }
 
 // X360 0x823B8028 @ +0xEBAC.
 void RootInputBuffer::SetGameModeInterface(const GameModeOutputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Sound/Module/BrnRootSoundModuleIo.h", 173));
     std::memcpy(&mGameModeInterface, lpInterface, sizeof(GameModeOutputInterface));
 }
 
@@ -374,7 +374,7 @@ void RootInputBuffer::SetUpdateInfo(const UpdateInfo* lpInfo)
 // X360 0x823B8310 @ +0xEEE0.
 void RootInputBuffer::SetAICarOutputInterface(const AICarOutputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Sound/Module/BrnRootSoundModuleIo.h", 213));
     std::memcpy(&mAICarOutputInterface, lpInterface, sizeof(AICarOutputInterface));
 }
 

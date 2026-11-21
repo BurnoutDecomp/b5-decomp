@@ -1,6 +1,6 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnRaceMainHudState.h"
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                          // CgsID / CgsIDCompress
 #include "GameShared/GameClasses/Containers/CgsHash.h"                  // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface
@@ -3052,7 +3052,7 @@ namespace BrnGui
     // record to the sat-nav component under the ORIGINAL event id, so one body serves both.
     void RaceMainHudState::UpdateSatNav(const CgsModule::Event* lpEvent, s32 liEventId)
     {
-        CGS_ASSERT(lpEvent != 0, " invalid event passed ");                 // cpp:3226
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt(" invalid event passed ", "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnRaceMainHudState.cpp", 3226));                 // cpp:3226
         // (the assert string's leading and trailing spaces are the console's, verbatim)
 
         if (mbSatNav)                                                       // lbz 0x150

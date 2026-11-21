@@ -10,7 +10,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h"
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectable.h"   // BrnGui::Selectable (item virtuals + accessors)
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                 // CGS_ASSERT
 
 namespace BrnGui
 {
@@ -80,8 +80,8 @@ namespace BrnGui
     // @ 0x8240FC98 -- bounds-check, set the queried flag, return the slot.
     Selectable* SelectableGroup::GetSelectable(s32 liIndex)
     {
-        CGS_ASSERT(liIndex >= 0 && liIndex < miSelectableCount,
-                   "Invalid index passed to SelectableGroup::GetSelectable()");
+        CGS_ASSERT(liIndex >= 0 && liIndex < miSelectableCount, CgsDev::Assert::StreamMessageAt("Invalid index passed to SelectableGroup::GetSelectable()", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.h", 248));
+
         SetDirty();
         return maSelectables[liIndex];
     }

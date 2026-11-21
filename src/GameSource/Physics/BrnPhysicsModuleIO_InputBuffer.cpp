@@ -1,6 +1,6 @@
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // CGS_ASSERT
 
 #include <cstddef>   // offsetof
 #include <cstring>   // std::memcpy (models the X360 out-of-line operator= / XMemCpy copies)
@@ -188,7 +188,7 @@ namespace PhysicsModuleIO
     // X360 0x8259F7F8 (DWARF :272): read-lock; return &mCameraInput (this+16).
     const InputBuffer::CameraStorage* InputBuffer::GetCameraInput() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 272));
         return &mCameraInput;
     }
 
@@ -209,7 +209,7 @@ namespace PhysicsModuleIO
     // X360 0x8259FD38 (DWARF :298): read-lock; return &mSolverMaxIterations (this+327200).
     const u32* InputBuffer::GetSolverMaxIterations() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 298));
         return &mSolverMaxIterations;
     }
 
@@ -273,7 +273,7 @@ namespace PhysicsModuleIO
     // X360 0x8279F240 (DWARF :299): write-lock; store one word into mSolverMaxIterations (this+327200).
     void InputBuffer::SetSolverMaxIterations(const u32* lpValue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 299));
         mSolverMaxIterations = *lpValue;
     }
 }

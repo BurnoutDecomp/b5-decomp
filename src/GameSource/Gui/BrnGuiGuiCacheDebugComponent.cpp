@@ -3,7 +3,7 @@
 
 #include "GameSource/Gui/BrnGuiGuiCacheDebugComponent.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // HUD status text
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"      // CgsGuiModuleIO::InputBuffer
@@ -83,7 +83,7 @@ namespace BrnGui
     // ARTIST 0x824ED368; the original callback asserts, then toggles this+0x14.
     void GuiCacheDebugComponent::ShowGuiCacheStatusCallback(void* lpData)
     {
-        CGS_ASSERT(lpData != 0, "ShowGuiCacheStatusCallback: Invalid data in the callback");
+        CGS_ASSERT(lpData != 0, CgsDev::Assert::StreamMessageAt("ShowGuiCacheStatusCallback: Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/BrnGuiGuiCacheDebugComponent.cpp", 433));
         GuiCacheDebugComponent* lpThis = static_cast<GuiCacheDebugComponent*>(lpData);
         lpThis->mbShowGuiCacheStatus = !lpThis->mbShowGuiCacheStatus;
     }
@@ -91,8 +91,8 @@ namespace BrnGui
     // ARTIST 0x824ED410; the original callback asserts, then toggles this+0x15.
     void GuiCacheDebugComponent::ShowAptComponentGuiCacheStatusCallback(void* lpData)
     {
-        CGS_ASSERT(lpData != 0,
-                   "ShowAptComponentGuiCacheStatusCallback: Invalid data in the callback");
+        CGS_ASSERT(lpData != 0, CgsDev::Assert::StreamMessageAt("ShowAptComponentGuiCacheStatusCallback: Invalid data in the callback", "..\\..\\..\\GameSource\\Gui/BrnGuiGuiCacheDebugComponent.cpp", 446));
+
         GuiCacheDebugComponent* lpThis = static_cast<GuiCacheDebugComponent*>(lpData);
         lpThis->mbShowAptComponentGuiCacheStatus = !lpThis->mbShowAptComponentGuiCacheStatus;
     }

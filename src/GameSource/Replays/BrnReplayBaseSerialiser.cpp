@@ -1,7 +1,7 @@
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"
 
 #include "GameSource/Replays/BrnReplayShared.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 #include <cstring>
@@ -51,7 +51,7 @@ namespace BrnReplays
     // raises mbLocked. Returns true (the X360 body always returns 1).
     bool BaseSerialiser::Lock()
     {
-        CGS_ASSERT(!mbLocked, "Already locked\n");
+        CGS_ASSERT(!mbLocked, CgsDev::Assert::StreamMessageAt("Already locked\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\replays\\BrnReplayBaseSerialiser.h", 342));
 
         mbLocked = true;
         return true;
@@ -62,7 +62,7 @@ namespace BrnReplays
     // clears mbLocked. Returns true (the X360 body always returns 1).
     bool BaseSerialiser::Unlock()
     {
-        CGS_ASSERT(mbLocked, "Not locked\n");
+        CGS_ASSERT(mbLocked, CgsDev::Assert::StreamMessageAt("Not locked\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\replays\\BrnReplayBaseSerialiser.h", 350));
 
         mbLocked = false;
         return true;
@@ -73,7 +73,7 @@ namespace BrnReplays
     // locked.
     void BaseSerialiser::SetMode(EMode leMode)
     {
-        CGS_ASSERT(mbLocked, "Can not change mode while not locked\n");
+        CGS_ASSERT(mbLocked, CgsDev::Assert::StreamMessageAt("Can not change mode while not locked\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\replays\\BrnReplayBaseSerialiser.h", 364));
 
         meMode = leMode;
     }

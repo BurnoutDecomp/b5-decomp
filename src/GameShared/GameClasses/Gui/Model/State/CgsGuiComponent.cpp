@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAux.h"        // CgsGui::AptAux (UpdateFlashComponent)
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                    // CgsCore::SPrintf
 #include "GameShared/GameClasses/Containers/CgsHash.h"                     // CgsContainers::CgsHash::CalculateHash
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 #include <cstring>   // strncpy, strlen
 
@@ -47,8 +47,8 @@ namespace CgsGui
     // assert string (GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h:169).
     void GuiComponent::SetStateInterface(StateInterface* lpStateInterface)
     {
-        CGS_ASSERT(lpStateInterface != 0,
-                   "Invalid state interface sent to GuiComponent::SetStateInterface");
+        CGS_ASSERT(lpStateInterface != 0, CgsDev::Assert::StreamMessageAt("Invalid state interface sent to GuiComponent::SetStateInterface", "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiComponent.h", 169));
+
         mpStateInterface = lpStateInterface;
     }
 

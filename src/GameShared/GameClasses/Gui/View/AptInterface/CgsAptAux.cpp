@@ -97,6 +97,12 @@ static const char KAC_ARTIST_ASSERT_FILE[] =
 
 namespace CgsGui
 {
+    s32 AptAux::miAptAuxRenderTargetPM;
+    s32 AptAux::miAptAuxUpdateTargetPM;
+    s32 AptAux::miAptAuxUpdateComponentsPM;
+    s32 AptAux::miAptAuxUpdateFlashComponentReservedPM;
+    s32 AptAux::miAptAuxUpdateFlashComponentNonReservedPM;
+
     // The singleton AptAux* the render callbacks load (guest _ZN6CgsGui13AptAuxPointer12mpAptAuxInstE).
     // AptAux::Construct @0x5C4B6C publishes the constructed instance here. Starts null.
     AptAux* AptAuxPointer::mpAptAuxInst = 0;
@@ -373,15 +379,15 @@ namespace CgsGui
     {
         CGS_ASSERT(miState0 == 3, "Update being called before Prepare is finished.");
 
-        CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateComponents);
+        CgsDev::PerfMonCpu::StartMonitor(AptAux::miAptAuxUpdateComponentsPM);
         UpdateComponents();
-        CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateComponents);
+        CgsDev::PerfMonCpu::StopMonitor(AptAux::miAptAuxUpdateComponentsPM);
 
-        CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateTarget);
+        CgsDev::PerfMonCpu::StartMonitor(AptAux::miAptAuxUpdateTargetPM);
         mAptMutex.Lock();
         AptUpdateTarget(mpAptTargetInstance, liDeltaMs, -1, 16);
         mAptMutex.Unlock();
-        CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateTarget);
+        CgsDev::PerfMonCpu::StopMonitor(AptAux::miAptAuxUpdateTargetPM);
     }
 
     // -------------------------------------------------------------------------
@@ -398,9 +404,9 @@ namespace CgsGui
     {
         CGS_ASSERT(miState0 == 3, "Render being called before Prepare is finished.");
 
-        CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miAptAuxRenderTarget);
+        CgsDev::PerfMonCpu::StartMonitor(AptAux::miAptAuxRenderTargetPM);
         AptRenderTarget(mpAptTargetInstance, liDeltaMs, -1);
-        CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miAptAuxRenderTarget);
+        CgsDev::PerfMonCpu::StopMonitor(AptAux::miAptAuxRenderTargetPM);
     }
 
     // ARTIST8285FEF0..8285FF10: wrap only the actual E_EFFECT_ALL value4.
@@ -467,15 +473,15 @@ namespace CgsGui
 
         if (lbReserved)
         {
-            CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateFlashComponentRes);
+            CgsDev::PerfMonCpu::StartMonitor(AptAux::miAptAuxUpdateFlashComponentReservedPM);
             lpAptAux->mpAptCommunicator->UpdateComponentReserved(lpacAptName, lpacViewState, lpacParam);
-            CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateFlashComponentRes);
+            CgsDev::PerfMonCpu::StopMonitor(AptAux::miAptAuxUpdateFlashComponentReservedPM);
         }
         else
         {
-            CgsDev::PerfMonCpu::StartMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateFlashComponentNRes);
+            CgsDev::PerfMonCpu::StartMonitor(AptAux::miAptAuxUpdateFlashComponentNonReservedPM);
             lpAptAux->mpAptCommunicator->UpdateComponent(lpacAptName, lpacViewState, lpacParam);
-            CgsDev::PerfMonCpu::StopMonitor(BrnGui::GuiPerfmons::miAptAuxUpdateFlashComponentNRes);
+            CgsDev::PerfMonCpu::StopMonitor(AptAux::miAptAuxUpdateFlashComponentNonReservedPM);
         }
     }
 

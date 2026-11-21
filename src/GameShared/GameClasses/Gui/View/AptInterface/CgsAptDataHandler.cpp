@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHandler.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptDataHeader.h"  // AptDataHeader (the registered header type)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT, CgsDev::Assert::Begin/Fire/EndAssert
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"            // CGS_ASSERT, CgsDev::Assert::Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (dynamic assert message)
 #include "GameShared/GameClasses/Containers/CgsHash.h"         // CgsContainers::CgsHash::CalculateHash (the name -> hash key)
 
@@ -35,8 +35,8 @@ namespace CgsGui
 {
     bool AptDataHandler::Prepare(CgsMemory::HeapMalloc* lpAllocator)
     {
-        CGS_ASSERT(lpAllocator != 0,
-                   "Passed in allocator to AptDataHandler::Prepare is null");
+        CGS_ASSERT(lpAllocator != 0, CgsDev::Assert::StreamMessageAt("Passed in allocator to AptDataHandler::Prepare is null", "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptDataHandler.cpp", 63));
+
         mpAllocator = lpAllocator;
         return true;
     }

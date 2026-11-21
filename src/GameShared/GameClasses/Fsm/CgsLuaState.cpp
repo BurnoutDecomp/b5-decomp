@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"  // CgsResource::LuaCodeResource
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"              // CgsMemory::HeapMalloc
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress / CgsIDUnCompress
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                    // CGS_ASSERT (flagged assert substitute)
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                    // CGS_ASSERT (flagged assert substitute)
 
 #include <cstring>   // strncpy
 
@@ -53,7 +53,7 @@ bool LuaState::Prepare(CgsResource::LuaCodeResource* lpLuaCodeResource, CgsMemor
 {
     mpHeapMalloc = lpHeapMalloc;
     mpLuaState   = lua_newstate(reinterpret_cast<lua_Alloc>(&LuaState::LuaAllocator), lpHeapMalloc);
-    CGS_ASSERT(mpLuaState != 0, "Failed to allocate LUA state, out of memory");
+    CGS_ASSERT(mpLuaState != 0, CgsDev::Assert::StreamMessageAt("Failed to allocate LUA state, out of memory", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\fsm\\CgsLuaState.cpp", 85));
 
     // Load the script chunk and run it (defining the FSM's Lua globals).
     luaL_loadbuffer(mpLuaState, lpLuaCodeResource->GetSource(),

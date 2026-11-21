@@ -3,7 +3,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineTeamSelection.h"
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                        // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"    // StateInterface
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"            // VariableEventQueue<18432,16>
@@ -174,7 +174,7 @@ void OnlineTeamSelection::Update()
 void OnlineTeamSelection::HandleGuiCacheEvent(const CgsModule::Event* lpEvent)
 {
     const GuiCachePayload* lpPayload = static_cast<const GuiCachePayload*>(lpEvent);
-    CGS_ASSERT(lpPayload->mpCache != 0, "Invalid cache in HandleGuiCacheEvent::Update");
+    CGS_ASSERT(lpPayload->mpCache != 0, CgsDev::Assert::StreamMessageAt("Invalid cache in HandleGuiCacheEvent::Update", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineTeamSelection.cpp", 248));
 
     if (mpGuiCache == 0)
     {
@@ -281,7 +281,7 @@ void OnlineTeamSelection::ShowPlayerList(s32 liSelectedPlayerID)
 
 void OnlineTeamSelection::HandleControllerInputPressed(const CgsModule::Event* lpEvent)
 {
-    CGS_ASSERT(lpEvent != 0, "Invalid event sent to OnlineTeamSelection::HandleControllerInputPressed");
+    CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineTeamSelection::HandleControllerInputPressed", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineTeamSelection.cpp", 333));
 
     if (meSubState == E_SUBSTATE_MAIN)
         HandleControllerInputMainSubState(lpEvent);

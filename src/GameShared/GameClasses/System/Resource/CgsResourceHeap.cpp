@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHeap.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // overhead allocator
-#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"           // CGS_ASSERT
 
 #include "types.hpp"   // uintptr_t (heap-memory alignment check)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the node-exhaustion boot gate
@@ -124,7 +124,7 @@ namespace CgsResource
 
     void HeapEntry::SetSize(u32 luSize)
     {
-        CGS_ASSERT(luSize <= KU_MAX_SIZE, "Size can not be larger than 0x8FFFFFFF - last bit is used as flag!\n");   // CgsResourceHeap.h:621
+        CGS_ASSERT(luSize <= KU_MAX_SIZE, CgsDev::Assert::StreamMessageAt("Size can not be larger than 0x8FFFFFFF - last bit is used as flag!\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceHeap.h", 621));   // CgsResourceHeap.h:621
         muSize = (muSize & 0x70000000u) | luSize;   // preserve status, replace size
     }
 

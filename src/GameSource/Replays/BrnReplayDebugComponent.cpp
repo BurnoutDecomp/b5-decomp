@@ -20,7 +20,7 @@
 #include "rw/rwcore_structs.h"
 #include "GameSource/Replays/BrnReplayModule.h"
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"   // live serialiser snapshot getters
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "BrnCommonTypes.h"   // Vector2 (rw::math::vpu) for DrawLine endpoints
 
@@ -691,7 +691,7 @@ namespace BrnReplays
     // ----------------------------------------------------------------------------
     void DebugComponent::OnActivate()
     {
-        CGS_ASSERT(mpReplayModule != 0, "No replay module\n");
+        CGS_ASSERT(mpReplayModule != 0, CgsDev::Assert::StreamMessageAt("No replay module\n", "..\\..\\..\\GameSource\\Replays/BrnReplayDebugComponent.cpp", 788));
 
         RegisterVariable(&mbShowHud, "Show HUD");
         RegisterVariable(mpReplayModule->GetAutoStartFlagPtr(), "Enable auto-start");

@@ -55,7 +55,7 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnIntro.h"
 #include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                            // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                  // CgsDev::StrStream (the streamed unhandled-event assert)
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h" // CgsDev::Assert::Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                       // CgsCore::SnPrintf
@@ -331,7 +331,7 @@ namespace BrnGui
     // ================================================================================
     void Intro::Construct(CgsID lId, CgsFsm::ScriptedFsm* lpFsm)
     {
-        CGS_ASSERT(lpFsm != 0, "Invalid ScriptedFsm ptr");   // cpp:111
+        CGS_ASSERT(lpFsm != 0, CgsDev::Assert::StreamMessageAt("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnIntro.cpp", 111));   // cpp:111
 
         CgsGui::State::Construct(lId, lpFsm);
 

@@ -5,7 +5,7 @@
 // (AddPhysicalDevice 0x828F9320 + PhysicalDeviceThread 0x828F1EA8 land in the worker step.)
 
 #include "GameShared/GameClasses/System/FileSystem/CgsDeviceManager.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "rw/rwcore_structs.h"
 
@@ -26,7 +26,7 @@ namespace CgsFileSystem
     // CgsFileSystem::GetDeviceManager @ 0x8264AD88
     DeviceManager* GetDeviceManager()
     {
-        CGS_ASSERT(DeviceManager::mpDeviceManager != 0, "Device manager not initialized\n");
+        CGS_ASSERT(DeviceManager::mpDeviceManager != 0, CgsDev::Assert::StreamMessageAt("Device manager not initialized\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsDeviceManager.h", 210));
         return DeviceManager::mpDeviceManager;
     }
 

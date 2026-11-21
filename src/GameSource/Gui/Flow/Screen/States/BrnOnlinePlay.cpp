@@ -18,7 +18,7 @@
 #include <xtl.h>
 #include <cstddef>                                                        // offsetof (overlay wire)
 #include <cstring>                                                        // std::strncpy
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsModule::Event, GuiEventQueueLarge
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface, GuiEventNetworkSuspension
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
@@ -258,7 +258,7 @@ void OnlinePlay::OnLeave()
 // ------------------------------------------------ HandleControllerInput @ 0x824AD6A0
 void OnlinePlay::HandleControllerInput(const CgsModule::Event* lpEvent)
 {
-    CGS_ASSERT(lpEvent != NULL, "Invalid event sent to OnlinePlay::HandleControllerInput");
+    CGS_ASSERT(lpEvent != NULL, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlinePlay::HandleControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlinePlay.cpp", 487));
 
     if (meSubState == E_SUBSTATE_MAIN)
         HandleControllerInputMainMenu(
@@ -670,7 +670,7 @@ void OnlinePlay::CheckForCompletedLoads()
 // ------------------------------------------------ HandlePlayerStatsEvent
 void OnlinePlay::HandlePlayerStatsEvent(const CgsModule::Event* lpEvent)
 {
-    CGS_ASSERT(lpEvent != NULL, "Invalid event sent to OnlinePlay::HandlePlayerStatsEvent");
+    CGS_ASSERT(lpEvent != NULL, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlinePlay::HandlePlayerStatsEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlinePlay.cpp", 708));
 
     if (!CgsSystem::HardwareInit::IsHardDiskAvailable())
         return;

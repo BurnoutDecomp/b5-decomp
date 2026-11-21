@@ -22,7 +22,7 @@
 
 #include <cstring>                                                        // strcmp
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDConvertToString
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream
@@ -152,7 +152,7 @@ const u32 OfflineTrophyCarUnlock::muNumResourcesToLoad = 4;
 // pointer and the profile pointer.
 void OfflineTrophyCarUnlock::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
 {
-    CGS_ASSERT(lpFsm != 0, "Invalid ScriptedFsm ptr");
+    CGS_ASSERT(lpFsm != 0, CgsDev::Assert::StreamMessageAt("Invalid ScriptedFsm ptr", "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineTrophyCarUnlock.cpp", 89));
 
     CgsGui::State::Construct(liId, lpFsm);
 
