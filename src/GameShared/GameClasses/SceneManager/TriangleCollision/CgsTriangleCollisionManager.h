@@ -70,8 +70,8 @@ namespace CgsSceneManager
             const CgsModule::EventQueue<CgsSceneManager::TriangleCollisionManagerIO::InEventClearPolySoupLists, 20>& lClearPolySoupListsQueue);
         // CgsTriangleCollisionManager.h:90
         const CgsGeometric::PolygonSoupList* GetPolySoupList(s32 liIndex) const;
-        // CgsTriangleCollisionManager.h:93
-        const CgsGeometric::PolygonSoupListSpatialMap* GetPolySoupListSpacialMap() const;
+        // ARTIST inlines this first-member accessor, including in OnActivate at 0x828AAD20.
+        const CgsGeometric::PolygonSoupListSpatialMap* GetPolySoupListSpacialMap() const { return &mPolySoupListSpacialMap; }
         // HOST OVERLOAD (scene-query wave 1b, 2026-09-02): the non-const view the synchronous
         // nearest line test needs -- BaseCollisionGenerator::CollideLineAgainstPolySoupListNearest
         // @0x828131C0 runs PolygonSoupListSpatialMap::RunQuery @0x82843A80 on it, and RunQuery is

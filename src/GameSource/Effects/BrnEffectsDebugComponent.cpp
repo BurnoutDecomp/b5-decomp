@@ -36,9 +36,9 @@ namespace BrnEffects
 {
     // --- File-scope debug-menu group names (X360 BrnEffectsDebugComponent.cpp:30-33). ----
     // The Setup* builders register their variables under these sub-menu paths.
-    static const char* const KP_SUBMENU_LION  = "Lion";
-    static const char* const KP_SUBMENU_BOOST = "Boost";
-    static const char* const KP_SUBMENU_JUMP  = "Jump";
+    const char* gpcLionSubmenu = "Lion";  // ARTIST 0x82CDAE34
+    const char* gpcBoostSubmenu = "Boost";  // ARTIST 0x82CDAE38
+    const char* gpcJumpSubmenu = "Jump";  // ARTIST 0x82CDAE3C
     const char* gpcPropsSubmenu = "Props";  // ARTIST 0x82CDAE40
 
     // --- Player-RaceCar corona tuning fields (registered by OnActivate). ------------------
@@ -385,18 +385,18 @@ namespace BrnEffects
     // ====================================================================================
     void EffectsDebugComponent::SetupLionMenu()
     {
-        RegisterVariable(&mbLionEnabled,            KP_SUBMENU_LION, "Enable/Disable LION rendering");
-        RegisterVariable(&mbLionStatisticsEnabled,  KP_SUBMENU_LION, "Enable/Disable LION statistics display");
-        RegisterVariable(&mbEnabled,                KP_SUBMENU_LION, "Enable/Disable Effects debugging");
-        RegisterVariable(&mTagPointIndex,           KP_SUBMENU_LION, "Tag point index: 0 - 10");
+        RegisterVariable(&mbLionEnabled,            gpcLionSubmenu, "Enable/Disable LION rendering");
+        RegisterVariable(&mbLionStatisticsEnabled,  gpcLionSubmenu, "Enable/Disable LION statistics display");
+        RegisterVariable(&mbEnabled,                gpcLionSubmenu, "Enable/Disable Effects debugging");
+        RegisterVariable(&mTagPointIndex,           gpcLionSubmenu, "Tag point index: 0 - 10");
 
-        RegisterVariable(&mfSimulationRate,         KP_SUBMENU_LION, "Lion Simulation Rate:");
+        RegisterVariable(&mfSimulationRate,         gpcLionSubmenu, "Lion Simulation Rate:");
         SetRange(&mfSimulationRate, 0.25f, 4.0f);
         SetStep(&mfSimulationRate, 0.25f);
 
-        RegisterVariable(&mbDumpRunningLionEffects, KP_SUBMENU_LION, "Dump running Lion effects");
-        RegisterVariable(&mbForceStateBlend,        KP_SUBMENU_LION, "Force State Blend");
-        RegisterVariable(&mfForceStateBlendValue,   KP_SUBMENU_LION, "Force State Value: ");
+        RegisterVariable(&mbDumpRunningLionEffects, gpcLionSubmenu, "Dump running Lion effects");
+        RegisterVariable(&mbForceStateBlend,        gpcLionSubmenu, "Force State Blend");
+        RegisterVariable(&mfForceStateBlendValue,   gpcLionSubmenu, "Force State Value: ");
         SetRange(&mfForceStateBlendValue, 0.0f, 1.0f);
         SetStep(&mfForceStateBlendValue, 0.1f);
     }
@@ -406,17 +406,17 @@ namespace BrnEffects
     // ====================================================================================
     void EffectsDebugComponent::SetupBoostMenu()
     {
-        RegisterVariable(&mbBoostTransition,        KP_SUBMENU_BOOST, "Transition");
+        RegisterVariable(&mbBoostTransition,        gpcBoostSubmenu, "Transition");
 
-        RegisterVariable(&mfTransitionMin,          KP_SUBMENU_BOOST, "Transition Min: ");
+        RegisterVariable(&mfTransitionMin,          gpcBoostSubmenu, "Transition Min: ");
         SetRange(&mfTransitionMin, 0.0f, 20.0f);
         SetStep(&mfTransitionMin, 1.0f);
 
-        RegisterVariable(&mfTransitionMax,          KP_SUBMENU_BOOST, "Transition Max: ");
+        RegisterVariable(&mfTransitionMax,          gpcBoostSubmenu, "Transition Max: ");
         SetRange(&mfTransitionMax, 0.0f, 20.0f);
         SetStep(&mfTransitionMax, 1.0f);
 
-        RegisterVariable(&mfBoostExhaustCutOffSpeed, KP_SUBMENU_BOOST, "Exhaust cut off speed");
+        RegisterVariable(&mfBoostExhaustCutOffSpeed, gpcBoostSubmenu, "Exhaust cut off speed");
     }
 
     // ====================================================================================
@@ -424,17 +424,17 @@ namespace BrnEffects
     // ====================================================================================
     void EffectsDebugComponent::SetupJumpMenu()
     {
-        RegisterVariable(&mJumpParams.mbForceJumping,         KP_SUBMENU_JUMP, "Jumping");
+        RegisterVariable(&mJumpParams.mbForceJumping,         gpcJumpSubmenu, "Jumping");
 
-        RegisterVariable(&mJumpParams.mfJumpLandingSparkSpeed, KP_SUBMENU_JUMP, "Landing Spark Speed");
+        RegisterVariable(&mJumpParams.mfJumpLandingSparkSpeed, gpcJumpSubmenu, "Landing Spark Speed");
 
-        RegisterVariable(&mJumpParams.mfLandingSparksTime,    KP_SUBMENU_JUMP, "Landing Spark Time");
+        RegisterVariable(&mJumpParams.mfLandingSparksTime,    gpcJumpSubmenu, "Landing Spark Time");
         SetStep(&mJumpParams.mfLandingSparksTime, 0.01f);
 
-        RegisterVariable(&mJumpParams.mfVapourDelayTime,      KP_SUBMENU_JUMP, "Vapour Start Delay");
+        RegisterVariable(&mJumpParams.mfVapourDelayTime,      gpcJumpSubmenu, "Vapour Start Delay");
         SetStep(&mJumpParams.mfVapourDelayTime, 0.01f);
 
-        RegisterVariable(&mJumpParams.mfVapourRampTime,       KP_SUBMENU_JUMP, "Vapour Ramp Time");
+        RegisterVariable(&mJumpParams.mfVapourRampTime,       gpcJumpSubmenu, "Vapour Ramp Time");
         SetStep(&mJumpParams.mfVapourRampTime, 0.01f);
     }
 

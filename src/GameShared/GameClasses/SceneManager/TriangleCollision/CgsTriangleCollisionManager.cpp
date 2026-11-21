@@ -152,12 +152,4 @@ void TriangleCollisionManager::ProcessClearPolySoupListEvents(
     }
 }
 
-// The collision scene itself. On the console this accessor is free -- the map is the
-// manager's first member, so StartUpdateTriangleCache just passes the manager pointer
-// where a PolygonSoupListSpatialMap* is wanted. Spelled by name here instead.
-const CgsGeometric::PolygonSoupListSpatialMap* TriangleCollisionManager::GetPolySoupListSpacialMap() const
-{
-    return &mPolySoupListSpacialMap;
-}
-
 }
