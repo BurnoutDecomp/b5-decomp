@@ -606,7 +606,11 @@ void EventInfoComponent::PrepareComponentsForGameMode()
                                           KAC_TEXTBOX_NAME,
                                           &mAddScoreTextField);
         CGS_ASSERT(lbFoundAddScore,
-                   "TryFindTextFieldFromMovieClip( mEventMovieClip, KAC_ADDSCORE_TEXTFIELD_NAME, KAC_TEXTBOX_NAME, &mAddScoreTextField )");   // cpp:380 (non-gating)
+                   CgsDev::Assert::MessageAt(
+                       "TryFindTextFieldFromMovieClip( mEventMovieClip, KAC_ADDSCORE_TEXTFIELD_NAME, "
+                       "KAC_TEXTBOX_NAME, &mAddScoreTextField )",
+                       "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnEventInfo.cpp",
+                       380));  // ARTIST 0x824293D0
 
         mAddScoreTextField.SetText(KAC_EMPTY_STRING, false);
 
@@ -618,7 +622,11 @@ void EventInfoComponent::PrepareComponentsForGameMode()
                                           KAC_BANKSCORE_TEXTBOX_NAME,
                                           &mBankScoreTextField);
         CGS_ASSERT(lbFoundBankScore,
-                   "TryFindTextFieldFromMovieClip( mEventMovieClip, KAC_BANKSCORE_TEXTFIELD_NAME, KAC_BANKSCORE_TEXTBOX_NAME, &mBankScoreTextField )");   // cpp:383 (non-gating)
+                   CgsDev::Assert::MessageAt(
+                       "TryFindTextFieldFromMovieClip( mEventMovieClip, KAC_BANKSCORE_TEXTFIELD_NAME, "
+                       "KAC_BANKSCORE_TEXTBOX_NAME, &mBankScoreTextField )",
+                       "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnEventInfo.cpp",
+                       383));  // ARTIST 0x82429428
 
         mBankScoreTextField.SetText(KAC_EMPTY_STRING, false);
 

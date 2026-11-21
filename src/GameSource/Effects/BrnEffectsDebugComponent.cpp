@@ -39,7 +39,7 @@ namespace BrnEffects
     static const char* const KP_SUBMENU_LION  = "Lion";
     static const char* const KP_SUBMENU_BOOST = "Boost";
     static const char* const KP_SUBMENU_JUMP  = "Jump";
-    static const char* const KP_SUBMENU_PROPS = "Props";
+    const char* gpcPropsSubmenu = "Props";  // ARTIST 0x82CDAE40
 
     // --- Player-RaceCar corona tuning fields (registered by OnActivate). ------------------
     // ⚠ CORRECTED 2026-09-02 (tyre-mark wave). This file used to declare THIRTY-FIVE
@@ -350,8 +350,8 @@ namespace BrnEffects
         SetupJumpMenu();
 
         // Props sub-menu.
-        RegisterVariable(&mPropParams.mbEnable,       KP_SUBMENU_PROPS, "Force Props");
-        RegisterVariable(&mPropParams.mMaterialIndex, KP_SUBMENU_PROPS, "Material Index");
+        RegisterVariable(&mPropParams.mbEnable,       gpcPropsSubmenu, "Force Props");
+        RegisterVariable(&mPropParams.mMaterialIndex, gpcPropsSubmenu, "Material Index");
         SetRange(&mPropParams.mMaterialIndex, 0u, 14u);
 
         // Junkyard-VFX editor.
