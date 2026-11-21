@@ -8,7 +8,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h"     // ServerInterfaceConnection
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"            // CgsDev::PerfMonCpu
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                            // CgsDev::Log::gpDebugPrint
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "lobbyapi.h"                                                                  // LobbyApiDisconnect
 
 #include "types.hpp"   // intptr_t
@@ -20,6 +20,9 @@
 // active / inactive table moves, the id walks and lookups, host identity, the event
 // callbacks, the connection-manager callbacks, the ack / nack filters for received
 // messages and the round-robin send slot.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsPlayerManager.cpp";
 
 namespace CgsNetwork
 {
@@ -97,7 +100,9 @@ void PlayerManager::RemovePlayer(NetworkPlayerID lPlayerID)
             break;
         }
     }
-    CGS_ASSERT(liPlayerIndex < miNumActivePlayers, "liPlayerIndex < miNumActivePlayers");
+    CGS_ASSERT(liPlayerIndex < miNumActivePlayers,
+        CgsDev::Assert::MessageAt(
+            "liPlayerIndex < miNumActivePlayers", KAC_ARTIST_ASSERT_FILE, 1336 /* ARTIST 0x8288457C */));
 
     ReleasePlayer(liPlayerIndex);
 
@@ -136,13 +141,15 @@ bool PlayerManager::AreAnyPlayersConnected() const
 void PlayerManager::PlayerDisconnectedCallback(NetworkPlayerID lPlayerID, void* lpUserData)
 {
     PlayerManager* lpPlayerManager = static_cast<PlayerManager*>(lpUserData);
-    CGS_ASSERT(lpPlayerManager, "lpPlayerManager");
+    CGS_ASSERT(lpPlayerManager,
+        CgsDev::Assert::MessageAt("lpPlayerManager", KAC_ARTIST_ASSERT_FILE, 1797 /* ARTIST 0x8288460C */));
 
     lpPlayerManager->BroadcastEvent(E_EVENT_PLAYER_DISCONNECTED,
                                     reinterpret_cast<void*>(static_cast<intptr_t>(lPlayerID)));
 
     NetworkPlayer* lpNetworkPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
-    CGS_ASSERT(lpNetworkPlayer, "lpNetworkPlayer");
+    CGS_ASSERT(lpNetworkPlayer,
+        CgsDev::Assert::MessageAt("lpNetworkPlayer", KAC_ARTIST_ASSERT_FILE, 1803 /* ARTIST 0x8288468C */));
     lpNetworkPlayer->SetDisconnected();
 
     if (lpPlayerManager->AreAnyPlayersConnected())
@@ -150,10 +157,14 @@ void PlayerManager::PlayerDisconnectedCallback(NetworkPlayerID lPlayerID, void* 
         return;
     }
 
-    CGS_ASSERT(lpPlayerManager->mpServerInterface, "lpPlayerManager->mpServerInterface");
+    CGS_ASSERT(lpPlayerManager->mpServerInterface,
+        CgsDev::Assert::MessageAt(
+            "lpPlayerManager->mpServerInterface", KAC_ARTIST_ASSERT_FILE, 1809 /* ARTIST 0x828846FC */));
     ServerInterfaceConnection* lpServerInterfaceConnection = static_cast<ServerInterfaceConnection*>(
         lpPlayerManager->mpServerInterface->GetConnectionComponent());
-    CGS_ASSERT(lpServerInterfaceConnection, "lpServerInterfaceConnection");
+    CGS_ASSERT(lpServerInterfaceConnection,
+        CgsDev::Assert::MessageAt(
+            "lpServerInterfaceConnection", KAC_ARTIST_ASSERT_FILE, 1811 /* ARTIST 0x82884728 */));
 
     if (NetConnStatus(KI_NETCONN_STATUS_PLUG, 0, 0, 0) == 0)
     {
@@ -228,7 +239,9 @@ PlayerData* PlayerManager::AssignActiveLocalPlayer(s32 liConnectionIndex)
         }
     }
 
-    CGS_ASSERT(false, "Couldn't find a free inactive local player");
+    CGS_ASSERT(false,
+        CgsDev::Assert::MessageAt(
+            "Couldn't find a free inactive local player", KAC_ARTIST_ASSERT_FILE, 1423 /* ARTIST 0x82873B6C */));
     return 0;
 }
 
@@ -248,7 +261,9 @@ PlayerData* PlayerManager::AssignActiveNetworkPlayer(s32 liConnectionIndex)
         }
     }
 
-    CGS_ASSERT(false, "Couldn't find a free inactive network player");
+    CGS_ASSERT(false,
+        CgsDev::Assert::MessageAt(
+            "Couldn't find a free inactive network player", KAC_ARTIST_ASSERT_FILE, 1453 /* ARTIST 0x82873C7C */));
     return 0;
 }
 
@@ -405,8 +420,11 @@ bool PlayerManager::AmIHost()
 // Whether ack / nack slot liIndex holds a pending signal from lPlayerID.
 bool PlayerManager::AckNeedsSending(NetworkPlayerID lPlayerID, s32 liIndex) const
 {
-    CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
-    CGS_ASSERT(liIndex < KI_MAX_ACKS_TO_BUFFER, "liIndex < KI_MAX_ACKS_TO_BUFFER");
+    CGS_ASSERT(liIndex >= 0,
+        CgsDev::Assert::MessageAt("liIndex >= 0", KAC_ARTIST_ASSERT_FILE, 1576 /* ARTIST 0x82873D80 */));
+    CGS_ASSERT(liIndex < KI_MAX_ACKS_TO_BUFFER,
+        CgsDev::Assert::MessageAt(
+            "liIndex < KI_MAX_ACKS_TO_BUFFER", KAC_ARTIST_ASSERT_FILE, 1577 /* ARTIST 0x82873DA4 */));
 
     if (!maAckMessage[liIndex].IsMessageValid())
     {
@@ -417,8 +435,11 @@ bool PlayerManager::AckNeedsSending(NetworkPlayerID lPlayerID, s32 liIndex) cons
 
 bool PlayerManager::NackNeedsSending(NetworkPlayerID lPlayerID, s32 liIndex) const
 {
-    CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
-    CGS_ASSERT(liIndex < KI_MAX_NACKS_TO_BUFFER, "liIndex < KI_MAX_NACKS_TO_BUFFER");
+    CGS_ASSERT(liIndex >= 0,
+        CgsDev::Assert::MessageAt("liIndex >= 0", KAC_ARTIST_ASSERT_FILE, 1611 /* ARTIST 0x82873E30 */));
+    CGS_ASSERT(liIndex < KI_MAX_NACKS_TO_BUFFER,
+        CgsDev::Assert::MessageAt(
+            "liIndex < KI_MAX_NACKS_TO_BUFFER", KAC_ARTIST_ASSERT_FILE, 1612 /* ARTIST 0x82873E54 */));
 
     if (!maNackMessage[liIndex].IsMessageValid())
     {

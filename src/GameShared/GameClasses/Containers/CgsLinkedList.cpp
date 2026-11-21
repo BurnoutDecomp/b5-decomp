@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Containers/CgsLinkedList.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // CgsContainers::BaseLinkedList - out-of-line surgery for the intrusive doubly-
 // linked list base. DECOMPILED from the X360 build (BURNOUT_X360_ARTIST.XEX):
@@ -17,6 +18,9 @@
 // runs; every accessor asserts against it. The node array passed to InternalInit
 // is walked by a BYTE stride (liStride) because the live nodes are LinkedListNode<T>
 // subclasses larger than BaseLinkedListNode.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\CgsLinkedList.cpp";
 
 namespace CgsContainers
 {
@@ -78,21 +82,27 @@ namespace CgsContainers
     // 0x82814D60 - head of the list.
     BaseLinkedListNode* BaseLinkedList::InternalGetHead() const
     {
-        CGS_ASSERT(miCount != KI_UNINITIALISED, "BaseLinkedList accessed when uninitialised");
+        CGS_ASSERT(miCount != KI_UNINITIALISED,
+            CgsDev::Assert::MessageAt(
+                "BaseLinkedList accessed when uninitialised", KAC_ARTIST_ASSERT_FILE, 84 /* ARTIST 0x82814D90 */));
         return mpFirst;
     }
 
     // 0x82814DC0 - tail of the list.
     BaseLinkedListNode* BaseLinkedList::InternalGetTail() const
     {
-        CGS_ASSERT(miCount != KI_UNINITIALISED, "BaseLinkedList accessed when uninitialised");
+        CGS_ASSERT(miCount != KI_UNINITIALISED,
+            CgsDev::Assert::MessageAt(
+                "BaseLinkedList accessed when uninitialised", KAC_ARTIST_ASSERT_FILE, 92 /* ARTIST 0x82814DF0 */));
         return mpLast;
     }
 
     // 0x82814E20 - prepend a node.
     void BaseLinkedList::InternalAddHead(BaseLinkedListNode* lpNode)
     {
-        CGS_ASSERT(miCount != KI_UNINITIALISED, "BaseLinkedList accessed when uninitialised");
+        CGS_ASSERT(miCount != KI_UNINITIALISED,
+            CgsDev::Assert::MessageAt(
+                "BaseLinkedList accessed when uninitialised", KAC_ARTIST_ASSERT_FILE, 100 /* ARTIST 0x82814E58 */));
 
         lpNode->mpPrev = 0;
         lpNode->mpNext = mpFirst;
@@ -111,7 +121,9 @@ namespace CgsContainers
     // 0x82814EC8 - append a node.
     void BaseLinkedList::InternalAddTail(BaseLinkedListNode* lpNode)
     {
-        CGS_ASSERT(miCount != KI_UNINITIALISED, "BaseLinkedList accessed when uninitialised");
+        CGS_ASSERT(miCount != KI_UNINITIALISED,
+            CgsDev::Assert::MessageAt(
+                "BaseLinkedList accessed when uninitialised", KAC_ARTIST_ASSERT_FILE, 123 /* ARTIST 0x82814F00 */));
 
         lpNode->mpNext = 0;
         lpNode->mpPrev = mpLast;
@@ -132,8 +144,12 @@ namespace CgsContainers
     // 0x828156CC); preserve that behaviour exactly rather than "correcting" it.
     void BaseLinkedList::InternalAddBefore(BaseLinkedListNode* lpNodeInList, BaseLinkedListNode* lpNewNode)
     {
-        CGS_ASSERT(miCount != KI_UNINITIALISED, "BaseLinkedList accessed when uninitialised");
-        CGS_ASSERT(InternalGetNodeIndex(lpNodeInList) >= 0, "InternalGetNodeIndex( lpNodeInList ) >= 0");
+        CGS_ASSERT(miCount != KI_UNINITIALISED,
+            CgsDev::Assert::MessageAt(
+                "BaseLinkedList accessed when uninitialised", KAC_ARTIST_ASSERT_FILE, 167 /* ARTIST 0x82815674 */));
+        CGS_ASSERT(InternalGetNodeIndex(lpNodeInList) >= 0,
+            CgsDev::Assert::MessageAt(
+                "InternalGetNodeIndex( lpNodeInList ) >= 0", KAC_ARTIST_ASSERT_FILE, 168 /* ARTIST 0x828156A4 */));
 
         if (lpNodeInList == mpFirst)
         {
@@ -153,7 +169,9 @@ namespace CgsContainers
     // 0x82814F70 - unlink and return the head node.
     BaseLinkedListNode* BaseLinkedList::InternalRemoveHead()
     {
-        CGS_ASSERT(miCount != KI_UNINITIALISED, "BaseLinkedList accessed when uninitialised");
+        CGS_ASSERT(miCount != KI_UNINITIALISED,
+            CgsDev::Assert::MessageAt(
+                "BaseLinkedList accessed when uninitialised", KAC_ARTIST_ASSERT_FILE, 188 /* ARTIST 0x82814FA0 */));
 
         BaseLinkedListNode* lpNode = mpFirst;
         if (mpFirst)
@@ -217,8 +235,12 @@ namespace CgsContainers
     // neighbours. Forwards to RemoveHead/RemoveTail at the ends.
     void BaseLinkedList::InternalRemoveNode(BaseLinkedListNode* lpNode)
     {
-        CGS_ASSERT(miCount != KI_UNINITIALISED, "BaseLinkedList accessed when uninitialised");
-        CGS_ASSERT(InternalGetNodeIndex(lpNode) >= 0, "InternalGetNodeIndex( lpNode ) >= 0");
+        CGS_ASSERT(miCount != KI_UNINITIALISED,
+            CgsDev::Assert::MessageAt(
+                "BaseLinkedList accessed when uninitialised", KAC_ARTIST_ASSERT_FILE, 258 /* ARTIST 0x82815740 */));
+        CGS_ASSERT(InternalGetNodeIndex(lpNode) >= 0,
+            CgsDev::Assert::MessageAt(
+                "InternalGetNodeIndex( lpNode ) >= 0", KAC_ARTIST_ASSERT_FILE, 259 /* ARTIST 0x82815770 */));
 
         if (mpFirst == lpNode)
         {

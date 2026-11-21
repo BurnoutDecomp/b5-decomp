@@ -9,7 +9,7 @@
 
 #include "BrnProfile.h"
 #include "GameSource/Gui/SaveLoad/BrnGuiSaveLoadProfileDLC1.h"   // BrnGuiSaveLoad::ProfileDLC1::IsDLCCarId (SplitArray DLC test)
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h"
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h"
@@ -17,6 +17,10 @@
 
 #include <string.h>   // memset / memcpy
 #include <stdlib.h>   // getenv (the [profile] selftest gate)
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h";
+static const char KAC_ARTIST_ASSERT_SOURCE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp";
 
 namespace BrnProgression
 {
@@ -91,7 +95,8 @@ void CarData::Construct(CgsID lId)
 // ------------------------------------------------------------------------------------
 void CarData::SetColourIndex(s32 liColour)
 {
-    CGS_ASSERT((u32)liColour < 256, "luColourIndex < 256");
+    CGS_ASSERT((u32)liColour < 256,
+        CgsDev::Assert::MessageAt("luColourIndex < 256", KAC_ARTIST_ASSERT_FILE, 1560 /* ARTIST 0x823548BC */));
     mu8ColourIndex = (u8)liColour;
 }
 
@@ -101,7 +106,8 @@ void CarData::SetColourIndex(s32 liColour)
 // ------------------------------------------------------------------------------------
 void CarData::SetPaletteIndex(s32 liPalette)
 {
-    CGS_ASSERT((u32)liPalette < 256, "luPaletteIndex < 256");
+    CGS_ASSERT((u32)liPalette < 256,
+        CgsDev::Assert::MessageAt("luPaletteIndex < 256", KAC_ARTIST_ASSERT_FILE, 1568 /* ARTIST 0x8235491C */));
     mu8PaletteIndex = (u8)liPalette;
 }
 
@@ -340,7 +346,9 @@ CarData* Profile::AddCar(CgsID lCarId, CarData::UnlockType leUnlockType)
 // ====================================================================================
 ProfileEvent* Profile::AddEvent(u32 luEventID)
 {
-    CGS_ASSERT(miEventCount < KI_MAX_EVENTS, "miEventCount < KI_MAX_EVENTS");
+    CGS_ASSERT(miEventCount < KI_MAX_EVENTS,
+        CgsDev::Assert::MessageAt(
+            "miEventCount < KI_MAX_EVENTS", KAC_ARTIST_ASSERT_SOURCE, 687 /* ARTIST 0x82359EE8 */));
 
     s32 liIndex = miEventCount;
     ProfileEvent& lEvent = maEvents[liIndex];
@@ -697,7 +705,8 @@ s32 Profile::GetNumAllMugshots()
 // ====================================================================================
 void Profile::SetPlayerLicencePicture(const CgsNetwork::NetworkTexture* lpNewPlayerImage)
 {
-    CGS_ASSERT(lpNewPlayerImage, "lpNewPlayerImage");
+    CGS_ASSERT(lpNewPlayerImage,
+        CgsDev::Assert::MessageAt("lpNewPlayerImage", KAC_ARTIST_ASSERT_SOURCE, 1273 /* ARTIST 0x8235A044 */));
 
     mPlayerLicencePicture.Construct();
     mPlayerLicencePicture.Prepare(&macPlayerLicenceTextureData[0],
@@ -1160,7 +1169,9 @@ void Profile::AddGameModeTypeToTotals(GsmIO::EGameModeType lEGameModeType)
 // ====================================================================================
 void Profile::AddGameModeTypeCompleted(GsmIO::EGameModeType lEGameModeType)
 {
-    CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE, "lEGameModeType > GsmIO::E_MODE_NONE");
+    CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE,
+        CgsDev::Assert::MessageAt(
+            "lEGameModeType > GsmIO::E_MODE_NONE", KAC_ARTIST_ASSERT_FILE, 2091 /* ARTIST 0x82354B3C */));
 
     ++maGameModeTypeAmountCompleted[lEGameModeType];
     ++maGameModeTypeAmountCompletedSinceTheStart[lEGameModeType];
@@ -1172,7 +1183,9 @@ void Profile::AddGameModeTypeCompleted(GsmIO::EGameModeType lEGameModeType)
 // ====================================================================================
 void Profile::AddGameModeTypeToDiscovered(GsmIO::EGameModeType lEGameModeType)
 {
-    CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE, "lEGameModeType > GsmIO::E_MODE_NONE");
+    CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE,
+        CgsDev::Assert::MessageAt(
+            "lEGameModeType > GsmIO::E_MODE_NONE", KAC_ARTIST_ASSERT_FILE, 2064 /* ARTIST 0x82354ACC */));
 
     ++maGameModeTypeAmountDiscovered[lEGameModeType];
 }
@@ -1182,7 +1195,9 @@ void Profile::AddGameModeTypeToDiscovered(GsmIO::EGameModeType lEGameModeType)
 // ====================================================================================
 s32 Profile::GetGameModeTypeAmount(GsmIO::EGameModeType lEGameModeType) const
 {
-    CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE, "lEGameModeType > GsmIO::E_MODE_NONE");
+    CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE,
+        CgsDev::Assert::MessageAt(
+            "lEGameModeType > GsmIO::E_MODE_NONE", KAC_ARTIST_ASSERT_FILE, 2055 /* ARTIST 0x82354A64 */));
 
     return maGameModeTypeAmount[lEGameModeType];
 }
@@ -1192,7 +1207,9 @@ s32 Profile::GetGameModeTypeAmount(GsmIO::EGameModeType lEGameModeType) const
 // ====================================================================================
 s32 Profile::GetGameModeTypeDiscovered(GsmIO::EGameModeType lEGameModeType) const
 {
-    CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE, "lEGameModeType > GsmIO::E_MODE_NONE");
+    CGS_ASSERT(lEGameModeType > GsmIO::E_MODE_NONE,
+        CgsDev::Assert::MessageAt(
+            "lEGameModeType > GsmIO::E_MODE_NONE", KAC_ARTIST_ASSERT_FILE, 2072 /* ARTIST 0x8240E96C */));
 
     return maGameModeTypeAmountDiscovered[lEGameModeType];
 }
@@ -2010,7 +2027,9 @@ u32 Profile::CompleteFreeburnChallenge(CgsID lChallengeID)
 // ====================================================================================
 s32 Profile::GetGameModeTypeCompletedAmountSinceTheStart(GsmIO::EGameModeType lEGameModeType) const
 {
-    CGS_ASSERT(lEGameModeType > -1, "lEGameModeType > GsmIO::E_MODE_NONE");
+    CGS_ASSERT(lEGameModeType > -1,
+        CgsDev::Assert::MessageAt(
+            "lEGameModeType > GsmIO::E_MODE_NONE", KAC_ARTIST_ASSERT_FILE, 2108 /* ARTIST 0x82354BC4 */));
 
     return maGameModeTypeAmountCompletedSinceTheStart[lEGameModeType];
 }

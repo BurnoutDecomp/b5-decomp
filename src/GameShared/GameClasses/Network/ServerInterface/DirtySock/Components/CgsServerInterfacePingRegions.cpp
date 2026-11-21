@@ -4,13 +4,18 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // GetLobbyAPIRef
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "lobbyapi.h"        // LobbyApiInfo
 #include "lobbytagfield.h"   // TagFieldFind / TagFieldGetDelim
 
 // Region pinging: StartPingRegions resolves region 0; Update polls the name lookup and
 // issues the ping; HandlePingResults records the ping (or -1) and resolves the next region,
 // ending the action when the "GPS_REGIONS" list runs out.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePingRegions.cpp";
+static const char KAC_ARTIST_ASSERT_HEADER[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network/ServerInterface/DirtySock/Components/CgsServerInterfacePingRegions.h";
 
 namespace CgsNetwork
 {
@@ -60,8 +65,11 @@ namespace CgsNetwork
 
     s32 ServerInterfacePingRegions::GetPingValue(s32 liRegion) const
     {
-        CGS_ASSERT(liRegion >= 0, "liRegion >= 0");
-        CGS_ASSERT(liRegion < miCurrentRegion, "liRegion < miCurrentRegion");
+        CGS_ASSERT(liRegion >= 0,
+            CgsDev::Assert::MessageAt("liRegion >= 0", KAC_ARTIST_ASSERT_HEADER, 201 /* ARTIST 0x82877994 */));
+        CGS_ASSERT(liRegion < miCurrentRegion,
+            CgsDev::Assert::MessageAt(
+                "liRegion < miCurrentRegion", KAC_ARTIST_ASSERT_HEADER, 202 /* ARTIST 0x828779BC */));
 
         return maiPingResults[liRegion];
     }
@@ -191,8 +199,11 @@ namespace CgsNetwork
 
     void ServerInterfacePingRegions::StartPingRegions()
     {
-        CGS_ASSERT(meCurrentAction == E_ACTION_COUNT, "meCurrentAction == E_ACTION_COUNT");
-        CGS_ASSERT(mpHostAddress == 0, "mpHostAddress == NULL");
+        CGS_ASSERT(meCurrentAction == E_ACTION_COUNT,
+            CgsDev::Assert::MessageAt(
+                "meCurrentAction == E_ACTION_COUNT", KAC_ARTIST_ASSERT_FILE, 442 /* ARTIST 0x8288A044 */));
+        CGS_ASSERT(mpHostAddress == 0,
+            CgsDev::Assert::MessageAt("mpHostAddress == NULL", KAC_ARTIST_ASSERT_FILE, 443 /* ARTIST 0x8288A06C */));
 
         miPingRequest   = -1;
         miCurrentRegion = 0;
@@ -258,7 +269,8 @@ namespace CgsNetwork
             return false;
         }
 
-        CGS_ASSERT(mpHostAddress == 0, "!mpHostAddress");
+        CGS_ASSERT(mpHostAddress == 0,
+            CgsDev::Assert::MessageAt("!mpHostAddress", KAC_ARTIST_ASSERT_FILE, 531 /* ARTIST 0x8287CBBC */));
 
         mpHostAddress = ProtoNameAsync(lacHostName, KI_NAME_RESOLVE_TIMEOUT);
         if (mpHostAddress == 0)
@@ -272,8 +284,11 @@ namespace CgsNetwork
 
     void ServerInterfacePingRegions::HandlePingResults(s32 liPing)
     {
-        CGS_ASSERT(miCurrentRegion >= 0, "miCurrentRegion >= 0");
-        CGS_ASSERT(miCurrentRegion < KI_MAX_PING_REGIONS, "miCurrentRegion < KI_MAX_PING_REGIONS");
+        CGS_ASSERT(miCurrentRegion >= 0,
+            CgsDev::Assert::MessageAt("miCurrentRegion >= 0", KAC_ARTIST_ASSERT_FILE, 567 /* ARTIST 0x8287CC48 */));
+        CGS_ASSERT(miCurrentRegion < KI_MAX_PING_REGIONS,
+            CgsDev::Assert::MessageAt(
+                "miCurrentRegion < KI_MAX_PING_REGIONS", KAC_ARTIST_ASSERT_FILE, 568 /* ARTIST 0x8287CC70 */));
 
         miPingRequest                   = -1;
         maiPingResults[miCurrentRegion] = liPing;

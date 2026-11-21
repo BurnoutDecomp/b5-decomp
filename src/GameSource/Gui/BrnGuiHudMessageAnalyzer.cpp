@@ -2,7 +2,7 @@
 
 #include <cstring>   // std::memcpy (the delayed-message adopt)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"     // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiCache.h"                // GuiCache accessors
 #include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h" // IsRunning/IsShowingResults
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"   // HudMessageDirector::AddMessage
@@ -39,6 +39,8 @@ namespace
 //     the ledger row is unnamed -- recovered alongside its caller)
 //   HudMessageAnalyzer::HandlePlayerEliminated            @0x8251B058
 //   HudMessageAnalyzer::HandleLiveRevengeUpdate           @0x8251E1F0  (cpp:3590s)
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.cpp";
 
 namespace BrnGui
 {
@@ -334,7 +336,8 @@ void HudMessageAnalyzer::HandleOnlineStuntRunVictory(
 void HudMessageAnalyzer::HandleOnlineStuntRunLastRun(
         const GuiOnlineStuntRunLastRunEvent* lpLastRunEvent)
 {
-    CGS_ASSERT(lpLastRunEvent != NULL, "lpLastRunEvent");
+    CGS_ASSERT(lpLastRunEvent != NULL,
+        CgsDev::Assert::MessageAt("lpLastRunEvent", KAC_ARTIST_ASSERT_FILE, 5470 /* ARTIST 0x8251FEEC */));
     (void)lpLastRunEvent;   // pointer-only tripwire; no field is read.
 
     GuiHudMessage lMessage;
@@ -1154,8 +1157,10 @@ namespace BrnGui
 void HudMessageAnalyzer::HandleNewRoadRulesHighScore(const GuiEventRoadRuleNewHighScore* lpEvent)
 {
     // Non-gating tripwires (cpp:4646/4647; both streamed on the X360, folded static).
-    CGS_ASSERT(lpEvent != NULL, "lpEvent");
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+    CGS_ASSERT(lpEvent != NULL,
+        CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 4646 /* ARTIST 0x824F32CC */));
+    CGS_ASSERT(mpGuiCache != NULL,
+        CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 4647 /* ARTIST 0x824F32F4 */));
 
     mfRoadRulesMessageTimeout = 0.0f;   // flt_82001CC0 == 0.0f
     mbNewRoadRulesHighScores  = true;
@@ -1318,7 +1323,8 @@ void HudMessageAnalyzer::HandleChallengeEnded(const GuiChallengeEndEvent* lpEven
 // with &mTrophyCarUnlockedEvent.
 void HudMessageAnalyzer::HandleTrophyCarUnlocked(const GuiEventTrophyCarUnlock* lpEvent)
 {
-    CGS_ASSERT(lpEvent != NULL, "lpTrophyUnlockedEvent");   // cpp:5190
+    CGS_ASSERT(lpEvent != NULL,
+        CgsDev::Assert::MessageAt("lpTrophyUnlockedEvent", KAC_ARTIST_ASSERT_FILE, 5190 /* ARTIST 0x8251F8DC */));   // cpp:5190
 
     GuiHudMessage lMessage;
     lMessage.Construct("CarAward");
@@ -1419,7 +1425,9 @@ void HudMessageAnalyzer::HandlePlayerJoinedLobby(const GuiEventNetworkPlayerJoin
 // stored name, then clear the pending flag + name.
 void HudMessageAnalyzer::TriggerPlayerLeftLobby()
 {
-    CGS_ASSERT(mbOnlinePlayerLeft == true, "mbOnlinePlayerLeft == true");   // cpp:5079
+    CGS_ASSERT(mbOnlinePlayerLeft == true,
+        CgsDev::Assert::MessageAt(
+            "mbOnlinePlayerLeft == true", KAC_ARTIST_ASSERT_FILE, 5079 /* ARTIST 0x8251F5E8 */));   // cpp:5079
 
     GuiHudMessage lMessage;
     lMessage.Construct("OnlFBLeave");
@@ -1508,7 +1516,8 @@ void HudMessageAnalyzer::HandleBurningHomeRunTeamChange(EActiveRaceCarIndex leAc
 // @ 0x8251E790 -- deferred pass from Update: announces the online event winner.
 void HudMessageAnalyzer::TriggerEventFinisher()
 {
-    CGS_ASSERT(mbOnlineWinnerWaiting, "mbOnlineWinnerWaiting");
+    CGS_ASSERT(mbOnlineWinnerWaiting,
+        CgsDev::Assert::MessageAt("mbOnlineWinnerWaiting", KAC_ARTIST_ASSERT_FILE, 3934 /* ARTIST 0x8251E7B8 */));
     mbOnlineWinnerWaiting = false;
 
     GuiHudMessage lMessage;
@@ -2740,7 +2749,8 @@ void HudMessageAnalyzer::HandleEliminatedEvent(const GuiEventCarEliminatedFromEv
 // resolve); offline events fall back to the rival car id printed into "RVL_%s".
 void HudMessageAnalyzer::HandleNetworkTailing(const GuiNetworkPlayerOnTailEvent* lpEvent) const
 {
-    CGS_ASSERT(lpEvent != NULL, "lpOnTailEvent");
+    CGS_ASSERT(lpEvent != NULL,
+        CgsDev::Assert::MessageAt("lpOnTailEvent", KAC_ARTIST_ASSERT_FILE, 2966 /* ARTIST 0x8251CD04 */));
 
     GuiHudMessage lMessage;
     lMessage.Construct("AggDrOnTail");

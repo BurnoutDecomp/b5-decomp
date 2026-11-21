@@ -14,7 +14,7 @@
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficDebugComponent.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
 
 #include <cstddef>   // offsetof / size_t
@@ -119,6 +119,14 @@
 #include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"                       // KU_MAX_HULLS (ManageTriggers)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h" // BrnWorld::CheckVehicleForPowerPark (GenerateNearbyParkedTrafficOutput)
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModule.h";
+static const char KAC_ARTIST_ASSERT_SOURCE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.cpp";
+static const char KAC_ARTIST_ASSERT_HEADER[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\SharedIO/BrnTrafficToRaceCarInterface.h";
+
 namespace BrnTraffic
 {
     namespace
@@ -150,21 +158,27 @@ namespace BrnTraffic
     // The flat vehicle index space [0, KU_MAX_TOTAL_TRAFFIC).
     Vehicle* TrafficEntityModule::GetVehicle(u32 luIndex)
     {
-        CGS_ASSERT(luIndex < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+        CGS_ASSERT(luIndex < KU_MAX_TOTAL_TRAFFIC,
+            CgsDev::Assert::MessageAt(
+                "luIndex < KU_MAX_TOTAL_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2459 /* ARTIST 0x82707B84 */));
         return &maVehicles[luIndex];
     }
 
     // @ 0x82707A38 -- `((luIndex + 85) << 7) + this` == &maVehicles[luIndex].
     Vehicle* TrafficEntityModule::GetStandardVehicle(u32 luIndex)
     {
-        CGS_ASSERT(luIndex < KU_MAX_STANDARD_TRAFFIC, "luIndex < KU_MAX_STANDARD_TRAFFIC");
+        CGS_ASSERT(luIndex < KU_MAX_STANDARD_TRAFFIC,
+            CgsDev::Assert::MessageAt(
+                "luIndex < KU_MAX_STANDARD_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2434 /* ARTIST 0x82707A64 */));
         return &maVehicles[luIndex];
     }
 
     // @ 0x827079D0 -- `((luIndex + 485) << 7) + this`; 485 == 85 + KU_MAX_STANDARD_TRAFFIC.
     Vehicle* TrafficEntityModule::GetStaticVehicle(u32 luIndex)
     {
-        CGS_ASSERT(luIndex < KU_MAX_STATIC_TRAFFIC, "luIndex < KU_MAX_STATIC_TRAFFIC");
+        CGS_ASSERT(luIndex < KU_MAX_STATIC_TRAFFIC,
+            CgsDev::Assert::MessageAt(
+                "luIndex < KU_MAX_STATIC_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2426 /* ARTIST 0x827079FC */));
         return &maVehicles[KU_STATIC_TRAFFIC_OFFSET + luIndex];
     }
 
@@ -182,14 +196,18 @@ namespace BrnTraffic
     // axle array starts immediately after the last (trailer) vehicle slot.
     VehicleAxles* TrafficEntityModule::GetVehicleAxles(u32 luIndex)
     {
-        CGS_ASSERT(luIndex < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
+        CGS_ASSERT(luIndex < KU_MAX_TOTAL_TRAFFIC,
+            CgsDev::Assert::MessageAt(
+                "luIndex < KU_MAX_TOTAL_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2475 /* ARTIST 0x82707C54 */));
         return &maVehicleAxles[luIndex];
     }
 
     // @ 0x82707858 -- `6 * (luIndex + 42384) + this`; stride 6 == sizeof(StaticTrafficParam).
     StaticTrafficParam* TrafficEntityModule::GetStaticTrafficParam(u32 luIndex)
     {
-        CGS_ASSERT(luIndex < KU_MAX_STATIC_TRAFFIC, "luIndex < KU_MAX_STATIC_TRAFFIC");
+        CGS_ASSERT(luIndex < KU_MAX_STATIC_TRAFFIC,
+            CgsDev::Assert::MessageAt(
+                "luIndex < KU_MAX_STATIC_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2402 /* ARTIST 0x82707884 */));
         return &maStaticTrafficParams[luIndex];
     }
 
@@ -216,13 +234,17 @@ namespace BrnTraffic
     // @ 0x82707D18 -- map a static-vehicle index into the full vehicle index space (+400).
     u32 TrafficEntityModule::GetVehicleIndexFromStaticIndex(u32 luStaticVehicle)
     {
-        CGS_ASSERT(luStaticVehicle < KU_MAX_STATIC_TRAFFIC, "luStaticVehicle < KU_MAX_STATIC_TRAFFIC");
+        CGS_ASSERT(luStaticVehicle < KU_MAX_STATIC_TRAFFIC,
+            CgsDev::Assert::MessageAt(
+                "luStaticVehicle < KU_MAX_STATIC_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2545 /* ARTIST 0x82707D3C */));
         return luStaticVehicle + KU_STATIC_TRAFFIC_OFFSET;
     }
 
     Param* TrafficEntityModule::GetParam(u32 luParam)
     {
-        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
+        CGS_ASSERT(luParam < KU_MAX_PARAMS,
+            CgsDev::Assert::MessageAt(
+                "luParam < KU_MAX_PARAMS", KAC_ARTIST_ASSERT_FILE, 2350 /* ARTIST 0x8270765C */));
         return &maParams[luParam];
     }
 
@@ -248,8 +270,12 @@ namespace BrnTraffic
     // one is the pool-warm-up guard (muLastParamCalculated is seeded past KU_MAX_PARAMS).
     ParamNeedToSlowData* TrafficEntityModule::GetParamNeedToSlowData(u32 luParam)
     {
-        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
-        CGS_ASSERT(muLastParamCalculated >= KU_MAX_PARAMS, "muLastParamCalculated >= KU_MAX_PARAMS");
+        CGS_ASSERT(luParam < KU_MAX_PARAMS,
+            CgsDev::Assert::MessageAt(
+                "luParam < KU_MAX_PARAMS", KAC_ARTIST_ASSERT_FILE, 2394 /* ARTIST 0x827077FC */));
+        CGS_ASSERT(muLastParamCalculated >= KU_MAX_PARAMS,
+            CgsDev::Assert::MessageAt(
+                "muLastParamCalculated >= KU_MAX_PARAMS", KAC_ARTIST_ASSERT_FILE, 2395 /* ARTIST 0x8270782C */));
         return &maParamNeedToSlowData[luParam];
     }
 
@@ -312,7 +338,9 @@ namespace BrnTraffic
     // meRunningState @ +0x308 == E_RUNNINGSTATE_PAUSED (1).
     bool TrafficEntityModule::IsPaused()
     {
-        CGS_ASSERT(meState == E_STATE_RUNNING, "meState == E_STATE_RUNNING");
+        CGS_ASSERT(meState == E_STATE_RUNNING,
+            CgsDev::Assert::MessageAt(
+                "meState == E_STATE_RUNNING", KAC_ARTIST_ASSERT_FILE, 2132 /* ARTIST 0x82707588 */));
         return meRunningState == E_RUNNINGSTATE_PAUSED;
     }
 
@@ -1802,7 +1830,9 @@ namespace
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::EnterStartingUpState()
 {
-    CGS_ASSERT(meState == E_STATE_INVALID, "meState == E_STATE_INVALID");
+    CGS_ASSERT(meState == E_STATE_INVALID,
+        CgsDev::Assert::MessageAt(
+            "meState == E_STATE_INVALID", KAC_ARTIST_ASSERT_SOURCE, 1697 /* ARTIST 0x82708060 */));
 
     meState           = E_STATE_STARTING_UP;
     meStartingUpState = E_STARTINGUPSTATE_FIRST;
@@ -1847,7 +1877,9 @@ void TrafficEntityModule::EnterRunningState()
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::EnterTearingDownState()
 {
-    CGS_ASSERT(meState == E_STATE_RUNNING, "meState == E_STATE_RUNNING");
+    CGS_ASSERT(meState == E_STATE_RUNNING,
+        CgsDev::Assert::MessageAt(
+            "meState == E_STATE_RUNNING", KAC_ARTIST_ASSERT_SOURCE, 1746 /* ARTIST 0x82708190 */));
 
     meState            = E_STATE_TEARING_DOWN;
     meTearingDownState = E_TEARINGDOWNSTATE_WIPING;
@@ -7188,14 +7220,18 @@ void TrafficEntityModule::SwapParamsInList(u32 luParam, u32 luNextParam)
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::RemoveParamFromList(u32 luParam)
 {
-    CGS_ASSERT(luParam < KU_MAX_STANDARD_TRAFFIC, "luParam < KU_MAX_STANDARD_TRAFFIC");
+    CGS_ASSERT(luParam < KU_MAX_STANDARD_TRAFFIC,
+        CgsDev::Assert::MessageAt(
+            "luParam < KU_MAX_STANDARD_TRAFFIC", KAC_ARTIST_ASSERT_SOURCE, 13002 /* ARTIST 0x8272636C */));
 
     ParamListNode* lpNode = &maParamListNodes[luParam];
 
     if (lpNode->muNextParam != static_cast<u16>(KU_INVALID_PARAM))
     {
         ParamListNode* lpNextNode = &maParamListNodes[lpNode->muNextParam];
-        CGS_ASSERT(lpNextNode->muPrevParam == luParam, "lpNextNode->muPrevParam == luParam");
+        CGS_ASSERT(lpNextNode->muPrevParam == luParam,
+            CgsDev::Assert::MessageAt(
+                "lpNextNode->muPrevParam == luParam", KAC_ARTIST_ASSERT_SOURCE, 13009 /* ARTIST 0x827263B8 */));
 
         lpNextNode->muPrevParam = lpNode->muPrevParam;
     }
@@ -7203,7 +7239,9 @@ void TrafficEntityModule::RemoveParamFromList(u32 luParam)
     if (lpNode->muPrevParam != static_cast<u16>(KU_INVALID_PARAM))
     {
         ParamListNode* lpPrevNode = &maParamListNodes[lpNode->muPrevParam];
-        CGS_ASSERT(lpPrevNode->muNextParam == luParam, "lpPrevNode->muNextParam == luParam");
+        CGS_ASSERT(lpPrevNode->muNextParam == luParam,
+            CgsDev::Assert::MessageAt(
+                "lpPrevNode->muNextParam == luParam", KAC_ARTIST_ASSERT_SOURCE, 13017 /* ARTIST 0x827263FC */));
 
         lpPrevNode->muNextParam = lpNode->muNextParam;
     }
@@ -19379,7 +19417,9 @@ void TrafficEntityModule::GenerateNearMissOutput( BrnTrafficIO::InputBuffer_PreS
 
         TrafficInterface* lpInterface = lpOutput->GetTrafficToRaceCarInterface_PreScene();
 
-        CGS_ASSERT( lpNearMissTrafficCollection != 0, "lpNearMissTrafficCollection != NULL" );
+        CGS_ASSERT( lpNearMissTrafficCollection != 0,
+            CgsDev::Assert::MessageAt(
+                "lpNearMissTrafficCollection != NULL", KAC_ARTIST_ASSERT_HEADER, 291 /* ARTIST 0x82715CFC */));
 
         std::memcpy( lpInterface->GetNearMissTrafficCollection(),
                      lpNearMissTrafficCollection,
@@ -19392,7 +19432,9 @@ void TrafficEntityModule::GenerateNearMissOutput( BrnTrafficIO::InputBuffer_PreS
 
         TrafficInterface* lpInterface = lpOutput->GetTrafficToRaceCarInterface_PreScene();
 
-        CGS_ASSERT( lpNearMissRaceCarCollection != 0, "lpNearMissRaceCarCollection != NULL" );
+        CGS_ASSERT( lpNearMissRaceCarCollection != 0,
+            CgsDev::Assert::MessageAt(
+                "lpNearMissRaceCarCollection != NULL", KAC_ARTIST_ASSERT_HEADER, 305 /* ARTIST 0x82715D40 */));
 
         std::memcpy( lpInterface->GetNearMissRaceCarCollection(),
                      lpNearMissRaceCarCollection,

@@ -1,6 +1,6 @@
 #include "GameSource/Gui/BrnGuiProfile.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                    // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsHash.h"                // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"              // CgsMemory::HeapMalloc::Malloc
@@ -34,6 +34,9 @@
 // storage-facing edge is stubbed. The synchronous-success leaves keep the task
 // machine able to complete on PC (no real storage yet).
 // ===========================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.cpp";
+static const char KAC_ARTIST_ASSERT_HEADER[] = "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.h";
 
 namespace BrnGui
 {
@@ -468,7 +471,8 @@ void ProfileManager::Construct(GuiCache& lrGuiCache, CgsGui::SystemUserProfile& 
 // ---------------------------------------------------------------------------
 bool ProfileManager::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc, CgsMemory::LinearMalloc* lpLinearMalloc)
 {
-    CGS_ASSERT(lpHeapMalloc != 0, "lpHeapMalloc != NULL");
+    CGS_ASSERT(lpHeapMalloc != 0,
+        CgsDev::Assert::MessageAt("lpHeapMalloc != NULL", KAC_ARTIST_ASSERT_FILE, 231 /* ARTIST 0x824F8D08 */));
 
     mpHeapMalloc = lpHeapMalloc;
 
@@ -543,7 +547,9 @@ void ProfileManager::HandleMessageChoice(u32 luChoice)
 {
     if (luChoice < muOptionCount)
     {
-        CGS_ASSERT(mpOptionHandler != 0, "mpOptionHandler != 0");
+        CGS_ASSERT(mpOptionHandler != 0,
+            CgsDev::Assert::MessageAt(
+                "mpOptionHandler != 0", KAC_ARTIST_ASSERT_HEADER, 686 /* ARTIST 0x8247336C */));
         mpOptionHandler->HandleOption(luChoice);
     }
 }
@@ -639,7 +645,8 @@ void ProfileManager::HandleOption(u32 luOption)
 {
     HideMessage();   // X360: virtual dispatch through the MessageDisplay base
 
-    CGS_ASSERT(mpOptionFunc != 0, "mpOptionFunc");
+    CGS_ASSERT(mpOptionFunc != 0,
+        CgsDev::Assert::MessageAt("mpOptionFunc", KAC_ARTIST_ASSERT_FILE, 1312 /* ARTIST 0x824EF834 */));
     (this->*mpOptionFunc)(luOption);
 }
 
@@ -736,7 +743,9 @@ void ProfileManager::UIClosed()
 void ProfileManager::SetProgressionProfile(BrnProgression::Profile* lpProgressionProfile,
                                            const BrnProgression::ProgressionData* lpProgressionData)
 {
-    CGS_ASSERT(lpProgressionProfile != 0, "lpProgressionProfile != NULL");
+    CGS_ASSERT(lpProgressionProfile != 0,
+        CgsDev::Assert::MessageAt(
+            "lpProgressionProfile != NULL", KAC_ARTIST_ASSERT_HEADER, 655 /* ARTIST 0x824ECCC0 */));
 
     mpProgressionProfile = lpProgressionProfile;
     mpProgressionData    = lpProgressionData;
@@ -848,14 +857,18 @@ void ProfileManager::HandleSaveLoadTaskResult(CgsGui::ESaveLoadTaskResult leResu
 // ---------------------------------------------------------------------------
 void ProfileManager::CheckDiskSpace(ProfileTaskResultHandler* lpTaskResultHandler)
 {
-    CGS_ASSERT(lpTaskResultHandler != 0, "lpTaskResultHandler != NULL");
-    CGS_ASSERT(!TaskIsRunning(), "!TaskIsRunning()");
+    CGS_ASSERT(lpTaskResultHandler != 0,
+        CgsDev::Assert::MessageAt(
+            "lpTaskResultHandler != NULL", KAC_ARTIST_ASSERT_FILE, 371 /* ARTIST 0x82523CCC */));
+    CGS_ASSERT(!TaskIsRunning(),
+        CgsDev::Assert::MessageAt("!TaskIsRunning()", KAC_ARTIST_ASSERT_FILE, 372 /* ARTIST 0x82523CFC */));
 
     mpTaskResultHandler   = lpTaskResultHandler;
     mpTaskResultFunc      = &ProfileManager::CheckDiskSpaceResult;
     mMetadata.mStoredData = CgsGui::MakeOpaqueBuffer(mStoredData);
 
-    CGS_ASSERT(false, "Should never get here");
+    CGS_ASSERT(false,
+        CgsDev::Assert::MessageAt("Should never get here", KAC_ARTIST_ASSERT_FILE, 382 /* ARTIST 0x82523D58 */));
 }
 
 // ---------------------------------------------------------------------------

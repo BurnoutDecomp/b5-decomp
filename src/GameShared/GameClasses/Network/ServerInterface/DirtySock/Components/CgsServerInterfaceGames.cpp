@@ -10,7 +10,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePingRegions.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfoData.h" // EConversionFlags
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint / CgsDev::Message::gxMessageFilterFlags
-#include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf / SnPrintf / StrCat
 #include <string.h>                                      // memcpy / strlen / strcmp
 
@@ -47,6 +47,9 @@ extern "C"
     s32  TagFieldSetRaw(char* pRecord, s32 iRecLen, const char* pKey, const u8* pValue);
     s32  TagFieldSetEpoch(char* pRecord, s32 iRecLen, const char* pKey, s32 iEpoch);
 }
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceGames.cpp";
 
 namespace CgsNetwork
 {
@@ -432,7 +435,8 @@ namespace CgsNetwork
     void ServerInterfaceGames::LeaveGameCallback(LobbyApiRefT* /*lpLobbyApi*/, LobbyApiMsgT* lpMsg, void* lpUserData)
     {
         ServerInterfaceGames* lpSelf = static_cast<ServerInterfaceGames*>(lpUserData);
-        CGS_ASSERT(lpSelf != 0, "lpLobbyComponent");
+        CGS_ASSERT(lpSelf != 0,
+            CgsDev::Assert::MessageAt("lpLobbyComponent", KAC_ARTIST_ASSERT_FILE, 661 /* ARTIST 0x82891384 */));
         ConnApiControl(lpSelf->mpServerInterface->GetConnAPIRef(),
                        KI_CONN_CTRL_DISCONNECT, 0, 0, "");
         if (lpSelf->IsLocalPlayerInGame())
@@ -698,7 +702,9 @@ namespace CgsNetwork
     {
         for (s32 i = 0; ; ++i)
         {
-            CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
+            CGS_ASSERT(IsLocalPlayerInGame(),
+                CgsDev::Assert::MessageAt(
+                    "IsLocalPlayerInGame()", KAC_ARTIST_ASSERT_FILE, 1726 /* ARTIST 0x8289166C */));
             if (i >= mLastGameRecord.iCount)
                 break;
             if (mLastGameRecord.aOpponents[i].iIdent == liPlayerID)
@@ -1002,7 +1008,9 @@ namespace CgsNetwork
 
     void ServerInterfaceGames::GetGameParameters(ServerInterfaceGameParamsBase* lpOut)
     {
-        CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
+        CGS_ASSERT(IsLocalPlayerInGame(),
+            CgsDev::Assert::MessageAt(
+                "IsLocalPlayerInGame()", KAC_ARTIST_ASSERT_FILE, 1688 /* ARTIST 0x82887474 */));
         lpOut->SerialiseFromGame(&mLastGameRecord);
     }
 
@@ -1021,13 +1029,16 @@ namespace CgsNetwork
 
     s32 ServerInterfaceGames::GetNumberOfFoundGames()
     {
-        CGS_ASSERT(mpFoundGames != 0, "mpFoundGames");
+        CGS_ASSERT(mpFoundGames != 0,
+            CgsDev::Assert::MessageAt("mpFoundGames", KAC_ARTIST_ASSERT_FILE, 1337 /* ARTIST 0x82878130 */));
         return DispListCount(mpFoundGames);
     }
 
     s32 ServerInterfaceGames::GetNumberPlayersInGame()
     {
-        CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
+        CGS_ASSERT(IsLocalPlayerInGame(),
+            CgsDev::Assert::MessageAt(
+                "IsLocalPlayerInGame()", KAC_ARTIST_ASSERT_FILE, 1726 /* ARTIST 0x8288759C */));
         return mLastGameRecord.iCount;
     }
 
@@ -1124,13 +1135,17 @@ namespace CgsNetwork
 
     bool ServerInterfaceGames::IsGameLocked()
     {
-        CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
+        CGS_ASSERT(IsLocalPlayerInGame(),
+            CgsDev::Assert::MessageAt(
+                "IsLocalPlayerInGame()", KAC_ARTIST_ASSERT_FILE, 1903 /* ARTIST 0x82887D7C */));
         return ((ConvertFlags(mLastGameRecord.uSysflags, E_CONVERSION_FROM_WIRE) >> 5) & 1) != 0;
     }
 
     bool ServerInterfaceGames::IsGameStarted()
     {
-        CGS_ASSERT(IsLocalPlayerInGame(), "IsLocalPlayerInGame()");
+        CGS_ASSERT(IsLocalPlayerInGame(),
+            CgsDev::Assert::MessageAt(
+                "IsLocalPlayerInGame()", KAC_ARTIST_ASSERT_FILE, 1881 /* ARTIST 0x82887D14 */));
         return ((ConvertFlags(mLastGameRecord.uSysflags, E_CONVERSION_FROM_WIRE) >> 11) & 1) != 0;
     }
 

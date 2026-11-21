@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModule.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // AddMonitor
 
 // The real rw::physics world Prepare/AllocateMemoryAndInitialiseRW build. Only the .cpp
@@ -50,6 +50,11 @@
 // strides (which the X360 store widths actually depend on) are locked below;
 // member access is by name throughout, so the bodies are semantically faithful
 // regardless of host pointer width.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\physics\\CgsPhysicsSimulationModule.h";
+static const char KAC_ARTIST_ASSERT_SOURCE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Physics/CgsPhysicsSimulationModule.cpp";
 
 namespace CgsPhysics
 {
@@ -141,8 +146,10 @@ namespace CgsPhysics
     // X360 @0x8289D168. Checked slot read returning maRWJoints[liIndex].
     rw_physics::Joint* JointData::GetJoint(s32 liIndex)
     {
-        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");          // h:621 tripwire (blt skips)
-        CGS_ASSERT(mabUsedSlot[liIndex], "mabUsedSlot[liIndex]");   // h:622 tripwire (bne skips)
+        CGS_ASSERT(liIndex < KI_SIZE,
+            CgsDev::Assert::MessageAt("liIndex < knSize", KAC_ARTIST_ASSERT_FILE, 621 /* ARTIST 0x8289D194 */));          // h:621 tripwire (blt skips)
+        CGS_ASSERT(mabUsedSlot[liIndex],
+            CgsDev::Assert::MessageAt("mabUsedSlot[liIndex]", KAC_ARTIST_ASSERT_FILE, 622 /* ARTIST 0x8289D1C0 */));   // h:622 tripwire (bne skips)
         return maRWJoints[liIndex];
     }
 
@@ -335,16 +342,20 @@ namespace CgsPhysics
     // X360 @0x8289D1E8. Checked slot read returning &maFrames[liIndex].
     DriveFrames* DriveData::GetDriveFrames(s32 liIndex)
     {
-        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");          // h:666 tripwire (blt skips)
-        CGS_ASSERT(mabUsedSlot[liIndex], "mabUsedSlot[liIndex]");   // h:667 tripwire (bne skips)
+        CGS_ASSERT(liIndex < KI_SIZE,
+            CgsDev::Assert::MessageAt("liIndex < knSize", KAC_ARTIST_ASSERT_FILE, 666 /* ARTIST 0x8289D214 */));          // h:666 tripwire (blt skips)
+        CGS_ASSERT(mabUsedSlot[liIndex],
+            CgsDev::Assert::MessageAt("mabUsedSlot[liIndex]", KAC_ARTIST_ASSERT_FILE, 667 /* ARTIST 0x8289D240 */));   // h:667 tripwire (bne skips)
         return &maFrames[liIndex];
     }
 
     // X360 @0x8289D268. Checked slot read returning &maScaledDynamics[liIndex].
     DriveDynamics* DriveData::GetScaledDriveDynamics(s32 liIndex)
     {
-        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");          // h:684 tripwire (blt skips)
-        CGS_ASSERT(mabUsedSlot[liIndex], "mabUsedSlot[liIndex]");   // h:685 tripwire (bne skips)
+        CGS_ASSERT(liIndex < KI_SIZE,
+            CgsDev::Assert::MessageAt("liIndex < knSize", KAC_ARTIST_ASSERT_FILE, 684 /* ARTIST 0x8289D294 */));          // h:684 tripwire (blt skips)
+        CGS_ASSERT(mabUsedSlot[liIndex],
+            CgsDev::Assert::MessageAt("mabUsedSlot[liIndex]", KAC_ARTIST_ASSERT_FILE, 685 /* ARTIST 0x8289D2C0 */));   // h:685 tripwire (bne skips)
         return &maScaledDynamics[liIndex];
     }
 
@@ -545,24 +556,33 @@ namespace CgsPhysics
     // returns the 8-byte RigidBodyId via a hidden sret ptr).
     RigidBodyId RigidBodyData::GetGameID(s32 liIndex)
     {
-        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");                              // h:585 tripwire (blt skips)
-        CGS_ASSERT(!maGameIDs[liIndex].IsInvalid(), "!maGameIDs[liIndex].IsInvalid()"); // h:586 tripwire
+        CGS_ASSERT(liIndex < KI_SIZE,
+            CgsDev::Assert::MessageAt("liIndex < knSize", KAC_ARTIST_ASSERT_FILE, 585 /* ARTIST 0x8289CFA8 */));                              // h:585 tripwire (blt skips)
+        CGS_ASSERT(!maGameIDs[liIndex].IsInvalid(),
+            CgsDev::Assert::MessageAt(
+                "!maGameIDs[liIndex].IsInvalid()", KAC_ARTIST_ASSERT_FILE, 586 /* ARTIST 0x8289CFF4 */)); // h:586 tripwire
         return maGameIDs[liIndex];
     }
 
     // X360 @0x8289D020. Checked slot read returning maRWBodies[liIndex].
     rw_physics::RigidBody* RigidBodyData::GetRigidBody(s32 liIndex)
     {
-        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");                              // h:594 tripwire (blt skips)
-        CGS_ASSERT(!maGameIDs[liIndex].IsInvalid(), "!maGameIDs[liIndex].IsInvalid()"); // h:595 tripwire
+        CGS_ASSERT(liIndex < KI_SIZE,
+            CgsDev::Assert::MessageAt("liIndex < knSize", KAC_ARTIST_ASSERT_FILE, 594 /* ARTIST 0x8289D04C */));                              // h:594 tripwire (blt skips)
+        CGS_ASSERT(!maGameIDs[liIndex].IsInvalid(),
+            CgsDev::Assert::MessageAt(
+                "!maGameIDs[liIndex].IsInvalid()", KAC_ARTIST_ASSERT_FILE, 595 /* ARTIST 0x8289D098 */)); // h:595 tripwire
         return maRWBodies[liIndex];
     }
 
     // X360 @0x8289D0C0. Checked slot read returning &maInertias[liIndex].
     Inertia* RigidBodyData::GetInertia(s32 liIndex)
     {
-        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");                              // h:603 tripwire (blt skips)
-        CGS_ASSERT(!maGameIDs[liIndex].IsInvalid(), "!maGameIDs[liIndex].IsInvalid()"); // h:604 tripwire
+        CGS_ASSERT(liIndex < KI_SIZE,
+            CgsDev::Assert::MessageAt("liIndex < knSize", KAC_ARTIST_ASSERT_FILE, 603 /* ARTIST 0x8289D0EC */));                              // h:603 tripwire (blt skips)
+        CGS_ASSERT(!maGameIDs[liIndex].IsInvalid(),
+            CgsDev::Assert::MessageAt(
+                "!maGameIDs[liIndex].IsInvalid()", KAC_ARTIST_ASSERT_FILE, 604 /* ARTIST 0x8289D138 */)); // h:604 tripwire
         return &maInertias[liIndex];
     }
 
@@ -580,7 +600,8 @@ namespace CgsPhysics
     // i.e. it fires from the caller's frame, which is what being inlined there means.
     void RigidBodyData::SetFree(s32 liIndex)
     {
-        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");
+        CGS_ASSERT(liIndex < KI_SIZE,
+            CgsDev::Assert::MessageAt("liIndex < knSize", KAC_ARTIST_ASSERT_SOURCE, 2504 /* ARTIST 0x8289F2A8 */));
         maGameIDs[liIndex] = K_INVALID_RIGID_BODY_ID;
     }
 
@@ -609,8 +630,12 @@ namespace CgsPhysics
         }
         while (!maGameIDs[liIndex].IsInvalid());   // `ld r11,0(r10)` ; `cmpld r11,K_INVALID`
 
-        CGS_ASSERT(liIndex < KI_SIZE, "Couldn't find free rigid body slot");    // .cpp:2483
-        CGS_ASSERT(liIndex != -1, "Couldn't find a free rigid body slot");      // .cpp:2484
+        CGS_ASSERT(liIndex < KI_SIZE,
+            CgsDev::Assert::MessageAt(
+                "Couldn't find free rigid body slot", KAC_ARTIST_ASSERT_SOURCE, 2483 /* ARTIST 0x8289D354 */));    // .cpp:2483
+        CGS_ASSERT(liIndex != -1,
+            CgsDev::Assert::MessageAt(
+                "Couldn't find a free rigid body slot", KAC_ARTIST_ASSERT_SOURCE, 2484 /* ARTIST 0x8289D378 */));      // .cpp:2484
 
         maGameIDs[liIndex]  = lId;         // stdx  r27 at (i+100)*8  == +0x320 + i*8
         maRWBodies[liIndex] = lpRWBody;    // stwx  r28 at i*4        == +0x000 + i*4 (console stride)
@@ -2241,7 +2266,8 @@ namespace CgsPhysics
             }
 
             rw_physics::RigidBody* const lpBody = mBodyData.GetRigidBody(liBodyIndex);   // called @0x8289D020
-            CGS_ASSERT(lpBody != NULL, "lpBody");   // .cpp:1683
+            CGS_ASSERT(lpBody != NULL,
+                CgsDev::Assert::MessageAt("lpBody", KAC_ARTIST_ASSERT_SOURCE, 1683 /* ARTIST 0x828A4A28 */));   // .cpp:1683
 
             lpBody->SetSpy(lrEvent.mSpy);           // `lbz 8(event)`; ori 8 / clrlwi 29
         }
