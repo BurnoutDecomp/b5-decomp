@@ -159,8 +159,12 @@ namespace CgsNetwork
         // The send-time monitor every adapter shares (registered once, -1 until then).
         static s32 miSendPerfMon;
 
+        // ARTIST NetworkAdapterBase::Construct receives the complete adapter pointer.
+        // SetServerType is the sole virtual slot, so the base owns the vptr at +0x00.
+        virtual void SetServerType(EServerType leServerType) = 0;
+
         // --- layout (X360 asm offsets) ----------------------------------------------------
-        // +0x00 is the platform adapter's vtable pointer.
+        // +0x00 is the adapter's vtable pointer.
         void* mpMessageSentCallbackFunction; // +0x04
         void* mpNetworkManager;              // +0x08  (NetworkManager*; the concrete Brn manager
                                              //        type -- BrnNetwork::BrnNetworkManager --
@@ -194,11 +198,11 @@ namespace CgsNetwork
 
     struct NetworkAdapter : NetworkAdapterBase
     {
-        // Selects which server flavour this adapter talks to; the network servers block
-        // forwards the chosen type here through the vtable. Only the platform adapter has a
-        // body (its vtable's single slot).
-        virtual void SetServerType(EServerType leServerType) = 0;
     };
+
+#if defined(D_PLATFORM_X360)
+    CGS_STATIC_ASSERT(sizeof(NetworkAdapterBase) == 0x28, "ARTIST network adapter base extent");
+#endif
 
     struct NetworkAdapterPrepareParams
     {

@@ -262,7 +262,7 @@ public:
     // ---- layout (console offsets in comments; ⭐ names/order now DWARF-authoritative,
     //      from the DecFIGS header for THIS class rather than the ProStreet PDB for the
     //      vendor SndPlayer1) ----
-    Attribute_t      mAttribute[3];                          // +0x28
+    CGS_ALIGN(8) Attribute_t mAttribute[3];                   // ARTIST 0x826EA560, +0x28
     TimerHandle      mTimerHandle;                           // +0x40 (mCpuTicks @ +0x50)
     RequestExternal* mpRequestExternal;                      // +0x58
     SndPlayer1FeedDesc mFeedDesc[KU_MAX_DECODERFEEDS];       // +0x5C (20 slots, 12-byte stride)
@@ -300,6 +300,12 @@ public:
     u8               mNextFeedSlotToFree;                    // +0x186
     u8               mTimerAdded;                            // +0x187
 };
+
+#if defined(D_PLATFORM_X360)
+CGS_STATIC_ASSERT(offsetof(SndPlayer1_CgsStreamMod, mAttribute) == 0x28, "ARTIST streaming attributes");
+CGS_STATIC_ASSERT(offsetof(SndPlayer1_CgsStreamMod, mMaxRequests) == 0x182, "ARTIST stream request count");
+CGS_STATIC_ASSERT(sizeof(SndPlayer1_CgsStreamMod) == 0x188, "ARTIST streaming instance extent");
+#endif
 
 } // namespace core
 } // namespace audio
