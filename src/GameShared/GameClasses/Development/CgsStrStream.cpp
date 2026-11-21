@@ -12,9 +12,11 @@
 // the DecFIGS DWARF + the X360 StrStream bodies (CgsStrStream.cpp).
 namespace CgsDev
 {
+    const char* gpcHexFormat = "0x%X";   // ARTIST 0x82F31944
+    const char* gpcSignedFormat = "%d"; // ARTIST 0x82F3193C
+
     namespace
     {
-        const char* KAC_INTEGER    = "%d";
         const char* KAC_UNSIGNED   = "%u";
         const char* KAC_PADDED_HEX = "0x%08X";
         const char* KAC_FLOAT      = "%f";
@@ -40,14 +42,7 @@ namespace CgsDev
     // ARTIST821F0E50 / 821F0EC8: 0 decimal, 1/2 hex, other modes silent.
     StrStreamBase& StrStreamBase::operator<<(s32 liValue)
     {
-        if (mePrintMode == E_PRINTMODE_DECIMAL)
-            AppendFormat("%d", liValue);
-        else if (static_cast<u32>(mePrintMode) < 3)
-        {
-            AppendFormat("0x%X", static_cast<u32>(liValue));
-            if (mePrintMode == E_PRINTMODE_HEXONCE) mePrintMode = E_PRINTMODE_DECIMAL;
-        }
-        return *this;
+        return PrintSignedInteger(liValue);
     }
 
     StrStreamBase& StrStreamBase::operator<<(u32 luValue)

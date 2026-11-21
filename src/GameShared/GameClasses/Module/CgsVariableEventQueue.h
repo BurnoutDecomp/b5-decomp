@@ -674,6 +674,7 @@ namespace CgsModule
     template <s32 BUFSIZE, s32 ALIGN>
     void VariableEventQueue<BUFSIZE, ALIGN>::OutputQueueContents() const
     {
+        s32 liSize = 0;
         s32 liNumTypes = 0;
         s32 laiTypes[KI_MAX_EVENT_TYPES_IN_QUEUE];
         s32 laiCounts[KI_MAX_EVENT_TYPES_IN_QUEUE];
@@ -688,8 +689,7 @@ namespace CgsModule
         memset(laiTypes, -1, sizeof(laiTypes));
         memset(laiSizes, 0, sizeof(laiSizes));
 
-        const Event* lpEvent = 0;
-        s32 liSize = 0;
+        const Event* lpEvent;
         s32 liType = GetFirstEvent(&lpEvent, &liSize);
         while (liType >= 0)
         {
@@ -711,15 +711,22 @@ namespace CgsModule
             liType = GetNextEvent(lpEvent, &lpEvent, &liSize);
         }
 
-        if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+        for (s32 liIndex = 0; liIndex < liNumTypes; ++liIndex)
         {
-            for (s32 liIndex = 0; liIndex < liNumTypes; ++liIndex)
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {
-                *CgsDev::Log::gpDebugPrint
-                    << "ERROR: Event Type " << laiTypes[liIndex]
-                    << " has " << laiCounts[liIndex]
-                    << " entries in the queue and each event's size is " << laiSizes[liIndex]
-                    << " (total mem usage is " << (laiSizes[liIndex] * laiCounts[liIndex]) << ") \n";
+                CgsDev::StrStreamBase& lrStream = *CgsDev::Log::gpDebugPrint;
+                lrStream << "ERROR: Event Type ";
+                lrStream.PrintSignedInteger(laiTypes[liIndex]);
+                lrStream << " has ";
+                const s32 liCount = laiCounts[liIndex];
+                lrStream.PrintSignedInteger(liCount);
+                lrStream << " entries in the queue and each event's size is ";
+                const s32 liEventSize = laiSizes[liIndex];
+                lrStream.PrintSignedInteger(liEventSize);
+                lrStream << " (total mem usage is ";
+                lrStream.PrintSignedInteger(liCount * liEventSize);
+                lrStream << ") \n";
             }
         }
     }

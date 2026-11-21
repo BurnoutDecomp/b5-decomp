@@ -18,6 +18,9 @@ namespace CgsDev
         E_PRINTMODE_HEXONCE = 2,
     };
 
+    extern const char* gpcHexFormat;
+    extern const char* gpcSignedFormat;
+
     struct StrStreamBase
     {
         StrStreamBase() { StrStreamBase::Reset(); }
@@ -41,6 +44,23 @@ namespace CgsDev
         StrStreamBase& operator<<(void* lpValue);
         StrStreamBase& operator<<(PrintMode leMode);
         StrStreamBase& operator<<(bool lbValue);   // streams "true" / "false" through the sink
+
+        // ARTIST inlines signed formatting in the event-queue histogram.
+        StrStreamBase& PrintSignedInteger(s32 liValue)
+        {
+            switch (mePrintMode)
+            {
+            case E_PRINTMODE_DECIMAL:
+                AppendFormat(gpcSignedFormat, liValue);
+                break;
+            case E_PRINTMODE_HEX:
+            case E_PRINTMODE_HEXONCE:
+                AppendFormat(gpcHexFormat, static_cast<u32>(liValue));
+                mePrintMode = mePrintMode == E_PRINTMODE_HEXONCE ? E_PRINTMODE_DECIMAL : mePrintMode;
+                break;
+            }
+            return *this;
+        }
 
         // ARTIST's queue diagnostics set the stream mode inline.
         StrStreamBase& SetPrintMode(PrintMode leMode)
