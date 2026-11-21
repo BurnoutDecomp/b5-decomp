@@ -218,45 +218,18 @@ namespace BrnParticle
     // allocates through an EA::Allocator::ITaggedAllocator*; this class is the
     // concrete adapter ParticleModule hands it, forwarding onto mpHeapMalloc.
     //
-    // TWO-VTABLE DTOR NOTE (why the deleting dtor stores at both this+0 AND
-    // this+4). IInternalAllocator's own scalar deleting destructor (X360
-    // 0x822898A0) is NOT the single-store pattern every other single-inheritance
-    // allocator front-end in this codebase uses (compare CgsGraphics::
-    // MoviePlayerCoreAllocator::`vector deleting destructor' @0x827DBAC0 and
-    // EA::Allocator::IAllocator::~IAllocator @0x82277E80, each of which stores
-    // exactly one vtable pointer at this+0). Here the asm stores TWO vtable
-    // pointers:
-    //   *(this+4) = off_8200FDB4   -- the EA::Allocator::IAllocator vtable
-    //                                  (the SAME constant IAllocator's own
-    //                                  destructor stores into *its* this+0 --
-    //                                  see SDKs/.../iallocator.cpp)
-    //   *(this+0) = off_8200F5B4   -- IInternalAllocator's own (derived) vtable
-    // and both the vector-deleting-destructor and the Free thunk are
-    // ADJUSTOR{4} thunks (`addi r3,r3,-4` before tail-calling the this-relative-
-    // to-primary body). An adjustor thunk with a non-zero `this` delta is the
-    // PPC/Itanium-ABI signature of a call arriving through a SECONDARY base
-    // subobject: the compiler lays IAllocator's vtable slot down as its own
-    // (non-primary) sub-object at +0x4 inside IInternalAllocator, distinct from
-    // IInternalAllocator's own primary vtable at +0x0, and thunks calls that
-    // arrive via the IAllocator-shaped secondary pointer back to the primary
-    // `this` before dispatching. The DWARF's single `: public ITaggedAllocator`
-    // line names only the primary base (matching every X360-ledger-attested
-    // method here, which all resolve through the primary vtable at +0x0); no
-    // second C++-source base is added, since the X360 ledger attests no method
-    // reached only through the secondary IAllocator pointer -- the secondary
-    // slot is a compiler-emitted ABI artifact of the ITaggedAllocator/IAllocator
-    // pure-interface chain, not a distinct user-written base to model.
+    // ITaggedAllocator supplies the primary ICoreAllocator and the secondary
+    // IAllocator at this+4. The ARTIST derived vtables are 0x82011E14 and
+    // 0x82011E00 respectively. Free and the deleting destructor adjust `this`
+    // when entered through the secondary table.
     class IInternalAllocator : public EA::Allocator::ITaggedAllocator
     {
     public:
         IInternalAllocator(CgsMemory::HeapMalloc* lpHeapMalloc);
 
-        // Out-of-line destructor: anchors the vtable. See the two-vtable-dtor
-        // note above -- the X360 deleting-destructor thunk block (scalar dtor
-        // @0x822898A0, its vector-deleting-destructor adjustor{4} thunk
-        // @0x82289890, and the Free adjustor{4} thunk @0x82289898) is entirely
-        // compiler-generated from this virtual ~dtor; no owned resources are
-        // released here (mpHeapMalloc is owned elsewhere).
+        // The out-of-line destructor anchors both vtables. ARTIST emits the
+        // primary deleting destructor at 0x822898A0 and the IAllocator
+        // adjustor at 0x82289890. The module owns mpHeapMalloc.
         virtual ~IInternalAllocator();
 
         // ITaggedAllocator overrides. BODIED 2026-09-03 in
