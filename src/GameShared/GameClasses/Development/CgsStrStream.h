@@ -20,12 +20,19 @@ namespace CgsDev
 
     struct StrStreamBase
     {
-        StrStreamBase();
+        StrStreamBase() { StrStreamBase::Reset(); }
         ~StrStreamBase() {}
-        virtual void Reset() { mePrintMode = E_PRINTMODE_DECIMAL; }
+        virtual void Reset();
 
         // Text insertion replaces null with <NULLSTRING> and calls the virtual Append sink.
-        StrStreamBase& operator<<(const char* lpcText);
+        StrStreamBase& operator<<(const char* lpcText)
+        {
+            if (lpcText)
+                Append(lpcText);
+            else
+                Append("<NULLSTRING>");
+            return *this;
+        }
 
         // Formatting overloads (render then forward to the sink).
         StrStreamBase& operator<<(s32 liValue);
@@ -54,7 +61,12 @@ namespace CgsDev
     // (used to build assert/log messages on the stack).
     struct StrStream : public StrStreamBase
     {
-        StrStream(char* lpcBuffer, s32 liBufferSize);
+        StrStream(char* lpcBuffer, s32 liBufferSize)
+            : mpcBuffer(lpcBuffer)
+            , miBufferSize(liBufferSize)
+        {
+            lpcBuffer[0] = '\0';
+        }
 
         char* GetBuffer() { return mpcBuffer; }
 
@@ -65,8 +77,7 @@ namespace CgsDev
         virtual void Reset()
         {
             mePrintMode = E_PRINTMODE_DECIMAL;
-            if (mpcBuffer && miBufferSize > 0)
-                mpcBuffer[0] = '\0';
+            mpcBuffer[0] = '\0';
         }
 
     protected:

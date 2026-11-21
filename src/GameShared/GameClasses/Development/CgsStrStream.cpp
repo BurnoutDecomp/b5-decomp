@@ -31,18 +31,10 @@ namespace CgsDev
         }
     }
 
-    StrStreamBase::StrStreamBase()
-        : mePrintMode(E_PRINTMODE_DECIMAL)
+    // The StrStreamBase vtable at 0x82000D00 points to 0x82815E58.
+    void StrStreamBase::Reset()
     {
-    }
-
-    StrStreamBase& StrStreamBase::operator<<(const char* lpcText)
-    {
-        if (lpcText)
-            Append(lpcText);
-        else
-            Append("<NULLSTRING>");
-        return *this;
+        mePrintMode = E_PRINTMODE_DECIMAL;
     }
 
     // ARTIST821F0E50 / 821F0EC8: 0 decimal, 1/2 hex, other modes silent.
@@ -137,25 +129,20 @@ namespace CgsDev
         Append(lacBuffer);
     }
 
+    // FAKEMATCH: retain the out-of-line text insertion body at ARTIST 0x821F01A8.
+#pragma inline_depth(0)
     void StrStreamBase::Append64IntDecimal(u64 luValue)
     {
         char lacBuffer[KI_FORMAT_BUFFER_SIZE];
         rw::core::stdc::ConvertI64ToA(static_cast<s64>(luValue), lacBuffer, 10);
         *this << lacBuffer;
     }
+#pragma inline_depth()
 
     void StrStreamBase::Append64IntHex(u64 luValue)
     {
         AppendFormat("0x%08X", static_cast<u32>(luValue >> 32));
         AppendFormat("%08X", static_cast<u32>(luValue));
-    }
-
-    // ARTIST 0x821F0158 clears the first byte of the caller's buffer.
-    StrStream::StrStream(char* lpcBuffer, s32 liBufferSize)
-        : mpcBuffer(lpcBuffer)
-        , miBufferSize(liBufferSize)
-    {
-        lpcBuffer[0] = '\0';
     }
 
     // ARTIST 0x82815E80 scans through the terminator and gives strncat the full remaining count.

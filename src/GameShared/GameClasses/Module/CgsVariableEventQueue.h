@@ -302,11 +302,10 @@ namespace CgsModule
     {
         if (!mbIsConstructed)
         {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Not Constructed\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 348);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Not Constructed\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, detail::KAC_VEQ_FILE, 348);
             CgsDev::Assert::EndAssert();
         }
         return miLength;
@@ -318,11 +317,10 @@ namespace CgsModule
     {
         if (!mbIsConstructed)
         {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Not Constructed\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 728);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Not Constructed\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, detail::KAC_VEQ_FILE, 728);
             CgsDev::Assert::EndAssert();
         }
         s32 liRem = liTotalEventSize & (ALIGN - 1);
@@ -658,11 +656,10 @@ namespace CgsModule
     {
         if (!mbIsConstructed)
         {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Not Constructed\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 983);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Not Constructed\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, detail::KAC_VEQ_FILE, 983);
             CgsDev::Assert::EndAssert();
         }
         return miBufferWritePos - miFirstEventOffset;
@@ -674,11 +671,10 @@ namespace CgsModule
     {
         if (!mbIsConstructed)
         {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Not Constructed\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 1000);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Not Constructed\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, detail::KAC_VEQ_FILE, 1000);
             CgsDev::Assert::EndAssert();
         }
         return &macData[miFirstEventOffset];
@@ -690,11 +686,10 @@ namespace CgsModule
     {
         if (!mbIsConstructed)
         {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Not Constructed\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 1000);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Not Constructed\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, detail::KAC_VEQ_FILE, 1000);
             CgsDev::Assert::EndAssert();
         }
         return &macData[miFirstEventOffset];
