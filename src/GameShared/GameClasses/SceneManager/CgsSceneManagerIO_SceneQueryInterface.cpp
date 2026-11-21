@@ -1,4 +1,4 @@
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"                              // CgsModule::BaseEventQueue<T>::AddEvent (inline generic)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneQueryInterface.h"    // CgsSceneManager::SceneManagerIO::SceneQueryInterface
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTest.h"          // InEventLineTestFine element (committed, 0x40 stride) + EExclusionMode
@@ -127,33 +127,42 @@ int CgsSceneManager::SceneManagerIO::SceneQueryInterface::VolumeTestDeepest(
 // -----------------------------------------------------------------------------
 void CgsSceneManager::SceneManagerIO::SceneQueryInterface::Append(const SceneQueryInterface& lOther)
 {
+    const char* const lpcAssertFile =
+        "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModuleIO.h";
+
     CGS_ASSERT(mpFineLineTestQueue || !lOther.mpFineLineTestQueue,
-               "mpFineLineTestQueue || !lOther.mpFineLineTestQueue");                              // :1138
+        CgsDev::Assert::MessageAt("mpFineLineTestQueue || !lOther.mpFineLineTestQueue",
+            lpcAssertFile, 1138 /* ARTIST 0x823C5034 */));
     if (lOther.mpFineLineTestQueue)
         mpFineLineTestQueue->Append(*lOther.mpFineLineTestQueue);
 
     CGS_ASSERT(mpFineVolumeTestQueue || !lOther.mpFineVolumeTestQueue,
-               "mpFineVolumeTestQueue || !lOther.mpFineVolumeTestQueue");                          // :1144
+        CgsDev::Assert::MessageAt("mpFineVolumeTestQueue || !lOther.mpFineVolumeTestQueue",
+            lpcAssertFile, 1144 /* ARTIST 0x823C507C */));
     if (lOther.mpFineVolumeTestQueue)
         mpFineVolumeTestQueue->Append(*lOther.mpFineVolumeTestQueue);
 
     CGS_ASSERT(mpFineLineTestFastDoubleSidedQueue || !lOther.mpFineLineTestFastDoubleSidedQueue,
-               "mpFineLineTestFastDoubleSidedQueue || !lOther.mpFineLineTestFastDoubleSidedQueue"); // :1150
+        CgsDev::Assert::MessageAt("mpFineLineTestFastDoubleSidedQueue || !lOther.mpFineLineTestFastDoubleSidedQueue",
+            lpcAssertFile, 1150 /* ARTIST 0x823C50C4 */));
     if (lOther.mpFineLineTestFastDoubleSidedQueue)
         mpFineLineTestFastDoubleSidedQueue->Append(*lOther.mpFineLineTestFastDoubleSidedQueue);
 
     CGS_ASSERT(mpFineSphereTestFastQueue || !lOther.mpFineSphereTestFastQueue,
-               "mpFineSphereTestFastQueue || !lOther.mpFineSphereTestFastQueue");                  // :1156
+        CgsDev::Assert::MessageAt("mpFineSphereTestFastQueue || !lOther.mpFineSphereTestFastQueue",
+            lpcAssertFile, 1156 /* ARTIST 0x823C510C */));
     if (lOther.mpFineSphereTestFastQueue)
         mpFineSphereTestFastQueue->Append(*lOther.mpFineSphereTestFastQueue);
 
     CGS_ASSERT(mpFineLineTestNearestQueue || !lOther.mpFineLineTestNearestQueue,
-               "mpFineLineTestNearestQueue || !lOther.mpFineLineTestNearestQueue");                // :1162
+        CgsDev::Assert::MessageAt("mpFineLineTestNearestQueue || !lOther.mpFineLineTestNearestQueue",
+            lpcAssertFile, 1162 /* ARTIST 0x823C5154 */));
     if (lOther.mpFineLineTestNearestQueue)
         mpFineLineTestNearestQueue->Append(*lOther.mpFineLineTestNearestQueue);
 
     CGS_ASSERT(mpFineVolumeTestDeepestQueue || !lOther.mpFineVolumeTestDeepestQueue,
-               "mpFineVolumeTestDeepestQueue || !lOther.mpFineVolumeTestDeepestQueue");            // :1168
+        CgsDev::Assert::MessageAt("mpFineVolumeTestDeepestQueue || !lOther.mpFineVolumeTestDeepestQueue",
+            lpcAssertFile, 1168 /* ARTIST 0x823C519C */));
     if (lOther.mpFineVolumeTestDeepestQueue)
         mpFineVolumeTestDeepestQueue->Append(*lOther.mpFineVolumeTestDeepestQueue);
 }

@@ -67,7 +67,10 @@ void* Attrib::Vault_ScalarDeletingDtor(Attrib::Vault* lpVault, int liDeleteFlag)
 // only the first word -- the payload pointer -- is read).
 void* Attrib::Vault::GetExportData(unsigned int luIndex) const
 {
-    CGS_ASSERT(luIndex < mNumExports, "Attrib::Vault given bad index.");
+    CGS_ASSERT(luIndex < mNumExports,
+        CgsDev::Assert::MessageAt("Attrib::Vault given bad index.",
+            "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribloadandgo.cpp",
+            526 /* ARTIST 0x82803450 */));
     return mExportData[luIndex].GetData();
 }
 

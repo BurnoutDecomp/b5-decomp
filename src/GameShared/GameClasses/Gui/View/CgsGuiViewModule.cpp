@@ -596,7 +596,8 @@ namespace CgsGui
     void ViewModule::SetClearScreenAlpha(f32 lfAlpha)
     {
         CGS_ASSERT(lfAlpha >= 0.0f && lfAlpha <= 1.0f,
-                   "lfAlpha must be in [0,1] in SetClearScreenAlpha");
+            CgsDev::Assert::MessageAt("lfAlpha>=0.0f && lfAlpha <= 1.0f",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CgsGuiViewModule.h", 482 /* ARTIST 0x82847544 */));
         mfClearScreenAlpha = lfAlpha;
     }
 

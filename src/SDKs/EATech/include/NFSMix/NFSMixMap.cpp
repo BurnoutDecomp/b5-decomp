@@ -1049,8 +1049,11 @@ void NFSMixMap::ResetMapData()
     m_AssignedMixCtlsUnique = 0;         // +0x144
     m_ScaleParamsAdded = 0;              // +0xD4
     m_ScaleParamsIDCount = 0;            // +0xD8
-    for (int li = 0; li < 20; ++li)      // +0xDC loop: m_CurveProcsTotal[10][2]
-        reinterpret_cast<int*>(m_CurveProcsTotal)[li] = 0;
+    for (int li = 0; li < 10; ++li)      // ARTIST 0x82B482DC clears one pair per iteration.
+    {
+        m_CurveProcsTotal[li][0] = 0;
+        m_CurveProcsTotal[li][1] = 0;
+    }
     m_3DMixCtlsAdded = 0;                // +0x1D4
     m_EventCtlsAdded = 0;               // +0x1E0
     m_nAssignedDMixIOBlocks = 0;         // +0xB4

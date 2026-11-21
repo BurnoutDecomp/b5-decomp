@@ -13,7 +13,7 @@
 // ============================================================================
 
 #include "SDKs/Packages/ICE/ICEFile.hpp"             // ICE::ICEFileHandler + KU_NORMAL_BUFFER
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "SDKs/EA/GameTalk/GameTalk.h"               // EA::GameTalk::GameTalkMessage / GameTalkManager
 #include "rw/core/stdc/stdc.h"                        // rw::core::stdc::String{Cat,Length} / Vsprintf
 
@@ -41,17 +41,23 @@ s32 ICEFileHandler::FilePrintf(const char* lpcFormat, ...)
     char lacBuffer[KU_NORMAL_BUFFER];   // ICEFile.cpp:100 -- the 1 KiB format scratch
     va_list lArgList;                   // ICEFile.cpp:101
 
-    // The format string itself must fit the scratch buffer (line 99).
+    const char* const lpcAssertFile =
+        "..\\..\\..\\SDKs\\Packages\\ICE\\ICEFile.cpp";
+
     CGS_ASSERT(static_cast<u32>(rw::core::stdc::StringLength(lpcFormat)) < KU_NORMAL_BUFFER,
-               "static_cast<uint32_t> ( ICEMath::StrLen( lpFormat ) ) < KU_NORMAL_BUFFER");
+        CgsDev::Assert::MessageAt(
+            "static_cast<uint32_t> ( ICEMath::StrLen( lpFormat ) ) < KU_NORMAL_BUFFER",
+            lpcAssertFile, 99 /* ARTIST 0x8252CA3C */));
 
     va_start(lArgList, lpcFormat);
     s32 liStrLength = rw::core::stdc::Vsprintf(lacBuffer, lpcFormat, lArgList);   // ICEFile.cpp:103
     va_end(lArgList);
 
-    CGS_ASSERT(liStrLength >= 0, "lStrLength >= 0");
+    CGS_ASSERT(liStrLength >= 0,
+        CgsDev::Assert::MessageAt("lStrLength >= 0", lpcAssertFile, 106 /* ARTIST 0x8252CA80 */));
     CGS_ASSERT(liStrLength < static_cast<s32>(KU_NORMAL_BUFFER - 1),
-               "lStrLength < static_cast<int32_t>(KU_NORMAL_BUFFER-1)");
+        CgsDev::Assert::MessageAt("lStrLength < static_cast<int32_t>(KU_NORMAL_BUFFER-1)",
+            lpcAssertFile, 107 /* ARTIST 0x8252CAA4 */));
 
     // Append the formatted text onto the accumulation buffer (`this`).
     rw::core::stdc::StringCat(reinterpret_cast<char*>(this), lacBuffer);

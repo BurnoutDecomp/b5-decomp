@@ -68,8 +68,8 @@ void cParticleLocator::Init()
     for (u32 luKey = 0; luKey < 2; ++luKey)
     {
         SetQuat(mCacheQuat[luKey], 0.0f, 0.0f, 0.0f, 1.0f);
-        SetVec(mCachePos[luKey], 0.0f, 0.0f, 0.0f, 0.0f);
         mCacheTime[luKey].BuildZero();
+        SetVec(mCachePos[luKey], 0.0f, 0.0f, 0.0f, 0.0f);
     }
 }
 
