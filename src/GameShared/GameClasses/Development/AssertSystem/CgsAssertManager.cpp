@@ -202,7 +202,7 @@ namespace Assert
         while (*lpcMessage)
         {
             s32 liLength = 0;
-            while (lpcMessage[liLength] && lpcMessage[liLength] != '\n' && liLength < KI_MAX_LINE_LENGTH)
+            while (lpcMessage[liLength] != '\n' && lpcMessage[liLength] && liLength < KI_MAX_LINE_LENGTH)
                 ++liLength;
             char lacLine[KI_MAX_LINE_LENGTH + 1];
             std::strncpy(lacLine, lpcMessage, liLength);

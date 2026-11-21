@@ -213,9 +213,16 @@ void DebugComponent::OnActivate()
     RegisterFloat(&mfSunTiltAtMidday, KPC_ROOT,
                   "Sun path tilt from vertical at midday (degrees)", 1.0f, 89.0f, 1.0f);
 
-    RegisterFloat(&mafJunkyardKeyLightDirection[0], "Junkyard Lighting", "LightX", -1.0f, 1.0f, 0.05f);
-    RegisterFloat(&mafJunkyardKeyLightDirection[1], "Junkyard Lighting", "LightY", -1.0f, 1.0f, 0.05f);
-    RegisterFloat(&mafJunkyardKeyLightDirection[2], "Junkyard Lighting", "LightZ", -1.0f, 1.0f, 0.05f);
+    // ARTIST 0x827B38D8–0x827B39A4 registers all three axes before setting ranges and steps.
+    RegisterVariable(&mafJunkyardKeyLightDirection[0], "Junkyard Lighting", "LightX");
+    RegisterVariable(&mafJunkyardKeyLightDirection[1], "Junkyard Lighting", "LightY");
+    RegisterVariable(&mafJunkyardKeyLightDirection[2], "Junkyard Lighting", "LightZ");
+    SetRange(&mafJunkyardKeyLightDirection[0], -1.0f, 1.0f);
+    SetRange(&mafJunkyardKeyLightDirection[1], -1.0f, 1.0f);
+    SetRange(&mafJunkyardKeyLightDirection[2], -1.0f, 1.0f);
+    SetStep(&mafJunkyardKeyLightDirection[0], 0.05f);
+    SetStep(&mafJunkyardKeyLightDirection[1], 0.05f);
+    SetStep(&mafJunkyardKeyLightDirection[2], 0.05f);
     RegisterVariable(&mbCalculateJunkyardKeyLightDirectionFromTime,
                      "Junkyard Lighting", "Set from time of day");
     RegisterVariable(&mbOverrideJunkyardKeyLightDirection,
