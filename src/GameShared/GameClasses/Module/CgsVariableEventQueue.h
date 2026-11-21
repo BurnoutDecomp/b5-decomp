@@ -2,7 +2,7 @@
 
 #include "types.hpp"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CgsDev::Assert::Begin/Fire/EndAssert (verbatim X360 file/line)
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h" // original diagnostic file and line
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // CgsDev::StrStream (assert/log message build)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"    // CgsModule::EventQueue<T,N> source for the typed Append<EventT,SRCN>
@@ -189,16 +189,18 @@ namespace CgsModule
     template <s32 BUFSIZE, s32 ALIGN>
     void VariableEventQueue<BUFSIZE, ALIGN>::Construct()
     {
-        // X360: miFirstEventOffset = ALIGN - (&macData[0] & 0xF). The LegacySrc/DWARF
-        // source subtracted sizeof(CBufferEntry) and looped (+= ALIGN) while negative;
-        // the X360 build collapsed that to the single ALIGN - rem form (binary wins).
+        // ARTIST 0x82211348 computes the offset before setting the constructed flag,
+        // then checks alignment using the signed address remainder.
+        const s32 liDataAddress = reinterpret_cast<s32>(&macData[0]);
+        const s32 liFirstEventOffset = ALIGN - (liDataAddress & (ALIGN - 1));
         mbIsConstructed = true;
-        const uintptr_t luDataAddr = reinterpret_cast<uintptr_t>(&macData[0]);
-        miFirstEventOffset = ALIGN - (s32)(luDataAddr & (ALIGN - 1));
+        miFirstEventOffset = liFirstEventOffset;
 
-        CGS_ASSERT(miFirstEventOffset >= 0, "miFirstEventOffset >= 0");
-        CGS_ASSERT(((luDataAddr + (uintptr_t)miFirstEventOffset) % ALIGN) == 0,
-                   "( ( (int32_t)&macData[0] + miFirstEventOffset ) % Alignment ) == 0");
+        CGS_ASSERT(liFirstEventOffset >= 0, CgsDev::Assert::MessageAt(
+            "miFirstEventOffset >= 0", detail::KAC_VEQ_FILE, 226));
+        CGS_ASSERT(((reinterpret_cast<s32>(macData) + miFirstEventOffset) % ALIGN) == 0,
+                   CgsDev::Assert::MessageAt(
+                       "( ( (int32_t)&macData[0] + miFirstEventOffset ) % Alignment ) == 0", detail::KAC_VEQ_FILE, 227));
 
         Clear();
     }
@@ -356,27 +358,21 @@ namespace CgsModule
     s32 VariableEventQueue<BUFSIZE, ALIGN>::GetNextEvent(
         const Event* lpEvent, const Event** lppNextEvent, s32* lpiSize) const
     {
-        if (!mbIsConstructed)
-        {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Not Constructed\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 407);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(mbIsConstructed, CgsDev::Assert::StreamMessageAt(
+            "Not Constructed\n", detail::KAC_VEQ_FILE, 407));
 
         s32 liPrevEntryPosition =
             (s32)(reinterpret_cast<const char*>(lpEvent) - macData) - (s32)sizeof(CBufferEntry);
         if (!((liPrevEntryPosition >= 0) && (liPrevEntryPosition < miBufferWritePos)))
         {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Prev entry is invalid, position: " << liPrevEntryPosition
-                       << " PrevEventPtr=0x" << CgsDev::E_PRINTMODE_HEX
-                       << reinterpret_cast<void*>(const_cast<Event*>(lpEvent)) << "\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 410);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            CgsDev::StrStreamBase& lrMessage = lStrStream << "Prev entry is invalid, position: " << liPrevEntryPosition;
+            lrMessage << " PrevEventPtr=0x";
+            (lrMessage.SetPrintMode(CgsDev::E_PRINTMODE_HEX) << reinterpret_cast<u32>(lpEvent))
+                .SetPrintMode(CgsDev::E_PRINTMODE_HEXONCE);
+            lrMessage << "\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, detail::KAC_VEQ_FILE, 410);
             CgsDev::Assert::EndAssert();
         }
 
@@ -387,20 +383,18 @@ namespace CgsModule
 
         if (!(liNextEntryPosition >= 0))
         {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Next entry position is invalid: " << liNextEntryPosition << "\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 419);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Next entry position is invalid: " << liNextEntryPosition << "\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, detail::KAC_VEQ_FILE, 419);
             CgsDev::Assert::EndAssert();
         }
         if (!(lpPrevEntry->miSize >= 0))
         {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Next entry size is invalid: " << lpPrevEntry->miSize;
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 420);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Next entry size is invalid: " << lpPrevEntry->miSize;
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, detail::KAC_VEQ_FILE, 420);
             CgsDev::Assert::EndAssert();
         }
 
@@ -422,33 +416,26 @@ namespace CgsModule
     template <s32 BUFSIZE, s32 ALIGN>
     bool VariableEventQueue<BUFSIZE, ALIGN>::AddEvent(const Event* lpEvent, s32 liType, s32 liSize)
     {
-        if (!mbIsConstructed)
-        {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Not Constructed\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 454);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(mbIsConstructed, CgsDev::Assert::StreamMessageAt(
+            "Not Constructed\n", detail::KAC_VEQ_FILE, 454));
 
         s32 liTotalEventSize = liSize + (s32)sizeof(CBufferEntry);
         s32 liPaddingBytes = GetEventPaddingSize(liTotalEventSize);
 
-        if (!((miBufferWritePos + liTotalEventSize + liPaddingBytes) <= BUFSIZE))
+        // FAKEMATCH: Keep the native operand order in the capacity and write-offset sums.
+        if (!((miBufferWritePos + liPaddingBytes + liTotalEventSize) <= BUFSIZE))
         {
             OutputQueueContents();
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "CgsModule::VariableEventQueue<" << (s32)BUFSIZE << "," << (s32)ALIGN << ">::AddEvent"
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "CgsModule::" __FUNCTION__
                        << "\nQueue overflow.\nWrite Pos=" << miBufferWritePos
                        << " Event Type=" << liType
                        << "\nTotalEventSize=" << liTotalEventSize
                        << " Padding=" << liPaddingBytes
                        << "\nBufferSize=" << (s32)BUFSIZE
                        << " Length=" << miLength << "\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 469);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, detail::KAC_VEQ_FILE, 469);
             CgsDev::Assert::EndAssert();
         }
 
@@ -458,7 +445,7 @@ namespace CgsModule
 
         miBufferWritePos += (s32)sizeof(CBufferEntry);
         memcpy(&macData[miBufferWritePos], lpEvent, liSize);
-        miBufferWritePos += liSize + liPaddingBytes;
+        miBufferWritePos = miBufferWritePos + liPaddingBytes + liSize;
         ++miLength;
 
         return true;
@@ -516,11 +503,10 @@ namespace CgsModule
     {
         if (!mbIsConstructed)
         {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Not Constructed\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 759);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Not Constructed\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, detail::KAC_VEQ_FILE, 759);
             CgsDev::Assert::EndAssert();
         }
 
@@ -541,8 +527,8 @@ namespace CgsModule
         }
 
         const char* lpSrc = lrSource.GetFirstWritePointer();
-        memcpy(&macData[miBufferWritePos], lpSrc, liSizeInBytes);
-        miBufferWritePos += liSizeInBytes;
+        XMemCpy(&macData[miBufferWritePos], lpSrc, liSizeInBytes);
+        miBufferWritePos = liSizeInBytes + miBufferWritePos;
         miLength += lrSource.GetLength();
         return true;
     }
@@ -607,27 +593,19 @@ namespace CgsModule
     template <s32 BUFSIZE, s32 ALIGN>
     void* VariableEventQueue<BUFSIZE, ALIGN>::AllocateEvent(s32 liType, s32 liSize)
     {
-        if (!mbIsConstructed)
-        {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Not Constructed\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 556);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(mbIsConstructed, CgsDev::Assert::StreamMessageAt(
+            "Not Constructed\n", detail::KAC_VEQ_FILE, 556));
 
         s32 liTotalEventSize = liSize + (s32)sizeof(CBufferEntry);
         s32 liPaddingBytes = GetEventPaddingSize(liTotalEventSize);
 
-        if (!((miBufferWritePos + liTotalEventSize + liPaddingBytes) <= BUFSIZE))
+        if (!((miBufferWritePos + liPaddingBytes + liTotalEventSize) <= BUFSIZE))
         {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "CgsModule::VariableEventQueue<" << (s32)BUFSIZE << "," << (s32)ALIGN << ">::AllocateEvent"
-                       << "\nQueue overflow\n";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 563);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "CgsModule::" __FUNCTION__
+                       << "\nQueue overflow\n";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, detail::KAC_VEQ_FILE, 563);
             CgsDev::Assert::EndAssert();
         }
 
@@ -637,7 +615,7 @@ namespace CgsModule
 
         miBufferWritePos += (s32)sizeof(CBufferEntry);
         void* lpResult = &macData[miBufferWritePos];
-        miBufferWritePos += liSize + liPaddingBytes;
+        miBufferWritePos = miBufferWritePos + liPaddingBytes + liSize;
         ++miLength;
 
         return lpResult;
@@ -766,25 +744,18 @@ namespace CgsModule
     template <s32 BUFSIZE, s32 ALIGN>
     bool VariableEventQueue<BUFSIZE, ALIGN>::AddEventSafe(const Event* lpEvent, s32 liType, s32 liSize)
     {
-        if (!mbIsConstructed)
-        {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Not Constructed\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 467);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(mbIsConstructed, CgsDev::Assert::StreamMessageAt(
+            "Not Constructed\n", detail::KAC_VEQ_FILE, 508));
         s32 liTotalEventSize = liSize + (s32)sizeof(CBufferEntry);
         s32 liPaddingBytes = GetEventPaddingSize(liTotalEventSize);
-        if ((miBufferWritePos + liTotalEventSize + liPaddingBytes) <= BUFSIZE)
+        if ((miBufferWritePos + liPaddingBytes + liTotalEventSize) <= BUFSIZE)
         {
             CBufferEntry* lpEntry = reinterpret_cast<CBufferEntry*>(&macData[miBufferWritePos]);
             lpEntry->miID   = liType;
             lpEntry->miSize = liSize;
             miBufferWritePos += (s32)sizeof(CBufferEntry);
             memcpy(&macData[miBufferWritePos], lpEvent, liSize);
-            miBufferWritePos += liSize + liPaddingBytes;
+            miBufferWritePos = miBufferWritePos + liPaddingBytes + liSize;
             ++miLength;
             return true;
         }

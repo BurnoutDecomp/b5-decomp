@@ -42,6 +42,13 @@ namespace CgsDev
         StrStreamBase& operator<<(PrintMode leMode);
         StrStreamBase& operator<<(bool lbValue);   // streams "true" / "false" through the sink
 
+        // ARTIST's queue diagnostics set the stream mode inline.
+        StrStreamBase& SetPrintMode(PrintMode leMode)
+        {
+            mePrintMode = leMode;
+            return *this;
+        }
+
         // 0x82817720 - render a printf-style format into a 256-byte stack buffer and forward the
         // result to the virtual char* sink (the X360 StrStreamBase::AppendFormat). The X360 asserts
         // the formatted length did not exceed the buffer (CgsStringUtils.h copy guard); we keep that
