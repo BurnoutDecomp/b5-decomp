@@ -193,8 +193,7 @@ Attrib::Collection::~Collection()
 // ++refcount-with-overflow-guard the X360 inlines at the other AddRef sites.
 Attrib::Collection* Attrib::Collection::AddRef()
 {
-    CGS_ASSERT(muRefCount != 0xFFFF, "Exceeded collection refcount maximum!\n");
-    ++muRefCount;
+    HashMap::AddRef();
     return this;
 }
 

@@ -105,9 +105,7 @@ namespace Attrib
         if (mpCollectionPtr)
         {
             Collection* lpCollection = const_cast<Collection*>(mpCollectionPtr);
-            CGS_ASSERT(lpCollection->muRefCount != 0xFFFF,
-                       "Exceeded collection refcount maximum!\n");
-            ++lpCollection->muRefCount;
+            lpCollection->HashMap::AddRef();
         }
     }
 
@@ -121,8 +119,7 @@ namespace Attrib
             if (lpCollection->mpSource == 0)
                 muFlags = 1;
             mpAttributeData = lpCollection->mpData;
-            CGS_ASSERT(lpCollection->muRefCount != 0xFFFF, "Exceeded collection refcount maximum!\n");
-            ++lpCollection->muRefCount;
+            lpCollection->HashMap::AddRef();
         }
     }
 
@@ -165,8 +162,7 @@ namespace Attrib
             if (mpCollection->mpSource == 0)
                 muFlags = 1;
             mpAttributeData = mpCollection->mpData;
-            CGS_ASSERT(mpCollection->muRefCount != 0xFFFF, "Exceeded collection refcount maximum!\n");
-            ++mpCollection->muRefCount;
+            mpCollection->HashMap::AddRef();
         }
     }
 
@@ -187,9 +183,7 @@ namespace Attrib
     {
         if (mpCollection)
         {
-            CGS_ASSERT(mpCollection->muRefCount != 0xFFFF,
-                       "Exceeded collection refcount maximum!\n");
-            ++mpCollection->muRefCount;
+            mpCollection->HashMap::AddRef();
         }
     }
 

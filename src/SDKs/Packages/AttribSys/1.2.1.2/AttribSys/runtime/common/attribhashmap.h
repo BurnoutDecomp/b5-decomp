@@ -33,7 +33,7 @@
 
 #include <cstddef>   // offsetof, NULL
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace Attrib
 {
@@ -115,9 +115,12 @@ namespace Attrib
         //      here per the x64 semantic-parity rule) ----
         u16  GetRefCount() const { return muRefCount; }
         u16  GetCount() const { return muCount; }
-        void AddRef()
+        __forceinline void AddRef()
         {
-            CGS_ASSERT(muRefCount != 0xFFFF, "Exceeded collection refcount maximum!\n");
+            CGS_ASSERT(muRefCount < 0xFFFF,
+                CgsDev::Assert::MessageAt("Exceeded collection refcount maximum!\n",
+                    "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/common/attribhashmap.h",
+                    622 /* ARTIST 0x82802908 */));
             ++muRefCount;
         }
         // ~ClassPrivate's teardown pair (@0x8280F4D8): zero the live count up

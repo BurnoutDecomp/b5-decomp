@@ -121,7 +121,7 @@ RefSpec& RefSpec::operator=(const RefSpec& lrOther)
 {
     if (mpCollectionPtr)
     {
-        Collection_Release(const_cast<Collection*>(mpCollectionPtr), -1);
+        const_cast<Collection*>(mpCollectionPtr)->Release();
         mpCollectionPtr = 0;
     }
 
@@ -132,8 +132,7 @@ RefSpec& RefSpec::operator=(const RefSpec& lrOther)
     if (mpCollectionPtr)
     {
         Collection* lpCollection = const_cast<Collection*>(mpCollectionPtr);
-        CGS_ASSERT(lpCollection->muRefCount != 0xFFFF, "Exceeded collection refcount maximum!\n");
-        ++lpCollection->muRefCount;
+        lpCollection->HashMap::AddRef();
     }
     return *this;
 }
