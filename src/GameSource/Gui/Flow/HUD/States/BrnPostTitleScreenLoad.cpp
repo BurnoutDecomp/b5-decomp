@@ -1,6 +1,6 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnPostTitleScreenLoad.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameSource/Gui/BrnGuiCache.h"            // BrnGui::GuiCache (the intro-video gate at +0x4B78)
@@ -101,7 +101,10 @@ namespace BrnGui
     void PostTitleScreenLoad::GetResourcesToLoad(const CgsGui::sResourceTuple** /*lppResourceTuples*/,
                                                  u32* /*lpuNumberOfResources*/) const
     {
-        CGS_ASSERT(false, "Should not get here");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "Should not get here",
+                "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnPostTitleScreenLoad.h", 63 /* ARTIST 0x825080C4 */));
     }
 
     namespace

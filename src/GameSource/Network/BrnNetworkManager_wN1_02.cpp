@@ -11,7 +11,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h"              // NetworkToGameStateInterface::SetFramesSinceStart
 #include "GameSource/GameState/BrnGameEvents.h"                                             // LocalPlayerDisconnectedEvent
 #include "GameSource/Resource/BrnResourceAllocator.h"                                       // GetAvailableMemory, BRN_RESOURCE_MEMORY_CHECK
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                          // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                                  // the memory checks' log line
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                   // CgsDev::PerfMonCpu::Start/StopMonitor
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"                                 // CgsGui::GuiEventNetworkDisconnected
@@ -39,6 +39,9 @@
 // GetActiveRaceCarIndex, IsLocalPlayer, IsDoingFreeBurnLobby, GetMaxMessageSize,
 // DxtDecodeCallback, ProcessNetworkTextureDecodeEvent.
 // ============================================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp";
 
 namespace GsmIO = BrnGameState::GameStateModuleIO;
 
@@ -402,8 +405,11 @@ namespace BrnNetwork
 
     void BrnNetworkManager::CaptureTelemetryEvent(ETelemetryHook leHook, const char* lpcData)
     {
-        CGS_ASSERT(GetServerInterface(), "GetServerInterface()");
-        CGS_ASSERT(GetServerInterface()->GetTelemetryComponent(), "GetServerInterface()->GetTelemetryComponent()");
+        CGS_ASSERT(GetServerInterface(),
+            CgsDev::Assert::MessageAt("GetServerInterface()", KAC_ARTIST_ASSERT_FILE, 3121 /* ARTIST 0x825821A8 */));
+        CGS_ASSERT(GetServerInterface()->GetTelemetryComponent(),
+            CgsDev::Assert::MessageAt(
+                "GetServerInterface()->GetTelemetryComponent()", KAC_ARTIST_ASSERT_FILE, 3122 /* ARTIST 0x825821D0 */));
         GetServerInterface()->GetTelemetryComponent()->CaptureEvent(leHook, lpcData);
     }
 

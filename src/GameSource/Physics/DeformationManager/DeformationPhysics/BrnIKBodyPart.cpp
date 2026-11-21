@@ -1,6 +1,6 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformationSensor.h"  // SensorSpec / the .w latch the band reads
 
@@ -33,6 +33,9 @@
 // The asserts are NON-gating tripwires: in the asm execution continues past a failed
 // BeginAssert/FireAssert/EndAssert triple with no early-out, so each CGS_ASSERT here is a
 // pure tripwire and the work that follows runs regardless (exactly like the asm).
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Physics/DeformationManager/DeformationPhysics/BrnIKBodyPart.h";
 
 namespace BrnPhysics
 {
@@ -343,8 +346,12 @@ namespace Deformation
     // ---------------------------------------------------------------------------------------------
     void IKBodyPart::SetActiveJointIndex(s32 liActiveJointIndex)
     {
-        CGS_ASSERT(liActiveJointIndex < 256, "liActiveJointIndex < 256");
-        CGS_ASSERT(liActiveJointIndex >= 0, "liActiveJointIndex >= 0");
+        CGS_ASSERT(liActiveJointIndex < 256,
+            CgsDev::Assert::MessageAt(
+                "liActiveJointIndex < 256", KAC_ARTIST_ASSERT_FILE, 553 /* ARTIST 0x825B40CC */));
+        CGS_ASSERT(liActiveJointIndex >= 0,
+            CgsDev::Assert::MessageAt(
+                "liActiveJointIndex >= 0", KAC_ARTIST_ASSERT_FILE, 554 /* ARTIST 0x825B40F0 */));
         mu8ActiveJointIndex = static_cast<u8>(liActiveJointIndex);
     }
 

@@ -21,7 +21,7 @@
 
 #include <xtl.h>
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModule.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsContactGenerationIO.h"
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsOverlapGenerationModule.h"  // OverlapGenerationIO::InputBuffer / InAddBodyEvent (AddBody)
@@ -229,7 +229,10 @@ void CullingGroupManager::CreateCullingTable(rw::IResourceAllocator* lpSceneAllo
 // ===========================================================================
 void SceneManagerModule::CreateCullingTable(rw::IResourceAllocator* lpSceneAllocator)
 {
-    CGS_ASSERT(lpSceneAllocator != NULL, "lpSceneAllocator != NULL");
+    CGS_ASSERT(lpSceneAllocator != NULL,
+        CgsDev::Assert::MessageAt(
+            "lpSceneAllocator != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsSceneManagerModule.cpp", 1362 /* ARTIST 0x828BACBC */));
     mCullingGroupManager.CreateCullingTable(lpSceneAllocator);
 }
 

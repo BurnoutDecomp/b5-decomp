@@ -16,7 +16,7 @@
 
 #include "BrnProgressionManager.h"
 #include "BrnProfile.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress (AddCar's "CARBEAGT" test)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"            // CgsDev::Log::gpDebugPrint (the two FLAG lines)
 #include "BrnProgressionCarData.h"                                    // BrnProgression::CarData (colour/palette/unlock type)
@@ -574,7 +574,10 @@ bool ProgressionManager::IsCarUnlocked(CgsID lCarId) const
 // ------------------------------------------------------------------------------------
 void ProgressionManager::RepairUnlockedVehicle(CgsID lCarId)
 {
-    CGS_ASSERT(lCarId != 0, "lCarId != kCGSID_NULL");
+    CGS_ASSERT(lCarId != 0,
+        CgsDev::Assert::MessageAt(
+            "lCarId != kCGSID_NULL",
+            "..\\..\\..\\GameSource\\GameState/Progression/BrnProgressionManager.h", 1415 /* ARTIST 0x8236365C */));
     mProfile.RepairUnlockedVehicle(lCarId);
 }
 

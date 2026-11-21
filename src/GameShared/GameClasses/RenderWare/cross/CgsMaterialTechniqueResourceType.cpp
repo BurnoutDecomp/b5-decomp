@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/RenderWare/cross/CgsMaterialTechniqueResourceType.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the unresolved-import boot gate
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
@@ -108,7 +108,10 @@ namespace CgsResource
 
     void MaterialTechniqueResourceType::GetImportPointer(const void*, uint32_t, uint32_t*, const void**) const
     {
-        CGS_ASSERT(false, "This function should not be called at runtime");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "This function should not be called at runtime",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\cross/CgsMaterialTechniqueResourceType.cpp", 371 /* ARTIST 0x828A80BC */));
     }
 
     void MaterialTechniqueResourceType::PostFixUp(void* lpResource, const rw::Resource&) const

@@ -1,5 +1,5 @@
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneQueryInterface.h" // SceneQueryInterface
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_TriangleCache.h"       // TriangleCacheInterface
@@ -73,7 +73,10 @@ bool CgsSceneManager::SceneManagerIO::SceneQueryInterface::HasData()
 s32 CgsSceneManager::SceneManagerIO::TriangleCacheInterface::GetNumCachedTriangleBatches(
     s32 liCacheSlotIndex) const
 {
-    CGS_ASSERT(mpTriangleCacheManager != 0, "mpTriangleCacheManager != NULL");
+    CGS_ASSERT(mpTriangleCacheManager != 0,
+        CgsDev::Assert::MessageAt(
+            "mpTriangleCacheManager != NULL",
+            "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModuleIO.h", 1295 /* ARTIST 0x822778B0 */));
     return mpTriangleCacheManager->mpaCachedObjectSlots[liCacheSlotIndex].miNumCachedTriangleBatches;
 }
 

@@ -1,12 +1,15 @@
 #include "SharedClasses/World/BrnWorldRegion.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnWorld
 {
 void WorldRegion::Construct(EDistrict leDistrict)
 {
-    CGS_ASSERT(leDistrict < E_DISTRICT_COUNT, "leDistrict < E_DISTRICT_COUNT");
+    CGS_ASSERT(leDistrict < E_DISTRICT_COUNT,
+        CgsDev::Assert::MessageAt(
+            "leDistrict < E_DISTRICT_COUNT",
+            "..\\..\\..\\SharedClasses\\World/BrnWorldRegion.h", 155 /* ARTIST 0x8229FE4C */));
 
     meDistrict = leDistrict;
     meCounty   = DistrictToCounty(meDistrict);

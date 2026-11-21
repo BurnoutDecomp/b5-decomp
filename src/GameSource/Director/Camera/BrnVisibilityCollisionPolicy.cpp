@@ -7,7 +7,7 @@
 #include "vendor/renderware/collision/CollisionVolume.hpp"          // rw::collision::SphereVolume (the camera-in-geometry sphere)
 #include "rw/rwcore_structs.h"                                      // rw::Resource (SphereVolume::Initialize's block descriptor)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 
 // ============================================================================
@@ -136,7 +136,10 @@ void VisibilityCollisionPolicy::SetVelocity(Vector3 lVelocity)
 void VisibilityCollisionPolicy::SetDesiredHeight(f32 lfDesiredHeight)
 {
     mbUseGroundConstraint = true;
-    CGS_ASSERT(lfDesiredHeight > 0.0f, "lfDesiredHeight > 0.0f");   // :489 (non-gating)
+    CGS_ASSERT(lfDesiredHeight > 0.0f,
+        CgsDev::Assert::MessageAt(
+            "lfDesiredHeight > 0.0f",
+            "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.h", 489 /* ARTIST 0x821F391C */));   // :489 (non-gating)
     mGroundConstraint.SetDesiredHeight(lfDesiredHeight);
 }
 

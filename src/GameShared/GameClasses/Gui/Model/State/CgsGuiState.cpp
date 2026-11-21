@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"   // CgsGui::State (+ ScriptedState base, StateInterface fwd, sResourceTuple fwd)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"       // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf
 #include "GameShared/GameClasses/Fsm/CgsEvent.h"         // CgsFsm::Event
 #include "GameShared/GameClasses/Fsm/CgsScriptedFsm.h"   // CgsFsm::ScriptedFsm::IsLuaResourceValid (mpFsm's concrete type)
@@ -65,7 +65,10 @@ namespace CgsGui
     // then unconditionally clear it (stb 0, 0x20(r31) runs regardless of the branch taken).
     void State::PreUpdate()
     {
-        CGS_ASSERT(!mbStateChangePending, "mbStateChangePending == false");
+        CGS_ASSERT(!mbStateChangePending,
+            CgsDev::Assert::MessageAt(
+                "mbStateChangePending == false",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiState.cpp", 104 /* ARTIST 0x828486C8 */));
         mbStateChangePending = false;
     }
 

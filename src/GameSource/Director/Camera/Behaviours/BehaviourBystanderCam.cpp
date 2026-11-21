@@ -31,6 +31,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BehaviourBystanderCam.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"               // Utils::TargetOutsideRange / TargetWillExceedRangeInXSecs
 #include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h"          // Utils::Tweaker (SetupTweaker)
 #include "rw/math/vpu/vector3_operation.h"                              // MagnitudeSquared / GetVector3_YAxis
@@ -152,7 +153,10 @@ void BehaviourBystanderCam::Construct()
 bool BehaviourBystanderCam::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 {
     SetPrepared();
-    CGS_ASSERT(mbSetup, "mbSetup");   // cpp:256
+    CGS_ASSERT(mbSetup,
+        CgsDev::Assert::MessageAt(
+            "mbSetup",
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourBystanderCam.cpp", 256 /* ARTIST 0x821F9AF8 */));   // cpp:256
     return true;
 }
 

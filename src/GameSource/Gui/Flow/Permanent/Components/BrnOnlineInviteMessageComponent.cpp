@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "BrnOnlineInviteMessageComponent.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h" // CGS_ASSERT
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponentUtils.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -293,7 +293,10 @@ void OnlineInviteMessageComponent::TransitionCompleteCallback(void* lpUserData,
                                                               u16 luFrame)
 {
     (void)luFrame;
-    CGS_ASSERT(lpUserData != 0, "lpUserData");
+    CGS_ASSERT(lpUserData != 0,
+        CgsDev::Assert::MessageAt(
+            "lpUserData",
+            "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnOnlineInviteMessageComponent.cpp", 650 /* ARTIST 0x82416374 */));
     static_cast<OnlineInviteMessageComponent*>(lpUserData)->DoTransitionComplete();
 }
 

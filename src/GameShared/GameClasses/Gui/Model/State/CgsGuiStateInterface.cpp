@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cstring>   // memcpy
 
@@ -16,7 +16,10 @@ namespace CgsGui
     // @ 0x8240E3E0
     GuiAccessPointers* StateInterface::GetAccessPointers()
     {
-        CGS_ASSERT(mpAccessPointers != 0, "mpAccessPointers != NULL");
+        CGS_ASSERT(mpAccessPointers != 0,
+            CgsDev::Assert::MessageAt(
+                "mpAccessPointers != NULL",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiStateInterface.h", 344 /* ARTIST 0x8240E408 */));
         return mpAccessPointers;
     }
 

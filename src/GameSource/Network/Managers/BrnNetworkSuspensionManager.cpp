@@ -1,7 +1,10 @@
 #include "GameSource/Network/Managers/BrnNetworkSuspensionManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Network/BrnNetworkManager.h"
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkSuspensionManager.cpp";
 
 namespace BrnNetwork
 {
@@ -43,8 +46,11 @@ namespace BrnNetwork
 
     void SuspensionManager::Resume(Callback lpfCallback, void* lpUserData)
     {
-        CGS_ASSERT(lpfCallback, "lCallback");
-        CGS_ASSERT(meSubState == E_SUBSTATE_COUNT, "meSubState == E_SUBSTATE_COUNT");
+        CGS_ASSERT(lpfCallback,
+            CgsDev::Assert::MessageAt("lCallback", KAC_ARTIST_ASSERT_FILE, 279 /* ARTIST 0x82544CB8 */));
+        CGS_ASSERT(meSubState == E_SUBSTATE_COUNT,
+            CgsDev::Assert::MessageAt(
+                "meSubState == E_SUBSTATE_COUNT", KAC_ARTIST_ASSERT_FILE, 280 /* ARTIST 0x82544CE0 */));
 
         mCallback = lpfCallback;
         mpUserData = lpUserData;

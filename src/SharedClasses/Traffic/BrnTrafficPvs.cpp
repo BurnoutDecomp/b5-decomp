@@ -10,6 +10,7 @@
 // =============================================================================
 
 #include "SharedClasses/Traffic/BrnTrafficPvs.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "types.hpp"   // uintptr_t (relocation arithmetic)
 
 namespace BrnTraffic
@@ -116,7 +117,10 @@ u32 Pvs::GetHullIndexForIndices(s32 liX, s32 liZ) const
 // &mpaHullPvs[luIndex] (20-byte stride == sizeof(Set<uint16_t,8u>)).
 const Set<u16, 8>& Pvs::GetHullPvs(u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < muNumCells, "luIndex < muNumCells");
+    CGS_ASSERT(luIndex < muNumCells,
+        CgsDev::Assert::MessageAt(
+            "luIndex < muNumCells",
+            "..\\..\\..\\SharedClasses\\Traffic/BrnTrafficPvs.h", 204 /* ARTIST 0x82705FE0 */));
 
     return mpaHullPvs[luIndex];
 }

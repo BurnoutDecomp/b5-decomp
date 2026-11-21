@@ -44,7 +44,7 @@
 
 #include <cstring>                                                        // strcmp / memcpy
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDConvertToString
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream
@@ -501,7 +501,10 @@ void OfflineRivalShutdown::HandleAptTriggers(const CgsGui::GuiEventAptTriggerPay
 // cpp:525 -- only the "pressed" record (id 6) is answered.
 void OfflineRivalShutdown::HandleControllerInput(const CgsModule::Event* lpEvent, s32 liEventType)
 {
-    CGS_ASSERT(lpEvent, "lpEvent");   // cpp:527
+    CGS_ASSERT(lpEvent,
+        CgsDev::Assert::MessageAt(
+            "lpEvent",
+            "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineRivalShutdown.cpp", 527 /* ARTIST 0x824BD128 */));   // cpp:527
 
     if (liEventType == KI_EVENT_CONTROLLER_INPUT_PRESSED)
     {

@@ -1,5 +1,5 @@
 #include "GameSource/Sound/Collision/BrnCollisionDataStructures.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (validity / same-scrape tripwires)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (validity / same-scrape tripwires)
 
 // =============================================================================
 // BrnSound::Logic::Collision::ScrapeInfo -- out-of-line bodies for the two
@@ -72,7 +72,10 @@ bool ScrapeInfo::operator==( const ScrapeInfo& lInfo ) const
 // ---------------------------------------------------------------------------
 void ScrapeInfo::UpdateHistory( const ScrapeInfo& lInfo )
 {
-    CGS_ASSERT( *this == lInfo, "*this == lInfo" );
+    CGS_ASSERT( *this == lInfo,
+        CgsDev::Assert::MessageAt(
+            "*this == lInfo",
+            "..\\..\\..\\GameSource\\Sound/Collision/BrnCollisionDataStructures.h", 146 /* ARTIST 0x826822FC */));
 
     mfIntensity = lInfo.mfIntensity;
     mfTimeStamp = lInfo.mfTimeStamp;

@@ -1,6 +1,6 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/texture2d.h"
 #include "GameSource/Effects/Particles/ParticleModule.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Effects/Particles/ParticleCpuMonitors.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/System/CgsHardwareInit.h"
@@ -159,7 +159,10 @@ namespace BrnParticle
     LionEffect* ParticleModule::GetLionEffect(u32 luHandle)
     {
         const u32 luArrayIndex = luHandle & LionEffect::KU_HANDLE_INDEX_MASK;
-        CGS_ASSERT(luArrayIndex < KU_MAX_PLAYING_EFFECTS, "luArrayIndex < KU_MAX_PLAYING_EFFECTS");
+        CGS_ASSERT(luArrayIndex < KU_MAX_PLAYING_EFFECTS,
+            CgsDev::Assert::MessageAt(
+                "luArrayIndex < KU_MAX_PLAYING_EFFECTS",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\Particles/ParticleModule.h", 382 /* ARTIST 0x822783A8 */));
 
         LionEffect* lpEffect = &maPlayingEffects[luArrayIndex];
         if (lpEffect->muHandle != luHandle)

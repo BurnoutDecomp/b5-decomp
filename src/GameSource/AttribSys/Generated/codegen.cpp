@@ -1,5 +1,5 @@
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribarray.h"       // TypeDesc, ITypeHandler
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"    // RefSpec
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsysallochooks.h"      // Attrib::Alloc
@@ -68,7 +68,10 @@ namespace Attrib
 
     void* DefaultDataArea(u32 luSize)
     {
-        CGS_ASSERT(luSize <= KU_MAX_DEFAULT_DATA_SIZE, "DefaultData requested for type which is too large.");
+        CGS_ASSERT(luSize <= KU_MAX_DEFAULT_DATA_SIZE,
+            CgsDev::Assert::MessageAt(
+                "DefaultData requested for type which is too large.",
+                "..\\..\\..\\GameSource\\AttribSys\\Generated/codegen.cpp", 14 /* ARTIST 0x821F0064 */));
         return gaDefaultData;
     }
 

@@ -30,7 +30,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavProfile.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
@@ -128,7 +128,10 @@ namespace BrnGui
     void CrashNavProfile::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm,
                                     ProfileManager& lrProfileManager)
     {
-        CGS_ASSERT(lpFsm != 0, "lpFsm");
+        CGS_ASSERT(lpFsm != 0,
+            CgsDev::Assert::MessageAt(
+                "lpFsm",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavProfile.cpp", 85 /* ARTIST 0x824B7AC4 */));
 
         CgsGui::State::Construct(liId, lpFsm);
         mpProfileManager = &lrProfileManager;

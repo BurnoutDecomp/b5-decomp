@@ -6,10 +6,13 @@
 // output throughout. The constructor is compiler-generated (member construction only).
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnHelpBar.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                           // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptObjectController.h" // ObjectController
 #include "GameSource/Gui/BrnGuiCache.h"                                           // GuiCache
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnHelpBar.cpp";
 
 namespace BrnGui
 {
@@ -68,10 +71,12 @@ namespace BrnGui
     void HelpBar::SetupComponent()
     {
         Animator* lpAnimator = &maAnimators[0];
-        CGS_ASSERT(lpAnimator != 0, "lpAnimator");
+        CGS_ASSERT(lpAnimator != 0,
+            CgsDev::Assert::MessageAt("lpAnimator", KAC_ARTIST_ASSERT_FILE, 104 /* ARTIST 0x824E259C */));
 
         CgsGui::ObjectController* lpObjectController = lpAnimator->GetObjectController();
-        CGS_ASSERT(lpObjectController != 0, "lpObjectController");
+        CGS_ASSERT(lpObjectController != 0,
+            CgsDev::Assert::MessageAt("lpObjectController", KAC_ARTIST_ASSERT_FILE, 107 /* ARTIST 0x824E25C4 */));
 
         mBasePosition = lpObjectController->GetPos();
     }

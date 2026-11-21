@@ -1,7 +1,7 @@
 #include "GameSource/Physics/PropManager/PropPhysics/BrnPropInstance.h"
 #include "rw/math/vpu/vector3_operation.h"           // rw::math::vpu::IsValid(Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"    // rw::math::vpu::IsValid(Matrix44Affine)
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 // ===========================================================================
 // BrnPhysics::Props::PropInstance out-of-line accessors, reconstructed store-for-
@@ -65,7 +65,10 @@ namespace Props
     // joint index. The X360 reads the u8 field at +0x6C and returns it zero-extended.
     int32_t PropInstance::GetJointIndex() const
     {
-        CGS_ASSERT(IsJointed(), "IsJointed()");
+        CGS_ASSERT(IsJointed(),
+            CgsDev::Assert::MessageAt(
+                "IsJointed()",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\propmanager\\PropPhysics/BrnPropInstance.h", 326 /* ARTIST 0x825B96D8 */));
         return mu8JointIndex;
     }
 }

@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"            // CgsContainers::FastBitArray (collected-data bits)
 #include "GameShared/GameClasses/Containers/CgsHash.h"                    // CgsContainers::CgsHash::CalculateHash
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf / SnPrintf
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N> / GuiEventWrapper
@@ -590,7 +590,10 @@ namespace BrnGui
         }
         muNumExpectedComponents = 0;
 
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache,
+            CgsDev::Assert::MessageAt(
+                "mpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnImageGallery.h", 310 /* ARTIST 0x82482D08 */));
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
     }
 

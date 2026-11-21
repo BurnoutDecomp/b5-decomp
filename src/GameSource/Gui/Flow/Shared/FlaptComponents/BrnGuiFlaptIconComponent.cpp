@@ -26,7 +26,7 @@
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"            // BrnFlapt::FileRef
 #include "GameShared/GameClasses/Containers/CgsHash.h"       // CgsHash::CalculateHash
 #include "SharedClasses/Gui/Flapt/BrnFlaptFile.h"            // BrnFlapt::TriggerParameters
-#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"           // CGS_ASSERT
 
 namespace BrnGui
 {
@@ -208,7 +208,10 @@ namespace BrnGui
     // @ 0x8241C710 -- goto-and-play lpcFrameName on every controlled child clip.
     void FlaptAnimatorComponent::Run(const char* lpcFrameName)
     {
-        CGS_ASSERT(lpcFrameName != 0, "NULL != lpcFrameName");
+        CGS_ASSERT(lpcFrameName != 0,
+            CgsDev::Assert::MessageAt(
+                "NULL != lpcFrameName",
+                "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.cpp", 247 /* ARTIST 0x8241C734 */));
 
         for (int liClip = 0; liClip < miNumChildMovieClips; ++liClip)
         {

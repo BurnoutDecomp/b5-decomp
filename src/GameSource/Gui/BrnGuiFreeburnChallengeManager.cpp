@@ -12,6 +12,7 @@
 // condition matches the X360 assert message text.
 
 #include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Gui/BrnGuiCache.h"                 // BrnGui::GuiCache::GetFreeburnChallengeList
 #include "GameSource/Gui/Events/BrnGuiChallengeEvents.h" // Gui challenge event payloads
 #include "SharedClasses/DataLists/ChallengeList.h"      // BrnResource::ChallengeList
@@ -98,7 +99,10 @@ void FreeburnChallengeManager::Update()
 // @ 0x8240EC30 — guard meInternalState != OFF, return mpCurrentChallenge.
 const BrnResource::ChallengeListEntry* FreeburnChallengeManager::GetCurrentChallenge() const
 {
-    CGS_ASSERT( meInternalState != E_INTERNAL_STATE_OFF, "meInternalState != E_INTERNAL_STATE_OFF" );
+    CGS_ASSERT( meInternalState != E_INTERNAL_STATE_OFF,
+        CgsDev::Assert::MessageAt(
+            "meInternalState != E_INTERNAL_STATE_OFF",
+            "..\\..\\..\\GameSource\\Gui/BrnGuiFreeburnChallengeManager.h", 235 /* ARTIST 0x8240EC58 */));
     return mpCurrentChallenge;
 }
 

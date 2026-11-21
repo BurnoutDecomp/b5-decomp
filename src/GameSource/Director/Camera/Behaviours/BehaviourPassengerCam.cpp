@@ -1,6 +1,6 @@
 #include "GameSource/Director/Camera/Behaviours/BehaviourPassengerCam.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 // ============================================================================
 // BrnDirector::Camera::BehaviourPassengerCam -- reconstructed from
@@ -34,7 +34,10 @@ bool BehaviourPassengerCam::Update(Camera& lrCamera, const BehaviourSharedInfo& 
     (void)lrCamera;
     (void)lrInfo;
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");   // :86 (non-gating)
+    CGS_ASSERT(mpParameters != 0,
+        CgsDev::Assert::MessageAt(
+            "mpParameters != NULL",
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourPassengerCam.cpp", 86 /* ARTIST 0x821F9E90 */));   // :86 (non-gating)
     return true;
 }
 

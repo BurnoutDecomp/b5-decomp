@@ -22,7 +22,7 @@
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptInterpolatorComponent.h"
 
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"   // BrnFlapt::FileRef
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 namespace BrnGui
 {
@@ -66,7 +66,10 @@ namespace BrnGui
                                              const BrnFlapt::FileRef& lFile,
                                              const char* lacParentName)
     {
-        CGS_ASSERT(lacName != 0, "lacName");
+        CGS_ASSERT(lacName != 0,
+            CgsDev::Assert::MessageAt(
+                "lacName",
+                "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptInterpolatorComponent.cpp", 76 /* ARTIST 0x8241D08C */));
 
         BrnFlaptComponent::Prepare(lacName, lFile, lacParentName);
         mfCurrentProportion = KF_INVALID_PROPORTION;

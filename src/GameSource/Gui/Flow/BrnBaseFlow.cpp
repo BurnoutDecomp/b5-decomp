@@ -1,6 +1,6 @@
 #include "GameSource/Gui/Flow/BrnBaseFlow.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiState.h"         // CgsGui::State (PreWorldUpdate)
 #include "GameSource/Gui/BrnGuiCache.h"                                 // GuiCache (UpdateStreaming's unload/ensure pair)
 #include "GameShared/GameClasses/Fsm/Resources/CgsLuaCodeResource.h"    // CgsResource::LuaCodeResource (PrepareLua)
@@ -37,7 +37,10 @@ namespace BrnGui
 
     void BrnBaseFlow::SetInEventQueue(InputBuffer::GuiEventQueue* lpInEventQueue)
     {
-        CGS_ASSERT(lpInEventQueue != 0, "lpInEventQueue");
+        CGS_ASSERT(lpInEventQueue != 0,
+            CgsDev::Assert::MessageAt(
+                "lpInEventQueue",
+                "..\\..\\..\\GameSource\\Gui/Flow/BrnBaseFlow.h", 162 /* ARTIST 0x827E28D4 */));
         mStateMachine.SetInEventQueue(lpInEventQueue);
     }
 

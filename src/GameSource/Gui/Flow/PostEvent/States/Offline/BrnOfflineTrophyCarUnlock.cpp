@@ -22,7 +22,7 @@
 
 #include <cstring>                                                        // strcmp
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDConvertToString
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream
@@ -446,7 +446,10 @@ void OfflineTrophyCarUnlock::HandleAptTriggers(const CgsGui::GuiEventAptTriggerP
 // Only the "pressed" record (id 6) is answered.
 void OfflineTrophyCarUnlock::HandleControllerInput(const CgsModule::Event* lpEvent, s32 liEventType)
 {
-    CGS_ASSERT(lpEvent, "lpEvent");
+    CGS_ASSERT(lpEvent,
+        CgsDev::Assert::MessageAt(
+            "lpEvent",
+            "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineTrophyCarUnlock.cpp", 523 /* ARTIST 0x824BD188 */));
 
     if (liEventType == KI_EVENT_CONTROLLER_INPUT_PRESSED)
     {

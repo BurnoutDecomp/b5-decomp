@@ -1,7 +1,7 @@
 #include "SharedClasses/AI/AISectionsResourceType.h"
 #include "rw/rwcore_structs.h"   // rw::Resource complete for the bodies
 #include "GameShared/GameClasses/System/Resource/CgsResourceLoadBase.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT + Begin/Fire/End + KI_MESSAGEBUFFERSIZE
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"            // CGS_ASSERT + Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (GetMiddle miss message)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -73,7 +73,10 @@ namespace BrnAI
     // const). CGS_ASSERT fills __FILE__/__LINE__; the X360-baked d:\p4 path/line 1201 is dropped.
     const BrnAI::AISection* BrnAI::AISectionsData::GetAISection( u32 luSectionIndex ) const
     {
-        CGS_ASSERT( luSectionIndex < muNumSections, "luSectionIndex < muNumSections" );
+        CGS_ASSERT( luSectionIndex < muNumSections,
+            CgsDev::Assert::MessageAt(
+                "luSectionIndex < muNumSections",
+                "..\\..\\..\\SharedClasses\\AI/AISectionsData.h", 1201 /* ARTIST 0x8230F700 */));
         return &mpaSections[luSectionIndex];
     }
 

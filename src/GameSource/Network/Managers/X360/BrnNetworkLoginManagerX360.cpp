@@ -20,7 +20,7 @@
 
 #include "GameSource/Network/Managers/X360/BrnNetworkLoginManagerX360.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Network/BrnNetworkManager.h"   // BrnNetworkManager (TriggerEventFromLogin / GetServerInterface / GetLocalUserControllerPort)
 #include "GameSource/Network/BrnServerInterface.h"   // BrnServerInterface::GetConnectionComponent
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h"  // ServerInterfaceConnection::DisconnectFromServer
@@ -123,7 +123,10 @@ namespace BrnNetwork
         if (NetConnStatus(KI_NETCONNSTATUS_GAMERTAG_SELECTOR, static_cast<int>(luUserIndex),
                           lpcUserName, KI_GAMERTAG_BUFFER_SIZE) != KI_NETCONNSTATUS_SUCCESS)
         {
-            CGS_ASSERT(false, "Error getting gamertag");
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt(
+                    "Error getting gamertag",
+                    "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkLoginManagerX360.cpp", 262 /* ARTIST 0x8254C1E0 */));
             lpcUserName[0] = '\0';
         }
         lpcPassword[0] = '\0';

@@ -39,6 +39,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Camera.h"                         // Camera::mTransform (the eye), the near clip
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"         // VehicleInfo::mRaceCarState (transform, entity)
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"       // what VehicleRef::Get resolves against
@@ -253,7 +254,10 @@ void CollisionPolicyAttachedToVehicle::SetDesiredHeight(f32 lfDesiredHeight)
     // GroundConstraint::GenerateSceneQueries on it -- i.e. asking for a desired height IS
     // asking for the ground constraint.
     mbUseGroundConstraint = 1;                                        // stb 1, 0x24B (before assert)
-    CGS_ASSERT(lfDesiredHeight > 0.0f, "lfDesiredHeight > 0.0f");     // fcmpu f31, 0.0f; bgt
+    CGS_ASSERT(lfDesiredHeight > 0.0f,
+        CgsDev::Assert::MessageAt(
+            "lfDesiredHeight > 0.0f",
+            "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.h", 489 /* ARTIST 0x821F398C */));     // fcmpu f31, 0.0f; bgt
     // +0x210 is mGroundConstraint (+0x1C0)'s own mfDesiredHeight (+0x50): the inlined
     // GroundConstraint::SetDesiredHeight (DWARF BrnCollisionPolicy.h:313). Until 2026-09-28 the
     // policy modelled it as a flat float of its own.

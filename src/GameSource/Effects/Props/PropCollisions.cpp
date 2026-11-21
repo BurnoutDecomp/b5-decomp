@@ -25,11 +25,13 @@
 #include "GameSource/Director/Camera/Camera.h"                                  // BrnDirector::Camera::Camera (GetTransform)
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h"               // BrnPhysics::Props::PropPhysicsDataHeader
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                           // CgsNumeric::Random
-#include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                              // CGS_ASSERT
 
 #include "types.hpp"   // uintptr_t
 
 // Static storage for the effect ring (one definition per TU).
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\SharedClasses\\Graphics/VFXPropsResourceType.h";
+
 namespace BrnEffects
 {
     u32 VFXRuntimeMaterialLef::mNextEffect = 0;
@@ -41,8 +43,11 @@ namespace BrnParticle
     // VFXPropsResourceType.h:400, as BuildPropToMaterialTable inlines it: the two asserts, then the state.
     const VFXPropState* VFXProp::GetState(u32 luState) const
     {
-        CGS_ASSERT(luState < muNumPropStates, "luState < muNumPropStates");   // VFXPropsResourceType.h:402
-        CGS_ASSERT(mpPropStates != 0, "mpPropStates != NULL");               // :403
+        CGS_ASSERT(luState < muNumPropStates,
+            CgsDev::Assert::MessageAt(
+                "luState < muNumPropStates", KAC_ARTIST_ASSERT_FILE, 402 /* ARTIST 0x822770A8 */));   // VFXPropsResourceType.h:402
+        CGS_ASSERT(mpPropStates != 0,
+            CgsDev::Assert::MessageAt("mpPropStates != NULL", KAC_ARTIST_ASSERT_FILE, 403 /* ARTIST 0x822770D0 */));               // :403
         return reinterpret_cast<const VFXPropState*>(static_cast<uintptr_t>(mpPropStates)) + luState;
     }
 }

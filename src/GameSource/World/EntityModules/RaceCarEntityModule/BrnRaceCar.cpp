@@ -28,11 +28,14 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityGlobalRaceCarOutputInterface (FillInOutputInterface)
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT + Begin/Fire/End
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"            // CGS_ASSERT + Begin/Fire/End
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (streamed asserts)
 #include "GameShared/GameClasses/World/CgsWorldMap2D.h"       // CgsWorld::WorldMap2D::GetValue
 #include "rw/math/vpu/matrix44affine_operation.h"             // rw::math::vpu::IsValid(Matrix44Affine)
 #include "rw/math/vpu/vector3_operation.h"                    // rw::math::vpu::IsValid(Vector3)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/BrnRaceCar.h";
 
 namespace BrnWorld
 {
@@ -387,8 +390,11 @@ void RaceCar::SetActiveRaceCarIndex(EActiveRaceCarIndex leIndex)
 // ----------------------------------------------------------------------------
 ActiveRaceCar* RaceCar::GetActiveRaceCar()
 {
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
-    CGS_ASSERT(IsInWorld(), "IsInWorld()");
+    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT,
+        CgsDev::Assert::MessageAt(
+            "muType < E_RACE_CAR_TYPE_COUNT", KAC_ARTIST_ASSERT_FILE, 547 /* ARTIST 0x822B39BC */));
+    CGS_ASSERT(IsInWorld(),
+        CgsDev::Assert::MessageAt("IsInWorld()", KAC_ARTIST_ASSERT_FILE, 401 /* ARTIST 0x822B39E4 */));
 
     return mpActiveRaceCar;
 }

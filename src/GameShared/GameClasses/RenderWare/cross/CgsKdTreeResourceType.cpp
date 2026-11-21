@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/RenderWare/cross/CgsKdTreeResourceType.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/rwcore_structs.h"   // rw::Resource complete
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -67,7 +67,10 @@ namespace CgsResource
 
     void KdTreeResourceType::GetImportPointer(const void*, uint32_t, uint32_t*, const void**) const
     {
-        CGS_ASSERT(false, "KdTrees have no import pointers");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "KdTrees have no import pointers",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\renderware\\cross/CgsKdTreeResourceType.cpp", 420 /* ARTIST 0x828A7774 */));
     }
 
     ResourceDescriptor KdTreeResourceType::GetSerialisedResourceDescriptor(const void* lpResource) const

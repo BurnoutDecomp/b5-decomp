@@ -1,6 +1,6 @@
 #include "GameSource/World/BrnWorldGraphicsStreamer.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"
 
@@ -121,7 +121,11 @@ void
 WorldGraphicsStreamer::OnLoadComplete( const BrnResource::GameDataIO::GameDataAssetEvent* lpEvent,
                                        s32 liListIndex )
 {
-    CGS_ASSERT( mpWorldEntityModule, "mpWorldEntityModule" );
+    CGS_ASSERT( mpWorldEntityModule,
+        CgsDev::Assert::MessageAt(
+            "mpWorldEntityModule",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/BrnWorldGraphicsStreamer.cpp", 129 /* ARTIST 0x827BE5F4 */));
 
     maInstanceLists[ liListIndex ] = static_cast<const BrnResource::GameDataIO::GetWorldUnitGraphicsResponse*>(lpEvent)->GetWorldUnitGraphicsHandle();
 

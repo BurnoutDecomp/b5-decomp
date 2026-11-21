@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Graphics/Instances/CgsInstance.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (GetInstance bounds check)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (GetInstance bounds check)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsGraphics::InstanceList::FixUp       @ 0x827F9318 (load-time fix-up)
@@ -50,7 +50,10 @@ namespace CgsGraphics
     // (luIndex + luIndex*4) << 4 == luIndex * 80 (CgsInstance.h:268 assert text).
     Instance* InstanceList::GetInstance(u32 luIndex) const
     {
-        CGS_ASSERT(luIndex < muArraySize, "Instance index out of range");
+        CGS_ASSERT(luIndex < muArraySize,
+            CgsDev::Assert::MessageAt(
+                "Instance index out of range",
+                "..\\..\\..\\GameShared\\GameClasses\\Graphics/Instances/CgsInstance.h", 268 /* ARTIST 0x822A3DC0 */));
         return reinterpret_cast<Instance*>(static_cast<uintptr_t>(muaInstances) + luIndex * kInstanceStride);
     }
 }

@@ -24,7 +24,7 @@
 #include "GameSource/Director/Camera/Camera.h"
 #include "rw/math/vpu/vector3_operation.h"          // rw::math::vpu::IsValid / Abs (Vector3)
 #include "rw/math/vpu/matrix44affine_operation.h"   // rw::math::vpu::IsValid (Matrix44Affine)
-#include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT (gpcMessageBuffer substitute)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"  // CGS_ASSERT (gpcMessageBuffer substitute)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"   // Utils::GetZoomFromFOVDegs (GetLodZoomFactor)
 #include <cstddef>                                  // offsetof
 
@@ -176,7 +176,10 @@ Camera::Camera(const Camera& lrOther)
 // ----------------------------------------------------------------------------
 void Camera::SetFOV(f32 lfFOV)
 {
-    CGS_ASSERT(lfFOV > 0.0f, "lfFOV > 0.0f");
+    CGS_ASSERT(lfFOV > 0.0f,
+        CgsDev::Assert::MessageAt(
+            "lfFOV > 0.0f",
+            "..\\..\\..\\GameSource\\Director/Camera/Camera.h", 424 /* ARTIST 0x821F26EC */));
     mfFOV = lfFOV;
 }
 

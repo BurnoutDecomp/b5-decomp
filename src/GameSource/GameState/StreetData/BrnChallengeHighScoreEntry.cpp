@@ -1,4 +1,5 @@
 #include "GameSource/GameState/StreetData/BrnChallengeHighScoreEntry.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"  // CgsContainers::FastBitArray<2> (UpdateEntry's out-param)
 #include "lobbyname.h"   // ::LobbyNameCmp (vendor/dirtysdk/include, an extern "C" declaration)
 
@@ -52,7 +53,10 @@ void ChallengeHighScoreEntry::Construct()
 //
 void ChallengeHighScoreEntry::Copy(const ChallengeHighScoreEntry* lpData)
 {
-    CGS_ASSERT(lpData != NULL, "lpData");
+    CGS_ASSERT(lpData != NULL,
+        CgsDev::Assert::MessageAt(
+            "lpData",
+            "..\\..\\..\\GameSource\\GameState/StreetData/BrnChallengeHighScoreEntry.cpp", 221 /* ARTIST 0x823176FC */));
 
     ChallengeData::Copy(lpData);
 

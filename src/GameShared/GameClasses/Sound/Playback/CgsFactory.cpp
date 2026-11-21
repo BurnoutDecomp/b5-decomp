@@ -9,6 +9,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/CgsFactory.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "rw/rwcore_structs.h"   // rw::Resource / rw::IResourceAllocator (the DoDispose carve return)
 
@@ -25,7 +26,10 @@ Factory::Factory(Name aName, Environment& arEnvironment)
       mEnvironment(arEnvironment)
 {
     bool lbResult = Environment::AddFactory(mEnvironment, this);
-    CGS_ASSERT(lbResult, "lbResult");
+    CGS_ASSERT(lbResult,
+        CgsDev::Assert::MessageAt(
+            "lbResult",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsFactory.h", 251 /* ARTIST 0x826AD398 */));
 }
 
 // @ 0x826AD3C8. The scalar-deleting thunk reinstalls the Object base vtable, asserts

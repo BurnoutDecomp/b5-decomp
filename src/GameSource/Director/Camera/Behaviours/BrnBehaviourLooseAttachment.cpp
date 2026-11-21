@@ -16,6 +16,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h"   // Utils::Tweaker::Construct (slot 6)
 
 #include <cstddef>   // offsetof
@@ -174,7 +175,10 @@ void BehaviourLooseAttachment::Construct()
 // ----------------------------------------------------------------------------
 bool BehaviourLooseAttachment::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 {
-    CGS_ASSERT(mAttachment.mbSet, "mAttachment.HasBeenSet()");
+    CGS_ASSERT(mAttachment.mbSet,
+        CgsDev::Assert::MessageAt(
+            "mAttachment.HasBeenSet()",
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourLooseAttachment.cpp", 88 /* ARTIST 0x821FAA18 */));
 
     SetNotPrepared();                                       // stb 0, +0x08
     mbFirstFrame = true;                                    // stb 1, +0x32D

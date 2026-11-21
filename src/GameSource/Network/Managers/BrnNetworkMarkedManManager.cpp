@@ -24,7 +24,7 @@
 
 #include "GameSource/Network/Managers/BrnNetworkMarkedManManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"   // NetworkPlayer, PlayerMenuData
 #include "GameSource/Network/BrnNetworkManager.h"
@@ -38,7 +38,10 @@ namespace BrnNetwork
     // BrnNetwork::MarkedManManager::Construct  @ 0x825539F0
     void MarkedManManager::Construct(BrnNetworkManager* lpNetworkManager)
     {
-        CGS_ASSERT(lpNetworkManager != 0, "lpNetworkManager");
+        CGS_ASSERT(lpNetworkManager != 0,
+            CgsDev::Assert::MessageAt(
+                "lpNetworkManager",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMarkedManManager.cpp", 44 /* ARTIST 0x82553A14 */));
 
         mpNetworkManager = lpNetworkManager;
 

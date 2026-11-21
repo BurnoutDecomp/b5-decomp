@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceBasePool.h"  // CgsResource::Entry (mID)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                       // CGS_ASSERT
 
 // CgsResource::ResourceHandle -- a handle onto a loaded resource (resource memory + source
 // pool entry). This TU owns the out-of-line accessor the X360 ARTIST build emitted.
@@ -19,7 +19,10 @@ namespace CgsResource
     // accessed BY NAME. (The asm's baked assert file/line are dropped per project convention.)
     ID ResourceHandle::GetResourceId() const
     {
-        CGS_ASSERT(mpSourceEntry != 0, "mpSourceEntry != NULL");
+        CGS_ASSERT(mpSourceEntry != 0,
+            CgsDev::Assert::MessageAt(
+                "mpSourceEntry != NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceHandle.cpp", 54 /* ARTIST 0x828D8468 */));
         return mpSourceEntry->mID;
     }
 

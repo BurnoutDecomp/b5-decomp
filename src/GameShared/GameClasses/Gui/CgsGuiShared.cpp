@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX @ 0x8240E388.
 
@@ -10,7 +10,10 @@ namespace CgsGui
     // (GameShared/GameClasses/Gui/CgsGuiShared.h:201).
     BrnGui::GuiCache* GuiAccessPointers::GetGuiCache()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt(
+                "mpGuiCache",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiShared.h", 201 /* ARTIST 0x8240E3B0 */));
         return mpGuiCache;
     }
 

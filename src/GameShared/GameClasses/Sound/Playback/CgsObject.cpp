@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // CgsSound::Playback::Object out-of-line members.
 //
@@ -33,7 +34,10 @@ Object::~Object()
 // the owning sound Environment.
 void Object::Release()
 {
-    CGS_ASSERT(mu32RefCount > 0, "mu32RefCount > 0");
+    CGS_ASSERT(mu32RefCount > 0,
+        CgsDev::Assert::MessageAt(
+            "mu32RefCount > 0",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsObject.h", 117 /* ARTIST 0x82680960 */));
     --mu32RefCount;
     if (mu32RefCount == 0)
         DoDispose();

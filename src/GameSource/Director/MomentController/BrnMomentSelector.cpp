@@ -28,7 +28,7 @@
 #include "GameSource/Director/MomentController/BrnMomentSelector.h"
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] one-shot jump-ladder rungs only
 #include "GameSource/Director/MomentController/BrnMomentSelectorSelector.h"   // Selector<u32,10> (the random arm)
 #include "GameSource/Director/MomentController/BrnMoment.h"                    // Moment (state/flags + GetName)
@@ -613,7 +613,10 @@ bool MomentSelector::SelectBestMomentWithExclusion(CgsNumeric::Random& lRandom, 
             return SelectBestRandomMomentWithExclusion(lRandom, liExclusion);
 
         default:
-            CGS_ASSERT(false, "unhandled type");
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt(
+                    "unhandled type",
+                    "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 338 /* ARTIST 0x82250FEC */));
             return false;
     }
 }

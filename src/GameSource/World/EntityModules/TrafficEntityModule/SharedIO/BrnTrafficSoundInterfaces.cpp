@@ -9,6 +9,7 @@
 // =============================================================================
 
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficSoundInterfaces.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnTraffic
 {
@@ -33,7 +34,10 @@ void TrafficSoundOutputInterface::AddTrafficEntity(const TrafficSoundEntity& lrE
 // X360 @ 0x82681E70. Bounds-asserts the live count against KU_MAX_ENTITIES, then returns it.
 u16 TrafficSoundOutputInterface::GetTrafficEntityCount() const
 {
-    CGS_ASSERT(mu16EntityCount < KU_MAX_ENTITIES, "mu16EntityCount < KU_MAX_ENTITIES");
+    CGS_ASSERT(mu16EntityCount < KU_MAX_ENTITIES,
+        CgsDev::Assert::MessageAt(
+            "mu16EntityCount < KU_MAX_ENTITIES",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\SharedIO/BrnTrafficSoundInterfaces.h", 232 /* ARTIST 0x82681E98 */));
     return mu16EntityCount;
 }
 

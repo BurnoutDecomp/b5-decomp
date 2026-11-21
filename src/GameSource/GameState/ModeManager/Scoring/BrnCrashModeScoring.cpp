@@ -77,7 +77,7 @@
 #include <cmath>                                      // std::fabs (Update's IsVectorSet epsilon test)
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"       // BrnGui::GuiRemovedTrafficEvent (DealWithRemovedTraffic)
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the X360 assert sites in these bodies)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (the X360 assert sites in these bodies)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // native unknown-vehicle message
 #include "GameShared/GameClasses/Core/CgsID.h"        // CgsIDUnCompress (GetVehicleScoreData diagnostic)
 // [showtime score wave 2026-08-29] Update's real body needs the two console types its own
@@ -449,7 +449,11 @@ namespace BrnGameState
     bool CrashModeScoring::IsActiveCrash(const RecentCrash* lpCrash) const
     {
         const f32 lfTimeSinceCrash = mfTimeSinceModeStart - lpCrash->mfTimeOfCrash;
-        CGS_ASSERT(lfTimeSinceCrash >= 0.0f, "lfTimeSinceCrash >= 0.0f");
+        CGS_ASSERT(lfTimeSinceCrash >= 0.0f,
+            CgsDev::Assert::MessageAt(
+                "lfTimeSinceCrash >= 0.0f",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 836 /* ARTIST 0x82312A64 */));
         return lfTimeSinceCrash < 5.0f;
     }
 

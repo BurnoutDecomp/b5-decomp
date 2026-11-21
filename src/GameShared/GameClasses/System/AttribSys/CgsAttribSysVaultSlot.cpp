@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysVaultSlot.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                  // CGS_ASSERT
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle::GetResourceId
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h" // AttribSysIO::RegisterVaultRequest
 
@@ -87,7 +87,10 @@ void VaultSlot::DecreaseRefCount()
 // @ 0x82802330 -- acquire one reference.
 void VaultSlot::IncreaseRefCount()
 {
-    CGS_ASSERT(miRefCount >= 0, "miRefCount >= 0");
+    CGS_ASSERT(miRefCount >= 0,
+        CgsDev::Assert::MessageAt(
+            "miRefCount >= 0",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultSlot.h", 222 /* ARTIST 0x82802358 */));
     ++miRefCount;
 }
 

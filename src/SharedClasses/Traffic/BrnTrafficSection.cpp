@@ -2,7 +2,7 @@
 
 #include <cmath>                                          // std::floor (CalcPositionAtParameter)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT
 #include "SharedClasses/Traffic/BrnTrafficHull.h"     // Hull::GetNeighbours (FindNeighbourForRung)
 #include "rw/math/vpu/vector3_operation.h"               // operator-, IsZero, Normalize, MultAdd
 
@@ -71,7 +71,10 @@ namespace BrnTraffic
     // A section with muNumRungs rungs has muNumRungs-1 inter-rung segments.
     u32 Section::GetNumSegments() const
     {
-        CGS_ASSERT(muNumRungs > 0, "muNumRungs > 0");
+        CGS_ASSERT(muNumRungs > 0,
+            CgsDev::Assert::MessageAt(
+                "muNumRungs > 0",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficSection.h", 368 /* ARTIST 0x821F4BA0 */));
         return static_cast<u32>(muNumRungs) - 1;
     }
 

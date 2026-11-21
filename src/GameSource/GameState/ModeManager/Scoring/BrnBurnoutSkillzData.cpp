@@ -27,7 +27,10 @@
 #include "GameSource/Network/Utilities/BrnNetworkRounder.h"
 
 // CGS_ASSERT (the house assert machinery the console Begin/Fire/End triples map to).
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h";
 
 namespace BrnGameState
 {
@@ -97,8 +100,12 @@ namespace BrnGameState
     // the object base, so the load sits at +0x00 plus four bytes per skill.
     f32 BurnoutSkillzData::GetBurnoutSkill(EBurnoutSkillType eSkill) const
     {
-        CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START, "leSkillType >= E_BURNOUT_SKILL_START");
-        CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT, "leSkillType < E_BURNOUT_SKILL_COUNT");
+        CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START,
+            CgsDev::Assert::MessageAt(
+                "leSkillType >= E_BURNOUT_SKILL_START", KAC_ARTIST_ASSERT_FILE, 135 /* ARTIST 0x8230FC8C */));
+        CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT,
+            CgsDev::Assert::MessageAt(
+                "leSkillType < E_BURNOUT_SKILL_COUNT", KAC_ARTIST_ASSERT_FILE, 136 /* ARTIST 0x8230FCB0 */));
 
         return mafBurnoutSkilz[eSkill];
     }

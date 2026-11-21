@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Out-of-line bodies for the two CgsSceneManager::EntityId setters the X360 ARTIST
 // build emitted out-of-line (the remaining accessors stay inline in CgsEntityId.h).
@@ -15,7 +16,10 @@ namespace CgsSceneManager
     void
     EntityId::SetOwner( u8 luOwner )
     {
-        CGS_ASSERT( luOwner <= 12, "Burnout Specfic: Bad entity type set" );
+        CGS_ASSERT( luOwner <= 12,
+            CgsDev::Assert::MessageAt(
+                "Burnout Specfic: Bad entity type set",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityId.h", 153 /* ARTIST 0x8229FF1C */));
         mId = ( (u32)luOwner << KU_OWNER_BASE ) | ( mId & ~KU_OWNER_MASK );
     }
 

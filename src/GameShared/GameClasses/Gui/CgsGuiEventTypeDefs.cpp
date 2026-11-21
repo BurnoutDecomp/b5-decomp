@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cfloat>   // FLT_MAX
 
@@ -13,7 +13,10 @@ namespace CgsGui
     // (GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h:250).
     f64 GuiEventTimeInfo::GetTime() const
     {
-        CGS_ASSERT(mfTimeNow != -FLT_MAX, "mfTimeNow!=-FLT_MAX");
+        CGS_ASSERT(mfTimeNow != -FLT_MAX,
+            CgsDev::Assert::MessageAt(
+                "mfTimeNow!=-FLT_MAX",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiEventTypeDefs.h", 250 /* ARTIST 0x8240E358 */));
         return mfTimeNow;
     }
 }

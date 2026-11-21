@@ -1,7 +1,7 @@
 #include "GameSource/Network/Managers/X360/BrnNetworkNotificationManagerX360.h"
 #include "GameSource/Network/BrnNetworkModule.h"    // BrnNetworkModule::GetNetworkManager
 #include "GameSource/Network/BrnNetworkManager.h"   // GetLocalUserControllerPort / GetGamerPictureManager
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::NetworkNotificationManagerX360::Prepare              @ 0x8254C6E0
@@ -30,7 +30,10 @@ namespace BrnNetwork
     bool NetworkNotificationManagerX360::Prepare()
     {
         mhNotifier = XNotifyCreateListener(1);   // li r3, 1 ; bl XNotifyCreateListener ; stw r3, 8(this)
-        CGS_ASSERT(mhNotifier != 0, "mhNotifier");
+        CGS_ASSERT(mhNotifier != 0,
+            CgsDev::Assert::MessageAt(
+                "mhNotifier",
+                "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkNotificationManagerX360.cpp", 62 /* ARTIST 0x8254C710 */));
         return true;                             // li r3, 1
     }
 

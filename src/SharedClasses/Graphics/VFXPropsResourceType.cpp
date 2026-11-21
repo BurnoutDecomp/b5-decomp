@@ -1,6 +1,6 @@
 #include "SharedClasses/Graphics/VFXPropsResourceType.h"
 #include "rw/rwcore_structs.h"                        // rw::Resource complete for FixUp
-#include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"    // CGS_ASSERT
 #include "types.hpp"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -233,7 +233,11 @@ namespace BrnParticle
     // Non-tool builds never serialise; the X360 fires a single assert and returns null.
     void* VFXPropCollectionResourceType::Serialise(const void* /*lpResource*/, const rw::Resource& /*lrDest*/) const
     {
-        CGS_ASSERT(false, "Didn't expect to call this function in non-tool builds.");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt(
+                "Didn't expect to call this function in non-tool builds.",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../../SharedClasses/Graphics/VFXPropsResourceType.cpp", 248 /* ARTIST 0x8267596C */));
         return 0;
     }
 }

@@ -1,5 +1,5 @@
 #include "GameSource/Sound/Traffic/BrnTrafficState.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // =============================================================================
 // BrnSound::Logic::Traffic::TrafficState -- out-of-line bodies.
@@ -57,7 +57,11 @@ const char* TrafficState::GetTypeName() const
 // State base Attach.
 void TrafficState::Attach( void* lpvAttachment )
 {
-    CGS_ASSERT( lpvAttachment != 0, "lpvAttachment" );
+    CGS_ASSERT( lpvAttachment != 0,
+        CgsDev::Assert::MessageAt(
+            "lpvAttachment",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Sound/Vehicles/Traffic/BrnTrafficState.cpp", 66 /* ARTIST 0x826CB29C */));
     mpTrafficEntity = static_cast<const BrnTraffic::BrnTrafficIO::TrafficSoundEntity*>( lpvAttachment );
     State::Attach( lpvAttachment );
 }

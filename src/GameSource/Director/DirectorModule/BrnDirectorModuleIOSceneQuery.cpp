@@ -3,7 +3,7 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIOSceneQuery.h" // the two buffer decls (promoted out of this TU)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"     // CgsModule::IOBuffer base (read/write lock-state queries)
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h" // CgsModule::IOHelper<T> (inline ctor/dtor)
-#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // CGS_ASSERT
 
 // BrnDirector::DirectorIO scene-query IO-buffer accessors, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. Three X360-emitted functions across two small IO buffers:
@@ -118,7 +118,10 @@ namespace DirectorIO
     void SceneQueryInputBuffer::Destruct()
     {
         const bool lbReleased = mResultsQueue.Release();
-        CGS_ASSERT(lbReleased, "mResultsQueue.Release()");                        // BrnDirectorModuleIO.cpp:207
+        CGS_ASSERT(lbReleased,
+            CgsDev::Assert::MessageAt(
+                "mResultsQueue.Release()",
+                "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.cpp", 207 /* ARTIST 0x8221B3B8 */));                        // BrnDirectorModuleIO.cpp:207
         (void)lbReleased;
         mResultsQueue.Destruct();
         CgsModule::IOBuffer::Destruct();

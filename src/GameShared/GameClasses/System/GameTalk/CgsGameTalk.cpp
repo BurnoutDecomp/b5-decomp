@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/System/GameTalk/CgsGameTalk.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/Windows/CgsLogWindow.h"
 #include "GameShared/GameClasses/System/GameTalk/CgsGameTalkDebugComponent.h"
 // The AttribSys GameTalk message handler registered by Prepare is a static member of
@@ -28,6 +28,9 @@
 //   All member offsets / constants were read directly off the asm; members are
 //   accessed by name.
 // =====================================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\System/GameTalk/CgsGameTalk.h";
 
 namespace CgsGameTalk
 {
@@ -114,8 +117,10 @@ namespace CgsGameTalk
     // X360 @0x828DAEE8 (header-inline in the original CgsGameTalk.h:178-179).
     s32 GameTalk::SendMessage(const char* lpTarget, EA::GameTalk::GameTalkMessage* lpMessage)
     {
-        CGS_ASSERT(lpTarget != 0, "lpTarget");
-        CGS_ASSERT(lpMessage != 0, "lpMessage");
+        CGS_ASSERT(lpTarget != 0,
+            CgsDev::Assert::MessageAt("lpTarget", KAC_ARTIST_ASSERT_FILE, 178 /* ARTIST 0x828DAF14 */));
+        CGS_ASSERT(lpMessage != 0,
+            CgsDev::Assert::MessageAt("lpMessage", KAC_ARTIST_ASSERT_FILE, 179 /* ARTIST 0x828DAF38 */));
 
         return EA::GameTalk::GameTalkManager::SendMessage(lpTarget, lpMessage);
     }

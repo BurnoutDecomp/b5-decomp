@@ -1,7 +1,7 @@
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] gpDebugPrint
 #include <cstdlib>                                          // [diag] getenv
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "types.hpp"
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnDirector::ArbitratorStateContainer::ConstructAll @ 0x8224F020
@@ -42,7 +42,10 @@ namespace BrnDirector
     // reads/returns the +0x35CC word; here that is mpCurrentState, accessed by name.
     ArbitratorState* ArbitratorStateContainer::GetCurrentState() const
     {
-        CGS_ASSERT(mpCurrentState != 0, "mpCurrentState != NULL");
+        CGS_ASSERT(mpCurrentState != 0,
+            CgsDev::Assert::MessageAt(
+                "mpCurrentState != NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\arbitrator\\BrnDirectorArbitratorStateContainer.h", 131 /* ARTIST 0x821F5A88 */));
         return mpCurrentState;
     }
 

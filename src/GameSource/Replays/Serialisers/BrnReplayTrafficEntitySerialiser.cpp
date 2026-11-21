@@ -26,7 +26,7 @@
 // compile-only gate.
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Replays/Serialisers/BrnReplayTrafficEntitySerialiser.h"
 #include "GameSource/Replays/BrnReplayQuantisedQuatPos.h"
 #include "GameSource/Replays/Serialisers/BrnReplayTrafficEntitySerialiserFrame.h"
@@ -129,7 +129,10 @@ namespace BrnReplays
     // Copy the 148-byte active-hull header for the local player into the static layout.
     void TrafficEntitySerialiser::SetActiveHullsForLocalPlayer(const TrafficSerialiserFrame::ActiveHullSet* lpActiveHulls)
     {
-        CGS_ASSERT(lpActiveHulls != 0, "lpActiveHulls");
+        CGS_ASSERT(lpActiveHulls != 0,
+            CgsDev::Assert::MessageAt(
+                "lpActiveHulls",
+                "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayTrafficEntitySerialiser.h", 557 /* ARTIST 0x827073F4 */));
         std::memcpy(&GetStaticLayout()->mActiveHullsForLocalPlayer, lpActiveHulls, sizeof(*lpActiveHulls));
     }
 

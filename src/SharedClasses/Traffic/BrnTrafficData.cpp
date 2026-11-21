@@ -17,7 +17,7 @@
 #include "SharedClasses/Traffic/BrnTrafficHull.h"    // BrnTraffic::Hull (GetHull return layout, FixUp)
 #include "SharedClasses/Traffic/BrnTrafficPvs.h"     // BrnTraffic::Pvs::FixUp / FixDown
 #include "SharedClasses/Traffic/BrnTrafficFlowType.h"// BrnTraffic::FlowType::FixUp / FixDown
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "types.hpp"
 #include "types.hpp"                                   // uintptr_t (relocation arithmetic)
 
@@ -226,7 +226,10 @@ namespace BrnTraffic
     // then returns the u8 count read at +0x168 (`lbz 0x168`). The DWARF return type is int32_t.
     s32 TrafficData::GetNumPaintColours() const
     {
-        CGS_ASSERT(muNumPaintColours != 0, "muNumPaintColours > 0");
+        CGS_ASSERT(muNumPaintColours != 0,
+            CgsDev::Assert::MessageAt(
+                "muNumPaintColours > 0",
+                "..\\..\\..\\SharedClasses\\Traffic/BrnTrafficData.h", 247 /* ARTIST 0x82705F80 */));
         return muNumPaintColours;
     }
 

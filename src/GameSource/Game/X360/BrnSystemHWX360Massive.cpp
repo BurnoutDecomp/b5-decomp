@@ -1,6 +1,6 @@
 #include <xtl.h>
 #include "GameSource/Game/X360/BrnSystemHWX360.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"            // CGS_ASSERT
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"      // CgsMemory::HeapMalloc
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // CgsDev::Log / Message
 #include "SDKs/EATech/eathread/BrnEAThreadX360.h"             // EA::Thread::GetThreadId / ThreadId
@@ -104,7 +104,10 @@ namespace BrnMassive
     // MassiveAd custom free hook: return a block to the shared Massive heap.
     void System360HWMassive::BurnoutMassiveFree(void* lpMemory)
     {
-        CGS_ASSERT(gpMassiveHeapMalloc != 0, "spHeapMalloc != NULL");
+        CGS_ASSERT(gpMassiveHeapMalloc != 0,
+            CgsDev::Assert::MessageAt(
+                "spHeapMalloc != NULL",
+                "..\\..\\..\\GameSource\\X360/BrnSystemHWX360Massive.cpp", 99 /* ARTIST 0x823AB218 */));
         gpMassiveHeapMalloc->Free(lpMemory);
     }
 

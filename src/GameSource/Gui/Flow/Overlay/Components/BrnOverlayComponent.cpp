@@ -1,6 +1,6 @@
 #include "GameSource/Gui/Flow/Overlay/Components/BrnOverlayComponent.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 // Reconstructed store-for-store from BURNOUT_X360_ARTIST.XEX.
 //
@@ -56,7 +56,10 @@ void OverlayComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& lFi
 // @ 0x8241C198
 void OverlayComponent::TransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
 {
-    CGS_ASSERT(NULL != lpUserData, "NULL != lpUserData");
+    CGS_ASSERT(NULL != lpUserData,
+        CgsDev::Assert::MessageAt(
+            "NULL != lpUserData",
+            "..\\..\\..\\GameSource\\Gui\\Flow\\Overlay\\Components\\BrnOverlayComponent.cpp", 87 /* ARTIST 0x8241C1BC */));
 
     OverlayComponent* lpThis = static_cast<OverlayComponent*>(lpUserData);
     lpThis->SetTransitionComplete(true);

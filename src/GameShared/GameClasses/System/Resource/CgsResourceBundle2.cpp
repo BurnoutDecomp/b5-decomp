@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundle2.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (mem-type bounds)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (mem-type bounds)
 #include "rw/rwcore_structs.h"                        // rw::BaseResourceDescriptor (descriptor fill)
 
 #include <cstdlib>   // _byteswap_ushort / _byteswap_ulong / _byteswap_uint64
@@ -23,7 +23,10 @@ namespace CgsResource
 
     u32 BundleV2::ResourceEntry::GetDiskSize(u32 luMemType) const   // 0x828D62F8
     {
-        CGS_ASSERT(luMemType < BundleV2::E_MEMTYPE_NUMTYPES, "luMemType < E_MEMTYPE_NUMTYPES");
+        CGS_ASSERT(luMemType < BundleV2::E_MEMTYPE_NUMTYPES,
+            CgsDev::Assert::MessageAt(
+                "luMemType < E_MEMTYPE_NUMTYPES",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceBundle2.h", 294 /* ARTIST 0x828D6324 */));
         return mauSizeAndAlignmentOnDisk[luMemType] & BundleV2::KU_SIZE_MASK;
     }
 

@@ -5,7 +5,7 @@
 
 #include "rw/math/vpu/vector3_operation.h"                              // rw::math::vpu::Cross / Magnitude
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // GameActionQueue::AddEvent / CgsModule::Event
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // OutputBuffer::GetGameActionQueue
 #include "GameSource/GameState/BrnGameActions.h"                        // the five takedown records + their ids
@@ -28,6 +28,9 @@
 // constants block). The X360 image holds zero in those .data words, which is why they cannot be
 // read straight out of it; the initialiser bodies at 0x82C4D7A0..0x82C4D81C are the evidence.
 // ============================================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp";
 
 namespace BrnGameState
 {
@@ -219,8 +222,12 @@ namespace BrnGameState
     // X360 0x82359538. Both range asserts (BrnTakedownManager.cpp:132/133) then the 80-byte stride.
     TakedownManager::RaceCarData* TakedownManager::GetRaceCarData(EActiveRaceCarIndex leActiveRaceCarIndex)
     {
-        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            CgsDev::Assert::MessageAt(
+                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 132 /* ARTIST 0x82359564 */));
+        CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            CgsDev::Assert::MessageAt(
+                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 133 /* ARTIST 0x82359588 */));
         return &maRaceCarData[leActiveRaceCarIndex];
     }
 

@@ -16,7 +16,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsModule::Event, GuiEventQueueLarge
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (Register/UnRegister/PlayAptMovie/out-queue)
@@ -41,7 +41,10 @@ namespace BrnGui
     // overrides and the first-map-update latch.
     void OnlineGameRoomPlayerInfo::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
-        CGS_ASSERT(lpFsm != 0, "lpFsm");   // X360 BrnOnlineGameRoomPlayerInfo.cpp:338
+        CGS_ASSERT(lpFsm != 0,
+            CgsDev::Assert::MessageAt(
+                "lpFsm",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 338 /* ARTIST 0x82484B58 */));   // X360 BrnOnlineGameRoomPlayerInfo.cpp:338
 
         CrashNavMap::Construct(liId, lpFsm);
 

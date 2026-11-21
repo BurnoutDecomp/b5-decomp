@@ -1,6 +1,6 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                        // CGS_ASSERT
 #include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"                        // CgsGeometric::Sphere (centre.xyz + radius.w)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSweptSphere.h"                   // CgsGeometric::SweptSphere
@@ -76,7 +76,10 @@ namespace Deformation
 	// =============================================================================================
 	s32 DeformableObject::GetSweptSpheres(const CgsGeometric::SweptSphere** lppSpheresOut)
 	{
-		CGS_ASSERT(mbDoSweptSphereTests, "mbDoSweptSphereTests");   // BrnDeformableObject.h:446 (non-gating)
+		CGS_ASSERT(mbDoSweptSphereTests,
+		    CgsDev::Assert::MessageAt(
+		        "mbDoSweptSphereTests",
+		        "..\\..\\..\\GameSource\\Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h", 446 /* ARTIST 0x825B4260 */));   // BrnDeformableObject.h:446 (non-gating)
 
 		*lppSpheresOut = maSweptSpheres;   // *a2 = a1 + 384
 		return static_cast<s32>(SpecNumSensors(mpDeformationSpec)) + KI_MAX_NUM_WHEEL_POINTS_PER_DEFORMABLE_OBJECT;

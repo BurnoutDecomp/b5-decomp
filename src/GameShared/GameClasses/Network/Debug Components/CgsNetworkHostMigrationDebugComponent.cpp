@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Network/Debug Components/CgsNetworkHostMigrationDebugComponent.h"
 #include "GameShared/GameClasses/Network/Players/CgsHostMigrationManager.h"
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::HostMigrationDebugComponent::ForceHostMigration  @ 0x8287F398
@@ -21,7 +21,10 @@ namespace CgsNetwork
     {
         HostMigrationDebugComponent* lpHostMigrationDebugComponent =
             static_cast<HostMigrationDebugComponent*>(lpData);
-        CGS_ASSERT(lpHostMigrationDebugComponent != 0, "lpHostMigrationDebugComponent");
+        CGS_ASSERT(lpHostMigrationDebugComponent != 0,
+            CgsDev::Assert::MessageAt(
+                "lpHostMigrationDebugComponent",
+                "..\\..\\..\\GameShared\\GameClasses\\Network/Debug Components/CgsNetworkHostMigrationDebugComponent.cpp", 107 /* ARTIST 0x8287F3BC */));
 
         HostMigrationManager* lpHostMigrationManager =
             lpHostMigrationDebugComponent->mpHostMigrationManager;

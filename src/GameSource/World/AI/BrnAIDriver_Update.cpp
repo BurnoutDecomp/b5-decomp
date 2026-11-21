@@ -8,7 +8,7 @@
 #include "GameSource/World/AI/PID/BrnPIDController.h"      // PIDController::Prepare
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficAIInterfaces.h" // BrnTraffic::BrnTrafficIO::TrafficAIEntity
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "rw/math/vpu/vector3_operation.h"                 // vpu::Magnitude / vpu::Dot
 #include "rw/math/vpu/vector2_operation.h"                 // vpu::Magnitude (2-lane: GetIndexOfFurthestVehicle)
@@ -89,6 +89,9 @@
 // @0x82799660..0x827998BC, UpdateBrakingAnticipationData @0x827964C0..0x827965E4 and
 // CalcDistanceFromPlayer @0x8276E1C8..0x8276E26C.
 // =================================================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIDriver.cpp";
 
 namespace BrnAI
 {
@@ -197,8 +200,11 @@ namespace BrnAI
     // ================================================================================
     NearbyVehicle* NearbyVehicles::GetVehiclePointer(s32 liEntry)
     {
-        CGS_ASSERT(liEntry >= 0, "liEntry >= 0");                                 // :2942
-        CGS_ASSERT(liEntry < KI_MAX_NEARBY_VEHICLES, "liEntry < KI_MAX_NEARBY_TRAFFIC");  // :2943
+        CGS_ASSERT(liEntry >= 0,
+            CgsDev::Assert::MessageAt("liEntry >= 0", KAC_ARTIST_ASSERT_FILE, 2942 /* ARTIST 0x8276689C */));                                 // :2942
+        CGS_ASSERT(liEntry < KI_MAX_NEARBY_VEHICLES,
+            CgsDev::Assert::MessageAt(
+                "liEntry < KI_MAX_NEARBY_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2943 /* ARTIST 0x827668C0 */));  // :2943
         return &mVehicle[liEntry];                                                // mulli 0x70; add
     }
 

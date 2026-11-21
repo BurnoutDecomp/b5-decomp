@@ -3,7 +3,7 @@
 #include "SharedClasses/Progression/BrnRival.h"              // complete BrnProgression::Rival (56-byte) for the rival lookups
 #include "SharedClasses/Progression/BrnOpponentData.h"       // complete BrnProgression::CarOpponentSet (144-byte) for FindCarOpponentSet
 #include "SharedClasses/Progression/BrnRaceEventData.h"      // complete BrnProgression::EventJunction (16-byte) for FixDown
-#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"           // CGS_ASSERT
 #include "GameSource/GameState/BrnGameActions.h"             // complete BrnProgression::TrophyUnlockData (16-byte) for &mpaTrophyUnlocks[i]
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"  // ProgressionRankData (pointer-return only)
 #include <cstring>                                           // memset
@@ -42,7 +42,10 @@ const EventJunction* ProgressionData::GetEventJunction(u32 luIndex) const
 // X360 0x823569F0. Bounds-checked accessor into the trophy-unlock table (16-byte stride).
 TrophyUnlockData* ProgressionData::GetTrophyUnlock(u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < muTrophyUnlockCount, "luIndex < muTrophyUnlockCount");
+    CGS_ASSERT(luIndex < muTrophyUnlockCount,
+        CgsDev::Assert::MessageAt(
+            "luIndex < muTrophyUnlockCount",
+            "..\\..\\..\\SharedClasses\\Progression/BrnProgressionData.h", 302 /* ARTIST 0x82356A20 */));
     return &GetTrophyUnlocks()[luIndex];
 }
 

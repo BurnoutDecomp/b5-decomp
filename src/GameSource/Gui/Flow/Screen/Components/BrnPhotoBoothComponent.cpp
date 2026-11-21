@@ -37,7 +37,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream (the streamed unhandled-photostate asserts)
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h" // CgsDev::Assert::Begin/Fire/EndAssert + KI_MESSAGEBUFFERSIZE
-#include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"       // CGS_ASSERT
 
 #include <cstddef>   // offsetof (the x64 payload-offset words of the wire records)
 
@@ -205,7 +205,10 @@ namespace BrnGui
     // load/unload through (asserts non-NULL). stw r31,0x404(this) => mpGuiCache.
     void PhotoBoothComponent::SetCachePointer(GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0, "NULL != lpGuiCache");
+        CGS_ASSERT(lpGuiCache != 0,
+            CgsDev::Assert::MessageAt(
+                "NULL != lpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnPhotoBoothComponent.h", 262 /* ARTIST 0x824B34BC */));
         mpGuiCache = lpGuiCache;
     }
 

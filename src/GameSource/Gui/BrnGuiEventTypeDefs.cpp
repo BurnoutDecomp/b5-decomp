@@ -13,6 +13,7 @@
 // condition matches the X360 assert message text.
 
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
 #include "GameSource/Gui/BrnGuiRaceCarInfoEvent.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"  // CgsCore::SPrintf / SnPrintf
@@ -25,6 +26,8 @@
 #include <cstring>  // std::memcpy -- the DoWorstCase compaction is a 0x30-byte block move.
 
 extern bool gbLogGuiAudioTriggers; // X360 byte_82FB5098, registered by GuiDebugComponent.
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h";
 
 namespace BrnGui
 {
@@ -195,8 +198,11 @@ EPlayerTeam GuiEventUpdateSatNav::SatNavIconInfo::GetPlayerTeam() const
 s32 GuiEventUpdateSatNav::SatNavI(const GuiEventUpdateSatNav* lpThis)
 {
     const s32 liIconType = lpThis->maIconInfo[0].mi8IconType; // lbz;extsb -> sign-extended
-    CGS_ASSERT( liIconType >= 0, "leIconType >= 0" );
-    CGS_ASSERT( liIconType < SatNavIconInfo::E_SATNAVICON_MAX, "leIconType < E_SATNAVICON_MAX" );
+    CGS_ASSERT( liIconType >= 0,
+        CgsDev::Assert::MessageAt("leIconType >= 0", KAC_ARTIST_ASSERT_FILE, 1911 /* ARTIST 0x823A6B64 */));
+    CGS_ASSERT( liIconType < SatNavIconInfo::E_SATNAVICON_MAX,
+        CgsDev::Assert::MessageAt(
+            "leIconType < E_SATNAVICON_MAX", KAC_ARTIST_ASSERT_FILE, 1912 /* ARTIST 0x823A6B88 */));
     return liIconType;
 }
 

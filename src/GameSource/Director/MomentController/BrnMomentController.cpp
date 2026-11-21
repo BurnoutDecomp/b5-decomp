@@ -15,7 +15,7 @@
 #include "GameSource/Director/MomentController/BrnMomentSharedInfo.h"            // MomentSharedInfo (UpdateAllMoments)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h"    // DebugPrinter (the moment name lines)
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                     // CgsDev::StrStream (lacMessage)
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (mbIsAllocated guard)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (mbIsAllocated guard)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the NewMoment allocation rung
 #include <cstdlib>                                           // [DIAG] getenv (BRN_CRASHCAM_DIAG)
 // ---- the twelve concrete moment types NewMoment allocates ----------------------------------------
@@ -122,7 +122,10 @@ void MomentController::UpdateAllMoments(Camera::BehaviourManager& lrBehaviourMan
 // pool handed out -- so GetMoment returns the pool handle's stored object.
 Moment* MomentController::MomentHandle::GetMoment() const
 {
-    CGS_ASSERT(mbIsAllocated, "mbIsAllocated");
+    CGS_ASSERT(mbIsAllocated,
+        CgsDev::Assert::MessageAt(
+            "mbIsAllocated",
+            "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.h", 141 /* ARTIST 0x821F5768 */));
     // The const handle's Get() yields const void*; the console build GetMoment returns the stored
     // moment pointer as a mutable Moment* (it only reads the slot's object-pointer word).
     return static_cast<Moment*>(const_cast<void*>(mMomentPoolHandle.Get()));

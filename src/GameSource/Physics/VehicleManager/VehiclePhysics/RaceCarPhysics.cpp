@@ -1,7 +1,7 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::{Dot, Add, Subtract, Mult, Normalize, MagnitudeSquared}
 #include "rw/math/fpu/scalar_operation.h"   // original scalar fsel clamps
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Math/BrnMathUtils.h"    // BrnMath::Magnitude2D / MagnitudeSquared2D (XZ plane)
 #include <algorithm> // std::min / std::max
 #include <cmath>     // std::sqrt, std::fabs
@@ -707,7 +707,10 @@ namespace Vehicle
     // ---------------------------------------------------------------------------------------
     Vector3 RaceCarPhysics::GetNormalCausingCrash()
     {
-        CGS_ASSERT(IsCrashing(), "mbCrashing");   // lbz this+0x710 (base mbIsCrashing)
+        CGS_ASSERT(IsCrashing(),
+            CgsDev::Assert::MessageAt(
+                "mbCrashing",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\VehiclePhysics/RaceCarPhysics.h", 328 /* ARTIST 0x825B3958 */));   // lbz this+0x710 (base mbIsCrashing)
         return mCrashNormal;   // lvx128 this+0x1440 -> hidden-sret stvx128
     }
 

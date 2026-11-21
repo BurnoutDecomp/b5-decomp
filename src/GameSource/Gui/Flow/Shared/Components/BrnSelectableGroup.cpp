@@ -10,7 +10,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h"
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectable.h"   // BrnGui::Selectable (item virtuals + accessors)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                 // CGS_ASSERT
 
 namespace BrnGui
 {
@@ -325,7 +325,10 @@ namespace BrnGui
     void SelectableGroup::SetSelectableId(s32 liIndex, u64 luId)
     {
         Selectable* lpSel = GetSelectable(liIndex);
-        CGS_ASSERT(lpSel != 0, "lpSelectable");
+        CGS_ASSERT(lpSel != 0,
+            CgsDev::Assert::MessageAt(
+                "lpSelectable",
+                "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.cpp", 112 /* ARTIST 0x824E3208 */));
         lpSel->SetId(luId);
         lpSel->SetDirty();
     }
