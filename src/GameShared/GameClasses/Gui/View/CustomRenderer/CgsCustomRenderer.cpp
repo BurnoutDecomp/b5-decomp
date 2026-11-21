@@ -5,7 +5,7 @@
 
 #include "GameShared/GameClasses/Gui/View/CustomRenderer/CgsCustomRenderer.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/ImRenderBuffer/CgsIm2dRenderBuffer.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 // CgsCustomRenderer.cpp -- the custom-render component base bodies, plus the one
 // derived-renderer leaf DecFIGS attributes to this file.
@@ -17,6 +17,9 @@
 //
 // (Construct @0x828476B0 is `mbRenderEnabled = false` and stays inline in the header,
 // as do the remaining trivial DWARF defaults.)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CustomRenderer/CgsCustomRenderer.cpp";
 
 namespace CgsGui
 {
@@ -38,12 +41,17 @@ namespace CgsGui
     renderengine::Texture* CustomRenderComponentInterface::GetRenderOutput(
         s32 /*liTextureIndex*/, s32* lpiShaderProgram, ImRendererSet* /*lpRendererSet*/)
     {
-        CGS_ASSERT(lpiShaderProgram != 0, "lpiShaderProgram != NULL");
+        CGS_ASSERT(lpiShaderProgram != 0,
+            CgsDev::Assert::MessageAt(
+                "lpiShaderProgram != NULL",
+                KAC_ARTIST_ASSERT_FILE, 114 /* ARTIST 0x828476F0 */));
 
         *lpiShaderProgram = 0;
 
         CGS_ASSERT(false,
-                   "attempting to get a texture for a component which does not render to texture");
+            CgsDev::Assert::MessageAt(
+                "attempting to get a texture for a component which does not render to texture",
+                KAC_ARTIST_ASSERT_FILE, 118 /* ARTIST 0x82847714 */));
         return 0;
     }
 

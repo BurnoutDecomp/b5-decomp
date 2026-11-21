@@ -16,7 +16,7 @@
 
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"
 #include "rw/rwcore_structs.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor / Start/StopMonitor
 #include "SDKs/EATech/include/NFSMix/MixerAllocator.hpp"                  // Nicotine mixer-allocator face
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
@@ -68,7 +68,9 @@ bool Environment::AddStateManager(StateManager* apStateManager)
 StateManager* Environment::GetStateManager(s32 liStateManId) const
 {
     CGS_ASSERT(liStateManId < KI_MAX_NUMBER_OF_STATES,
-               "liStateManId < KI_MAX_NUMBER_OF_STATES");
+        CgsDev::Assert::MessageAt(
+            "liStateManId < KI_MAX_NUMBER_OF_STATES",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsEnvironment.cpp", 481 /* ARTIST 0x8268D1EC */));
 
     return mapStateManagers[liStateManId];
 }

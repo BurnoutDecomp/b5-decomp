@@ -314,7 +314,9 @@ void BehaviourSpirallingDeathcam::Start()
 void BehaviourSpirallingDeathcam::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourSpirallingDeathcam,
-               "lpParameters->GetType() == eBehaviourSpirallingDeathcam");   // h:193
+        CgsDev::Assert::MessageAt(
+            "lpParameters->GetType() == eBehaviourSpirallingDeathcam",
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourSpirallingDeathcam.h", 193 /* ARTIST 0x821F56B0 */));   // h:193
     mpParameters = lpParameters;   // stw 0x2D0(this)
 }
 

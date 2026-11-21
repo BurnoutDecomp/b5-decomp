@@ -161,7 +161,8 @@ const char* AttribSysPackageAllocator::GetUserPackageName()
         break;
     }
 
-    CGS_ASSERT(false, "Unknown package.\n");
+    CGS_ASSERT(false,
+        CgsDev::Assert::MessageAt("Unknown package.\n", KAC_ARTIST_ASSERT_FILE, 450 /* ARTIST 0x821F022C */));
     return NULL;
 }
 }

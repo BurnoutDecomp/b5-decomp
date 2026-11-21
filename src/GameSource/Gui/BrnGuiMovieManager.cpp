@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // original state diagnostic
 #include "GameShared/GameClasses/System/Resource/CgsResourceTypeIds.h"           // E_RESOURCETYPE_VIDEODATA
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT (VideoDefinition::Copy)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                // CGS_ASSERT (VideoDefinition::Copy)
 #include "GameSource/Sound/Global/BrnMusicEffect.h"                                // MusicEffect::IsCustomSoundtrackActive (Update @0x82507A98)
 
 #include <cstring>   // strlen / memset (X360 QueueNextMovie path construction)
@@ -367,7 +367,9 @@ namespace BrnGui
     void MovieManager::DestroyMemoryResourceAndDescriptor()
     {
         CGS_ASSERT(mResourceAllocatorResource.m_baseResources[0] != 0,
-                   "mResourceAllocatorResource.GetMemoryResource()");
+            CgsDev::Assert::MessageAt(
+                "mResourceAllocatorResource.GetMemoryResource()",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiMovieManager.cpp", 582 /* ARTIST 0x824F9648 */));
         XPhysicalFree(mResourceAllocatorResource.m_baseResources[0]);
         mResourceAllocatorResource.m_baseResources[0] = 0;
     }

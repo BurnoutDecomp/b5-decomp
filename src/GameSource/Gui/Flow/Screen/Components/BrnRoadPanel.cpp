@@ -505,7 +505,9 @@ namespace BrnGui
     const char* RoadPanel::GetSelectedFriendName() const
     {
         CGS_ASSERT(meCurrentScoreMode == KI_ROAD_PANEL_MODE_ONLINE,
-                   "GetScoringMode() == GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE"); // @0x82418018
+            CgsDev::Assert::MessageAt(
+                "GetScoringMode() == GuiEventSetRoadRuleScoreMode::E_ROAD_PANEL_MODE_ONLINE",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnRoadPanel.h", 231 /* ARTIST 0x82418020 */)); // @0x82418018
 
         // X360: 0xA2*meCurrentRule + this + 0x1A2 == mPanels[meCurrentRule].mNames[1].
         return mRoadPanelData.mPanels[meCurrentRule].mNames[KI_FRIEND_ROW];

@@ -37,11 +37,16 @@ BrnTrigger::TriggerData::GetRegion( int liRegionIndex ) const
 const BrnTrigger::Landmark*
 BrnTrigger::TriggerData::GetLandmarkFromRegionIndex( int liRegionIndex ) const
 {
-    CGS_ASSERT( liRegionIndex < miRegionCount, "liRegionIndex < miRegionCount" );
+    CGS_ASSERT( liRegionIndex < miRegionCount,
+        CgsDev::Assert::MessageAt(
+            "liRegionIndex < miRegionCount",
+            KAC_ARTIST_ASSERT_FILE, 624 /* ARTIST 0x8231B678 */));
 
     const TriggerRegion* lpTriggerRegion = mppRegions[liRegionIndex];
     CGS_ASSERT( lpTriggerRegion->GetType() == TriggerRegion::E_TYPE_LANDMARK,
-                "lpTriggerRegion->GetType() == TriggerRegion::E_TYPE_LANDMARK" );
+        CgsDev::Assert::MessageAt(
+            "lpTriggerRegion->GetType() == TriggerRegion::E_TYPE_LANDMARK",
+            KAC_ARTIST_ASSERT_FILE, 615 /* ARTIST 0x8231B6AC */));
 
     return static_cast<const Landmark*>( lpTriggerRegion );
 }

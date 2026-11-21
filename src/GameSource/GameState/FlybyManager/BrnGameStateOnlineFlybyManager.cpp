@@ -247,7 +247,9 @@ s32 OnlineFlybyManager::CalculateNumberOfCarsInFlyby()
 const CgsNetwork::PlayerName* OnlineFlybyManager::GetRivalName(BrnNetwork::NetworkPlayerID lPlayerID)
 {
     CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-               "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CgsDev::Assert::MessageAt(
+            "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            KAC_ARTIST_ASSERT_FILE, 715 /* ARTIST 0x82358224 */));
 
     return &mPlayerInputInterface.GetPlayerStatusDataByPlayerID(lPlayerID)->mPlayerName;
 }

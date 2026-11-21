@@ -71,7 +71,7 @@
 // record + the GetPlayerResultsData accessor (network keystone grow).
 #include "GameSource/Network/BrnNetworkModuleIO.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Bad-case-of-Road-Rage assert)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (Bad-case-of-Road-Rage assert)
 
 // CgsSystem::Time(f32) ctor + Time::operator+= -- UpdateGeneralStats folds the frame delta into the
 // lead/last/boost Time accumulators (the X360 CgsSystem::Time::Time(deltaTime) + operator+_ pair).
@@ -652,7 +652,9 @@ namespace BrnGameState
     {
         CGS_ASSERT(leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
                    leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+            CgsDev::Assert::MessageAt(
+                "( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 3578 /* ARTIST 0x82363500 */));
 
         CarData* lpCar = GetCarData(leRaceCarIndex);
         if (lpCar)

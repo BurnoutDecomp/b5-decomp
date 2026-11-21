@@ -76,7 +76,9 @@ namespace BrnNetwork
         for (s32 liProcess = 0; liProcess < KI_NUMBER_OF_PROCESSES; ++liProcess)
         {
             CGS_ASSERT(maProcessActions[liProcess * KI_ACTIONS_PER_PROCESS] != KI_NO_ACTION,
-                       "No actions supplied for this process");
+                CgsDev::Assert::MessageAt(
+                    "No actions supplied for this process",
+                    "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerCardManagerX360.cpp", 262 /* ARTIST 0x8254CAF8 */));
         }
     }
 

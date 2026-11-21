@@ -3,7 +3,7 @@
 #include "GameSource/World/AI/ResetOnTrack/BrnResetOnTrackDebugComponent.h"
 #include "GameSource/World/AI/BrnAICar.h"                                 // AICar (the array element)
 #include "GameSource/World/AI/SharedIO/BrnAIModuleResultInterface.h"      // AIModuleResultInterface
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameSource/World/AI/BrnAIPortal.h"
@@ -14,6 +14,9 @@
 
 // BrnAI::ResetOnTrackManager out-of-line members: Construct (@0x82791A48) and GetAICar
 // (@0x82765878), plus the file-scope static perf-mon handles.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\World/AI/ResetOnTrack/BrnResetOnTrackManager.h";
 
 namespace BrnAI
 {
@@ -298,9 +301,13 @@ namespace BrnAI
     AICar* ResetOnTrackManager::GetAICar(EGlobalRaceCarIndex leGlobalRaceCarIndex)
     {
         CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
-                   "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
+            CgsDev::Assert::MessageAt(
+                "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
+                KAC_ARTIST_ASSERT_FILE, 419 /* ARTIST 0x827658A4 */));
         CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-                   "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+            CgsDev::Assert::MessageAt(
+                "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
+                KAC_ARTIST_ASSERT_FILE, 420 /* ARTIST 0x827658C8 */));
 
         static const u32 KU_AI_CAR_STRIDE = 0x1560;  // sizeof(AICar) == 5472 (X360-attested)
         return reinterpret_cast<AICar*>(

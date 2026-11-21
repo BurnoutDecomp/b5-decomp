@@ -53,7 +53,9 @@ void SpecificGameModeEventInterface::Event::Construct(
     s32            liNumLandmarks)
 {
     CGS_ASSERT(liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE,
-               "liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE");
+        CgsDev::Assert::MessageAt(
+            "liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateSharedIO.h", 1850 /* ARTIST 0x82354370 */));
 
     miEventID              = liEventID;
     mTrafficLightTriggerId = luTrafficLightTriggerId;

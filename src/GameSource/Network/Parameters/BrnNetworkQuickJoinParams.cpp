@@ -1,5 +1,5 @@
 #include "BrnNetworkQuickJoinParams.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                     // CGS_ASSERT
 #include "GameSource/Network/Parameters/BrnNetworkParameterData.h"     // MatchmakingContext, AmendRankedContexts
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -12,6 +12,9 @@
 // The search-context list of the platform record is a list of { id, value } pairs with the
 // count after it; the game-side context helpers take it as a MatchmakingContext array and an
 // s32 count, so the two platform members are handed over through that view.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkQuickJoinParams.cpp";
 
 namespace BrnNetwork
 {
@@ -43,11 +46,14 @@ namespace BrnNetwork
     void QuickJoinParams::SetMatchmakingParameter(EBrnQuickJoinParameters leParameter, s32 liValue)
     {
         CGS_ASSERT(static_cast<s32>(leParameter) >= 0 && leParameter < E_QUICKJOIN_COUNT,
-                   "(int32_t)leParameter >= 0 && leParameter < E_QUICKJOIN_COUNT");
+            CgsDev::Assert::MessageAt(
+                "(int32_t)leParameter >= 0 && leParameter < E_QUICKJOIN_COUNT",
+                KAC_ARTIST_ASSERT_FILE, 74 /* ARTIST 0x82584210 */));
 
         maiQuickJoinParams[leParameter] = liValue;
         ++miNumParameters;
-        CGS_ASSERT(miNumParameters <= CgsNetwork::KI_MAX_QUICK_JOIN_PARAMS, "miNumParameters <= 16");
+        CGS_ASSERT(miNumParameters <= CgsNetwork::KI_MAX_QUICK_JOIN_PARAMS,
+            CgsDev::Assert::MessageAt("miNumParameters <= 16", KAC_ARTIST_ASSERT_FILE, 80 /* ARTIST 0x8258424C */));
     }
 
     void QuickJoinParams::SetMatchmakingParameter(EBrnQuickJoinParameters leParameter, bool lbValue)

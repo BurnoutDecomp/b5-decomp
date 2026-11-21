@@ -806,7 +806,9 @@ namespace BrnGui
         SetExpectedComponent(mGeneralTransitionComponentApt.GetName());
 
         CGS_ASSERT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM,
-                   "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM");   // cpp:3527
+            CgsDev::Assert::MessageAt(
+                "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM",
+                KAC_ARTIST_ASSERT_FILE, 3527 /* ARTIST 0x82474A18 */));   // cpp:3527
 
         mpCache->SetExpectedAptComponentList(E_GUIFLOW_HUD, mauExpectedComponentIds,
                                              muNumExpectedComponents);

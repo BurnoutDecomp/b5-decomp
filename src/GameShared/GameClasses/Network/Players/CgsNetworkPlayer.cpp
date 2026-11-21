@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"  // CgsSystem::TimerStatus
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"
 #include "GameShared/GameClasses/Network/Players/CgsReliableMessageManager.h"
@@ -158,7 +158,9 @@ bool NetworkPlayer::IsMessageTypeRegistered(s32 leType)
         if (maSendMessageData[liIndex].meType == leType)
         {
             CGS_ASSERT(maRecvMessageData[liIndex].meType == leType,
-                       "maRecvMessageData[i].meType == leType");
+                CgsDev::Assert::MessageAt(
+                    "maRecvMessageData[i].meType == leType",
+                    "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsNetworkPlayer.cpp", 908 /* ARTIST 0x82872B64 */));
             return true;
         }
     }

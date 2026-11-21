@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/System/Resource/CgsLiveUpdateModule.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                   // CGS_ASSERT
 #include "GameShared/GameClasses/System/Resource/CgsLiveUpdateModuleIO.h"  // LiveUpdateIO::OutputBuffer (Get/SetStatus)
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"    // Events::LoadBundleRequest
 #include "GameShared/GameClasses/System/GameTalk/CgsGameTalk.h"            // CgsGameTalk::GameTalk::SendMessage
@@ -27,7 +27,10 @@ namespace CgsResource
     void LiveUpdateModule::Construct(CgsGameTalk::GameTalk* lpGameTalk)
     {
         // Only one live-update module may exist at a time.
-        CGS_ASSERT(spInstance == 0, "spInstance==NULL");
+        CGS_ASSERT(spInstance == 0,
+            CgsDev::Assert::MessageAt(
+                "spInstance==NULL",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsLiveUpdateModule.cpp", 52 /* ARTIST 0x828E6574 */));
 
         // Chain the base single-buffered module Construct.
         ModuleSingleBuffered::Construct();

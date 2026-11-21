@@ -593,7 +593,10 @@ namespace CgsGui
     // exists, then remove the unloading movieclip from the communicator component table.
     void AptCallbackFile::OnUnload(AptValue* lpValue)
     {
-        CGS_ASSERT(AptAuxPointer::mpAptAuxInst != 0, "AptAuxPointer::mpAptAuxInst");
+        CGS_ASSERT(AptAuxPointer::mpAptAuxInst != 0,
+            CgsDev::Assert::MessageAt(
+                "AptAuxPointer::mpAptAuxInst",
+                KAC_ARTIST_ASSERT_FILE, 906 /* ARTIST 0x8285410C */));
         AptCommunicator::RemoveExpiredAptComponent(lpValue);
     }
 

@@ -1,4 +1,5 @@
 #include "GameSource/World/AI/SharedIO/BrnAICarOutputInterface.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include <cstring>   // memcpy (SetPlayerRoute's Route::Construct copy)
 
 #include <cfloat>   // FLT_MAX (Construct's per-car distance seed)
@@ -33,7 +34,9 @@ namespace AIModuleIO
     u16 AICarOutputInterface::GetAISectionIndex(s32 liAICarIndex) const
     {
         CGS_ASSERT(liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS,
-                   "liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS");
+            CgsDev::Assert::MessageAt(
+                "liAICarIndex >= 0 && liAICarIndex < BrnWorld::KI_MAX_OUT_OF_RANGE_RACE_CARS",
+                "..\\..\\..\\GameSource\\World/AI/SharedIO/BrnAICarOutputInterface.h", 229 /* ARTIST 0x8230F8BC */));
         return mauAISections[liAICarIndex];
     }
 

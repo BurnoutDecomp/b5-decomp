@@ -39,6 +39,9 @@
 #ifndef NOMINMAX
 #define NOMINMAX
 #endif
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsEnvironment.cpp";
+
 namespace CgsSound
 {
 namespace Playback
@@ -46,12 +49,15 @@ namespace Playback
 
 Environment::eAudioMode Environment::GetAudioMode() const
 {
-    CGS_ASSERT(mpDacPlugin != 0, "mpDacPlugin");
+    CGS_ASSERT(mpDacPlugin != 0,
+        CgsDev::Assert::MessageAt("mpDacPlugin", KAC_ARTIST_ASSERT_FILE, 528 /* ARTIST 0x82689BFC */));
 
     XAUDIOSPEAKERCONFIG lXAudioSpeakerConfig;
     const HRESULT lhr = XAudioGetSpeakerConfig(&lXAudioSpeakerConfig);
     CGS_ASSERT(lhr == S_OK,
-               "XAudioGetSpeakerConfig( &lXAudioSpeakerConfig ) == S_OK");
+        CgsDev::Assert::MessageAt(
+            "XAudioGetSpeakerConfig( &lXAudioSpeakerConfig ) == S_OK",
+            KAC_ARTIST_ASSERT_FILE, 533 /* ARTIST 0x82689C28 */));
 
     return (lXAudioSpeakerConfig & XAUDIOSPEAKERCONFIG_DIGITAL_MASK)
             == XAUDIOSPEAKERCONFIG_DIGITAL_DOLBYDIGITAL

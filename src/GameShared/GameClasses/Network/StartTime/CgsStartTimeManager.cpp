@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"
 #include "GameShared/GameClasses/Network/Players/CgsHostMigrationManager.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // CgsNetwork::StartTimeManager -- the pre-start handshake. The host waits until every
 // connected client reports ready (or the wait times out), picks a start time a short gap
@@ -437,7 +437,9 @@ void StartTimeManager::SetStartTime(const StartTime* lpStartTime)
 {
     CGS_ASSERT(!IsStartTimeValid()
                || mpHostMigrationManager->ABecomesHostBeforeB(mStartTime.mHostID, lpStartTime->mHostID),
-               "!IsStartTimeValid() || mpHostMigrationManager->ABecomesHostBeforeB(mStartTime.mHostID, lpStartTime->mHostID)");
+        CgsDev::Assert::MessageAt(
+            "!IsStartTimeValid() || mpHostMigrationManager->ABecomesHostBeforeB(mStartTime.mHostID, lpStartTime->mHostID)",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsStartTimeManager.cpp", 1116 /* ARTIST 0x8288A15C */));
 
     mbStartTimeIsValid = true;
     mStartTime         = *lpStartTime;

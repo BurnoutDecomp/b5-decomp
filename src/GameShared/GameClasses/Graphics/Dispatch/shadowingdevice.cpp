@@ -7,7 +7,7 @@
 #include <cstring>                                                          // memcpy (serialised-slot reads)
 #include "rw/rwcore_structs.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // the quiet one-shot gates
 #include "GameShared/GameClasses/Graphics/Dispatch/renderablemesh.h"        // RenderableMesh (mesh-dispatch seam)
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h" // MaterialTechniqueView
@@ -142,7 +142,10 @@ namespace shadow
         renderengine::VertexProgramState* lpVertexProgramState =
             renderengine::VertexProgramState::InitializeNoBindX360(
                 sVertexProgramStateResource, lParameters);
-        CGS_ASSERT(lpVertexProgramState, "lpVertexProgramState");
+        CGS_ASSERT(lpVertexProgramState,
+            CgsDev::Assert::MessageAt(
+                "lpVertexProgramState",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/shadowingdevice.cpp", 476 /* ARTIST 0x827E79DC */));
         return lpVertexProgramState;
     }
 

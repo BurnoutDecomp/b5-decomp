@@ -1,6 +1,6 @@
 #include "GameSource/World/AI/BrnAIPortal.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "types.hpp"                                   // uintptr_t (relocation arithmetic)
 
 // BrnAI::Portal::GetBoundaryLine @0x82764480.
@@ -17,7 +17,9 @@ namespace BrnAI
     const BoundaryLine* Portal::GetBoundaryLine(u8 lu8BoundryIndex) const
     {
         CGS_ASSERT(lu8BoundryIndex < mu8NumBoundaryLines,
-                   "lu8BoundryIndex < mu8NumBoundaryLines");
+            CgsDev::Assert::MessageAt(
+                "lu8BoundryIndex < mu8NumBoundaryLines",
+                "..\\..\\..\\SharedClasses\\AI/AISectionsData.h", 811 /* ARTIST 0x827644B0 */));
         return &mpaBoundaryLines[lu8BoundryIndex];
     }
 

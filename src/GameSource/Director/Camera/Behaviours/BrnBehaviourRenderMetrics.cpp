@@ -1,7 +1,7 @@
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRenderMetrics.h"
 
 #include <string.h>                                                // _stricmp / strlen
-#include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"            // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"       // CgsSceneManager::K_INVALID_ENTITY_ID
@@ -285,7 +285,9 @@ bool BehaviourRenderMetrics::Update(Camera& lrCamera, const BehaviourSharedInfo&
 void BehaviourRenderMetrics::SetParameters(const Behaviour::Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourRenderMetrics,
-               "lpParameters->GetType() == eBehaviourRenderMetrics");
+        CgsDev::Assert::MessageAt(
+            "lpParameters->GetType() == eBehaviourRenderMetrics",
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRenderMetrics.cpp", 434 /* ARTIST 0x821FB2B8 */));
     mpParameters = static_cast<const Parameters*>(lpParameters);
 }
 

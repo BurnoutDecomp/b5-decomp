@@ -24,7 +24,10 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModule.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // EPlayerScoringIndex
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnRaceCarEntityModule.h";
 
 namespace BrnWorld
 {
@@ -76,12 +79,14 @@ void RaceCarEntityModule::SetActiveRaceCarForPlayerScoringIndex(
 {
     CGS_ASSERT(lePlayerScoringIndex >= BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_0 &&
                    lePlayerScoringIndex < BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT,
-               "(lePlayerScoringIndex>=BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_0) && "
-               "(lePlayerScoringIndex<BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT)");
+        CgsDev::Assert::MessageAt(
+            "(lePlayerScoringIndex>=BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_0) && (lePlayerScoringIndex<BrnGameState::GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT)",
+            KAC_ARTIST_ASSERT_FILE, 1203 /* ARTIST 0x822A38C0 */));
     CGS_ASSERT(leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
                    leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && "
-               "(leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+        CgsDev::Assert::MessageAt(
+            "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+            KAC_ARTIST_ASSERT_FILE, 1205 /* ARTIST 0x822A38EC */));
 
     maActiveRaceCarForPlayerScoringIndex[lePlayerScoringIndex] = leActiveRaceCarIndex;
 }

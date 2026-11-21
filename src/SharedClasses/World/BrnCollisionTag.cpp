@@ -1,4 +1,5 @@
 #include "SharedClasses/World/BrnCollisionTag.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // BrnWorld::CollisionTag, reconstructed from BURNOUT_X360_ARTIST.XEX. This TU defines the
 // invisible-surface-id global and bodies GetTrafficInfo (0x826763B0); the other accessors
@@ -37,7 +38,10 @@ namespace BrnWorld
         *lpfTrafficAngle = lfAngleRatio * KF_TWO_PI;
 
         CGS_ASSERT(*lpfTrafficAngle >= 0.0f && *lpfTrafficAngle < KF_TWO_PI,
-                   "*lpfTrafficAngle >= 0.0f && *lpfTrafficAngle < (2.0f * RwMath::PI)");
+            CgsDev::Assert::MessageAt(
+                "*lpfTrafficAngle >= 0.0f && *lpfTrafficAngle < (2.0f * RwMath::PI)",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../../SharedClasses/World/BrnCollisionTag.cpp", 72 /* ARTIST 0x82676450 */));
 
         return E_TRAFFIC_DIRECTION_VALID;
     }

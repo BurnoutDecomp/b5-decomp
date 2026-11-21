@@ -133,9 +133,13 @@ static const CgsID KU_CGSID_NULL = 0;
 void RaceCarEntityModule::AddTrainingRequest(BrnProgression::ETrainingType leTrainingType)
 {
     CGS_ASSERT(miPendingRequestCount < KI_TRAINING_REQUEST_QUEUE_SIZE,
-               "miPendingRequestCount < KI_TRAINING_REQUEST_QUEUE_SIZE");
+        CgsDev::Assert::MessageAt(
+            "miPendingRequestCount < KI_TRAINING_REQUEST_QUEUE_SIZE",
+            KAC_ARTIST_ASSERT_FILE, 8445 /* ARTIST 0x822A47E0 */));
     CGS_ASSERT(leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT,
-               "leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT");
+        CgsDev::Assert::MessageAt(
+            "leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT",
+            KAC_ARTIST_ASSERT_FILE, 8446 /* ARTIST 0x822A480C */));
 
     if (miPendingRequestCount < KI_TRAINING_REQUEST_QUEUE_SIZE)
     {

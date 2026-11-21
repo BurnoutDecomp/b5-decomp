@@ -169,7 +169,9 @@ namespace BrnGui
     void CompassComponent::UpdatePlayerMarkerState(EPlayerRouteState lePlayerOnTrack)
     {
         CGS_ASSERT((E_PLAYER_ROUTE_ON_COURSE <= lePlayerOnTrack) && (E_PLAYER_ROUTE_COUNT > lePlayerOnTrack),
-                   "(E_PLAYER_ROUTE_ON_COURSE <= lePlayerOnTrack) && (E_PLAYER_ROUTE_COUNT > lePlayerOnTrack)");
+            CgsDev::Assert::MessageAt(
+                "(E_PLAYER_ROUTE_ON_COURSE <= lePlayerOnTrack) && (E_PLAYER_ROUTE_COUNT > lePlayerOnTrack)",
+                KAC_ARTIST_ASSERT_FILE, 255 /* ARTIST 0x8241EBDC */));
 
         if (lePlayerOnTrack != mePlayerOnTrack)
         {

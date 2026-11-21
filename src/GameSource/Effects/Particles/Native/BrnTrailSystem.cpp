@@ -37,7 +37,7 @@
 
 #include "GameSource/Effects/Particles/Native/BrnTrailSystem.h"
 #include "GameSource/Effects/Particles/Native/BrnIm3dSkidsRenderer.h"   // BrnGraphics::Im3dSkidsRenderer (EndRender fold)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                       // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"                               // rw::math::vpu::{operator+,operator-,MagnitudeSquared,Normalize,Cross,Dot}
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // [diag] CgsDev::Log::WriteToLog
@@ -157,7 +157,9 @@ namespace Native
     void EmitterArray::AddEntry(TrailEmitter* lpEmitter)
     {
         CGS_ASSERT(mnCurrentSize < KN_TRAIL_EMITTER_POOL_SIZE,
-                   "mnCurrentSize < knTrailEmitterPoolSize");
+            CgsDev::Assert::MessageAt(
+                "mnCurrentSize < knTrailEmitterPoolSize",
+                "..\\..\\..\\GameSource\\Effects/Particles/Native/BrnTrailSystem.h", 134 /* ARTIST 0x82277D80 */));
 
         mapEmitters[mnCurrentSize] = lpEmitter;
         ++mnCurrentSize;

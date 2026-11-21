@@ -33,6 +33,8 @@
 // sTexture are wider and every one of them pointed into the wrong member. Reaching the
 // members BY NAME is both the campaign rule and the bug fix.
 
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapManager.cpp";
+
 namespace BrnGui
 {
     // ---------------------------------------------------------------------------
@@ -270,10 +272,13 @@ namespace BrnGui
     // (GetTileState is evaluated as the asserted expression, matching the X360 unconditional call.)
     void MapManager::RemoveTileFromSet(SatNavTile* lpTile)
     {
-        CGS_ASSERT(lpTile != NULL, "lpTile != NULL");
+        CGS_ASSERT(lpTile != NULL,
+            CgsDev::Assert::MessageAt("lpTile != NULL", KAC_ARTIST_ASSERT_FILE, 979 /* ARTIST 0x8244884C */));
 
         CGS_ASSERT(GetTileState(lpTile->muID) == SatNavTile::E_STATE_LOADED,
-                   "GetTileState( lpTile->muID) == SatNavTile::E_STATE_LOADED");
+            CgsDev::Assert::MessageAt(
+                "GetTileState( lpTile->muID) == SatNavTile::E_STATE_LOADED",
+                KAC_ARTIST_ASSERT_FILE, 980 /* ARTIST 0x8244887C */));
     }
 
     namespace

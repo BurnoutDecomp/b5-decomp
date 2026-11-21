@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/CgsNetworkVersionDisplay.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h"
@@ -95,7 +95,9 @@ namespace CgsNetwork
     {
         CGS_ASSERT(
             (leServerType >= E_SERVER_TYPE_LOCAL) && (leServerType < E_SERVER_TYPE_COUNT),
-            "(leServerType>=E_SERVER_TYPE_LOCAL) && (leServerType<E_SERVER_TYPE_COUNT)");
+            CgsDev::Assert::MessageAt(
+                "(leServerType>=E_SERVER_TYPE_LOCAL) && (leServerType<E_SERVER_TYPE_COUNT)",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\CgsNetworkVersionDisplay.cpp", 104 /* ARTIST 0x8286FA24 */));
 
         mpcVersion       = lpcVersion;
         muField_04       = luField_04;

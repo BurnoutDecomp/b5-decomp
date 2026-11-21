@@ -8,7 +8,7 @@
 //
 // Zeroes the single owned reference at +0x0C and returns `this`.
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Set's unimplemented/unknown tripwires)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (Set's unimplemented/unknown tripwires)
 
 namespace BrnDirector
 {
@@ -70,7 +70,9 @@ namespace BrnDirector
         meType         = E_RACE_CAR;
         muRef          = 0;
         CGS_ASSERT(static_cast<s32>(leRaceCar) < KI_MAX_NUM_RACE_CARS,
-                   "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars");   // BrnVehicleRef.h:222
+            CgsDev::Assert::MessageAt(
+                "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
+                "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 222 /* ARTIST 0x821F2A0C */));   // BrnVehicleRef.h:222
     }
 
     // @ 0x821F2A38 (class:BrnDirector::VehicleRef TU) -- memberwise inequality over

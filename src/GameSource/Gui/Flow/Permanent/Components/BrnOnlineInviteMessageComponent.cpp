@@ -272,7 +272,9 @@ void OnlineInviteMessageComponent::DoTransitionComplete()
 {
     // Guest: lwz r11, 0x30(this); cmpwi r11, 2 -- must be transitioning out.
     CGS_ASSERT(meShowingState == E_SHOWINGSTATE_TRANSITIONING_OUT,
-               "meShowingState == E_SHOWINGSTATE_TRANSITIONING_OUT");
+        CgsDev::Assert::MessageAt(
+            "meShowingState == E_SHOWINGSTATE_TRANSITIONING_OUT",
+            "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnOnlineInviteMessageComponent.cpp", 624 /* ARTIST 0x82416308 */));
 
     // Guest: lwz r10, 0x34(this) -- snapshot the secondary state BEFORE clearing +0x30.
     const EOnlineNotificationChyronType leShowingType = meShowingType;

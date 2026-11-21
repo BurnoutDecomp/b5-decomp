@@ -1,7 +1,7 @@
 #include "types.hpp"
 
 #include "GameSource/Network/Messages/BrnShowtimeSwitchMessage.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::ShowtimeSwitchMessage::Construct            @ 0x8257C3B0
@@ -51,7 +51,9 @@ namespace BrnNetwork
                                                bool lbEnteringShowtime)
     {
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-                   "lu16FrameCount != KU16_INVALID_FRAME");
+            CgsDev::Assert::MessageAt(
+                "lu16FrameCount != KU16_INVALID_FRAME",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnShowtimeSwitchMessage.cpp", 131 /* ARTIST 0x8257C4C0 */));
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
         {

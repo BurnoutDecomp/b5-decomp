@@ -8,7 +8,7 @@
 
 #include <cstring>
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                    // CgsCore::SPrintf (the playing-movie record)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // CgsDev::PerfMonCpu (the Update phase brackets)
 #include "GameShared/GameClasses/Gui/View/CgsGuiViewModuleIO.h"            // ViewIO::InputBuffer / OutputBuffer (Update IO)
@@ -587,7 +587,9 @@ namespace CgsGui
     const char* ViewModule::GetMovieNameByLevel(int liLevel) const
     {
         CGS_ASSERT(liLevel >= 0 && liLevel < KI_NUM_MOVIE_LEVELS,
-                   "liLevel>=0 && liLevel < KI_NUM_MOVIE_LEVELS");
+            CgsDev::Assert::MessageAt(
+                "liLevel>=0 && liLevel < KI_NUM_MOVIE_LEVELS",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/View/CgsGuiViewModule.h", 498 /* ARTIST 0x824EBCDC */));
         return macCurrentlyPlayingMovies[liLevel];
     }
 

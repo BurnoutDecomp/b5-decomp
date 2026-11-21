@@ -21,7 +21,8 @@ namespace CgsGui
     // X360 0x8284C7D8. Realmc save-ready callback -- never expected on X360.
     s32 SaveLoadSystem::SaveReady()
     {
-        CGS_ASSERT(false, "SaveReady called.\n");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt("SaveReady called.\n", KAC_ARTIST_ASSERT_FILE, 917 /* ARTIST 0x8284C7EC */));
         return 0;
     }
 

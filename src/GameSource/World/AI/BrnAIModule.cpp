@@ -1,6 +1,6 @@
 #include "BrnAIModule.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"         // AcquireResourceResponse
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO_OutputBuffer.h"            // AIModuleIO::OutputBuffer
@@ -41,7 +41,9 @@ AIModule::EPrepareStage operator++(AIModule::EPrepareStage& leEnumIndex, int)
     AIModule::EPrepareStage leOldValue = leEnumIndex;
     leEnumIndex = static_cast<AIModule::EPrepareStage>(static_cast<int>(leEnumIndex) + 1);
     CGS_ASSERT(leEnumIndex <= AIModule::E_PREPARESTAGE_DONE,
-               "leEnumIndex <= AIModule::E_PREPARESTAGE_DONE");
+        CgsDev::Assert::MessageAt(
+            "leEnumIndex <= AIModule::E_PREPARESTAGE_DONE",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModule.h", 418 /* ARTIST 0x82765A3C */));
     return leOldValue;
 }
 

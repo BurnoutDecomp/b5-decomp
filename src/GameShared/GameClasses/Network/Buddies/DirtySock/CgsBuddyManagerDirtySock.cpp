@@ -312,12 +312,15 @@ namespace CgsNetwork
     // =========================================================================
     void BuddyManagerBase::SendMessage(const PlayerName* lpBuddyName, const char* lpcMessage)
     {
-        CGS_ASSERT(lpBuddyName, "lpBuddyName");
+        CGS_ASSERT(lpBuddyName,
+            CgsDev::Assert::MessageAt("lpBuddyName", KAC_ARTIST_ASSERT_FILE, 742 /* ARTIST 0x8288B6F8 */));
 
         s32 liResult = HLBListSendChatMsg(mpBuddies, lpBuddyName->GetPlayerName(), reinterpret_cast<s32>(lpcMessage),
                                           reinterpret_cast<void*>(&_MessageSendingCallback), this);
         CGS_ASSERT(liResult == HLB_ERROR_NONE,
-                   "DirtySock::HLBListSendChatMsg( mpBuddies, lpBuddyName->GetPlayerName(), lpcMessage, &_MessageSendingCallback, this ) == HLB_ERROR_NONE");
+            CgsDev::Assert::MessageAt(
+                "DirtySock::HLBListSendChatMsg( mpBuddies, lpBuddyName->GetPlayerName(), lpcMessage, &_MessageSendingCallback, this ) == HLB_ERROR_NONE",
+                KAC_ARTIST_ASSERT_FILE, 744 /* ARTIST 0x8288B738 */));
     }
 
     // =========================================================================

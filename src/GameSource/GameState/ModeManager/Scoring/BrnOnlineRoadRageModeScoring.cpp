@@ -225,7 +225,9 @@ bool OnlineRoadRageModeScoring::CheckForRedTeamWin(const ScoringSystem* lpScorin
         }
 
         CGS_ASSERT(leEnumIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CgsDev::Assert::MessageAt(
+                "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                "..\\..\\..\\GameSource\\BurnoutConstants.h", 39 /* ARTIST 0x82321B04 */));
     }
 
     return lpScoringSystem->IsBlueTeamEliminated() || lbAllBlueTimedOut;

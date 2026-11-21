@@ -23,7 +23,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Arbitrator/States/BrnSimpleIceTakedownPlayer.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 namespace BrnDirector
 {
@@ -32,7 +32,9 @@ namespace BrnDirector
         // The && short-circuit matches the asm: the class key is only read when the shot is non-null.
         CGS_ASSERT(lpIceAnim != 0 &&
                    static_cast<s64>(lpIceAnim->GetClassKey()) == Attrib::Gen::iceanim::ClassKey(),
-                   "lpIceAnim && lpIceAnim->GetClassKey()==Attrib::Gen::iceanim::ClassKey()");
+            CgsDev::Assert::MessageAt(
+                "lpIceAnim && lpIceAnim->GetClassKey()==Attrib::Gen::iceanim::ClassKey()",
+                "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.h", 236 /* ARTIST 0x821F5914 */));
 
         mpIceAnim = lpIceAnim;
     }

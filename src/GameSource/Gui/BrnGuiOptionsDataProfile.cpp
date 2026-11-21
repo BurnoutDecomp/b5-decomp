@@ -501,7 +501,9 @@ void OptionsDataProfile::OnlineSaveRoute::OnlineSaveRouteEvent::Construct(
     s32 liEventID, u32 luJunctionID, CgsID* lpaLandmarks, s32 liNumLandmarks)
 {
     CGS_ASSERT(liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE,
-               "liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE");
+        CgsDev::Assert::MessageAt(
+            "liNumLandmarks <= KI_MAX_LANDMARKS_IN_MODE",
+            KAC_ARTIST_ASSERT_HEADER, 798 /* ARTIST 0x824EBD48 */));
 
     miEventID      = liEventID;      // +0x88
     mJunctionId    = luJunctionID;   // +0x80

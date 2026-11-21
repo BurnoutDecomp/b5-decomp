@@ -2,7 +2,7 @@
 #include "GameSource/Network/Parameters/BrnNetworkPlayerParams.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"        // CgsCore::SPrintf
 #include "GameShared/GameClasses/Core/CgsID.h"                 // CgsID, CgsIDCompress/UnCompress, KI_CGSID_STRING_LEN
-#include "GameShared/GameClasses/Core/CgsAssert.h"             // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"             // CGS_ASSERT
 #include "GameShared/GameClasses/System/Timer/CgsFrameRate.h"  // CgsSystem::EFrameRate
 #include "GameSource/GameState/BrnGameStateSharedIO.h"         // BrnGameState::GameStateModuleIO::EPlayerTeam
 
@@ -25,6 +25,9 @@
 // PreparePattern builds the shared serialisation pattern once into the class
 // static macPattern; Prepare chains to the platform prepare then resets the
 // payload's bookkeeping fields.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Parameters/BrnNetworkPlayerParams.h";
 
 namespace BrnNetwork
 {
@@ -149,9 +152,13 @@ namespace BrnNetwork
     BrnGameState::GameStateModuleIO::EPlayerTeam PlayerParamsBase::GetPlayerTeam() const
     {
         CGS_ASSERT(mData.mi8PlayerTeam >= 0,
-                   "mData.mi8PlayerTeam >= GsmIO::E_PLAYER_TEAM_NONE");
+            CgsDev::Assert::MessageAt(
+                "mData.mi8PlayerTeam >= GsmIO::E_PLAYER_TEAM_NONE",
+                KAC_ARTIST_ASSERT_FILE, 204 /* ARTIST 0x82541BD4 */));
         CGS_ASSERT(mData.mi8PlayerTeam < 9,
-                   "mData.mi8PlayerTeam < GsmIO::E_PLAYER_TEAM_COUNT");
+            CgsDev::Assert::MessageAt(
+                "mData.mi8PlayerTeam < GsmIO::E_PLAYER_TEAM_COUNT",
+                KAC_ARTIST_ASSERT_FILE, 205 /* ARTIST 0x82541C00 */));
         return static_cast<BrnGameState::GameStateModuleIO::EPlayerTeam>(mData.mi8PlayerTeam);
     }
 

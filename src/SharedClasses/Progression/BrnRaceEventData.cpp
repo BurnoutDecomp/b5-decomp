@@ -1,5 +1,5 @@
 #include "SharedClasses/Progression/BrnRaceEventData.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (RaceEventData bounds checks)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (RaceEventData bounds checks)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnProgression::EventRacerPersonality::Construct   @ 0x826767B8
@@ -26,7 +26,9 @@ void EventRacerPersonality::Construct()
 const CheckpointData* RaceEventData::GetCheckpointData(s32 liCheckpointIndex) const
 {
     CGS_ASSERT(liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount,
-               "liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount");
+        CgsDev::Assert::MessageAt(
+            "liCheckpointIndex >= 0 && liCheckpointIndex < miCheckpointCount",
+            "..\\..\\..\\SharedClasses\\Progression/BrnRaceEventData.h", 953 /* ARTIST 0x8230F840 */));
     // CheckpointData is a complete 40-byte type (static_assert in the header), so the console's
     // `40 * index + base` is plain element indexing once the SERIALISED 32-bit table slot has
     // been turned into a host address (see the slot banner in BrnRaceEventData.h).

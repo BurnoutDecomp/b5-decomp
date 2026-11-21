@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGameSearchParams.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceQuickJoinParams.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceEndGameData.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
 #include "lobbytagfield.h"                              // DirtySDK TagFieldFind / TagFieldSetNumber
 
@@ -347,7 +347,9 @@ namespace CgsNetwork
     void ServerInterfaceGamesX360::SetSessionFlags(s32 liFlags)
     {
         CGS_ASSERT(mpServerInterface->GetConnAPIRef() != 0,
-                   "mpServerInterface->GetConnAPIRef()");
+            CgsDev::Assert::MessageAt(
+                "mpServerInterface->GetConnAPIRef()",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\X360\\CgsServerInterfaceGamesX360.cpp", 471 /* ARTIST 0x8287F7E4 */));
 
         s32 liStatus = ConnApiStatus(mpServerInterface->GetConnAPIRef(),
                                      KI_CONN_SESSION_FLAGS, 0, 0);

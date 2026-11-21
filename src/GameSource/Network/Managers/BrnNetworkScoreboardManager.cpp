@@ -315,10 +315,14 @@ namespace BrnNetwork
         const ScoreboardRowSortData* lpSortData2 =
             static_cast<const ScoreboardRowSortData*>(lpData2);
 
-        CGS_ASSERT(lpSortData1 != 0, "lpSortData1");
-        CGS_ASSERT(lpSortData2 != 0, "lpSortData2");
+        CGS_ASSERT(lpSortData1 != 0,
+            CgsDev::Assert::MessageAt("lpSortData1", KAC_ARTIST_ASSERT_FILE, 1236 /* ARTIST 0x8254766C */));
+        CGS_ASSERT(lpSortData2 != 0,
+            CgsDev::Assert::MessageAt("lpSortData2", KAC_ARTIST_ASSERT_FILE, 1237 /* ARTIST 0x82547690 */));
         CGS_ASSERT(lpSortData1->mbAscending == lpSortData2->mbAscending,
-                   "lpSortData1->mbAscending == lpSortData2->mbAscending");
+            CgsDev::Assert::MessageAt(
+                "lpSortData1->mbAscending == lpSortData2->mbAscending",
+                KAC_ARTIST_ASSERT_FILE, 1238 /* ARTIST 0x825476BC */));
 
         int liRetVal;
         if (lpSortData1->miScore > lpSortData2->miScore)

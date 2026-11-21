@@ -79,9 +79,12 @@ namespace BrnNetwork
                                               const BrnGameState::BurnoutSkillzData* lpSkillzData,
                                               bool lbInitialData)
     {
-        CGS_ASSERT(lpSkillzData, "lpSkillzData");
+        CGS_ASSERT(lpSkillzData,
+            CgsDev::Assert::MessageAt("lpSkillzData", KAC_ARTIST_ASSERT_FILE, 146 /* ARTIST 0x8257F6FC */));
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-                   "lu16FrameCount != KU16_INVALID_FRAME");
+            CgsDev::Assert::MessageAt(
+                "lu16FrameCount != KU16_INVALID_FRAME",
+                KAC_ARTIST_ASSERT_FILE, 147 /* ARTIST 0x8257F724 */));
 
         // A slot already flagged VALID is being re-armed: clear the flag instead of
         // stamping the initial-data marker (asm: lbz 0x19 ; if bit0 set -> clear bit0 ;

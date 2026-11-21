@@ -38,6 +38,7 @@
 // accessor quartet (IsTipPending / GetProfile / GetTimeSinceLastTip / RequestTip).
 
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/BrnGameStateModule.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h"
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"
@@ -147,8 +148,10 @@ void TrainingManager::OnVoiceoverFinished()
         {
             CGS_ASSERT(meTrainingState == E_TRAINING_STATE_PLAYING_MESSAGE ||
                        meTrainingState == E_TRAINING_STATE_WAITINGFORUNPAUSE,
-                       "meTrainingState == E_TRAINING_STATE_PLAYING_MESSAGE || "
-                       "meTrainingState == E_TRAINING_STATE_WAITINGFORUNPAUSE");
+                CgsDev::Assert::MessageAt(
+                    "meTrainingState == E_TRAINING_STATE_PLAYING_MESSAGE || meTrainingState == E_TRAINING_STATE_WAITINGFORUNPAUSE",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                    "../GameState/TrainingManager/BrnTrainingManager.cpp", 582 /* ARTIST 0x8235906C */));
             mbVoiceoverFinishedLastFrame = true;
         }
     }

@@ -15,7 +15,7 @@
 // reduced to CGS_ASSERT per project convention.
 
 #include "GameSource/Network/Parameters/BrnNetworkParameterData.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnNetwork
 {
@@ -52,7 +52,11 @@ namespace BrnNetwork
         case 3:  return 5;
         case 4:  return 6;
         default:
-            CGS_ASSERT(false, "Unknown game mode");
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt(
+                    "Unknown game mode",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                    "../Network/Parameters/BrnNetworkParameterData.cpp", 73 /* ARTIST 0x825874E8 */));
             return 0;
         }
     }

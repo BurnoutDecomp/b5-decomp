@@ -15,7 +15,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"
 #include <cstdlib>
 #include "BrnCommonTypes.h"                                     // VecFloat (MovieClipRef::SetPositionY arg)
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"    // CgsDev::StrStream (AttemptStateRestore's streamed assert)
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h" // FormatAndAddText + ParameterFormatType
@@ -29,6 +29,8 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // one-shot deferred-call log
 
 // EasyDrive lifecycle, navigation and row population restored from ARTIST.
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.h";
 
 namespace BrnGui
 {
@@ -91,7 +93,9 @@ operator++(FriendsListComponent::EFriendListBranchState& lreEnumIndex, int)
     const FriendsListComponent::EFriendListBranchState leOld = lreEnumIndex;
     lreEnumIndex = static_cast<FriendsListComponent::EFriendListBranchState>(lreEnumIndex + 1);
     CGS_ASSERT(lreEnumIndex <= FriendsListComponent::E_FRIENDLISTBRANCH_THIRD_OF_THREE,
-               "leEnumIndex <= FriendsListComponent::E_FRIENDLISTBRANCH_THIRD_OF_THREE");
+        CgsDev::Assert::MessageAt(
+            "leEnumIndex <= FriendsListComponent::E_FRIENDLISTBRANCH_THIRD_OF_THREE",
+            KAC_ARTIST_ASSERT_FILE, 603 /* ARTIST 0x82410984 */));
     return leOld;
 }
 
@@ -104,7 +108,9 @@ operator--(FriendsListComponent::EFriendListBranchState& lreEnumIndex, int)
     const FriendsListComponent::EFriendListBranchState leOld = lreEnumIndex;
     lreEnumIndex = static_cast<FriendsListComponent::EFriendListBranchState>(lreEnumIndex - 1);
     CGS_ASSERT(lreEnumIndex >= FriendsListComponent::E_FRIENDLISTBRANCH_FIRST_OF_ONE,
-               "leEnumIndex >= FriendsListComponent::E_FRIENDLISTBRANCH_FIRST_OF_ONE");
+        CgsDev::Assert::MessageAt(
+            "leEnumIndex >= FriendsListComponent::E_FRIENDLISTBRANCH_FIRST_OF_ONE",
+            KAC_ARTIST_ASSERT_FILE, 603 /* ARTIST 0x824109E4 */));
     return leOld;
 }
 

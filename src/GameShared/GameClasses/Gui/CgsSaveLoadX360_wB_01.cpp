@@ -14,7 +14,7 @@
 
 #include "GameShared/GameClasses/Gui/CgsSaveLoadX360.h"   // MUST be first (fwd-decls ::LanguageManager/::SystemUserProfile at global scope)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "SDKs/Realmc/RealmcMemcardInterface.h"           // RealmcIface::MemcardInterface::MessageChoice
 
 namespace
@@ -64,7 +64,9 @@ namespace CgsGui
     const char* SaveLoadSystem::LocaleGetStrCallback(u32 luStringID)
     {
         CGS_ASSERT(luStringID < (sizeof(maRealmemcardStringIDs) / sizeof(maRealmemcardStringIDs[0])),
-                   "liStringID < M_ARRAY_SIZE(maRealmemcardStringIDs)");
+            CgsDev::Assert::MessageAt(
+                "liStringID < M_ARRAY_SIZE(maRealmemcardStringIDs)",
+                "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.cpp", 309 /* ARTIST 0x8284C1D4 */));
         return maRealmemcardStringIDs[luStringID];
     }
 }

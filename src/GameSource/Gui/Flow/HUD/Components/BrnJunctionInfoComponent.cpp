@@ -327,7 +327,10 @@ namespace BrnGui
         case 2:
             return "Bronze";
         default:
-            CGS_ASSERT(false, "Unhandled medal index in JunctionInfoComponent::GetMedalFrameNameFromMedal\n");
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt(
+                    "Unhandled medal index in JunctionInfoComponent::GetMedalFrameNameFromMedal\n",
+                    "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnJunctionInfoComponent.cpp", 362 /* ARTIST 0x82414E34 */));
             return 0;
         }
     }

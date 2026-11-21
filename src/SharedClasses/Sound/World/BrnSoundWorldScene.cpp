@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "SharedClasses/Sound/World/BrnSoundWorldScene.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint, gxMessageFilterFlags ("[Static map]" spew)
@@ -73,7 +73,10 @@ bool SoundWorldScene::Prepare(BrnSound::Module::SoundLogicModule* lpLogicModule,
                               const char* lpcResourceExt)
 {
     CGS_ASSERT(lpLogicModule && lpcResourceExt,
-               "( lpLogicModule ) && ( lpcResourceExt )");
+        CgsDev::Assert::MessageAt(
+            "( lpLogicModule ) && ( lpcResourceExt )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Sound/World/BrnSoundWorldScene.cpp", 145 /* ARTIST 0x82686560 */));
     mpcResourceExt = lpcResourceExt;
     mpLogicModule = lpLogicModule;
     return true;

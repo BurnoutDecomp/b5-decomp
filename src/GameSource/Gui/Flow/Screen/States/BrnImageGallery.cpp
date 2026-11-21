@@ -575,7 +575,9 @@ namespace BrnGui
             SetExpectedComponent(maCategorySelectable[liCategory].GetName());
         }
         CGS_ASSERT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM,
-                   "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM");
+            CgsDev::Assert::MessageAt(
+                "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnImageGallery.cpp", 1057 /* ARTIST 0x8248476C */));
         mpGuiCache->SetExpectedAptComponentList(E_GUIFLOW_SCREEN, mauExpectedComponentIds,
                                                 muNumExpectedComponents);
     }

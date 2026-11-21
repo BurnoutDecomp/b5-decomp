@@ -11,6 +11,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/Components/BrnEATraxMenuComponent.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                  // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface
@@ -242,8 +243,9 @@ namespace BrnGui
     {
         CGS_ASSERT(lePlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_RANDOM ||
                    lePlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_SEQUENTIAL,
-                   "liPlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_RANDOM || "
-                   "liPlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_SEQUENTIAL");
+            CgsDev::Assert::MessageAt(
+                "liPlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_RANDOM || liPlayOrderMode == GuiEventAudioTraxPlayOrder::E_TRAX_PLAY_ORDER_MODE_SEQUENTIAL",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnEATraxMenuComponent.cpp", 321 /* ARTIST 0x82419824 */));
 
         mPlayMode.SetText(KAPC_PLAY_ORDER_MODES[static_cast<s32>(lePlayOrderMode)]);
         mbSettingsChanged = true;

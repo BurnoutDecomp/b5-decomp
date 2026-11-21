@@ -311,7 +311,9 @@ Module::EModulePrepareStage operator++(Module::EModulePrepareStage& leEnumIndex,
     leEnumIndex = static_cast<Module::EModulePrepareStage>(static_cast<s32>(leEnumIndex) + 1);
 
     CGS_ASSERT(leEnumIndex <= Module::eModulePrepareDone,
-               "leEnumIndex <= Module::eModulePrepareDone");
+        CgsDev::Assert::MessageAt(
+            "leEnumIndex <= Module::eModulePrepareDone",
+            KAC_ARTIST_ASSERT_FILE, 277 /* ARTIST 0x82681D5C */));
 
     return leOldEnumIndex;
 }

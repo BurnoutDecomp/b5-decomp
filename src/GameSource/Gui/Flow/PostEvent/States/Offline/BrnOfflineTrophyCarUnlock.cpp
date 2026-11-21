@@ -369,7 +369,10 @@ void OfflineTrophyCarUnlock::HandleIncomingEvents()
 // order.
 void OfflineTrophyCarUnlock::AppendExpectedComponents()
 {
-    CGS_ASSERT(mpGuiCache, "mpGuiCache");
+    CGS_ASSERT(mpGuiCache,
+        CgsDev::Assert::MessageAt(
+            "mpGuiCache",
+            "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineTrophyCarUnlock.cpp", 401 /* ARTIST 0x824B9AC8 */));
 
     mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mScreenAnim.GetName());
     mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mManufacturerIcon.GetName());

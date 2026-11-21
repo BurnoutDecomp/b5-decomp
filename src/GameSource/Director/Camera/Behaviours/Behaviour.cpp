@@ -1,6 +1,6 @@
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (BeginAssert/FireAssert/EndAssert)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (BeginAssert/FireAssert/EndAssert)
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/Behaviour.cpp
@@ -44,7 +44,9 @@ namespace Camera
 void Behaviour::SetCantSwitchFromMeNow(Camera& lrCamera, s32 leNoCutFromFlag)
 {
     CGS_ASSERT(!mbHasFailed,
-               "Setting \"Cant switch from me now\" when behaviour has failed");   // Behaviour.h:460
+        CgsDev::Assert::MessageAt(
+            "Setting \"Cant switch from me now\" when behaviour has failed",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\behaviours\\Behaviour.h", 460 /* ARTIST 0x822063B4 */));   // Behaviour.h:460
 
     lrCamera.GetValidityAccount().SetNoCutFromFlag(leNoCutFromFlag);
 

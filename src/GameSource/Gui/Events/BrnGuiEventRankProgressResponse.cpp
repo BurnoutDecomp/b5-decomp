@@ -8,6 +8,7 @@
 // member list + the producing action's mirror-image field set).
 
 #include "GameSource/Gui/Events/BrnGuiEventRankProgressResponse.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/BrnGameActions.h"   // GameStateModuleIO::RankInfoResponseAction
 
 namespace BrnGui
@@ -57,7 +58,9 @@ void GuiEventRankProgressResponse::Construct(
 s32 GuiEventRankProgressResponse::GetPlayerRank() const
 {
     CGS_ASSERT( miCurrentRank != KI_PLAYER_HAS_FINISHED_LAST_RANK,
-                "miCurrentRank != KI_PLAYER_HAS_FINISHED_LAST_RANK" );
+        CgsDev::Assert::MessageAt(
+            "miCurrentRank != KI_PLAYER_HAS_FINISHED_LAST_RANK",
+            "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h", 7841 /* ARTIST 0x8240EA50 */));
     return miCurrentRank;
 }
 

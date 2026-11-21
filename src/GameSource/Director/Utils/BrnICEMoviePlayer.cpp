@@ -335,7 +335,9 @@ const ICEMoviePlaylist&
 SharedPlaylists::GetPausePlaylist() const
 {
     CGS_ASSERT(muCurrentPausePlaylist < KU_NUM_PAUSE_PLAYLISTS,
-               "muCurrentPausePlaylist < KI_NUM_PAUSE_PLAYLISTS");
+        CgsDev::Assert::MessageAt(
+            "muCurrentPausePlaylist < KI_NUM_PAUSE_PLAYLISTS",
+            "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.h", 629 /* ARTIST 0x821F5A20 */));
     return maPausePlaylists[muCurrentPausePlaylist];
 }
 

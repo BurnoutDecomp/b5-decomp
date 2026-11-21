@@ -1,7 +1,7 @@
 #include "SharedClasses/Graphics/BrnVFXMeshCollectionResourceType.h"
 #include "GameSource/Effects/Particles/Native/BrnDebrisArray.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 #include <cmath>                                      // std::floor (de-inlined Floor/IntFloor)
 
@@ -14,6 +14,9 @@
 // The used bucket list and the pool free list are intrusive doubly-linked lists threaded
 // through each bucket's FXBucketBase head (mpPreviousBucket/mpNextBucket) and the
 // FXBucketManager (mpFreeList/muNumFreeBuckets); see BrnDebrisArray.h for the layout map.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/Native/BrnDebrisRenderer.cpp";
 
 namespace BrnParticle
 {
@@ -56,11 +59,16 @@ namespace Native
     void BrnDebrisArray::Construct(FXBucketManager* lpBucketManager, EDebrisArrayID leDebrisType)
     {
         CGS_ASSERT( ( leDebrisType >= 0 ) && ( leDebrisType < eDebrisArray_Max ),
-                    "( leDebrisType >= 0 ) && ( leDebrisType < eDebrisArray_Max )" );
+            CgsDev::Assert::MessageAt(
+                "( leDebrisType >= 0 ) && ( leDebrisType < eDebrisArray_Max )",
+                KAC_ARTIST_ASSERT_FILE, 182 /* ARTIST 0x8227A408 */));
 
         mpParams = &_gaDebrisArrayParams[leDebrisType];
 
-        CGS_ASSERT( mpParams->mnNumParticles > 0, "mpParams->mnNumParticles > 0" );
+        CGS_ASSERT( mpParams->mnNumParticles > 0,
+            CgsDev::Assert::MessageAt(
+                "mpParams->mnNumParticles > 0",
+                KAC_ARTIST_ASSERT_FILE, 185 /* ARTIST 0x8227A44C */));
 
         mpBucketManager = lpBucketManager;
         mpBuckets       = 0;

@@ -1,5 +1,5 @@
 #include "GameSource/Game/X360/BrnSystemHWX360.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log / Message
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h" // AllocatorList
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"     // CgsMemory::HeapMalloc
@@ -57,7 +57,9 @@ namespace BrnHW
         System360HW::EPrepareStage lePrevious = reStage;
         reStage = static_cast<System360HW::EPrepareStage>(reStage + 1);
         CGS_ASSERT(reStage <= System360HW::E_PREPARESTAGE_DONE,
-                   "leEnumIndex <= System360HW::E_PREPARESTAGE_DONE");
+            CgsDev::Assert::MessageAt(
+                "leEnumIndex <= System360HW::E_PREPARESTAGE_DONE",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\game\\..\\X360\\BrnSystemHWX360.h", 132 /* ARTIST 0x823A8A44 */));
         return lePrevious;
     }
 

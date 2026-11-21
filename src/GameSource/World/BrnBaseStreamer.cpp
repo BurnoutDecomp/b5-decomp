@@ -1,4 +1,5 @@
 #include "GameSource/World/BrnBaseStreamer.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"   // Load/UnloadGameDataEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // [stream] multi-reply trace
 #include <cstdlib>                                              // std::getenv ([car-audio] witness)
@@ -767,7 +768,10 @@ bool InternalBaseStreamer::IsAssetLoaded( CgsID lId, u64 luUserData ) const
 //   produce the bool (status == 3).
 bool InternalBaseStreamer::IsEntryReady( s32 liIndex ) const
 {
-    CGS_ASSERT( liIndex < miStreamListLength, "liIndex < miStreamListLength" );
+    CGS_ASSERT( liIndex < miStreamListLength,
+        CgsDev::Assert::MessageAt(
+            "liIndex < miStreamListLength",
+            "..\\..\\..\\GameSource\\World/BrnBaseStreamer.h", 409 /* ARTIST 0x827B0288 */));
     return mpCurrentEntryList[liIndex].meStatus == StreamerCurrentEntry::E_STATUS_READY;
 }
 

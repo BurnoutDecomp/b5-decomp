@@ -17,6 +17,7 @@
 // =============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/Module/CgsSoundPlaybackModule.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "rw/rwcore_structs.h"   // rw::Resource / rw::IResourceAllocator (the Release-machine DoFree wraps)
 
@@ -1198,7 +1199,9 @@ Module::EPrepareStage operator++(Module::EPrepareStage& leEnumIndex, int)
     leEnumIndex = static_cast<Module::EPrepareStage>(static_cast<s32>(leEnumIndex) + 1);
 
     CGS_ASSERT(leEnumIndex <= Module::E_PREPARESTAGE_DONE,
-               "leEnumIndex <= Module::E_PREPARESTAGE_DONE");
+        CgsDev::Assert::MessageAt(
+            "leEnumIndex <= Module::E_PREPARESTAGE_DONE",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Module/CgsSoundPlaybackModule.h", 500 /* ARTIST 0x82681C9C */));
 
     return leOldEnumIndex;
 }

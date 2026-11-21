@@ -367,7 +367,9 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
         ClearExpectedComponent();
         SetExpectedComponent(mTimeFieldIcon.GetName());
         CGS_ASSERT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM,
-                   "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM");
+            CgsDev::Assert::MessageAt(
+                "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineMarkMan.cpp", 503 /* ARTIST 0x82487298 */));
         mpGuiCache->SetExpectedAptComponentList(E_GUIFLOW_SCREEN, mauExpectedComponentIds,
                                                 muNumExpectedComponents);
     }

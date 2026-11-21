@@ -242,12 +242,18 @@ void ShaderConstantTable::AddShaderConstant(u32 luIndex, const char* lpcName, u8
 // (CgsShaderConstants.h:396 / :400 / :401 assert sites.)
 void ShaderConstantTable::SetShaderConstantData(u32 luIndex, Vector4 lValue)
 {
-    CGS_ASSERT(luIndex < mu8NumUsedConstants, "luIndex < mu8NumUsedConstants");
+    CGS_ASSERT(luIndex < mu8NumUsedConstants,
+        CgsDev::Assert::MessageAt(
+            "luIndex < mu8NumUsedConstants",
+            KAC_ARTIST_ASSERT_FILE, 396 /* ARTIST 0x822B3324 */));
 
     Vector4* lpDest = UpdateShaderChangeTableAndGetConstantDestination(luIndex);
-    CGS_ASSERT(lpDest, "lpDest");
+    CGS_ASSERT(lpDest,
+        CgsDev::Assert::MessageAt("lpDest", KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x822B3358 */));
     CGS_ASSERT(maConstants[luIndex].GetSizeInBytes() == 16u,
-               "sizeof(lData) == maConstants[luIndex].GetSizeInBytes()");
+        CgsDev::Assert::MessageAt(
+            "sizeof(lData) == maConstants[luIndex].GetSizeInBytes()",
+            KAC_ARTIST_ASSERT_FILE, 401 /* ARTIST 0x822B3390 */));
 
     *lpDest = lValue;
 }

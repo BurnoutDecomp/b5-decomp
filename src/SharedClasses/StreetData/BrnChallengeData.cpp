@@ -23,6 +23,9 @@ static const char KAC_ARTIST_ASSERT_FILE[] =
 static const char KAC_ARTIST_ASSERT_SOURCE[] =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/StreetData/BrnChallengeData.cpp";
 
+static const char KAC_ARTIST_ASSERT_HEADER[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\streetdata\\BrnChallengeData.h";
+
 namespace BrnStreetData
 {
     // The X360 initialises a fresh record's per-entry ids to the all-ones "no owner" sentinel.
@@ -48,7 +51,9 @@ namespace BrnStreetData
     void ScoreList::SetScore( ScoreType leScoreType, int32_t liScore )
     {
         CGS_ASSERT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
-                    "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT" );
+            CgsDev::Assert::MessageAt(
+                "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT",
+                KAC_ARTIST_ASSERT_HEADER, 601 /* ARTIST 0x8230ECA8 */));
         maScores[ leScoreType ] = liScore;
     }
 
@@ -115,7 +120,9 @@ namespace BrnStreetData
     void ChallengePlayerScoreEntry::SetCarID( ScoreType leScoreType, ::CgsID lCarID )
     {
         CGS_ASSERT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
-                    "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT" );
+            CgsDev::Assert::MessageAt(
+                "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT",
+                KAC_ARTIST_ASSERT_HEADER, 490 /* ARTIST 0x8230EC48 */));
         maCarIDs[ leScoreType ] = lCarID;
     }
 

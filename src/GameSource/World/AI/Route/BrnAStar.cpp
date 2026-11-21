@@ -1,6 +1,6 @@
 #include "GameSource/World/AI/Route/BrnAStar.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/World/AI/Route/BrnRoute.h"       // BrnAI::Route / RouteNode
 #include "GameSource/World/AI/BrnAIPortal.h"          // BrnAI::Portal
 #include "GameSource/Math/BrnMathUtils.h"             // BrnMath::Flatten
@@ -30,6 +30,9 @@
 // __LINE__. PerfMonCpu instrumentation (StartMonitor/StopMonitor + the "A*" /
 // "A* Extract best open node" / "A* Find node" AddMonitor handles) is part of the X360
 // behaviour and reproduced store-for-store.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\route\\BrnAStar.h";
 
 namespace BrnAI
 {
@@ -102,10 +105,13 @@ const f32 AStar::KF_ZERO_EPSILON = 1.1920929e-07f;
 // __FILE__/__LINE__ by CGS_ASSERT. Called by ExtractBestOpenNode and FindNode.
 AStarNode* AStarNodePool::GetNode(u16 luNodeIndex)
 {
-    CGS_ASSERT(luNodeIndex < KU_MAX_NODES, "luIndex < KU_MAX_NODES");
+    CGS_ASSERT(luNodeIndex < KU_MAX_NODES,
+        CgsDev::Assert::MessageAt("luIndex < KU_MAX_NODES", KAC_ARTIST_ASSERT_FILE, 483 /* ARTIST 0x8276555C */));
     CGS_ASSERT(luNodeIndex % KU_MAX_PARTITION_NODES
                    < mauNodeCount[luNodeIndex / KU_MAX_PARTITION_NODES],
-               "luIndex % KU_MAX_PARTITION_NODES < mauNodeCount[luIndex / KU_MAX_PARTITION_NODES]");
+        CgsDev::Assert::MessageAt(
+            "luIndex % KU_MAX_PARTITION_NODES < mauNodeCount[luIndex / KU_MAX_PARTITION_NODES]",
+            KAC_ARTIST_ASSERT_FILE, 484 /* ARTIST 0x827655A0 */));
     return &maNodes[luNodeIndex];
 }
 

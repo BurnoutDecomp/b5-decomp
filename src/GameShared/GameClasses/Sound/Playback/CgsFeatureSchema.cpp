@@ -15,7 +15,7 @@
 
 #include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace CgsSound
 {
@@ -61,7 +61,9 @@ const SlotSchema* FeatureSchema::GetSlotSchema(u32 au32Index) const
 const SlotSchema* const* FeatureSchema::GetSlotSchemaAddress(u32 au32Index) const
 {
     CGS_ASSERT(au32Index < mu32SlotSchemaCount,
-               "lu32I < mu32SlotSchemaCount");
+        CgsDev::Assert::MessageAt(
+            "lu32I < mu32SlotSchemaCount",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsDataStructures.h", 1066 /* ARTIST 0x82680A60 */));
 
     return reinterpret_cast<const SlotSchema* const*>(
                &mapSchema[mu32ParameterSchemaCount + au32Index]);

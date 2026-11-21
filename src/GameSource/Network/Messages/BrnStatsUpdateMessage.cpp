@@ -94,7 +94,9 @@ namespace BrnNetwork
 
         // Inlined Message::PrepareForSend frame-stamp.
         CGS_ASSERT(lu16Frame != CgsNetwork::KU16_INVALID_FRAME,
-                   "lu16Frame != KU16_INVALID_FRAME");
+            CgsDev::Assert::MessageAt(
+                "lu16Frame != KU16_INVALID_FRAME",
+                "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h", 594 /* ARTIST 0x8257FEB8 */));
         mu16Frame = lu16Frame;
         mi8Type   = KI8_STATS_UPDATE_MESSAGE_TYPE;
         mx8Flags  = static_cast<u8>(mx8Flags | CgsNetwork::KX8_FLAGS_VALID);

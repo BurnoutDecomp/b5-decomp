@@ -9,7 +9,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h" // ServerInterfaceGames
 #include "GameSource/Network/Parameters/BrnNetworkPlayerParamsClass.h" // BrnNetwork::PlayerParams (stack lobby params)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // CgsModule::VariableEventQueue<14000,16>
-#include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"         // CGS_ASSERT
 
 #include <cstddef>                                         // offsetof (uncalled layout pin)
 
@@ -272,7 +272,9 @@ namespace BrnNetwork
             {
                 RemovePlayer(maTeamSelectionData[liPlayerIndex].mPlayerID);
                 CGS_ASSERT(maTeamSelectionData[liPlayerIndex].mPlayerID == KI_INVALID_PLAYER_ID,
-                           "maTeamSelectionData[liPlayerIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID");
+                    CgsDev::Assert::MessageAt(
+                        "maTeamSelectionData[liPlayerIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
+                        "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 584 /* ARTIST 0x8255714C */));
             }
         }
     }

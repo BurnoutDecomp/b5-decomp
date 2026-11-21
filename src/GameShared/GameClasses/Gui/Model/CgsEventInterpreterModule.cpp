@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Gui/Model/CgsEventInterpreterModule.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cstring>   // memcpy
 
@@ -50,7 +51,9 @@ EventInterpreterModule::EventInterpreterPrepareStage operator++(
     const EventInterpreterModule::EventInterpreterPrepareStage leOldStage = lrStage;
     lrStage = static_cast<EventInterpreterModule::EventInterpreterPrepareStage>(leOldStage + 1);
     CGS_ASSERT(lrStage <= EventInterpreterModule::E_PREPARE_DONE,
-               "leEnumIndex <= EventInterpreterModule::E_PREPARE_DONE");
+        CgsDev::Assert::MessageAt(
+            "leEnumIndex <= EventInterpreterModule::E_PREPARE_DONE",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\model\\CgsEventInterpreterModule.h", 303 /* ARTIST 0x828470FC */));
     return leOldStage;
 }
 

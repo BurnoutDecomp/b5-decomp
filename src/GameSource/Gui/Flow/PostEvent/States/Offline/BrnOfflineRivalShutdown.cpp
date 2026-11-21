@@ -373,7 +373,10 @@ void OfflineRivalShutdown::HandleIncomingEvents()
 // composed "<parent>_<name>"), on the screen flow (r4 = 0), in the console's order.
 void OfflineRivalShutdown::AppendExpectedComponents()
 {
-    CGS_ASSERT(mpGuiCache, "mpGuiCache");   // cpp:374
+    CGS_ASSERT(mpGuiCache,
+        CgsDev::Assert::MessageAt(
+            "mpGuiCache",
+            "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineRivalShutdown.cpp", 374 /* ARTIST 0x824B96C8 */));   // cpp:374
 
     mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mScreenAnim.GetName());
     mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mManufacturerIcon.GetName());

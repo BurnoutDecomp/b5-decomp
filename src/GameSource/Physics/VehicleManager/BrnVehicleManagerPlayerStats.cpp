@@ -265,7 +265,9 @@ namespace Vehicle
     {
         const s32 liIndex = static_cast<s32>(lePlayerActiveRaceCarIndex);
         CGS_ASSERT(liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT && liIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID,
-                   "( lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )");
+            CgsDev::Assert::MessageAt(
+                "( lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\VehicleManager/BrnVehicleManager.h", 1667 /* ARTIST 0x8259C05C */));
 
         mePlayerActiveRaceCarIndex = lePlayerActiveRaceCarIndex;   // asm: stwx @ +172204
     }

@@ -26,13 +26,16 @@
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"     // BrnGui::GuiChallengeSelectedEvent
 #include "SharedClasses/DataLists/ChallengeList.h"        // BrnResource::ChallengeList
 #include "SharedClasses/DataLists/ChallengeListEntry.h"   // BrnResource::ChallengeListEntry
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 
 #include <cstring>   // std::strcmp (the X360 inlines the name compares)
 
 // includes folded in from the BrnChallengeSelector_w*.cpp partfiles (2026-09-15)
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h" // LanguageManager::FormatAndAddText, ParameterFormatType
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SnPrintf
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnChallengeSelector.cpp";
 
 namespace BrnGui
 {
@@ -79,9 +82,14 @@ void ChallengeSelector::Construct(const char* lpacName,
 // @ 0x82415960
 s32 ChallengeSelector::GetChallengeIndex(s32 liAvailableChallengeIndex)
 {
-    CGS_ASSERT(liAvailableChallengeIndex >= 0, "liAvailableChallengeIndex >= 0");
+    CGS_ASSERT(liAvailableChallengeIndex >= 0,
+        CgsDev::Assert::MessageAt(
+            "liAvailableChallengeIndex >= 0",
+            KAC_ARTIST_ASSERT_FILE, 121 /* ARTIST 0x8241598C */));
     CGS_ASSERT(liAvailableChallengeIndex < miAvailableChallenges,
-               "liAvailableChallengeIndex < miAvailableChallenges");
+        CgsDev::Assert::MessageAt(
+            "liAvailableChallengeIndex < miAvailableChallenges",
+            KAC_ARTIST_ASSERT_FILE, 122 /* ARTIST 0x824159B4 */));
 
     return mau16AvailableChallengeIndexToChallengeIndexMapping[liAvailableChallengeIndex];
 }

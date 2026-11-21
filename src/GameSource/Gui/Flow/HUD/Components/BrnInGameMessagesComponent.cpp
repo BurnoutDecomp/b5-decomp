@@ -225,7 +225,9 @@ namespace
     void InGameMessagesComponent::SetGameMode(BrnGameState::GameStateModuleIO::EGameModeType leCurrentGameMode)
     {
         CGS_ASSERT((BrnGameState::GameStateModuleIO::E_MODE_NONE <= leCurrentGameMode) && (leCurrentGameMode < 18),
-                   "(GsmIO::E_MODE_NONE <= leCurrentGameMode) && (GsmIO::E_MODE_COUNT > leCurrentGameMode)");
+            CgsDev::Assert::MessageAt(
+                "(GsmIO::E_MODE_NONE <= leCurrentGameMode) && (GsmIO::E_MODE_COUNT > leCurrentGameMode)",
+                KAC_ARTIST_ASSERT_HEADER, 469 /* ARTIST 0x82472BB4 */));
         meCurrentGameMode = leCurrentGameMode;
     }
 

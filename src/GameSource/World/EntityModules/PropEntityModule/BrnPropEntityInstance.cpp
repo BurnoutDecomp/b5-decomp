@@ -335,9 +335,12 @@ namespace BrnWorld
     // @ 0x822A1C20. Assign the prop's slot in the physics pool (0 .. KU_MAX_PHYSICAL_PROPS-1).
     void PropEntityInstance::SetPhysicsIndex(s32 liPhysicsIndex)
     {
-        CGS_ASSERT(liPhysicsIndex >= 0, "liPhysicsIndex >= 0");
+        CGS_ASSERT(liPhysicsIndex >= 0,
+            CgsDev::Assert::MessageAt("liPhysicsIndex >= 0", KAC_ARTIST_ASSERT_FILE, 725 /* ARTIST 0x822A1C4C */));
         CGS_ASSERT(liPhysicsIndex < 15,
-                   "liPhysicsIndex < static_cast< int32_t > ( BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS )");
+            CgsDev::Assert::MessageAt(
+                "liPhysicsIndex < static_cast< int32_t > ( BrnPhysics::Props::KU_MAX_PHYSICAL_PROPS )",
+                KAC_ARTIST_ASSERT_FILE, 726 /* ARTIST 0x822A1C70 */));
         mu8PhysicsIndex = static_cast<u8>(liPhysicsIndex);   // +76
     }
 

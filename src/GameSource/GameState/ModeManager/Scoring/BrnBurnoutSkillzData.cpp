@@ -46,7 +46,9 @@ namespace BrnGameState
         const BurnoutSkillzData::EBurnoutSkillType eOld = eSkill;
         eSkill = static_cast<BurnoutSkillzData::EBurnoutSkillType>(static_cast<int>(eSkill) + 1);
         CGS_ASSERT(static_cast<int>(eSkill) <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT,
-                   "leEnumIndex <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT");
+            CgsDev::Assert::MessageAt(
+                "leEnumIndex <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT",
+                KAC_ARTIST_ASSERT_FILE, 109 /* ARTIST 0x8230FC38 */));
         return eOld;
     }
 

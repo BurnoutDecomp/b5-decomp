@@ -74,9 +74,12 @@ namespace CgsCollision
     // -------------------------------------------------------------------------
     void* PrimitivePairListBuilder::AllocateMemory(s32 liBytes)
     {
-        CGS_ASSERT(mpaDataStream != NULL, "mpaDataStream != NULL");
+        CGS_ASSERT(mpaDataStream != NULL,
+            CgsDev::Assert::MessageAt("mpaDataStream != NULL", KAC_ARTIST_ASSERT_FILE, 755 /* ARTIST 0x828120C8 */));
         CGS_ASSERT(static_cast<s32>(mu16UsedData) + liBytes <= static_cast<s32>(mu16MaxDataSize),
-                   "Trying to use too much memory");
+            CgsDev::Assert::MessageAt(
+                "Trying to use too much memory",
+                KAC_ARTIST_ASSERT_FILE, 756 /* ARTIST 0x828120F8 */));
 
         void* lpMemory = mpaDataStream + mu16UsedData;
         mu16UsedData = static_cast<u16>(mu16UsedData + liBytes);

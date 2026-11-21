@@ -308,7 +308,11 @@ bool AIAggression::CanSlam()
 // True when the candidate car's speed is below the minimum required to be worth targeting.
 bool AIAggression::CarIsTooSlow(const AICar* lpCar)
 {
-    CGS_ASSERT(lpCar != 0, "lpCar");
+    CGS_ASSERT(lpCar != 0,
+        CgsDev::Assert::MessageAt(
+            "lpCar",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/AI/BrnAIAggression.cpp", 1179 /* ARTIST 0x8276696C */));
     return lpCar->GetSpeed() < KF_CAR_TOO_SLOW_SPEED;
 }
 

@@ -34,10 +34,18 @@ s32 BaseOnlineModeScoring::GetPlayerPosition(s32 liRaceCarIndex)
 // so the table write executes unconditionally even on a failed bound.
 void BaseOnlineModeScoring::SetPlayerPosition(s32 liRaceCarIndex, s32 liPlayerPosition)
 {
-    CGS_ASSERT(liRaceCarIndex >= 0, "liRaceCarIndex >= 0");
-    CGS_ASSERT(liRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
-    CGS_ASSERT(liPlayerPosition >= 0, "liPlayerPosition >= 0");
-    CGS_ASSERT(liPlayerPosition < E_ACTIVE_RACE_CAR_INDEX_COUNT, "liPlayerPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+    CGS_ASSERT(liRaceCarIndex >= 0,
+        CgsDev::Assert::MessageAt("liRaceCarIndex >= 0", KAC_ARTIST_ASSERT_HEADER, 356 /* ARTIST 0x823107A0 */));
+    CGS_ASSERT(liRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CgsDev::Assert::MessageAt(
+            "liRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
+            KAC_ARTIST_ASSERT_HEADER, 357 /* ARTIST 0x823107C4 */));
+    CGS_ASSERT(liPlayerPosition >= 0,
+        CgsDev::Assert::MessageAt("liPlayerPosition >= 0", KAC_ARTIST_ASSERT_HEADER, 359 /* ARTIST 0x823107E8 */));
+    CGS_ASSERT(liPlayerPosition < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CgsDev::Assert::MessageAt(
+            "liPlayerPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
+            KAC_ARTIST_ASSERT_HEADER, 360 /* ARTIST 0x8231080C */));
 
     maiPlayerPositions[liRaceCarIndex] = liPlayerPosition;
 }

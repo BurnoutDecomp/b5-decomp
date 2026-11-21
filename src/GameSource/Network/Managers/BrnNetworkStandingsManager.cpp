@@ -216,7 +216,9 @@ namespace BrnNetwork
             {
                 RemovePlayer(maStandingsData[liPlayerIndex].mPlayerID);
                 CGS_ASSERT(maStandingsData[liPlayerIndex].mPlayerID == K_INVALID_PLAYER_ID,
-                           "maStandingsData[liPlayerIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID");
+                    CgsDev::Assert::MessageAt(
+                        "maStandingsData[liPlayerIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
+                        "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStandingsManager.cpp", 246 /* ARTIST 0x82550B8C */));
             }
         }
     }

@@ -535,15 +535,20 @@ NetworkPlayerID CompressionAndEncryptionUtils::ExtractSendingPlayerID(u8* lpacBu
                                                                       s32 liBufferSize)
 {
     CGS_ASSERT(static_cast<u32>(liBufferSize) >= sizeof(PackedPacketHeader),
-               "(uint32_t)liBufferSize >= sizeof(PackedPacketHeader)");
-    CGS_ASSERT(lpacBufferToUnPackFrom, "lpacBufferToUnPackFrom");
+        CgsDev::Assert::MessageAt(
+            "(uint32_t)liBufferSize >= sizeof(PackedPacketHeader)",
+            KAC_ARTIST_ASSERT_FILE, 581 /* ARTIST 0x8286FD64 */));
+    CGS_ASSERT(lpacBufferToUnPackFrom,
+        CgsDev::Assert::MessageAt("lpacBufferToUnPackFrom", KAC_ARTIST_ASSERT_FILE, 582 /* ARTIST 0x8286FD88 */));
 
     const PackedPacketHeader* lpHeader =
         reinterpret_cast<const PackedPacketHeader*>(lpacBufferToUnPackFrom);
     if ((lpHeader->mx8Flags & KX8_FLAGS_RELIABLE) == KX8_FLAGS_RELIABLE)
     {
         CGS_ASSERT(static_cast<u32>(liBufferSize) > sizeof(ReliablePackedPacketHeader),
-                   "(uint32_t)liBufferSize > sizeof(ReliablePackedPacketHeader)");
+            CgsDev::Assert::MessageAt(
+                "(uint32_t)liBufferSize > sizeof(ReliablePackedPacketHeader)",
+                KAC_ARTIST_ASSERT_FILE, 590 /* ARTIST 0x8286FDBC */));
         const ReliablePackedPacketHeader* lpReliableHeader =
             reinterpret_cast<const ReliablePackedPacketHeader*>(lpacBufferToUnPackFrom);
         return lpReliableHeader->mSendingPlayerID;

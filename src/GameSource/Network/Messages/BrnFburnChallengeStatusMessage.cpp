@@ -1,7 +1,7 @@
 #include "types.hpp"
 
 #include "GameSource/Network/Messages/BrnFburnChallengeStatusMessage.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cstring>   // memcpy
 
@@ -69,7 +69,9 @@ namespace BrnNetwork
                                                      const FburnChallengeStatusPayload* lpCompletedChallenges)
     {
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-                   "lu16FrameCount != KU16_INVALID_FRAME");
+            CgsDev::Assert::MessageAt(
+                "lu16FrameCount != KU16_INVALID_FRAME",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnFburnChallengeStatusMessage.cpp", 119 /* ARTIST 0x8257C844 */));
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
         {

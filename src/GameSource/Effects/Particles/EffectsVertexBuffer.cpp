@@ -1,5 +1,5 @@
 #include "GameSource/Effects/Particles/EffectsVertexBuffer.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 // EffectsVertexBuffer::Lock  X360 0x822798E0
 // Asserts the buffer is not already locked, resets the write cursor to the base
@@ -11,7 +11,10 @@
 EffectsVertexBufferLocked& EffectsVertexBuffer::Lock()
 {
     CGS_ASSERT((mxFlags & KX_FLAG_LOCKED) == 0,
-               "( mxFlags & KX_FLAG_LOCKED ) == 0");
+        CgsDev::Assert::MessageAt(
+            "( mxFlags & KX_FLAG_LOCKED ) == 0",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 98 /* ARTIST 0x8227990C */));
 
     mpLockedBufferCurrentAddress = mpLockedBufferBaseAddress;
     mxFlags |= KX_FLAG_LOCKED;

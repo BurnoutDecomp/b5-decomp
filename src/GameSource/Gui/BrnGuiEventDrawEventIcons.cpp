@@ -41,7 +41,9 @@ void GuiEventDrawEventIcons::Construct(bool lbDrawIcons,
 
     CGS_ASSERT( (miNumIconsToIgnore == 0) ||
                 ((lpuIconsToIgnore != 0) && (miNumIconsToIgnore <= KI_MAX_ICONS_TO_IGNORE)),
-                "(miNumIconsToIgnore == 0) || ((lpuIconsToIgnore != NULL) && (miNumIconsToIgnore <= KI_MAX_ICONS_TO_IGNORE) )" );
+        CgsDev::Assert::MessageAt(
+            "(miNumIconsToIgnore == 0) || ((lpuIconsToIgnore != NULL) && (miNumIconsToIgnore <= KI_MAX_ICONS_TO_IGNORE) )",
+            KAC_ARTIST_ASSERT_FILE, 2785 /* ARTIST 0x824EB264 */));
 
     for ( s32 liIndex = 0; liIndex < miNumIconsToIgnore; ++liIndex )
         mauIconsToIgnore[liIndex] = lpuIconsToIgnore[liIndex];
