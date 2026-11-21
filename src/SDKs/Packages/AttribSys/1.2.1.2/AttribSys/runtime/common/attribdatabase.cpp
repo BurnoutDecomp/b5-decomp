@@ -647,7 +647,7 @@ void CollectionExportPolicy::Initialize(Vault& lrVault, const TypeID& /*lrType*/
     {
         // The X360 probes the class's collection table for the key first.
         ClassPrivate* lpClassPrivate =
-            reinterpret_cast<ClassPrivate*>(lpClass)->mpPrivates;
+            lpClass->GetPrivates();
         if (lpClassPrivate->mCollections.Find(lpLoad->mKey) == NULL)
         {
             void* lpBlock = Attrib::Alloc(sizeof(Collection), NULL);   // X360 Alloc(40)

@@ -33,7 +33,7 @@ namespace Attrib
 
         bool IsReferenced(const Class& lrObject)
         {
-            const ClassPrivate* lpPrivate = static_cast<const ClassPrivate*>(lrObject.GetPrivates());
+            const ClassPrivate* lpPrivate = lrObject.GetPrivates();
             return lpPrivate->mLayoutTable.GetRefCount() != 0;
         }
     }

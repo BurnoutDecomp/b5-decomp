@@ -104,6 +104,7 @@ public:
     };
 
     bool           Add(u64 luKey, Attrib::Class* lpValue);                 // 0x8280AAE8
+    Attrib::Class* RemoveIndex(u32 luIndex);                             // 0x82808A98
     unsigned int   FindIndex(u64 luKey) const;                            // 0x828063C0
     Attrib::Class* Find(u64 luKey) const;                                 // 0x828064D0
     u64            GetKeyAtIndex(u32 luIndex) const;                      // 0x82807430
@@ -273,6 +274,8 @@ namespace Attrib
     // Layout by X360 byte offset (attribclassprivate.h agrees: mKey@+0, mpPrivates@+8):
     //   +0x00  mKey        : Attrib::Key  (class key)
     //   +0x08  mpPrivates  : ClassPrivate*  (owns mCollections @ +0x1C)
+    class ClassPrivate;
+
     class Class
     {
     public:
@@ -288,8 +291,7 @@ namespace Attrib
         // call site of Attrib::RefSpec::GetCollection / Attrib::FindCollection (X360 asm:
         // addi r3, mpPrivates, 0x1C; bl <table Find>). Returns the collection stored under
         // luKey in this class's table (ClassPrivate::mCollections), or NULL when the key is
-        // absent. Out-of-line (vechashmap.cpp) so the table is reached through the real
-        // named ClassPrivate member rather than the retired X360 byte offset.
+        // absent. Defined alongside the ClassPrivate layout.
         Collection* GetCollection(u64 luKey) const;
 
         // @ 0x8280ADD8 -- remove lpCollection (located by its own 64-bit key at
@@ -299,8 +301,11 @@ namespace Attrib
 
         // The console's `lwz r10, 8(class)` read of the ClassPrivate block, by name
         // (HashMap::Remove @0x82807B4C inherited-payload arm; Collection::Clear phase 2).
-        // Returns void* because ClassPrivate is not visible here; callers static_cast.
-        void* GetPrivates() const { return mpPrivates; }
+        ClassPrivate* GetPrivates() const { return mpPrivates; }
+
+    protected:
+        Class(u64 luKey, ClassPrivate* lpPrivates)
+            : mKey(luKey), mpPrivates(lpPrivates) {}
 
     private:
         // The class's default-collection key, materialised as a literal immediate in the X360 asm
@@ -315,6 +320,6 @@ namespace Attrib
 
         u64   mKey;        // +0x00  class key (u64 hash -- the ClassPrivate ctor
                            //         @0x8280EC80 ld/std's the serialised base)
-        void* mpPrivates;  // +0x08  ClassPrivate* (owns mCollections)
+        ClassPrivate* mpPrivates;  // +0x08  owns the layout and collection table
     };
 }

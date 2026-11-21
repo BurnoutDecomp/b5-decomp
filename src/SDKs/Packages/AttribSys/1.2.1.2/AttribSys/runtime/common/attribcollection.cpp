@@ -91,7 +91,7 @@ Attrib::Collection::~Collection()
         // 0x8280C444 `lwz r11,0x18(r31) ; lwz r3,8(r11) ; bl Attrib::ClassPrivate::Release`
         // -- class+8 is the ClassPrivate; Release drops the layout table's shared refcount
         // and queues the class for deferred deletion on the final drop.
-        lpClassPrivate = reinterpret_cast<ClassPrivate*>(mpClass)->mpPrivates;
+        lpClassPrivate = mpClass->GetPrivates();
         lpClassPrivate->Release();
     }
 
@@ -181,7 +181,7 @@ Attrib::Node* Attrib::Collection::GetNode(u64 luKey, const Collection*& lrpConta
         // The owning class's shared layout table (X360 classPrivate+0x10),
         // by name now the x64 ClassPrivate layout is real.
         const ClassPrivate* lpClassPrivate =
-            reinterpret_cast<const ClassPrivate*>(mpClass)->mpPrivates;
+            mpClass->GetPrivates();
         const HashMap* lpLayoutTable = &lpClassPrivate->mLayoutTable;
 
         Attrib::Node* lpNode = reinterpret_cast<Attrib::Node*>(lpLayoutTable->Find(luKey));
@@ -229,7 +229,7 @@ void* Attrib::Collection::GetData(u64 luKey, unsigned int luIndex) const
             // The class's inherited data area (X360 classPrivate+0x34 ==
             // mStaticData), by name.
             const ClassPrivate* lpOwnerPrivate =
-                reinterpret_cast<const ClassPrivate*>(lpOwner->mpClass)->mpPrivates;
+                lpOwner->mpClass->GetPrivates();
             u8* lpDataBase = static_cast<u8*>(lpOwnerPrivate->mStaticData);
             lpArray = reinterpret_cast<Array*>(lpDataBase + lpNode->muValue);
         }
@@ -369,7 +369,7 @@ void Attrib::Collection::Clear()
     // The owning class's private impl + shared layout table (X360 class+0x08 /
     // classPrivate+0x10), by name now the x64 ClassPrivate layout is real.
     ClassPrivate* lpClassPrivate =
-        reinterpret_cast<ClassPrivate*>(mpClass)->mpPrivates;
+        mpClass->GetPrivates();
     HashMap* lpLayout = &lpClassPrivate->mLayoutTable;
     const unsigned int luExpected =
         static_cast<unsigned int>(lpLayout->muCount) + static_cast<unsigned int>(muCount);
@@ -417,7 +417,7 @@ void Attrib::Collection::Clear()
     }
 
     // ---- Phase 2: free this instance's data for every laid-out/inherited attribute ---
-    lpClassPrivate = reinterpret_cast<ClassPrivate*>(mpClass)->mpPrivates;
+    lpClassPrivate = mpClass->GetPrivates();
     lpLayout       = &lpClassPrivate->mLayoutTable;
 
     unsigned int luLayoutCap = lpLayout->muCapacity;
@@ -532,12 +532,12 @@ u64 Attrib::Collection::NextKey(u64 luKey, bool& lrbInLayoutTable) const
         // Own table exhausted -- continue in the class's shared layout table.
         lrbInLayoutTable = true;
         const ClassPrivate* lpClassPrivate =
-            reinterpret_cast<const ClassPrivate*>(mpClass)->mpPrivates;
+            mpClass->GetPrivates();
         return ScanForValidKey(lpClassPrivate->mLayoutTable, 0xFFFFFFFFu);
     }
 
     const ClassPrivate* lpClassPrivate =
-        reinterpret_cast<const ClassPrivate*>(mpClass)->mpPrivates;
+        mpClass->GetPrivates();
     const HashMap& lrLayout = lpClassPrivate->mLayoutTable;
     const unsigned int luIndex = lrLayout.FindIndex(luKey);
     if (luIndex < lrLayout.muCapacity && lrLayout.mpBuckets[luIndex].IsOccupied())
@@ -569,7 +569,7 @@ namespace Attrib
 }
 
 Attrib::Collection::Collection(const CollectionLoadData& lrLoad, Vault* lpSource)
-    : HashMap(lrLoad.mTableReserve, static_cast<u8>(lrLoad.mTableKeyShift), 1)
+    : HashMap(lrLoad.mTableReserve, lrLoad.mTableKeyShift, true)
 {
     mpParent = NULL;
     mKey     = lrLoad.mKey;
@@ -587,7 +587,7 @@ Attrib::Collection::Collection(const CollectionLoadData& lrLoad, Vault* lpSource
     // (X360 `++vault->mRefCount` inline).
     mpSource->AddRef(0);
 
-    ClassPrivate* lpClassPrivate = reinterpret_cast<ClassPrivate*>(mpClass)->mpPrivates;
+    ClassPrivate* lpClassPrivate = mpClass->GetPrivates();
     const bool lbAdded = lpClassPrivate->mCollections.Add(mKey, this);
     CGS_ASSERT(lbAdded, "Failed to add Attrib::Collection.");
     (void)lbAdded;

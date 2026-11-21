@@ -143,6 +143,26 @@ Attrib::Class* VecHashMap_Attrib_Class_TablePolicy_0_16::Find(u64 luKey) const
     return lrNode.Get();
 }
 
+// @ 0x82808A98: vacate the class bucket and repair its probe run.
+Attrib::Class* VecHashMap_Attrib_Class_TablePolicy_0_16::RemoveIndex(u32 luIndex)
+{
+    if (!ValidIndex(luIndex))
+        return NULL;
+
+    Node& lrNode = mpTable[luIndex];
+    Attrib::Class* lpRemoved = lrNode.Get();
+    const u64 luKey = lrNode.Key();
+    lrNode.mpPtr = reinterpret_cast<Attrib::Class*>(&lrNode);
+    lrNode.mKey = 0;
+    --muNumEntries;
+
+    const u32 luHome = static_cast<u32>(luKey) % muTableSize;
+    u32 luProbe = UpdateSearchLength(luHome, luIndex);
+    while (luProbe < muTableSize)
+        luProbe = UpdateSearchLength(luProbe, luProbe);
+    return lpRemoved;
+}
+
 // @ 0x82807430 -- GetKeyAtIndex(index): assert the index is valid (in range AND a live,
 // non-sentinel node), then return that node's key (Node::Key() yields 0 for a sentinel).
 u64 VecHashMap_Attrib_Class_TablePolicy_0_16::GetKeyAtIndex(u32 luIndex) const
@@ -820,11 +840,9 @@ void CollectionHashMap::Clear()
 // hit the same table (ClassPrivate::mCollections @ mpPrivates+0x1C).
 Collection* Class::GetCollectionWithDefault(u64 luKey) const
 {
-    CollectionHashMap* lpTable = GetCollectionTable();
-
-    Collection* lpCollection = lpTable->Find(luKey);
+    Collection* lpCollection = GetCollectionTable()->Find(luKey);
     if (lpCollection == NULL)
-        lpCollection = lpTable->Find(KU_DEFAULT_COLLECTION_KEY);
+        lpCollection = GetCollectionTable()->Find(KU_DEFAULT_COLLECTION_KEY);
 
     return lpCollection;
 }
@@ -834,7 +852,9 @@ Collection* Class::GetCollectionWithDefault(u64 luKey) const
 // Returns true iff a live bucket was actually vacated.
 bool Class::RemoveCollection(Collection* lpCollection)
 {
-    CGS_ASSERT(lpCollection != NULL, "Cannot remove NULL collection.");
+    CGS_ASSERT(lpCollection != NULL, CgsDev::Assert::MessageAt("Cannot remove NULL collection.",
+        "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribclass.cpp",
+        136 /* ARTIST 0x8280AE04 */));
 
     // FIXED (attrib teardown wave 2026-09-03): this used to read the key as
     // `*(u64*)((u8*)lpCollection + 0x10)` -- the CONSOLE offset. Attrib::Collection
@@ -872,13 +892,11 @@ bool Class::RemoveCollection(Collection* lpCollection)
 // Class::RemoveCollection call.
 Collection* CollectionHashMap::RemoveIndex(u32 luIndex)
 {
-    if (luIndex >= mTableSize)
+    const bool lbValid = luIndex < mTableSize && !mTable[luIndex].IsEmpty();
+    if (!lbValid)
         return NULL;
 
     Node* lpNode = &mTable[luIndex];
-    if (lpNode->IsEmpty())
-        return NULL;
-
     Collection* lpRemoved = lpNode->Get();
     const u64   luKey     = lpNode->Key();
 
@@ -902,23 +920,21 @@ Collection* CollectionHashMap::RemoveIndex(u32 luIndex)
 
 // @ 0x82806320 (Attrib::Class::Ta... Find wrapper) -- resolve the slot via
 // FindIndex and hand back the stored collection; NULL when the key is absent.
-Collection* CollectionHashMap::Find(u64 luKey) const
+// FAKEMATCH: ARTIST calls the table lookup out of line from the class wrappers.
+__declspec(noinline) Collection* CollectionHashMap::Find(u64 luKey) const
 {
     const u32 luIndex = FindIndex(luKey);
-    return (luIndex < mTableSize) ? mTable[luIndex].Get() : NULL;
+    const bool lbValid = luIndex < mTableSize && !mTable[luIndex].IsEmpty();
+    if (lbValid)
+        return mTable[luIndex].Get();
+    return NULL;
 }
 
 // ClassPrivate::mCollections through the real named member (the X360 inlines
 // mpPrivates+0x1C; attribclassprivate.h owns the x64 layout).
 CollectionHashMap* Class::GetCollectionTable() const
 {
-    return &static_cast<ClassPrivate*>(mpPrivates)->mCollections;
-}
-
-// The no-default collection lookup (the Attrib::Class::Ta call sites).
-Collection* Class::GetCollection(u64 luKey) const
-{
-    return GetCollectionTable()->Find(luKey);
+    return &GetPrivates()->mCollections;
 }
 
 } // namespace Attrib

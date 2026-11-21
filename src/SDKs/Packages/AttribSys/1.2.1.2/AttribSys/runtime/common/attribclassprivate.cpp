@@ -19,18 +19,6 @@
 // layout HashMap / collection table / class registry are now driven through the
 // committed real container types (attribhashmap.cpp / vechashmap.cpp).
 
-namespace Attrib
-{
-    // The class-registry EraseAt (X360 sub_82808A98 -- the VecHashMap<false,16>
-    // slot-vacate with probe-run repair). Teardown-path only (~ClassPrivate);
-    // deferred to its own TU with the remaining VecHashMap removal family.
-    static void ClassTable_EraseAt(ClassTable& lrTable, unsigned int luIndex)
-    {
-        (void)lrTable; (void)luIndex;
-        CGS_ASSERT(false, "ClassTable EraseAt @0x82808A98: deferred TU (teardown path)");
-    }
-}
-
 // ============================================================================
 // Attrib::ClassPrivate::ClassPrivate @ 0x8280EC80
 // ============================================================================
@@ -42,9 +30,8 @@ namespace Attrib
 // laid-out searchable definition into the layout HashMap, and finally register
 // the Class with the process database's class table.
 Attrib::ClassPrivate::ClassPrivate(const ClassLoadData& lrLoad, Vault* lpSource)
-    : mKey(lrLoad.mClass)
-    , mpPrivates(this)
-    , mLayoutTable(lrLoad.mLayoutCount, static_cast<u8>(lrLoad.mLayoutKeyShift), 1)
+    : Class(lrLoad.mClass, this)
+    , mLayoutTable(lrLoad.mLayoutCount, lrLoad.mLayoutKeyShift, true)
 {
     // mCollections: zero the table header in place, then reserve when the load
     // record carries a seed (X360 TablePolicy_1_96_::Rebuild gated on it).
@@ -64,7 +51,7 @@ Attrib::ClassPrivate::ClassPrivate(const ClassLoadData& lrLoad, Vault* lpSource)
 
     // Push every laid-out (flag bit1), searchable (not bit3) definition into the
     // layout HashMap. The X360 re-reads the self back-pointer each iteration.
-    ClassPrivate* lpSelf = mpPrivates;
+    ClassPrivate* lpSelf = GetPrivates();
     if (lpSelf->mNumDefinitions != 0)
     {
         for (unsigned int luIndex = 0; luIndex < lpSelf->mNumDefinitions; ++luIndex)
@@ -98,7 +85,7 @@ Attrib::ClassPrivate::ClassPrivate(const ClassLoadData& lrLoad, Vault* lpSource)
     // Register this Class with the process attribute database's class table
     // (the X360 reads off_83011BC4->mPrivates, asserting initialization first).
     DatabasePrivate* lpPrivates = GetDatabasePrivate();
-    lpPrivates->mClasses.Add(mKey, reinterpret_cast<Attrib::Class*>(this));
+    lpPrivates->mClasses.Add(GetKey(), this);
 }
 
 // ============================================================================
@@ -108,7 +95,7 @@ Attrib::ClassPrivate::ClassPrivate(const ClassLoadData& lrLoad, Vault* lpSource)
 void Attrib::ClassPrivate::Release() const
 {
     if (mLayoutTable.Release())
-        DatabasePrivate::QueueForDelete(reinterpret_cast<const Class*>(this),
+        DatabasePrivate::QueueForDelete<Class>(this,
             GetDatabasePrivate()->mGarbageClasses);
 }
 
@@ -129,8 +116,8 @@ Attrib::ClassPrivate::~ClassPrivate()
 
     // Unregister the Class from the database class table.
     DatabasePrivate* lpPrivates = GetDatabasePrivate();
-    const unsigned int luIndex = lpPrivates->mClasses.FindIndex(mKey);
-    ClassTable_EraseAt(lpPrivates->mClasses, luIndex);
+    const unsigned int luIndex = lpPrivates->mClasses.FindIndex(GetKey());
+    lpPrivates->mClasses.RemoveIndex(luIndex);
 
     mCollections.Clear();
 

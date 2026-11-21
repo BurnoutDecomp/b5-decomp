@@ -96,7 +96,7 @@ namespace Attrib
     // collection-table wrappers live in vechashmap.h's Attrib::Class.
     //
     // Attrib::ClassPrivate : public Class (DWARF attribprivate.h:297).
-    class ClassPrivate
+    class ClassPrivate : public Class
     {
     public:
         ClassPrivate(const ClassLoadData& lrLoad, Vault* lpSource); // @ 0x8280EC80
@@ -108,10 +108,6 @@ namespace Attrib
         static void* operator new(size_t, void* lpPlacement) { return lpPlacement; }
         static void  operator delete(void*, void*) {}
 
-        // ---- Class base (DWARF attribsys.h Class; X360 +0/+8) ----
-        u64           mKey;          // +0x00  class key (u64 hash; the ctor ld/std's it)
-        ClassPrivate* mpPrivates;    // +0x08  self back-reference
-
         // ---- ClassPrivate members (DWARF attribprivate.h:344-351) ----
         HashMap           mLayoutTable;     // X360 +16  (layout attribute table)
         CollectionHashMap mCollections;     // X360 +28  (key -> Collection*)
@@ -121,4 +117,13 @@ namespace Attrib
         Vault*            mSource;          // X360 +48
         void*             mStaticData;      // X360 +52  (DWARF :351; untouched by the ctor)
     };
+
+    // ARTIST inlines the simple class lookup into the two RefSpec call paths.
+    inline Collection* Class::GetCollection(u64 luKey) const
+    {
+        return GetPrivates()->mCollections.Find(luKey);
+    }
+
+    CGS_STATIC_ASSERT(sizeof(Class) == 16, "ARTIST Class base size");
+    CGS_STATIC_ASSERT(sizeof(ClassPrivate) == 56, "ARTIST ClassPrivate size");
 }

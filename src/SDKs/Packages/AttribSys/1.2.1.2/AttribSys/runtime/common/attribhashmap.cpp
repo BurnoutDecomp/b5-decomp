@@ -52,9 +52,9 @@ void Attrib::HashMap::ReleaseBucketsForTeardown()
 // size and build the initial bucket array. A non-dynamic (fixed) map first rounds the
 // caller's count UP through the TablePolicy grow curve: ((20*(n-1))/16 + 3) & ~3
 // (with n==1 mapping to 1). The X360 uses signed /16 (srawi + addze).
-Attrib::HashMap::HashMap(unsigned int luCount, u8 lu8KeyShift, u8 lu8Dynamic)
+Attrib::HashMap::HashMap(unsigned int luCount, unsigned int luKeyShift, bool lbDynamic)
 {
-    mu8KeyShift        = lu8KeyShift;
+    mu8KeyShift        = static_cast<u8>(luKeyShift);
     mpBuckets          = NULL;
     muCapacity         = 0;
     muCount            = 0;
@@ -63,15 +63,16 @@ Attrib::HashMap::HashMap(unsigned int luCount, u8 lu8KeyShift, u8 lu8Dynamic)
 
     if (luCount != 0)
     {
-        if (lu8Dynamic == 0)
+        if (!lbDynamic)
         {
-            if (luCount == 1)
+            const s32 liCountAboveOne = static_cast<s32>(luCount - 1);
+            if (liCountAboveOne == 0)
             {
                 luCount = 1;
             }
             else
             {
-                const s32 liGrown = ((20 * static_cast<s32>(luCount - 1)) >> 4) + 3;
+                const s32 liGrown = (20 * liCountAboveOne) / 16 + 3;
                 luCount = static_cast<u32>(liGrown) & 0xFFFFFFFCu;
             }
         }

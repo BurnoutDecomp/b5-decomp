@@ -93,7 +93,7 @@ namespace Attrib
         // Alias for the per-home cached probe length the bodies read as mu8SearchLen.
         // (Same byte as Node::mMax @ +0xE.)
 
-        HashMap(unsigned int luCount, u8 lu8KeyShift, u8 lu8Dynamic);       // 0x828094E8
+        HashMap(unsigned int luCount, unsigned int luKeyShift, bool lbDynamic);       // 0x828094E8
 
         // Insert (luKey -> payload) into the table. Grows-and-rehashes first when the table
         // is exactly full, homes the key by rotate-hash, PreFlightAdds to find the first free

@@ -71,7 +71,7 @@ namespace Attrib
             // X360 `lwz r11,0x18(r5); lwz r11,8(r11); lwz r11,0x34(r11)` ==
             // collection->mpClass->mpPrivates->mStaticData -- by name here.
             const ClassPrivate* lpPrivate =
-                reinterpret_cast<const ClassPrivate*>(lpCollection->mpClass)->mpPrivates;
+                lpCollection->mpClass->GetPrivates();
             return static_cast<u8*>(lpPrivate->mStaticData) + muValue;
         }
 
@@ -103,7 +103,7 @@ namespace Attrib
         else if ((muFlags & 0x20u) != 0)
         {
             const ClassPrivate* lpPrivate =
-                reinterpret_cast<const ClassPrivate*>(lpCollection->mpClass)->mpPrivates;
+                lpCollection->mpClass->GetPrivates();
             lpArray = reinterpret_cast<const Array*>(
                 static_cast<u8*>(lpPrivate->mStaticData) + muValue);
         }
@@ -236,8 +236,7 @@ namespace Attrib
             // Inherited: the resolved collection's class static-data area + node offset
             // (X360 collection+0x18 -> class, +8 -> privates, +0x34 -> mStaticData).
             const ClassPrivate* lpPrivate =
-                reinterpret_cast<const ClassPrivate*>(
-                    mpInstance->GetResolvedCollection()->mpClass)->mpPrivates;
+                mpInstance->GetResolvedCollection()->mpClass->GetPrivates();
             lpArray = reinterpret_cast<Array*>(
                 static_cast<u8*>(lpPrivate->mStaticData) + lpNode->muValue);
         }
