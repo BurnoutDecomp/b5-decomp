@@ -1,4 +1,8 @@
 // DirtySDK native CommTCP, ARTIST 82B3BF88..82B3CD10.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "commall_x360_internal.h"
 #include "dirtylib_x360_internal.h"
 #include "dirtymem.h"

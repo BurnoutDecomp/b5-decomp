@@ -125,8 +125,34 @@ uLong ZEXPORT adler32_z(uLong adler, const Bytef *buf, z_size_t len) {
 }
 
 /* ========================================================================= */
-uLong ZEXPORT adler32(uLong adler, const Bytef *buf, uInt len) {
-    return adler32_z(adler, buf, len);
+uLong ZEXPORT adler32(uLong seed, const Bytef *buf, uInt len) {
+#if defined(_XBOX)
+    /* ARTIST's zlib uses the original block loop for this entry point. */
+    unsigned long adler = seed & 0xffff;
+    unsigned long sum2 = (seed >> 16) & 0xffff;
+    int k;
+
+    if (buf == Z_NULL) return 1L;
+
+    while (len > 0) {
+        k = len < NMAX ? len : NMAX;
+        len -= k;
+        while (k >= 16) {
+            DO16(buf);
+            buf += 16;
+            k -= 16;
+        }
+        if (k != 0) do {
+            adler += *buf++;
+            sum2 += adler;
+        } while (--k);
+        MOD(adler);
+        MOD(sum2);
+    }
+    return (sum2 << 16) | adler;
+#else
+    return adler32_z(seed, buf, len);
+#endif
 }
 
 /* ========================================================================= */
