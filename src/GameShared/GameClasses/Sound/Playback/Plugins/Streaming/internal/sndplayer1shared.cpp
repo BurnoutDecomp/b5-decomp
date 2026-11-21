@@ -15,6 +15,7 @@
 #include <cstring>
 #include <limits>
 #include <new>
+#include <ppcintrinsics.h>
 
 extern "C" CgsSound::Playback::IStreamProvider* off_82FFBA0C;
 
@@ -113,14 +114,16 @@ namespace
         return static_cast<u64>(static_cast<s64>(value));
     }
 
-    s32 PpcFctidzLowS32(f64 value)
-    {
-        return static_cast<s32>(static_cast<u32>(PpcFctidzBits(value)));
-    }
-
     u32 PpcFctidzLowU32(f64 value)
     {
-        return static_cast<u32>(PpcFctidzBits(value));
+        u32 luLowWord;
+        __stfiwx(__fctidz(value), 0, &luLowWord);
+        return luLowWord;
+    }
+
+    s32 PpcFctidzLowS32(f64 value)
+    {
+        return static_cast<s32>(PpcFctidzLowU32(value));
     }
 
     u16 CheckedU16(u32 value)
@@ -269,7 +272,7 @@ int SndPlayer1_CgsStreamMod::GetSize(const VoiceStageConfig* config)
     const s32 liMaxRequests = config->mpContext
         ? PpcFctidzLowS32(*static_cast<const f32*>(config->mpContext))
         : 1;
-    const u32 luChannels = static_cast<u8>(config->mFlagAndField8);
+    const u32 luChannels = config->mu8OutputChannels;
     return static_cast<int>(ComputeHostLayout(luChannels, liMaxRequests).totalBytes);
 }
 

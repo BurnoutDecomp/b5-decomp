@@ -171,22 +171,22 @@ void SpliceManager::CreateMonoVoice( VoicePluginPair* apOutPair )
     laPlugInChain[0].mpContext      = &lCtorParams;
     laPlugInChain[0].mpDesc         =
         static_cast<rw::audio::core::PlugInDescRunTime*>( sndplayerHandle );  // 'SnP1'
-    laPlugInChain[0].mFlagAndField8 = 1u;
+    laPlugInChain[0].mu8OutputChannels = 1u;
 
     laPlugInChain[1].mpContext      = 0;
     laPlugInChain[1].mpDesc         =
         static_cast<rw::audio::core::PlugInDescRunTime*>( resampleHandle );   // 'Rsp0'
-    laPlugInChain[1].mFlagAndField8 = 1u;
+    laPlugInChain[1].mu8OutputChannels = 1u;
 
     laPlugInChain[2].mpContext      = 0;
     laPlugInChain[2].mpDesc         =
         static_cast<rw::audio::core::PlugInDescRunTime*>( pannerHandle );     // 'Pn21'
-    laPlugInChain[2].mFlagAndField8 = 6u;
+    laPlugInChain[2].mu8OutputChannels = 6u;
 
     laPlugInChain[3].mpContext      = 0;
     laPlugInChain[3].mpDesc         =
         static_cast<rw::audio::core::PlugInDescRunTime*>( sendHandle );       // 'Sen0'
-    laPlugInChain[3].mFlagAndField8 = 6u;
+    laPlugInChain[3].mu8OutputChannels = 6u;
 
     apOutPair->mpVoice = rw::audio::core::Voice::CreateInstance(
         0,                                   // r3 = priority 0
@@ -212,17 +212,17 @@ void SpliceManager::CreateStereoVoice( VoicePluginPair* apOutPair )
     laPlugInChain[0].mpContext      = &lCtorParams;
     laPlugInChain[0].mpDesc         =
         static_cast<rw::audio::core::PlugInDescRunTime*>( sndplayerHandle );  // 'SnP1'
-    laPlugInChain[0].mFlagAndField8 = 2u;
+    laPlugInChain[0].mu8OutputChannels = 2u;
 
     laPlugInChain[1].mpContext      = 0;
     laPlugInChain[1].mpDesc         =
         static_cast<rw::audio::core::PlugInDescRunTime*>( resampleHandle );   // 'Rsp0'
-    laPlugInChain[1].mFlagAndField8 = 2u;
+    laPlugInChain[1].mu8OutputChannels = 2u;
 
     laPlugInChain[2].mpContext      = 0;
     laPlugInChain[2].mpDesc         =
         static_cast<rw::audio::core::PlugInDescRunTime*>( sendHandle );       // 'Sen0'
-    laPlugInChain[2].mFlagAndField8 = 2u;
+    laPlugInChain[2].mu8OutputChannels = 2u;
 
     apOutPair->mpVoice = rw::audio::core::Voice::CreateInstance(
         0,                                   // r3 = priority 0

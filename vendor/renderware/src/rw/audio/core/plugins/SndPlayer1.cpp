@@ -253,7 +253,7 @@ SndPlayer1Layout SndPlayer1::ComputeLayout(u8 au8Channels, u32 auMaxRequests)
 // -------------------------------------------------------------------------------------
 // GetSize @0x82BA0220 -- the stage-carve stride.
 //
-// ⚠️ The channel count comes from the config's mFlagAndField8. The console reads it as
+// ⚠️ The channel count comes from the config's mu8OutputChannels. The console reads it as
 // `lbz r9, 8(r3)`, but +8 on x64 lands INSIDE the widened mpDesc -- that mis-read is
 // exactly what caused the phase-D mixer-scribble crash, so this goes by name.
 // -------------------------------------------------------------------------------------
@@ -262,7 +262,7 @@ int SndPlayer1::GetSize(const VoiceStageConfig *apConfig)
     const ConstructorParams *lpParams =
         static_cast<const ConstructorParams *>(apConfig->mpContext);
     const u32 luMaxRequests = lpParams ? TruncateRequestCount(lpParams->maxRequests) : 1u;
-    const u8 lu8Channels = static_cast<u8>(apConfig->mFlagAndField8);
+    const u8 lu8Channels = apConfig->mu8OutputChannels;
     return static_cast<int>(ComputeLayout(lu8Channels, luMaxRequests).muTotalSize);
 }
 

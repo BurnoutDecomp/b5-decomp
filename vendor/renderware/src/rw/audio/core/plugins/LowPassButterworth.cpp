@@ -84,7 +84,7 @@ char **LowPassButterworth::GetPlugInDescRunTime()
 // -------------------------------------------------------------------------------------
 int LowPassButterworth::GetSize(const VoiceStageConfig *config)
 {
-    const u8 lu8Channels = static_cast<u8>(config->mFlagAndField8);
+    const u8 lu8Channels = config->mu8OutputChannels;
     return static_cast<int>(Butterworth::GetSize(lu8Channels)
                             + offsetof(LowPassButterworth, mButterworth)); // X360: +0x60
 }

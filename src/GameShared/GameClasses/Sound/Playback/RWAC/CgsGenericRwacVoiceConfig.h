@@ -66,7 +66,7 @@ namespace Playback
             rw::audio::core::VoiceStageConfig& lrConfig = GetConfig(au32Index);
             lrConfig.mpContext = apContext;
             lrConfig.mpDesc = static_cast<rw::audio::core::PlugInDescRunTime*>(apHandle);
-            lrConfig.mFlagAndField8 = au8Channels;
+            lrConfig.mu8OutputChannels = au8Channels;
         }
 
         GenericRwacVoiceScratchpad& GetScratchpad() { return mScratchPad; }

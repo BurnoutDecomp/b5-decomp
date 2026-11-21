@@ -53,7 +53,7 @@ namespace Playback
         {
             apStages[arStage].mpContext = apContext;
             apStages[arStage].mpDesc = reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(auHandle);
-            apStages[arStage].mFlagAndField8 = auOutputChannels;
+            apStages[arStage].mu8OutputChannels = auOutputChannels;
             ++arStage;
         }
     }
@@ -328,7 +328,7 @@ namespace Playback
                     laPanner[luConfig].mpDesc = reinterpret_cast<
                         rw::audio::core::PlugInDescRunTime*>(
                             maAemsSubMixPlugInConfig[luConfig].muPlugInHandle);
-                    laPanner[luConfig].mFlagAndField8 =
+                    laPanner[luConfig].mu8OutputChannels =
                         maAemsSubMixPlugInConfig[luConfig].mu8ChannelCount;
                 }
                 rw::audio::core::PlugIn** lppPannerPlugins = 0;

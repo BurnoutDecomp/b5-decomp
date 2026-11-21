@@ -51,7 +51,7 @@ PlugIn *PlugIn::CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pD
     self->mInputChannels = flag;             // stb a5 -> 0x20
 
     self->mOutputChannels =
-        static_cast<u8>(apConfig->mFlagAndField8); // lbz 8(a4) -> stb 0x21
+        apConfig->mu8OutputChannels; // lbz 8(a4) -> stb 0x21
 
     if (!reinterpret_cast<PlugInCreateInstanceFn>(pDesc->pCreateInstance)(
             self, apConfig->mpContext)) // (*(a3+8))(self, *(a4))

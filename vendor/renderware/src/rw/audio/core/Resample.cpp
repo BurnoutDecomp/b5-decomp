@@ -92,7 +92,7 @@ char **Resample::GetPlugInDescRunTime()
 int Resample::GetSize(const VoiceStageConfig *config)
 {
     return static_cast<int>(KU_RESAMPLE_HISTORY_BYTES_PER_CHANNEL
-                                * static_cast<u8>(config->mFlagAndField8)
+                                * config->mu8OutputChannels
                             + ResampleHistoryOffset());   // X360: 24 * channels + 80
 }
 

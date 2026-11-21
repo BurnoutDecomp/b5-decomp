@@ -112,10 +112,13 @@ struct VoiceStageConfig
     // reads THIS record by name.
     void *mpContext;             // +0x00 -- the create-context pointer (0 when unused)
     PlugInDescRunTime *mpDesc;   // +0x04 -- describes this stage's plug-in
-    u32 mFlagAndField8;          // +0x08 -- low byte = the `flag` passed to
-                                 //   PlugIn::CreateInstance AND the init/channel byte
-                                 //   copied into PlugIn::mOutputChannels
+    u8 mu8OutputChannels;       // +0x08 -- channel byte loaded by PlugIn::CreateInstance
 };
+
+#if defined(D_PLATFORM_X360)
+CGS_STATIC_ASSERT(offsetof(VoiceStageConfig, mu8OutputChannels) == 8, "ARTIST voice stage channel byte");
+CGS_STATIC_ASSERT(sizeof(VoiceStageConfig) == 12, "ARTIST voice stage config stride");
+#endif
 
 // -------------------------------------------------------------------------------------
 // Voice -- see the file header for the byte layout. Plain object (no vtable).

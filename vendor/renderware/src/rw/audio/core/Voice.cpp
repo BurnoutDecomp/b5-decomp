@@ -243,7 +243,7 @@ Voice *Voice::CreateInstance(u8 priority, int numStages, VoiceStageConfig *confi
         }
         stage->mpProcess = desc->pProcess;
         stage->mpPreProcess = desc->pPreProcess;
-        flag = static_cast<u8>(configs[i].mFlagAndField8);
+        flag = configs[i].mu8OutputChannels;
     }
 
     // Success: hand back the plug-in array and enqueue the create-handler command.
