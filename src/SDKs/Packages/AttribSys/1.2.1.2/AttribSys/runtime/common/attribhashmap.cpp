@@ -433,8 +433,7 @@ unsigned int Attrib::HashMap::PreFlightAdd(u64 luKey, unsigned int luStartIndex,
 // most one this is the final release: assert it was not already zero, zero the
 // refcount, and return whether it had been exactly 1 (the "was actually held"
 // result the callers thread back as an int). While more than one reference is
-// held, decrement and report "not released" (0). DWARF marks this const, but the
-// X360 body writes mRefCount, so the reconstruction takes a non-const this.
+// held, decrement the mutable count and report "not released" (0).
 bool Attrib::HashMap::Release() const
 {
     // ⚠️ FIXED 2026-08-01 (Prepare wave): this used to reach the refcount as
@@ -445,7 +444,7 @@ bool Attrib::HashMap::Release() const
     // used the named member) bumped the real muRefCount. Symptom: "Too many releases of
     // object!" on the first Instance destructor that ever ran against a real collection --
     // i.e. the moment DirectorResourceManager::Prepare landed. Read it BY NAME.
-    u16* lpuRefCount = &const_cast<Attrib::HashMap*>(this)->muRefCount;
+    u16* lpuRefCount = &muRefCount;
     const unsigned int luRefs = *lpuRefCount;
 
     bool lbReleased;

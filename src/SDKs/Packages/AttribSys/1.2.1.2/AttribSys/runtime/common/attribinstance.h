@@ -109,11 +109,10 @@ namespace Attrib
         // Body: attribcollection.cpp.
         Collection(const CollectionLoadData& lrLoad, Vault* lpSource);
 
-        // Bump the shared refcount (asserts it has not saturated at 0xFFFF); returns this.
-        Collection* AddRef();                       // @0x828028E0  (attribcollection.cpp)
-        // Drop one shared reference via HashMap::Release; on the final drop, queue this
-        // collection onto the attribute database's garbage list for deferred deletion.
-        int         Release();                       // @0x8280C2E8  (attribcollection.cpp)
+        // The native callers pass a 64-bit reference key (see ARTIST 0x8280C45C).
+        // These refcount paths leave the key unused.
+        void AddRef(u64 luReferenceKey = 0) const;    // @0x828028E0
+        void Release(u64 luReferenceKey = 0) const;   // @0x8280C2E8
         // @0x8280C3F8 -- the real destructor: unregister from the owning class's
         // collection table, drop the class layout-table / parent-collection / source-vault
         // references, Clear() every attribute, then release the bucket array. It does NOT
@@ -218,9 +217,6 @@ namespace Attrib
         const Collection* mpCollectionPtr; // +0x10 (attribsys.h:764)
     };
 
-    // Collection helpers + generated-class helpers (each its own TU).
-    Collection* Collection_AddRef(Collection* lpCollection, int liFlags);
-    int         Collection_Release(Collection* lpCollection, int liFlags);
     // Attrib::Collection::Get @0x82807E30 -- resolve luKey through lpCollection and hand
     // back the 16-byte Attrib::Attribute cursor by value (the X360 returns it through the
     // hidden r3 sret pointer, which is why the out parameter leads). It is a real member of

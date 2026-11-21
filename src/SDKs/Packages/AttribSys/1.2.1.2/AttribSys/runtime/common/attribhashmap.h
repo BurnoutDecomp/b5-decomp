@@ -115,7 +115,8 @@ namespace Attrib
         //      here per the x64 semantic-parity rule) ----
         u16  GetRefCount() const { return muRefCount; }
         u16  GetCount() const { return muCount; }
-        __forceinline void AddRef()
+        // FAKEMATCH: Inlining keeps the shared guard in the ARTIST callers.
+        __forceinline void AddRef() const
         {
             CGS_ASSERT(muRefCount < 0xFFFF,
                 CgsDev::Assert::MessageAt("Exceeded collection refcount maximum!\n",
@@ -155,7 +156,7 @@ namespace Attrib
         // it bump/read it directly -- Collection::AddRef is ++muRefCount with the 0xFFFF
         // overflow guard, exactly the sequence the X360 inlines at every AddRef site. Left in
         // declaration order (after muCount) so the member layout is unchanged.
-        u16   muRefCount;         // +0x08  shared refcount
+        mutable u16 muRefCount;   // +0x08  shared refcount
     private:
         u8    mu8MaxSearchLength; // +0x0A  table-wide worst-collision probe length
         u8    mu8KeyShift;        // +0x0B  rotate-hash shift

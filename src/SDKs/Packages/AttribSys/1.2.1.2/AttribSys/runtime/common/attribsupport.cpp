@@ -121,7 +121,7 @@ RefSpec& RefSpec::operator=(const RefSpec& lrOther)
 {
     if (mpCollectionPtr)
     {
-        const_cast<Collection*>(mpCollectionPtr)->Release();
+        mpCollectionPtr->Release(static_cast<u64>(-1));
         mpCollectionPtr = 0;
     }
 
@@ -131,8 +131,7 @@ RefSpec& RefSpec::operator=(const RefSpec& lrOther)
 
     if (mpCollectionPtr)
     {
-        Collection* lpCollection = const_cast<Collection*>(mpCollectionPtr);
-        lpCollection->HashMap::AddRef();
+        mpCollectionPtr->HashMap::AddRef();
     }
     return *this;
 }
@@ -145,7 +144,7 @@ void RefSpec::Clean()
 {
     if (mpCollectionPtr)
     {
-        Collection_Release(const_cast<Collection*>(mpCollectionPtr), -1);
+        mpCollectionPtr->Release(static_cast<u64>(-1));
         mpCollectionPtr = 0;
     }
 }
@@ -190,7 +189,7 @@ const Collection* RefSpec::GetCollection()
         Collection* lpCollection = lpClass->GetCollection(mCollectionKey);
         mpCollectionPtr = lpCollection;
         if (lpCollection)
-            Collection_AddRef(lpCollection, -1);
+            lpCollection->AddRef(static_cast<u64>(-1));
     }
     return mpCollectionPtr;
 }
@@ -213,7 +212,7 @@ const Collection* RefSpec::GetCollectionWithDefault()
         Collection* lpCollection = lpClass->GetCollectionWithDefault(mCollectionKey);
         mpCollectionPtr = lpCollection;
         if (lpCollection)
-            Collection_AddRef(lpCollection, -1);
+            lpCollection->AddRef(static_cast<u64>(-1));
     }
     return mpCollectionPtr;
 }

@@ -147,12 +147,9 @@ Attrib::Collection::~Collection()
         lpClassPrivate->Release();
     }
 
-    // 0x8280C450 `lwz r3,0xC(r31) ; cmplwi ; beq ; ld r4,0x10(r31) ; bl
-    // Attrib::Collection::Release`. The `ld r4,0x10(r31)` stages mKey into r4, which
-    // Collection::Release @0x8280C2E8 never reads (its whole body only touches r3 and
-    // the database singleton) -- a dead scheduled load, NOT a second argument.
+    // ARTIST 0x8280C45C passes the child's key when releasing the parent.
     if (mpParent != NULL)
-        mpParent->Release();
+        mpParent->Release(mKey);
 
     // 0x8280C464 -- free every attribute this collection owns, plus this instance's
     // data for every laid-out/inherited attribute of the class layout table.
@@ -189,12 +186,10 @@ Attrib::Collection::~Collection()
 // Attrib::Collection::AddRef @ 0x828028E0
 // ============================================================================
 // Bump the shared refcount (the HashMap base's muRefCount @ +0x08), asserting it has not
-// already saturated at 0xFFFF, then return this. This is the out-of-line copy of the
-// ++refcount-with-overflow-guard the X360 inlines at the other AddRef sites.
-Attrib::Collection* Attrib::Collection::AddRef()
+// already saturated at 0xFFFF. Reuse the same operation as the inlined AddRef sites.
+void Attrib::Collection::AddRef(u64 /*luReferenceKey*/) const
 {
     HashMap::AddRef();
-    return this;
 }
 
 // ============================================================================
@@ -202,21 +197,14 @@ Attrib::Collection* Attrib::Collection::AddRef()
 // ============================================================================
 // Drop one reference on the collection's attribute table (HashMap::Release). Once it hits
 // zero, queue this collection for deferred deletion on the attribute database's collection
-// garbage list (mPrivates + 0x6C). Returns the HashMap release result (a byte-wide bool
-// widened to int, exactly as the X360 threads r3 through), or the QueueForDelete result on
-// the final drop.
-int Attrib::Collection::Release()
+// garbage list (mPrivates + 0x6C).
+void Attrib::Collection::Release(u64 /*luReferenceKey*/) const
 {
-    const int liReleased = HashMap::Release() ? 1 : 0;
-    if (liReleased != 0)
+    if (HashMap::Release())
     {
-        // The database's deferred-collection ring (X360 mPrivates+0x6C), by name
-        // now the x64 DatabasePrivate layout is real.
-        return static_cast<int>(reinterpret_cast<intptr_t>(
-            DatabasePrivate_QueueCollectionForDelete(
-                this, &GetDatabasePrivate()->mGarbageCollections)));
+        DatabasePrivate_QueueCollectionForDelete(
+            const_cast<Collection*>(this), &GetDatabasePrivate()->mGarbageCollections);
     }
-    return liReleased;
 }
 
 // ============================================================================

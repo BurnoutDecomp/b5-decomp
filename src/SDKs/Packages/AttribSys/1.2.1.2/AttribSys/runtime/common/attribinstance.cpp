@@ -21,41 +21,6 @@
 
 namespace Attrib
 {
-    // ------------------------------------------------------------------------
-    // Collection refcount helpers. These two are NOT separate functions on the
-    // console -- they ARE Attrib::Collection::AddRef @0x828028E0 and
-    // Attrib::Collection::Release @0x8280C2E8, both of which are reconstructed by
-    // name in attribcollection.cpp. Verified from the one-line caller:
-    //
-    //   Attrib::Instance::~Instance @0x8280D100
-    //     0x8280D100  lwz  r3, 0(r3)        ; mpCollection
-    //     0x8280D104  cmplwi cr6, r3, 0
-    //     0x8280D108  beqlr cr6
-    //     0x8280D10C  li   r4, 0            ; <- the "flags" argument ...
-    //     0x8280D110  b    Attrib__Collection__Release
-    //
-    // ...and Collection::Release's own body (@0x8280C2E8) never reads r4 -- it is
-    // `mr r30, r3` / `bl HashMap::Release` / queue-for-delete. The second argument
-    // is a dead register stage that Hex-Rays surfaces as a parameter; the callers
-    // stage 0 or -1 indifferently. So the faithful body of these free-function
-    // seams is a straight forward to the real members, and liFlags is (void)'d.
-    //
-    // ⚠️ These were `__debugbreak()` traps until 2026-07-31. That was load-bearing
-    // by accident: Attrib::FindCollection was a `return 0` stub, so mpCollection was
-    // always null and ~Instance never reached the trap. The moment FindCollection
-    // started resolving real collections (same date) every Instance destructor would
-    // have hit the breakpoint. Do not re-trap these.
-    // ------------------------------------------------------------------------
-    Collection* Collection_AddRef(Collection* lpCollection, int /*liFlags*/)
-    {
-        return lpCollection ? lpCollection->AddRef() : 0;
-    }
-
-    int Collection_Release(Collection* lpCollection, int /*liFlags*/)
-    {
-        return lpCollection ? lpCollection->Release() : 0;
-    }
-
     // This layering seam keeps Instance independent of the TU that owns RefSpec's lazy
     // database lookup.  On X360 the returned Collection* is 32 bits; the native PC port
     // must preserve the pointer width rather than transcribing the console register as int.
@@ -77,19 +42,18 @@ namespace Attrib
     {
         if ((muFlags & 1u) != 0)
         {
-            Collection* lpOld    = mpCollection;
-            Collection* lpParent = mpCollection->mpParent;
-            mpCollection = lpParent;
-            if (lpParent)
+            Collection* const lpOld = mpCollection;
+            mpCollection = lpOld->mpParent;
+            if (mpCollection)
             {
-                mpAttributeData = lpParent->mpData;
-                Collection_AddRef(mpCollection, 0);
+                mpAttributeData = mpCollection->mpData;
+                mpCollection->AddRef(0);
             }
             else
             {
                 mpAttributeData = 0;
             }
-            Collection_Release(lpOld, 0);
+            lpOld->Release(0);
             muFlags &= ~1u;
         }
     }
@@ -104,8 +68,7 @@ namespace Attrib
     {
         if (mpCollectionPtr)
         {
-            Collection* lpCollection = const_cast<Collection*>(mpCollectionPtr);
-            lpCollection->HashMap::AddRef();
+            mpCollectionPtr->HashMap::AddRef();
         }
     }
 
@@ -210,7 +173,7 @@ namespace Attrib
     Instance::~Instance()
     {
         if (mpCollection)
-            Collection_Release(mpCollection, 0);
+            mpCollection->Release(0);
     }
 
     Collection* Instance::Change(Collection* lpNewCollection)
@@ -220,13 +183,14 @@ namespace Attrib
         {
             Unmodify();
             if (mpCollection)
-                Collection_Release(mpCollection, 0);
+                mpCollection->Release(0);
 
             bool lbHasDefault = false;
             mpCollection = lpNewCollection;
             if (lpNewCollection)
             {
-                lResult = reinterpret_cast<Collection*>(Collection_AddRef(lpNewCollection, 0));
+                lpNewCollection->AddRef(0);
+                lResult = lpNewCollection;
                 mpAttributeData = mpCollection->mpData;
                 lbHasDefault = (mpCollection->mpSource == 0);
             }
