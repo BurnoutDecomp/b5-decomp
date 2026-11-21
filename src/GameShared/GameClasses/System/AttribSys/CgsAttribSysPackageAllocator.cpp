@@ -80,14 +80,10 @@ void* AttribSysPackageAllocator::Malloc(size_t lnSize, int /*liFlags*/)
     return lpResult;
 }
 
-// @ 0x828020C8 - free a block back to the adopted heap. The byte count is part of
-// the interface but unused here (the heap tracks block sizes); only mbHasAllocator
-// is asserted before forwarding to HeapMalloc::Free(this->mpHeapAllocator, block).
-// The declared 3-arg spelling (ptr, size, tag) the AttribList helpers call --
-// the X360 folds it onto the 2-arg body; size/tag are debug-only.
-void AttribSysPackageAllocator::Free(void* lpBlock, s32 /*liSize*/, const char* /*lpcTag*/)
+// ARTIST 0x82802138. The tagged overload accounts for the supplied size.
+void AttribSysPackageAllocator::Free(void* lpBlock, s32 liSize, const char* /*lpcTag*/)
 {
-    Free(lpBlock, 0u);
+    FreeSized(lpBlock, static_cast<size_t>(liSize));
 }
 
 void AttribSysPackageAllocator::Free(void* lpBlock, size_t /*lnSize*/)
@@ -95,9 +91,8 @@ void AttribSysPackageAllocator::Free(void* lpBlock, size_t /*lnSize*/)
     Free(lpBlock);
 }
 
-// The block-only free, and the one the console actually emits: the size-carrying
-// spellings above are interface sugar that folds onto this body. Asserts the allocator
-// is live, then hands the block straight back to the adopted heap.
+// ARTIST 0x828020C8 also serves the untagged size overload. The heap tracks the
+// block size itself, so this path just checks the allocator and returns the block.
 void AttribSysPackageAllocator::Free(void* lpBlock)
 {
     CGS_ASSERT(mbHasAllocator,

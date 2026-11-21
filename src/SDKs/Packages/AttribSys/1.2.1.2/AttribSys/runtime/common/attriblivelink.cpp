@@ -4,8 +4,9 @@
 
 #include <cstdlib>   // atoi
 #include <cstring>   // strstr, strncpy, strlen, memcpy
+#include <xtl.h>     // XMemCpy
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                          // CGS_ASSERT, MessageAt
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                             // CgsCore::SPrintf
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h"      // GetAttribSysAllocator / GetEaStlAllocator
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h"   // AttribSysPackageAllocator
@@ -403,8 +404,11 @@ namespace Attrib
         if (lpData == NULL)
             return;
 
-        CGS_ASSERT(mOriginalImage != NULL, "RevertReplace with no original image.");
-        memcpy(lpData, mOriginalImage, mTypeSize);
+        // ARTIST 0x8280DAF4 loads the original assertion location.
+        CGS_ASSERT(mOriginalImage != NULL, CgsDev::Assert::MessageAt(
+            "RevertReplace with no original image.",
+            "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attriblivelink.cpp", 1088));
+        XMemCpy(lpData, mOriginalImage, mTypeSize);
 
         if (mExtraImage != NULL)
         {

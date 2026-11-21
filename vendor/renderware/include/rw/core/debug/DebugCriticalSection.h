@@ -41,11 +41,11 @@ namespace rw { namespace core { namespace debug { namespace detail {
     struct DebugCriticalSection
     {
         // @ 0x82BBC4A0 - initialise the OS critical section and mark the wrapper enabled.
-        int   Create();
+        void Create();
         // @ 0x82BBC4D8 - enter the section if it has been Created (else a no-op).
-        void* Enter();
+        void Enter();
         // @ 0x82BBC4F0 - leave the section if it has been Created (else a no-op).
-        void* Leave();
+        void Leave();
 
         int              miInitialised;
         CRITICAL_SECTION mCriticalSection;

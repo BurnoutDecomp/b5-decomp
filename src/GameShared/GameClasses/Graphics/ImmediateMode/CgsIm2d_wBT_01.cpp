@@ -11,7 +11,7 @@
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/shadowingdevice.h"   // shadow::Device::SetState / SetResource
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "BrnCommonTypes.h"                                           // Vector3 / Vector4
 
 #include <cstring>
@@ -143,7 +143,10 @@ void Im2d::PushMask(renderengine::TextureState* lpMaskTextureState,
                     renderengine::Texture* lpMaskTexture,
                     const Basic2dColouredTexturedVertex* lpaMaskVertices)
 {
-    CGS_ASSERT(mu32NumMasks < KU_IM2D_MAX_MASK_COUNT, "mu32NumMasks < V_IM2D_MAX_MASK_COUNT");
+    // ARTIST 0x827F07EC loads the original inline assertion location.
+    CGS_ASSERT(mu32NumMasks < KU_IM2D_MAX_MASK_COUNT, CgsDev::Assert::MessageAt(
+        "mu32NumMasks < V_IM2D_MAX_MASK_COUNT",
+        "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsIm2d.h", 502));
 
     if (mu32NumMasks == 0
         && ImRenderer<Basic2dColouredTexturedVertex>::SetProgram(static_cast<s8>(mi8CurrentProgram + 1)))
