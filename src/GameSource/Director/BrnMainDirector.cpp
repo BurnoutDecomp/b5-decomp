@@ -53,7 +53,7 @@
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h" // ArbStateSharedInfo
 #include "GameSource/Director/BrnDirectorResourceManager.h"            // BrnDirector::DirectorResourceManager
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatus
-#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                     // CGS_ASSERT
 #include "SDKs/Packages/ICE/ICECameraSpaceHandler.hpp"                 // ICE::CameraSpaceHandler
                                                                        //   (UpdateCameraBehavioursPostScene
                                                                        //    stages one per frame)
@@ -521,7 +521,10 @@ namespace BrnDirector
             return true;
 
         default:
-            CGS_ASSERT(false, "Invalid Stage\n");
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt(
+                    "Invalid Stage\n",
+                    "..\\..\\..\\GameSource\\Director/BrnMainDirector.cpp", 297 /* ARTIST 0x82236F54 */));
             return false;
         }
     }

@@ -1,6 +1,6 @@
 #include "GameSource/Gui/View/BrnRoadSignIconManager.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the BRN_MAPICON_DIAG witness
-#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"           // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"               // CgsIDCompress
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"          // CgsGui::GuiEventWrapper (the 562 record)
@@ -16,6 +16,8 @@
 // BrnGui::RoadSignIcon / BrnGui::RoadSignIconManager (the asserts name the original home,
 // GameSource/Gui/SatNav/BrnRoadSignIconManager.cpp). Every body follows the console asm; the
 // asserts are the console's own strings and, as on the console, none of them gates.
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/SatNav/BrnRoadSignIconManager.cpp";
 
 namespace BrnGui
 {
@@ -380,12 +382,15 @@ namespace
     // console.
     void RoadSignIconManager::SetRoadRuleBatchData(const GuiEventRoadRuleBatchDataResponse* lpRoadRules)
     {
-        CGS_ASSERT(lpRoadRules != 0, "lpRoadRules");   // assert line 677
+        CGS_ASSERT(lpRoadRules != 0,
+            CgsDev::Assert::MessageAt("lpRoadRules", KAC_ARTIST_ASSERT_FILE, 677 /* ARTIST 0x824F5844 */));   // assert line 677
 
         for (s32 liRoadRuleIndex = 0; liRoadRuleIndex < lpRoadRules->miRoadCount; ++liRoadRuleIndex)
         {
             CGS_ASSERT(lpRoadRules->maRoadIds[liRoadRuleIndex] != 0,
-                       "lpRoadRules->maRoadIds[ liRoadRuleIndex ] != kCGSID_NULL");   // assert line 683
+                CgsDev::Assert::MessageAt(
+                    "lpRoadRules->maRoadIds[ liRoadRuleIndex ] != kCGSID_NULL",
+                    KAC_ARTIST_ASSERT_FILE, 683 /* ARTIST 0x824F5894 */));   // assert line 683
 
             char lacRoadNameString[32];
             CgsCore::SPrintf(lacRoadNameString, 31, "%llu",

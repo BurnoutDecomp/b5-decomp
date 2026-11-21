@@ -41,7 +41,7 @@
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::RegisterForEvents
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                     // CgsGui::GuiAccessPointers
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                        // BrnFlapt::FileRef
-#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // the in-queue Update walks
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
@@ -125,7 +125,9 @@ namespace BrnGui
             // Prepare the EventObserver base (its StateInterface) with the access pointers
             // and a null resource allocator (X360 passes 0 for the allocator).
             CGS_ASSERT(CgsGui::EventObserver::Prepare(lpGuiAccessPointers, 0),
-                       "CgsGui::EventObserver::Prepare(lpGuiAccessPointers)");
+                CgsDev::Assert::MessageAt(
+                    "CgsGui::EventObserver::Prepare(lpGuiAccessPointers)",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiAlwaysAvailableComponentsManager.cpp", 140 /* ARTIST 0x824F37DC */));
             // fall through
 
         case E_PREPARE_REGISTERFOREVENTS:

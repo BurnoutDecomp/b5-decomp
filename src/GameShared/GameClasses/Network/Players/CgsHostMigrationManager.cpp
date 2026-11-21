@@ -25,6 +25,9 @@
 #include <cstdlib>   // qsort
 #include <cstring>   // memmove
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsHostMigrationManager.cpp";
+
 namespace CgsSystem { class TimerStatus; }
 
 namespace CgsNetwork
@@ -361,7 +364,9 @@ namespace CgsNetwork
             {
                 RemovePlayer(maHostMigrationPlayerIDs[liArrayIndex]);
                 CGS_ASSERT(maHostMigrationPlayerIDs[liArrayIndex] == KI_INVALID_PLAYER_ID,
-                           "maHostMigrationPlayerIDs[liArrayIndex] == K_INVALID_PLAYER_ID");
+                    CgsDev::Assert::MessageAt(
+                        "maHostMigrationPlayerIDs[liArrayIndex] == K_INVALID_PLAYER_ID",
+                        KAC_ARTIST_ASSERT_FILE, 849 /* ARTIST 0x8288F8AC */));
             }
         }
         mHostPlayerID = KI_INVALID_PLAYER_ID;
@@ -502,8 +507,12 @@ namespace CgsNetwork
     // -------------------------------------------------------------------------------
     void HostMigrationManager::SendHostKeepAliveMessage(NetworkPlayer* lpNetPlayer, u16 lu16CurrentFrame)
     {
-        CGS_ASSERT(lpNetPlayer != 0, "lpNetPlayer");
-        CGS_ASSERT(mHostPlayerID != KI_INVALID_PLAYER_ID, "mHostPlayerID != K_INVALID_PLAYER_ID");
+        CGS_ASSERT(lpNetPlayer != 0,
+            CgsDev::Assert::MessageAt("lpNetPlayer", KAC_ARTIST_ASSERT_FILE, 430 /* ARTIST 0x828835A8 */));
+        CGS_ASSERT(mHostPlayerID != KI_INVALID_PLAYER_ID,
+            CgsDev::Assert::MessageAt(
+                "mHostPlayerID != K_INVALID_PLAYER_ID",
+                KAC_ARTIST_ASSERT_FILE, 432 /* ARTIST 0x828835D0 */));
 
         Message* lpMessage = lpNetPlayer->GetRegisteredSendMessage(KI_MESSAGE_TYPE_HOST_KEEP_ALIVE);
         static_cast<HostKeepAliveMessage*>(lpMessage)->PrepareForSend(lu16CurrentFrame);

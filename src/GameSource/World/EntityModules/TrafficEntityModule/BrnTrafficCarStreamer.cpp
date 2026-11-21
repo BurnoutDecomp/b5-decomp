@@ -285,8 +285,10 @@ void TrafficCarStreamer::Update( const u8* lpauOverrideBonusAssets, u32 luNumBon
 // -----------------------------------------------------------------------------
 void TrafficCarStreamer::GetBonusAssets( u8* lpauOutBonusAssets, u32* lpuOutNumBonusAssets ) const
 {
-    CGS_ASSERT( lpauOutBonusAssets != 0, "lpauOutBonusAssets" );
-    CGS_ASSERT( lpuOutNumBonusAssets != 0, "lpuOutNumBonusAssets" );
+    CGS_ASSERT( lpauOutBonusAssets != 0,
+        CgsDev::Assert::MessageAt("lpauOutBonusAssets", KAC_ARTIST_ASSERT_FILE, 269 /* ARTIST 0x8274F8F0 */));
+    CGS_ASSERT( lpuOutNumBonusAssets != 0,
+        CgsDev::Assert::MessageAt("lpuOutNumBonusAssets", KAC_ARTIST_ASSERT_FILE, 270 /* ARTIST 0x8274F914 */));
 
     u32 luBonusAssetsUsed = 0;
 
@@ -295,7 +297,9 @@ void TrafficCarStreamer::GetBonusAssets( u8* lpauOutBonusAssets, u32* lpuOutNumB
         if( ( maxLoadFlags[luAsset] & E_LOADFLAG_SHOULD_BE_LOADED ) == E_LOADFLAG_BONUS )
         {
             CGS_ASSERT( luBonusAssetsUsed < KU_MAX_BONUS_STREAMED_ASSETS,
-                        "luBonusAssetsUsed < KU_MAX_BONUS_STREAMED_ASSETS" );
+                CgsDev::Assert::MessageAt(
+                    "luBonusAssetsUsed < KU_MAX_BONUS_STREAMED_ASSETS",
+                    KAC_ARTIST_ASSERT_FILE, 277 /* ARTIST 0x8274F964 */));
 
             lpauOutBonusAssets[luBonusAssetsUsed] = static_cast< u8 >( luAsset );
             luBonusAssetsUsed++;

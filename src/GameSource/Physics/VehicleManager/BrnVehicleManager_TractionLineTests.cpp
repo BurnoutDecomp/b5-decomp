@@ -43,9 +43,12 @@
 #include "SDKs/EATech/eajobs/job.h"                                                     // EA::Jobs::Job::WaitOn
 #include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"
 #include "SharedClasses/World/BrnCollisionTag.h"   // KU_COLLISION_MASK_SURFACE_ID (the assert bound)
-#include "GameShared/GameClasses/Core/CgsAssert.h" // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h" // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // PerfMonCpu::Start/StopMonitor
 #include <cstddef>                                                 // offsetof (the layout gates)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnVehicleManager.cpp";
 
 namespace BrnPhysics
 {
@@ -99,17 +102,27 @@ namespace
             CgsModule::IOBufferStack* lpInputBufferStack,
             CgsSceneManager::CgsCollision::CollisionGenerator* lpTractionContactGen)
     {
-        CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");        // :1949
-        CGS_ASSERT(lpTractionContactGen != 0, "lpTractionContactGen != NULL");    // :1950
+        CGS_ASSERT(lpInputBufferStack != 0,
+            CgsDev::Assert::MessageAt(
+                "lpInputBufferStack != NULL",
+                KAC_ARTIST_ASSERT_FILE, 1949 /* ARTIST 0x825B50C4 */));        // :1949
+        CGS_ASSERT(lpTractionContactGen != 0,
+            CgsDev::Assert::MessageAt(
+                "lpTractionContactGen != NULL",
+                KAC_ARTIST_ASSERT_FILE, 1950 /* ARTIST 0x825B50E8 */));    // :1950
         CGS_ASSERT(mpTractionLineStreamProducer == 0,
-                   "mpTractionLineStreamProducer == NULL");                             // :1951
+            CgsDev::Assert::MessageAt(
+                "mpTractionLineStreamProducer == NULL",
+                KAC_ARTIST_ASSERT_FILE, 1951 /* ARTIST 0x825B5118 */));                             // :1951
 
         mpTractionLineStreamProducer =
             lpTractionContactGen->CreateLineWithTriangleListStream(
                 KI_MAX_TRACTION_LINE_STREAM_COMMANDS);
 
         CGS_ASSERT(mpTractionLineStreamProducer != 0,
-                   "mpTractionLineStreamProducer != NULL");                             // :1961
+            CgsDev::Assert::MessageAt(
+                "mpTractionLineStreamProducer != NULL",
+                KAC_ARTIST_ASSERT_FILE, 1961 /* ARTIST 0x825B514C */));                             // :1961
     }
 
     // =============================================================================================
@@ -151,9 +164,14 @@ namespace
     void VehicleManager::DoVehicleTractionLineDecallocations(
             CgsModule::IOBufferStack* lpInputBufferStack)
     {
-        CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");        // :2296
+        CGS_ASSERT(lpInputBufferStack != 0,
+            CgsDev::Assert::MessageAt(
+                "lpInputBufferStack != NULL",
+                KAC_ARTIST_ASSERT_FILE, 2296 /* ARTIST 0x825B5298 */));        // :2296
         CGS_ASSERT(mpTractionLineStreamProducer != 0,
-                   "mpTractionLineStreamProducer != NULL");                             // :2297
+            CgsDev::Assert::MessageAt(
+                "mpTractionLineStreamProducer != NULL",
+                KAC_ARTIST_ASSERT_FILE, 2297 /* ARTIST 0x825B52C8 */));                             // :2297
 
         mpTractionLineStreamProducer = 0;
     }

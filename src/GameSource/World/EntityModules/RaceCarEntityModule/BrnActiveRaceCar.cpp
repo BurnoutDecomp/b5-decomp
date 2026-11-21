@@ -36,7 +36,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleIOQueues.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "rw/math/vpu/matrix44affine_operation.h"    // rw::math::vpu::Mult
 #include "rw/math/vpu/vector3_operation.h"        // rw::math::vpu::TransformVector's operands (operator+ / operator*)
 #include "GameSource/Math/BrnMathUtils.h"                // BrnMath::IsNormal
@@ -66,6 +66,9 @@
 // printing this number turns "the frame around the impact" from an ESTIMATE into a filename.
 // ⛔ A trace correlated against a dump of a DIFFERENT frame has already produced a false lead
 // in this tree (device.cpp:255) -- do not go back to inferring the frame from a call index.
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnActiveRaceCar.h";
+
 namespace renderengine { extern u32 guPresentCount; }
 
 namespace BrnWorld
@@ -981,9 +984,12 @@ bool ActiveRaceCar::IsAttached() const
 // IsActive @ 0x822A1FB8. The two asserts are the X360's own, in asm order.
 bool ActiveRaceCar::IsActive() const
 {
-    CGS_ASSERT(muState < E_STATE_COUNT, "muState < E_STATE_COUNT");
+    CGS_ASSERT(muState < E_STATE_COUNT,
+        CgsDev::Assert::MessageAt("muState < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 1316 /* ARTIST 0x822A1FEC */));
     CGS_ASSERT(muState == E_STATE_INACTIVE || mpRaceCar != 0,
-               "Active ActiveRaceCar without a RaceCar");
+        CgsDev::Assert::MessageAt(
+            "Active ActiveRaceCar without a RaceCar",
+            KAC_ARTIST_ASSERT_FILE, 1317 /* ARTIST 0x822A2020 */));
 
     return muState == E_STATE_ACTIVE;
 }
@@ -2014,7 +2020,11 @@ void ActiveRaceCar::Update(f32 lfTimeStep,
 void ActiveRaceCar::SendAddedRemovedNetworkCarForCollisionEvents(
         BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInput )
 {
-    CGS_ASSERT( lpVehicleInput != 0, "lpVehicleInput != NULL" );
+    CGS_ASSERT( lpVehicleInput != 0,
+        CgsDev::Assert::MessageAt(
+            "lpVehicleInput != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.cpp", 1545 /* ARTIST 0x822BF864 */));
 
     for( s32 liEvent = 0; liEvent < mAddRemoveNetworkCarForCollisionQueue.GetLength(); ++liEvent )
     {

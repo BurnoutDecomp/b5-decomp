@@ -35,6 +35,9 @@
 
 #include <cstring>
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayTrafficEntitySerialiser.h";
+
 namespace BrnReplays
 {
     // -------------------------------------------------------------------------
@@ -95,7 +98,9 @@ namespace BrnReplays
     TrafficVehicleDataRecord* TrafficEntitySerialiser::GetVehicleData(u32 luVehicle)
     {
         CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
-                   "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");
+            CgsDev::Assert::MessageAt(
+                "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
+                KAC_ARTIST_ASSERT_FILE, 507 /* ARTIST 0x827072AC */));
 
         u8* lpBase = reinterpret_cast<u8*>(GetStaticLayout());
         const u32 luChunk = luVehicle / KU_VEHICLES_PER_CHUNK;
@@ -113,7 +118,9 @@ namespace BrnReplays
     TrafficVehicleTransformRecord* TrafficEntitySerialiser::GetVehicleTransform(u32 luVehicle)
     {
         CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
-                   "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");
+            CgsDev::Assert::MessageAt(
+                "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
+                KAC_ARTIST_ASSERT_FILE, 476 /* ARTIST 0x82707214 */));
 
         u8* lpBase = reinterpret_cast<u8*>(GetStaticLayout());
         const u32 luChunk = luVehicle / KU_VEHICLES_PER_CHUNK;

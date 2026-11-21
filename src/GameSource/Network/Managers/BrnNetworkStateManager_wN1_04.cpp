@@ -389,17 +389,25 @@ namespace BrnNetwork
     // ------------------------------------------------------------------------------------
     void StateManager::MarkedManLoaded(const BrnGameState::GameStateModuleIO::MarkedManLoadedAction* lpMarkedManLoadedAction)
     {
-        CGS_ASSERT(mpNetworkManager, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetServerInterface(), "mpNetworkManager->GetServerInterface()");
+        CGS_ASSERT(mpNetworkManager,
+            CgsDev::Assert::MessageAt("mpNetworkManager", KAC_ARTIST_ASSERT_FILE, 3925 /* ARTIST 0x825494C0 */));
+        CGS_ASSERT(mpNetworkManager->GetServerInterface(),
+            CgsDev::Assert::MessageAt(
+                "mpNetworkManager->GetServerInterface()",
+                KAC_ARTIST_ASSERT_FILE, 3926 /* ARTIST 0x825494E8 */));
         CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetConnectionComponent(),
-                   "mpNetworkManager->GetServerInterface()->GetConnectionComponent()");
+            CgsDev::Assert::MessageAt(
+                "mpNetworkManager->GetServerInterface()->GetConnectionComponent()",
+                KAC_ARTIST_ASSERT_FILE, 3927 /* ARTIST 0x82549514 */));
 
         if (mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn())
         {
             if (!lpMarkedManLoadedAction->mbMovingBetweenLobbyModes)
             {
                 CGS_ASSERT(!GsmIO::IsShowtimeGameMode(lpMarkedManLoadedAction->meGameMode),
-                           "!GsmIO::IsShowtimeGameMode(lpMarkedManLoadedAction->meGameMode)");
+                    CgsDev::Assert::MessageAt(
+                        "!GsmIO::IsShowtimeGameMode(lpMarkedManLoadedAction->meGameMode)",
+                        KAC_ARTIST_ASSERT_FILE, 3935 /* ARTIST 0x8254957C */));
 
                 mpNetworkManager->GetStartTimeManager()->StartSyncingTime(
                     lpMarkedManLoadedAction->meGameMode == GsmIO::E_MODE_ONLINE_FREE_BURN_LOBBY);

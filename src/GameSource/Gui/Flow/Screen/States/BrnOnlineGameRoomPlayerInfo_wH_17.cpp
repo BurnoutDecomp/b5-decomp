@@ -42,7 +42,8 @@ namespace BrnGui
     // player rows. The asm passes flow 0 (E_GUIFLOW_SCREEN) to every call.
     void OnlineGameRoomPlayerInfo::SetExpectedLobbyComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:3908
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 3908 /* ARTIST 0x82484EA4 */));   // cpp:3908
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 

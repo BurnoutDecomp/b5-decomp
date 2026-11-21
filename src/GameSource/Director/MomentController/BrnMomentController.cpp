@@ -198,7 +198,10 @@ bool MomentController::MomentHandle::Prepare(AbstractPoolVoidHandle lVoidHandle,
 
     static_cast<Moment*>(const_cast<void*>(mMomentPoolHandle.Get()))->Construct();
 
-    CGS_ASSERT(GetMoment()->Prepare(&lrBehaviourManager), "GetMoment().Prepare(lBehaviourManager)");
+    CGS_ASSERT(GetMoment()->Prepare(&lrBehaviourManager),
+        CgsDev::Assert::MessageAt(
+            "GetMoment().Prepare(lBehaviourManager)",
+            "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.cpp", 242 /* ARTIST 0x821F7358 */));
     return true;
 }
 

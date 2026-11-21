@@ -32,7 +32,9 @@ void OnlinePlayerAddedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNet
 void OnlinePlayerFinalisedEvent::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lNetworkPlayerID)
 {
     CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-               "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CgsDev::Assert::MessageAt(
+            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            KAC_ARTIST_ASSERT_FILE, 3221 /* ARTIST 0x823A785C */));
     mNetworkPlayerID = lNetworkPlayerID;
 }
 
@@ -89,7 +91,9 @@ void StartNetworkGameEvent::SetPlayerData(s32                         liPlayerIn
     (void)lWheelId;
 
     CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-               "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CgsDev::Assert::MessageAt(
+            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            KAC_ARTIST_ASSERT_FILE, 3447 /* ARTIST 0x82542104 */));
 
     maNetworkPlayerID[liPlayerIndex]        = lNetworkPlayerID;
     maCarIds[liPlayerIndex]                 = lCarId;

@@ -132,11 +132,18 @@ void HudMessageAnalyzer::HandleBurningHomeRunRunnerCrashes(
         const GuiHUDMessageBHRRunnerCrashed* lpEvent)
 {
     // Non-gating tripwires (cpp:1925-1928).
-    CGS_ASSERT(lpEvent != NULL, "lpEvent");
-    CGS_ASSERT(lpEvent->meActiveRaceCarIndex >= 0, "lpEvent->meActiveRaceCarIndex >= 0");
+    CGS_ASSERT(lpEvent != NULL,
+        CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 1925 /* ARTIST 0x8251B46C */));
+    CGS_ASSERT(lpEvent->meActiveRaceCarIndex >= 0,
+        CgsDev::Assert::MessageAt(
+            "lpEvent->meActiveRaceCarIndex >= 0",
+            KAC_ARTIST_ASSERT_FILE, 1926 /* ARTIST 0x8251B494 */));
     CGS_ASSERT(lpEvent->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "lpEvent->meActiveRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+        CgsDev::Assert::MessageAt(
+            "lpEvent->meActiveRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
+            KAC_ARTIST_ASSERT_FILE, 1927 /* ARTIST 0x8251B4BC */));
+    CGS_ASSERT(mpGuiCache != NULL,
+        CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 1928 /* ARTIST 0x8251B4E4 */));
 
     GuiHudMessage lMessage;   // FLAG: deliberately left unconstructed on the <= 0 arms
 
@@ -295,10 +302,13 @@ void HudMessageAnalyzer::HandleEventDistanceToFinish(const GuiInEventDistanceToF
 {
     // Non-gating tripwires (cpp:3758/3759; the second is a single combined assert on the
     // console, message text verbatim including its spacing).
-    CGS_ASSERT(lpEvent != NULL, "lpEvent");
+    CGS_ASSERT(lpEvent != NULL,
+        CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 3758 /* ARTIST 0x8251E57C */));
     CGS_ASSERT((0 < lpEvent->miPlayerPosition) &&
                (E_ACTIVE_RACE_CAR_INDEX_COUNT >= lpEvent->miPlayerPosition),
-               "(0 < lpEvent->miPlayerPosition) && ( E_ACTIVE_RACE_CAR_INDEX_COUNT >= lpEvent->miPlayerPosition)");
+        CgsDev::Assert::MessageAt(
+            "(0 < lpEvent->miPlayerPosition) && ( E_ACTIVE_RACE_CAR_INDEX_COUNT >= lpEvent->miPlayerPosition)",
+            KAC_ARTIST_ASSERT_FILE, 3759 /* ARTIST 0x8251E5AC */));
 
     GuiHudMessage lMessage;
     lMessage.Construct("EventDistFin");

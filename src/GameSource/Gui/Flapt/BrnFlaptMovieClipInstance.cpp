@@ -4,7 +4,7 @@
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldInstance.h"
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"
 #include "GameSource/Gui/Flapt/BrnFlaptRenderer.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -12,6 +12,8 @@
 
 // The live FLApt clip node. Construct and GetNthChild are reconstructed from
 // ARTIST @0x82470040 / @0x8246C450; declaration names come from DecFIGS.
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptMovieClipInstance.cpp";
+
 namespace BrnFlapt
 {
 
@@ -362,11 +364,14 @@ void MovieClipInstance::ResetTimeline()
 void MovieClipInstance::GotoAndPlayLabel(u32 luLabelHash,
                                          const char* lpcDEBUGName)
 {
-    CGS_ASSERT(mpMovieClip != 0, "mpMovieClip");
+    CGS_ASSERT(mpMovieClip != 0,
+        CgsDev::Assert::MessageAt("mpMovieClip", KAC_ARTIST_ASSERT_FILE, 1299 /* ARTIST 0x8246F25C */));
     const u32 luFrame = static_cast<u32>(
         mpMovieClip->FindLabelledFrameIndex(luLabelHash, lpcDEBUGName));
     CGS_ASSERT(luFrame < mpMovieClip->muNumFramesInTimeline,
-               "luFrame < mpMovieClip->muNumFramesInTimeline");
+        CgsDev::Assert::MessageAt(
+            "luFrame < mpMovieClip->muNumFramesInTimeline",
+            KAC_ARTIST_ASSERT_FILE, 1303 /* ARTIST 0x8246F29C */));
     muLastKeyFrameApplied = static_cast<u16>(-1);
     mxFlags = static_cast<u8>(mxFlags & 0xFEu);
     GotoFrame(luFrame);
@@ -375,11 +380,14 @@ void MovieClipInstance::GotoAndPlayLabel(u32 luLabelHash,
 void MovieClipInstance::GotoAndStopLabel(u32 luLabelHash,
                                          const char* lpcLabel)
 {
-    CGS_ASSERT(mpMovieClip != 0, "mpMovieClip");
+    CGS_ASSERT(mpMovieClip != 0,
+        CgsDev::Assert::MessageAt("mpMovieClip", KAC_ARTIST_ASSERT_FILE, 1330 /* ARTIST 0x8246F30C */));
     const u32 luFrame = static_cast<u32>(
         mpMovieClip->FindLabelledFrameIndex(luLabelHash, lpcLabel));
     CGS_ASSERT(luFrame < mpMovieClip->muNumFramesInTimeline,
-               "luFrame < mpMovieClip->muNumFramesInTimeline");
+        CgsDev::Assert::MessageAt(
+            "luFrame < mpMovieClip->muNumFramesInTimeline",
+            KAC_ARTIST_ASSERT_FILE, 1334 /* ARTIST 0x8246F34C */));
     muLastKeyFrameApplied = static_cast<u16>(-1);
     mxFlags = static_cast<u8>(mxFlags | 1u);
     GotoFrame(luFrame);
@@ -406,13 +414,24 @@ void MovieClipInstance::SetSoundTriggerHandler(SoundTriggerCallback lpCallback,
 
 const TriggerParameters* MovieClipInstance::GetTriggerParameters() const
 {
-    CGS_ASSERT(mpMovieClip != 0, "NULL != mpMovieClip");
-    CGS_ASSERT(mpMovieClip->mpFile != 0, "NULL != mpMovieClip->mpFile");
-    CGS_ASSERT(muParameterIndex != 0xFFFFu, "0xFFFF != muParameterIndex");
+    CGS_ASSERT(mpMovieClip != 0,
+        CgsDev::Assert::MessageAt("NULL != mpMovieClip", KAC_ARTIST_ASSERT_FILE, 1358 /* ARTIST 0x8246C644 */));
+    CGS_ASSERT(mpMovieClip->mpFile != 0,
+        CgsDev::Assert::MessageAt(
+            "NULL != mpMovieClip->mpFile",
+            KAC_ARTIST_ASSERT_FILE, 1359 /* ARTIST 0x8246C670 */));
+    CGS_ASSERT(muParameterIndex != 0xFFFFu,
+        CgsDev::Assert::MessageAt(
+            "0xFFFF != muParameterIndex",
+            KAC_ARTIST_ASSERT_FILE, 1360 /* ARTIST 0x8246C698 */));
     CGS_ASSERT(muParameterIndex < mpMovieClip->mpFile->muNumTriggerParameters,
-               "muParameterIndex < mpMovieClip->mpFile->muNumTriggerParameters");
+        CgsDev::Assert::MessageAt(
+            "muParameterIndex < mpMovieClip->mpFile->muNumTriggerParameters",
+            KAC_ARTIST_ASSERT_FILE, 1361 /* ARTIST 0x8246C6CC */));
     CGS_ASSERT(mpMovieClip->mpFile->mpaTriggerParameters != 0,
-               "NULL != mpMovieClip->mpFile->mpaTriggerParameters");
+        CgsDev::Assert::MessageAt(
+            "NULL != mpMovieClip->mpFile->mpaTriggerParameters",
+            KAC_ARTIST_ASSERT_FILE, 1362 /* ARTIST 0x8246C6FC */));
     return &mpMovieClip->mpFile->mpaTriggerParameters[muParameterIndex];
 }
 

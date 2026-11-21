@@ -247,7 +247,8 @@ namespace CgsNetwork
 
     void ServerInterfaceDirtySock::MemFree(void* lpBlock, s32 /*liAlignment*/, s32 /*liPool*/)
     {
-        CGS_ASSERT(mpMemoryBlock, "mpMemoryBlock");
+        CGS_ASSERT(mpMemoryBlock,
+            CgsDev::Assert::MessageAt("mpMemoryBlock", KAC_ARTIST_ASSERT_FILE, 256 /* ARTIST 0x828755B8 */));
         mpMemoryBlock->Free(lpBlock);
     }
 
@@ -352,13 +353,34 @@ namespace CgsNetwork
 
     void ServerInterfaceDirtySock::Destruct()
     {
-        CGS_ASSERT(mpMemoryBlock == 0, "Release the memory block before calling Destruct!");
-        CGS_ASSERT(mpLobbyAPIRef == 0, "Call release before calling Destruct!");
-        CGS_ASSERT(mpLobbyLoginRef == 0, "Call release before calling Destruct!");
-        CGS_ASSERT(mpConnApiRef == 0, "Call release before calling Destruct!");
-        CGS_ASSERT(mpGameManagerRef == 0, "Call release before calling Destruct!");
-        CGS_ASSERT(mpSettingRef == 0, "Call release before calling Destruct!");
-        CGS_ASSERT(mpacMessageBuffer == 0, "Call release before calling Destruct!");
+        CGS_ASSERT(mpMemoryBlock == 0,
+            CgsDev::Assert::MessageAt(
+                "Release the memory block before calling Destruct!",
+                KAC_ARTIST_ASSERT_FILE, 409 /* ARTIST 0x82885A90 */));
+        CGS_ASSERT(mpLobbyAPIRef == 0,
+            CgsDev::Assert::MessageAt(
+                "Call release before calling Destruct!",
+                KAC_ARTIST_ASSERT_FILE, 410 /* ARTIST 0x82885ABC */));
+        CGS_ASSERT(mpLobbyLoginRef == 0,
+            CgsDev::Assert::MessageAt(
+                "Call release before calling Destruct!",
+                KAC_ARTIST_ASSERT_FILE, 411 /* ARTIST 0x82885AE0 */));
+        CGS_ASSERT(mpConnApiRef == 0,
+            CgsDev::Assert::MessageAt(
+                "Call release before calling Destruct!",
+                KAC_ARTIST_ASSERT_FILE, 412 /* ARTIST 0x82885B04 */));
+        CGS_ASSERT(mpGameManagerRef == 0,
+            CgsDev::Assert::MessageAt(
+                "Call release before calling Destruct!",
+                KAC_ARTIST_ASSERT_FILE, 413 /* ARTIST 0x82885B28 */));
+        CGS_ASSERT(mpSettingRef == 0,
+            CgsDev::Assert::MessageAt(
+                "Call release before calling Destruct!",
+                KAC_ARTIST_ASSERT_FILE, 414 /* ARTIST 0x82885B4C */));
+        CGS_ASSERT(mpacMessageBuffer == 0,
+            CgsDev::Assert::MessageAt(
+                "Call release before calling Destruct!",
+                KAC_ARTIST_ASSERT_FILE, 415 /* ARTIST 0x82885B70 */));
 
         mpLobbyAPIRef     = 0;
         mpLobbyLoginRef   = 0;

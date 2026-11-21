@@ -72,7 +72,9 @@ bool SoundTriggerAction::IsEmpty()
 void RemotePlayerDisconnectedAction::SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
     CGS_ASSERT((leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-               "( leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 ) && ( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+        CgsDev::Assert::MessageAt(
+            "( leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 ) && ( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )",
+            KAC_ARTIST_ASSERT_FILE, 6360 /* ARTIST 0x8230FECC */));
 
     meActiveRaceCarIndex = leActiveRaceCarIndex;
 }
@@ -81,7 +83,9 @@ void RemotePlayerDisconnectedAction::SetActiveRaceCarIndex(EActiveRaceCarIndex l
 void RemotePlayerDisconnectedAction::SetNetworkPlayerID(BrnNetwork::NetworkPlayerID lPlayerID)
 {
     CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-               "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CgsDev::Assert::MessageAt(
+            "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            KAC_ARTIST_ASSERT_FILE, 6374 /* ARTIST 0x8230FF2C */));
 
     mPlayerID = lPlayerID;
 }
@@ -115,7 +119,9 @@ void OnlinePlayerAddedAction::SetPlayerScoringIndex(EPlayerScoringIndex lePlayer
     CGS_ASSERT(
         (lePlayerScoringIndex >= E_PLAYER_SCORING_INDEX_0) &&
         (lePlayerScoringIndex <  E_PLAYER_SCORING_INDEX_COUNT),
-        "(lePlayerScoringIndex >= E_PLAYER_SCORING_INDEX_0) && (lePlayerScoringIndex < E_PLAYER_SCORING_INDEX_COUNT)");
+        CgsDev::Assert::MessageAt(
+            "(lePlayerScoringIndex >= E_PLAYER_SCORING_INDEX_0) && (lePlayerScoringIndex < E_PLAYER_SCORING_INDEX_COUNT)",
+            KAC_ARTIST_ASSERT_FILE, 6390 /* ARTIST 0x82355224 */));
 
     mePlayerScoringIndex = lePlayerScoringIndex;
 }
@@ -264,7 +270,9 @@ void OnlineRoundResults::Construct()
 void OnlineRoundResults::SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID, s32 liPosition)
 {
     CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-               "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CgsDev::Assert::MessageAt(
+            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            KAC_ARTIST_ASSERT_FILE, 6641 /* ARTIST 0x8231CA6C */));
 
     if (liPosition == -1)
     {
@@ -272,8 +280,12 @@ void OnlineRoundResults::SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerI
     }
     else
     {
-        CGS_ASSERT(liPosition >= 0, "liPosition >= 0");
-        CGS_ASSERT(liPosition < KI_MAX_PLAYERS, "liPosition < KI_MAX_PLAYERS");
+        CGS_ASSERT(liPosition >= 0,
+            CgsDev::Assert::MessageAt("liPosition >= 0", KAC_ARTIST_ASSERT_FILE, 6649 /* ARTIST 0x8231CAAC */));
+        CGS_ASSERT(liPosition < KI_MAX_PLAYERS,
+            CgsDev::Assert::MessageAt(
+                "liPosition < KI_MAX_PLAYERS",
+                KAC_ARTIST_ASSERT_FILE, 6650 /* ARTIST 0x8231CAD0 */));
 
         maPlayerPosition[liPosition] = lNetworkPlayerID;
     }

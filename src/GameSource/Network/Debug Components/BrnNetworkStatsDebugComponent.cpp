@@ -181,14 +181,20 @@ namespace BrnNetwork
     // header note; mirrored here.
     void StatsDebugComponent::GetELOFromServer(void* lpData)
     {
-        CGS_ASSERT(lpData != 0, "lpData");
+        CGS_ASSERT(lpData != 0,
+            CgsDev::Assert::MessageAt("lpData", KAC_ARTIST_ASSERT_FILE, 258 /* ARTIST 0x82591490 */));
         StatsDebugComponent* lpStatsDebugComponent = static_cast<StatsDebugComponent*>(lpData);
 
         CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != 0,
-                   "lpStatsDebugComponent->mpServerInterface");
+            CgsDev::Assert::MessageAt(
+                "lpStatsDebugComponent->mpServerInterface",
+                KAC_ARTIST_ASSERT_FILE, 261 /* ARTIST 0x825914B8 */));
         ServerInterfaceCustomCommands* lpCustomCommandsComponent =
             GetCustomCommands(lpStatsDebugComponent->mpServerInterface);
-        CGS_ASSERT(lpCustomCommandsComponent != 0, "lpCustomCommandsComponent");
+        CGS_ASSERT(lpCustomCommandsComponent != 0,
+            CgsDev::Assert::MessageAt(
+                "lpCustomCommandsComponent",
+                KAC_ARTIST_ASSERT_FILE, 264 /* ARTIST 0x825914E4 */));
 
         lpStatsDebugComponent->SetReadOnly(&lpStatsDebugComponent->miRaceElo, true);
         lpStatsDebugComponent->SetReadOnly(&lpStatsDebugComponent->miRoadRageElo, true);
@@ -207,14 +213,20 @@ namespace BrnNetwork
     // of the GET order, per the custom-commands header note), restored by _SetEloCallbackFunction.
     void StatsDebugComponent::SetELOOnServer(void* lpData)
     {
-        CGS_ASSERT(lpData != 0, "lpData");
+        CGS_ASSERT(lpData != 0,
+            CgsDev::Assert::MessageAt("lpData", KAC_ARTIST_ASSERT_FILE, 293 /* ARTIST 0x82591588 */));
         StatsDebugComponent* lpStatsDebugComponent = static_cast<StatsDebugComponent*>(lpData);
 
         CGS_ASSERT(lpStatsDebugComponent->mpServerInterface != 0,
-                   "lpStatsDebugComponent->mpServerInterface");
+            CgsDev::Assert::MessageAt(
+                "lpStatsDebugComponent->mpServerInterface",
+                KAC_ARTIST_ASSERT_FILE, 296 /* ARTIST 0x825915B0 */));
         ServerInterfaceCustomCommands* lpCustomCommandsComponent =
             GetCustomCommands(lpStatsDebugComponent->mpServerInterface);
-        CGS_ASSERT(lpCustomCommandsComponent != 0, "lpCustomCommandsComponent");
+        CGS_ASSERT(lpCustomCommandsComponent != 0,
+            CgsDev::Assert::MessageAt(
+                "lpCustomCommandsComponent",
+                KAC_ARTIST_ASSERT_FILE, 299 /* ARTIST 0x825915DC */));
 
         lpStatsDebugComponent->SetReadOnly(&lpStatsDebugComponent->miRaceElo, true);
         lpStatsDebugComponent->SetReadOnly(&lpStatsDebugComponent->miBurningHomeRunElo, true);

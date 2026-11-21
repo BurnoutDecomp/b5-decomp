@@ -14,6 +14,8 @@
 // (Homed in this dedicated TU file rather than CgsNetworkManager.cpp, which already owns
 // the separate CgsNetwork::NetworkManager::NetworkManager TU.)
 
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameShared\\GameClasses\\Network/CgsNetworkManager.h";
+
 namespace CgsNetwork
 {
 
@@ -23,9 +25,12 @@ void NetworkManagerPrepareParams::Construct(
         const PlayerManagerPrepareParams* lpPlayerManager,
         CgsSystem::EFrameRate leLocalConsoleFrameRate)
 {
-    CGS_ASSERT(lpVersionDisplay, "lpVersionDisplay");
-    CGS_ASSERT(lpNetworkAdapter, "lpNetworkAdapter");
-    CGS_ASSERT(lpPlayerManager, "lpPlayerManager");
+    CGS_ASSERT(lpVersionDisplay,
+        CgsDev::Assert::MessageAt("lpVersionDisplay", KAC_ARTIST_ASSERT_FILE, 412 /* ARTIST 0x825814A0 */));
+    CGS_ASSERT(lpNetworkAdapter,
+        CgsDev::Assert::MessageAt("lpNetworkAdapter", KAC_ARTIST_ASSERT_FILE, 413 /* ARTIST 0x825814C4 */));
+    CGS_ASSERT(lpPlayerManager,
+        CgsDev::Assert::MessageAt("lpPlayerManager", KAC_ARTIST_ASSERT_FILE, 414 /* ARTIST 0x825814E8 */));
 
     mVersionDisplay         = *lpVersionDisplay;
     mNetworkAdapter         = *lpNetworkAdapter;
@@ -39,9 +44,12 @@ void NetworkManagerPrepareParams::VersionDisplayPrepareParams::Construct(
         u32 luField_04,
         EServerType leServerType)
 {
-    CGS_ASSERT(lpcServerVersion != 0, "lpcServerVersion");
+    CGS_ASSERT(lpcServerVersion != 0,
+        CgsDev::Assert::MessageAt("lpcServerVersion", KAC_ARTIST_ASSERT_FILE, 452 /* ARTIST 0x8258159C */));
     CGS_ASSERT((leServerType >= E_SERVER_TYPE_LOCAL) && (leServerType < E_SERVER_TYPE_COUNT),
-               "(leServerType >= E_SERVER_TYPE_LOCAL) && (leServerType < E_SERVER_TYPE_COUNT)");
+        CgsDev::Assert::MessageAt(
+            "(leServerType >= E_SERVER_TYPE_LOCAL) && (leServerType < E_SERVER_TYPE_COUNT)",
+            KAC_ARTIST_ASSERT_FILE, 453 /* ARTIST 0x825815C8 */));
 
     mpcVersion   = lpcServerVersion;
     muField_04   = luField_04;

@@ -2,7 +2,7 @@
 
 #include <string.h>   // memcpy / strncpy (the X360 bodies call the CRT primitives directly)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"  // CGS_ASSERT
 #include "GameSource/Network/Managers/BrnNetworkBuddyManagerBase.h"             // BuddyManagerBase (upload scratch, buddy queries)
 #include "GameSource/Network/Components/BrnServerInterfaceCustomCommands.h"     // ServerInterfaceCustomCommands::OverWriteServerFriendsRecord
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"  // ServerInterface::GetCustomCommandsComponent
@@ -32,6 +32,9 @@
 //   N=10 NetworkInAcceptInvite    (size 16  PlayerName)
 //   N=12 NetworkInJoinBuddy       (size 16  PlayerName)
 // ===========================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkBuddyManagerDebugComponent.cpp";
 
 namespace BrnNetwork
 {
@@ -353,16 +356,23 @@ namespace BrnNetwork
     void BuddyManagerDebugComponent::ForceServerFriendsOverwrite(void* lpData)
     {
         BuddyManagerDebugComponent* lpBuddyDebug = static_cast<BuddyManagerDebugComponent*>(lpData);
-        CGS_ASSERT(lpBuddyDebug, "lpBuddyDebug");
+        CGS_ASSERT(lpBuddyDebug,
+            CgsDev::Assert::MessageAt("lpBuddyDebug", KAC_ARTIST_ASSERT_FILE, 530 /* ARTIST 0x82591BA0 */));
 
         BuddyManagerBase* lpBuddyManager = lpBuddyDebug->mpBuddyManager;
-        CGS_ASSERT(lpBuddyManager, "lpBuddyManager");
+        CGS_ASSERT(lpBuddyManager,
+            CgsDev::Assert::MessageAt("lpBuddyManager", KAC_ARTIST_ASSERT_FILE, 533 /* ARTIST 0x82591BC8 */));
         CGS_ASSERT(lpBuddyManager->mpServerInterface->GetCustomCommandsComponent(),
-                   "lpBuddyManager->mpServerInterface->GetCustomCommandsComponent()");
+            CgsDev::Assert::MessageAt(
+                "lpBuddyManager->mpServerInterface->GetCustomCommandsComponent()",
+                KAC_ARTIST_ASSERT_FILE, 535 /* ARTIST 0x82591BF4 */));
 
         ServerInterfaceCustomCommands* lpCustomCommandsComponent = static_cast<ServerInterfaceCustomCommands*>(
             lpBuddyManager->mpServerInterface->GetCustomCommandsComponent());
-        CGS_ASSERT(lpCustomCommandsComponent, "lpCustomCommandsComponent");
+        CGS_ASSERT(lpCustomCommandsComponent,
+            CgsDev::Assert::MessageAt(
+                "lpCustomCommandsComponent",
+                KAC_ARTIST_ASSERT_FILE, 537 /* ARTIST 0x82591C20 */));
 
         lpBuddyManager->miNumBuddiesAtUpload = 0;
         for (s32 liBuddyIndex = 0; liBuddyIndex < lpBuddyManager->GetNumBuddies(); ++liBuddyIndex)
@@ -370,7 +380,9 @@ namespace BrnNetwork
             const bool lbGotName = lpBuddyManager->GetBuddyName(
                 liBuddyIndex, &lpBuddyManager->maBuddyListAtUpload[lpBuddyManager->miNumBuddiesAtUpload]);
             CGS_ASSERT(lbGotName,
-                       "lpBuddyManager->GetBuddyName( liBuddyIndex, &lpBuddyManager->maBuddyListAtUpload[lpBuddyManager->miNumBuddiesAtUpload] )");
+                CgsDev::Assert::MessageAt(
+                    "lpBuddyManager->GetBuddyName( liBuddyIndex, &lpBuddyManager->maBuddyListAtUpload[lpBuddyManager->miNumBuddiesAtUpload] )",
+                    KAC_ARTIST_ASSERT_FILE, 543 /* ARTIST 0x82591C90 */));
 
             if (lpBuddyManager->IsFullBuddy(&lpBuddyManager->maBuddyListAtUpload[lpBuddyManager->miNumBuddiesAtUpload]))
             {

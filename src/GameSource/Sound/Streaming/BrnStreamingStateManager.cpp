@@ -2,7 +2,7 @@
 #include "GameSource/Sound/Streaming/BrnStreamingState.h"
 #include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameSource/Sound/Streaming/BrnIStreamUser.h"   // [DIAG] GetCreateParams for the witness
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 // =============================================================================
 // BrnSound::Logic::Streaming::StreamingStateManager -- out-of-line bodies.
 //
@@ -20,6 +20,9 @@
 // GetTypeName @0x82683A88 reads the name pointer from the typed descriptor at +4.
 // The descriptor values and CRT registration thunk are pinned by ARTIST_CRT_ORDER.json.
 // =============================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Sound/Streaming/BrnStreamingStateManager.h";
 
 namespace BrnSound
 {
@@ -310,7 +313,9 @@ bool StreamingStateManager::Release()
 void StreamingStateManager::PostStreamRequest( const StreamRequest& lStreamRequest )
 {
     CGS_ASSERT( muPlayRequestCount < E_MAX_STREAM_REQUESTS,
-                "muPlayRequestCount < E_MAX_STREAM_REQUESTS" );
+        CgsDev::Assert::MessageAt(
+            "muPlayRequestCount < E_MAX_STREAM_REQUESTS",
+            KAC_ARTIST_ASSERT_FILE, 257 /* ARTIST 0x82683520 */));
 
     maPlayRequests[muPlayRequestCount] = lStreamRequest;
 
@@ -338,7 +343,9 @@ void StreamingStateManager::PostStreamRequest( const StreamRequest& lStreamReque
 void StreamingStateManager::PostStreamRequestInternal( const StreamRequest& arRequest )
 {
     CGS_ASSERT( muPlayRequestCount < E_MAX_STREAM_REQUESTS,
-                "muPlayRequestCount < E_MAX_STREAM_REQUESTS" );
+        CgsDev::Assert::MessageAt(
+            "muPlayRequestCount < E_MAX_STREAM_REQUESTS",
+            KAC_ARTIST_ASSERT_FILE, 307 /* ARTIST 0x826836D8 */));
 
     maPlayRequests[muPlayRequestCount] = arRequest;
     ++muPlayRequestCount;
@@ -359,7 +366,9 @@ void StreamingStateManager::PostStreamRequestInternal( const StreamRequest& arRe
 void StreamingStateManager::RePostStreamRequest( const StreamRequest& request )
 {
     CGS_ASSERT( muNumRePostRequests < E_MAX_REQUEST_RE_POSTS,
-                "muNumRePostRequests < E_MAX_REQUEST_RE_POSTS" );
+        CgsDev::Assert::MessageAt(
+            "muNumRePostRequests < E_MAX_REQUEST_RE_POSTS",
+            KAC_ARTIST_ASSERT_FILE, 349 /* ARTIST 0x82683780 */));
 
     maRePostRequests[muNumRePostRequests] = request;
     ++muNumRePostRequests;

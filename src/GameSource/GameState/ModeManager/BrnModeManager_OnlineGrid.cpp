@@ -14,6 +14,7 @@
 // ============================================================================
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/GameState/BrnGameStateModule.h"                              // GetProgressionManager (assert operand)
 #include "GameSource/GameState/BrnGameEvents.h"                                  // StartNetworkGameEvent / KI_MAX_RACE_CARS
@@ -25,6 +26,9 @@
 #include "GameShared/GameClasses/Algorithms/CgsBubbleSort.h"                  // CgsAlgorithms::BubbleSort
 #include "GameShared/GameClasses/Algorithms/CgsShuffle.h"                     // CgsAlgorithms::Shuffle
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                         // CgsNumeric::Random
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp";
 
 namespace BrnGameState
 {
@@ -68,10 +72,14 @@ void ModeManager::SetOnlineRaceCars(GameModeParams* lpGameModeParams,
     // the folded address against null, i.e. this is a plain "the module has a progression manager"
     // guard; the answer is never used.
     CGS_ASSERT(mpGameStateModule->GetProgressionManager() != 0,
-               "mpGameStateModule->GetProgressionManager()");
+        CgsDev::Assert::MessageAt(
+            "mpGameStateModule->GetProgressionManager()",
+            KAC_ARTIST_ASSERT_FILE, 4334 /* ARTIST 0x82311ED0 */));
 
     CGS_ASSERT(lpStartNetworkGameEvent->miNumRaceCars > 0,
-               "lpStartNetworkGameEvent->miNumRaceCars > 0");
+        CgsDev::Assert::MessageAt(
+            "lpStartNetworkGameEvent->miNumRaceCars > 0",
+            KAC_ARTIST_ASSERT_FILE, 4336 /* ARTIST 0x82311EF8 */));
 
     // The RIVAL count, not the car count: the local player is not one of the network players the
     // roster loops over. Stored as a byte.
@@ -80,12 +88,17 @@ void ModeManager::SetOnlineRaceCars(GameModeParams* lpGameModeParams,
 
     lpGameModeParams->mLocalNetworkPlayerID = lpStartNetworkGameEvent->mLocalNetworkPlayerID;
 
-    CGS_ASSERT(mpCurrentGameMode != 0, "mpCurrentGameMode");
-    CGS_ASSERT(mpCurrentGameMode->IsOnline(), "mpCurrentGameMode->IsOnline()");
+    CGS_ASSERT(mpCurrentGameMode != 0,
+        CgsDev::Assert::MessageAt("mpCurrentGameMode", KAC_ARTIST_ASSERT_FILE, 4342 /* ARTIST 0x82311F34 */));
+    CGS_ASSERT(mpCurrentGameMode->IsOnline(),
+        CgsDev::Assert::MessageAt(
+            "mpCurrentGameMode->IsOnline()",
+            KAC_ARTIST_ASSERT_FILE, 4343 /* ARTIST 0x82311F60 */));
 
     const OnlineGameMode* lpCurrentOnlineGameMode =
         static_cast<const OnlineGameMode*>(mpCurrentGameMode);
-    CGS_ASSERT(lpCurrentOnlineGameMode != 0, "lpCurrentOnlineGameMode");
+    CGS_ASSERT(lpCurrentOnlineGameMode != 0,
+        CgsDev::Assert::MessageAt("lpCurrentOnlineGameMode", KAC_ARTIST_ASSERT_FILE, 4345 /* ARTIST 0x82311F88 */));
 
     for (s32 liRaceCar = 0; liRaceCar < GameStateModuleIO::KI_MAX_RACE_CARS; ++liRaceCar)
     {

@@ -4,7 +4,7 @@
 
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowController.h"   // embedded controller and SendEvent
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"   // DebugManager::Update during load
 #include "GameSource/Resource/BrnGameDataModule.h"   // GameDataModule + gpBurnoutGame->GetGameDataModule()
 #include "GameSource/Resource/BrnGameDataModuleIO.h" // GameDataIO::InputBuffer/OutputBuffer (LoadSoundModule args)
@@ -27,6 +27,10 @@
 #include "GameSource/Network/BrnNetworkModuleIO.h"            // BrnNetworkModuleIO::PreSimulationInputBuffer / OutputBuffer
 
 #include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\GameFlowController/TopLevel/BrnGameMainFlowStates.h";
+
 
 // The loading flow uses the actual GameData member and its persistent resource IO pair.
 static bool g_bLoggedGameDataPrepare = false;
@@ -148,7 +152,9 @@ namespace
 void LoadingScriptedState::ResumeLoadingWorld()
 {
     CGS_ASSERT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
-               "meLoadingStateStage == E_LOADINGSTATESTAGE_START");   // X360 h:209
+        CgsDev::Assert::MessageAt(
+            "meLoadingStateStage == E_LOADINGSTATESTAGE_START",
+            KAC_ARTIST_ASSERT_FILE, 209 /* ARTIST 0x823A85D4 */));   // X360 h:209
     gBrnScriptedLoadPaused = false;
 }
 
@@ -1206,7 +1212,9 @@ void MainGameFlowStateCheckDiskSpace::OnEnter()
     // ResumeLoadingWorld does.
     gBrnScriptedLoadPaused = false;
     CGS_ASSERT(gBrnScriptedLoadStage == E_LOADINGSTATESTAGE_START,
-               "meLoadingStateStage == E_LOADINGSTATESTAGE_START");
+        CgsDev::Assert::MessageAt(
+            "meLoadingStateStage == E_LOADINGSTATESTAGE_START",
+            KAC_ARTIST_ASSERT_FILE, 195 /* ARTIST 0x823AAACC */));
     gBrnScriptedLoadPaused = true;
 
     // @0x823AAB00 -- the pending-GUI-FSM-stage slot (gm+0x9A0644) is stamped 4 here; the

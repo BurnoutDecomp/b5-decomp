@@ -446,7 +446,8 @@ namespace BrnDirector
 
     void ArbStateTestbed::GenericActivateCam(void* lpParameters)
     {
-        CGS_ASSERT(spTestbed != NULL, "spTestbed != NULL");
+        CGS_ASSERT(spTestbed != NULL,
+            CgsDev::Assert::MessageAt("spTestbed != NULL", KAC_ARTIST_ASSERT_FILE, 328 /* ARTIST 0x8226BD60 */));
         spTestbed->UnregisterParameters();
         spTestbed->mpParameters = static_cast<Camera::Behaviour::Parameters*>(lpParameters);
         spTestbed->mpShotRef    = 0;
@@ -455,7 +456,8 @@ namespace BrnDirector
 
     void ArbStateTestbed::ActivateIceCam(void* lpShotRef)
     {
-        CGS_ASSERT(spTestbed != NULL, "spTestbed != NULL");
+        CGS_ASSERT(spTestbed != NULL,
+            CgsDev::Assert::MessageAt("spTestbed != NULL", KAC_ARTIST_ASSERT_FILE, 425 /* ARTIST 0x82264070 */));
         spTestbed->UnregisterParameters();
         spTestbed->mpShotRef    = static_cast<Camera::Camera::ShotReference*>(lpShotRef);
         spTestbed->mpParameters = 0;

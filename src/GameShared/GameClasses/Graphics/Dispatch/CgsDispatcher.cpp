@@ -26,6 +26,9 @@
 // scaling, folded into the language-level subtraction here).
 // =============================================================================
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Graphics\\Dispatch\\CgsDispatcher.h";
+
 namespace CgsGraphics
 {
 
@@ -98,9 +101,13 @@ void* DispatchBin::BeginAllocateMemory(u32 luMaxQwords)
     }
 
     CGS_ASSERT(m_pActiveAllocateMemoryBlock == NULL,
-               "m_pActiveAllocateMemoryBlock == NULL");
+        CgsDev::Assert::MessageAt(
+            "m_pActiveAllocateMemoryBlock == NULL",
+            KAC_ARTIST_ASSERT_FILE, 522 /* ARTIST 0x827F92B8 */));
     CGS_ASSERT(reinterpret_cast<void*>(m_pPacketStart) == reinterpret_cast<void*>(m_pNextWord),
-               "m_pPacketStart == m_pNextWord");
+        CgsDev::Assert::MessageAt(
+            "m_pPacketStart == m_pNextWord",
+            KAC_ARTIST_ASSERT_FILE, 525 /* ARTIST 0x827F92E4 */));
 
     m_pActiveAllocateMemoryBlock = m_pNextWord;
     return m_pActiveAllocateMemoryBlock;
@@ -110,10 +117,14 @@ void* DispatchBin::BeginAllocateMemory(u32 luMaxQwords)
 // Open a packet: stamp the packet start at the current write head.
 void DispatchBin::BeginPacket()
 {
-    CGS_ASSERT(m_pNextWord != NULL, "m_pNextWord != NULL");
-    CGS_ASSERT(m_pPacketStart == NULL, "m_pPacketStart == NULL");
+    CGS_ASSERT(m_pNextWord != NULL,
+        CgsDev::Assert::MessageAt("m_pNextWord != NULL", KAC_ARTIST_ASSERT_FILE, 455 /* ARTIST 0x822A06F4 */));
+    CGS_ASSERT(m_pPacketStart == NULL,
+        CgsDev::Assert::MessageAt("m_pPacketStart == NULL", KAC_ARTIST_ASSERT_FILE, 456 /* ARTIST 0x822A071C */));
     CGS_ASSERT(static_cast<u32>(m_pNextWord - m_pBin) < m_uSize,
-               "uint32_t( m_pNextWord - m_pBin ) < m_uSize");
+        CgsDev::Assert::MessageAt(
+            "uint32_t( m_pNextWord - m_pBin ) < m_uSize",
+            KAC_ARTIST_ASSERT_FILE, 457 /* ARTIST 0x822A0754 */));
 
     m_pPacketStart = m_pNextWord;
 }
@@ -124,11 +135,17 @@ void DispatchBin::BeginPacket()
 void DispatchBin::EndAllocateMemory(u32 luActualQwords)
 {
     CGS_ASSERT(m_pActiveAllocateMemoryBlock != NULL,
-               "m_pActiveAllocateMemoryBlock != NULL");
+        CgsDev::Assert::MessageAt(
+            "m_pActiveAllocateMemoryBlock != NULL",
+            KAC_ARTIST_ASSERT_FILE, 535 /* ARTIST 0x827E6690 */));
     CGS_ASSERT(reinterpret_cast<void*>(m_pPacketStart) == reinterpret_cast<void*>(m_pNextWord),
-               "m_pPacketStart == m_pNextWord");
+        CgsDev::Assert::MessageAt(
+            "m_pPacketStart == m_pNextWord",
+            KAC_ARTIST_ASSERT_FILE, 540 /* ARTIST 0x827E66BC */));
     CGS_ASSERT(reinterpret_cast<void*>(m_pPacketStart) == m_pActiveAllocateMemoryBlock,
-               "m_pPacketStart == m_pActiveAllocateMemoryBlock");
+        CgsDev::Assert::MessageAt(
+            "m_pPacketStart == m_pActiveAllocateMemoryBlock",
+            KAC_ARTIST_ASSERT_FILE, 541 /* ARTIST 0x827E66E8 */));
 
     DispatchPacket* lpEnd = m_pPacketStart + luActualQwords;
     m_pActiveAllocateMemoryBlock = NULL;

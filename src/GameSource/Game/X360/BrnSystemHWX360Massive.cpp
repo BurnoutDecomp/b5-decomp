@@ -22,6 +22,8 @@
 // The X360 assert path (BrnSystemHWX360Massive.h:98) is dropped per convention;
 // the rodata message is reproduced verbatim.
 // ---------------------------------------------------------------------------
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\X360/BrnSystemHWX360Massive.cpp";
+
 namespace BrnMassive
 {
     System360HWMassive::EPrepareStage operator++(System360HWMassive::EPrepareStage& reStage, int)
@@ -29,7 +31,9 @@ namespace BrnMassive
         System360HWMassive::EPrepareStage lePrevious = reStage;
         reStage = static_cast<System360HWMassive::EPrepareStage>(reStage + 1);
         CGS_ASSERT(reStage <= System360HWMassive::E_PREPARESTAGE_DONE,
-                   "leEnumIndex <= System360HWMassive::E_PREPARESTAGE_DONE");
+            CgsDev::Assert::MessageAt(
+                "leEnumIndex <= System360HWMassive::E_PREPARESTAGE_DONE",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\x360\\BrnSystemHWX360Massive.h", 98 /* ARTIST 0x823A8984 */));
         return lePrevious;
     }
 
@@ -83,14 +87,17 @@ namespace BrnMassive
     // allocates through the hook, and logs a diagnostic on exhaustion.
     void* System360HWMassive::BurnoutMassiveMalloc(unsigned int luSize)
     {
-        CGS_ASSERT(gpMassiveHeapMalloc != 0, "spHeapMalloc != NULL");
+        CGS_ASSERT(gpMassiveHeapMalloc != 0,
+            CgsDev::Assert::MessageAt("spHeapMalloc != NULL", KAC_ARTIST_ASSERT_FILE, 53 /* ARTIST 0x823AB128 */));
 
         EA::Thread::ThreadId lThreadId = EA::Thread::GetThreadId();
         if (gsMassiveAllocThreadId == MassiveUnsetThreadId())
             gsMassiveAllocThreadId = lThreadId;
         else
             CGS_ASSERT(gsMassiveAllocThreadId == lThreadId,
-                       "Massive Allocating From Multiple Threads");
+                CgsDev::Assert::MessageAt(
+                    "Massive Allocating From Multiple Threads",
+                    KAC_ARTIST_ASSERT_FILE, 65 /* ARTIST 0x823AB168 */));
 
         void* lpResult = gpMassiveHeapMalloc->Malloc(static_cast<s32>(luSize), 4);
         if (lpResult == 0 && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -210,7 +217,9 @@ namespace BrnMassive
 
                 CGS_ASSERT(MassiveAdClient3::CMassiveClientCore::Shutdown(
                                1, KU_MASSIVE_SHUTDOWN_TIMEOUT_MS) != 0,
-                           "Failed to Shutdown Massive");
+                    CgsDev::Assert::MessageAt(
+                        "Failed to Shutdown Massive",
+                        KAC_ARTIST_ASSERT_FILE, 260 /* ARTIST 0x823AB560 */));
 
                 mpClientCore = 0;
                 break;
@@ -220,7 +229,8 @@ namespace BrnMassive
                 break;
 
             default:
-                CGS_ASSERT(false, "false");
+                CGS_ASSERT(false,
+                    CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 273 /* ARTIST 0x823AB58C */));
                 break;
         }
         return 1;

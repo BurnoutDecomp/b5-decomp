@@ -24,7 +24,7 @@
 
 #include "GameSource/Network/Managers/BrnNetworkLoginManagerBase.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Network/BrnNetworkModule.h"        // GetNetworkManager / AddOutputGuiEvent
 #include "GameSource/Network/BrnNetworkManager.h"        // BrnNetworkManager (TriggerEventFromLogin / GetServerInterface / GetSuspensionManager)
 #include "GameSource/Network/BrnServerInterface.h"       // BrnServerInterface + component accessors
@@ -45,6 +45,9 @@
 #include <cstring>   // strncpy / memset
 
 #include "netconn.h"   // NetConnStatus (the selector is a FourCC)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLoginManagerBase.cpp";
 
 namespace BrnNetwork
 {
@@ -174,7 +177,10 @@ namespace BrnNetwork
             return true;
 
         default:
-            CGS_ASSERT(false, "Invalid login sub state");
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt(
+                    "Invalid login sub state",
+                    KAC_ARTIST_ASSERT_FILE, 237 /* ARTIST 0x8256CE04 */));
             return false;
         }
     }
@@ -324,7 +330,9 @@ namespace BrnNetwork
     void LoginManagerBase::AnswerSignIn(bool lbSuccess)
     {
         CGS_ASSERT(meSignInState == E_SIGN_IN_STATE_SIGNING_IN,
-                   "meSignInState == E_SIGN_IN_STATE_SIGNING_IN");
+            CgsDev::Assert::MessageAt(
+                "meSignInState == E_SIGN_IN_STATE_SIGNING_IN",
+                KAC_ARTIST_ASSERT_FILE, 958 /* ARTIST 0x82543BE8 */));
         // X360: meSignInState = !lbSuccess + 1 -- success -> SUCCESS(1), failure -> FAILED(2).
         meSignInState = lbSuccess ? E_SIGN_IN_STATE_SUCCESS : E_SIGN_IN_STATE_FAILED;
     }

@@ -955,7 +955,9 @@ namespace CgsPhysics
         leEnumIndex = static_cast<PhysicsSimulationModule::EReleaseStage>(
             static_cast<int>(leEnumIndex) + 1);
         CGS_ASSERT(leEnumIndex <= PhysicsSimulationModule::RELEASESTAGE_DONE,
-                   "leEnumIndex <= PhysicsSimulationModule::RELEASESTAGE_DONE");
+            CgsDev::Assert::MessageAt(
+                "leEnumIndex <= PhysicsSimulationModule::RELEASESTAGE_DONE",
+                KAC_ARTIST_ASSERT_FILE, 566 /* ARTIST 0x8289CF44 */));
         return leOld;
     }
 
@@ -3164,7 +3166,9 @@ namespace CgsPhysics
     {
         lpInput->LockForRead();
         CGS_ASSERT(lpInput->GetAddContactQueue()->GetLength() == 0,
-                   "It's invalid to add contacts during a ProcessInput update");   // .cpp:961 -- fire-and-continue
+            CgsDev::Assert::MessageAt(
+                "It's invalid to add contacts during a ProcessInput update",
+                KAC_ARTIST_ASSERT_SOURCE, 961 /* ARTIST 0x828A7710 */));   // .cpp:961 -- fire-and-continue
         ProcessInputBuffers(lpInput);
         lpInput->UnlockForRead();
     }

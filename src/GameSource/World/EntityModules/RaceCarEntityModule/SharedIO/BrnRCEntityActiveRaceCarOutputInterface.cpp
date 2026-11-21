@@ -351,8 +351,14 @@ bool RCEntityActiveRaceCarOutputInterface::IsRaceCarPlayer(EActiveRaceCarIndex l
 void RCEntityActiveRaceCarOutputInterface::SetBoostOutputInfoN(EActiveRaceCarIndex leActiveRaceCarIndex,
                                                                const BoostOutputInfo& lrBoostOutputInfo)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,     "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+            KAC_ARTIST_ASSERT_FILE, 1141 /* ARTIST 0x822A1108 */));
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+            KAC_ARTIST_ASSERT_FILE, 1142 /* ARTIST 0x822A112C */));
     maBoostOutputInfo[leActiveRaceCarIndex] = lrBoostOutputInfo;
 }
 
@@ -554,7 +560,9 @@ void RCEntityActiveRaceCarOutputInterface::AddCarToRace(BrnWorld::RaceCar* lpRac
 bool RCEntityActiveRaceCarOutputInterface::IsPlayerCarActive() const
 {
     CGS_ASSERT(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        CgsDev::Assert::MessageAt(
+            "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+            KAC_ARTIST_ASSERT_FILE, 967 /* ARTIST 0x82277BB8 */));
     if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
     {
         return false;

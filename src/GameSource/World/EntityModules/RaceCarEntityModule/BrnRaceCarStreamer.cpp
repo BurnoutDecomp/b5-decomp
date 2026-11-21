@@ -103,10 +103,16 @@ bool RaceCarStreamer::IsRaceCarActive( s32 liActiveRaceCar ) const
 // IsDesiredRaceCarLoadedForCarSelect in this TU). All resource bits present.
 bool RaceCarStreamer::IsRaceCarLoaded( s32 liActiveRaceCar ) const
 {
-    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+    CGS_ASSERT( liActiveRaceCar >= 0,
+        CgsDev::Assert::MessageAt("liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 382 /* ARTIST 0x822A147C */));
+    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
+        CgsDev::Assert::MessageAt(
+            "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS",
+            KAC_ARTIST_ASSERT_FILE, 383 /* ARTIST 0x822A14A0 */));
     CGS_ASSERT( ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE ) != 0,
-                "maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE" );
+        CgsDev::Assert::MessageAt(
+            "maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ACTIVE",
+            KAC_ARTIST_ASSERT_FILE, 384 /* ARTIST 0x822A14D0 */));
 
     return ( maxLoadFlags[liActiveRaceCar] & E_LOADFLAG_ALLRESOURCES ) == E_LOADFLAG_ALLRESOURCES;
 }
@@ -335,9 +341,12 @@ void RaceCarStreamer::OnAudioUnloading( s32 liActiveRaceCar )
 // @ 0x822A1620. Record whether this car's audio "load data" arrived (mabAudioLoaded).
 void RaceCarStreamer::SetAudioLoadDataStatus( s32 liActiveRaceCar, bool lbStatus )
 {
-    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >=0" );
+    CGS_ASSERT( liActiveRaceCar >= 0,
+        CgsDev::Assert::MessageAt("liActiveRaceCar >=0", KAC_ARTIST_ASSERT_FILE, 735 /* ARTIST 0x822A1650 */));
     CGS_ASSERT( liActiveRaceCar < static_cast<s32>( sizeof( mabAudioLoaded ) / sizeof( mabAudioLoaded[0] ) ),
-                "liActiveRaceCar < static_cast<int32_t>(sizeof(mabAudioLoaded)/sizeof(mabAudioLoaded[0]))" );
+        CgsDev::Assert::MessageAt(
+            "liActiveRaceCar < static_cast<int32_t>(sizeof(mabAudioLoaded)/sizeof(mabAudioLoaded[0]))",
+            KAC_ARTIST_ASSERT_FILE, 736 /* ARTIST 0x822A1674 */));
 
     mabAudioLoaded[liActiveRaceCar] = lbStatus;
 }

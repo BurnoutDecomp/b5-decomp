@@ -1221,7 +1221,9 @@ s32 Profile::GetGameModeTypeDiscovered(GsmIO::EGameModeType lEGameModeType) cons
 void Profile::AddWinForGameMode(GsmIO::EGameModeType leGameModeType)
 {
     CGS_ASSERT((leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT) && (leGameModeType > GsmIO::E_MODE_NONE),
-               "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )");
+        CgsDev::Assert::MessageAt(
+            "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )",
+            KAC_ARTIST_ASSERT_FILE, 2294 /* ARTIST 0x82354CB4 */));
 
     ++maiWinsPerOfflineGameMode[leGameModeType];
     ++maiRankWinsPerOfflineGameMode[leGameModeType];
@@ -1235,7 +1237,9 @@ void Profile::AddWinForGameMode(GsmIO::EGameModeType leGameModeType)
 void Profile::AddLossForGameMode(GsmIO::EGameModeType leGameModeType)
 {
     CGS_ASSERT((leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT) && (leGameModeType > GsmIO::E_MODE_NONE),
-               "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )");
+        CgsDev::Assert::MessageAt(
+            "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )",
+            KAC_ARTIST_ASSERT_FILE, 2303 /* ARTIST 0x8230FB54 */));
 
     ++maiLossesPerOfflineGameMode[leGameModeType];
     if (maiLossesPerOfflineGameMode[leGameModeType] < 1)
@@ -1248,7 +1252,9 @@ void Profile::AddLossForGameMode(GsmIO::EGameModeType leGameModeType)
 s32 Profile::GetNumRankWinsForGameMode(GsmIO::EGameModeType leGameModeType) const
 {
     CGS_ASSERT((leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT) && (leGameModeType > GsmIO::E_MODE_NONE),
-               "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )");
+        CgsDev::Assert::MessageAt(
+            "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )",
+            KAC_ARTIST_ASSERT_FILE, 2195 /* ARTIST 0x8230FA74 */));
 
     return maiRankWinsPerOfflineGameMode[leGameModeType];
 }
@@ -1259,7 +1265,9 @@ s32 Profile::GetNumRankWinsForGameMode(GsmIO::EGameModeType leGameModeType) cons
 s32 Profile::GetNumLossesForGameMode(GsmIO::EGameModeType leGameModeType) const
 {
     CGS_ASSERT((leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT) && (leGameModeType > GsmIO::E_MODE_NONE),
-               "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )");
+        CgsDev::Assert::MessageAt(
+            "( leGameModeType < GsmIO::E_MODE_OFFLINE_COUNT ) && ( leGameModeType > GsmIO::E_MODE_NONE )",
+            KAC_ARTIST_ASSERT_FILE, 2212 /* ARTIST 0x8230FAE4 */));
 
     return maiLossesPerOfflineGameMode[leGameModeType];
 }
@@ -1271,7 +1279,9 @@ s32 Profile::GetNumLossesForGameMode(GsmIO::EGameModeType leGameModeType) const
 void Profile::AddTakedown(BrnGameState::ETakedownType leTakedownType)
 {
     CGS_ASSERT(leTakedownType > BrnGameState::E_TAKEDOWN_NONE,
-               "leTakedownType > BrnGameState::E_TAKEDOWN_NONE");
+        CgsDev::Assert::MessageAt(
+            "leTakedownType > BrnGameState::E_TAKEDOWN_NONE",
+            KAC_ARTIST_ASSERT_FILE, 2285 /* ARTIST 0x82354C2C */));
 
     ++miTotalTakedownCount;
     ++maiTakedownTypeCounts[leTakedownType];
@@ -1324,9 +1334,13 @@ s32 Profile::GetStuntElementCountByCounty(BrnGameState::StuntElementType leStunt
                                           BrnWorld::ECounty leCounty) const
 {
     CGS_ASSERT(leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT,
-               "leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT");
+        CgsDev::Assert::MessageAt(
+            "leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT",
+            KAC_ARTIST_ASSERT_FILE, 2487 /* ARTIST 0x82354D40 */));
     CGS_ASSERT(leCounty < BrnWorld::E_COUNTY_VALID_COUNT,
-               "leCounty < BrnWorld::E_COUNTY_VALID_COUNT");
+        CgsDev::Assert::MessageAt(
+            "leCounty < BrnWorld::E_COUNTY_VALID_COUNT",
+            KAC_ARTIST_ASSERT_FILE, 2488 /* ARTIST 0x82354D64 */));
 
     return maaiStuntCountsByCounty[leStuntElementType][leCounty];
 }
@@ -1339,7 +1353,9 @@ s32 Profile::GetStuntElementCountByCounty(BrnGameState::StuntElementType leStunt
 const CarData* Profile::GetCarData(s32 liCarIndex) const
 {
     CGS_ASSERT(liCarIndex >= 0 && liCarIndex < miCarCount,
-               "liCarIndex >= 0 && liCarIndex < miCarCount");
+        CgsDev::Assert::MessageAt(
+            "liCarIndex >= 0 && liCarIndex < miCarCount",
+            KAC_ARTIST_ASSERT_FILE, 1923 /* ARTIST 0x82354988 */));
 
     return &maCars[liCarIndex];
 }
@@ -1375,7 +1391,9 @@ s32 Profile::GetTotalCarsToShutDown() const
 const ProfileEvent* Profile::GetEvent(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < static_cast<u32>(miEventCount),
-               "luIndex < static_cast<uint32_t>(miEventCount)");
+        CgsDev::Assert::MessageAt(
+            "luIndex < static_cast<uint32_t>(miEventCount)",
+            KAC_ARTIST_ASSERT_FILE, 3004 /* ARTIST 0x82354DD0 */));
 
     return &maEvents[luIndex];
 }

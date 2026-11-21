@@ -40,6 +40,10 @@
 #include <cstring>  // memcpy
 #include <cstdlib>  // getenv (BRN_STUNT_DIAG)
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp";
+
 namespace BrnGameState
 {
 
@@ -251,14 +255,18 @@ bool BurnoutSkillzManager::GetRoadRuleHighScore(BrnNetwork::NetworkPlayerID lNet
                                                 BrnNetwork::Road::ChallengeIndex liIndex,
                                                 BrnStreetData::ChallengeHighScoreEntry* lpData)
 {
-    CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
+    CGS_ASSERT(mpScoringSystem,
+        CgsDev::Assert::MessageAt("mpScoringSystem", KAC_ARTIST_ASSERT_FILE, 784 /* ARTIST 0x823227F8 */));
 
     CarData* lpCarData = mpScoringSystem->GetCarData(lNetworkPlayerID);
     if (lpCarData)
     {
-        CGS_ASSERT(lpData, "lpData");
+        CGS_ASSERT(lpData,
+            CgsDev::Assert::MessageAt("lpData", KAC_ARTIST_ASSERT_FILE, 794 /* ARTIST 0x82322834 */));
         CGS_ASSERT(liIndex < KI_MAX_CHALLENGES && liIndex >= 0,
-                   "liIndex < BrnGameState::KI_MAX_CHALLENGES && liIndex >= 0");
+            CgsDev::Assert::MessageAt(
+                "liIndex < BrnGameState::KI_MAX_CHALLENGES && liIndex >= 0",
+                KAC_ARTIST_ASSERT_FILE, 795 /* ARTIST 0x82322860 */));
         lpCarData->GetRoadRulesScores(liIndex, lpData);
         return true;
     }
@@ -273,13 +281,18 @@ void BurnoutSkillzManager::SetRoadRuleHighScore(BrnNetwork::NetworkPlayerID lNet
                                                 BrnNetwork::Road::ChallengeIndex liIndex,
                                                 BrnStreetData::ChallengeHighScoreEntry* lpData)
 {
-    CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
+    CGS_ASSERT(mpScoringSystem,
+        CgsDev::Assert::MessageAt("mpScoringSystem", KAC_ARTIST_ASSERT_FILE, 818 /* ARTIST 0x823228D8 */));
 
     CarData* lpCarData = mpScoringSystem->GetCarData(lNetworkPlayerID);
-    CGS_ASSERT(lpCarData, "lpCarData");
-    CGS_ASSERT(lpData, "lpData");
+    CGS_ASSERT(lpCarData,
+        CgsDev::Assert::MessageAt("lpCarData", KAC_ARTIST_ASSERT_FILE, 822 /* ARTIST 0x8232290C */));
+    CGS_ASSERT(lpData,
+        CgsDev::Assert::MessageAt("lpData", KAC_ARTIST_ASSERT_FILE, 825 /* ARTIST 0x82322930 */));
     CGS_ASSERT(liIndex < KI_MAX_CHALLENGES && liIndex >= 0,
-               "liIndex < BrnGameState::KI_MAX_CHALLENGES && liIndex >= 0");
+        CgsDev::Assert::MessageAt(
+            "liIndex < BrnGameState::KI_MAX_CHALLENGES && liIndex >= 0",
+            KAC_ARTIST_ASSERT_FILE, 826 /* ARTIST 0x8232295C */));
     lpCarData->SetRoadRulesScores(liIndex, lpData);
 }
 

@@ -4,11 +4,14 @@
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"        // GetGameComponent
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"              // TimerStatus::GetTime
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // CgsNetwork::PlayersConnectionManager -- the connection-entry bookkeeping (add / remove a
 // peer, register its two message types), the test-connection handshake, the connection
 // status broadcast and the message callbacks the network players invoke.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsPlayersConnectionManager.cpp";
 
 namespace CgsNetwork
 {
@@ -207,7 +210,9 @@ void PlayersConnectionManager::SendTestConnectionMessage(ConnectionDataEntry* lp
                                                          u16 lu16CurrentFrame)
 {
     CGS_ASSERT(lpEntry->mPlayerConnectionData.meConnectionStatus == E_CHECKING_CONNECTION,
-               "lpEntry->mPlayerConnectionData.meConnectionStatus == E_CHECKING_CONNECTION");
+        CgsDev::Assert::MessageAt(
+            "lpEntry->mPlayerConnectionData.meConnectionStatus == E_CHECKING_CONNECTION",
+            KAC_ARTIST_ASSERT_FILE, 693 /* ARTIST 0x82884ACC */));
 
     lpEntry->mbTestConnectionPacketNacked = false;
     lpEntry->mTestConnectionMessageSend.PrepareForSend(lu16CurrentFrame);
@@ -335,9 +340,14 @@ void PlayersConnectionManager::ConnectionStatusMessageArrivedCallback(ReliableMe
                                                                       NetworkPlayerID lSendingPlayerID,
                                                                       void* lpUserData)
 {
-    CGS_ASSERT(lpMessage, "lpMessage");
-    CGS_ASSERT(lSendingPlayerID != K_INVALID_PLAYER_ID, "lSendingPlayerID != K_INVALID_PLAYER_ID");
-    CGS_ASSERT(lpUserData, "lpUserData");
+    CGS_ASSERT(lpMessage,
+        CgsDev::Assert::MessageAt("lpMessage", KAC_ARTIST_ASSERT_FILE, 1305 /* ARTIST 0x82884E00 */));
+    CGS_ASSERT(lSendingPlayerID != K_INVALID_PLAYER_ID,
+        CgsDev::Assert::MessageAt(
+            "lSendingPlayerID != K_INVALID_PLAYER_ID",
+            KAC_ARTIST_ASSERT_FILE, 1306 /* ARTIST 0x82884E24 */));
+    CGS_ASSERT(lpUserData,
+        CgsDev::Assert::MessageAt("lpUserData", KAC_ARTIST_ASSERT_FILE, 1307 /* ARTIST 0x82884E48 */));
 
     PlayersConnectionManager* lpConnMgr = static_cast<PlayersConnectionManager*>(lpUserData);
     ConnectionDataEntry*      lpEntry   = lpConnMgr->GetEntry(lSendingPlayerID);

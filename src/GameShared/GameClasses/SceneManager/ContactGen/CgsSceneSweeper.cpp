@@ -23,7 +23,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsSceneSweeper.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"           // CGS_ASSERT
 
 #include <cstddef>   // offsetof
 #include <cstring>   // std::memset (the console's own memset calls)
@@ -33,6 +33,9 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityManager.h"          // EntityManager::GetVolumeInstance, VolumeInstance
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // PerfMonCpu::Start/StopMonitor
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\ContactGen/CgsSceneSweeper.cpp";
 
 namespace CgsSceneManager
 {
@@ -122,8 +125,13 @@ namespace CgsSceneManager
                                rw::BitTable::Storage* lpCullingTable)
     {
         CGS_ASSERT(lpaVolumeInstanceCullingGroup != NULL,
-                   "lpaVolumeInstanceCullingGroup != NULL");           // CgsSceneSweeper.cpp:115
-        CGS_ASSERT(lpCullingTable != NULL, "lpCullingTable != NULL");  // CgsSceneSweeper.cpp:116
+            CgsDev::Assert::MessageAt(
+                "lpaVolumeInstanceCullingGroup != NULL",
+                KAC_ARTIST_ASSERT_FILE, 115 /* ARTIST 0x828C2030 */));           // CgsSceneSweeper.cpp:115
+        CGS_ASSERT(lpCullingTable != NULL,
+            CgsDev::Assert::MessageAt(
+                "lpCullingTable != NULL",
+                KAC_ARTIST_ASSERT_FILE, 116 /* ARTIST 0x828C2054 */));  // CgsSceneSweeper.cpp:116
 
         mpaVolumeInstanceCullingGroup = lpaVolumeInstanceCullingGroup;  // stwx r29,r31,0xDC4A8
         mpCullingTable                = lpCullingTable;                 // stwx r28,r31,0xDC4AC

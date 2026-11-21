@@ -25,8 +25,10 @@
 
 #include "GameSource/Gui/BrnGuiBurnoutSkillsManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include <cfloat>
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiBurnoutSkillsManager.h";
 
 namespace BrnGui
 {
@@ -300,7 +302,10 @@ void BurnoutSkillsManager::SetRoadRuleMode(BrnGameState::EActiveRoadRule leRoadR
             break;
 
         default:
-            CGS_ASSERT(false, "Invalid road rule mode\n");
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt(
+                    "Invalid road rule mode\n",
+                    "..\\..\\..\\GameSource\\Gui/BrnGuiBurnoutSkillsManager.cpp", 465 /* ARTIST 0x824F9FE0 */));
             break;
     }
 }
@@ -317,9 +322,13 @@ f32 BurnoutSkillsManager::GetBurnoutSkillForARC(
     EActiveRaceCarIndex leActiveRaceCar) const
 {
     CGS_ASSERT(leActiveRaceCar >= E_ACTIVE_RACE_CAR_INDEX_0,
-               "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+            KAC_ARTIST_ASSERT_FILE, 174 /* ARTIST 0x8240EBE0 */));
     CGS_ASSERT(leActiveRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+            KAC_ARTIST_ASSERT_FILE, 175 /* ARTIST 0x8240EC04 */));
 
     return maSkillzData[leActiveRaceCar].GetBurnoutSkill(leSkill);
 }

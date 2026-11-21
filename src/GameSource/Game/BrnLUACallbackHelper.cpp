@@ -10,6 +10,9 @@ extern "C" int lua_gettop(lua_State* lpLuaState);
 //   GetStringParam  @ 0x823C5DF8
 // ParamIndexToStackIndex is inlined at every call site (stack index == param index + 1).
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\game\\BrnLUACallbackHelper.h";
+
 namespace BrnGame
 {
     // Inlined at ARTIST 0x823C6160..0x823C6174 in LUACBPressButton.
@@ -65,7 +68,9 @@ namespace BrnGame
 
         // if (!lua_isnumber(mpLUAHandle, liStackIndex)) assert.
         CGS_ASSERT(lua_isnumber(mpLUAHandle, liStackIndex) != 0,
-                   "IsParamNumber(liParamIndex)");
+            CgsDev::Assert::MessageAt(
+                "IsParamNumber(liParamIndex)",
+                KAC_ARTIST_ASSERT_FILE, 148 /* ARTIST 0x823C5DA8 */));
 
         // lua_tonumber returns a double; fctiwz truncates it to a signed 32-bit int.
         return static_cast<s32>(lua_tonumber(mpLUAHandle, liStackIndex));
@@ -79,7 +84,9 @@ namespace BrnGame
 
         // if (!lua_isstring(mpLUAHandle, liStackIndex)) assert.
         CGS_ASSERT(lua_isstring(mpLUAHandle, liStackIndex) != 0,
-                   "IsParamString(liParamIndex)");
+            CgsDev::Assert::MessageAt(
+                "IsParamString(liParamIndex)",
+                KAC_ARTIST_ASSERT_FILE, 155 /* ARTIST 0x823C5E30 */));
 
         // lua_tolstring(L, idx, len) with a null length pointer (li r5,0).
         return lua_tolstring(mpLUAHandle, liStackIndex, 0);

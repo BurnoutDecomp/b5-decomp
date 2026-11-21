@@ -280,15 +280,24 @@ namespace BrnNetwork
     void BrnNetworkManager::SyncTimeClientReadyCallback(NetworkPlayerID lClientReadyID, void* lpUserData)
     {
         BrnNetworkManager* lpNetworkManager = static_cast<BrnNetworkManager*>(lpUserData);
-        CGS_ASSERT(lpNetworkManager, "lpNetworkManager");
-        CGS_ASSERT(lpNetworkManager->GetServerInterface(), "lpNetworkManager->GetServerInterface()");
+        CGS_ASSERT(lpNetworkManager,
+            CgsDev::Assert::MessageAt("lpNetworkManager", KAC_ARTIST_ASSERT_FILE, 2276 /* ARTIST 0x82581BD4 */));
+        CGS_ASSERT(lpNetworkManager->GetServerInterface(),
+            CgsDev::Assert::MessageAt(
+                "lpNetworkManager->GetServerInterface()",
+                KAC_ARTIST_ASSERT_FILE, 2281 /* ARTIST 0x82581BF8 */));
         CGS_ASSERT(lpNetworkManager->GetServerInterface()->GetGameComponent(),
-                   "lpNetworkManager->GetServerInterface()->GetGameComponent()");
+            CgsDev::Assert::MessageAt(
+                "lpNetworkManager->GetServerInterface()->GetGameComponent()",
+                KAC_ARTIST_ASSERT_FILE, 2282 /* ARTIST 0x82581C20 */));
 
         if (lpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame() &&
             !lpNetworkManager->GetServerInterface()->GetGameComponent()->IsGameStarted())
         {
-            CGS_ASSERT(lpNetworkManager->mpNetworkModule, "lpNetworkManager->mpNetworkModule");
+            CGS_ASSERT(lpNetworkManager->mpNetworkModule,
+                CgsDev::Assert::MessageAt(
+                    "lpNetworkManager->mpNetworkModule",
+                    KAC_ARTIST_ASSERT_FILE, 2286 /* ARTIST 0x82581C78 */));
             lpNetworkManager->GetTrafficManager()->RestartNetworkTraffic(lClientReadyID);
         }
     }

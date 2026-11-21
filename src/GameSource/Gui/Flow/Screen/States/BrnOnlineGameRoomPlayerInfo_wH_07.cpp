@@ -27,7 +27,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface out-queue / PlayAptMovie
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / AddEvent
@@ -143,7 +143,10 @@ namespace BrnGui
     // debounce timers (Update runs them down).
     void OnlineGameRoomPlayerInfo::HandleControllerInputFreeBurnSubState(const CgsModule::Event* lpControllerEvent)
     {
-        CGS_ASSERT(lpControllerEvent != 0, "lpControllerEvent");   // cpp:1532 (non-fatal)
+        CGS_ASSERT(lpControllerEvent != 0,
+            CgsDev::Assert::MessageAt(
+                "lpControllerEvent",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 1532 /* ARTIST 0x824A4A34 */));   // cpp:1532 (non-fatal)
 
         if (mpGuiCache == 0 || mpGuiCache->mbFreeBurnInputDisabled)
         {

@@ -24,7 +24,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavEnterOnline.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/CgsGuiEventTypeDefs.h"               // CgsGui::ELoginQuestion
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface out-queue
@@ -113,7 +113,9 @@ namespace BrnGui
         {
             // cpp:220. Non-fatal in the X360 build -- the loop keeps walking the table.
             CGS_ASSERT(maShowControlsFunc[li] != 0,
-                       "No show control function supplied for this login question");
+                CgsDev::Assert::MessageAt(
+                    "No show control function supplied for this login question",
+                    "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavEnterOnline.cpp", 220 /* ARTIST 0x824C17F0 */));
         }
     }
 

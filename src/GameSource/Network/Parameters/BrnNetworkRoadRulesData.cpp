@@ -29,6 +29,9 @@
 static const char KAC_ARTIST_ASSERT_FILE[] =
     "..\\..\\..\\GameSource\\Network/Parameters/BrnNetworkRoadRulesData.h";
 
+static const char KAC_ARTIST_ASSERT_SOURCE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkRoadRulesData.cpp";
+
 namespace BrnNetwork
 {
 
@@ -56,11 +59,18 @@ void RoadRulesUploadData::Construct(u64 lu64RoadRulesID)
 // Append one {record-index, score, car-id} row; returns true once the batch is full.
 bool RoadRulesUploadData::SetScoreData(s32 liRecordIndex, s32 liQuantisedScore, CgsID lCarID)
 {
-    CGS_ASSERT(liRecordIndex >= 0, "liRecordIndex >= 0");
+    CGS_ASSERT(liRecordIndex >= 0,
+        CgsDev::Assert::MessageAt("liRecordIndex >= 0", KAC_ARTIST_ASSERT_SOURCE, 61 /* ARTIST 0x82584964 */));
     CGS_ASSERT(liRecordIndex < BrnGameState::KI_MAX_CHALLENGES * BrnStreetData::E_SCORE_TYPE_COUNT,
-               "liRecordIndex < BrnGameState::KI_MAX_CHALLENGES * BrnStreetData::E_SCORE_TYPE_COUNT");
-    CGS_ASSERT(miNumScores >= 0, "miNumScores >= 0");
-    CGS_ASSERT(miNumScores < KI_MAX_UPLOAD_DATA, "miNumScores < KI_MAX_UPLOAD_DATA");
+        CgsDev::Assert::MessageAt(
+            "liRecordIndex < BrnGameState::KI_MAX_CHALLENGES * BrnStreetData::E_SCORE_TYPE_COUNT",
+            KAC_ARTIST_ASSERT_SOURCE, 62 /* ARTIST 0x82584988 */));
+    CGS_ASSERT(miNumScores >= 0,
+        CgsDev::Assert::MessageAt("miNumScores >= 0", KAC_ARTIST_ASSERT_SOURCE, 63 /* ARTIST 0x825849B0 */));
+    CGS_ASSERT(miNumScores < KI_MAX_UPLOAD_DATA,
+        CgsDev::Assert::MessageAt(
+            "miNumScores < KI_MAX_UPLOAD_DATA",
+            KAC_ARTIST_ASSERT_SOURCE, 64 /* ARTIST 0x825849D8 */));
 
     maiRecordIndices[miNumScores]  = liRecordIndex;
     maiQuantisedScore[miNumScores] = liQuantisedScore;

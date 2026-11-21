@@ -1,6 +1,6 @@
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "rw/math/fpu/scalar_operation.h"            // Tan / IsZero
 #include "rw/math/vpu/vector3_operation.h"           // Subtract / Normalize / IsZero
 #include "rw/math/vpu/matrix44affine_operation.h"    // Mult / TransformPoint /
@@ -88,6 +88,10 @@
 //   THE LESSON GENERALISES: "unattested rodata" and "an addressing mode I have not decoded"
 //   are different findings, and only the first one blocks a reconstruction. Anything still
 //   on the list above should be re-read with that distinction in mind before it is trusted.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\Utils/CameraUtils.h";
+static const char KAC_ARTIST_ASSERT_SOURCE[] = "..\\..\\..\\GameSource\\Director/Camera/Utils/CameraUtils.cpp";
 
 namespace BrnDirector
 {
@@ -205,13 +209,17 @@ void TransitionSmoother::Set(f32 lfValue, f32 lfLerpAmount0to1,
     mfTarget = lfValue;
 
     CGS_ASSERT(lfLerpAmount0to1 >= 0.0f && lfLerpAmount0to1 <= 1.0f,
-               "lfLerpAmount0to1 >= 0.0f && lfLerpAmount0to1 <= 1.0f");   // :157
+        CgsDev::Assert::MessageAt(
+            "lfLerpAmount0to1 >= 0.0f && lfLerpAmount0to1 <= 1.0f",
+            KAC_ARTIST_ASSERT_FILE, 157 /* ARTIST 0x821F2304 */));   // :157
 
     mfIdealLerpAmount = lfLerpAmount0to1;
     mfLerpAmount      = 0.0f;
 
     CGS_ASSERT(lfLerpAmountLerpAmount0to1 >= 0.0f && lfLerpAmountLerpAmount0to1 <= 1.0f,
-               "lfLerpAmountLerpAmount0to1 >= 0.0f && lfLerpAmountLerpAmount0to1 <= 1.0f");   // :160
+        CgsDev::Assert::MessageAt(
+            "lfLerpAmountLerpAmount0to1 >= 0.0f && lfLerpAmountLerpAmount0to1 <= 1.0f",
+            KAC_ARTIST_ASSERT_FILE, 160 /* ARTIST 0x821F2338 */));   // :160
 
     mfLerpAmountLerpAmount     = lfLerpAmountLerpAmount0to1;
     mfSimilarityToleranceScale = lfSimilarityToleranceScale;
@@ -234,7 +242,9 @@ void TransitionSmoother::SetTarget(f32 lfTarget)
 u32 Cycle(u32 luValue, u32 luInclusiveLowerBound, u32 luExclusiveUpperBound, u32 luStep)
 {
     CGS_ASSERT(luInclusiveLowerBound < luExclusiveUpperBound,
-               "luInclusiveLowerBound < luExclusiveUpperBound");
+        CgsDev::Assert::MessageAt(
+            "luInclusiveLowerBound < luExclusiveUpperBound",
+            KAC_ARTIST_ASSERT_FILE, 340 /* ARTIST 0x821F23A4 */));
 
     return (luValue - luInclusiveLowerBound + luStep)
                % (luExclusiveUpperBound - luInclusiveLowerBound)
@@ -687,7 +697,9 @@ f32 GetSmallestDifferenceBetweenDegsAngles(f32 lfFromDegs, f32 lfToDegs)
     }
 
     CGS_ASSERT(lfAngle < KF_FULL_TURN_DEGS && lfAngle > KF_NEG_FULL_TURN_DEGS,
-               "(lrAngle < 360.0f) && (lrAngle > -360.0f)");            // .cpp:535
+        CgsDev::Assert::MessageAt(
+            "(lrAngle < 360.0f) && (lrAngle > -360.0f)",
+            KAC_ARTIST_ASSERT_SOURCE, 535 /* ARTIST 0x821F88F8 */));            // .cpp:535
 
     if (lfAngle > KF_HALF_TURN_DEGS)
     {
@@ -699,7 +711,9 @@ f32 GetSmallestDifferenceBetweenDegsAngles(f32 lfFromDegs, f32 lfToDegs)
     }
 
     CGS_ASSERT(lfAngle <= KF_HALF_TURN_DEGS && lfAngle >= KF_NEG_HALF_TURN_DEGS,
-               "(lrAngle <= 180.0f) && (lrAngle >= -180.0f)");          // .cpp:546
+        CgsDev::Assert::MessageAt(
+            "(lrAngle <= 180.0f) && (lrAngle >= -180.0f)",
+            KAC_ARTIST_ASSERT_SOURCE, 546 /* ARTIST 0x821F8950 */));          // .cpp:546
 
     return lfAngle;
 }

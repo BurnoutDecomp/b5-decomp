@@ -21,10 +21,13 @@
 // per-car accessors (maCarsInTheRace / GetCarModelId) are reachable. Its body is appended below.
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 // KI_MAX_PLAYER_TEAMS (== 9): the stunt-run free-for-all team-index bound shared with
 // OnlineStuntRunModeScoring. This leaf header forward-declares ScoringSystem only (no cycle).
 #include "GameSource/GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.h"
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\BurnoutConstants.h";
 
 namespace BrnGameState
 {
@@ -420,7 +423,9 @@ namespace BrnGameState
             }
 
             CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                CgsDev::Assert::MessageAt(
+                    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                    KAC_ARTIST_ASSERT_FILE, 39 /* ARTIST 0x823206B4 */));
         }
 
         return liTeamScore;
@@ -452,7 +457,9 @@ namespace BrnGameState
             }
 
             CGS_ASSERT(liTeam + 1 <= KI_MAX_PLAYER_TEAMS,
-                       "leEnumIndex <= E_PLAYER_TEAM_COUNT");
+                CgsDev::Assert::MessageAt(
+                    "leEnumIndex <= E_PLAYER_TEAM_COUNT",
+                    "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedEnums.h", 112 /* ARTIST 0x82320744 */));
         }
 
         return liLeadingTeam;
@@ -478,7 +485,9 @@ namespace BrnGameState
             }
 
             CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                CgsDev::Assert::MessageAt(
+                    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                    KAC_ARTIST_ASSERT_FILE, 39 /* ARTIST 0x82320438 */));
         }
 
         return liCount;
@@ -529,7 +538,9 @@ namespace BrnGameState
             }
 
             CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                CgsDev::Assert::MessageAt(
+                    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                    KAC_ARTIST_ASSERT_FILE, 39 /* ARTIST 0x8232061C */));
         }
 
         return true;
@@ -554,7 +565,9 @@ namespace BrnGameState
             }
 
             CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                CgsDev::Assert::MessageAt(
+                    "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                    KAC_ARTIST_ASSERT_FILE, 39 /* ARTIST 0x823207D4 */));
         }
 
         return true;

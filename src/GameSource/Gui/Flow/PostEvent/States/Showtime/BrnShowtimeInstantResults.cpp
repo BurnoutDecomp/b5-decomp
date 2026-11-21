@@ -35,7 +35,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream
@@ -52,6 +52,9 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"  // EGameModeType (the mode asserts)
 
 #include <cstring>   // strcmp (HandleAptTriggers' component-name matching)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.cpp";
 
 namespace BrnGui
 {
@@ -406,7 +409,8 @@ namespace BrnGui
     // ---------------------------------------------------------------------------------------
     void ShowtimeInstantResultsState::AppendExpectedComponents()
     {
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");                          // cpp:305
+        CGS_ASSERT(mpGuiCache,
+            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 305 /* ARTIST 0x824B49BC */));                          // cpp:305
 
         for (s32 liHelpItem = 0; liHelpItem < KI_HELPITEMS; ++liHelpItem)
         {
@@ -443,9 +447,9 @@ namespace BrnGui
                        == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME
                    || mResults.meFinishedGameModeType
                        == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME,
-                   "mResults.meFinishedGameModeType == BrnGameState::GameStateModuleIO::"
-                   "E_MODE_OFFLINE_SHOWTIME || mResults.meFinishedGameModeType == "
-                   "BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME");   // cpp:527
+            CgsDev::Assert::MessageAt(
+                "mResults.meFinishedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME || mResults.meFinishedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME",
+                KAC_ARTIST_ASSERT_FILE, 527 /* ARTIST 0x824B4B78 */));   // cpp:527
 
         mResultsIcon.SetState(KAC_ICON_STATE_SCORING);
         SetMultiplierText();

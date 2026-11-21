@@ -484,11 +484,17 @@ namespace BrnNetwork
     void BrnNetworkPlayer::RemoveBufferedMessage(UpdateMessage* lpUpdateMessage)
     {
         CGS_ASSERT(lpUpdateMessage->mu16Frame != CgsNetwork::KU16_INVALID_FRAME,
-                   "lpUpdateMessage->GetU16Frame() != KU16_INVALID_FRAME");
+            CgsDev::Assert::MessageAt(
+                "lpUpdateMessage->GetU16Frame() != KU16_INVALID_FRAME",
+                KAC_ARTIST_ASSERT_FILE, 1059 /* ARTIST 0x82588DA8 */));
 
         const s32 liBufIndex = static_cast<s32>(lpUpdateMessage - maUpdateMessageBuffer);
-        CGS_ASSERT(liBufIndex >= 0, "liBufIndex >= 0");
-        CGS_ASSERT(liBufIndex < miNumUpdateMessagesBuffered, "liBufIndex < miNumUpdateMessagesBuffered");
+        CGS_ASSERT(liBufIndex >= 0,
+            CgsDev::Assert::MessageAt("liBufIndex >= 0", KAC_ARTIST_ASSERT_FILE, 1065 /* ARTIST 0x82588DDC */));
+        CGS_ASSERT(liBufIndex < miNumUpdateMessagesBuffered,
+            CgsDev::Assert::MessageAt(
+                "liBufIndex < miNumUpdateMessagesBuffered",
+                KAC_ARTIST_ASSERT_FILE, 1066 /* ARTIST 0x82588E04 */));
 
         maUpdateMessageBuffer[liBufIndex] = maUpdateMessageBuffer[miNumUpdateMessagesBuffered - 1];
         --miNumUpdateMessagesBuffered;
@@ -500,7 +506,9 @@ namespace BrnNetwork
                                                                     UpdateMessage* lpUpdateMessage)
     {
         CGS_ASSERT(lpUpdateMessage->mu16Frame != CgsNetwork::KU16_INVALID_FRAME,
-                   "lpUpdateMessage->GetU16Frame() != KU16_INVALID_FRAME");
+            CgsDev::Assert::MessageAt(
+                "lpUpdateMessage->GetU16Frame() != KU16_INVALID_FRAME",
+                KAC_ARTIST_ASSERT_FILE, 1259 /* ARTIST 0x825972DC */));
 
         mu16LastBufferedUpdateAppliedFrame = lpUpdateMessage->mu16Frame;
         mu16LastAnyUpdateAppliedFrame      = lpUpdateMessage->mu16Frame;
@@ -845,23 +853,35 @@ namespace BrnNetwork
                                                                        void* lpUserData)
     {
         BrnNetworkPlayer* lpPlayer = static_cast<BrnNetworkPlayer*>(lpUserData);
-        CGS_ASSERT(lpPlayer != 0, "lpPlayer");
+        CGS_ASSERT(lpPlayer != 0,
+            CgsDev::Assert::MessageAt("lpPlayer", KAC_ARTIST_ASSERT_FILE, 2442 /* ARTIST 0x8258EEA8 */));
 
         FburnChallengeStatusMessage* lpFreeburnChallengeStatusMessage =
             static_cast<FburnChallengeStatusMessage*>(lpMessage);
-        CGS_ASSERT(lpFreeburnChallengeStatusMessage != 0, "lpFreeburnChallengeStatusMessage");
+        CGS_ASSERT(lpFreeburnChallengeStatusMessage != 0,
+            CgsDev::Assert::MessageAt(
+                "lpFreeburnChallengeStatusMessage",
+                KAC_ARTIST_ASSERT_FILE, 2445 /* ARTIST 0x8258EECC */));
 
         BrnGameState::GameStateModuleIO::CompletedFburnChallengesData lCompletedChallengesData;
         lCompletedChallengesData.mNetworkPlayerID = lNetworkPlayerID;
         if (lpFreeburnChallengeStatusMessage->Retrieve(&lCompletedChallengesData.mCompletedFreeburnChallenges))
         {
-            CGS_ASSERT(lpPlayer->mpNetworkModule != 0, "lpPlayer->mpNetworkModule");
+            CGS_ASSERT(lpPlayer->mpNetworkModule != 0,
+                CgsDev::Assert::MessageAt(
+                    "lpPlayer->mpNetworkModule",
+                    KAC_ARTIST_ASSERT_FILE, 2455 /* ARTIST 0x8258EF10 */));
 
             BrnNetworkModuleIO::NetworkToGameStateInterface* lpNetworkToGameStateInterface =
                 lpPlayer->mpNetworkModule->GetNetworkToGameStateInterface();
-            CGS_ASSERT(lpNetworkToGameStateInterface != 0, "lpNetworkToGameStateInterface");
+            CGS_ASSERT(lpNetworkToGameStateInterface != 0,
+                CgsDev::Assert::MessageAt(
+                    "lpNetworkToGameStateInterface",
+                    KAC_ARTIST_ASSERT_FILE, 2457 /* ARTIST 0x8258EF40 */));
             CGS_ASSERT(lpNetworkToGameStateInterface->GetCompletedChallengesQueue() != 0,
-                       "lpNetworkToGameStateInterface->GetCompletedChallengesQueue()");
+                CgsDev::Assert::MessageAt(
+                    "lpNetworkToGameStateInterface->GetCompletedChallengesQueue()",
+                    KAC_ARTIST_ASSERT_FILE, 2458 /* ARTIST 0x8258EF64 */));
 
             lpNetworkToGameStateInterface->GetCompletedChallengesQueue()->AddEvent(lCompletedChallengesData);
         }

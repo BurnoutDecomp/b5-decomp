@@ -151,9 +151,14 @@ namespace BrnNetwork
         {
             meCurrentStatus = E_STATS_STATUS_OFFLINE_PROGRESSION;
 
-            CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+            CGS_ASSERT(mpServerInterface != 0,
+                CgsDev::Assert::MessageAt(
+                    "mpServerInterface",
+                    KAC_ARTIST_ASSERT_FILE, 1052 /* ARTIST 0x82546C1C */));
             CGS_ASSERT(mpServerInterface->GetCustomCommandsComponent() != 0,
-                       "mpServerInterface->GetCustomCommandsComponent()");
+                CgsDev::Assert::MessageAt(
+                    "mpServerInterface->GetCustomCommandsComponent()",
+                    KAC_ARTIST_ASSERT_FILE, 1053 /* ARTIST 0x82546C48 */));
 
             // The event's OfflineProgressionT record sits at offset 0, so the event pointer
             // doubles as the OFFPROG record pointer the custom-commands component expects.
@@ -346,9 +351,12 @@ namespace BrnNetwork
 
     void NetworkPlayerStatsManager::AddEvent(const StatsRequestEvent* lpStatsRequestEvent)
     {
-        CGS_ASSERT(lpStatsRequestEvent != 0, "lpStatsRequestEvent");
+        CGS_ASSERT(lpStatsRequestEvent != 0,
+            CgsDev::Assert::MessageAt("lpStatsRequestEvent", KAC_ARTIST_ASSERT_FILE, 574 /* ARTIST 0x82552674 */));
         CGS_ASSERT(mEventQueue.GetLength() + 1 < mEventQueue.GetMaxLength(),
-                   "mEventQueue.GetLength() + 1 < mEventQueue.GetMaxLength()");
+            CgsDev::Assert::MessageAt(
+                "mEventQueue.GetLength() + 1 < mEventQueue.GetMaxLength()",
+                KAC_ARTIST_ASSERT_FILE, 575 /* ARTIST 0x825526A0 */));
         mEventQueue.Push(lpStatsRequestEvent);
     }
 
@@ -367,7 +375,9 @@ namespace BrnNetwork
     void NetworkPlayerStatsManager::AddEventFromNetworkPlayerID(NetworkPlayerID lNetworkPlayerID)
     {
         CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-                   "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+            CgsDev::Assert::MessageAt(
+                "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+                KAC_ARTIST_ASSERT_FILE, 794 /* ARTIST 0x825624CC */));
 
         StatsRequestEvent lEvent;
         lEvent.Construct(GetPlayerNameFromID(lNetworkPlayerID), lNetworkPlayerID);
@@ -511,9 +521,13 @@ namespace BrnNetwork
             if (lpPlayerStats != 0)
             {
                 CGS_ASSERT(leStatType >= NetworkPlayerStats::E_STATS_VALUE_START,
-                           "leStatType >= NetworkPlayerStats::E_STATS_VALUE_START");
+                    CgsDev::Assert::MessageAt(
+                        "leStatType >= NetworkPlayerStats::E_STATS_VALUE_START",
+                        KAC_ARTIST_ASSERT_FILE, 1209 /* ARTIST 0x8255299C */));
                 CGS_ASSERT(leStatType < NetworkPlayerStats::E_STATS_VALUE_COUNT,
-                           "leStatType < NetworkPlayerStats::E_STATS_VALUE_COUNT");
+                    CgsDev::Assert::MessageAt(
+                        "leStatType < NetworkPlayerStats::E_STATS_VALUE_COUNT",
+                        KAC_ARTIST_ASSERT_FILE, 1210 /* ARTIST 0x825529C0 */));
                 lpPlayerStats->SetStatAsInt(leStatType, liValue, NetworkPlayerStats::E_STAT_TYPE_NUMBER);
                 MarkNeedsUpdatingFlagInAllPlayers();
             }
@@ -532,17 +546,23 @@ namespace BrnNetwork
     void NetworkPlayerStatsManager::UploadFreeBurnLobbyStats(
         const BrnGameState::GameStateModuleIO::OnlineGameResults* lpResults)
     {
-        CGS_ASSERT(lpResults != 0, "lpResults");
+        CGS_ASSERT(lpResults != 0,
+            CgsDev::Assert::MessageAt("lpResults", KAC_ARTIST_ASSERT_FILE, 989 /* ARTIST 0x8255F7C4 */));
 
         if (meCurrentStatus == E_STATS_STATUS_IDLE
             && mpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_CUSTOM_COMMANDS)
                    == CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE)
         {
-            CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+            CGS_ASSERT(mpServerInterface != 0,
+                CgsDev::Assert::MessageAt("mpServerInterface", KAC_ARTIST_ASSERT_FILE, 993 /* ARTIST 0x8255F80C */));
             CGS_ASSERT(mpServerInterface->GetCustomCommandsComponent() != 0,
-                       "mpServerInterface->GetCustomCommandsComponent()");
+                CgsDev::Assert::MessageAt(
+                    "mpServerInterface->GetCustomCommandsComponent()",
+                    KAC_ARTIST_ASSERT_FILE, 994 /* ARTIST 0x8255F838 */));
             CGS_ASSERT(mpNetworkManager->GetLiveRevengeManager() != 0,
-                       "mpNetworkManager->GetLiveRevengeManager()");
+                CgsDev::Assert::MessageAt(
+                    "mpNetworkManager->GetLiveRevengeManager()",
+                    KAC_ARTIST_ASSERT_FILE, 995 /* ARTIST 0x8255F868 */));
 
             meCurrentStatus = E_STATS_STATUS_UPLOADING_FREE_BURN_STATS;
             mpServerInterface->GetCustomCommandsComponent()->UploadFreeBurnLobbyStats(

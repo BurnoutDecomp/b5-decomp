@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Graphics/CgsBufferedDispatchFrame.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (BeginAssert/FireAssert/EndAssert)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (BeginAssert/FireAssert/EndAssert)
 
 #include <new>      // ::operator new[] / ::operator delete[] (the frame-pointer array backing)
 #include "rw/core/memory/memoryfunctions.h"
@@ -26,6 +26,9 @@
 // RwFreeMemAligned (indirect off_82F91A0C); both are global engine memory
 // thunks whose bodies are homed by the RenderWare-memory follow-on.
 // =============================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\CgsBufferedDispatchFrame.cpp";
 
 namespace CgsGraphics
 {
@@ -117,7 +120,9 @@ void BufferedDispatchFrame::Swap()
 DispatchList& BufferedDispatchFrame::GetDispatchListForWrite(u32 luListId)
 {
     CGS_ASSERT(muNumDispatchFrames > muCurrentFrameForWrite,
-               "muNumDispatchFrames > muCurrentFrameForWrite");
+        CgsDev::Assert::MessageAt(
+            "muNumDispatchFrames > muCurrentFrameForWrite",
+            KAC_ARTIST_ASSERT_FILE, 171 /* ARTIST 0x827E77DC */));
 
     return *mapDispatchFrame[muCurrentFrameForWrite]->GetList(luListId);
 }
@@ -127,7 +132,9 @@ DispatchList& BufferedDispatchFrame::GetDispatchListForWrite(u32 luListId)
 DispatchBin& BufferedDispatchFrame::GetDispatchBinForWrite()
 {
     CGS_ASSERT(muNumDispatchFrames > muCurrentFrameForWrite,
-               "muNumDispatchFrames > muCurrentFrameForWrite");
+        CgsDev::Assert::MessageAt(
+            "muNumDispatchFrames > muCurrentFrameForWrite",
+            KAC_ARTIST_ASSERT_FILE, 189 /* ARTIST 0x827E7854 */));
 
     return mapDispatchFrame[muCurrentFrameForWrite]->GetBin();
 }
@@ -137,7 +144,9 @@ DispatchBin& BufferedDispatchFrame::GetDispatchBinForWrite()
 DispatchFrame& BufferedDispatchFrame::GetDispatchFrameForWrite()
 {
     CGS_ASSERT(muNumDispatchFrames > muCurrentFrameForWrite,
-               "muNumDispatchFrames > muCurrentFrameForWrite");
+        CgsDev::Assert::MessageAt(
+            "muNumDispatchFrames > muCurrentFrameForWrite",
+            KAC_ARTIST_ASSERT_FILE, 207 /* ARTIST 0x827E78C4 */));
 
     return *mapDispatchFrame[muCurrentFrameForWrite];
 }
@@ -147,7 +156,9 @@ DispatchFrame& BufferedDispatchFrame::GetDispatchFrameForWrite()
 DispatchFrame& BufferedDispatchFrame::GetDispatchFrameForRead()
 {
     CGS_ASSERT(muNumDispatchFrames > muCurrentFrameForRead,
-               "muNumDispatchFrames > muCurrentFrameForRead");
+        CgsDev::Assert::MessageAt(
+            "muNumDispatchFrames > muCurrentFrameForRead",
+            KAC_ARTIST_ASSERT_FILE, 226 /* ARTIST 0x827E792C */));
 
     return *mapDispatchFrame[muCurrentFrameForRead];
 }

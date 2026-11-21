@@ -234,7 +234,9 @@ bool Param::IsQueueing() const
 void Param::PushHistory(u32 luSegmentIndex, u32 luHullIndex)
 {
     CGS_ASSERT(muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER,
-               "muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER");
+        CgsDev::Assert::MessageAt(
+            "muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER",
+            KAC_ARTIST_ASSERT_FILE, 740 /* ARTIST 0x82706AF4 */));
 
     const u32 luLastEntry =
         (muNextHistoryToWrite + KU_PARAM_NUM_SEGMENTS_TO_REMEMBER - 1) % KU_PARAM_NUM_SEGMENTS_TO_REMEMBER;
@@ -253,11 +255,17 @@ void Param::PushHistory(u32 luSegmentIndex, u32 luHullIndex)
 void Param::GetHistoryEntry(u32 luHistoryIndex, u32* lpOutSegmentIndex, u32* lpOutHullIndex) const
 {
     CGS_ASSERT(luHistoryIndex < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER,
-               "luHistoryIndex < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER");
+        CgsDev::Assert::MessageAt(
+            "luHistoryIndex < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER",
+            KAC_ARTIST_ASSERT_FILE, 768 /* ARTIST 0x8274FA3C */));
     CGS_ASSERT(muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER,
-               "muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER");
-    CGS_ASSERT(lpOutSegmentIndex != 0, "lpOutSegmentIndex");
-    CGS_ASSERT(lpOutHullIndex != 0, "lpOutHullIndex");
+        CgsDev::Assert::MessageAt(
+            "muNextHistoryToWrite < KU_PARAM_NUM_SEGMENTS_TO_REMEMBER",
+            KAC_ARTIST_ASSERT_FILE, 769 /* ARTIST 0x8274FA64 */));
+    CGS_ASSERT(lpOutSegmentIndex != 0,
+        CgsDev::Assert::MessageAt("lpOutSegmentIndex", KAC_ARTIST_ASSERT_FILE, 770 /* ARTIST 0x8274FA88 */));
+    CGS_ASSERT(lpOutHullIndex != 0,
+        CgsDev::Assert::MessageAt("lpOutHullIndex", KAC_ARTIST_ASSERT_FILE, 771 /* ARTIST 0x8274FAAC */));
 
     const u32 luIndexToRead =
         (muNextHistoryToWrite + (2 * KU_PARAM_NUM_SEGMENTS_TO_REMEMBER) - 1 - luHistoryIndex) %

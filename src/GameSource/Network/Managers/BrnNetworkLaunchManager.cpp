@@ -1,6 +1,6 @@
 #include "GameSource/Network/Managers/BrnNetworkLaunchManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Network/BrnNetworkManager.h"
 #include "GameSource/Network/Managers/BrnNetworkStateManager.h"
 #include "GameSource/Network/Managers/BrnNetworkSuspensionManager.h"
@@ -41,6 +41,9 @@
 // lobby can recover. The handler return value is the EStatus reported up to the
 // StateManager.
 // ===========================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLaunchManager.cpp";
 
 namespace BrnNetwork
 {
@@ -167,7 +170,9 @@ namespace BrnNetwork
     LaunchManager::EStatus LaunchManager::Update()
     {
         CGS_ASSERT(maUpdateFunctions[meSubState] != 0,
-                   "No update function supplied for the current substate");
+            CgsDev::Assert::MessageAt(
+                "No update function supplied for the current substate",
+                KAC_ARTIST_ASSERT_FILE, 144 /* ARTIST 0x82543ED8 */));
 
         return (this->*maUpdateFunctions[meSubState])();
     }
@@ -484,9 +489,12 @@ namespace BrnNetwork
 
     LaunchManager::EStatus LaunchManager::UpdateWaiting()
     {
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager != 0,
+            CgsDev::Assert::MessageAt("mpNetworkManager", KAC_ARTIST_ASSERT_FILE, 484 /* ARTIST 0x825440C4 */));
         CGS_ASSERT(mpNetworkManager->GetTimerStatus() != 0,
-                   "mpNetworkManager->GetTimerStatus()");
+            CgsDev::Assert::MessageAt(
+                "mpNetworkManager->GetTimerStatus()",
+                KAC_ARTIST_ASSERT_FILE, 485 /* ARTIST 0x825440F8 */));
 
         const CgsSystem::Time lNow =
             mpNetworkManager->GetTimerStatus()->GetTime();

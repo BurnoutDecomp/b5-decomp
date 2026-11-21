@@ -41,6 +41,11 @@
 #include <cstddef>   // offsetof (the x64 payload-offset words of the wire records)
 #include <cstring>   // std::strcmp (the X360 inlines the apt-trigger name compares)
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.cpp";
+static const char KAC_ARTIST_ASSERT_HEADER[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.h";
+
 namespace BrnGui
 {
     // ================================================================================
@@ -273,9 +278,12 @@ namespace BrnGui
     // ================================================================================
     void LicenseComponent::AppendExpectedAptComponent(GuiFlow leFlow)
     {
-        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");                         // cpp:145
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_ARTIST_ASSERT_FILE, 145 /* ARTIST 0x8241A7C0 */));                         // cpp:145
         CGS_ASSERT((E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow),
-                   "(E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow)");   // cpp:147
+            CgsDev::Assert::MessageAt(
+                "(E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow)",
+                KAC_ARTIST_ASSERT_FILE, 147 /* ARTIST 0x8241A7EC */));   // cpp:147
 
         mpGuiCache->AppendExpectedAptComponent(leFlow, GetName());
         mpGuiCache->AppendExpectedAptComponent(leFlow, mPlayerNameTextField.GetName());
@@ -1034,9 +1042,12 @@ namespace BrnGui
     // ================================================================================
     bool LicenseComponent::EnsureResourcesAreUnloaded()
     {
-        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // h:448
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_ARTIST_ASSERT_HEADER, 448 /* ARTIST 0x824B342C */));   // h:448
         CGS_ASSERT(meCurrentLicenseState == E_LICENSE_RESOURCES_UNLOADED,
-                   "E_LICENSE_RESOURCES_UNLOADED == meCurrentLicenseState");   // h:449
+            CgsDev::Assert::MessageAt(
+                "E_LICENSE_RESOURCES_UNLOADED == meCurrentLicenseState",
+                KAC_ARTIST_ASSERT_HEADER, 449 /* ARTIST 0x824B3454 */));   // h:449
 
         return mpGuiCache->EnsureResourcesAreUnloaded(maLicenseResourcesToLoad,
                                                       static_cast<u32>(miNumResourcesToLoad));

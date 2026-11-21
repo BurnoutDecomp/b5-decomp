@@ -25,6 +25,9 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // ::LobbyNameCmp (the vendor name compare)
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsResults.cpp";
+
 namespace BrnNetwork
 {
     // @ 0x82552CF8 -- choose the record slot for a new player-stats entry.
@@ -84,13 +87,19 @@ namespace BrnNetwork
     {
         miCacheSize = 0;
 
-        CGS_ASSERT(mpNetworkManager, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetServerInterface(), "mpNetworkManager->GetServerInterface()");
+        CGS_ASSERT(mpNetworkManager,
+            CgsDev::Assert::MessageAt("mpNetworkManager", KAC_ARTIST_ASSERT_FILE, 77 /* ARTIST 0x82552C5C */));
+        CGS_ASSERT(mpNetworkManager->GetServerInterface(),
+            CgsDev::Assert::MessageAt(
+                "mpNetworkManager->GetServerInterface()",
+                KAC_ARTIST_ASSERT_FILE, 78 /* ARTIST 0x82552C84 */));
 
         CGS_ASSERT(
             mStatsDebugComponent.Prepare(mpNetworkManager->GetServerInterface(),
                                          mpNetworkManager->GetStatsManager()),
-            "mStatsDebugComponent.Prepare( mpNetworkManager->GetServerInterface(), mpNetworkManager->GetStatsManager() )");
+            CgsDev::Assert::MessageAt(
+                "mStatsDebugComponent.Prepare( mpNetworkManager->GetServerInterface(), mpNetworkManager->GetStatsManager() )",
+                KAC_ARTIST_ASSERT_FILE, 80 /* ARTIST 0x82552CC4 */));
 
         return true;
     }
@@ -155,7 +164,9 @@ namespace BrnNetwork
     NetworkPlayerStatsResults::InsertPlayerStats(const NetworkPlayerStats& lNewStats)
     {
         CGS_ASSERT(lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED,
-                   "lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED");
+            CgsDev::Assert::MessageAt(
+                "lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED",
+                KAC_ARTIST_ASSERT_FILE, 295 /* ARTIST 0x82552E40 */));
 
         NetworkPlayerStats* lpPlaceToInsert = 0;
         if (lNewStats.GetPlayerID() != CgsNetwork::K_INVALID_PLAYER_ID)
@@ -176,7 +187,10 @@ namespace BrnNetwork
             mStatsDebugComponent.RemoveStats(lpPlaceToInsert);
         }
 
-        CGS_ASSERT(lpPlaceToInsert != 0, "lpPlaceToInsert != NULL");
+        CGS_ASSERT(lpPlaceToInsert != 0,
+            CgsDev::Assert::MessageAt(
+                "lpPlaceToInsert != NULL",
+                KAC_ARTIST_ASSERT_FILE, 324 /* ARTIST 0x82552EB8 */));
         *lpPlaceToInsert = lNewStats;
         mStatsDebugComponent.AddStats(lpPlaceToInsert);
         return lpPlaceToInsert;

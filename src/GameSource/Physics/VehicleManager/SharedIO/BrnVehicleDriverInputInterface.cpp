@@ -70,7 +70,9 @@ namespace Vehicle
     void VehicleDriverInputInterface::AddTargetAssist(Vector3 lTargetAssistPosition, EntityId lTargetAssistID)
     {
         CGS_ASSERT(miTargetAssistCount < KI_MAX_TARGET_ASSIST_CARS,
-                   "miTargetAssistCount < BrnTraffic::KI_MAX_STOMPED_CARS");
+            CgsDev::Assert::MessageAt(
+                "miTargetAssistCount < BrnTraffic::KI_MAX_STOMPED_CARS",
+                KAC_ARTIST_ASSERT_FILE, 231 /* ARTIST 0x822A03D4 */));
 
         mTargetAssistPositions[miTargetAssistCount] = lTargetAssistPosition;
         mTargetAssistIDs[miTargetAssistCount]       = lTargetAssistID;
@@ -91,7 +93,9 @@ namespace Vehicle
         if (miTargetAssistCount > 0)
         {
             CGS_ASSERT(miTargetAssistCount <= KI_MAX_TARGET_ASSIST_CARS,
-                       "miTargetAssistCount <= BrnTraffic::KI_MAX_STOMPED_CARS");
+                CgsDev::Assert::MessageAt(
+                    "miTargetAssistCount <= BrnTraffic::KI_MAX_STOMPED_CARS",
+                    KAC_ARTIST_ASSERT_FILE, 260 /* ARTIST 0x823A7B80 */));
 
             memcpy(lpOutTargetAssistPositions, mTargetAssistPositions,
                    sizeof(Vector3) * miTargetAssistCount);
@@ -118,7 +122,9 @@ namespace Vehicle
         mDriverUpdateQueue.Append(*lpInterfaceToAppend->GetUpdateDriverQueue());
 
         CGS_ASSERT(miTargetAssistCount == 0 || lpInterfaceToAppend->GetTargetAssistCount() == 0,
-                   "miTargetAssistCount==0 || lpInterfaceToAppend->GetTargetAssistCount()==0");
+            CgsDev::Assert::MessageAt(
+                "miTargetAssistCount==0 || lpInterfaceToAppend->GetTargetAssistCount()==0",
+                KAC_ARTIST_ASSERT_FILE, 164 /* ARTIST 0x823DB67C */));
 
         if (miTargetAssistCount == 0)
         {

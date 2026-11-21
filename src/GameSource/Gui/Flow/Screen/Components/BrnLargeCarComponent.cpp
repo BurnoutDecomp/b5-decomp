@@ -58,7 +58,9 @@ namespace BrnGui
     void LargeCarComponent::ShowCar()
     {
         CGS_ASSERT(meCurrentState >= E_INTERNAL_STATE_READY,
-                   "E_INTERNAL_STATE_READY <= meCurrentState");
+            CgsDev::Assert::MessageAt(
+                "E_INTERNAL_STATE_READY <= meCurrentState",
+                KAC_ARTIST_ASSERT_FILE, 180 /* ARTIST 0x8241B760 */));
 
         SetState("transIn");
         meCurrentState = E_INTERNAL_STATE_SHOWING;
@@ -67,14 +69,20 @@ namespace BrnGui
     // @ 0x8241B7A8
     void LargeCarComponent::HandleLoadNotification(const CgsGui::GuiEventLoadNotification* lpLoadEvent)
     {
-        CGS_ASSERT(lpLoadEvent != 0, "lpLoadEvent");
+        CGS_ASSERT(lpLoadEvent != 0,
+            CgsDev::Assert::MessageAt("lpLoadEvent", KAC_ARTIST_ASSERT_FILE, 222 /* ARTIST 0x8241B7D4 */));
 
         if (lpLoadEvent->meRequestType == CgsGui::E_GUI_RESOURCETYPE_APT &&
             muResourceIdType == lpLoadEvent->muLoadRequestId)
         {
             CGS_ASSERT(E_INTERNAL_STATE_RESOURCES_REQUESTED == meCurrentState,
-                       "E_INTERNAL_STATE_RESOURCES_REQUESTED == meCurrentState");
-            CGS_ASSERT(muResourceIdType != 0, "muResourceIdType != 0");
+                CgsDev::Assert::MessageAt(
+                    "E_INTERNAL_STATE_RESOURCES_REQUESTED == meCurrentState",
+                    KAC_ARTIST_ASSERT_FILE, 227 /* ARTIST 0x8241B818 */));
+            CGS_ASSERT(muResourceIdType != 0,
+                CgsDev::Assert::MessageAt(
+                    "muResourceIdType != 0",
+                    KAC_ARTIST_ASSERT_FILE, 228 /* ARTIST 0x8241B840 */));
             meCurrentState = E_INTERNAL_STATE_READY;
         }
     }
@@ -82,14 +90,20 @@ namespace BrnGui
     // @ 0x8241B868
     void LargeCarComponent::HandleUnloadNotification(const CgsGui::GuiEventUnloadNotification* lpUnloadEvent)
     {
-        CGS_ASSERT(lpUnloadEvent != 0, "lpUnloadEvent");
+        CGS_ASSERT(lpUnloadEvent != 0,
+            CgsDev::Assert::MessageAt("lpUnloadEvent", KAC_ARTIST_ASSERT_FILE, 247 /* ARTIST 0x8241B894 */));
 
         if (lpUnloadEvent->meRequestType == CgsGui::E_GUI_RESOURCETYPE_APT &&
             muResourceIdType == lpUnloadEvent->muLoadRequestId)
         {
             CGS_ASSERT(E_INTERNAL_STATE_UNLOAD_REQUESTED == meCurrentState,
-                       "E_INTERNAL_STATE_UNLOAD_REQUESTED == meCurrentState");
-            CGS_ASSERT(muResourceIdType != 0, "muResourceIdType != 0");
+                CgsDev::Assert::MessageAt(
+                    "E_INTERNAL_STATE_UNLOAD_REQUESTED == meCurrentState",
+                    KAC_ARTIST_ASSERT_FILE, 252 /* ARTIST 0x8241B8D8 */));
+            CGS_ASSERT(muResourceIdType != 0,
+                CgsDev::Assert::MessageAt(
+                    "muResourceIdType != 0",
+                    KAC_ARTIST_ASSERT_FILE, 253 /* ARTIST 0x8241B900 */));
             meCurrentState = E_INTERNAL_STATE_DATA_SUPPLIED;
         }
     }

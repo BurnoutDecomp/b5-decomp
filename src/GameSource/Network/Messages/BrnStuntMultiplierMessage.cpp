@@ -1,6 +1,6 @@
 #include "types.hpp"
 #include "GameSource/Network/Messages/BrnStuntMultiplierMessage.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cstring>   // memcpy (the 8-byte record crosses the s64 interface)
 
@@ -15,6 +15,9 @@
 // multiplier-info blob at +0x28) plus the frames-since-start stamp (+0x30). The X360 body
 // stores/reads the whole 8-byte blob with a single std/ld at +0x28 and the frame word with a
 // stw/lwz at +0x30.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Messages/BrnStuntMultiplierMessage.cpp";
 
 namespace BrnNetwork
 {
@@ -49,17 +52,29 @@ namespace BrnNetwork
                                                 MultiplierInfo lMultiplierInfo)
     {
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-                   "lu16FrameCount != KU16_INVALID_FRAME");
+            CgsDev::Assert::MessageAt(
+                "lu16FrameCount != KU16_INVALID_FRAME",
+                KAC_ARTIST_ASSERT_FILE, 145 /* ARTIST 0x8257D334 */));
         CGS_ASSERT(lMultiplierInfo.muMultiplierStuntTypes > 0,
-                   "lMultiplierInfo.muMultiplierStuntTypes > 0");
+            CgsDev::Assert::MessageAt(
+                "lMultiplierInfo.muMultiplierStuntTypes > 0",
+                KAC_ARTIST_ASSERT_FILE, 146 /* ARTIST 0x8257D35C */));
         CGS_ASSERT(lMultiplierInfo.muMultiplierStuntTypes <= 0x3FFFFu,
-                   "lMultiplierInfo.muMultiplierStuntTypes <= static_cast<uint32_t>( KI_MAX_MULTIPLIER_STUNT_TYPES )");
+            CgsDev::Assert::MessageAt(
+                "lMultiplierInfo.muMultiplierStuntTypes <= static_cast<uint32_t>( KI_MAX_MULTIPLIER_STUNT_TYPES )",
+                KAC_ARTIST_ASSERT_FILE, 147 /* ARTIST 0x8257D388 */));
         CGS_ASSERT(lMultiplierInfo.mu16BarrelRolls <= 8u,
-                   "lMultiplierInfo.muBarrelRolls <= static_cast<uint32_t>( KI_MAX_BARREL_ROLLS )");
+            CgsDev::Assert::MessageAt(
+                "lMultiplierInfo.muBarrelRolls <= static_cast<uint32_t>( KI_MAX_BARREL_ROLLS )",
+                KAC_ARTIST_ASSERT_FILE, 148 /* ARTIST 0x8257D3B0 */));
         CGS_ASSERT(lMultiplierInfo.mu16FlatSpins <= 16u,
-                   "lMultiplierInfo.muFlatSpins <= static_cast<uint32_t>( KI_MAX_FLAT_SPINS )");
+            CgsDev::Assert::MessageAt(
+                "lMultiplierInfo.muFlatSpins <= static_cast<uint32_t>( KI_MAX_FLAT_SPINS )",
+                KAC_ARTIST_ASSERT_FILE, 149 /* ARTIST 0x8257D3D8 */));
         CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-                   "!CgsNetwork::ReliableMessage::IsMessageValid()");
+            CgsDev::Assert::MessageAt(
+                "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x8257D404 */));
 
         mMultiplierInfo    = lMultiplierInfo;      // the whole 8-byte record, +0x28
         miFramesSinceStart = liFramesSinceStart;   // +0x30

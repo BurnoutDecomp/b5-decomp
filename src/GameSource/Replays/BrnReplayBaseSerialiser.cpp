@@ -1,7 +1,7 @@
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"
 
 #include "GameSource/Replays/BrnReplayShared.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 #include <cstring>
@@ -22,6 +22,9 @@
 // (Lock/Unlock/SetMode) and BrnReplayBaseSerialiserDataFunctions.h (Read/Write);
 // CGS_ASSERT records this file's __FILE__/__LINE__, which is the project-faithful
 // equivalent (the messages are preserved verbatim).
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\replays\\BrnReplayBaseSerialiserDataFunctions.h";
 
 namespace BrnReplays
 {
@@ -82,11 +85,18 @@ namespace BrnReplays
     // cursor. Returns the number of bytes read.
     s32 BaseSerialiser::Read(void* lpData, s32 liSize)
     {
-        CGS_ASSERT(meMode == E_MODE_PLAYING, "Not playing\n");
-        CGS_ASSERT(mbLocked, "Not locked\n");
-        CGS_ASSERT(mpBuffer != 0, "Buffer not allocated\n");
+        CGS_ASSERT(meMode == E_MODE_PLAYING,
+            CgsDev::Assert::MessageAt("Not playing\n", KAC_ARTIST_ASSERT_FILE, 173 /* ARTIST 0x8264C1BC */));
+        CGS_ASSERT(mbLocked,
+            CgsDev::Assert::MessageAt("Not locked\n", KAC_ARTIST_ASSERT_FILE, 174 /* ARTIST 0x8264C1E4 */));
+        CGS_ASSERT(mpBuffer != 0,
+            CgsDev::Assert::MessageAt(
+                "Buffer not allocated\n",
+                KAC_ARTIST_ASSERT_FILE, 175 /* ARTIST 0x8264C20C */));
         CGS_ASSERT(miBufferUsed - miBufferRead >= liSize,
-                   "Not enough data in buffer\n");
+            CgsDev::Assert::MessageAt(
+                "Not enough data in buffer\n",
+                KAC_ARTIST_ASSERT_FILE, 176 /* ARTIST 0x8264C23C */));
 
         std::memcpy(lpData,
                     static_cast<u8*>(mpBuffer) + miBufferRead,

@@ -37,7 +37,9 @@ AttribSysModule::EPrepareStage operator++(AttribSysModule::EPrepareStage& leStag
     const AttribSysModule::EPrepareStage leOld = leStage;
     leStage = static_cast<AttribSysModule::EPrepareStage>(leStage + 1);
     CGS_ASSERT(leStage <= AttribSysModule::E_PREPARESTAGE_DONE,
-               "leEnumIndex <= AttribSysModule::E_PREPARESTAGE_DONE");
+        CgsDev::Assert::MessageAt(
+            "leEnumIndex <= AttribSysModule::E_PREPARESTAGE_DONE",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModule.h", 230 /* ARTIST 0x828024EC */));
     return leOld;
 }
 
@@ -295,8 +297,12 @@ void AttribSysModule::RegisterVault(AttribSysIO::RegisterVaultRequest* lpRegiste
 // @0x8266EAA0 uses it as the GameData event-slot index).
 void AttribSysModule::UnregisterVault(AttribSysIO::UnregisterVaultRequest* lpUnregisterVaultRequest)
 {
-    CGS_ASSERT(IsSchemaLoaded(), "IsSchemaLoaded()");
-    CGS_ASSERT(lpUnregisterVaultRequest != 0, "lpUnregisterVaultRequest != NULL");
+    CGS_ASSERT(IsSchemaLoaded(),
+        CgsDev::Assert::MessageAt("IsSchemaLoaded()", KAC_ARTIST_ASSERT_FILE, 462 /* ARTIST 0x8280FA04 */));
+    CGS_ASSERT(lpUnregisterVaultRequest != 0,
+        CgsDev::Assert::MessageAt(
+            "lpUnregisterVaultRequest != NULL",
+            KAC_ARTIST_ASSERT_FILE, 463 /* ARTIST 0x8280FA28 */));
     mVaultArray.UnregisterVault(lpUnregisterVaultRequest);
 
     const s32 liEventId = lpUnregisterVaultRequest->miEventId;

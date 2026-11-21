@@ -1,7 +1,7 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentPlayerJumping.h"
 
 #include <math.h>                                                     // fabsf (the grounded test's sign clear)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                    // CGS_ASSERT
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourIceAnim.h"
 #include "GameSource/Director/Camera/BrnBehaviourParameterBank.h"     // the jump rig/bystander blocks
 #include "GameSource/Director/BrnDirectorICEWrapper.h"                // ICEWrapper (the resource-manager header's inlines need it complete first)
@@ -26,6 +26,9 @@
 //
 // Collection allocation and camera selection follow the native X360 bodies.
 // ============================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp";
 
 namespace BrnDirector
 {
@@ -298,45 +301,70 @@ bool MomentPlayerJumping::PrepareCameras(Camera::BehaviourManager& lrBehaviourMa
     case E_TYPE_ICE_RIG:
     {
         const bool lbIce = mIceCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbIce, "mIceCollection.Prepare(lBehaviourManager)");
+        CGS_ASSERT(lbIce,
+            CgsDev::Assert::MessageAt(
+                "mIceCollection.Prepare(lBehaviourManager)",
+                KAC_ARTIST_ASSERT_FILE, 416 /* ARTIST 0x82275610 */));
         break;
     }
     case E_TYPE_DROPPED_RIG_THEN_ATTACHED_RIG_SEQUENCE:
     {
         const bool lbDropped = mDroppedRigCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbDropped, "mDroppedRigCollection.Prepare(lBehaviourManager)");
+        CGS_ASSERT(lbDropped,
+            CgsDev::Assert::MessageAt(
+                "mDroppedRigCollection.Prepare(lBehaviourManager)",
+                KAC_ARTIST_ASSERT_FILE, 422 /* ARTIST 0x8227565C */));
         const bool lbRig = mRigCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbRig, "mRigCollection.Prepare(lBehaviourManager)");
+        CGS_ASSERT(lbRig,
+            CgsDev::Assert::MessageAt(
+                "mRigCollection.Prepare(lBehaviourManager)",
+                KAC_ARTIST_ASSERT_FILE, 423 /* ARTIST 0x82275690 */));
         break;
     }
     case E_TYPE_BYSTANDER_THEN_ATTACHED_RIG_SEQUENCE:
     {
         const bool lbBystander = mBystanderCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbBystander, "mBystanderCollection.Prepare(lBehaviourManager)");
+        CGS_ASSERT(lbBystander,
+            CgsDev::Assert::MessageAt(
+                "mBystanderCollection.Prepare(lBehaviourManager)",
+                KAC_ARTIST_ASSERT_FILE, 429 /* ARTIST 0x822756D8 */));
         const bool lbRig = mRigCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbRig, "mRigCollection.Prepare(lBehaviourManager)");
+        CGS_ASSERT(lbRig,
+            CgsDev::Assert::MessageAt(
+                "mRigCollection.Prepare(lBehaviourManager)",
+                KAC_ARTIST_ASSERT_FILE, 430 /* ARTIST 0x8227570C */));
         break;
     }
     case E_TYPE_BYSTANDER_SHOT:
     {
         const bool lbBystander = mBystanderCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbBystander, "mBystanderCollection.Prepare(lBehaviourManager)");
+        CGS_ASSERT(lbBystander,
+            CgsDev::Assert::MessageAt(
+                "mBystanderCollection.Prepare(lBehaviourManager)",
+                KAC_ARTIST_ASSERT_FILE, 436 /* ARTIST 0x8227574C */));
         break;
     }
     case E_TYPE_DROPPED_RIG_SHOT:
     {
         const bool lbDropped = mDroppedRigCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbDropped, "mDroppedRigCollection.Prepare(lBehaviourManager)");
+        CGS_ASSERT(lbDropped,
+            CgsDev::Assert::MessageAt(
+                "mDroppedRigCollection.Prepare(lBehaviourManager)",
+                KAC_ARTIST_ASSERT_FILE, 442 /* ARTIST 0x82275790 */));
         break;
     }
     case E_TYPE_ATTACHED_RIG_SHOT:
     {
         const bool lbRig = mRigCollection.Prepare(lrBehaviourManager);
-        CGS_ASSERT(lbRig, "mRigCollection.Prepare(lBehaviourManager)");
+        CGS_ASSERT(lbRig,
+            CgsDev::Assert::MessageAt(
+                "mRigCollection.Prepare(lBehaviourManager)",
+                KAC_ARTIST_ASSERT_FILE, 448 /* ARTIST 0x822757D4 */));
         break;
     }
     default:
-        CGS_ASSERT(false, "invalid type");
+        CGS_ASSERT(false,
+            CgsDev::Assert::MessageAt("invalid type", KAC_ARTIST_ASSERT_FILE, 454 /* ARTIST 0x82275800 */));
         break;
     }
     return true;

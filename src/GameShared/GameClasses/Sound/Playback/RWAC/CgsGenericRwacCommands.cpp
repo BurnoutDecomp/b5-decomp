@@ -86,9 +86,14 @@ RwacCommandPluginGetAttribute::RwacCommandPluginGetAttribute(
     maOperand2    = arSource.maOperand2;    // lwz r11,8(r5); stw r11,8(r31)
     maOperand3    = arSource.maOperand3;    // lwz r11,0xC(r5); stw r11,0xC(r31)
 
-    CGS_ASSERT(luCommandCount == 4u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
+    CGS_ASSERT(luCommandCount == 4u,
+        CgsDev::Assert::MessageAt(
+            "sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
+            KAC_ARTIST_ASSERT_FILE, 408 /* ARTIST 0x82681518 */));
     CGS_ASSERT(GetCommandType() == E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE,
-               "E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE == GetCommandType()");
+        CgsDev::Assert::MessageAt(
+            "E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE == GetCommandType()",
+            KAC_ARTIST_ASSERT_FILE, 409 /* ARTIST 0x82681540 */));
 }
 
 // ---------------------------------------------------------------------------
@@ -150,9 +155,14 @@ RwacCommandPlayerPlayParameters::RwacCommandPlayerPlayParameters(
         mpWaveContent->Acquire();            // ++Object::mu32RefCount
     mpRequestHandle = arSource.mpRequestHandle; // lwz/stw word 2
 
-    CGS_ASSERT(luCommandCount == 3u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
+    CGS_ASSERT(luCommandCount == 3u,
+        CgsDev::Assert::MessageAt(
+            "sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
+            KAC_ARTIST_ASSERT_FILE, 458 /* ARTIST 0x826AD5D4 */));
     CGS_ASSERT(GetCommandType() == E_RWAC_COMMAND_PLAYER_PLAY_PARAMETERS,
-               "E_RWAC_COMMAND_PLAYER_PLAY_PARAMETERS == GetCommandType()");
+        CgsDev::Assert::MessageAt(
+            "E_RWAC_COMMAND_PLAYER_PLAY_PARAMETERS == GetCommandType()",
+            KAC_ARTIST_ASSERT_FILE, 459 /* ARTIST 0x826AD5FC */));
 }
 
 RwacCommandPlayerPlayParameters::~RwacCommandPlayerPlayParameters()
@@ -178,9 +188,14 @@ RwacCommandPlayerIsRequestDoneParameters::RwacCommandPlayerIsRequestDoneParamete
     muCommandType = arSource.muCommandType; // stw r11,0(this)
     mpParams      = arSource.mpParams;      // stw r11,4(this)
 
-    CGS_ASSERT(luCommandCount == 2u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
+    CGS_ASSERT(luCommandCount == 2u,
+        CgsDev::Assert::MessageAt(
+            "sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
+            KAC_ARTIST_ASSERT_FILE, 499 /* ARTIST 0x826815B0 */));
     CGS_ASSERT(GetCommandType() == E_RWAC_COMMAND_PLAYER_IS_REQUEST_DONE_PARAMETERS,
-               "E_RWAC_COMMAND_PLAYER_IS_REQUEST_DONE_PARAMETERS == GetCommandType()");
+        CgsDev::Assert::MessageAt(
+            "E_RWAC_COMMAND_PLAYER_IS_REQUEST_DONE_PARAMETERS == GetCommandType()",
+            KAC_ARTIST_ASSERT_FILE, 500 /* ARTIST 0x826815D8 */));
 }
 
 // ---------------------------------------------------------------------------
@@ -193,9 +208,14 @@ RwacCommandApplyReverbIRFile::RwacCommandApplyReverbIRFile(
     muCommandType = arSource.muCommandType; // stw r11,0(this)
     maOperand     = arSource.maOperand;     // stw r11,4(this)
 
-    CGS_ASSERT(luCommandCount == 2u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
+    CGS_ASSERT(luCommandCount == 2u,
+        CgsDev::Assert::MessageAt(
+            "sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
+            KAC_ARTIST_ASSERT_FILE, 565 /* ARTIST 0x826816E0 */));
     CGS_ASSERT(GetCommandType() == E_RWAC_COMMAND_REVERBIR_APPLY_IR_DATA,
-               "E_RWAC_COMMAND_REVERBIR_APPLY_IR_DATA == GetCommandType()");
+        CgsDev::Assert::MessageAt(
+            "E_RWAC_COMMAND_REVERBIR_APPLY_IR_DATA == GetCommandType()",
+            KAC_ARTIST_ASSERT_FILE, 566 /* ARTIST 0x82681708 */));
 }
 
 // ---------------------------------------------------------------------------
@@ -216,9 +236,14 @@ RwacCommandGinsuAttachDataParameters::RwacCommandGinsuAttachDataParameters(
     muCommandType = arSource.muCommandType; // stw r11,0(this)
     maOperand     = arSource.maOperand;     // stw r11,4(this)
 
-    CGS_ASSERT(luCommandCount == 2u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
+    CGS_ASSERT(luCommandCount == 2u,
+        CgsDev::Assert::MessageAt(
+            "sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
+            KAC_ARTIST_ASSERT_FILE, 599 /* ARTIST 0x82681778 */));
     CGS_ASSERT(GetCommandType() == E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS,
-               "E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS == GetCommandType()");
+        CgsDev::Assert::MessageAt(
+            "E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS == GetCommandType()",
+            KAC_ARTIST_ASSERT_FILE, 600 /* ARTIST 0x826817A0 */));
 }
 
 // ---------------------------------------------------------------------------
@@ -264,9 +289,14 @@ RwacCommandVoiceRelease::RwacCommandVoiceRelease(
     muCommandType = arSource.muCommandType; // lwz r11,0(r5); stw r11,0(this)
     maOperand     = arSource.maOperand;     // lwz r11,4(r5); stw r11,4(this)
 
-    CGS_ASSERT(luCommandCount == 2u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
+    CGS_ASSERT(luCommandCount == 2u,
+        CgsDev::Assert::MessageAt(
+            "sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
+            KAC_ARTIST_ASSERT_FILE, 252 /* ARTIST 0x82681360 */));
     CGS_ASSERT(GetCommandType() == E_RWAC_COMMAND_VOICE_RELEASE,
-               "E_RWAC_COMMAND_VOICE_RELEASE == GetCommandType()");
+        CgsDev::Assert::MessageAt(
+            "E_RWAC_COMMAND_VOICE_RELEASE == GetCommandType()",
+            KAC_ARTIST_ASSERT_FILE, 253 /* ARTIST 0x82681388 */));
 }
 
 // ---------------------------------------------------------------------------
@@ -279,9 +309,14 @@ RwacCommandSendConnectParameters::RwacCommandSendConnectParameters(
     muCommandType = arSource.muCommandType; // lwz r11,0(r5); stw r11,0(this)
     maOperand     = arSource.maOperand;     // lwz r11,4(r5); stw r11,4(this)
 
-    CGS_ASSERT(luCommandCount == 2u, "sizeof(*this) / sizeof(uintptr_t) == luCommandCount");
+    CGS_ASSERT(luCommandCount == 2u,
+        CgsDev::Assert::MessageAt(
+            "sizeof(*this) / sizeof(uintptr_t) == luCommandCount",
+            KAC_ARTIST_ASSERT_FILE, 532 /* ARTIST 0x82681648 */));
     CGS_ASSERT(GetCommandType() == E_RWAC_COMMAND_SEND_CONNECT_PARAMETERS,
-               "E_RWAC_COMMAND_SEND_CONNECT_PARAMETERS == GetCommandType()");
+        CgsDev::Assert::MessageAt(
+            "E_RWAC_COMMAND_SEND_CONNECT_PARAMETERS == GetCommandType()",
+            KAC_ARTIST_ASSERT_FILE, 533 /* ARTIST 0x82681670 */));
 }
 
 } // namespace Playback

@@ -42,6 +42,9 @@
 #include "GameSource/World/EntityModules/PropEntityModule/SharedIO/BrnPropToTrafficInterface.h" // PropToTrafficInterface (SendTrafficLightRestoreEvents)
 #include <vectorintrinsics.h>
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropZoneManager.h";
+
 namespace BrnWorld
 {
     using BrnPhysics::Props::PropPhysicsDataHeader;
@@ -375,16 +378,24 @@ namespace BrnWorld
     // slot address -- there is NO null return path in the shipped body.
     PropEntityInstance* PropZoneManager::GetProp(u16 lu16ZoneId, u32 luPropIndex)
     {
-        CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES, "luZoneId < 500");
+        CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES,
+            CgsDev::Assert::MessageAt("luZoneId < 500", KAC_ARTIST_ASSERT_FILE, 555 /* ARTIST 0x822A41D8 */));
 
         const u16 lu16StartIndex = mauStartIndexOfZone[lu16ZoneId];
-        CGS_ASSERT(lu16StartIndex != KU_UNLOADED_ZONE, "luStartIndex != KU_UNLOADED_ZONE");
+        CGS_ASSERT(lu16StartIndex != KU_UNLOADED_ZONE,
+            CgsDev::Assert::MessageAt(
+                "luStartIndex != KU_UNLOADED_ZONE",
+                KAC_ARTIST_ASSERT_FILE, 558 /* ARTIST 0x822A420C */));
         CGS_ASSERT(luPropIndex < mauNumberOfPropsInZone[lu16ZoneId],
-                   "luInstanceId < mauNumberOfPropsInZone[luZoneId]");
+            CgsDev::Assert::MessageAt(
+                "luInstanceId < mauNumberOfPropsInZone[luZoneId]",
+                KAC_ARTIST_ASSERT_FILE, 559 /* ARTIST 0x822A4240 */));
 
         const u32 luPoolIndex = lu16StartIndex + luPropIndex;
         CGS_ASSERT(luPoolIndex < KU_MAX_LOADED_PROP_INSTANCES,
-                   "luStartIndex + luInstanceId < BrnPhysics::Props::KU_MAX_LOADED_PROP_INSTANCES");
+            CgsDev::Assert::MessageAt(
+                "luStartIndex + luInstanceId < BrnPhysics::Props::KU_MAX_LOADED_PROP_INSTANCES",
+                KAC_ARTIST_ASSERT_FILE, 560 /* ARTIST 0x822A4268 */));
 
         return &maProps[luPoolIndex];
     }

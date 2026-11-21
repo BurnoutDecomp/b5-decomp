@@ -32,7 +32,7 @@
 
 #include "GameSource/Physics/VehicleManager/BrnVehicleManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                             // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                             // CGS_ASSERT
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"             // SceneManagerIO::InputBuffer_Update::GetInSceneUpdateInterface (@0x825BD8C0, write-lock twin)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // InSceneUpdateInterface::mAddToCacheQueue (X360 +0xC4930)
 #include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManagerIO.h" // TriangleCacheManagerIO::InEventAddToCache (8 bytes)
@@ -41,6 +41,9 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"   // GetHalfExtent / GetPosition
 #include "rw/math/vpu/vector3_operation.h"                                     // rw::math::vpu::MagnitudeSquared
 #include <cmath>                                                               // std::sqrt (the rsqrt NR chain's answer)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnVehicleManager.cpp";
 
 namespace BrnPhysics
 {
@@ -79,7 +82,10 @@ namespace Vehicle
     bool VehicleManager::PrepareTriangleCache(
         CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update)
     {
-        CGS_ASSERT(lpSceneInputBuffer_Update != NULL, "lpSceneInputBuffer_Update != NULL");  // :891
+        CGS_ASSERT(lpSceneInputBuffer_Update != NULL,
+            CgsDev::Assert::MessageAt(
+                "lpSceneInputBuffer_Update != NULL",
+                KAC_ARTIST_ASSERT_FILE, 891 /* ARTIST 0x82615BC4 */));  // :891
 
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdate =
             lpSceneInputBuffer_Update->GetInSceneUpdateInterface();
@@ -193,13 +199,22 @@ namespace Vehicle
     bool VehicleManager::Prepare(rw::IResourceAllocator* lpPhysicsAllocator,
                                  CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer)
     {
-        CGS_ASSERT(lpPhysicsAllocator != NULL, "lpPhysicsAllocator != NULL");                 // :815
-        CGS_ASSERT(lpSceneInputBuffer != NULL, "lpSceneInputBuffer_Update != NULL");          // :816
+        CGS_ASSERT(lpPhysicsAllocator != NULL,
+            CgsDev::Assert::MessageAt(
+                "lpPhysicsAllocator != NULL",
+                KAC_ARTIST_ASSERT_FILE, 815 /* ARTIST 0x8263C6B8 */));                 // :815
+        CGS_ASSERT(lpSceneInputBuffer != NULL,
+            CgsDev::Assert::MessageAt(
+                "lpSceneInputBuffer_Update != NULL",
+                KAC_ARTIST_ASSERT_FILE, 816 /* ARTIST 0x8263C6DC */));          // :816
 
         switch (mePrepareStage)
         {
         default:
-            CGS_ASSERT(false, "Invalid prepare stage\n");                                     // :867
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt(
+                    "Invalid prepare stage\n",
+                    KAC_ARTIST_ASSERT_FILE, 867 /* ARTIST 0x8263C7A0 */));                                     // :867
             return false;
 
         case 0:

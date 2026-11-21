@@ -217,7 +217,9 @@ namespace BrnTraffic
     StaticTrafficParam* TrafficEntityModule::GetStaticTrafficParamFro(u32 luIndex)
     {
         CGS_ASSERT(luIndex >= KU_STATIC_TRAFFIC_OFFSET && luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC,
-                   "( luIndex >= KU_STATIC_TRAFFIC_OFFSET ) && ( luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC )");
+            CgsDev::Assert::MessageAt(
+                "( luIndex >= KU_STATIC_TRAFFIC_OFFSET ) && ( luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC )",
+                KAC_ARTIST_ASSERT_FILE, 2418 /* ARTIST 0x82707984 */));
         return &maStaticTrafficParams[luIndex - KU_STATIC_TRAFFIC_OFFSET];
     }
 
@@ -227,7 +229,9 @@ namespace BrnTraffic
     StaticTrafficParam* TrafficEntityModule::GetStaticTrafficParamFromFullV(u32 luIndex)
     {
         CGS_ASSERT(luIndex >= KU_STATIC_TRAFFIC_OFFSET && luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC,
-                   "( luIndex >= KU_STATIC_TRAFFIC_OFFSET ) && ( luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC )");
+            CgsDev::Assert::MessageAt(
+                "( luIndex >= KU_STATIC_TRAFFIC_OFFSET ) && ( luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC )",
+                KAC_ARTIST_ASSERT_FILE, 2410 /* ARTIST 0x82707904 */));
         return &maStaticTrafficParams[luIndex - KU_STATIC_TRAFFIC_OFFSET];
     }
 
@@ -254,10 +258,18 @@ namespace BrnTraffic
     // So the console is spelling &maParams[luParam].maPlans[luPlan], guarded by IsAlive().
     ParamPlan* TrafficEntityModule::GetParamPlan(u32 luParam, u32 luPlan)
     {
-        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
-        CGS_ASSERT(luPlan < KU_PARAM_NUM_PLANS, "luPlan < KU_PARAM_NUM_PLANS");
+        CGS_ASSERT(luParam < KU_MAX_PARAMS,
+            CgsDev::Assert::MessageAt(
+                "luParam < KU_MAX_PARAMS",
+                KAC_ARTIST_ASSERT_FILE, 2584 /* ARTIST 0x82707DA0 */));
+        CGS_ASSERT(luPlan < KU_PARAM_NUM_PLANS,
+            CgsDev::Assert::MessageAt(
+                "luPlan < KU_PARAM_NUM_PLANS",
+                KAC_ARTIST_ASSERT_FILE, 2585 /* ARTIST 0x82707DC4 */));
         CGS_ASSERT((maParams[luParam].mxFlags & Param::E_FLAG_ALIVE) != 0,
-                   "maParams[luParam].IsAlive()");
+            CgsDev::Assert::MessageAt(
+                "maParams[luParam].IsAlive()",
+                KAC_ARTIST_ASSERT_FILE, 2586 /* ARTIST 0x82707E00 */));
         return &maParams[luParam].maPlans[luPlan];
     }
 
@@ -1857,7 +1869,9 @@ void TrafficEntityModule::EnterStartingUpState()
 void TrafficEntityModule::EnterRunningState()
 {
     CGS_ASSERT(meState == E_STATE_STARTING_UP && meStartingUpState == E_STARTINGUPSTATE_LAST,
-               "( meState == E_STATE_STARTING_UP ) && ( meStartingUpState == E_STARTINGUPSTATE_LAST )");
+        CgsDev::Assert::MessageAt(
+            "( meState == E_STATE_STARTING_UP ) && ( meStartingUpState == E_STARTINGUPSTATE_LAST )",
+            KAC_ARTIST_ASSERT_SOURCE, 1721 /* ARTIST 0x8270811C */));
 
     const ERunningState leRunningStateToUse = meRunningStateToUseAfterStartup;
 

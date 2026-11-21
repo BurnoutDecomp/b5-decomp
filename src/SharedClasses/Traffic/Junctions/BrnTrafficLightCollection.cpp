@@ -221,12 +221,20 @@ namespace BrnTraffic
     {
         const u32 luHash = luInstanceID & KU_INSTANCE_ID_HASH_MASK;
         CGS_ASSERT((luHash + 1) < KU_INSTANCE_ID_HASH_TABLE_SIZE,
-                   "(luHash + 1) < KU_INSTANCE_ID_HASH_TABLE_SIZE");
+            CgsDev::Assert::MessageAt(
+                "(luHash + 1) < KU_INSTANCE_ID_HASH_TABLE_SIZE",
+                KAC_ARTIST_ASSERT_FILE, 288 /* ARTIST 0x8274F5C4 */));
 
         const u32 luBeginIndex = mauInstanceHashOffsets[luHash];
         const u32 luEndIndex   = mauInstanceHashOffsets[luHash + 1];
-        CGS_ASSERT(luEndIndex >= luBeginIndex, "luEndIndex >= luBeginIndex");
-        CGS_ASSERT(luEndIndex <= muNumTrafficLights, "luEndIndex <= muNumTrafficLights");
+        CGS_ASSERT(luEndIndex >= luBeginIndex,
+            CgsDev::Assert::MessageAt(
+                "luEndIndex >= luBeginIndex",
+                KAC_ARTIST_ASSERT_FILE, 294 /* ARTIST 0x8274F600 */));
+        CGS_ASSERT(luEndIndex <= muNumTrafficLights,
+            CgsDev::Assert::MessageAt(
+                "luEndIndex <= muNumTrafficLights",
+                KAC_ARTIST_ASSERT_FILE, 295 /* ARTIST 0x8274F628 */));
 
         for (u32 luIndex = luBeginIndex; luIndex < luEndIndex; ++luIndex)
         {

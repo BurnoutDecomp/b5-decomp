@@ -51,6 +51,8 @@
 
 static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h";
 
+static const char KAC_ARTIST_ASSERT_SOURCE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp";
+
 namespace BrnGui
 {
         // ARTIST off_82F278E0, read directly from BURNOUT_X360_ARTIST.XEX.i64.
@@ -2930,7 +2932,9 @@ namespace BrnGui
     s32 GuiCache::GetTrophyCarUnlockType() const
     {
         CGS_ASSERT(meTrophyCarUnlockType != 0,
-                   "BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE != meTrophyCarUnlockType");
+            CgsDev::Assert::MessageAt(
+                "BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE != meTrophyCarUnlockType",
+                KAC_ARTIST_ASSERT_FILE, 3354 /* ARTIST 0x824B30EC */));
         return meTrophyCarUnlockType;
     }
 
@@ -3224,9 +3228,13 @@ namespace BrnGui
     s32 GuiCache::GetCurrentOnlinePlayerTeam(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CgsDev::Assert::MessageAt(
+                "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                KAC_ARTIST_ASSERT_FILE, 3664 /* ARTIST 0x8240F93C */));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CgsDev::Assert::MessageAt(
+                "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                KAC_ARTIST_ASSERT_FILE, 3665 /* ARTIST 0x8240F960 */));
 
         return maCurrentPlayerTeam[leActiveRaceCarIndex];
     }
@@ -3321,9 +3329,13 @@ namespace BrnGui
     bool GuiCache::GetOnlinePlayerDisconnected(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CgsDev::Assert::MessageAt(
+                "lePlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                KAC_ARTIST_ASSERT_FILE, 3684 /* ARTIST 0x8240F9B4 */));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CgsDev::Assert::MessageAt(
+                "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                KAC_ARTIST_ASSERT_FILE, 3685 /* ARTIST 0x8240F9D8 */));
 
         return maOnlinePlayerDisconnected[leActiveRaceCarIndex];
     }
@@ -3332,9 +3344,13 @@ namespace BrnGui
     bool GuiCache::IsOnlinePlayerEliminated(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "leCurrentPlayer >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CgsDev::Assert::MessageAt(
+                "leCurrentPlayer >= E_ACTIVE_RACE_CAR_INDEX_0",
+                KAC_ARTIST_ASSERT_FILE, 3724 /* ARTIST 0x8240FA34 */));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leCurrentPlayer < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CgsDev::Assert::MessageAt(
+                "leCurrentPlayer < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                KAC_ARTIST_ASSERT_FILE, 3725 /* ARTIST 0x8240FA58 */));
 
         return maOnlinePlayerEliminated[leActiveRaceCarIndex];
     }
@@ -3443,9 +3459,13 @@ namespace BrnGui
     bool GuiCache::GetOnlinePlayerInCarSelect(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CgsDev::Assert::MessageAt(
+                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                KAC_ARTIST_ASSERT_FILE, 3704 /* ARTIST 0x824436FC */));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CgsDev::Assert::MessageAt(
+                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                KAC_ARTIST_ASSERT_FILE, 3705 /* ARTIST 0x82443720 */));
 
         return maOnlinePlayerInCarSelect[leActiveRaceCarIndex];
     }
@@ -3508,7 +3528,9 @@ namespace BrnGui
     const PresetRace* GuiCache::GetPresetRace(s32 liPresetRaceIndex) const
     {
         CGS_ASSERT(liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces,
-                   "liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces");
+            CgsDev::Assert::MessageAt(
+                "liPresetRaceIndex >= 0 && liPresetRaceIndex < miNumPresetRaces",
+                KAC_ARTIST_ASSERT_FILE, 2211 /* ARTIST 0x824B3020 */));
         return &maPresetRaces[liPresetRaceIndex];
     }
 
@@ -3635,9 +3657,13 @@ namespace BrnGui
     bool GuiCache::IsReplayARCRendered(EActiveRaceCarIndex leActiveRaceCarIndex) const
     {
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                   "leARCI >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CgsDev::Assert::MessageAt(
+                "leARCI >= E_ACTIVE_RACE_CAR_INDEX_0",
+                KAC_ARTIST_ASSERT_SOURCE, 4443 /* ARTIST 0x824EEDD4 */));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CgsDev::Assert::MessageAt(
+                "leARCI < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                KAC_ARTIST_ASSERT_SOURCE, 4444 /* ARTIST 0x824EEDF8 */));
         return maReplayARCRendered[leActiveRaceCarIndex];
     }
 
@@ -4198,8 +4224,9 @@ namespace BrnGui
     {
         CGS_ASSERT(lpActiveLandmarksEvent->muNumLandmarks
                        <= GuiEventSetActiveLandmarks::KU_MAX_LANDMARKS_IN_GAME,
-                   "lpActiveLandmarksEvent->muNumLandmarks <= static_cast<uint32_t>( "
-                   "KI_MAX_LANDMARKS_IN_GAME )");                           // cpp:4067
+            CgsDev::Assert::MessageAt(
+                "lpActiveLandmarksEvent->muNumLandmarks <= static_cast<uint32_t>( KI_MAX_LANDMARKS_IN_GAME )",
+                KAC_ARTIST_ASSERT_SOURCE, 4067 /* ARTIST 0x824EE800 */));                           // cpp:4067
 
         for (u32 luIndex = 0; luIndex < lpActiveLandmarksEvent->muNumLandmarks; ++luIndex)
         {

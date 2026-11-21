@@ -69,7 +69,9 @@ void GuiAudioTriggerEvent::Construct(s32 leAction, const char* lpComponentName,
                                      const char* lpLabel, const char* lpMovieName)
 {
     CGS_ASSERT(lpComponentName && lpLabel && lpMovieName,
-               "lpComponentName && lpLabel && lpMovieName");
+        CgsDev::Assert::MessageAt(
+            "lpComponentName && lpLabel && lpMovieName",
+            "..\\..\\..\\GameSource\\Gui/Events/BrnGuiAudioEvent.cpp", 96 /* ARTIST 0x824F6390 */));
 
     CgsCore::SPrintf(macComponent, sizeof(macComponent), lpComponentName);
     macComponent[31] = 0;
@@ -168,9 +170,13 @@ EActiveRaceCarIndex GuiEventUpdateSatNav::SatNavIconInfo::GetActiveRaceCarIndex(
 {
     const s8 liActiveRaceCarIndex = mi8ActiveRaceCarIndex;
     CGS_ASSERT( liActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID,
-                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID" );
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID",
+            KAC_ARTIST_ASSERT_FILE, 1896 /* ARTIST 0x824B2F2C */));
     CGS_ASSERT( liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+            KAC_ARTIST_ASSERT_FILE, 1897 /* ARTIST 0x824B2F50 */));
     return static_cast<EActiveRaceCarIndex>( liActiveRaceCarIndex );
 }
 
@@ -555,14 +561,18 @@ void GuiNetworkRemotePlayerDisconnectEvent::SetActiveRaceCarIndex(EActiveRaceCar
 {
     CGS_ASSERT( (leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                 (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                "(leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)" );
+        CgsDev::Assert::MessageAt(
+            "(leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)",
+            KAC_ARTIST_ASSERT_FILE, 7748 /* ARTIST 0x823A76DC */));
     meActiveRaceCarIndex = leActiveRaceCarIndex;
 }
 
 void GuiNetworkRemotePlayerDisconnectEvent::SetNetworkPlayerID(s32 lPlayerID)
 {
     CGS_ASSERT( lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-                "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID" );
+        CgsDev::Assert::MessageAt(
+            "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            KAC_ARTIST_ASSERT_FILE, 7762 /* ARTIST 0x823A773C */));
     mPlayerID = lPlayerID;
 }
 

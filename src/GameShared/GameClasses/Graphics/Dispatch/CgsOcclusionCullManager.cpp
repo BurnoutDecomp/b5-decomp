@@ -38,6 +38,9 @@
 static const char KAC_ARTIST_ASSERT_FILE[] =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\dispatch\\./CgsOcclusionCullManager.h";
 
+static const char KAC_ARTIST_ASSERT_SOURCE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\Dispatch/CgsOcclusionCullManager.cpp";
+
 namespace CgsGraphics
 {
     CGS_STATIC_ASSERT((sizeof(Matrix44) == 0x40),
@@ -252,8 +255,11 @@ namespace CgsGraphics
     void OcclusionCullManager::EndQueries()
     {
         CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_QUERY,
-                   "meOcclusionMode == OCCLUSIONMODE_QUERY");
-        CGS_ASSERT(mbOcclusionEnabled, "mbOcclusionEnabled");
+            CgsDev::Assert::MessageAt(
+                "meOcclusionMode == OCCLUSIONMODE_QUERY",
+                KAC_ARTIST_ASSERT_SOURCE, 371 /* ARTIST 0x827EDF84 */));
+        CGS_ASSERT(mbOcclusionEnabled,
+            CgsDev::Assert::MessageAt("mbOcclusionEnabled", KAC_ARTIST_ASSERT_SOURCE, 372 /* ARTIST 0x827EDFAC */));
 
         meOcclusionMode = OCCLUSIONMODE_NONE;
         if (mbImmediateMode && !mbOcclusionCheapShader)
@@ -268,8 +274,11 @@ namespace CgsGraphics
     void OcclusionCullManager::BeginConditionalRender()
     {
         CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_NONE,
-                   "meOcclusionMode == OCCLUSIONMODE_NONE");
-        CGS_ASSERT(mbOcclusionEnabled, "mbOcclusionEnabled");
+            CgsDev::Assert::MessageAt(
+                "meOcclusionMode == OCCLUSIONMODE_NONE",
+                KAC_ARTIST_ASSERT_SOURCE, 440 /* ARTIST 0x827E91DC */));
+        CGS_ASSERT(mbOcclusionEnabled,
+            CgsDev::Assert::MessageAt("mbOcclusionEnabled", KAC_ARTIST_ASSERT_SOURCE, 441 /* ARTIST 0x827E9204 */));
 
         if (mbConditionalRendering)
             meOcclusionMode = OCCLUSIONMODE_RENDER;
@@ -282,8 +291,11 @@ namespace CgsGraphics
     void OcclusionCullManager::EndConditionalRender()
     {
         CGS_ASSERT(meOcclusionMode == OCCLUSIONMODE_RENDER || !mbConditionalRendering,
-                   "meOcclusionMode == OCCLUSIONMODE_RENDER || !mbConditionalRendering");
-        CGS_ASSERT(mbOcclusionEnabled, "mbOcclusionEnabled");
+            CgsDev::Assert::MessageAt(
+                "meOcclusionMode == OCCLUSIONMODE_RENDER || !mbConditionalRendering",
+                KAC_ARTIST_ASSERT_SOURCE, 463 /* ARTIST 0x827E9290 */));
+        CGS_ASSERT(mbOcclusionEnabled,
+            CgsDev::Assert::MessageAt("mbOcclusionEnabled", KAC_ARTIST_ASSERT_SOURCE, 464 /* ARTIST 0x827E92B8 */));
 
         meOcclusionMode = OCCLUSIONMODE_NONE;
         shadow::Device::ResetShadowing();

@@ -79,6 +79,9 @@
 // dumped bb_<present>.bmp can be matched to the simple particles drawn into it.
 
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/ParticleModule.cpp";
+
 namespace BrnParticle
 {
     ParticleModule::ParticleModule()
@@ -143,11 +146,16 @@ namespace BrnParticle
     // otherwise publish the kill and changed flags to the dispatch thread.
     void ParticleModule::StopLionEffect(LionEffect* lpEffect)
     {
-        CGS_ASSERT(lpEffect != 0, "lpEffect != NULL");
+        CGS_ASSERT(lpEffect != 0,
+            CgsDev::Assert::MessageAt("lpEffect != NULL", KAC_ARTIST_ASSERT_FILE, 1833 /* ARTIST 0x8228A268 */));
         CGS_ASSERT((lpEffect->muFlags & LionEffect::EPPE_FLAG_IN_USE) != 0,
-                   "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagInUse ) != 0");
+            CgsDev::Assert::MessageAt(
+                "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagInUse ) != 0",
+                KAC_ARTIST_ASSERT_FILE, 1835 /* ARTIST 0x8228A294 */));
         CGS_ASSERT((lpEffect->muFlags & LionEffect::EPPE_FLAG_KILL) == 0,
-                   "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagKill ) == 0");
+            CgsDev::Assert::MessageAt(
+                "( lpEffect->muFlags & BrnParticle::LionEffect::ePPEFlagKill ) == 0",
+                KAC_ARTIST_ASSERT_FILE, 1836 /* ARTIST 0x8228A2C0 */));
         if (lpEffect->muFlags & LionEffect::EPPE_FLAG_CREATE)
             lpEffect->Construct();
         else

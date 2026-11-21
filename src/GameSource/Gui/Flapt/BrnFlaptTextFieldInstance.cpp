@@ -36,9 +36,12 @@ void TextFieldInstance::Construct(const MovieClip* lpMovieClip,
                                   const RGBA* lpAlternateTextColours,
                                   s32 liNumAlternateColours)
 {
-    CGS_ASSERT(lpMovieClip != 0, "lpMovieClip");
+    CGS_ASSERT(lpMovieClip != 0,
+        CgsDev::Assert::MessageAt("lpMovieClip", KAC_ARTIST_ASSERT_FILE, 48 /* ARTIST 0x8246F584 */));
     CGS_ASSERT(luTextFieldIndex < lpMovieClip->muNumTextFields,
-               "luTextFieldIndex < lpMovieClip->muNumTextFields");
+        CgsDev::Assert::MessageAt(
+            "luTextFieldIndex < lpMovieClip->muNumTextFields",
+            KAC_ARTIST_ASSERT_FILE, 49 /* ARTIST 0x8246F5AC */));
 
     // Cache the alternate-text-colour table + construct the embedded text object.
     mAptString.Construct(lpAlternateTextColours, liNumAlternateColours);

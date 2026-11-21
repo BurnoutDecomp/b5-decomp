@@ -16,7 +16,9 @@
 // literals are dropped per project convention; the guard + store are reproduced exactly.
 
 #include "GameSource/Network/SharedIO/BrnNetworkOutPlayerEvents.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Network/BrnNetworkOutEventTypeDefs.h";
 
 namespace BrnNetwork
 {
@@ -32,7 +34,9 @@ namespace BrnNetworkModuleIO
     void NetworkOutPlayerAddedEvent::SetNetworkPlayerID(NetworkPlayerID lNetworkPlayerID)
     {
         CGS_ASSERT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
-                   "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+            CgsDev::Assert::MessageAt(
+                "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+                KAC_ARTIST_ASSERT_FILE, 1447 /* ARTIST 0x8258110C */));
         mNetworkPlayerID = lNetworkPlayerID;
     }
 
@@ -40,7 +44,9 @@ namespace BrnNetworkModuleIO
     void NetworkOutPlayerFinalisedEvent::SetNetworkPlayerID(NetworkPlayerID lNetworkPlayerID)
     {
         CGS_ASSERT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
-                   "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+            CgsDev::Assert::MessageAt(
+                "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+                KAC_ARTIST_ASSERT_FILE, 1554 /* ARTIST 0x8258116C */));
         mNetworkPlayerID = lNetworkPlayerID;
     }
 
@@ -48,7 +54,9 @@ namespace BrnNetworkModuleIO
     void NetworkOutPlayerRemovedEvent::SetNetworkPlayerID(NetworkPlayerID lNetworkPlayerID)
     {
         CGS_ASSERT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
-                   "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+            CgsDev::Assert::MessageAt(
+                "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+                KAC_ARTIST_ASSERT_FILE, 1568 /* ARTIST 0x825811CC */));
         mNetworkPlayerID = lNetworkPlayerID;
     }
 
@@ -62,7 +70,9 @@ namespace BrnNetworkModuleIO
                                                    EDisconnectStatus leDisconnectStatus)
     {
         CGS_ASSERT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
-                   "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+            CgsDev::Assert::MessageAt(
+                "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+                KAC_ARTIST_ASSERT_FILE, 1416 /* ARTIST 0x825810B4 */));
         mNetworkPlayerID     = lNetworkPlayerID;
         meDisconnectStatus   = leDisconnectStatus;
         meActiveRaceCarIndex = leActiveRaceCarIndex;

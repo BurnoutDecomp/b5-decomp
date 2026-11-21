@@ -187,18 +187,30 @@ s32 BaseOnlineModeScoring::GetAwardParameter(const NetworkAwardData* lpAwardData
 // Ascending finishing position. Two cars never share a position.
 int BaseOnlineModeScoring::_RaceWinnerCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL, "lpData1");
-    CGS_ASSERT(lpData2 != NULL, "lpData2");
+    CGS_ASSERT(lpData1 != NULL,
+        CgsDev::Assert::MessageAt("lpData1", KAC_ARTIST_ASSERT_FILE, 392 /* ARTIST 0x823138AC */));
+    CGS_ASSERT(lpData2 != NULL,
+        CgsDev::Assert::MessageAt("lpData2", KAC_ARTIST_ASSERT_FILE, 393 /* ARTIST 0x823138D0 */));
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
 
-    CGS_ASSERT(lpPlayer1->miRaceCarPosition >= 0, "lpPlayer1->miRaceCarPosition >= 0");
+    CGS_ASSERT(lpPlayer1->miRaceCarPosition >= 0,
+        CgsDev::Assert::MessageAt(
+            "lpPlayer1->miRaceCarPosition >= 0",
+            KAC_ARTIST_ASSERT_FILE, 399 /* ARTIST 0x823138F8 */));
     CGS_ASSERT(lpPlayer1->miRaceCarPosition < KI_MAX_ACTIVE_RACE_CARS,
-               "lpPlayer1->miRaceCarPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
-    CGS_ASSERT(lpPlayer2->miRaceCarPosition >= 0, "lpPlayer2->miRaceCarPosition >= 0");
+        CgsDev::Assert::MessageAt(
+            "lpPlayer1->miRaceCarPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
+            KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x82313920 */));
+    CGS_ASSERT(lpPlayer2->miRaceCarPosition >= 0,
+        CgsDev::Assert::MessageAt(
+            "lpPlayer2->miRaceCarPosition >= 0",
+            KAC_ARTIST_ASSERT_FILE, 401 /* ARTIST 0x82313948 */));
     CGS_ASSERT(lpPlayer2->miRaceCarPosition < KI_MAX_ACTIVE_RACE_CARS,
-               "lpPlayer2->miRaceCarPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+        CgsDev::Assert::MessageAt(
+            "lpPlayer2->miRaceCarPosition < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
+            KAC_ARTIST_ASSERT_FILE, 402 /* ARTIST 0x82313970 */));
 
     if (lpPlayer1->miRaceCarPosition > lpPlayer2->miRaceCarPosition)
     {
@@ -210,7 +222,9 @@ int BaseOnlineModeScoring::_RaceWinnerCompare(const void* lpData1, const void* l
     }
 
     CGS_ASSERT(lpPlayer1->miRaceCarPosition != lpPlayer2->miRaceCarPosition,
-               "lpPlayer1->miRaceCarPosition != lpPlayer2->miRaceCarPosition");
+        CgsDev::Assert::MessageAt(
+            "lpPlayer1->miRaceCarPosition != lpPlayer2->miRaceCarPosition",
+            KAC_ARTIST_ASSERT_FILE, 415 /* ARTIST 0x823139C0 */));
     return 0;
 }
 
@@ -310,8 +324,10 @@ int BaseOnlineModeScoring::_FastestLapCompare(const void* lpData1, const void* l
 // Cars whose distance is valid first, then the shortest distance driven.
 int BaseOnlineModeScoring::_ShortestDistanceLapCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL, "lpData1");
-    CGS_ASSERT(lpData2 != NULL, "lpData2");
+    CGS_ASSERT(lpData1 != NULL,
+        CgsDev::Assert::MessageAt("lpData1", KAC_ARTIST_ASSERT_FILE, 569 /* ARTIST 0x82313DF4 */));
+    CGS_ASSERT(lpData2 != NULL,
+        CgsDev::Assert::MessageAt("lpData2", KAC_ARTIST_ASSERT_FILE, 570 /* ARTIST 0x82313E18 */));
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
@@ -334,15 +350,19 @@ int BaseOnlineModeScoring::_ShortestDistanceLapCompare(const void* lpData1, cons
     }
 
     CGS_ASSERT(lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven,
-               "lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven");
+        CgsDev::Assert::MessageAt(
+            "lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven",
+            KAC_ARTIST_ASSERT_FILE, 595 /* ARTIST 0x82313E84 */));
     return 0;
 }
 
 // Cars whose distance is valid first, then the longest distance driven.
 int BaseOnlineModeScoring::_LongestDistanceLapCompare(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL, "lpData1");
-    CGS_ASSERT(lpData2 != NULL, "lpData2");
+    CGS_ASSERT(lpData1 != NULL,
+        CgsDev::Assert::MessageAt("lpData1", KAC_ARTIST_ASSERT_FILE, 612 /* ARTIST 0x82313ED4 */));
+    CGS_ASSERT(lpData2 != NULL,
+        CgsDev::Assert::MessageAt("lpData2", KAC_ARTIST_ASSERT_FILE, 613 /* ARTIST 0x82313EF8 */));
 
     const NetworkAwardData* lpPlayer1 = static_cast<const NetworkAwardData*>(lpData1);
     const NetworkAwardData* lpPlayer2 = static_cast<const NetworkAwardData*>(lpData2);
@@ -365,7 +385,9 @@ int BaseOnlineModeScoring::_LongestDistanceLapCompare(const void* lpData1, const
     }
 
     CGS_ASSERT(lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven,
-               "lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven");
+        CgsDev::Assert::MessageAt(
+            "lpPlayer1->mfDistanceDriven == lpPlayer2->mfDistanceDriven",
+            KAC_ARTIST_ASSERT_FILE, 638 /* ARTIST 0x82313F64 */));
     return 0;
 }
 
@@ -450,7 +472,9 @@ bool BaseOnlineModeScoring::_GiveRaceWinnerAward(const NetworkAwardData* lpaNetw
 {
     CGS_ASSERT(lpaNetworkAwardData[0].miRaceCarPosition < lpaNetworkAwardData[1].miRaceCarPosition ||
                    liNumberOfRaceCars < 2,
-               "lpaNetworkAwardData[0].miRaceCarPosition < lpaNetworkAwardData[1].miRaceCarPosition || liNumberOfRaceCars < 2");
+        CgsDev::Assert::MessageAt(
+            "lpaNetworkAwardData[0].miRaceCarPosition < lpaNetworkAwardData[1].miRaceCarPosition || liNumberOfRaceCars < 2",
+            KAC_ARTIST_ASSERT_FILE, 779 /* ARTIST 0x82314394 */));
     return true;
 }
 

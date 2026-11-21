@@ -3,7 +3,7 @@
 
 #include "GameSource/World/AI/BrnAIModule.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 namespace BrnAI
 {
@@ -70,7 +70,11 @@ bool AIModule::Release()
 
         default:
         {
-            CGS_ASSERT( false, "0" );
+            CGS_ASSERT( false,
+                CgsDev::Assert::MessageAt(
+                    "0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                    "../World/AI/BrnAIModule.cpp", 550 /* ARTIST 0x8276E34C */));
             return false;
         }
     }

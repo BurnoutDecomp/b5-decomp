@@ -98,21 +98,37 @@ namespace Deformation
                                TagPoint* lpTagPointArrayBase)
     {
         CGS_ASSERT(lpSpec->GetStartIndexOfDrivenPoints() < 128,
-                   "lpData->GetStartIndexOfDrivenPoints() < KI_MAX_NUM_DRIVEN_POINTS_PER_DEFORMABLE_OBJECT");
+            CgsDev::Assert::MessageAt(
+                "lpData->GetStartIndexOfDrivenPoints() < KI_MAX_NUM_DRIVEN_POINTS_PER_DEFORMABLE_OBJECT",
+                KAC_ARTIST_ASSERT_FILE, 216 /* ARTIST 0x825B3F20 */));
         CGS_ASSERT(lpSpec->GetStartIndexOfDrivenPoints() >= 0,
-                   "lpData->GetStartIndexOfDrivenPoints() >= 0");
+            CgsDev::Assert::MessageAt(
+                "lpData->GetStartIndexOfDrivenPoints() >= 0",
+                KAC_ARTIST_ASSERT_FILE, 217 /* ARTIST 0x825B3F48 */));
         CGS_ASSERT(lpSpec->GetNumberOfDrivenPoints() >= 0,
-                   "lpData->GetNumberOfDrivenPoints() >= 0");
+            CgsDev::Assert::MessageAt(
+                "lpData->GetNumberOfDrivenPoints() >= 0",
+                KAC_ARTIST_ASSERT_FILE, 218 /* ARTIST 0x825B3F70 */));
         CGS_ASSERT(lpSpec->GetStartIndexOfDrivenPoints() + lpSpec->GetNumberOfDrivenPoints() < 128,
-                   "lpData->GetStartIndexOfDrivenPoints() + lpData->GetNumberOfDrivenPoints() < KI_MAX_NUM_DRIVEN_POINTS_PER_DEFORMABLE_OBJECT");
+            CgsDev::Assert::MessageAt(
+                "lpData->GetStartIndexOfDrivenPoints() + lpData->GetNumberOfDrivenPoints() < KI_MAX_NUM_DRIVEN_POINTS_PER_DEFORMABLE_OBJECT",
+                KAC_ARTIST_ASSERT_FILE, 219 /* ARTIST 0x825B3FA0 */));
         CGS_ASSERT(lpSpec->GetStartIndexOfTagPoints() < 128,
-                   "lpData->GetStartIndexOfTagPoints() < KI_MAX_NUM_TAG_POINTS_PER_DEFORMABLE_OBJECT");
+            CgsDev::Assert::MessageAt(
+                "lpData->GetStartIndexOfTagPoints() < KI_MAX_NUM_TAG_POINTS_PER_DEFORMABLE_OBJECT",
+                KAC_ARTIST_ASSERT_FILE, 220 /* ARTIST 0x825B3FC8 */));
         CGS_ASSERT(lpSpec->GetStartIndexOfTagPoints() >= 0,
-                   "lpData->GetStartIndexOfTagPoints() >= 0");
+            CgsDev::Assert::MessageAt(
+                "lpData->GetStartIndexOfTagPoints() >= 0",
+                KAC_ARTIST_ASSERT_FILE, 221 /* ARTIST 0x825B3FF0 */));
         CGS_ASSERT(lpSpec->GetNumberOfTagPoints() >= 0,
-                   "lpData->GetNumberOfTagPoints() >= 0");
+            CgsDev::Assert::MessageAt(
+                "lpData->GetNumberOfTagPoints() >= 0",
+                KAC_ARTIST_ASSERT_FILE, 222 /* ARTIST 0x825B4018 */));
         CGS_ASSERT(lpSpec->GetStartIndexOfTagPoints() + lpSpec->GetNumberOfTagPoints() < 128,
-                   "lpData->GetStartIndexOfTagPoints() + lpData->GetNumberOfTagPoints() < KI_MAX_NUM_TAG_POINTS_PER_DEFORMABLE_OBJECT");
+            CgsDev::Assert::MessageAt(
+                "lpData->GetStartIndexOfTagPoints() + lpData->GetNumberOfTagPoints() < KI_MAX_NUM_TAG_POINTS_PER_DEFORMABLE_OBJECT",
+                KAC_ARTIST_ASSERT_FILE, 223 /* ARTIST 0x825B4048 */));
 
         // *v5 = 48*GetStartIndexOfDrivenPoints() + a3 (pointer stride sizeof(IKDrivenPoint)==48).
         maDrivenPoints = lpDrivenPointArrayBase + lpSpec->GetStartIndexOfDrivenPoints();
@@ -137,7 +153,9 @@ namespace Deformation
             do
             {
                 CGS_ASSERT(liIndex < mpSpec->GetNumberOfDrivenPoints(),
-                           "liIndex < GetNumberOfDrivenPoints()");
+                    CgsDev::Assert::MessageAt(
+                        "liIndex < GetNumberOfDrivenPoints()",
+                        KAC_ARTIST_ASSERT_FILE, 236 /* ARTIST 0x825E773C */));
                 maDrivenPoints[liIndex].Update();          // IKDrivenPoint::Update(v4 + *v1)
                 ++liIndex;
             }

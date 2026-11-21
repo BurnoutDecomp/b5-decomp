@@ -41,6 +41,11 @@
 
 #include <cstddef>   // offsetof (the x64 payload-offset words of the wire records)
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnPhotoBoothComponent.h";
+static const char KAC_ARTIST_ASSERT_SOURCE[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnPhotoBoothComponent.cpp";
+
 namespace BrnGui
 {
     // E_GUI_RESOURCEID_NUM -- the terminating count of the GUI resource-id enum. Now homed
@@ -217,8 +222,11 @@ namespace BrnGui
     bool PhotoBoothComponent::EnsureResourcesAreLoaded()
     {
         CGS_ASSERT(mPhotoResourceToLoad.muId != KU_GUI_RESOURCEID_NUM,
-                   "E_GUI_RESOURCEID_NUM != mPhotoResourceToLoad.muId");
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+            CgsDev::Assert::MessageAt(
+                "E_GUI_RESOURCEID_NUM != mPhotoResourceToLoad.muId",
+                KAC_ARTIST_ASSERT_FILE, 341 /* ARTIST 0x824B3520 */));
+        CGS_ASSERT(mpGuiCache,
+            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 342 /* ARTIST 0x824B3548 */));
 
         mbResourceLoaded = mpGuiCache->EnsureResourceIsLoaded(mPhotoResourceToLoad);
         return mbResourceLoaded;
@@ -230,8 +238,11 @@ namespace BrnGui
     bool PhotoBoothComponent::EnsureResourcesAreUnloaded()
     {
         CGS_ASSERT(mPhotoResourceToLoad.muId != KU_GUI_RESOURCEID_NUM,
-                   "E_GUI_RESOURCEID_NUM != mPhotoResourceToLoad.muId");
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+            CgsDev::Assert::MessageAt(
+                "E_GUI_RESOURCEID_NUM != mPhotoResourceToLoad.muId",
+                KAC_ARTIST_ASSERT_FILE, 361 /* ARTIST 0x824B35A8 */));
+        CGS_ASSERT(mpGuiCache,
+            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 362 /* ARTIST 0x824B35D0 */));
 
         GuiCache* lpGuiCache = mpGuiCache;
         mbResourceLoaded = false;
@@ -688,9 +699,12 @@ namespace BrnGui
     // waits for them to finish initialising before reporting the flow ready.
     void PhotoBoothComponent::AppendExpectedAptComponents(GuiFlow leFlow)
     {
-        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_ARTIST_ASSERT_SOURCE, 135 /* ARTIST 0x8241ACE0 */));
         CGS_ASSERT((E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow),
-                   "(E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow)");
+            CgsDev::Assert::MessageAt(
+                "(E_GUIFLOW_FIRST <= leFlow) && (E_GUIFLOW_COUNT > leFlow)",
+                KAC_ARTIST_ASSERT_SOURCE, 137 /* ARTIST 0x8241AD0C */));
 
         mpGuiCache->AppendExpectedAptComponent(leFlow, GetName());
         mpGuiCache->AppendExpectedAptComponent(leFlow, mHelpItemLeft.GetName());

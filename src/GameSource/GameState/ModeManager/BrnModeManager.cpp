@@ -37,6 +37,9 @@
 #include <stdlib.h>                                    // getenv        ([mode-results] diag)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint ([mode-results] diag)
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp";
+
 namespace BrnGameState
 {
 
@@ -117,9 +120,14 @@ bool ModeManager::IsInPostEvent() const
 // X360 0x82329890. The car's next-expected checkpoint (clamped to u8 by the X360).
 s32 ModeManager::GetNextLandmarkIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex) const
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= 0, "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leGlobalRaceCarIndex >= 0,
+        CgsDev::Assert::MessageAt(
+            "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
+            KAC_ARTIST_ASSERT_FILE, 5483 /* ARTIST 0x823298BC */));
     CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-               "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+        CgsDev::Assert::MessageAt(
+            "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
+            KAC_ARTIST_ASSERT_FILE, 5484 /* ARTIST 0x823298E0 */));
 
     const s32 liNext = maCarCheckpointData[leGlobalRaceCarIndex].GetNextCheckpointIndex();
     return static_cast<u8>(liNext);   // X360 clrlwi r3,r3,24 (low byte -- the LandmarkIndex)
@@ -143,11 +151,20 @@ u32 ModeManager::CountCheckpointsRemaining(EGlobalRaceCarIndex leGlobalRaceCarIn
 // X360 0x8231E800. Mark a checkpoint as reached by the given car.
 void ModeManager::MarkCarHittingCheckpoint(u32 luCheckpointIndex, EGlobalRaceCarIndex leGlobalRaceCarIndex)
 {
-    CGS_ASSERT(static_cast<s32>(luCheckpointIndex) >= 0, "liCheckpointIndex >= 0");
-    CGS_ASSERT(luCheckpointIndex < muNumLandmarks, "static_cast<uint32_t>( liCheckpointIndex ) < muNumLandmarks");
-    CGS_ASSERT(leGlobalRaceCarIndex >= 0, "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
+    CGS_ASSERT(static_cast<s32>(luCheckpointIndex) >= 0,
+        CgsDev::Assert::MessageAt("liCheckpointIndex >= 0", KAC_ARTIST_ASSERT_FILE, 5514 /* ARTIST 0x8231E830 */));
+    CGS_ASSERT(luCheckpointIndex < muNumLandmarks,
+        CgsDev::Assert::MessageAt(
+            "static_cast<uint32_t>( liCheckpointIndex ) < muNumLandmarks",
+            KAC_ARTIST_ASSERT_FILE, 5515 /* ARTIST 0x8231E860 */));
+    CGS_ASSERT(leGlobalRaceCarIndex >= 0,
+        CgsDev::Assert::MessageAt(
+            "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
+            KAC_ARTIST_ASSERT_FILE, 5517 /* ARTIST 0x8231E884 */));
     CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-               "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+        CgsDev::Assert::MessageAt(
+            "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
+            KAC_ARTIST_ASSERT_FILE, 5518 /* ARTIST 0x8231E8A8 */));
 
     maCarCheckpointData[leGlobalRaceCarIndex].MarkCheckpointAsHit(static_cast<s32>(luCheckpointIndex));
 }
@@ -155,9 +172,14 @@ void ModeManager::MarkCarHittingCheckpoint(u32 luCheckpointIndex, EGlobalRaceCar
 // X360 0x8231E8D8. Re-arm the car's checkpoint tracker for the next lap.
 void ModeManager::ResetCheckpointDataForNextLap(EGlobalRaceCarIndex leGlobalRaceCarIndex)
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= 0, "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leGlobalRaceCarIndex >= 0,
+        CgsDev::Assert::MessageAt(
+            "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
+            KAC_ARTIST_ASSERT_FILE, 5533 /* ARTIST 0x8231E904 */));
     CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-               "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+        CgsDev::Assert::MessageAt(
+            "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
+            KAC_ARTIST_ASSERT_FILE, 5534 /* ARTIST 0x8231E928 */));
 
     maCarCheckpointData[leGlobalRaceCarIndex].SetupCheckpoints(static_cast<s32>(muNumLandmarks));
 }

@@ -3,7 +3,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 #include <cfloat>
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT + the Begin/Fire/EndAssert front-end
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT + the Begin/Fire/EndAssert front-end
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // StrStream (runtime-composed assert messages)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor ("BoostBar", page 3)
 #include "GameSource/Gui/BrnGuiCache.h"                   // GuiCache (resources, time, loaded textures)
@@ -39,6 +39,9 @@
 // dynamic-initialiser region's straight-line stores into the 0x82FBxxxx constant block (the six
 // boost colours cross-validate exactly against the PS3 __static_initialization literals); each
 // constant's X360 BSS address is noted where its using body attests it.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/CustomRenderer/Renderers/BrnBoostBarRenderer.h";
 
 namespace BrnGui
 {
@@ -522,7 +525,9 @@ Vector3 BoostBarRenderer::GetInnerBoostBarColour()
 {
     CGS_ASSERT(meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT &&
                meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE,
-               "( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT ) && ( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE )");
+        CgsDev::Assert::MessageAt(
+            "( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT ) && ( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE )",
+            KAC_ARTIST_ASSERT_FILE, 641 /* ARTIST 0x824EC788 */));
     return mav3BoostInnerColours[meCurrentBoostType];
 }
 
@@ -530,7 +535,9 @@ Vector3 BoostBarRenderer::GetOuterBoostBarColour()
 {
     CGS_ASSERT(meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT &&
                meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE,
-               "( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT ) && ( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE )");
+        CgsDev::Assert::MessageAt(
+            "( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT ) && ( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE )",
+            KAC_ARTIST_ASSERT_FILE, 658 /* ARTIST 0x824EC808 */));
     return mav3BoostOuterColours[meCurrentBoostType];
 }
 

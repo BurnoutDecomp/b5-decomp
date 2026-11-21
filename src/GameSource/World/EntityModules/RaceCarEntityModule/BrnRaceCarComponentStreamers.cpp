@@ -6,7 +6,7 @@ extern s32 KI_PRINT_CAR_LOADING_STATES; // shared ARTIST82FFB830, owned by BrnVe
 #include <cstring>                                                            // strstr
 #include <cstdlib>                                                            // std::getenv ([car-audio] witness)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                           // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                               // CgsID(Un)Compress, CgsIDConvertToString
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                    // CgsDev::Log::gpDebugPrint
 #include "GameSource/Resource/SharedIO/BrnAssetIds.h"                        // BrnResource::MakeVehicleId, EAssetSet
@@ -45,6 +45,10 @@ extern s32 KI_PRINT_CAR_LOADING_STATES; // shared ARTIST82FFB830, owned by BrnVe
 // The assert tripwires that streamed an index into the
 // message buffer are reproduced with the house CGS_ASSERT carrying the static expression.
 // ============================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../World/EntityModules/RaceCarEntityModule/BrnRaceCarComponentStreamers.cpp";
 
 namespace BrnWorld
 {
@@ -134,7 +138,9 @@ bool RaceCarAudioStreamer::IsVehicleAssetLoaded( CgsID lAssetId, s32 liActiveRac
     (void)lbIsPlayer;
 
     CGS_ASSERT( liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
-                "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+        CgsDev::Assert::MessageAt(
+            "liActiveRaceCar >= 0 && liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS",
+            KAC_ARTIST_ASSERT_FILE, 843 /* ARTIST 0x822A5904 */));
 
     return maEntries[liActiveRaceCar].meState
                == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_LOADEDANDATTACHED;
@@ -177,22 +183,33 @@ void RaceCarAudioStreamer::OnUnloadComplete( const BrnResource::GameDataIO::Unlo
 {
     const s32 liActiveRaceCar = static_cast<s32>( GetUserId( liListIndex ) );
 
-    CGS_ASSERT( liActiveRaceCar >= 0, "liActiveRaceCar >= 0" );
-    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS, "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS" );
+    CGS_ASSERT( liActiveRaceCar >= 0,
+        CgsDev::Assert::MessageAt("liActiveRaceCar >= 0", KAC_ARTIST_ASSERT_FILE, 392 /* ARTIST 0x822A5604 */));
+    CGS_ASSERT( liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS,
+        CgsDev::Assert::MessageAt(
+            "liActiveRaceCar < KI_MAX_ACTIVE_RACE_CARS",
+            KAC_ARTIST_ASSERT_FILE, 393 /* ARTIST 0x822A5628 */));
 
     RaceCarStreamingSound& lEntry = maEntries[liActiveRaceCar];
 
-    CGS_ASSERT( lpEvent != 0, "lpEvent" );
-    CGS_ASSERT( lEntry.mLoadedBundleId != 0, "lpEntry->mLoadedBundleId" );
-    CGS_ASSERT( lEntry.mbLoadedIsPlayer, "lpEntry->mbLoadedIsPlayer" );
+    CGS_ASSERT( lpEvent != 0,
+        CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 397 /* ARTIST 0x822A5660 */));
+    CGS_ASSERT( lEntry.mLoadedBundleId != 0,
+        CgsDev::Assert::MessageAt("lpEntry->mLoadedBundleId", KAC_ARTIST_ASSERT_FILE, 398 /* ARTIST 0x822A5688 */));
+    CGS_ASSERT( lEntry.mbLoadedIsPlayer,
+        CgsDev::Assert::MessageAt("lpEntry->mbLoadedIsPlayer", KAC_ARTIST_ASSERT_FILE, 399 /* ARTIST 0x822A56B0 */));
     CGS_ASSERT( lEntry.mLoadedBundleId == lpEvent->GetGameDataId(),
-                "lpEntry->mLoadedBundleId == lpEvent->GetGameDataId()" );
+        CgsDev::Assert::MessageAt(
+            "lpEntry->mLoadedBundleId == lpEvent->GetGameDataId()",
+            KAC_ARTIST_ASSERT_FILE, 400 /* ARTIST 0x822A56DC */));
 
     lEntry.mLoadedBundleId  = 0;
     lEntry.mbLoadedIsPlayer = false;
 
     CGS_ASSERT( lEntry.meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_UNLOADINGBUNDLES,
-                "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_UNLOADINGBUNDLES" );
+        CgsDev::Assert::MessageAt(
+            "lpEntry->meState == RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_UNLOADINGBUNDLES",
+            KAC_ARTIST_ASSERT_FILE, 405 /* ARTIST 0x822A5710 */));
 
     lEntry.meState = RaceCarStreamingSound::E_RACECARSTREAMINGSOUND_IDLE;
 }

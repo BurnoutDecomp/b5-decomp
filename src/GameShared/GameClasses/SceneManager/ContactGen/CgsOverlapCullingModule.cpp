@@ -1086,16 +1086,20 @@ bool OverlapCullingModule::IsInsideEscapeVolume(s32 liVolumeInstanceIndex)
     VolumeInstance* lpEscapeVolInst =
         mpEntityManager->GetVolumeInstance(static_cast<s32>(luEscapeVolumeInstanceIndex));
 
-    CGS_ASSERT(lpVolInst != NULL, "lpVolInst");              // .cpp:614
-    CGS_ASSERT(lpEscapeVolInst != NULL, "lpEscapeVolInst");  // .cpp:615
+    CGS_ASSERT(lpVolInst != NULL,
+        CgsDev::Assert::MessageAt("lpVolInst", KAC_ARTIST_ASSERT_FILE, 614 /* ARTIST 0x828CB0FC */));              // .cpp:614
+    CGS_ASSERT(lpEscapeVolInst != NULL,
+        CgsDev::Assert::MessageAt("lpEscapeVolInst", KAC_ARTIST_ASSERT_FILE, 615 /* ARTIST 0x828CB120 */));  // .cpp:615
 
     const VolRef::Volume* lpVol =
         mpVolumeManager->GetRwVolume(lpVolInst->miVolumeIndex);
     const VolRef::Volume* lpEscapeVol =
         mpVolumeManager->GetRwVolume(lpEscapeVolInst->miVolumeIndex);
 
-    CGS_ASSERT(lpVol != NULL, "lpVol");              // .cpp:619
-    CGS_ASSERT(lpEscapeVol != NULL, "lpEscapeVol");  // .cpp:620
+    CGS_ASSERT(lpVol != NULL,
+        CgsDev::Assert::MessageAt("lpVol", KAC_ARTIST_ASSERT_FILE, 619 /* ARTIST 0x828CB164 */));              // .cpp:619
+    CGS_ASSERT(lpEscapeVol != NULL,
+        CgsDev::Assert::MessageAt("lpEscapeVol", KAC_ARTIST_ASSERT_FILE, 620 /* ARTIST 0x828CB188 */));  // .cpp:620
 
     rw::collision::PrimitivePairIntersectResult lIntersectResult;
 
@@ -1162,16 +1166,20 @@ void OverlapCullingModule::DoInternalCollision(s32 liVolumeInstanceIndex,
     VolumeInstance* lpIntVolInst =
         mpEntityManager->GetVolumeInstance(static_cast<s32>(luInternalVolumeInstanceIndex));
 
-    CGS_ASSERT(lpVolInst != NULL, "lpVolInst");        // .cpp:657
-    CGS_ASSERT(lpIntVolInst != NULL, "lpIntVolInst");  // .cpp:658
+    CGS_ASSERT(lpVolInst != NULL,
+        CgsDev::Assert::MessageAt("lpVolInst", KAC_ARTIST_ASSERT_FILE, 657 /* ARTIST 0x828CB234 */));        // .cpp:657
+    CGS_ASSERT(lpIntVolInst != NULL,
+        CgsDev::Assert::MessageAt("lpIntVolInst", KAC_ARTIST_ASSERT_FILE, 658 /* ARTIST 0x828CB258 */));  // .cpp:658
 
     const VolRef::Volume* lpVol =
         mpVolumeManager->GetRwVolume(lpVolInst->miVolumeIndex);
     const VolRef::Volume* lpIntVol =
         mpVolumeManager->GetRwVolume(lpIntVolInst->miVolumeIndex);
 
-    CGS_ASSERT(lpVol != NULL, "lpVol");        // .cpp:662
-    CGS_ASSERT(lpIntVol != NULL, "lpIntVol");  // .cpp:663
+    CGS_ASSERT(lpVol != NULL,
+        CgsDev::Assert::MessageAt("lpVol", KAC_ARTIST_ASSERT_FILE, 662 /* ARTIST 0x828CB29C */));        // .cpp:662
+    CGS_ASSERT(lpIntVol != NULL,
+        CgsDev::Assert::MessageAt("lpIntVol", KAC_ARTIST_ASSERT_FILE, 663 /* ARTIST 0x828CB2C0 */));  // .cpp:663
 
     DoPairQuery(lpOutputBuffer,
                 lpVolInst, static_cast<u32>(liVolumeInstanceIndex), lpVol,

@@ -69,6 +69,8 @@
 #include "SDKs/XboxMath/XMVectorACos.h"   // XboxMath::XMVectorACos (X360 0x821F0980), the FOV cone's arc-cosine
 #include <cstdlib>   // [H3c] qsort (the IconDisplaySort pass)
 
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapIconManager.cpp";
+
 namespace BrnGui
 {
 namespace
@@ -299,8 +301,10 @@ s32 MapIconManager::GetDriveThroughAndJunkyardCount() const
 // the selection space when rival selection is on, so their count comes off first.
 const char* MapIconManager::GetRoadSignNameAtIndex(s32 liIndex) const
 {
-    CGS_ASSERT(liIndex >= 0, "liIndex >= 0");                        // :2591 (non-gating)
-    CGS_ASSERT(mbUseRoadSigns == true, "mbUseRoadSigns == true");    // :2592 (non-gating)
+    CGS_ASSERT(liIndex >= 0,
+        CgsDev::Assert::MessageAt("liIndex >= 0", KAC_ARTIST_ASSERT_FILE, 2591 /* ARTIST 0x824FAA7C */));                        // :2591 (non-gating)
+    CGS_ASSERT(mbUseRoadSigns == true,
+        CgsDev::Assert::MessageAt("mbUseRoadSigns == true", KAC_ARTIST_ASSERT_FILE, 2592 /* ARTIST 0x824FAAAC */));    // :2592 (non-gating)
 
     s32 liRoadSignIndex = liIndex;
     if (mbAllowRivalSelection)   // +0x7081
@@ -308,9 +312,12 @@ const char* MapIconManager::GetRoadSignNameAtIndex(s32 liIndex) const
         liRoadSignIndex -= GetNumRivalIcons();
     }
 
-    CGS_ASSERT(liRoadSignIndex >= 0, "liRoadSignIndex >= 0");        // :2601 (non-gating)
+    CGS_ASSERT(liRoadSignIndex >= 0,
+        CgsDev::Assert::MessageAt("liRoadSignIndex >= 0", KAC_ARTIST_ASSERT_FILE, 2601 /* ARTIST 0x824FAAE8 */));        // :2601 (non-gating)
     CGS_ASSERT(liRoadSignIndex < mRoadSignIconManager.GetNumIcons(),
-               "liRoadSignIndex < mRoadSignIconManager.GetNumIcons()");   // :2602 (non-gating)
+        CgsDev::Assert::MessageAt(
+            "liRoadSignIndex < mRoadSignIconManager.GetNumIcons()",
+            KAC_ARTIST_ASSERT_FILE, 2602 /* ARTIST 0x824FAB0C */));   // :2602 (non-gating)
 
     return mRoadSignIconManager.GetIconNameAtIndex(static_cast<u32>(liRoadSignIndex));
 }
@@ -321,7 +328,9 @@ const char* MapIconManager::GetRoadSignNameAtIndex(s32 liIndex) const
 u32 MapIconManager::GetEventIDAtIndex(s32 liIndex) const
 {
     CGS_ASSERT(meEventIconDisplayType != GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT,
-               "meEventIconDisplayType != GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT");
+        CgsDev::Assert::MessageAt(
+            "meEventIconDisplayType != GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT",
+            KAC_ARTIST_ASSERT_FILE, 2618 /* ARTIST 0x824FAB70 */));
                                                                      // :2618 (non-gating)
 
     s32 liEventIndex = liIndex;
@@ -2189,7 +2198,9 @@ void MapIconManager::SetShowDrivethrus(bool lbShowDrivethrus)
 void MapIconManager::SetAllowDriveThruSelection(bool lbAllowDriveThruSelection)
 {
     CGS_ASSERT(mbShowingDriveThrus || !lbAllowDriveThruSelection,
-               "mbShowingDriveThrus || !lbAllowDriveThruSelection");   // cpp:3409
+        CgsDev::Assert::MessageAt(
+            "mbShowingDriveThrus || !lbAllowDriveThruSelection",
+            KAC_ARTIST_ASSERT_FILE, 3409 /* ARTIST 0x824F4FBC */));   // cpp:3409
 
     mbAllowDriveThruSelection = lbAllowDriveThruSelection;   // X360 +0x7080
 }

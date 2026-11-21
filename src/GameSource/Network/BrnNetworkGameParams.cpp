@@ -232,9 +232,12 @@ void GameParams::SetVehicleChoice(s32 liVehicleChoice)
 // VEC_LEVEL field (bits 13..16) of the game-search word.
 void GameParams::SetVehicleLevelLimit(s32 liLevelLimit)
 {
-    CGS_ASSERT(liLevelLimit >= 0, "liLevelLimit >= 0");
+    CGS_ASSERT(liLevelLimit >= 0,
+        CgsDev::Assert::MessageAt("liLevelLimit >= 0", KAC_ARTIST_ASSERT_FILE, 180 /* ARTIST 0x82583DE4 */));
     CGS_ASSERT(liLevelLimit < (1 << KU_BRN_GAMESEARCHDATA_VEC_LEVEL_NUM_BITS),
-               "liLevelLimit < (1<<KU_BRN_GAMESEARCHDATA_VEC_LEVEL_NUM_BITS)");
+        CgsDev::Assert::MessageAt(
+            "liLevelLimit < (1<<KU_BRN_GAMESEARCHDATA_VEC_LEVEL_NUM_BITS)",
+            KAC_ARTIST_ASSERT_FILE, 181 /* ARTIST 0x82583E08 */));
 
     const u32 luMask = ((1u << KU_BRN_GAMESEARCHDATA_VEC_LEVEL_NUM_BITS) - 1)
                        << KU_BRN_GAMESEARCHDATA_VEC_LEVEL_BASE_BIT;
@@ -275,9 +278,12 @@ void GameParams::SetTrafficCheckingOn(bool lbTrafficCheckingOn)
 // (mask 0xF8000).
 void GameParams::SetTimeLimit(s32 liTimeLimit)
 {
-    CGS_ASSERT(liTimeLimit >= 0, "liTimeLimit >= 0");
+    CGS_ASSERT(liTimeLimit >= 0,
+        CgsDev::Assert::MessageAt("liTimeLimit >= 0", KAC_ARTIST_ASSERT_FILE, 233 /* ARTIST 0x82583EEC */));
     CGS_ASSERT(liTimeLimit < (1 << KI_GAME_PARAMS_TIME_LIMIT_NUM_BITS),
-               "liTimeLimit < (1<<KI_GAME_PARAMS_TIME_LIMIT_NUM_BITS)");
+        CgsDev::Assert::MessageAt(
+            "liTimeLimit < (1<<KI_GAME_PARAMS_TIME_LIMIT_NUM_BITS)",
+            KAC_ARTIST_ASSERT_FILE, 234 /* ARTIST 0x82583F10 */));
     mGameData.muUser1 = ((static_cast<u32>(liTimeLimit) << KI_GAME_PARAMS_TIME_LIMIT_BASE_BIT) & 0xF8000u)
                       | (mGameData.muUser1 & 0xFFF07FFFu);
 }
