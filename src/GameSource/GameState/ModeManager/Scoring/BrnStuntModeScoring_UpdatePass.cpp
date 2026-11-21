@@ -57,7 +57,7 @@
 // the whole accumulator on bank. Matches the sibling Update* bodies (BrnStuntModeScoring_StuntTypes.cpp).
 #include "rw/math/vpu/vector3_operation.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [stunt] the per-award witness rung
 #include <cstdlib>                                          // getenv (BRN_STUNT_DIAG)
 
@@ -567,7 +567,11 @@ namespace BrnGameState
             lEvent.miFlatSpins         = static_cast<s16>(mRecentStunt.muFlatSpins);
             lEvent.miBarrelRolls       = static_cast<s16>(mRecentStunt.muBarrelRolls);
 
-            CGS_ASSERT(lpOutputActionQueue != 0, "lpOutputActionQueue");
+            CGS_ASSERT(lpOutputActionQueue != 0,
+                CgsDev::Assert::MessageAt(
+                    "lpOutputActionQueue",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                    "../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 163 /* ARTIST 0x82344748 */));
 
             // X360: AddEvent(queue, &payload, /*type*/21, /*size*/8).
             lpOutputActionQueue->AddEvent(

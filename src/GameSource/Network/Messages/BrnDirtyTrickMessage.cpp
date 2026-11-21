@@ -2,7 +2,7 @@
 
 #include "GameSource/Network/Messages/BrnDirtyTrickMessage.h"
 #include "GameSource/Network/BrnNetworkManager.h"        // BrnNetworkManager::PackOrUnpack (player-id field helper)
-#include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"       // CGS_ASSERT
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::DirtyTrickMessage::Construct            @ 0x8257AB68
@@ -82,7 +82,10 @@ namespace BrnNetwork
         mu8DirtyTrickType         = lu8DirtyTrickType;      // stb, +0x30
         mu8DirtyTrickStatus       = lu8DirtyTrickStatus;    // stb, +0x31
         CgsNetwork::ReliableMessage::PrepareForSend(KI_DIRTY_TRICK_MESSAGE_TYPE, lu16Frame);
-        CGS_ASSERT(IsReliable(), "IsReliable()");
+        CGS_ASSERT(IsReliable(),
+            CgsDev::Assert::MessageAt(
+                "IsReliable()",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnDirtyTrickMessage.cpp", 106 /* ARTIST 0x8257AC2C */));
     }
 
     s32 DirtyTrickMessage::GetPackedMessageSize()

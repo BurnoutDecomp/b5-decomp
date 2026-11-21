@@ -7,7 +7,9 @@
 // the stringized conditions match the X360 assert text.
 
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiEventTypeDefs.h";
 
 namespace BrnGui
 {
@@ -57,8 +59,10 @@ void GuiEventDrawEventIcons::Construct(bool lbDrawIcons,
 void GuiEventDrawEventIcons::GetIgnoreIcons(u32* lpuIconsToIgnore,
                                             s32* lpiNumIconsToIgnore) const
 {
-    CGS_ASSERT( lpuIconsToIgnore != 0, "lpuIconsToIgnore" );
-    CGS_ASSERT( lpiNumIconsToIgnore != 0, "lpiNumIconsToIgnore" );
+    CGS_ASSERT( lpuIconsToIgnore != 0,
+        CgsDev::Assert::MessageAt("lpuIconsToIgnore", KAC_ARTIST_ASSERT_FILE, 2815 /* ARTIST 0x82443548 */));
+    CGS_ASSERT( lpiNumIconsToIgnore != 0,
+        CgsDev::Assert::MessageAt("lpiNumIconsToIgnore", KAC_ARTIST_ASSERT_FILE, 2816 /* ARTIST 0x8244356C */));
 
     *lpiNumIconsToIgnore = miNumIconsToIgnore;
 

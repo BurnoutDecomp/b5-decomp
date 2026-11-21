@@ -22,7 +22,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnTextSelection.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 namespace BrnGui
 {
@@ -146,7 +146,10 @@ namespace BrnGui
         if (miHighlightedIndex > -1)
         {
             Selectable* lpCurrentlySelected = GetHighlighted();
-            CGS_ASSERT(lpCurrentlySelected != 0, "lpCurrentlySelected");   // cpp:153
+            CGS_ASSERT(lpCurrentlySelected != 0,
+                CgsDev::Assert::MessageAt(
+                    "lpCurrentlySelected",
+                    "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnTextSelection.cpp", 153 /* ARTIST 0x824E83F8 */));   // cpp:153
 
             // X360 `lwz r4, 8(r30)` -- Selectable::mpcSelectionText, read through the row
             // type that owns the accessor (DWARF BrnTextSelectionItem.h:83 GetText()).

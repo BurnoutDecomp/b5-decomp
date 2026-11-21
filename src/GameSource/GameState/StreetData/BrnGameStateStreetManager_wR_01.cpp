@@ -20,7 +20,7 @@
 #include "SharedClasses/StreetData/BrnChallengeData.h"                        // ChallengeData::ContainsData / GetScore, ScoreType operator++
 #include "GameSource/GameState/BrnCgsPlayerName.h"                            // CgsNetwork::PlayerName
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"     // CgsDev::PerfMonCpu::StartMonitor / StopMonitor
-#include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                            // CGS_ASSERT
 
 #include <string.h>
 
@@ -88,7 +88,10 @@ void StreetManager::Update( bool lbIsAnythingPaused,
 // ----------------------------------------------------------------------------
 void StreetManager::UpdateRoadRulesProfileScores()
 {
-    CGS_ASSERT( mpProgressionManager, "mpProgressionManager" );
+    CGS_ASSERT( mpProgressionManager,
+        CgsDev::Assert::MessageAt(
+            "mpProgressionManager",
+            "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2443 /* ARTIST 0x823174A8 */));
 
     CgsDev::PerfMonCpu::StartMonitor( miSetRoadRuleNetworkHighScoresPM );
     mpProgressionManager->SetRoadRuleNetworkHighScores( maNetworkChallengeData );

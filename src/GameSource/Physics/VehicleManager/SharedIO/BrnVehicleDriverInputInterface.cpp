@@ -16,7 +16,10 @@
 #include <cstring>   // memcpy
 #include <cstddef>   // offsetof (layout oracle)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h";
 
 namespace BrnPhysics
 {
@@ -160,8 +163,12 @@ namespace Vehicle
     // words from `this`). Range-guards the index, then returns the float.
     f32 VehicleDriverInputInterface::GetBaseDeformationAmount(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            CgsDev::Assert::MessageAt(
+                "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 286 /* ARTIST 0x825B35B4 */));
+        CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            CgsDev::Assert::MessageAt(
+                "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 287 /* ARTIST 0x825B35D8 */));
 
         return maBaseDeformationAmounts[leRaceCarIndex];
     }
@@ -172,8 +179,12 @@ namespace Vehicle
     // from `this`). Range-guards the index, then returns the s32.
     s32 VehicleDriverInputInterface::Ge(EActiveRaceCarIndex leRaceCarIndex) const
     {
-        CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,   "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+            CgsDev::Assert::MessageAt(
+                "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 305 /* ARTIST 0x825B362C */));
+        CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+            CgsDev::Assert::MessageAt(
+                "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 306 /* ARTIST 0x825B3650 */));
 
         return maBaseDeformationFrames[leRaceCarIndex];
     }

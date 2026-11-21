@@ -51,7 +51,7 @@
 #include <cstddef>  // offsetof
 #include <cstring>  // memset
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint / gxMessageFilterFlags
 #include "GameShared/GameClasses/SceneManager/CgsEntityManager.h"           // EntityManager, VolumeInstance
 #include "GameShared/GameClasses/SceneManager/CgsVolumeManager.h"           // VolumeManager::GetRwVolume
@@ -60,6 +60,9 @@
 #include "vendor/renderware/collision/CollisionVolume.hpp"                  // native Volume type descriptors
 #include "vendor/renderware/collision/GPInstance.hpp"                       // PrimitivePairIntersect(+Result)
 #include "vendor/renderware/collision/VolumeQuery.hpp"                      // rw::collision::VolumeVolumeQuery
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\ContactGen/CgsOverlapCullingModule.cpp";
 
 namespace CgsSceneManager
 {
@@ -406,8 +409,10 @@ bool OverlapCullingModule::Release()
 void OverlapCullingModule::Update(OverlapCullingIO::InputBuffer* lpInputBuffer,
                                   OverlapCullingIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");    // .cpp:209
-    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");  // .cpp:210
+    CGS_ASSERT(lpInputBuffer != 0,
+        CgsDev::Assert::MessageAt("lpInputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 209 /* ARTIST 0x828D1D80 */));    // .cpp:209
+    CGS_ASSERT(lpOutputBuffer != 0,
+        CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 210 /* ARTIST 0x828D1DA4 */));  // .cpp:210
 
     lpInputBuffer->LockForRead();
     lpOutputBuffer->LockForWrite();

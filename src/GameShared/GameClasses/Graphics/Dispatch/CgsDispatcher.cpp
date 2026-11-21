@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/rwcore_structs.h"   // rw::Resource / rw::ResourceDescriptor / rw::IResourceAllocator
 #include <new>                   // ::operator new (the PC RW-heap thunk target)
 
@@ -59,7 +59,10 @@ DispatchCommand* DispatchBin::AllocateCommand(u32 luNumExtraQwords)
 // quad-words and return the old head. Must not be called mid-packet.
 void* DispatchBin::AllocateMemoryFast(u32 luQwords)
 {
-    CGS_ASSERT(m_pPacketStart == NULL, "m_pPacketStart == NULL");
+    CGS_ASSERT(m_pPacketStart == NULL,
+        CgsDev::Assert::MessageAt(
+            "m_pPacketStart == NULL",
+            "..\\..\\..\\GameShared\\GameClasses\\Graphics\\Dispatch\\CgsDispatcher.h", 437 /* ARTIST 0x822A0650 */));
 
     if (static_cast<u32>(m_pNextWord - m_pBin) + luQwords >= m_uSize)
     {

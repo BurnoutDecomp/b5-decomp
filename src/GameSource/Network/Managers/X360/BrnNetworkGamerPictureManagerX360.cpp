@@ -1,6 +1,6 @@
 #include "GameSource/Network/Managers/X360/BrnNetworkGamerPictureManagerX360.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"             // CgsNetwork::NetworkTexture
 #include "GameShared/GameClasses/Network/Utilities/CgsNetworkImageConverter.h"    // ConvertAndResize
 #include "GameShared/Jobs/DXTCompress/CgsNetworkTextureDXTCompress.h"             // SetNewTextureToCompress
@@ -16,6 +16,9 @@
 #include <xtl.h>
 
 #include "netconn.h"   // NetConnStatus ('onln': 1 while connected to the network service)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerPictureManagerX360.cpp";
 
 namespace BrnNetwork
 {
@@ -61,7 +64,8 @@ namespace BrnNetwork
     void GamerPictureManagerX360::Construct(BrnNetworkManager* lpNetworkManager,
                                             CgsNetwork::NetworkTextureDXTCompress* lpTextureCompressor)
     {
-        CGS_ASSERT(lpNetworkManager, "lpNetworkManager");
+        CGS_ASSERT(lpNetworkManager,
+            CgsDev::Assert::MessageAt("lpNetworkManager", KAC_ARTIST_ASSERT_FILE, 59 /* ARTIST 0x825574E8 */));
 
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_GAMER_PICTURES; ++liPlayerIndex)
         {
@@ -75,7 +79,8 @@ namespace BrnNetwork
         mbPictureDownloaded     = false;
         mDownloadingXuid        = 0;
 
-        CGS_ASSERT(lpTextureCompressor, "lpTextureCompressor");
+        CGS_ASSERT(lpTextureCompressor,
+            CgsDev::Assert::MessageAt("lpTextureCompressor", KAC_ARTIST_ASSERT_FILE, 76 /* ARTIST 0x82557550 */));
         mpTextureCompressor = lpTextureCompressor;
 
         ResetGamerPictureData();

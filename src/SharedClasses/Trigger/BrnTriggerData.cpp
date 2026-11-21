@@ -6,9 +6,12 @@
 #include "SharedClasses/Trigger/BrnSpawnLocation.h"  // complete SpawnLocation (GetSpawnLocation stride)
 #include "SharedClasses/Trigger/BrnGenericRegion.h"  // complete GenericRegion (GetGenericRegion stride == 0x38)
 #include "SharedClasses/Trigger/BrnRoamingLocation.h" // complete RoamingLocation (GetRoamingLocation stride == 0x20)
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (GetOnlineLandmark / FixUp message build)
 #include "types.hpp"                                   // uintptr_t (load-time pointer relocation arithmetic)
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h";
+
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnTrigger::TriggerData::GetRegion                 @ 0x8230E490
@@ -23,7 +26,9 @@
 const BrnTrigger::TriggerRegion*
 BrnTrigger::TriggerData::GetRegion( int liRegionIndex ) const
 {
-    CGS_ASSERT( liRegionIndex < miRegionCount, "liRegionIndex < miRegionCount" );
+    CGS_ASSERT( liRegionIndex < miRegionCount,
+        CgsDev::Assert::MessageAt(
+            "liRegionIndex < miRegionCount", KAC_ARTIST_ASSERT_FILE, 624 /* ARTIST 0x8230E4C0 */));
     return mppRegions[liRegionIndex];
 }
 
@@ -45,7 +50,9 @@ BrnTrigger::TriggerData::GetLandmarkFromRegionIndex( int liRegionIndex ) const
 const BrnTrigger::Killzone*
 BrnTrigger::TriggerData::GetKillzone( int liKillzoneIndex ) const
 {
-    CGS_ASSERT( liKillzoneIndex < miKillzoneCount, "liKillzoneIndex < miKillzoneCount" );
+    CGS_ASSERT( liKillzoneIndex < miKillzoneCount,
+        CgsDev::Assert::MessageAt(
+            "liKillzoneIndex < miKillzoneCount", KAC_ARTIST_ASSERT_FILE, 533 /* ARTIST 0x82354850 */));
     return &mpKillzones[liKillzoneIndex];
 }
 

@@ -15,7 +15,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // CgsDev::Debug2DImmediateRender
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h" // CgsDev::Debug3DImmediateRender
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                       // CgsDev::SimpleStrStream
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                           // CgsCore::SPrintf (DrawPortalIds)
 #include "GameSource/World/AI/Route/BrnAStar.h"                                   // BrnAI::AStar / AStarNodePool (DrawAStarInMap)
 
@@ -269,7 +269,11 @@ void RouteMapDebugComponent::Back100SectionsCallback(void* lpUserData)
 // ====================================================================================================
 void RouteMapDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpDisplay)
 {
-    CGS_ASSERT(mpRouteMapModule != NULL, "mpRouteMapModule != NULL");
+    CGS_ASSERT(mpRouteMapModule != NULL,
+        CgsDev::Assert::MessageAt(
+            "mpRouteMapModule != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/AI/Route/BrnRouteMapDebugComponent.cpp", 160 /* ARTIST 0x8278C800 */));
 
     if (mbDrawPortals)
         DrawPortals(lpDisplay);

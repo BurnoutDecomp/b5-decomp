@@ -1,5 +1,5 @@
 #include "GameSource/Network/X360/BrnServerInterfaceX360.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::BrnServerInterfaceX360::Release @ 0x8258B2E0
@@ -124,7 +124,11 @@ namespace BrnNetwork
 
         default:
             // BrnServerInterfaceX360.cpp:181 -- expression string "0" verbatim.
-            CGS_ASSERT( false, "0" );
+            CGS_ASSERT( false,
+                CgsDev::Assert::MessageAt(
+                    "0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                    "../Network/X360/BrnServerInterfaceX360.cpp", 181 /* ARTIST 0x8258B394 */));
             return false;
         }
     }

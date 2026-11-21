@@ -1,6 +1,6 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnBoostMessageItem.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                   // CGS_ASSERT
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"                                    // BrnFlapt::FileRef
 #include "GameSource/Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponentUtils.h"    // BrnGui::AttachToTextFieldComponent
 
@@ -10,6 +10,9 @@
 // Bodied here (5 ledger functions):
 //   Construct @0x82411A18   Prepare @0x82420050   SetText @0x82411B00
 //   SetTransition @0x82420158                     UpdateBoostType @0x82411BD0
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnBoostMessageItem.cpp";
 
 namespace BrnGui
 {
@@ -89,8 +92,12 @@ void BoostMessageItem::SetTransition(u32 luTransition, s32 leBoostType)
 // enum spelling; -1 leaves the backing untouched.
 void BoostMessageItem::UpdateBoostType(s32 leBoostType)
 {
-    CGS_ASSERT(leBoostType >= -1, "leBoostType >= BrnWorld::E_BOOST_TYPE_NONE");   // :268 (non-gating)
-    CGS_ASSERT(leBoostType < 3,   "leBoostType < BrnWorld::E_BOOST_TYPE_COUNT");   // :269 (non-gating)
+    CGS_ASSERT(leBoostType >= -1,
+        CgsDev::Assert::MessageAt(
+            "leBoostType >= BrnWorld::E_BOOST_TYPE_NONE", KAC_ARTIST_ASSERT_FILE, 268 /* ARTIST 0x82411BFC */));   // :268 (non-gating)
+    CGS_ASSERT(leBoostType < 3,
+        CgsDev::Assert::MessageAt(
+            "leBoostType < BrnWorld::E_BOOST_TYPE_COUNT", KAC_ARTIST_ASSERT_FILE, 269 /* ARTIST 0x82411C20 */));   // :269 (non-gating)
 
     if (leBoostType != -1 && leBoostType != meCurrentBoostType)
     {

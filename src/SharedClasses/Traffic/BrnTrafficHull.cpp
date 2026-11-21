@@ -16,8 +16,11 @@
 // the forward declarations in BrnTrafficHull.h are not enough here.
 #include "SharedClasses/Traffic/Junctions/BrnJunctionLogicBox.h"  // JunctionLogicBox (+0x3C/+0x40)
 #include "SharedClasses/Traffic/BrnTrafficLightTrigger.h"         // LightTriggerStartData (0x1A0)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                // CGS_ASSERT
 #include "types.hpp"                                     // uintptr_t
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/Traffic/BrnTrafficHull.cpp";
 
 namespace BrnTraffic
 {
@@ -132,10 +135,14 @@ namespace BrnTraffic
     // =========================================================================================
     const JunctionLogicBox* Hull::GetJunctionForLightTrigger(u32 luIndex) const
     {
-        CGS_ASSERT(luIndex < muNumLightTriggers, "luIndex < muNumLightTriggers");
+        CGS_ASSERT(luIndex < muNumLightTriggers,
+            CgsDev::Assert::MessageAt(
+                "luIndex < muNumLightTriggers", KAC_ARTIST_ASSERT_FILE, 274 /* ARTIST 0x827528A0 */));
 
         const u8 lu8JunctionIndex = mpaLightTriggerJunctionLookup[luIndex];
-        CGS_ASSERT(lu8JunctionIndex < muNumJunctions, "lu8JunctionIndex < muNumJunctions");
+        CGS_ASSERT(lu8JunctionIndex < muNumJunctions,
+            CgsDev::Assert::MessageAt(
+                "lu8JunctionIndex < muNumJunctions", KAC_ARTIST_ASSERT_FILE, 276 /* ARTIST 0x827528D0 */));
 
         return &mpaJunctions[lu8JunctionIndex];
     }

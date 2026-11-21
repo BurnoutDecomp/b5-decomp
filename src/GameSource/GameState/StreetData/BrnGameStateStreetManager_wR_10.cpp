@@ -29,9 +29,12 @@
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"             // CgsContainers::FastBitArray<2>
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                 // CgsContainers::BitArray<64u>::SetBit
 #include "GameShared/GameClasses/Network/CgsNetworkUtils.h"                // CgsNetwork::UsernameCompare
-#include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                         // CGS_ASSERT
 
 #include <string.h>   // _strnicmp (the console's strnicmp)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp";
 
 namespace BrnGameState
 {
@@ -190,9 +193,13 @@ bool StreetManager::ClearAllChallengeDataForBuddy( const CgsNetwork::PlayerName*
 void StreetManager::SetChallengeFriendHighScore( BrnStreetData::ChallengeIndex liIndex,
                                                  const BrnStreetData::ChallengeHighScoreEntry* lpData )
 {
-    CGS_ASSERT( liIndex < BrnGameState::KI_MAX_CHALLENGES, "liIndex < BrnGameState::KI_MAX_CHALLENGES" );
-    CGS_ASSERT( liIndex >= 0, "liIndex >= 0" );
-    CGS_ASSERT( lpData, "lpData" );
+    CGS_ASSERT( liIndex < BrnGameState::KI_MAX_CHALLENGES,
+        CgsDev::Assert::MessageAt(
+            "liIndex < BrnGameState::KI_MAX_CHALLENGES", KAC_ARTIST_ASSERT_FILE, 3674 /* ARTIST 0x82324C30 */));
+    CGS_ASSERT( liIndex >= 0,
+        CgsDev::Assert::MessageAt("liIndex >= 0", KAC_ARTIST_ASSERT_FILE, 3675 /* ARTIST 0x82324C54 */));
+    CGS_ASSERT( lpData,
+        CgsDev::Assert::MessageAt("lpData", KAC_ARTIST_ASSERT_FILE, 3676 /* ARTIST 0x82324C78 */));
 
     maNetworkChallengeData[liIndex].Copy( lpData );
 }

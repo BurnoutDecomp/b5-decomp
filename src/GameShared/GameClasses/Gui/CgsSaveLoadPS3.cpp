@@ -2,7 +2,7 @@
 // because the workflow's TU attribution keyed the class to the PS3 source file.
 // ARTIST controls every path and the native layout in CgsSaveLoadX360.h.
 #include "GameShared/GameClasses/Gui/CgsSaveLoadX360.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"
 #include "SDKs/Realmc/RealmcGameInfo.h"
 #include "SDKs/Realmc/RealmcSaveInfo.h"
@@ -230,7 +230,10 @@ void SaveLoadSystem::ShowAutosaveIcon(bool visible)
 // 8284C730
 void SaveLoadSystem::HandleOption(u32 option)
 {
-    CGS_ASSERT(mMessageDisplayOptionFunc != 0, "mpMessageDisplayOptionFunc != 0");
+    CGS_ASSERT(mMessageDisplayOptionFunc != 0,
+        CgsDev::Assert::MessageAt(
+            "mpMessageDisplayOptionFunc != 0",
+            "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.cpp", 843 /* ARTIST 0x8284C760 */));
     mpMessageDisplay->HideMessage();
     void (SaveLoadSystem::*callback)(u32) = mMessageDisplayOptionFunc;
     mMessageDisplayOptionFunc = 0;

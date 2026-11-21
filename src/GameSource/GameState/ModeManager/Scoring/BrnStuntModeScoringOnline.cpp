@@ -15,7 +15,12 @@
 // scalar placeholders that compile) rather than fabricated against an un-homed layout.
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.cpp";
 
 namespace BrnGameState
 {
@@ -274,10 +279,14 @@ bool StuntModeScoringOnline::WasStuntRecentlyPerformed(StuntInfo* lpStuntInfo)
 // ----------------------------------------------------------------------------
 int StuntModeScoringOnline::_ChainableMultipliersSort(const void* lpData1, const void* lpData2)
 {
-    CGS_ASSERT(lpData1 != NULL, "lpData1");
-    CGS_ASSERT(lpData2 != NULL, "lpData2");
-    CGS_ASSERT(lpData1 != NULL, "lpChainableInfo1");
-    CGS_ASSERT(lpData2 != NULL, "lpChainableInfo2");
+    CGS_ASSERT(lpData1 != NULL,
+        CgsDev::Assert::MessageAt("lpData1", KAC_ARTIST_ASSERT_FILE, 789 /* ARTIST 0x823136E4 */));
+    CGS_ASSERT(lpData2 != NULL,
+        CgsDev::Assert::MessageAt("lpData2", KAC_ARTIST_ASSERT_FILE, 790 /* ARTIST 0x82313708 */));
+    CGS_ASSERT(lpData1 != NULL,
+        CgsDev::Assert::MessageAt("lpChainableInfo1", KAC_ARTIST_ASSERT_FILE, 794 /* ARTIST 0x8231372C */));
+    CGS_ASSERT(lpData2 != NULL,
+        CgsDev::Assert::MessageAt("lpChainableInfo2", KAC_ARTIST_ASSERT_FILE, 795 /* ARTIST 0x82313750 */));
 
     const GameStateModuleIO::ChainableMultiplierInfo* lp1 =
         static_cast<const GameStateModuleIO::ChainableMultiplierInfo*>(lpData1);

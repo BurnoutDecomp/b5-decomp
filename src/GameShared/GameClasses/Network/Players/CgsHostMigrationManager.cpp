@@ -17,7 +17,7 @@
 // here. NewHostMessage / HostKeepAliveMessage (de)serialise via their own TUs.
 // ===================================================================================
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"   // UInt16IsLargerWrapped, flag accessors
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -116,7 +116,10 @@ namespace CgsNetwork
                                        u16 lu16CurrentFrame)
     {
         mpPlayerManager = lpPlayerManager;
-        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0,
+            CgsDev::Assert::MessageAt(
+                "mpPlayerManager",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsHostMigrationManager.cpp", 180 /* ARTIST 0x828834CC */));
 
         for (s32 liIndex = 0; liIndex < KI_MAX_PLAYERS; ++liIndex)
             maHostMigrationPlayerIDs[liIndex] = KI_INVALID_PLAYER_ID;

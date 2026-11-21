@@ -3,7 +3,7 @@
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"  // BrnFlapt::MovieClipInstance
 #include "GameSource/Gui/Flapt/BrnFlaptTextFieldRef.h"       // BrnFlapt::TextFieldRef
 #include "GameShared/GameClasses/Containers/CgsHash.h"        // CgsContainers::CgsHash::CalculateHash
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"            // CGS_ASSERT
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"  // CgsGraphics::Im2dTransform
 
 #include <cmath>   // std::sqrt, std::cos, std::sin (de-SIMD'd rsqrt/cos/sin)
@@ -41,6 +41,8 @@
 // The X360's permute constants (LHSRIGHT/LHSUP/LHSOUTRIGHTUP) just gather/scatter
 // those named lanes; with semantic-parity-by-named-members the constants drop out.
 // ============================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptMovieClipRef.cpp";
 
 namespace BrnFlapt
 {
@@ -139,7 +141,8 @@ MovieClipRef* MovieClipRef::GetParent(MovieClipRef* lpOutRef) const
 // instance.
 void MovieClipRef::GotoAndPlayLabel(u32 luLabelHash, const char* lpcDEBUGName) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
+    CGS_ASSERT(mpMovieClipInst != 0,
+        CgsDev::Assert::MessageAt("mpMovieClipInst", KAC_ARTIST_ASSERT_FILE, 149 /* ARTIST 0x8246F3B4 */));
 
     mpMovieClipInst->GotoAndPlayLabel(luLabelHash, lpcDEBUGName);
 }
@@ -179,8 +182,10 @@ void MovieClipRef::GotoAndStopLabel(const char* lpcLabel) const
 // type out of the Ref's declaration home; bridge it to the typed signature here.
 void MovieClipRef::SetFrameTriggerCallback(void* lpCallback, void* lpUserData) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
-    CGS_ASSERT(lpCallback != 0, "lpCallback");
+    CGS_ASSERT(mpMovieClipInst != 0,
+        CgsDev::Assert::MessageAt("mpMovieClipInst", KAC_ARTIST_ASSERT_FILE, 229 /* ARTIST 0x8246CAEC */));
+    CGS_ASSERT(lpCallback != 0,
+        CgsDev::Assert::MessageAt("lpCallback", KAC_ARTIST_ASSERT_FILE, 230 /* ARTIST 0x8246CB10 */));
 
     mpMovieClipInst->SetFrameTriggerCallback(
         reinterpret_cast<MovieClipInstance::FrameTriggerCallback>(lpCallback),

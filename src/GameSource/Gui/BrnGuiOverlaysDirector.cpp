@@ -3,7 +3,7 @@
 
 #include <cstring>   // std::memcpy (the buffered -> current overlay promote)
 #include <cstdlib>
-#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Development/CgsStrStream.h"           // CgsDev::StrStreamBase (operator<<)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                        // BrnGui::GuiOverlayRequest
@@ -25,6 +25,8 @@
 //   322 stop mode                                      -> drop a buffered online-transition overlay
 // and on the output queue: 185 = start an overlay (the popup style word), 187 = full info,
 // 188 = wait finished.
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiOverlaysDirector.cpp";
 
 namespace BrnGui
 {
@@ -360,9 +362,11 @@ void GuiOverlaysDirector::BridgeOutEvents(CgsGui::ModelIO::InputBuffer* lpGuiMod
     if (mOutputQueue.GetLength() == 0)
         return;
 
-    CGS_ASSERT(lpGuiModelInput != NULL, "lpGuiModelInput");
+    CGS_ASSERT(lpGuiModelInput != NULL,
+        CgsDev::Assert::MessageAt("lpGuiModelInput", KAC_ARTIST_ASSERT_FILE, 229 /* ARTIST 0x82501200 */));
 
-    CGS_ASSERT(mpModelModule != NULL, "mpModelModule");
+    CGS_ASSERT(mpModelModule != NULL,
+        CgsDev::Assert::MessageAt("mpModelModule", KAC_ARTIST_ASSERT_FILE, 230 /* ARTIST 0x82501228 */));
 
     lpGuiModelInput->LockForWrite();
     mpModelModule->AddGuiEvents(&mOutputQueue, lpGuiModelInput);

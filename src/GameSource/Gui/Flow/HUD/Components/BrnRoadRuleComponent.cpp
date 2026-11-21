@@ -5,7 +5,7 @@
 #include <cstdlib>
 #include <cstddef>
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                     // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2dTransform.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                // CgsCore::SPrintf
@@ -918,7 +918,10 @@ void RoadRuleComponent::TransitionComplete(s32 liArg)
 // @ 0x82441778 -- the trampoline Prepare installs on the component clip.
 void RoadRuleComponent::TransitionCompleteCallback(void* lpUserData, u16 lu16Label)
 {
-    CGS_ASSERT(lpUserData != 0, "lpUserData");   // :2231 (non-gating)
+    CGS_ASSERT(lpUserData != 0,
+        CgsDev::Assert::MessageAt(
+            "lpUserData",
+            "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnRoadRuleComponent.cpp", 2231 /* ARTIST 0x824417A4 */));   // :2231 (non-gating)
     static_cast<RoadRuleComponent*>(lpUserData)->TransitionComplete(static_cast<s32>(lu16Label));
 }
 
@@ -1424,7 +1427,10 @@ void RoadRuleComponent::UpdateUpcomingRoadLeaders(GuiEventRoadRuleUpcomingRoads*
 // @ 0x82473520 -- BrnRoadRuleComponent.h:628. Adopt the GUI cache pointer.
 void RoadRuleComponent::SetCachePointer(GuiCache* lpGuiCache)
 {
-    CGS_ASSERT(0 != lpGuiCache, "lpCache");   // :628 (non-gating)
+    CGS_ASSERT(0 != lpGuiCache,
+        CgsDev::Assert::MessageAt(
+            "lpCache",
+            "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnRoadRuleComponent.h", 628 /* ARTIST 0x8247354C */));   // :628 (non-gating)
     mpGuiCache = lpGuiCache;
 }
 

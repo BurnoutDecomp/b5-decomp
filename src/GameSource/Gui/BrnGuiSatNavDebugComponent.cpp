@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // DrawFrame
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnSatNavRenderer.h"                       // SatNavRenderer::UpdateRendererTransform
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                           // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                                       // CgsGuiModuleIO::InputBuffer (Update)
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"                                    // Lock/UnlockBuffersForIO (Update)
 #include "GameSource/Gui/BrnGuiModule.h"                                                     // GuiModule::mGuiCache (Update)
@@ -12,6 +12,8 @@
 // BrnGui::SatNavDebugComponent -- the sat-nav (mini-map) debug component bodies. OnActivate wires
 // every editable to the debug menu; the change callbacks re-publish the state / rectangle to the
 // renderer; RenderHUD draws the rect outline when its toggle is on. See the header for the layout.
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiSatNavDebugComponent.cpp";
 
 namespace BrnGui
 {
@@ -217,7 +219,8 @@ namespace BrnGui
     // =============================================================================================
     void SatNavDebugComponent::SatNavStateCallback(void* /*lpValue*/, void* lpUserData)
     {
-        CGS_ASSERT(lpUserData != 0, "lpUserData");   // BrnGuiSatNavDebugComponent.cpp:247
+        CGS_ASSERT(lpUserData != 0,
+            CgsDev::Assert::MessageAt("lpUserData", KAC_ARTIST_ASSERT_FILE, 247 /* ARTIST 0x8250D9EC */));   // BrnGuiSatNavDebugComponent.cpp:247
 
         SatNavDebugComponent* lpThis = static_cast<SatNavDebugComponent*>(lpUserData);
 
@@ -241,7 +244,8 @@ namespace BrnGui
     // =============================================================================================
     void SatNavDebugComponent::SatNavPositionCallback(void* /*lpValue*/, void* lpUserData)
     {
-        CGS_ASSERT( lpUserData != 0, "lpUserData" );   // BrnGuiSatNavDebugComponent.cpp:281
+        CGS_ASSERT( lpUserData != 0,
+            CgsDev::Assert::MessageAt("lpUserData", KAC_ARTIST_ASSERT_FILE, 281 /* ARTIST 0x8250DB64 */));   // BrnGuiSatNavDebugComponent.cpp:281
 
         static_cast<SatNavDebugComponent*>(lpUserData)->TriggerSatNavPositionUpdate();
     }

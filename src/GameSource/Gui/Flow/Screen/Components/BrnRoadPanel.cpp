@@ -23,7 +23,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/Screen/Components/BrnRoadPanel.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // ParameterFormatType
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
@@ -206,7 +206,10 @@ namespace BrnGui
     // @ 0x82418410 -------------------------------------------------------------------
     void RoadPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");   // cpp:174
+        CGS_ASSERT(lpGuiCache != 0,
+            CgsDev::Assert::MessageAt(
+                "lpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnRoadPanel.cpp", 174 /* ARTIST 0x82418438 */));   // cpp:174
 
         lpGuiCache->AppendExpectedAptComponent(leFlow, GetNameHash());          // a1[33]  == +0x84
         // The road sign's own name hash (the embedded RoadSignIcon's muHashedName).

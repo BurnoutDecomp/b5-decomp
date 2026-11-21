@@ -1,6 +1,6 @@
 #include "GameSource/Gui/Flow/Screen/Components/BrnLeaderboardColumnComponent.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 
 // BrnGui::LeaderboardColumnComponent -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -65,7 +65,10 @@ namespace BrnGui
     // @ 0x824195E8
     void LeaderboardColumnComponent::SetCell(const char* lpcCellText)
     {
-        CGS_ASSERT(miCellCount < KI_MAX_CELLS, "miCellCount < KI_MAX_CELLS");
+        CGS_ASSERT(miCellCount < KI_MAX_CELLS,
+            CgsDev::Assert::MessageAt(
+                "miCellCount < KI_MAX_CELLS",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLeaderboardColumnComponent.cpp", 113 /* ARTIST 0x8241961C */));
 
         AddOutputAptViewState(KAPC_CELL_STRINGS[miCellCount], lpcCellText, false);
         ++miCellCount;

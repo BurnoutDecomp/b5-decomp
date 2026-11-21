@@ -12,7 +12,7 @@
 
 #include "GameSource/Network/Managers/BrnNetworkRoadRulesManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameSource/Network/BrnNetworkModule.h"                                    // BrnNetworkModule (GetGameStateToNetworkInterface / GetNetworkManager / GetNetworkEventQueue)
 #include "GameSource/Network/BrnNetworkManager.h"                                   // BrnNetworkManager::OnAutoLoginProcessComplete
@@ -26,6 +26,9 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"      // ServerInterfaceGames::IsLocalPlayerInGame / IsGameStarted
 #include "GameSource/Network/Components/BrnServerInterfaceCustomCommands.h"         // ServerInterfaceCustomCommands::GetRoadRulesHighScores / GetLocalRoadRulesHighScores
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                    // VariableEventQueue<14000,16> / <13312,16>
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp";
 
 namespace BrnNetwork
 {
@@ -165,10 +168,14 @@ namespace BrnNetwork
         mpServerInterface  = lpServerInterface;
         mpNetworkModule    = lpNetworkModule;
 
-        CGS_ASSERT( mpTimeManager != 0, "mpTimeManager" );
-        CGS_ASSERT( mpPlayerManager != 0, "mpPlayerManager" );
-        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
-        CGS_ASSERT( mpNetworkModule != 0, "mpNetworkModule" );
+        CGS_ASSERT( mpTimeManager != 0,
+            CgsDev::Assert::MessageAt("mpTimeManager", KAC_ARTIST_ASSERT_FILE, 159 /* ARTIST 0x8255C848 */));
+        CGS_ASSERT( mpPlayerManager != 0,
+            CgsDev::Assert::MessageAt("mpPlayerManager", KAC_ARTIST_ASSERT_FILE, 160 /* ARTIST 0x8255C870 */));
+        CGS_ASSERT( mpServerInterface != 0,
+            CgsDev::Assert::MessageAt("mpServerInterface", KAC_ARTIST_ASSERT_FILE, 161 /* ARTIST 0x8255C898 */));
+        CGS_ASSERT( mpNetworkModule != 0,
+            CgsDev::Assert::MessageAt("mpNetworkModule", KAC_ARTIST_ASSERT_FILE, 162 /* ARTIST 0x8255C8C0 */));
 
         mBufferedRoadRulesRecvQueue.Clear();
         mbDownloadedLocalScores = false;

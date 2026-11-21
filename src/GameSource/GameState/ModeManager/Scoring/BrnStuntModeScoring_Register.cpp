@@ -2,7 +2,7 @@
 
 #include "GameSource/GameState/BrnGameActions.h"        // WorldStuntAction / PowerParkResultAction (the action types these bodies deref)
 #include "GameSource/GameState/BrnGameStateTypes.h"      // EStuntType, StuntElementType
-#include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"       // CGS_ASSERT
 
 // ============================================================================
 // BrnStuntModeScoring_Register.cpp
@@ -305,7 +305,11 @@ void StuntModeScoring::UpdateStuntRepetition(f32 lfDelta)
 // ----------------------------------------------------------------------------
 void StuntModeScoring::UpdateStuntRating(EStuntType leStuntType, f32 lfA, f32 lfB, f32 lfC)
 {
-    CGS_ASSERT(mbStuntInProgress && mbComboInProgress, "mbStuntInProgress && mbComboInProgress");
+    CGS_ASSERT(mbStuntInProgress && mbComboInProgress,
+        CgsDev::Assert::MessageAt(
+            "mbStuntInProgress && mbComboInProgress",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1010 /* ARTIST 0x8231311C */));
 
     // Both gates skip on `fcmpu` + `blt`, which is NOT taken when the compare is unordered, so a
     // NaN measurement still promotes the stunt: written `!(a < b)`, not `a >= b`.

@@ -1,6 +1,6 @@
 #include "GameSource/Network/Messages/BrnLiveRevengeSyncMessage.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                         // CGS_ASSERT
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"  // PackOrUnpackInt / PackOrUnpackDateAndTime
 
 // BrnNetwork::LiveRevengeSyncMessage -- carries one LiveRevengeRelationship (at +0x28, straight
@@ -38,7 +38,10 @@ namespace BrnNetwork
         {
             mLiveRevengeRelationship = *lpLiveRevengeRelationship;
             ReliableMessage::PrepareForSend(KI_LIVE_REVENGE_SYNC_MESSAGE_TYPE, lu16Frame);
-            CGS_ASSERT(IsReliable(), "IsReliable()");
+            CGS_ASSERT(IsReliable(),
+                CgsDev::Assert::MessageAt(
+                    "IsReliable()",
+                    "..\\..\\..\\GameSource\\Network/Messages/BrnLiveRevengeSyncMessage.cpp", 97 /* ARTIST 0x8257B3E0 */));
         }
     }
 

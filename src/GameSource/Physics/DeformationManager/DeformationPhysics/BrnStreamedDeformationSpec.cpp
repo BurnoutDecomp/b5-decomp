@@ -1,4 +1,5 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "SharedClasses/Physics/Deformation/BrnBodyPartBBoxSpec.h"   // BodyPartBBoxSpec::HackCheckHandedness (FixUp)
 
 // BrnPhysics::Deformation::StreamedDeformationSpec.
@@ -38,6 +39,9 @@
 //
 // The asserts are non-gating tripwires: execution continues past a failed assert exactly as the asm
 // does (BeginAssert/FireAssert/EndAssert with no early-out).
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h";
+
 namespace BrnPhysics
 {
 namespace Deformation
@@ -188,7 +192,8 @@ namespace Deformation
     // (BrnStreamedDeformationSpec.h:94, non-gating tripwire), then loads meTagPointType (element +64).
     ETagPointType LocatorPointSpecList::GetLocatorTy(u32 luTag) const
     {
-        CGS_ASSERT(luTag < muNumLocators, "luTag < muNumLocators");   // BrnStreamedDeformationSpec.h:94
+        CGS_ASSERT(luTag < muNumLocators,
+            CgsDev::Assert::MessageAt("luTag < muNumLocators", KAC_ARTIST_ASSERT_FILE, 94 /* ARTIST 0x82704960 */));   // BrnStreamedDeformationSpec.h:94
         return mpaLocatorPoints[luTag].meTagPointType;
     }
 
@@ -197,7 +202,8 @@ namespace Deformation
     // added offset). Bounds-asserts luTag < muNumLocators (BrnStreamedDeformationSpec.h:98).
     const Matrix44Affine* LocatorPointSpecList::GetLocatorXf(u32 luTag) const
     {
-        CGS_ASSERT(luTag < muNumLocators, "luTag < muNumLocators");   // BrnStreamedDeformationSpec.h:98
+        CGS_ASSERT(luTag < muNumLocators,
+            CgsDev::Assert::MessageAt("luTag < muNumLocators", KAC_ARTIST_ASSERT_FILE, 98 /* ARTIST 0x825B3210 */));   // BrnStreamedDeformationSpec.h:98
         return &mpaLocatorPoints[luTag].mLocatorMatrix;
     }
 

@@ -3,7 +3,7 @@
 #include "GameSource/World/EnvironmentSettings/BrnEnvironmentSettings.h"  // ParseEnvironmentFile
 #include "SharedClasses/World/BrnEnvironmentUtil.h"                       // ComputeKeyLightDirection
 #include "SharedClasses/Graphics/BrnEffectsData.h"                        // BrnEffectsFrame + BrnEffects::{Bloom,Vignette,Tint}Data
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 #include "GameSource/World/BrnWorldModuleIO.h"               // BrnWorldIO::UpdateOutputBuffer (LockForWrite / GetEffectsEnvironmentInterface)
 #include "SharedClasses/World/BrnEnvironmentTimeLine.h"      // TimeLine + TimeLine::LocationData (group envdata's header)
@@ -101,6 +101,9 @@ namespace
 
 #include <cstdlib>   // [DIAG] getenv (BRN_ENV_DIAG)
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EnvironmentManager/BrnEnvironmentManager.cpp";
+
 namespace BrnWorld
 {
 namespace EnvironmentSettings
@@ -174,7 +177,9 @@ bool EnvironmentManager::UpdateFromTool(bool lbPause)
 // @ 0x827B0E50. Commit the pending season swap once the stream-in has finished.
 void EnvironmentManager::DiscardCurrSeason()
 {
-    CGS_ASSERT(meStreamInStage == E_STREAMIN_DONE, "meStreamInStage == E_STREAMIN_DONE");
+    CGS_ASSERT(meStreamInStage == E_STREAMIN_DONE,
+        CgsDev::Assert::MessageAt(
+            "meStreamInStage == E_STREAMIN_DONE", KAC_ARTIST_ASSERT_FILE, 1287 /* ARTIST 0x827B0E78 */));
 
     // Rewind the stream-OUT stage machine to START and point it at the season that is
     // being discarded. (0x444/0x448 were previously mis-named muCurrSeasonRef /
@@ -924,7 +929,8 @@ void EnvironmentManager::EnableJunkyardLightingSetup()
 // and drop both overrides.
 void EnvironmentManager::DisableJunkyardLightingSetup()
 {
-    CGS_ASSERT(mbJunkyardLightingSetup, "mbJunkyardLightingSetup");
+    CGS_ASSERT(mbJunkyardLightingSetup,
+        CgsDev::Assert::MessageAt("mbJunkyardLightingSetup", KAC_ARTIST_ASSERT_FILE, 1855 /* ARTIST 0x827B1110 */));
 
     SetTimeOfDay_Seconds(mfTimeBeforeEnteringJunkyard);
     mfTimeOfDayUpperBound       = KF_DEF_TIME_OF_DAY_UPPER_BOUND;

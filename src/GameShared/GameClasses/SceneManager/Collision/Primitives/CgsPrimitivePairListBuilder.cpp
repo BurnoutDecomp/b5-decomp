@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/SceneManager/Collision/Primitives/CgsPrimitivePairListBuilder.h"
 
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // CgsMemory::LinearMalloc::Malloc / GetAlignment
-#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint ([DIAG] block only)
 #include "SDKs/EATech/rwcollision/volume_debug_access.h"     // rw::collision::Volume + EVolumeType
 
@@ -13,6 +13,9 @@
 // bring up the packed-pair blob; AddCollisionHeader stamps the 16-byte record header; AddPrimitive /
 // AddPrimitivePair bump-allocate the primitive payload(s), copy the caller's data in verbatim, and
 // bump the record count. AllocateMemory is the bump allocator every append draws from.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\SceneManager/Collision/Primitives/CgsPrimitivePairListBuilder.cpp";
 
 namespace CgsSceneManager
 {
@@ -46,8 +49,11 @@ namespace CgsCollision
         const s32 liRequiredMemory = 96 * lu16NumPrimitives;
 
         u8* lpMemory = static_cast<u8*>(lpMalloc->Malloc(liRequiredMemory));
-        CGS_ASSERT(lpMemory != 0, "lpMemory");
-        CGS_ASSERT(lpMalloc->GetAlignment() >= 16, "lpMalloc->GetAlignment() >= 16");
+        CGS_ASSERT(lpMemory != 0,
+            CgsDev::Assert::MessageAt("lpMemory", KAC_ARTIST_ASSERT_FILE, 111 /* ARTIST 0x82814394 */));
+        CGS_ASSERT(lpMalloc->GetAlignment() >= 16,
+            CgsDev::Assert::MessageAt(
+                "lpMalloc->GetAlignment() >= 16", KAC_ARTIST_ASSERT_FILE, 112 /* ARTIST 0x828143BC */));
 
         mpaDataStream   = lpMemory;
         mu16MaxDataSize = static_cast<u16>(liRequiredMemory);

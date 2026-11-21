@@ -13,7 +13,10 @@
 
 #include "GameSource/GameState/BrnGameStateModuleIO.h"
 #include "GameSource/GameState/BrnGameStateModule.h"      // GetPlayerActiveRaceCarIndex
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp";
 
 namespace BrnGameState
 {
@@ -110,8 +113,11 @@ void ModeManager::SetPlayerDisconnected(
         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutput,
         GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    CGS_ASSERT(lpActionQueue != NULL, "lpActionQueue");
-    CGS_ASSERT(lPlayerID != -1, "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+    CGS_ASSERT(lpActionQueue != NULL,
+        CgsDev::Assert::MessageAt("lpActionQueue", KAC_ARTIST_ASSERT_FILE, 5273 /* ARTIST 0x8234CD64 */));
+    CGS_ASSERT(lPlayerID != -1,
+        CgsDev::Assert::MessageAt(
+            "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", KAC_ARTIST_ASSERT_FILE, 5274 /* ARTIST 0x8234CD88 */));
 
     CarData* lpCarData = mScoringSystem.GetCarData(lPlayerID);
     if (lpCarData != NULL && !lpCarData->GetScoreData()->GetDisconnected())

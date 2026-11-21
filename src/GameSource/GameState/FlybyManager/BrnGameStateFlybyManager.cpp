@@ -1,6 +1,6 @@
 #include "types.hpp"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"   // CgsNetwork::K_INVALID_PLAYER_ID
 #include "GameSource/GameState/FlybyManager/BrnGameStateFlybyManager.h"
 #include "GameSource/GameState/FlybyManager/BrnGameStateOnlineFlybyManager.h"
@@ -27,7 +27,10 @@ void FlybyManager::Construct(GameStateModule* lpGameStateModule, ScoringSystem* 
 // X360. Accessor for the owning GameStateModule; asserts it was set by Construct.
 GameStateModule* FlybyManager::GetGameStateModule()
 {
-    CGS_ASSERT(mpGameStateModule, "mpGameStateModule");
+    CGS_ASSERT(mpGameStateModule,
+        CgsDev::Assert::MessageAt(
+            "mpGameStateModule",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\flybymanager\\BrnGameStateFlybyManager.h", 204 /* ARTIST 0x82358748 */));
     return mpGameStateModule;
 }
 

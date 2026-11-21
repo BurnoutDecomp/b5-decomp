@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface / GuiEventNetworkSuspension / GuiEventPlayAptMovie
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the state in-queue
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsID / CgsIDCompress
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"                           // GuiTracker::ClearTracker
@@ -573,7 +573,10 @@ namespace BrnGui
     // it is kept for the DWARF signature.)
     void InGame::PauseGame(bool /*lbUserInstigated*/, bool lbOpenDriverDetails)
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1038
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt(
+                "mpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnInGame.cpp", 1038 /* ARTIST 0x824DF018 */));   // cpp:1038
 
         if (!PauseAllowed())
             return;

@@ -1,7 +1,7 @@
 #include "types.hpp"
 #include <float.h> // FLT_MAX: the native 0x7F7FFFFF float bound
 #include "GameSource/Network/Messages/BrnBurnoutSkillzMessage.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream (streamed assert)
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h" // PackOrUnpackFloat / PackOrUnpackBool
 
@@ -14,6 +14,9 @@
 // A RELIABLE message carrying one player's 56-byte BurnoutSkillzData payload (@+0x28)
 // plus an initial-data marker (@+0x60). Its immediate base is ReliableMessage; see the
 // header note for the evidence.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Messages/BrnBurnoutSkillzMessage.cpp";
 
 namespace BrnNetwork
 {
@@ -95,8 +98,10 @@ namespace BrnNetwork
     bool BurnoutSkillzMessage::Retrieve(BrnGameState::BurnoutSkillzData* lpSkillzData,
                                         bool* lpbInitialData)
     {
-        CGS_ASSERT(lpSkillzData, "lpSkillzData");
-        CGS_ASSERT(lpbInitialData, "lpbInitialData");
+        CGS_ASSERT(lpSkillzData,
+            CgsDev::Assert::MessageAt("lpSkillzData", KAC_ARTIST_ASSERT_FILE, 183 /* ARTIST 0x8257F7B0 */));
+        CGS_ASSERT(lpbInitialData,
+            CgsDev::Assert::MessageAt("lpbInitialData", KAC_ARTIST_ASSERT_FILE, 184 /* ARTIST 0x8257F7D4 */));
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {

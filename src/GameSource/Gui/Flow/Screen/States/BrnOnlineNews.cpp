@@ -20,7 +20,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineNews.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStreamBase (unexpected-event log)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEventWrapper
@@ -282,7 +282,10 @@ namespace BrnGui
     // ================================================================================
     void OnlineNews::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt(
+                "mpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineNews.cpp", 287 /* ARTIST 0x824AA448 */));
 
         if (meSubState == E_SUBSTATE_LOADING_SCREEN)
         {

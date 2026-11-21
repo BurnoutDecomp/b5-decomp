@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // CgsDev::Debug2DImmediateRender, RGBA, Vector2
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                                       // CgsCore::SPrintf
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                            // CGS_ASSERT
 #include "GameSource/GameState/ModeManager/Scoring/BrnCrashModeScoringRecentCrash.h"           // BrnGameState::CrashModeScoring
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The "Showtime score" crash-mode debug overlay.
@@ -11,6 +11,10 @@
 // the debug 2D immediate renderer (the X360 inlines CrashModeScoring's getters to direct member reads;
 // five map onto the closed accessor set, the sixth -- "Highest jump" / mfHighestJump @ +0x320 -- has
 // no accessor in the DWARF, so it is read directly as a friend, exactly as the X360 binary does).
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../GameState/ModeManager/Debug/BrnCrashScoreDebugComponent.cpp";
 
 namespace BrnGameState
 {
@@ -38,7 +42,9 @@ namespace BrnGameState
     // @ 0x82312168 - assert the scoring object is wired (the base Update has nothing else to do here).
     void CrashScoreDebugComponent::Update()
     {
-        CGS_ASSERT(mpCrashScoring != 0, "mpCrashScoring != NULL");
+        CGS_ASSERT(mpCrashScoring != 0,
+            CgsDev::Assert::MessageAt(
+                "mpCrashScoring != NULL", KAC_ARTIST_ASSERT_FILE, 100 /* ARTIST 0x82312188 */));
     }
 
     // @ 0x823121B0
@@ -97,7 +103,8 @@ namespace BrnGameState
     // @ 0x8231EB90 - assert the scoring object is wired, then draw the readout if "Display score" is on.
     void CrashScoreDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
     {
-        CGS_ASSERT(mpCrashScoring != 0, "mpCrashScoring != NULL");
+        CGS_ASSERT(mpCrashScoring != 0,
+            CgsDev::Assert::MessageAt("mpCrashScoring != NULL", KAC_ARTIST_ASSERT_FILE, 82 /* ARTIST 0x8231EBC0 */));
         if (mbShowScoring)
             DisplayScores(lpRender);
     }

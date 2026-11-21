@@ -1,7 +1,7 @@
 #include "types.hpp"
 #include "GameSource/Network/Messages/BrnCarSelectMessage.h"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::CarSelectMessage::GetPackedMessageSize @ 0x8257A538
@@ -87,7 +87,10 @@ namespace BrnNetwork
         mbFinalSelection        = lbFinalSelection;          // stb, +0x40
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_CAR_SELECT_MESSAGE_TYPE, lu16Frame);
-        CGS_ASSERT(IsReliable(), "IsReliable()");
+        CGS_ASSERT(IsReliable(),
+            CgsDev::Assert::MessageAt(
+                "IsReliable()",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 110 /* ARTIST 0x8257A50C */));
     }
 
     // ---------------------------------------------------------------------------------

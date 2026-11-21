@@ -6,11 +6,15 @@
 #include "GameSource/GameState/BrnGameStateTypes.h"
 #include "GameSource/BurnoutConstants.h"
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"
 
 #include <stdlib.h> // qsort
 #include <cstring>  // std::memset (ClearData fills the blue-team finish-type array)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../GameState/ModeManager/Scoring/BrnOnlineRoadRageModeScoring.cpp";
 
 namespace BrnGameState
 {
@@ -337,8 +341,10 @@ int OnlineRoadRageModeScoring::_RedTeamPlayerCompare(const void* lpPlayer1, cons
 {
     s32 liResult = 0;
 
-    CGS_ASSERT(lpPlayer1, "lpPlayer1");
-    CGS_ASSERT(lpPlayer2, "lpPlayer2");
+    CGS_ASSERT(lpPlayer1,
+        CgsDev::Assert::MessageAt("lpPlayer1", KAC_ARTIST_ASSERT_FILE, 723 /* ARTIST 0x8231528C */));
+    CGS_ASSERT(lpPlayer2,
+        CgsDev::Assert::MessageAt("lpPlayer2", KAC_ARTIST_ASSERT_FILE, 724 /* ARTIST 0x823152B0 */));
 
     const RedTeamSortData* lpP1 = static_cast<const RedTeamSortData*>(lpPlayer1);
     const RedTeamSortData* lpP2 = static_cast<const RedTeamSortData*>(lpPlayer2);

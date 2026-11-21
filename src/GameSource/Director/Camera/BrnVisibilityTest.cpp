@@ -12,9 +12,12 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Camera.h"                   // Camera (the transform, mfFOV)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"        // Utils::GetZoomFromFOVDegs
 #include "GameSource/Director/Utils/BrnSceneQueryInterface.h"   // BrnDirector::SceneQueryInterface::LineTestNearest
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.h";
 
 namespace BrnDirector
 {
@@ -31,7 +34,8 @@ namespace Camera
 // ----------------------------------------------------------------------------
 f32 VisibilityTest::GetOffscreenTime() const
 {
-    CGS_ASSERT(mbTestLookingAt, "mbTestLookingAt");   // lbz 0xB0; assert set
+    CGS_ASSERT(mbTestLookingAt,
+        CgsDev::Assert::MessageAt("mbTestLookingAt", KAC_ARTIST_ASSERT_FILE, 248 /* ARTIST 0x821F3740 */));   // lbz 0xB0; assert set
     return mfOffscreenTime;                           // lfs f1, 0xA4(this)
 }
 
@@ -45,7 +49,8 @@ f32 VisibilityTest::GetOffscreenTime() const
 // ----------------------------------------------------------------------------
 bool VisibilityTest::IsOnScreen() const
 {
-    CGS_ASSERT(mbTestLookingAt, "mbTestLookingAt");   // lbz 0xB0; assert set
+    CGS_ASSERT(mbTestLookingAt,
+        CgsDev::Assert::MessageAt("mbTestLookingAt", KAC_ARTIST_ASSERT_FILE, 269 /* ARTIST 0x821F3798 */));   // lbz 0xB0; assert set
     return mbIsOnScreen;                              // lbz r3, 0xB2(this)
 }
 

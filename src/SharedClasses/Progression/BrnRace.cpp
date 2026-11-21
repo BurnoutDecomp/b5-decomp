@@ -1,11 +1,13 @@
 #include "SharedClasses/Progression/BrnRace.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (AddLandmark / landmark-index getters)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (AddLandmark / landmark-index getters)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnProgression::Race::Construct                @ 0x826767D8
 //   BrnProgression::Race::AddLandmark              @ 0x82354660
 //   BrnProgression::Race::GetStartLandmarkIndex    @ 0x823545F0
 //   BrnProgression::Race::GetFinishLandmarkIndex   @ 0x824EA988
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\SharedClasses\\Progression/BrnRace.h";
 
 namespace BrnProgression
 {
@@ -71,7 +73,9 @@ void Race::AddLandmark(LandmarkIndex lIndex, u16 luAiSectionIndex)
 // loads the half-word at +0x30 (maLandmarkIndices[0]) and writes it through the return buffer.
 LandmarkIndex Race::GetStartLandmarkIndex() const
 {
-    CGS_ASSERT(muNumLandmarks >= 2, "Need at least two landmarks for a race");
+    CGS_ASSERT(muNumLandmarks >= 2,
+        CgsDev::Assert::MessageAt(
+            "Need at least two landmarks for a race", KAC_ARTIST_ASSERT_FILE, 144 /* ARTIST 0x82354620 */));
     return maLandmarkIndices[0];
 }
 
@@ -80,7 +84,9 @@ LandmarkIndex Race::GetStartLandmarkIndex() const
 // (muNumLandmarks + 0x17) * 2 == 0x30 + (muNumLandmarks - 1)*2 == &maLandmarkIndices[num-1].
 LandmarkIndex Race::GetFinishLandmarkIndex() const
 {
-    CGS_ASSERT(muNumLandmarks >= 2, "Need at least two landmarks for a race");
+    CGS_ASSERT(muNumLandmarks >= 2,
+        CgsDev::Assert::MessageAt(
+            "Need at least two landmarks for a race", KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x824EA9B8 */));
     return maLandmarkIndices[muNumLandmarks - 1];
 }
 

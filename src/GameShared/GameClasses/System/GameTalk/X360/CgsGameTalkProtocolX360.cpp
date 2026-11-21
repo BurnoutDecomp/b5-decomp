@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/System/GameTalk/X360/CgsGameTalkProtocolX360.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 
 #include <cstring>   // strlen
@@ -76,6 +76,9 @@ namespace
 
 // File-scope inactivity timer (the asm's &unk_83035760).
 CgsSystem::Timer CgsGameTalk::GameTalkProtocol::sInactivityTimer;
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\gametalk\\X360/CgsGameTalkProtocolX360.cpp";
 
 namespace CgsGameTalk
 {
@@ -493,8 +496,10 @@ void GameTalkProtocol::SendPingResponseToGameExplorer(const char* lpacPingID)
 bool GameTalkProtocol::Prepare(f32 lrInactivityTimeout, f32 lrUpdateTimeStep,
                                EA::GameTalk::GameTalkManager* lpGameTalk)
 {
-    CGS_ASSERT(lpGameTalk != 0, "lpGameTalk != NULL");
-    CGS_ASSERT(lrUpdateTimeStep > 0.0f, "lrUpdateTimeStep > 0.0f");
+    CGS_ASSERT(lpGameTalk != 0,
+        CgsDev::Assert::MessageAt("lpGameTalk != NULL", KAC_ARTIST_ASSERT_FILE, 137 /* ARTIST 0x82839274 */));
+    CGS_ASSERT(lrUpdateTimeStep > 0.0f,
+        CgsDev::Assert::MessageAt("lrUpdateTimeStep > 0.0f", KAC_ARTIST_ASSERT_FILE, 138 /* ARTIST 0x828392A0 */));
 
     mrInactivityTimeout = lrInactivityTimeout;
     sInactivityTimer.Prepare(lrUpdateTimeStep);

@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"              // CGS_ASSERT
 #include "GameShared/GameClasses/Containers/CgsHash.h"          // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"            // CgsUnicode::IsValidUtf8String
 #include "GameShared/GameClasses/Language/Resources/CgsLanguageResourceType.h" // CgsResource::LanguageResource (LoadStringTable)
@@ -438,7 +438,10 @@ namespace CgsLanguage
     // non-fatal/continue in this codebase).
     const char* LanguageManager::GetDefaultFont() const
     {
-        CGS_ASSERT(mpcDefaultFontName != 0, "Invalid Default Font Name in Language Manager");
+        CGS_ASSERT(mpcDefaultFontName != 0,
+            CgsDev::Assert::MessageAt(
+                "Invalid Default Font Name in Language Manager",
+                "..\\..\\..\\GameShared\\GameClasses\\Language/CgsLanguageManager.h", 642 /* ARTIST 0x824434E8 */));
         return mpcDefaultFontName;
     }
 
@@ -449,7 +452,10 @@ namespace CgsLanguage
     // true (the X360 body has no failure return).
     bool LanguageManager::Prepare(CgsMemory::HeapMalloc* lpLanguageAllocator)
     {
-        CGS_ASSERT(lpLanguageAllocator != 0, "Null pointer for language allocator given");
+        CGS_ASSERT(lpLanguageAllocator != 0,
+            CgsDev::Assert::MessageAt(
+                "Null pointer for language allocator given",
+                "..\\..\\..\\GameShared\\GameClasses\\Language/CgsLanguageManager.cpp", 180 /* ARTIST 0x828608FC */));
         mpLanguageAllocator = lpLanguageAllocator;
         mDebugComponent.Register();
         return true;
