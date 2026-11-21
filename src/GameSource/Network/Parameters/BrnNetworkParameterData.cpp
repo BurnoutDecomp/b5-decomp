@@ -131,31 +131,26 @@ namespace BrnNetwork
     }
 
     // ---- SetUpContexts @ 0x82587738 ------------------------------------------
-    // Seeds the X360 LIVE matchmaking context array with the three standard game-search
-    // contexts, appending each {id,value} pair and advancing the count word. Returns the
-    // translated game-mode value, or the incoming liGameMode when the game-mode context is
-    // skipped (r3 is threaded through).
-    s32 SetUpContexts(s32 liGameMode, char lbRanked, s32* lpiCount,
+    // Seeds the X360 LIVE matchmaking context array with the ranked and unranked
+    // entries and appends a game-mode entry when a mode was specified.
+    void SetUpContexts(s32 liGameMode, bool lbRanked, s32* lpiCount,
                       MatchmakingContext* lpaContexts)
     {
         *lpiCount = 0;
 
         lpaContexts[*lpiCount].muContextId = KU_CONTEXT_RANKED;
-        lpaContexts[*lpiCount].muValue     = (lbRanked == 0) ? 1u : 0u;
+        lpaContexts[*lpiCount].muValue     = lbRanked ? 0u : 1u;
         ++*lpiCount;
 
         lpaContexts[*lpiCount].muContextId = KU_CONTEXT_UNRANKED;
         lpaContexts[*lpiCount].muValue     = 0u;
         ++*lpiCount;
 
-        s32 liResult = liGameMode;
         if (liGameMode != 0)
         {
             lpaContexts[*lpiCount].muContextId = KU_CONTEXT_GAME_MODE;
-            liResult = TranslateGameMode(liGameMode);
-            lpaContexts[*lpiCount].muValue = static_cast<u32>(liResult);
+            lpaContexts[*lpiCount].muValue = static_cast<u32>(TranslateGameMode(liGameMode));
             ++*lpiCount;
         }
-        return liResult;
     }
 }

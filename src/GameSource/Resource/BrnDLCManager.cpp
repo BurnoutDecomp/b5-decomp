@@ -595,8 +595,8 @@ namespace BrnResource
     // stage. The removal is a memmove of the (count - current - 1) trailing records down one slot
     // (stride 76). The trailing stage store is 3 when the (now shorter) list still has a package at
     // miCurrentPackage (miCurrentPackage < new count) and 9 otherwise (list exhausted).
-    // (The asm returns whatever r3 held; the value is unused by the caller Prepare -> void.)
-    int DLCManager::DLCVersionCheckFailed()
+    // Prepare reads mePrepareStage to continue processing.
+    void DLCManager::DLCVersionCheckFailed()
     {
         const s32 liCurrent  = miCurrentPackage;                 // lwz r11, 0x624(r31)
         const s32 liTrailing = muPackageCount - liCurrent - 1;   // lwz 0x620; subf; addi -1
@@ -615,6 +615,5 @@ namespace BrnResource
         mePrepareStage = (miCurrentPackage < liNewCount)
             ? E_PREPARE_OPEN_VERSION : E_PREPARE_DONE;   // original stages 3 / 9
 
-        return 0;   // r3 is leaked from the asm and unused; method is effectively void.
     }
 }

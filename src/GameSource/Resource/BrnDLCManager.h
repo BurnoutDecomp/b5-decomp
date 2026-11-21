@@ -291,8 +291,8 @@ public:
 
     // X360 0x82662E18. The current package's version check failed: shift-remove it from the array,
     // decrement muPackageCount, and advance mePrepareStage (3 = more to check, 9 = done).
-    // (Returns int only because the asm leaks r3; the value is unused -> effectively void.)
-    int DLCVersionCheckFailed();
+    // Prepare reads the stage to continue processing.
+    void DLCVersionCheckFailed();
 
 private:
     // ARTIST 0x82665A58. Thread entry receives this DLCManager through context.

@@ -112,7 +112,7 @@ namespace BrnNetwork
     // =======================================================================
     // PrepareGamerPictureTextures @ 0x8254C4A0
     // =======================================================================
-    s32 GamerPictureManagerX360::PrepareGamerPictureTextures(CgsMemory::HeapMalloc* lpHeapMalloc)
+    void GamerPictureManagerX360::PrepareGamerPictureTextures(CgsMemory::HeapMalloc* lpHeapMalloc)
     {
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_GAMER_PICTURES; ++liPlayerIndex)
         {
@@ -123,7 +123,7 @@ namespace BrnNetwork
         mLocalPlayerGamerPictureData.mTexture.Prepare(
             lpHeapMalloc, KI_PICTURE_WIDTH, KI_PICTURE_HEIGHT,
             static_cast<renderengine::PixelFormat>(KI_PICTURE_PIXEL_FORMAT));
-        return mCompressedTexture.Prepare(
+        mCompressedTexture.Prepare(
             lpHeapMalloc, KI_COMPRESSED_WIDTH, KI_COMPRESSED_HEIGHT,
             static_cast<renderengine::PixelFormat>(KI_COMPRESSED_PIXEL_FORMAT));
     }
@@ -143,7 +143,7 @@ namespace BrnNetwork
     // =======================================================================
     // ResetGamerPictureData @ 0x8254C528
     // =======================================================================
-    s32 GamerPictureManagerX360::ResetGamerPictureData()
+    void GamerPictureManagerX360::ResetGamerPictureData()
     {
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_GAMER_PICTURES; ++liPlayerIndex)
         {
@@ -158,7 +158,7 @@ namespace BrnNetwork
         mLocalPlayerGamerPictureData.mXuid      = 0;
         mLocalPlayerGamerPictureData.mTexture.Release();
 
-        return mCompressedTexture.Release();
+        mCompressedTexture.Release();
     }
 
     // =======================================================================

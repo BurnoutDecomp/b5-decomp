@@ -88,9 +88,9 @@ void BaseOverlayState::ResetOverlayComponents()
 // @ 0x824B1E60
 void BaseOverlayState::OnEnter()
 {
-    meLeaveMethod   = GuiOverlayCompleteEvent::E_LEAVEMETHOD_NONE;
     meInternalState = E_OVERLAYINTERNALSTATE_START;
     mpGuiCache      = NULL;
+    meLeaveMethod   = GuiOverlayCompleteEvent::E_LEAVEMETHOD_NONE;
 
     mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 

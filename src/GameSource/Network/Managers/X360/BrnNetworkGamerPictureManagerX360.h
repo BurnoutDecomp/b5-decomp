@@ -176,12 +176,12 @@ namespace BrnNetwork
         GamerPictureData* GetGamerPictureData(s32 liPlayerID);
 
         // X360 0x8254C528 -- reset every slot (id = -1, xuid = 0, not-ready) and release its
-        // texture; also the local + compressed textures. Returns the last Release() result.
-        s32 ResetGamerPictureData();
+        // texture; also release the local and compressed textures.
+        void ResetGamerPictureData();
 
         // X360 0x8254C4A0 -- (re)allocate the 7 remote + local picture textures (160x120) and the
-        // compressed scratch texture (64x64). Returns the last Prepare() result.
-        s32 PrepareGamerPictureTextures(CgsMemory::HeapMalloc* lpHeapMalloc);
+        // compressed scratch texture (64x64).
+        void PrepareGamerPictureTextures(CgsMemory::HeapMalloc* lpHeapMalloc);
 
         // X360 0x8254C590 -- pick the next XUID to download (the local player's, else the first
         // not-ready remote slot) and -- if one was found -- kick off its download. Returns `this`.
