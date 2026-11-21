@@ -1,5 +1,5 @@
 #include "CgsServerInterfaceGameParams.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"          // DirtySock::LobbyApiPlayT
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfoData.h"   // EConversionFlags
 #include "lobbytagfield.h"   // TagFieldSet* / TagFieldGetStructure
@@ -136,7 +136,10 @@ namespace CgsNetwork
     // travels packed under "PARAMS".
     void ServerInterfaceGameParamsBase::SerialiseToString(char* lpcString, s32 liLength) const
     {
-        CGS_ASSERT(lpcString, "lpcString");
+        const char* const lpcSource =
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\"
+            "CgsServerInterfaceGameParams.cpp";
+        CGS_ASSERT(lpcString, CgsDev::Assert::MessageAt("lpcString", lpcSource, 92));
 
         if (macName[0] != 0)
         {
@@ -151,11 +154,9 @@ namespace CgsNetwork
         if (GetData() != 0 && GetDataSize() != 0)
         {
             CGS_ASSERT(strlen(GetPattern()) < static_cast<size_t>(GetPatternLength()),
-                       "strlen( GetPattern()) < (size_t) GetPatternLength()");
-            const char* lpcPattern = GetPattern();
-            const s32   liSize     = static_cast<s32>(GetDataSize());
-            const void* lpData     = GetData();
-            TagFieldSetStructure(lpcString, liLength, "PARAMS", lpData, liSize, lpcPattern);
+                CgsDev::Assert::MessageAt("strlen( GetPattern()) < (size_t) GetPatternLength()", lpcSource, 110));
+            TagFieldSetStructure(lpcString, liLength, "PARAMS",
+                                 GetData(), static_cast<s32>(GetDataSize()), GetPattern());
         }
 
         TagFieldSetNumber(lpcString, liLength, "MINSIZE", miMinNumPlayers);

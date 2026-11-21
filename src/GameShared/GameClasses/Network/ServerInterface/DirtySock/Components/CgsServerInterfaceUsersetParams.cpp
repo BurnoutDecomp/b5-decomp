@@ -1,5 +1,5 @@
 #include "CgsServerInterfaceUsersetParams.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (over-length assert)
 #include "lobbytagfield.h"                                    // DirtySDK TagFieldGet/Set*
 
@@ -111,7 +111,10 @@ namespace CgsNetwork
     //   lpcRecord must be non-null (asserted).
     void ServerInterfaceUsersetParamsBase::SerialiseToString(char* lpcRecord, s32 liRecLen) const
     {
-        CGS_ASSERT(lpcRecord != 0, "lpcString");
+        const char* const lpcSource =
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\"
+            "CgsServerInterfaceUsersetParams.cpp";
+        CGS_ASSERT(lpcRecord != 0, CgsDev::Assert::MessageAt("lpcString", lpcSource, 84));
 
         if (macName[0])
         {
@@ -125,18 +128,14 @@ namespace CgsNetwork
         }
         TagFieldSetString(lpcRecord, liRecLen, "PASS", macPassword);
 
-        // Emit the custom userset structure blob only when the structure exposes
-        // data (GetData, non-const slot +0x10) and a non-zero size (GetDataSize, +0xC).
-        if (const_cast<ServerInterfaceUsersetParamsBase*>(this)->GetData() && GetDataSize())
+        // Serialize the custom structure through its const accessor when it has data and a size.
+        if (GetData() && GetDataSize())
         {
             CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
-                       "strlen( GetPattern()) < (size_t) GetPatternLength()");
+                CgsDev::Assert::MessageAt("strlen( GetPattern()) < (size_t) GetPatternLength()", lpcSource, 102));
 
-            const char* lpcPattern = GetPattern();
-            const u32   luDataSize = GetDataSize();
-            const void* lpData     = const_cast<ServerInterfaceUsersetParamsBase*>(this)->GetData();
             TagFieldSetStructure(lpcRecord, liRecLen, "PARAMS",
-                                 lpData, static_cast<s32>(luDataSize), lpcPattern);
+                                 GetData(), static_cast<s32>(GetDataSize()), GetPattern());
         }
 
         TagFieldSetNumber(lpcRecord, liRecLen, "SIZE", miMaxNumPlayers);

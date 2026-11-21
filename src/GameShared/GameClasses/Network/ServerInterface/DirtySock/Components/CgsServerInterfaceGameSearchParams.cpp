@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGameSearchParams.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "lobbytagfield.h"                            // DirtySDK TagFieldSet*
 #include <cstring>                                    // std::strlen, std::memset
 
@@ -47,7 +47,10 @@ bool ServerInterfaceGameSearchParamsBase::Prepare()
 
 void ServerInterfaceGameSearchParamsBase::SerialiseToString(char* lpcRecord, s32 liRecLen) const
 {
-    CGS_ASSERT(miNumGames > 0, "Invalid number of games to search for");
+    const char* const lpcSource =
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\"
+        "CgsServerInterfaceGameSearchParams.cpp";
+    CGS_ASSERT(miNumGames > 0, CgsDev::Assert::MessageAt("Invalid number of games to search for", lpcSource, 72));
 
     TagFieldSetNumber(lpcRecord, liRecLen, "START", 0);
     TagFieldSetNumber(lpcRecord, liRecLen, "COUNT", miNumGames);
@@ -65,17 +68,13 @@ void ServerInterfaceGameSearchParamsBase::SerialiseToString(char* lpcRecord, s32
         TagFieldSetNumber(lpcRecord, liRecLen, "PLAYERS", 1);
     }
 
-    void* lpData = const_cast<ServerInterfaceGameSearchParamsBase*>(this)->GetData();
-    if (lpData && GetDataSize())
+    if (GetData() && GetDataSize())
     {
         CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
-                   "strlen( GetPattern() ) < (size_t)GetPatternLength()");
+            CgsDev::Assert::MessageAt("strlen( GetPattern() ) < (size_t)GetPatternLength()", lpcSource, 97));
 
-        const char* lpcPattern = GetPattern();
-        const u32   luDataSize = GetDataSize();
-        lpData = const_cast<ServerInterfaceGameSearchParamsBase*>(this)->GetData();
         TagFieldSetStructure(lpcRecord, liRecLen, "CUSTOM",
-                             lpData, static_cast<s32>(luDataSize), lpcPattern);
+                             GetData(), static_cast<s32>(GetDataSize()), GetPattern());
     }
 
     TagFieldSetNumber(lpcRecord, liRecLen, "CUSTMASK",
