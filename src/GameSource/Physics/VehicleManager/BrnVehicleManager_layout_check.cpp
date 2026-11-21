@@ -271,6 +271,14 @@ namespace Vehicle
                       && offsetof(VehicleManager, miNumSPUTractionLineTests)
                           >  offsetof(VehicleManager, mpTractionLineStreamProducer)),
                       "the DWARF :1072/:1075/:1076 tail order");
+#if defined(D_PLATFORM_X360)
+        CGS_STATIC_ASSERT(offsetof(VehicleManager, mpContactGenList) == 172468,
+                          "ARTIST FreeAllocations 0x8261BB14");
+        CGS_STATIC_ASSERT(offsetof(VehicleManager, mpContactGenerator) == 172472,
+                          "ARTIST FreeAllocations 0x8261BB04");
+        CGS_STATIC_ASSERT(offsetof(VehicleManager, miNumSPUTractionLineTests) == 172588,
+                          "ARTIST VehicleManagerDebugComponent::OnActivate 0x825B5F34");
+#endif
 
         // ---- shape guards the offsets alone cannot catch ---------------------------------------
         // `sizeof` is permutation-blind and tail padding can absorb a grown array, so pin the END of

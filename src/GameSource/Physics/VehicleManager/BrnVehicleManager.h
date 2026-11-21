@@ -2833,14 +2833,9 @@ namespace Vehicle
         // type: CgsSceneManager::CgsCollision::CollisionGenerator (NOT the `CgsPhysics::
         // CollisionGenerator` some sibling headers forward-declare -- that fork is flagged at those
         // headers' consumers, not here).
-        //   * console: 3 pad bytes [172465..172468) + two 4-byte pointers [172468..172476)
-        //   * host:    7 pad bytes (3 + 4 more so the 8-byte pointers seat on an 8 boundary) + 16
-        // The +12 host growth is absorbed by the REMAINING opaque run below -- legal here, unlike
-        // the drift-constant cases, because everything both sides of the carve inside this span is
-        // UNRECONSTRUCTED padding, not a modelled DWARF member; the span's two ENDS
-        // (mn8RoundRobinControlWord / miContactStreamCounterA) keep their pinned seats, which the
-        // mounted layout gate (_AssertLayoutTuningBank) checks.
-        unsigned char        mPad2A1D1[7];  // console [172465..172468) + 4B host pointer alignment
+        // ARTIST 0x8261BB04 and 0x8261BB14 place the two 4-byte pointers at
+        // +172472 and +172468. Three bytes after the control word align the first pointer.
+        unsigned char        mPad2A1D1[3];
         BrnPhysics::ContactGenList*                        mpContactGenList;    // +172468 (DWARF :1045)
         CgsSceneManager::CgsCollision::CollisionGenerator* mpContactGenerator;  // +172472 (DWARF :1046)
 
