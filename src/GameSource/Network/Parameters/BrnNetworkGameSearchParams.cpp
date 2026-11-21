@@ -131,7 +131,7 @@ namespace BrnNetwork
 
         // The platform context list is { id, value } pairs with the count after it; the
         // context helper takes it as a MatchmakingContext array and an s32 count.
-        SetUpContexts(leGameSearchGameMode, static_cast<char>(lbIsRanked),
+        SetUpContexts(leGameSearchGameMode, lbIsRanked,
                       reinterpret_cast<s32*>(&muX360Field_68),
                       reinterpret_cast<MatchmakingContext*>(maX360Payload));
         return true;

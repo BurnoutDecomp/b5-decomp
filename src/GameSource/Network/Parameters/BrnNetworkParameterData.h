@@ -35,10 +35,9 @@ namespace BrnNetwork
     // Maps a game-side game-mode id (1..4) to its LIVE game-mode context value.
     s32 TranslateGameMode(s32 liGameMode);
 
-    // Seeds the LIVE matchmaking context array with the three standard game-search
-    // contexts, advancing *lpiCount. Returns the translated game-mode value (or the
-    // incoming liGameMode when the game-mode context is skipped).
-    s32 SetUpContexts(s32 liGameMode, char lbRanked, s32* lpiCount,
+    // Seeds the LIVE matchmaking context array, advancing *lpiCount for each entry.
+    // The game-mode context is optional.
+    void SetUpContexts(s32 liGameMode, bool lbRanked, s32* lpiCount,
                       MatchmakingContext* lpaContexts);
 
     // Maps a game mode (10..17) to its LIVE game-mode context value.
