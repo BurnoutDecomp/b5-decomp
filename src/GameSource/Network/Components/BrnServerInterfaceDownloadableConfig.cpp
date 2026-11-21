@@ -1,7 +1,7 @@
 #include "GameSource/Network/Components/BrnServerInterfaceDownloadableConfig.h"
 
 #include <cstddef>                                        // offsetof
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h" // CGS_ASSERT
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h" // GetLobbyAPIRef
 #include "lobbyapi.h"                                     // LobbyApiInfo
 #include "lobbyname.h"                                    // LobbyNameCmp
@@ -158,7 +158,10 @@ namespace BrnNetwork
             offsetof(BrnServerInterfaceDownloadableConfig, mfTimeBetweenOfflineProgressionUpload));
 
         CGS_ASSERT(miSizeOfMemLookupTable == KI_MAX_ELEMENTS_IN_MEMADDR_LOOKUP,
-                   "miSizeOfMemLookupTable == KI_MAX_ELEMENTS_IN_MEMADDR_LOOKUP");
+                   CgsDev::Assert::MessageAt(
+                       "miSizeOfMemLookupTable == KI_MAX_ELEMENTS_IN_MEMADDR_LOOKUP",
+                       "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                       "../Network/Components/BrnServerInterfaceDownloadableConfig.cpp", 145));  // 0x8258341C
 
         return true;
     }

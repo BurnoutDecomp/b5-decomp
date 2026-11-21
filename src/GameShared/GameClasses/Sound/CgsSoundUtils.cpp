@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (PathLine stage machines)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"  // CGS_ASSERT (PathLine stage machines)
 #include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::Clamp (PathLine<2>::Update's fsel pair)
 
 #include <algorithm>   // std::sort (SelectionHistory::FindRandomOldest)
@@ -302,6 +302,8 @@ f32 Slope::GetValue(f32 lfInput, Curve::ECurveType leCurve) const
 static const f32 KF_STAGE_LENGTH_SCALE = 0.001f;
 // flt_82002138 -- minimum stage length floor applied when the scaled length is <= 0.
 static const f32 KF_MIN_STAGE_LENGTH   = 0.0099999998f;
+static const char KAC_SOUND_UTILS_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Sound/CgsSoundUtils.cpp";
 
 // -------------------------------------------------------------------------------------------
 // PathLine<2> -- explicit specializations.
@@ -311,7 +313,8 @@ static const f32 KF_MIN_STAGE_LENGTH   = 0.0099999998f;
 template <>
 s32 PathLine<2>::AddStage(f32 lfStart, f32 lfFinish, f32 lfLength, Curve::ECurveType leCurve)
 {
-    CGS_ASSERT(mnNumStages != 2, "mnNumStages != TNumPoints");
+    CGS_ASSERT(mnNumStages != 2, CgsDev::Assert::MessageAt(
+        "mnNumStages != TNumPoints", KAC_SOUND_UTILS_ASSERT_FILE, 334));  // 0x82690B88
 
     // Length is supplied in milliseconds; store it in seconds and clamp to a floor
     // so Update never divides by (near) zero.
@@ -468,7 +471,8 @@ template <u32 tuNumStages>
 s32 PathLine<tuNumStages>::AddStage(f32 lfStart, f32 lfFinish, f32 lfLength,
                                     Curve::ECurveType leCurve)
 {
-    CGS_ASSERT(mnNumStages != static_cast<s32>(tuNumStages), "mnNumStages != TNumPoints");
+    CGS_ASSERT(mnNumStages != static_cast<s32>(tuNumStages), CgsDev::Assert::MessageAt(
+        "mnNumStages != TNumPoints", KAC_SOUND_UTILS_ASSERT_FILE, 334));  // 0x8268EF40
 
     maLength[mnNumStages] = lfLength * KF_STAGE_LENGTH_SCALE;
     if (maLength[mnNumStages] <= 0.0f)

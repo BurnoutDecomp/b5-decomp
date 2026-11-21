@@ -2,7 +2,7 @@
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/texturestate.h"
 
 #include "SharedClasses/Gui/SatNav/BrnSatNavTile.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h" // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiCache.h"              // BrnGui::GuiCache (RecvEvent resource load)
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h" // CgsGui::sResourceTuple / ResourceRequestTypes
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // StateInterface::GetAllocator (Construct)
@@ -314,7 +314,9 @@ namespace BrnGui
                         continue;
                     }
 
-                    CGS_ASSERT(lTile.mpTile != NULL, "lTile.mpTile != NULL");
+                    CGS_ASSERT(lTile.mpTile != NULL, CgsDev::Assert::MessageAt(
+                        "lTile.mpTile != NULL",
+                        "..\\..\\..\\GameSource\\Gui/SatNav/BrnMapManager.cpp", 229));  // 0x8244F810
 
                     const SatNavTile::sRect& lWorldBB = lTile.mpTile->mBBWorld[0];
                     const float lfTileArea = MyAbs(

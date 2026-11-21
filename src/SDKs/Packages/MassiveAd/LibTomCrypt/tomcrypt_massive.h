@@ -31,7 +31,7 @@ void crypt_argchk(const char* v, const char* s, int d);
 void zeromem(void* dst, unsigned long len);
 void burn_stack(unsigned long len);
 
-int md5_init(hash_state* md);
+void md5_init(hash_state* md);
 int md5_process(hash_state* md, const unsigned char* in, unsigned long inlen);
 int md5_done(hash_state* md, unsigned char* hash);
 }

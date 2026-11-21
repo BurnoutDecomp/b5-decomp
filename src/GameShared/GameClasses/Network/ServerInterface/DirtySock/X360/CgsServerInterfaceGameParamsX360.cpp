@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/X360/CgsServerInterfaceGameParamsX360.h"
 
-#include <string.h>   // memset (XMemSet)
+#include <xtl.h>   // XMemSet
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::ServerInterfaceGameParamsX360::Prepare            @ 0x82877810
@@ -31,7 +31,7 @@ bool ServerInterfaceGameParamsX360::Prepare()
 
     miContextCount  = 0;
     miPropertyCount = 0;
-    memset(maRankedContexts, 0, sizeof(maRankedContexts));
+    XMemSet(maRankedContexts, 0, sizeof(maRankedContexts));
 
     // Append the ranked (0x800A) context, value 0.
     maRankedContexts[miContextCount].muContextId = KU_GAMEPARAMS_CONTEXT_RANKED;

@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // GetMessageBuffer / GetComponent / OnEvent
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 
 #include <string.h>   // strlen, _strnicmp
@@ -264,7 +264,10 @@ namespace CgsNetwork
 
     void ServerInterfaceTelemetry::AbandonFirstUsageBuffer()
     {
-        CGS_ASSERT(mpTelemetryNormalUsage != 0, "NULL != mpTelemetryNormalUsage");
+        CGS_ASSERT(mpTelemetryNormalUsage != 0, CgsDev::Assert::MessageAt(
+            "NULL != mpTelemetryNormalUsage",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\"
+            "Components\\CgsServerInterfaceTelemetry.cpp", 832));  // 0x8287B62C
 
         if (mpTelemetryFirstUsage == 0)
         {
