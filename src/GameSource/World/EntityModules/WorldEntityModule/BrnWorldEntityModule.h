@@ -383,6 +383,9 @@ private:
     // (@0x6790 in the X360 object).
     BrnMassive::BrnMassive mMassive;
 
+    // ARTIST 0x82302484 places the next field at +0x7138, 24 bytes past the mapped Massive state.
+    u8 mau8PadAfterMassive[0x18];
+
     // Massive debug block (X360 Construct debug registrations, "World/Massive").
     f32  mfMassiveImpressionDebugDistance;              // = 150.0f
     s32  miNumMassiveSubscribersCreated;                // UpdateMassive's creation cursor (0..9)
@@ -453,6 +456,10 @@ private:
         CGS_STATIC_ASSERT((offsetof(WorldEntityModule, mPlayerZoneResponse) == 0x2620), "world PVS response");
         CGS_STATIC_ASSERT((offsetof(WorldEntityModule, mPVSDebugComponent) == 0x2900), "world PVS debug component");
         CGS_STATIC_ASSERT((offsetof(WorldEntityModule, mMassive) == 0x6790), "world Massive member");
+        CGS_STATIC_ASSERT((offsetof(WorldEntityModule, mfMassiveImpressionDebugDistance) == 0x7138),
+                          "ARTIST WorldEntityModule::Construct 0x82302484");
+        CGS_STATIC_ASSERT((offsetof(WorldEntityModule, mbWaitingForStreaming) == 0x71DC),
+                          "ARTIST WorldEntityModule::Prepare 0x823029BC");
     }
 #endif
 

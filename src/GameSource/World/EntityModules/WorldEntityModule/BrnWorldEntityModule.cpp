@@ -22,7 +22,7 @@
 // =============================================================================
 
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -353,7 +353,10 @@ WorldEntityModule::Prepare( WorldEntityIO::OutputBuffer_Prepare* lpOutputBuffer 
 
         default:
         {
-            CGS_ASSERT( false, "Invalid Stage\n" );
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "Invalid Stage\n",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../World/EntityModules/WorldEntityModule/BrnWorldEntityModule.cpp", 631));  // ARTIST 0x823029DC
         }
         break;
     }
