@@ -44,12 +44,12 @@ void ModeManager::FinishedMapPan()
 
     if (mpCurrentGameMode->HasTimedIntro())
     {
-        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         lStrStream << "Should not be told map pan has ended if not using a map pan! Mode is "
                    << mpCurrentGameMode->GetName() << "\n";
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2506); // ARTIST 0x82311988
         CgsDev::Assert::EndAssert();
     }
 

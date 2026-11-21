@@ -70,13 +70,12 @@ const MemoryMapBank* MemoryMap::GetBank(s32 liIndex) const
     if (liIndex >= static_cast<s32>(muNumBanks) - 1)
     {
         CgsDev::Assert::BeginAssert();
-        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+        CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         lStrStream << "Bank index " << liIndex << " is out of range\n";
         CgsDev::Assert::FireAssert(
-            lacMessageBuffer,
+            CgsDev::Assert::gpcMessageBuffer,
             "..\\..\\..\\GameShared\\GameClasses\\Memory/MemoryMap/CgsMemoryMap.h",
-            175);
+            175); // ARTIST 0x82663D40
         CgsDev::Assert::EndAssert();
     }
 
@@ -92,13 +91,12 @@ const MemoryMapPool* MemoryMap::GetPool(s32 liIndex) const
     if (liIndex >= static_cast<s32>(muNumPools))
     {
         CgsDev::Assert::BeginAssert();
-        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-        CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+        CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
         lStrStream << "Pool index " << liIndex << " is out of range\n";
         CgsDev::Assert::FireAssert(
-            lacMessageBuffer,
+            CgsDev::Assert::gpcMessageBuffer,
             "..\\..\\..\\GameShared\\GameClasses\\Memory/MemoryMap/CgsMemoryMap.h",
-            188);
+            188); // ARTIST 0x82663E14
         CgsDev::Assert::EndAssert();
     }
 

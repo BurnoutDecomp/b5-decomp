@@ -21,7 +21,6 @@ namespace CgsDev
     struct StrStreamBase
     {
         StrStreamBase() { StrStreamBase::Reset(); }
-        ~StrStreamBase() {}
         virtual void Reset();
 
         // Text insertion replaces null with <NULLSTRING> and calls the virtual Append sink.

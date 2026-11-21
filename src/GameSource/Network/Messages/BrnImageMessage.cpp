@@ -67,12 +67,12 @@ namespace BrnNetwork
     {
         if (GetPackedMessageSize() > KI_MAX_PACKED_IMAGE_MESSAGE_SIZE)
         {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStream(lacMessage, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "We are " << GetPackedMessageSize() << " but we can only fit "
                     << KI_MAX_PACKED_IMAGE_MESSAGE_SIZE << " in a packet.";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessage, __FILE__, __LINE__);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 54); // ARTIST 0x8257C088
             CgsDev::Assert::EndAssert();
         }
 

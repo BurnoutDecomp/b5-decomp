@@ -22,8 +22,8 @@
 //     alignment (CgsMemory::HeapMalloc::KI_DEFAULT_ALIGNMENT). It then asserts the result is
 //     non-null, streaming "Allocating <lnSize> bytes" into the assert message.
 //   - AptFree: HeapMalloc::Free(allocator, lpBlock) maps to mpAllocator->Free(lpBlock).
-//   - The X360-baked CgsAptDataHandler.h file/line (130/140/156/157) are discarded per
-//     project convention; the assert strings are X360 rodata, reproduced verbatim.
+//   - ARTIST formats the messages under the assert mutex and reports the original
+//     CgsAptDataHandler.h file and lines 130, 140, 156 and 157.
 
 // Layout note: under the X360 ABI mpAllocator sits at +1028 (0x404 == the `*(this + 1028)`
 // load in both AptAlloc/AptFree), after the s32 count + the 128-entry 8-byte header table.
@@ -41,32 +41,56 @@ namespace CgsGui
         return true;
     }
 
+    namespace
+    {
+        const char KAC_APT_ALLOCATOR_ASSERT_FILE[] =
+            "..\\..\\..\\GameShared\\GameClasses\\Gui/View/AptInterface/CgsAptDataHandler.h"; // ARTIST 0x820E0D98
+    }
+
     // X360 0x82847250.
     void* AptDataHandler::AptAlloc(size_t lnSize)
     {
-        CGS_ASSERT(mpAllocator != 0, "Apts data allocator is invalid in AptDataHandler::AptAlloc");
-
-        void* lpBlock = mpAllocator->Malloc(static_cast<s32>(lnSize), CgsMemory::HeapMalloc::KI_DEFAULT_ALIGNMENT);
-
-        if (lpBlock == 0)
+        if (mpAllocator == 0)
         {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "AptDataHandler::AptAlloc Failed to allocate memory! Allocating "
-                       << static_cast<s32>(lnSize) << " bytes";
             CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), __FILE__, __LINE__);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Apts data allocator is invalid in AptDataHandler::AptAlloc";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, KAC_APT_ALLOCATOR_ASSERT_FILE, 130);
             CgsDev::Assert::EndAssert();
         }
 
+        void* lpBlock = mpAllocator->Malloc(static_cast<s32>(lnSize), CgsMemory::HeapMalloc::KI_DEFAULT_ALIGNMENT);
+        if (lpBlock == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "AptDataHandler::AptAlloc Failed to allocate memory! Allocating "
+                       << static_cast<u32>(lnSize) << " bytes";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, KAC_APT_ALLOCATOR_ASSERT_FILE, 140);
+            CgsDev::Assert::EndAssert();
+        }
         return lpBlock;
     }
 
     // X360 0x82847390.
     void AptDataHandler::AptFree(void* lpBlock)
     {
-        CGS_ASSERT(mpAllocator != 0, "Apts data allocator is invalid in AptDataHandler::AptFree");
-        CGS_ASSERT(lpBlock != 0, "AptDataHandler::AptFree passed a null pointer to free");
+        if (mpAllocator == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "Apts data allocator is invalid in AptDataHandler::AptFree";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, KAC_APT_ALLOCATOR_ASSERT_FILE, 156);
+            CgsDev::Assert::EndAssert();
+        }
+        if (lpBlock == 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
+            lStrStream << "AptDataHandler::AptFree passed a null pointer to free";
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, KAC_APT_ALLOCATOR_ASSERT_FILE, 157);
+            CgsDev::Assert::EndAssert();
+        }
 
         mpAllocator->Free(lpBlock);
     }

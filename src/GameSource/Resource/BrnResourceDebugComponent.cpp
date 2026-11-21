@@ -461,13 +461,12 @@ namespace BrnResource
         if (mpModule == 0)
         {
             CgsDev::Assert::BeginAssert();
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStrStream << "No module\n";
             CgsDev::Assert::FireAssert(
-                lacMessageBuffer,
+                CgsDev::Assert::gpcMessageBuffer,
                 "..\\..\\..\\GameSource\\Resource/BrnResourceDebugComponent.cpp",
-                313);
+                313); // ARTIST 0x82662734
             CgsDev::Assert::EndAssert();
         }
 

@@ -160,16 +160,13 @@ namespace BrnAI
     {
         if (luPortalIndex >= mu8NumPortals)
         {
-            // X360 streams the diagnostic into the global CgsDev::Assert message buffer;
-            // matching the committed AISectionsResourceType::GetMiddle precedent, build it
-            // into a local buffer and fire the assert.
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            // ARTIST holds the assert mutex while streaming into the shared message buffer.
+            CgsDev::Assert::BeginAssert();
+            CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStream << "Trying to access portal " << static_cast<s32>(luPortalIndex)
                     << " when only " << static_cast<s32>(mu8NumPortals) << " available.";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lacMessageBuffer,
-                                       "..\\..\\..\\SharedClasses\\AI/AISectionsData.h", 880);
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer,
+                "..\\..\\..\\SharedClasses\\AI/AISectionsData.h", 880); // ARTIST 0x8230F6AC
             CgsDev::Assert::EndAssert();
         }
 

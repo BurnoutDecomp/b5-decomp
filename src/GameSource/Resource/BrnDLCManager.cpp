@@ -563,13 +563,12 @@ namespace BrnResource
         if (liPackage < 0 || liPackage >= static_cast<s32>(muPackageCount))
         {
             CgsDev::Assert::BeginAssert();
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
             lStrStream << "Package " << liPackage << " is out of range\n";
             CgsDev::Assert::FireAssert(
-                lacMessageBuffer,
+                CgsDev::Assert::gpcMessageBuffer,
                 "..\\..\\..\\GameSource\\Resource/BrnDLCManager.h",
-                332);
+                332); // ARTIST 0x8266160C
             CgsDev::Assert::EndAssert();
         }
 
