@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm3d.h"
 #include "GameShared/GameClasses/Graphics/VertexDescriptors/CgsPositionOnlyVertex.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/states/programbuffer.h"
 #include "rw/rwcore_structs.h"
 #include "GameShared/GameClasses/Graphics/CgsResourceAllocatorCreate.h"
@@ -191,7 +191,10 @@ void ImRenderer<V>::BeginRendering()
 template <typename V>
 void ImRenderer<V>::EndRendering()
 {
-    CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this), "mgpActiveRenderer == this");
+    CGS_ASSERT(mgpActiveRenderer == static_cast<ImRendererBase*>(this),
+        CgsDev::Assert::MessageAt(
+            "mgpActiveRenderer == this",
+            "..\\..\\..\\GameShared\\GameClasses\\Graphics/ImmediateMode/CgsImRenderer.h", 645 /* ARTIST 0x827EB128 */));
     mgpActiveRenderer = 0;
 }
 

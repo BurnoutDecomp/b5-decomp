@@ -186,7 +186,10 @@ namespace BrnGui
     void JunctionInfoComponent::HandleJunctionChange(const GuiEventJunctionInfo* lpEvent,
                                                      CgsID lCurrentCarId)
     {
-        CGS_ASSERT(lpEvent != 0, "lpEvent");
+        CGS_ASSERT(lpEvent != 0,
+            CgsDev::Assert::MessageAt(
+                "lpEvent",
+                "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnJunctionInfoComponent.cpp", 152 /* ARTIST 0x824400E0 */));
 
         mJunctionInfo = *lpEvent;
         mJunctionInfo.mi8Difficulty = 0;

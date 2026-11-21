@@ -10,7 +10,7 @@
 // =============================================================================
 
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModule.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnWorld
 {
@@ -18,7 +18,11 @@ namespace BrnWorld
 void
 WorldEntityModule::BridgePVSToOutput_Prepare( WorldEntityIO::OutputBuffer_Prepare* lpOutputBuffer )
 {
-    CGS_ASSERT( lpOutputBuffer, "lpOutputBuffer" );
+    CGS_ASSERT( lpOutputBuffer,
+        CgsDev::Assert::MessageAt(
+            "lpOutputBuffer",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/WorldEntityModule/Bridges/WorldEntityBridgePVSToOutput.cpp", 38 /* ARTIST 0x822F9EF4 */));
 
     lpOutputBuffer->GetResourceRequestInterface()->Append(
         *mPVSModule.GetGameDataRequestInt() );

@@ -51,6 +51,10 @@
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable;
 // bodied by the CgsShaderConstants TU). Slot 0 holds the per-draw world transform.
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../World/EntityModules/WorldEntityModule/BrnWorldEntityModule.cpp";
+
 namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
 
 namespace BrnWorld
@@ -561,7 +565,8 @@ WorldEntityModule::PreSceneUpdate(
 void
 WorldEntityModule::UpdateCollisionValidation( WorldEntityIO::OutputBuffer_PostPhysics* lpOutputBuffer )
 {
-    CGS_ASSERT( lpOutputBuffer, "lpOutputBuffer" );
+    CGS_ASSERT( lpOutputBuffer,
+        CgsDev::Assert::MessageAt("lpOutputBuffer", KAC_ARTIST_ASSERT_FILE, 1098 /* ARTIST 0x82307FE4 */));
 
     lpOutputBuffer->GetStatusInterface()->SetCollisionWorldInvalid( meCollisionWorldState != E_COLWORLDSTATE_VALID );
     lpOutputBuffer->GetStatusInterface()->SetCollisionWorldInvalidating( meCollisionWorldState == E_COLWORLDSTATE_INVALIDATING );
@@ -1127,7 +1132,10 @@ WorldEntityModule::PrepareWorldCollision(
     WorldEntityIO::SceneInputInterface* lpSceneInterface,
     bool lbLoadBundle )
 {
-    CGS_ASSERT( lpRequestInterface && lpSceneInterface, "lpRequestInterface && lpSceneInterface" );
+    CGS_ASSERT( lpRequestInterface && lpSceneInterface,
+        CgsDev::Assert::MessageAt(
+            "lpRequestInterface && lpSceneInterface",
+            KAC_ARTIST_ASSERT_FILE, 2117 /* ARTIST 0x8230692C */));
 
     switch ( meWorldColPrepareStage )
     {

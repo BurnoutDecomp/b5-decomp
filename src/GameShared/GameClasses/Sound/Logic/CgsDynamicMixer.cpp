@@ -23,7 +23,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Logic/CgsDynamicMixer.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
@@ -94,7 +94,9 @@ int DynamicMixer::DMixPrintf(const char* apFormat, ...)
     const int liCopied = ::vsnprintf(lacText, sizeof(lacText), apFormat, lArgs);
     va_end(lArgs);
     CGS_ASSERT(liCopied < static_cast<int>(sizeof(lacText)),
-               "lNumBytesCopied<(int32_t)luBytes");
+        CgsDev::Assert::MessageAt(
+            "lNumBytesCopied<(int32_t)luBytes",
+            "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 96 /* ARTIST 0x8268D2F4 */));
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << lacText;
     return 0;

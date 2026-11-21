@@ -6,6 +6,7 @@
 // layout's field TYPES are not attested). See BrnReplaySoundSerialiser.h for the address map.
 
 #include "GameSource/Replays/Serialisers/BrnReplaySoundSerialiser.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
@@ -13,6 +14,9 @@
 #include "vendor/renderware/physics/JointFrames.hpp"   // rw::math::vpu::QuaternionFromMatrix33 (WriteAsQuatPos)
 
 #include <cstring>
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h";
 
 namespace BrnReplays
 {
@@ -39,9 +43,14 @@ namespace BrnReplays
     // the static layout's collision array (record base +0, stride 224), then bump the count.
     SoundSerialiserStaticLayout* SoundSerialiser::AddCollision(const void* lpCollision)
     {
-        CGS_ASSERT(GetNumCollisions() >= 0, "GetNumCollisions() >= 0");
+        CGS_ASSERT(GetNumCollisions() >= 0,
+            CgsDev::Assert::MessageAt(
+                "GetNumCollisions() >= 0",
+                KAC_ARTIST_ASSERT_FILE, 375 /* ARTIST 0x82695AFC */));
         CGS_ASSERT(GetNumCollisions() < SoundSerialiserStaticLayout::KI_MAX_COLLISIONS,
-                   "GetNumCollisions() < SoundSerialiserStaticLayout::KI_MAX_COLLISIONS");
+            CgsDev::Assert::MessageAt(
+                "GetNumCollisions() < SoundSerialiserStaticLayout::KI_MAX_COLLISIONS",
+                KAC_ARTIST_ASSERT_FILE, 376 /* ARTIST 0x82695B2C */));
 
         const s32 liIndex = GetStaticLayout()->GetNumCollisions();
 

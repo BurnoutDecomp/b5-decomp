@@ -42,7 +42,7 @@
 #include "GameSource/World/BrnWorldModule.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"   // CgsSystem::TimerStatus{,Interface} -- WorldModule::Update stages the environment frame delta
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<4096,16>::AddEvent
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"       // CgsResource::ID::HashString
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"       // BrnResource::GameDataIO::RequestInterface<4096>
@@ -66,6 +66,10 @@
 
 // The global runtime shader-constant register (X360 symbol mShaderConstantTable;
 // same extern as the world-entity TU -- the defining home lands with the shader TU).
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../World/Bridges/WorldBridgeEntityModulesToEntityModules.cpp";
+
 namespace CgsGraphics { extern ShaderConstantTable mShaderConstantTable; }
 
 namespace renderengine { extern s32 gDisplayWidth; extern s32 gDisplayHeight; }
@@ -5051,8 +5055,14 @@ void BridgeRaceCarModuleToTrafficModule_PostScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpTrafficInputBuffer_PostScene != 0, "lpTrafficInputBuffer_PostScene");   // :61
-    CGS_ASSERT(lpRaceCarOutputBuffer_PostScene != 0, "lpRaceCarOutputBuffer_PostScene"); // :62
+    CGS_ASSERT(lpTrafficInputBuffer_PostScene != 0,
+        CgsDev::Assert::MessageAt(
+            "lpTrafficInputBuffer_PostScene",
+            KAC_ARTIST_ASSERT_FILE, 61 /* ARTIST 0x827AD854 */));   // :61
+    CGS_ASSERT(lpRaceCarOutputBuffer_PostScene != 0,
+        CgsDev::Assert::MessageAt(
+            "lpRaceCarOutputBuffer_PostScene",
+            KAC_ARTIST_ASSERT_FILE, 62 /* ARTIST 0x827AD878 */)); // :62
 
     // Source getter (read-lock) first, destination setter (write-lock) second -- the
     // console's order, and both are lock tripwires.

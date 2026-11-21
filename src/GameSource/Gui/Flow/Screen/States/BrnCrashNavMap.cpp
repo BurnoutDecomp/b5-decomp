@@ -1104,7 +1104,10 @@ namespace BrnGui
 
         // cpp:537 -- non-fatal on the X360; the manager is dereferenced either way,
         // exactly as the console does.
-        CGS_ASSERT(mpIconManager != 0, "mpIconManager");
+        CGS_ASSERT(mpIconManager != 0,
+            CgsDev::Assert::MessageAt(
+                "mpIconManager",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavMap.cpp", 537 /* ARTIST 0x824B6820 */));
 
         if ((CgsDev::Message::gxMessageFilterFlags & KX_MESSAGE_FILTER_BIT) != 0)
         {

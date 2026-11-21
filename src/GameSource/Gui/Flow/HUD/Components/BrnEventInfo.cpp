@@ -442,7 +442,9 @@ namespace
 void EventInfoComponent::SetEventType(BrnGameState::GameStateModuleIO::EGameModeType leCurrentGameMode)
 {
     CGS_ASSERT(leCurrentGameMode != BrnGameState::GameStateModuleIO::E_MODE_NONE,
-               "GsmIO::E_MODE_NONE != leCurrentGameMode");   // cpp:501 (non-gating)
+        CgsDev::Assert::MessageAt(
+            "GsmIO::E_MODE_NONE != leCurrentGameMode",
+            "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnEventInfo.cpp", 501 /* ARTIST 0x8242FCA4 */));   // cpp:501 (non-gating)
 
     meCurrentEventType = leCurrentGameMode;                  // stw r30, 0x3D4(r31)
 

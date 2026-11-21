@@ -1,4 +1,5 @@
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiIOInterfaces.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // =============================================================================
 // BrnGameState::GameStateModuleIO::GameStateToGuiInterface -- the interface's own .cpp home.
@@ -287,7 +288,11 @@ void GameStateToGuiInterface::AddOvertakeEvent(u8 lu8NewPosition, ::EActiveRaceC
 void GameStateToGuiInterface::AppendRaceCarCrashes(
     const CgsModule::EventQueue<BrnPhysics::Vehicle::RaceCarCrashEvent, 8>* lpRaceCarCrashEventQueue)
 {
-    CGS_ASSERT(lpRaceCarCrashEventQueue != 0, "lpRaceCarCrashEventQueue");   // line 247
+    CGS_ASSERT(lpRaceCarCrashEventQueue != 0,
+        CgsDev::Assert::MessageAt(
+            "lpRaceCarCrashEventQueue",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../GameState/SharedIO/BrnGameStateToGuiIOInterfaces.cpp", 247 /* ARTIST 0x823799AC */));   // line 247
     mRaceCarCrashEventQueue.Append(*lpRaceCarCrashEventQueue);                // this + 0x1E0
 }
 

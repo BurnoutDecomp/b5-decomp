@@ -729,7 +729,10 @@ namespace BrnGui
     // -----------------------------------------------------------------------------------
     void InstantResultsState::AppendExpectedScreenComponents()
     {
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");     // cpp:774
+        CGS_ASSERT(mpGuiCache,
+            CgsDev::Assert::MessageAt(
+                "mpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.cpp", 774 /* ARTIST 0x824B3CD4 */));     // cpp:774
 
         const GuiFlow leFlow = static_cast<GuiFlow>(0);
 

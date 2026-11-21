@@ -334,7 +334,9 @@ namespace BrnNetwork
             {
                 RemovePlayer(maMugshotData[liIndex].mTakedownAggressorPlayerID);
                 CGS_ASSERT(maMugshotData[liIndex].mTakedownAggressorPlayerID == -1,
-                           "maMugshotData[liIndex].mTakedownAggressorPlayerID == CgsNetwork::K_INVALID_PLAYER_ID");
+                    CgsDev::Assert::MessageAt(
+                        "maMugshotData[liIndex].mTakedownAggressorPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
+                        KAC_ARTIST_ASSERT_FILE, 1321 /* ARTIST 0x8255DC54 */));
             }
         }
 
@@ -1506,19 +1508,24 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------
     void NetworkImageManager::_GetCompressedGamerPicCallback(void* lpPixels, void* lpUserData)
     {
-        CGS_ASSERT(lpPixels, "lpPixels");
-        CGS_ASSERT(lpUserData, "lpUserData");
+        CGS_ASSERT(lpPixels,
+            CgsDev::Assert::MessageAt("lpPixels", KAC_ARTIST_ASSERT_FILE, 2304 /* ARTIST 0x8256FD6C */));
+        CGS_ASSERT(lpUserData,
+            CgsDev::Assert::MessageAt("lpUserData", KAC_ARTIST_ASSERT_FILE, 2305 /* ARTIST 0x8256FD90 */));
         NetworkImageManager* lpImageManager = static_cast<NetworkImageManager*>(lpUserData);
-        CGS_ASSERT(lpImageManager, "lpImageManager");
+        CGS_ASSERT(lpImageManager,
+            CgsDev::Assert::MessageAt("lpImageManager", KAC_ARTIST_ASSERT_FILE, 2307 /* ARTIST 0x8256FDAC */));
 
         CgsNetwork::PlayerManager* lpPlayerManager = lpImageManager->mpPlayerManager;
-        CGS_ASSERT(lpPlayerManager, "lpPlayerManager");
+        CGS_ASSERT(lpPlayerManager,
+            CgsDev::Assert::MessageAt("lpPlayerManager", KAC_ARTIST_ASSERT_FILE, 2311 /* ARTIST 0x8256FDD4 */));
 
         NetworkPlayerID lLocalPlayerID;
         if ( lpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID) )
         {
             MugshotData* lpMugshotData = lpImageManager->GetMugshotDataEntry(lLocalPlayerID);
-            CGS_ASSERT(lpMugshotData, "lpMugshotData");
+            CGS_ASSERT(lpMugshotData,
+                CgsDev::Assert::MessageAt("lpMugshotData", KAC_ARTIST_ASSERT_FILE, 2320 /* ARTIST 0x8256FE10 */));
 
             std::memcpy(lpMugshotData->mPicture.GetTexture(), lpPixels, lpMugshotData->mPicture.GetTextureSize());
             lpImageManager->RequestMugshotSave(lpMugshotData, lpMugshotData->mTakedownVictimPlayerID,
@@ -1549,7 +1556,8 @@ namespace BrnNetwork
             }
         }
 
-        CGS_ASSERT(lpEntry, "lpEntry");
+        CGS_ASSERT(lpEntry,
+            CgsDev::Assert::MessageAt("lpEntry", KAC_ARTIST_ASSERT_FILE, 1264 /* ARTIST 0x8254A910 */));
         return lpEntry;
     }
 
@@ -1574,7 +1582,8 @@ namespace BrnNetwork
             }
         }
 
-        CGS_ASSERT(lpEntry, "lpEntry");
+        CGS_ASSERT(lpEntry,
+            CgsDev::Assert::MessageAt("lpEntry", KAC_ARTIST_ASSERT_FILE, 1296 /* ARTIST 0x8254A994 */));
         return lpEntry;
     }
 

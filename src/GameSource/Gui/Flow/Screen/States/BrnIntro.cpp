@@ -53,6 +53,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnIntro.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Input/GameInputActions.h"                       // EGameInputActions (the controller action vocabulary)
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                            // CGS_ASSERT
@@ -434,7 +435,10 @@ namespace BrnGui
     // ================================================================================
     void Intro::AppendExpectedComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:595
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt(
+                "mpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnIntro.cpp", 595 /* ARTIST 0x824B90C8 */));   // cpp:595
 
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mScreenAnim.GetName());
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mPhotoBoothComponent.GetName());

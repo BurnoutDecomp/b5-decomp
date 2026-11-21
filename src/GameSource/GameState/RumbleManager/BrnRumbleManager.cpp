@@ -37,7 +37,7 @@
 #include "GameSource/GameState/RumbleManager/BrnRumbleManager.h"
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h" // BrnPhysics::Vehicle::EVehicleDrivenWheel
 #include "GameSource/World/BrnEntityTypes.h"                                           // BrnWorld::E_ENTITYTYPE_WORLD (UpdateImpacts' world-contact scale)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                     // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                             // [DIAG] CgsDev::Log::gpDebugPrint (PlayJolt witness)
 #include "rw/math/vpu/vector3_operation.h"                                             // rw::math::vpu::Magnitude (UpdateImpacts)
 #include "rw/math/fpu/scalar_operation.h"                                              // rw::math::fpu::Clamp / Max / Abs (UpdateImpacts, UpdateSurfaceRumble)
@@ -701,7 +701,10 @@ namespace BrnGameState
         CgsInput::InputIO::JoltEffect lJoltEffect = kJoltEffect;
 
         CGS_ASSERT(leImpactType != BrnPhysics::Vehicle::E_IMPACT_NONE,
-                   "leImpactType != BrnPhysics::Vehicle::E_IMPACT_NONE");
+            CgsDev::Assert::MessageAt(
+                "leImpactType != BrnPhysics::Vehicle::E_IMPACT_NONE",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../GameState/RumbleManager/BrnRumbleManager.cpp", 751 /* ARTIST 0x82379608 */));
 
         f32 lfVolumeLow;
         switch (leImpactType)

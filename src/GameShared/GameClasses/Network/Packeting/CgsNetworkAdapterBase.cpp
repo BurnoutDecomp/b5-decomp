@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/Packeting/CgsNetworkAdapterBase.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -17,6 +17,9 @@
 //   stw r27(lpNetworkManager), 0x0C ;  stw r26(a5), 0x10
 // The server-type guard is the combined "(leServerType >= E_SERVER_TYPE_LOCAL) &&
 // (leServerType < E_SERVER_TYPE_COUNT)" range test (the asm splits it into blt 0 / blt 7).
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp";
 
 namespace CgsNetwork
 {
@@ -146,8 +149,10 @@ s32 NetworkAdapterBase::ReceiveFrom(void** lppData, ConnectionData lConnectionDa
     s32 liLength = 0;
     NetGamePacketT* lpPacket = reinterpret_cast<NetGamePacketT*>(mpRecvBuffer);
 
-    CGS_ASSERT(lppData, "lppData");
-    CGS_ASSERT(mpRecvBuffer, "mpRecvBuffer");
+    CGS_ASSERT(lppData,
+        CgsDev::Assert::MessageAt("lppData", KAC_ARTIST_ASSERT_FILE, 262 /* ARTIST 0x8287122C */));
+    CGS_ASSERT(mpRecvBuffer,
+        CgsDev::Assert::MessageAt("mpRecvBuffer", KAC_ARTIST_ASSERT_FILE, 263 /* ARTIST 0x82871254 */));
 
     if (lConnectionData.mpNetGameLink == 0)
     {

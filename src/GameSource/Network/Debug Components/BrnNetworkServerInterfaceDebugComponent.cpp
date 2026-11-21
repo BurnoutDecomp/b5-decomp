@@ -26,7 +26,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h" // CgsDev::DebugUI::DebugUI::GetMetrics
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsTypes.h" // CgsDev::DebugUI::StringList / Metrics / RGBA
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h" // CgsDev::Debug2DImmediateRender (MaybeDrawText target)
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 
 #include "connapi.h"                                       // ConnApiGetClientList / ConnApiClientListT
 #include "lobbyname.h"                                     // LobbyNameCmp
@@ -34,6 +34,9 @@
 // The shared debug-HUD text helper (its own TU).
 void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkServerInterfaceDebugComponent.cpp";
 
 namespace BrnNetwork
 {
@@ -166,7 +169,10 @@ namespace BrnNetwork
     // user-data is the component (registered via RegisterFunction(&Disconnect, this, "Disconnect")).
     void ServerInterfaceDebugComponent::Disconnect(void* lpData)
     {
-        CGS_ASSERT(lpData != 0, "lpServerInterfaceDebugComponent");
+        CGS_ASSERT(lpData != 0,
+            CgsDev::Assert::MessageAt(
+                "lpServerInterfaceDebugComponent",
+                KAC_ARTIST_ASSERT_FILE, 235 /* ARTIST 0x825857CC */));
         static_cast<ServerInterfaceDebugComponent*>(lpData)->mbDisconnectNextUpdate = true;
     }
 
@@ -217,7 +223,8 @@ namespace BrnNetwork
         if (mbApplyServerTypeNextUpdate)
         {
             mbApplyServerTypeNextUpdate = false;
-            CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+            CGS_ASSERT(mpNetworkManager != 0,
+                CgsDev::Assert::MessageAt("mpNetworkManager", KAC_ARTIST_ASSERT_FILE, 190 /* ARTIST 0x8258ACCC */));
             mpNetworkManager->GetNetworkServers()->SetServerType(static_cast<CgsNetwork::EServerType>(miServerType));
         }
     }
@@ -361,7 +368,10 @@ namespace BrnNetwork
     // component is non-null, then unconditionally sets the deferred-apply flag.
     void ServerInterfaceDebugComponent::ServerTypeSelectCallback(void* /*lpData*/, void* lpUserData)
     {
-        CGS_ASSERT(lpUserData != 0, "lpServerInterfaceDebugComponent");
+        CGS_ASSERT(lpUserData != 0,
+            CgsDev::Assert::MessageAt(
+                "lpServerInterfaceDebugComponent",
+                KAC_ARTIST_ASSERT_FILE, 541 /* ARTIST 0x82585824 */));
         static_cast<ServerInterfaceDebugComponent*>(lpUserData)->mbApplyServerTypeNextUpdate = true;
     }
 }

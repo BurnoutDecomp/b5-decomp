@@ -13,7 +13,7 @@
 
 #include "GameSource/Gui/Flow/Screen/Components/BrnGuiNetworkRouteInfo.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStreamBase
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                // gpDebugPrint / gxMessageFilterFlags
@@ -534,7 +534,10 @@ namespace BrnGui
     // ------------------------------------------------------------ SetupMap
     void GuiNetworkRouteInfo::SetupMap()
     {
-        CGS_ASSERT(mpIconManager != 0, "mpIconManager");
+        CGS_ASSERT(mpIconManager != 0,
+            CgsDev::Assert::MessageAt(
+                "mpIconManager",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnGuiNetworkRouteInfo.cpp", 679 /* ARTIST 0x824302F4 */));
 
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
         {
