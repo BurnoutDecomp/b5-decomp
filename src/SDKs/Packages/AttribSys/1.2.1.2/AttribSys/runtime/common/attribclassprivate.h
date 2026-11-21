@@ -90,16 +90,6 @@ namespace Attrib
         static const ClassStaticDesc* GetStatic(::Attribute::Key luKey); // attribprivate.h:144
     };
 
-    // Read the process attribute database's private impl (the X360 reads
-    // off_83011BC4 then its +4 mPrivates inline, asserting the database is
-    // initialized first). Body: attribsys.cpp (sThis is private to Database).
-    DatabasePrivate* GetDatabasePrivate();
-
-    // DatabasePrivate::QueueForDelete<Class> @0x8280BF78 -- defer a class for
-    // garbage collection on the database's class garbage ring. Body in its own
-    // TU (the list-node allocate seam); declared here for Release.
-    void* DatabasePrivate_QueueClassForDelete(void* lpClass, void* lpGarbageList);
-
     // Attrib::Class (DWARF: the {key, privates} handle; the ClassPrivate ctor
     // copies the 8-byte serialised base then re-points mpPrivates at itself).
     // The full Class API is inlined away on the X360 spine; the committed
@@ -111,7 +101,7 @@ namespace Attrib
     public:
         ClassPrivate(const ClassLoadData& lrLoad, Vault* lpSource); // @ 0x8280EC80
         ~ClassPrivate();                                            // @ 0x8280F4D8
-        int Release();                                              // @ 0x8280C370
+        void Release() const;                                       // @ 0x8280C370
 
         // In-place construction over an Attrib::Alloc'd block
         // (ClassExportPolicy::Initialize @0x8280EE38).

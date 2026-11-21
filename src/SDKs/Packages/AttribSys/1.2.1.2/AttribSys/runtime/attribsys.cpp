@@ -15,15 +15,6 @@ namespace Attrib
     // off_83011BC4 â€” installed by the (separately reconstructed) Database constructor.
     Database* Database::sThis = 0;
 
-    // The GetDatabasePrivate() seam (attribclassprivate.h:94; friend of Database).
-    // X360 inline: read off_83011BC4 (sThis) then its +4 mPrivates, asserting the
-    // database is initialized first (same assert as Database::Get).
-    DatabasePrivate* GetDatabasePrivate()
-    {
-        CGS_ASSERT(Database::sThis != 0, "Attribute database not initialized.");
-        return const_cast<DatabasePrivate*>(&Database::sThis->mPrivates);
-    }
-
     // ~Database @ 0x828057A8 (scalar deleting destructor thunk). The X360 thunk stores
     // the Database vtable pointer (off_820D8E2C) at this+0 and, when the low should-free
     // bit is set, runs operator delete(this, sizeof(Database)) and returns this. Database
@@ -46,9 +37,7 @@ namespace Attrib
 
     Database& Attrib::Database::Get()
     {
-        // X360: read sThis; assert + return it (the assert path still returns sThis).
-        CGS_ASSERT(sThis != 0, "Attribute database not initialized.");
-        return *sThis;
+        return *GetInitializedDatabase();
     }
 
     bool Database::IsInitialized()

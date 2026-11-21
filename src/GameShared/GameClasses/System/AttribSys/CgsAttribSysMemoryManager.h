@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysPackageAllocator.h"
 
 namespace CgsMemory
@@ -46,7 +47,14 @@ public:
     static AttribSysPackageAllocator* GetAttribSysAllocator();
 
     static AttribSysPackageAllocator* GetGameTalkAllocator();
-    static AttribSysPackageAllocator* GetEaStlAllocator();
+    // FAKEMATCH: ARTIST inlines the checked EASTL allocator lookup in the list helpers.
+    static __forceinline AttribSysPackageAllocator* GetEaStlAllocator()
+    {
+        CGS_ASSERT(sbHasLinearAllocator, CgsDev::Assert::MessageAt("sbHasLinearAllocator",
+            "..\\..\\..\\GameShared\\GameClasses\\System/AttribSys/CgsAttribSysMemoryManager.h",
+            173 /* ARTIST 0x828091D4 */));
+        return &sEaStlAllocator;
+    }
 
     static bool HasMemoryBuffer();
 

@@ -9,7 +9,7 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribloadandgo.h"       // Attrib::Vault (Export / policy dispatch)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attribsysallochooks.h"          // Attrib::Alloc
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"          // StringToKey64 (type-key globals)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                  // CGS_ASSERT
 
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttribHashMapTablePolicy.h" // shared census-free
 
@@ -53,13 +53,8 @@ namespace Attrib
 // These are the eastl::list / eastl::vector<AttribSysPackageAllocator> methods the X360
 // emits under truncated symbols; DWARF (EASTL/list.h, EASTL/vector.h) resolves them.
 //
-// The list frees route through the STATIC EASTL AttribSys package allocator that the
-// memory manager hands out (GetEaStlAllocator()), reproducing the inlined
-// sbHasLinearAllocator assert (in the accessor) + mbHasAllocator assert + heap-forward +
-// miFreeTotal += 12 (the tagged 3-arg Free) in the correct order. GetEaStlAllocator() and
-// the 3-arg tagged Free are declared-only cross-TU seams (bodied in their own homes); they
-// link fine under the compile-only gate. The vector helpers DoAllocate/DoFree are likewise
-// separate cross-TU bl targets (own TUs).
+// The list helpers share the checked EASTL allocator. The sized free keeps the
+// package's recorded free-byte count in step with the nodes it releases.
 // =============================================================================
 
 namespace Attrib
@@ -69,18 +64,17 @@ namespace Attrib
 // (DWARF list.h:290). Walk the ring from the first real node (mNode.mpNext) back to the
 // sentinel (&mNode), freeing each node through the static EASTL AttribSys package
 // allocator. Called by Attrib::DatabasePrivate::~DatabasePrivate.
-AttribListBase* AttribListClearNodes(AttribListBase* lpList)
+void AttribListClearNodes(AttribListBase* lpList)
 {
-    AttribListNode* lpSentinel = &lpList->mNode;
-    for (AttribListNode* lpNode = lpList->mNode.mpNext; lpNode != lpSentinel; )
+    AttribListLink* lpSentinel = &lpList->mNode;
+    for (AttribListLink* lpNode = lpList->mNode.mpNext; lpNode != lpSentinel; )
     {
-        AttribListNode* lpDoomed = lpNode;
+        AttribListLink* lpDoomed = lpNode;
         lpNode = lpNode->mpNext;
 
-        CgsAttribSys::AttribSysMemoryManager::GetEaStlAllocator()->Free(
-            lpDoomed, KI_ATTRIB_LIST_NODE_SIZE, NULL);
+        CgsAttribSys::AttribSysMemoryManager::GetEaStlAllocator()->FreeSized(
+            lpDoomed, KI_ATTRIB_LIST_NODE_SIZE);
     }
-    return lpList;
 }
 
 // @ 0x82803FC8 -- eastl::list<const Attrib::Class*, AttribSysPackageAllocator>::DoFreeNode
@@ -90,8 +84,8 @@ AttribListBase* AttribListClearNodes(AttribListBase* lpList)
 // Attrib::DatabasePrivate::CollectGarbageBag<Attrib::Class>.
 void AttribListFreeNode(void* /*lpUnusedList*/, void* lpNode)
 {
-    CgsAttribSys::AttribSysMemoryManager::GetEaStlAllocator()->Free(
-        lpNode, KI_ATTRIB_LIST_NODE_SIZE, NULL);
+    CgsAttribSys::AttribSysMemoryManager::GetEaStlAllocator()->FreeSized(
+        lpNode, KI_ATTRIB_LIST_NODE_SIZE);
 }
 
 // @ 0x82809228 / 0x828091A8 -- eastl::list<const Class*/Collection*,
@@ -101,16 +95,18 @@ void AttribListFreeNode(void* /*lpUnusedList*/, void* lpNode)
 // to link into the ring (the QueueForDelete push sites). The X360 node is 12
 // bytes; sizeof-based here for the widened x64 node, mirroring the DoClear/
 // DoFreeNode accounting.
-AttribListNode* AttribListAllocateNode(AttribListBase* /*lpList*/, void* const* lppValue)
+template <typename T>
+AttribListNode* AttribListAllocateNode(AttribListBase* /*lpList*/, const T* const* lppValue)
 {
     AttribListNode* lpNode = static_cast<AttribListNode*>(
         CgsAttribSys::AttribSysMemoryManager::GetEaStlAllocator()->Malloc(
             sizeof(AttribListNode), 0));
-    lpNode->mpNext = NULL;
-    lpNode->mpPrev = NULL;
-    lpNode->mpValue = *lppValue;
+    ::new (&lpNode->mpValue) void*(const_cast<T*>(*lppValue));
     return lpNode;
 }
+
+template AttribListNode* AttribListAllocateNode<Collection>(AttribListBase*, const Collection* const*);
+template AttribListNode* AttribListAllocateNode<Class>(AttribListBase*, const Class* const*);
 
 // @ 0x8280C258 -- eastl::vector<const Attrib::TypeDesc*, AttribSysPackageAllocator>::reserve(n)
 // (DWARF vector.h:126; instantiated for Attrib::TypeDescPtrVec). If n exceeds the current
@@ -188,24 +184,30 @@ AttribVectorBase* AttribVectorFree(AttribVectorBase* lpVector, s32 liOldCapacity
 // reconstructed in their own AttribSys TUs.
 // =============================================================================
 
+static const char KAC_ARTIST_DATABASE_FILE[] =
+    "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribdatabase.cpp";
+
 // @ 0x82805620 (attribdatabase.cpp:274). Classes hold no export entries, so a per-export
 // Clean is a programming error.
 void ClassExportPolicy::Clean(Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, "Classes should not have export entries!\n");
+    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Classes should not have export entries!\n",
+        KAC_ARTIST_DATABASE_FILE, 274 /* ARTIST 0x82805634 */));
 }
 
 // @ 0x82805660 (attribdatabase.cpp:292). Same guard on the per-export Deinitialize hook.
 void ClassExportPolicy::Deinitialize(Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, "Classes should not have export entries!\n");
+    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Classes should not have export entries!\n",
+        KAC_ARTIST_DATABASE_FILE, 292 /* ARTIST 0x82805674 */));
 }
 
 // @ 0x828056A0 (attribdatabase.cpp:341). A Collection is never placed in the export table,
 // so IsReferenced can only be reached in error; it asserts and reports "not referenced".
 bool CollectionExportPolicy::IsReferenced(const Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, "Collections should not be in export table!\n");
+    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Collections should not be in export table!\n",
+        KAC_ARTIST_DATABASE_FILE, 341 /* ARTIST 0x828056B4 */));
     return false;
 }
 
@@ -213,14 +215,16 @@ bool CollectionExportPolicy::IsReferenced(const Vault&, const TypeID&, const Exp
 // per-export Clean hook is a dead path. (Shares the Class rodata message.)
 void CollectionExportPolicy::Clean(Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, "Classes should not have export entries!\n");
+    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Classes should not have export entries!\n",
+        KAC_ARTIST_DATABASE_FILE, 366 /* ARTIST 0x828056F4 */));
 }
 
 // @ 0x82805720 (attribdatabase.cpp:391). Same guard on the Collection per-export
 // Deinitialize hook.
 void CollectionExportPolicy::Deinitialize(Vault&, const TypeID&, const ExportID&)
 {
-    CGS_ASSERT(false, "Classes should not have export entries!\n");
+    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Classes should not have export entries!\n",
+        KAC_ARTIST_DATABASE_FILE, 391 /* ARTIST 0x82805734 */));
 }
 
 // =============================================================================
@@ -695,19 +699,24 @@ void TypeDescPtrVec::PushBack(const TypeDesc* lpDesc)
 // with nodes from the AttribSys package allocator; see attribdatabaseprivate.h.
 void TypeTable::Construct()
 {
-    mpRoot = NULL;
+    mAnchor.mpRight = &mAnchor;
+    mAnchor.mpLeft = &mAnchor;
+    mAnchor.mpParent = NULL;
+    mAnchor.mu8Color = 0; // ARTIST 0x8280C674
     muSize = 0;
 }
 
 TypeDesc* TypeTable::Insert(const TypeDesc& lrDesc)
 {
-    SetNode** lppSlot = &mpRoot;
+    SetLink* lpParent = &mAnchor;
+    SetLink** lppSlot = &mAnchor.mpParent;
     while (*lppSlot != NULL)
     {
-        SetNode* lpNode = *lppSlot;
-        if (lrDesc.mType < lpNode->mValue.mType)
+        SetNode* lpNode = static_cast<SetNode*>(*lppSlot);
+        lpParent = lpNode;
+        if (mCompare(lrDesc.mType, lpNode->mValue.mType))
             lppSlot = &lpNode->mpLeft;
-        else if (lpNode->mValue.mType < lrDesc.mType)
+        else if (mCompare(lpNode->mValue.mType, lrDesc.mType))
             lppSlot = &lpNode->mpRight;
         else
             return &lpNode->mValue;   // unique-key set: keep the existing node
@@ -716,21 +725,28 @@ TypeDesc* TypeTable::Insert(const TypeDesc& lrDesc)
     SetNode* lpNew = static_cast<SetNode*>(Attrib::Alloc(sizeof(SetNode), NULL));
     lpNew->mpLeft = NULL;
     lpNew->mpRight = NULL;
+    lpNew->mpParent = lpParent;
+    lpNew->mu8Color = 0;
     lpNew->mValue = lrDesc;
     *lppSlot = lpNew;
+    if (muSize == 0 || (lpParent == mAnchor.mpLeft && lppSlot == &lpParent->mpLeft))
+        mAnchor.mpLeft = lpNew;
+    if (muSize == 0 || (lpParent == mAnchor.mpRight && lppSlot == &lpParent->mpRight))
+        mAnchor.mpRight = lpNew;
     ++muSize;
     return &lpNew->mValue;
 }
 
 const TypeDesc* TypeTable::Find(u64 luType) const
 {
-    const SetNode* lpNode = mpRoot;
-    while (lpNode != NULL)
+    const SetLink* lpLink = mAnchor.mpParent;
+    while (lpLink != NULL)
     {
-        if (luType < lpNode->mValue.mType)
-            lpNode = lpNode->mpLeft;
-        else if (lpNode->mValue.mType < luType)
-            lpNode = lpNode->mpRight;
+        const SetNode* lpNode = static_cast<const SetNode*>(lpLink);
+        if (mCompare(luType, lpNode->mValue.mType))
+            lpLink = lpNode->mpLeft;
+        else if (mCompare(lpNode->mValue.mType, luType))
+            lpLink = lpNode->mpRight;
         else
             return &lpNode->mValue;
     }
@@ -818,7 +834,7 @@ AttribListBase* DatabasePrivate_CollectClassGarbageBag(AttribListBase* lpGarbage
 {
     while (lpGarbageList->mNode.mpNext != &lpGarbageList->mNode)
     {
-        AttribListNode* lpNode = lpGarbageList->mNode.mpNext;
+        AttribListNode* lpNode = static_cast<AttribListNode*>(lpGarbageList->mNode.mpNext);
         ClassPrivate* lpClass = reinterpret_cast<ClassPrivate*>(lpNode->mpValue);
 
         CGS_ASSERT(lpClass != NULL, "NULL object found in garbage bag.");
@@ -836,21 +852,6 @@ AttribListBase* DatabasePrivate_CollectClassGarbageBag(AttribListBase* lpGarbage
         AttribListFreeNode(lpGarbageList, lpNode);
     }
     return lpGarbageList;
-}
-
-// GetDatabasePrivate -- the typed private-impl accessor every registry site
-// inlines on the X360 (off_83011BC4 + the initialization assert + ->mPrivates).
-// The live registry IS its own privates (the ctor's Database(*this) base), so
-// the accessor hands the singleton back as a DatabasePrivate.
-DatabasePrivate* GetDatabasePrivate()
-{
-    Database* lpDatabase = Database::sThis;
-    if (lpDatabase == NULL)
-    {
-        CGS_ASSERT(false, "Attribute database not initialized.");
-        lpDatabase = Database::sThis;
-    }
-    return const_cast<DatabasePrivate*>(&lpDatabase->mPrivates);
 }
 
 } // namespace Attrib

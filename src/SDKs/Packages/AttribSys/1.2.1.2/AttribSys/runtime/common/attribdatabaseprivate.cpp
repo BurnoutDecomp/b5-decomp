@@ -3,7 +3,8 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttribHashMapTablePolicy.h" // shared AttribSys census-free
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribdatabase.h"           // AttribListNode/Base + node-free seam
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"           // Attrib::Collection (~Collection)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                             // CGS_ASSERT
+#include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribclassprivate.h"  // ClassPrivate layout refcount
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                             // CGS_ASSERT
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX (AttribSys v1.2.1.2).
 //   Attrib::DatabasePrivate::`scalar deleting destructor' @ 0x8280CA40
@@ -23,6 +24,48 @@
 // ~DatabasePrivate() plus the class operator delete bodied below.
 namespace Attrib
 {
+    namespace
+    {
+        bool IsReferenced(const Collection& lrObject)
+        {
+            return lrObject.GetRefCount() != 0;
+        }
+
+        bool IsReferenced(const Class& lrObject)
+        {
+            const ClassPrivate* lpPrivate = static_cast<const ClassPrivate*>(lrObject.GetPrivates());
+            return lpPrivate->mLayoutTable.GetRefCount() != 0;
+        }
+    }
+
+    // Queue an unreferenced object once, at the tail of its garbage list.
+    template <typename T>
+    void DatabasePrivate::QueueForDelete(const T* lpObject, AttribListBase& lrQueue)
+    {
+        // FAKEMATCH: Preserve the search key separately from the node's address-taken value.
+        const T* const lpCandidate = lpObject;
+        CGS_ASSERT(lpCandidate && !IsReferenced(*lpCandidate), CgsDev::Assert::MessageAt(
+            "Cannot queue NULL or referenced object for delete.",
+            "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribdatabase.cpp",
+            76 /* ARTIST 0x8280BEF0, 0x8280BFC4 */));
+
+        AttribListLink* lpNode = lrQueue.mNode.mpNext;
+        while (lpNode != &lrQueue.mNode && static_cast<AttribListNode*>(lpNode)->mpValue != lpCandidate)
+            lpNode = lpNode->mpNext;
+
+        if (lpNode == &lrQueue.mNode)
+        {
+            AttribListNode* lpNewNode = AttribListAllocateNode(&lrQueue, &lpObject);
+            lpNewNode->mpNext = &lrQueue.mNode;
+            lpNewNode->mpPrev = lrQueue.mNode.mpPrev;
+            lrQueue.mNode.mpPrev->mpNext = lpNewNode;
+            lrQueue.mNode.mpPrev = lpNewNode;
+        }
+    }
+
+    template void DatabasePrivate::QueueForDelete<Collection>(const Collection*, AttribListBase&);
+    template void DatabasePrivate::QueueForDelete<Class>(const Class*, AttribListBase&);
+
     // ~DatabasePrivate @ 0x8280CA5C (inner dtor, called by the deleting thunk). Its real
     // body -- releasing the class registry / garbage queues this object owns -- lives in
     // its own AttribSys TU (todo) and is not part of this batch; bodied empty here so the
@@ -56,7 +99,7 @@ namespace Attrib
     {
         while (lpGarbageList->mNode.mpNext != &lpGarbageList->mNode)
         {
-            AttribListNode*     lpNode       = lpGarbageList->mNode.mpNext;
+            AttribListNode*     lpNode       = static_cast<AttribListNode*>(lpGarbageList->mNode.mpNext);
             Attrib::Collection* lpCollection = reinterpret_cast<Attrib::Collection*>(lpNode->mpValue);
 
             CGS_ASSERT(lpCollection != NULL, "NULL object found in garbage bag.");

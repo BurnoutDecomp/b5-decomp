@@ -1,11 +1,8 @@
 #pragma once
 
 #include "types.hpp"
-
-namespace CgsMemory
-{
-class HeapMalloc;
-}
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 
 namespace CgsAttribSys
 {
@@ -89,7 +86,15 @@ public:
     // that hands back this instance, so only mbHasAllocator is asserted here). The exact
     // vendor symbol name is not independently attested; FreeSized names the reconstructed
     // inline. FLAG.
-    void  FreeSized(void* lpBlock, size_t lnSize);
+    // FAKEMATCH: ARTIST inlines the guard and byte accounting at the EASTL free sites.
+    __forceinline void FreeSized(void* lpBlock, size_t lnSize)
+    {
+        CGS_ASSERT(mbHasAllocator, CgsDev::Assert::MessageAt("mbHasAllocator",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysPackageAllocator.h",
+            324 /* ARTIST 0x8280402C */));
+        mpHeapAllocator->Free(lpBlock);
+        miFreeTotal += static_cast<s32>(lnSize);
+    }
 
     // @ 0x82803F18 -- EASTL container allocator adapter deallocate(void*, size_t): the hook
     // the EASTL list<Attrib::Collection*, AttribSysPackageAllocator> caller invokes as

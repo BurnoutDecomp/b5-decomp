@@ -15,11 +15,8 @@
 //   mGarbageClasses     ClassList (eastl::list<const Class*>)
 // The ctor @0x8280C598 (from a serialised DatabaseLoadData) attests the member
 // order/offsets on the X360: Database base {vptr@0, mPrivates@+4=self},
-// mClasses@+8 (12B), mNumCompiledTypes@+20, mCompiledTypes@+24 (12B),
-// mTypes@+36, garbage ring sentinels @+108/+140.
-//
-// This is the x64 semantic-parity layout (named members, widened pointers) per
-// the reconstruction rules; the earlier opaque-172-byte-span model is retired.
+// mClasses@+8 (12B), mNumCompiledTypes@+20, mCompiledTypes@+24 (36B),
+// mTypes@+60 (48B), garbage ring sentinels @+108/+140.
 
 #include "types.hpp"
 #include <cstddef>   // size_t
@@ -56,8 +53,9 @@ namespace Attrib
     struct TypeDescPtrVec
     {
         const TypeDesc** mpBegin;        // +0
-        const TypeDesc** mpEnd;          // +4 (x64 widened)
+        const TypeDesc** mpEnd;          // +4
         const TypeDesc** mpCapacityEnd;  // +8
+        CgsAttribSys::AttribSysPackageAllocator mAllocator; // +12
 
         unsigned int Size() const { return static_cast<unsigned int>(mpEnd - mpBegin); }
 
@@ -85,10 +83,16 @@ namespace Attrib
     class TypeTable
     {
     public:
-        struct SetNode
+        struct SetLink
         {
-            SetNode* mpLeft;
-            SetNode* mpRight;
+            SetLink* mpRight;
+            SetLink* mpLeft;
+            SetLink* mpParent;
+            u8 mu8Color;
+        };
+
+        struct SetNode : SetLink
+        {
             TypeDesc mValue;
         };
 
@@ -103,8 +107,15 @@ namespace Attrib
         const TypeDesc* Find(u64 luType) const;
 
     private:
-        SetNode*     mpRoot;
+        struct TypeKeyLess
+        {
+            bool operator()(u64 luLeft, u64 luRight) const { return luLeft < luRight; }
+        };
+
+        TypeKeyLess mCompare;
+        SetLink mAnchor;
         unsigned int muSize;
+        CgsAttribSys::AttribSysPackageAllocator mAllocator;
     };
 
     // ------------------------------------------------------------------------
@@ -144,6 +155,9 @@ namespace Attrib
         AttribListBase mGarbageCollections;  // attribdatabase.cpp:103 (X360 +108 ring)
         AttribListBase mGarbageClasses;      // attribdatabase.cpp:104 (X360 +140 ring)
 
+        template <typename T>
+        static void QueueForDelete(const T* lpObject, AttribListBase& lrQueue);
+
         // @ 0x8280C598 -- build the registry from the schema's serialised
         // DatabaseLoadData: reserve the class table, seed the type registry with
         // the NULL type then one TypeDesc per schema typename (key = the hash64
@@ -165,4 +179,8 @@ namespace Attrib
         static void* operator new(size_t, void* lpPlacement) { return lpPlacement; }
         static void operator delete(void*, void*) {}
     };
+
+    CGS_STATIC_ASSERT(sizeof(TypeDescPtrVec) == 36, "ARTIST compiled-type vector size");
+    CGS_STATIC_ASSERT(sizeof(TypeTable) == 48, "ARTIST type table size");
+    CGS_STATIC_ASSERT(sizeof(DatabasePrivate) == 172, "ARTIST database size");
 }

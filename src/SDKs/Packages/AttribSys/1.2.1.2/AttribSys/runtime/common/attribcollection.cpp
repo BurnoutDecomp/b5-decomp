@@ -37,58 +37,6 @@
 // database's garbage list. The scalar deleting destructor (@0x8280C510) is homed beside
 // its CollectionHashMap::Clear caller in vechashmap.cpp.
 
-namespace Attrib
-{
-    // Read the process attribute database's private impl (off_83011BC4 followed
-    // to mPrivates; asserts the database is initialized). Typed against the real
-    // x64 DatabasePrivate (attribdatabaseprivate.h); bodied in attribdatabase.cpp.
-    struct DatabasePrivate;
-    DatabasePrivate* GetDatabasePrivate();
-
-    // Attrib::DatabasePrivate::QueueForDelete<Attrib::Collection> @ 0x8280BEA8. Defer a
-    // collection for garbage collection on the database's collection garbage list (an intrusive
-    // eastl::list ring, AttribListBase). The X360 asserts the object is non-NULL and unreferenced
-    // (its shared HashMap refcount at +0x08 is zero), then -- only if it is not already queued --
-    // allocates a node holding the collection and links it at the tail of the ring. Reached from
-    // Attrib::Collection::Release on the final refcount drop.
-    void* DatabasePrivate_QueueCollectionForDelete(void* lpCollection, void* lpGarbageList)
-    {
-        AttribListBase* lpQueue = reinterpret_cast<AttribListBase*>(lpGarbageList);
-
-        // The X360 reads the collection's shared refcount at +0x08 (the HashMap base's
-        // muRefCount). FIXED (attrib teardown wave 2026-09-03): this used to transcribe
-        // that CONSOLE offset literally -- on the host mpBuckets is 8 bytes, so +0x08 is
-        // HashMap::muCapacity, and the "referenced" guard was reading the BUCKET COUNT of
-        // the table being queued. Read it BY NAME (the identical defect attribhashmap.cpp's
-        // HashMap::Release note documents).
-        bool lbNullOrReferenced = (lpCollection == NULL);
-        if (!lbNullOrReferenced)
-        {
-            const u16 lu16RefCount =
-                static_cast<const Collection*>(lpCollection)->GetRefCount();
-            lbNullOrReferenced = (lu16RefCount != 0);
-        }
-        CGS_ASSERT(!lbNullOrReferenced,
-                   "Cannot queue NULL or referenced object for delete.");
-
-        // Already queued? (walk the ring; the X360 leaves r3 = the object, unused by the caller.)
-        for (AttribListNode* lpNode = lpQueue->mNode.mpNext;
-             lpNode != &lpQueue->mNode; lpNode = lpNode->mpNext)
-        {
-            if (lpNode->mpValue == lpCollection)
-                return lpCollection;
-        }
-
-        // Allocate a node holding the collection and link it at the tail (insert-before-sentinel).
-        AttribListNode* lpNewNode = AttribListAllocateNode(lpQueue, &lpCollection);
-        lpNewNode->mpNext              = &lpQueue->mNode;
-        lpNewNode->mpPrev              = lpQueue->mNode.mpPrev;
-        lpQueue->mNode.mpPrev->mpNext  = lpNewNode;
-        lpQueue->mNode.mpPrev          = lpNewNode;
-        return lpNewNode;
-    }
-}
-
 // ============================================================================
 // Attrib::Collection::~Collection @ 0x8280C3F8
 // ============================================================================
@@ -202,8 +150,7 @@ void Attrib::Collection::Release(u64 /*luReferenceKey*/) const
 {
     if (HashMap::Release())
     {
-        DatabasePrivate_QueueCollectionForDelete(
-            const_cast<Collection*>(this), &GetDatabasePrivate()->mGarbageCollections);
+        DatabasePrivate::QueueForDelete(this, GetDatabasePrivate()->mGarbageCollections);
     }
 }
 

@@ -21,42 +21,6 @@
 
 namespace Attrib
 {
-    // Attrib::DatabasePrivate::QueueForDelete<Attrib::Class> @ 0x8280BF78. The Class twin of
-    // the Collection delete-queue push (attribcollection.cpp). Identical ring logic; the
-    // referenced-check reads the shared layout-table refcount through the Class's
-    // ClassPrivate. Reached from Attrib::ClassPrivate::Release on the final drop.
-    void* DatabasePrivate_QueueClassForDelete(void* lpClass, void* lpGarbageList)
-    {
-        AttribListBase* lpQueue = reinterpret_cast<AttribListBase*>(lpGarbageList);
-
-        // X360: refcount = ClassPrivate(mpPrivates)->mLayoutTable.muRefCount.
-        bool lbNullOrReferenced = (lpClass == NULL);
-        if (!lbNullOrReferenced)
-        {
-            const ClassPrivate* lpClassPrivate =
-                reinterpret_cast<const ClassPrivate*>(lpClass)->mpPrivates;
-            lbNullOrReferenced = (lpClassPrivate->mLayoutTable.GetRefCount() != 0);
-        }
-        CGS_ASSERT(!lbNullOrReferenced,
-                   "Cannot queue NULL or referenced object for delete.");
-
-        // Already queued? (walk the ring; the X360 leaves r3 = the object, unused by the caller.)
-        for (AttribListNode* lpNode = lpQueue->mNode.mpNext;
-             lpNode != &lpQueue->mNode; lpNode = lpNode->mpNext)
-        {
-            if (lpNode->mpValue == lpClass)
-                return lpClass;
-        }
-
-        // Allocate a node holding the class and link it at the tail (insert-before-sentinel).
-        AttribListNode* lpNewNode = AttribListAllocateNode(lpQueue, &lpClass);
-        lpNewNode->mpNext              = &lpQueue->mNode;
-        lpNewNode->mpPrev              = lpQueue->mNode.mpPrev;
-        lpQueue->mNode.mpPrev->mpNext  = lpNewNode;
-        lpQueue->mNode.mpPrev          = lpNewNode;
-        return lpNewNode;
-    }
-
     // The class-registry EraseAt (X360 sub_82808A98 -- the VecHashMap<false,16>
     // slot-vacate with probe-run repair). Teardown-path only (~ClassPrivate);
     // deferred to its own TU with the remaining VecHashMap removal family.
@@ -140,19 +104,12 @@ Attrib::ClassPrivate::ClassPrivate(const ClassLoadData& lrLoad, Vault* lpSource)
 // ============================================================================
 // Attrib::ClassPrivate::Release @ 0x8280C370
 // ============================================================================
-// Drop one reference on the layout HashMap; once it hits zero, queue this Class for
-// deferred deletion on the database's garbage list. Returns the HashMap release result
-// (a byte-wide bool widened to int, exactly as the X360 threads r3 through).
-int Attrib::ClassPrivate::Release()
+// Drop the layout reference and queue this class for deferred deletion on the final drop.
+void Attrib::ClassPrivate::Release() const
 {
-    const int liReleased = static_cast<int>(mLayoutTable.Release());
-    if (liReleased != 0)
-    {
-        DatabasePrivate* lpPrivates = GetDatabasePrivate();
-        return static_cast<int>(reinterpret_cast<intptr_t>(
-            DatabasePrivate_QueueClassForDelete(this, &lpPrivates->mGarbageClasses)));
-    }
-    return liReleased;
+    if (mLayoutTable.Release())
+        DatabasePrivate::QueueForDelete(reinterpret_cast<const Class*>(this),
+            GetDatabasePrivate()->mGarbageClasses);
 }
 
 // ============================================================================

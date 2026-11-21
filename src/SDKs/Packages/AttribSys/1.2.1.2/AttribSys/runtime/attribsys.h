@@ -13,6 +13,7 @@
 // in attribdatabase.cpp (their own TU). Out-of-line bodies + the sThis definition live in
 // the attribsys.cpp companion.
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"
 
 namespace Attrib
@@ -26,7 +27,7 @@ namespace Attrib
     class Class;
     struct TypeDesc;   // class-key MUST be struct (attribarray.h defines struct TypeDesc; MSVC mangles U/V from the key)
     class ExportManager;
-    class DatabasePrivate;
+    struct DatabasePrivate;
 
     // The process-wide attribute database. A vtbl'd handle onto a DatabasePrivate impl,
     // with a private static self-pointer installed at construction.
@@ -89,5 +90,24 @@ namespace Attrib
 
         // The singleton self-pointer (off_83011BC4 on X360). Defined in attribsys.cpp.
         static Database* sThis;              // attribdatabase.cpp:112
+
+        // FAKEMATCH: ARTIST inlines the checked singleton lookup at the private accessor sites.
+        static __forceinline Database* GetInitializedDatabase()
+        {
+            Database* lpDatabase = sThis;
+            if (!lpDatabase)
+            {
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("Attribute database not initialized.",
+                    "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/attribsys.h",
+                    649 /* ARTIST 0x828021C8 */));
+                lpDatabase = sThis;
+            }
+            return lpDatabase;
+        }
     };
+
+    __forceinline DatabasePrivate* GetDatabasePrivate()
+    {
+        return const_cast<DatabasePrivate*>(&Database::GetInitializedDatabase()->mPrivates);
+    }
 }

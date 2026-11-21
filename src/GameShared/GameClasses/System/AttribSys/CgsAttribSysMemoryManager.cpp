@@ -24,27 +24,19 @@ AttribSysPackageAllocator AttribSysMemoryManager::sEaStlAllocator;
 // CgsAttribSysMemoryManager.h:211 "sbHasLinearAllocator".)
 AttribSysPackageAllocator* AttribSysMemoryManager::GetAttribSysAllocator()
 {
-    CGS_ASSERT(sbHasLinearAllocator, "sbHasLinearAllocator");
+    CGS_ASSERT(sbHasLinearAllocator, CgsDev::Assert::MessageAt("sbHasLinearAllocator",
+        "..\\..\\..\\GameShared\\GameClasses\\System/AttribSys/CgsAttribSysMemoryManager.h",
+        211 /* ARTIST 0x821F02C4 */));
 
     return &sAttribSysAllocator;
 }
 
-// The GameTalk / EASTL package-allocator getters -- the same guarded-static
-// shape as GetAttribSysAllocator (their X360 bodies are the sibling stores of
-// the 0x821F02A0 family; the EASTL one backs Attrib::AttribListAllocateNode on
-// the vault-load path).
+// The GameTalk package uses the same prepared-state guard.
 AttribSysPackageAllocator* AttribSysMemoryManager::GetGameTalkAllocator()
 {
     CGS_ASSERT(sbHasLinearAllocator, "sbHasLinearAllocator");
 
     return &sGameTalkAllocator;
-}
-
-AttribSysPackageAllocator* AttribSysMemoryManager::GetEaStlAllocator()
-{
-    CGS_ASSERT(sbHasLinearAllocator, "sbHasLinearAllocator");
-
-    return &sEaStlAllocator;
 }
 
 // Reset the manager's static state (called from AttribSysModule::Construct @0x8280AD50;
