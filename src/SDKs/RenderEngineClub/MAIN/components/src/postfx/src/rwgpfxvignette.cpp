@@ -351,8 +351,8 @@ namespace postfx
     // ============================================================================================
     void Vignette::Release()
     {
-        if (m_vertexProgram != 0)
-            renderengine::ProgramBuffer::Release(m_vertexProgram);
+        renderengine::ProgramBuffer::Release(m_pixelProgram);
+        renderengine::ProgramBuffer::Release(m_vertexProgram);
 
         m_allocator->DoFree(m_rasterizerStateResource);
         m_allocator->DoFree(m_depthStencilResource);

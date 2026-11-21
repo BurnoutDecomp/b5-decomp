@@ -501,8 +501,8 @@ void State::DestroyEffects()
     }
     mpHeadEffectControl = 0;
     mpHeadEffectObject = 0;
-    miNumLoadedEffectControls = 0;
     miNumLoadedEffectObjects = 0;
+    miNumLoadedEffectControls = 0;
 }
 
 // ---------------------------------------------------------------------------

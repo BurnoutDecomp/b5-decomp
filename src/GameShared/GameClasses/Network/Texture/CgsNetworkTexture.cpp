@@ -20,7 +20,8 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                      // CGS_ASSERT + the Begin/Fire/End assert front-end
 #include "GameShared/GameClasses/Development/CgsStrStream.h"            // CgsDev::StrStream (streamed "Invalid pixel format!" asserts)
 
-#include <cstring>   // std::memcpy (the X360 XMemCpy)
+#include <cstring>  // std::memset
+#include <xtl.h>    // XMemCpy
 
 static const char KAC_ARTIST_ASSERT_FILE[] =
     "..\\..\\..\\GameShared\\GameClasses\\Network/CgsNetworkTexture.cpp";
@@ -266,6 +267,6 @@ namespace CgsNetwork
             CgsDev::Assert::MessageAt(
                 "lePixelFormat == GetFormat()", KAC_ARTIST_ASSERT_FILE, 370 /* ARTIST 0x8287E90C */));
 
-        std::memcpy(mpcTexture, lpcPixelData, static_cast<size_t>(liDataSizeInBytes));
+        XMemCpy(mpcTexture, lpcPixelData, static_cast<SIZE_T>(liDataSizeInBytes));
     }
 }
