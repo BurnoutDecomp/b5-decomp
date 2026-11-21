@@ -38,6 +38,7 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavDriverDetails.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                     // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                // CgsDev::StrStreamBase (the two <<-asserts)
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"             // CgsLanguage::LanguageManager
@@ -1014,14 +1015,18 @@ void CrashNavDriverDetails::UpdateStatsPanel()
 // where the field takes a float (the time played, the mileage, the best drift, the best oncoming).
 void CrashNavDriverDetails::HandleStatData(const GuiEventStatsResponse* lpStatsEvent)
 {
-    CGS_ASSERT(lpStatsEvent != 0, "lpStatsEvent");   // cpp:1050
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");       // cpp:1051
+    static const char KAC_ASSERT_FILE[] =
+        "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavDriverDetails.cpp"; // ARTIST 0x82067DE8
+    CGS_ASSERT(lpStatsEvent != 0,
+        CgsDev::Assert::MessageAt("lpStatsEvent", KAC_ASSERT_FILE, 1050)); // ARTIST 0x824B8644
+    CGS_ASSERT(mpGuiCache != 0,
+        CgsDev::Assert::MessageAt("mpGuiCache", KAC_ASSERT_FILE, 1051));   // ARTIST 0x824B866C
 
     typedef CgsLanguage::LanguageManager LM;
     const LM* lpLanguageManager = mpStateInterface->GetLanguageManager();
 
-    char lacBuffer[128];
-    lacBuffer[63] = 0;   // the X360's `stb 0, var_41` -- the formatter's own cap is 64
+    char lacBuffer[64]; // ARTIST 0x824B8620 and 0x824B86EC
+    lacBuffer[sizeof(lacBuffer) - 1] = 0;
 
     // --- the plain single-value fields -------------------------------------------
     maStatTextfields[0].SetLocalisedText(static_cast<f32>(lpStatsEvent->miTimePlayed),         // lwz 0x20
