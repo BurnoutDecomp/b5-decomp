@@ -41,7 +41,9 @@ namespace BrnNetwork
     {
         // Debug-menu option labels for the two enum variables (the console's .rdata StringList
         // tables; each ends with a { 0, null } terminator).
-        const CgsDev::DebugUI::StringList KA_CONNECTION_TYPE_OPTIONS[] =
+        // ARTIST places the tables at 0x820873A8 and 0x820873D8. Keep the first table
+        // on the same eight-byte boundary so the XDK emits OnActivate's -0x30 offset.
+        __declspec(align(8)) const CgsDev::DebugUI::StringList KA_CONNECTION_TYPE_OPTIONS[] =
         {
             { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_NONE,              "Not using rebroadcaster"                    },
             { CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_BOTH,     "Game and voip direct first"                 },
