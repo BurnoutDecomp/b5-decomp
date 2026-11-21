@@ -1,12 +1,19 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
-#include <cstring>   // std::memcpy (BaseEventQueue<T>::Append, models the Xbox XMemCpy intrinsic)
+#include <basetsd.h>
+#include <cstring>
+
+// Native memory copy declared by the XDK in xbox.h.
+extern "C" void* __stdcall XMemCpy(void* pDest, const void* pSrc, SIZE_T count);
 
 namespace CgsModule
 {
+    static const char KAC_BASE_EVENT_QUEUE_FILE[] =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsBaseEventQueue.h";
+
     // A non-owning ring of events stored in an externally supplied buffer. The
     // derived EventQueue<T, N> supplies an inline maEvents[N] buffer; other users
     // can point it at storage they manage. Recovered from the X360 spine with
@@ -17,7 +24,8 @@ namespace CgsModule
     public:
         void Construct(T* lpEventBuffer, s32 liMaxLength)
         {
-            CGS_ASSERT(lpEventBuffer != 0, "lpEventBuffer != NULL");
+            CGS_ASSERT(lpEventBuffer != 0, CgsDev::Assert::MessageAt(
+                "lpEventBuffer != NULL", KAC_BASE_EVENT_QUEUE_FILE, 160));
             mpEvents = lpEventBuffer;
             miMaxLength = liMaxLength;
             miLength = 0;
@@ -32,8 +40,10 @@ namespace CgsModule
         {
             // X360 AddEvent appends UNCONDITIONALLY -- the two asserts are non-gating tripwires
             // (the bounds-gated "return false on full" variant is the separate AddEventSafe).
-            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");
-            CGS_ASSERT(miLength < miMaxLength, "EventQueue::AddEvent - Reached Max length");
+            CGS_ASSERT(mpEvents != 0, CgsDev::Assert::MessageAt(
+                "mpEvents != NULL", KAC_BASE_EVENT_QUEUE_FILE, 312));
+            CGS_ASSERT(miLength < miMaxLength, CgsDev::Assert::MessageAt(
+                "EventQueue::AddEvent - Reached Max length", KAC_BASE_EVENT_QUEUE_FILE, 313));
             mpEvents[miLength] = lEvent;
             ++miLength;
             return true;
@@ -62,8 +72,10 @@ namespace CgsModule
         // want the bounds-gated reserve; that is AllocateEventSafe below.
         T& AddEvent()
         {
-            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");
-            CGS_ASSERT(GetLength() < GetMaxLength(), "GetLength() < GetMaxLength()");
+            CGS_ASSERT(mpEvents != 0, CgsDev::Assert::MessageAt(
+                "mpEvents != NULL", KAC_BASE_EVENT_QUEUE_FILE, 360));
+            CGS_ASSERT(GetLength() < GetMaxLength(), CgsDev::Assert::MessageAt(
+                "GetLength() < GetMaxLength()", KAC_BASE_EVENT_QUEUE_FILE, 361));
             s32 liIndex = miLength;
             ++miLength;
             return mpEvents[liIndex];
@@ -75,7 +87,8 @@ namespace CgsModule
         // a per-instantiation out-of-line body; modelled here as the generic inline template body.
         bool AddEventSafe(const T& lEvent)
         {
-            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");
+            CGS_ASSERT(mpEvents != 0, CgsDev::Assert::MessageAt(
+                "mpEvents != NULL", KAC_BASE_EVENT_QUEUE_FILE, 331));
             if (miLength >= miMaxLength) return false;
             mpEvents[miLength] = lEvent;
             ++miLength;
@@ -127,7 +140,8 @@ namespace CgsModule
         // scope, right after InputBuffer::GetUpdateRigidBodyQueue.
         T* AllocateEventSafe()
         {
-            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");   // CgsBaseEventQueue.h:381
+            CGS_ASSERT(mpEvents != 0, CgsDev::Assert::MessageAt(
+                "mpEvents != NULL", KAC_BASE_EVENT_QUEUE_FILE, 381));
             if (miLength >= miMaxLength)
             {
                 return 0;
@@ -145,9 +159,12 @@ namespace CgsModule
         // i.e. &mpEvents[liIndex]. The DWARF gives the real `const T&` return.
         const T& GetEvent(s32 liIndex) const
         {
-            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");
-            CGS_ASSERT(liIndex < GetLength(), "liIndex < GetLength()");
-            CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+            CGS_ASSERT(mpEvents != 0, CgsDev::Assert::MessageAt(
+                "mpEvents != NULL", KAC_BASE_EVENT_QUEUE_FILE, 272));
+            CGS_ASSERT(liIndex < GetLength(), CgsDev::Assert::MessageAt(
+                "liIndex < GetLength()", KAC_BASE_EVENT_QUEUE_FILE, 274));
+            CGS_ASSERT(liIndex >= 0, CgsDev::Assert::MessageAt(
+                "liIndex >= 0", KAC_BASE_EVENT_QUEUE_FILE, 275));
             return mpEvents[liIndex];
         }
 
@@ -157,16 +174,20 @@ namespace CgsModule
         // because a T& is ABI-returned as a 32-bit pointer; the DWARF gives the real T&.
         T& GetEvent(s32 liIndex)
         {
-            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");
-            CGS_ASSERT(liIndex < GetLength(), "liIndex < GetLength()");
-            CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
+            CGS_ASSERT(mpEvents != 0, CgsDev::Assert::MessageAt(
+                "mpEvents != NULL", KAC_BASE_EVENT_QUEUE_FILE, 292));
+            CGS_ASSERT(liIndex < GetLength(), CgsDev::Assert::MessageAt(
+                "liIndex < GetLength()", KAC_BASE_EVENT_QUEUE_FILE, 294));
+            CGS_ASSERT(liIndex >= 0, CgsDev::Assert::MessageAt(
+                "liIndex >= 0", KAC_BASE_EVENT_QUEUE_FILE, 295));
             return mpEvents[liIndex];
         }
 
         // Asserted read of the queue's backing buffer (X360 CgsBaseEventQueue.h:486; called by Append).
         const T* GetQueueStartPointer() const
         {
-            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");
+            CGS_ASSERT(mpEvents != 0, CgsDev::Assert::MessageAt(
+                "mpEvents != NULL", KAC_BASE_EVENT_QUEUE_FILE, 486));
             return mpEvents;
         }
 
@@ -176,24 +197,14 @@ namespace CgsModule
         // lSource's events and advances miLength. Returns true.
         bool Append(const BaseEventQueue<T>& lSource)
         {
-            // An EMPTY source contributes nothing, so bail before reading its buffer
-            // pointer: the whole-aggregate merges (InSceneUpdateInterface::Append walks
-            // all 25 queues) routinely see a source queue whose owning IO buffer never
-            // ran Construct, and GetQueueStartPointer's tripwire would fire on every one
-            // of them for a copy of zero bytes.
-            if (lSource.miLength == 0)
-            {
-                return true;
-            }
+            CGS_ASSERT(mpEvents != 0, CgsDev::Assert::MessageAt(
+                "mpEvents != NULL", KAC_BASE_EVENT_QUEUE_FILE, 413));
+            CGS_ASSERT(lSource.miLength + miLength <= miMaxLength, CgsDev::Assert::MessageAt(
+                "Base event queue overflow", KAC_BASE_EVENT_QUEUE_FILE, 414));
 
-            CGS_ASSERT(mpEvents != 0, "mpEvents != NULL");                          // CgsBaseEventQueue.h:413
-            CGS_ASSERT(lSource.miLength + miLength <= miMaxLength, "Base event queue overflow"); // :414
-
-            s32 liSourceLength = lSource.miLength;
+            const s32 liSourceLength = lSource.miLength;
             const T* lpSourceEvents = lSource.GetQueueStartPointer();
-
-            // XMemCpy (Xbox block-copy intrinsic), modelled as std::memcpy.
-            std::memcpy(mpEvents + miLength, lpSourceEvents, sizeof(T) * liSourceLength);
+            XMemCpy(mpEvents + miLength, lpSourceEvents, sizeof(T) * liSourceLength);
             miLength += lSource.miLength;
             return true;
         }
