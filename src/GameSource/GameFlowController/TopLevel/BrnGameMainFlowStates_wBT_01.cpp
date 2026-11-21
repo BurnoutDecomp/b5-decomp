@@ -50,9 +50,9 @@ bool LoadingScriptedState::LoadControllerModule(BrnResource::GameDataIO::InputBu
         lDescriptor.m_baseResourceDescriptors[0].m_size      = KU_INPUT_MODULE_MEMORY_SIZE;
         lDescriptor.m_baseResourceDescriptors[0].m_alignment = KU_INPUT_MODULE_MEMORY_ALIGNMENT;
 
-        rw::ResourceDescriptor lExtended;
-        rw::Resource           lResource;
-        rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lExtended, &lDescriptor);
+        const rw::ResourceDescriptor lExtended =
+            rw::core::GeneralResourceAllocator::GetResourceDescriptor(lDescriptor);
+        rw::Resource lResource;
 
         for (s32 liIndex = 1; liIndex < static_cast<s32>(rw::KU_RESOURCE_LANE_COUNT); ++liIndex)
         {

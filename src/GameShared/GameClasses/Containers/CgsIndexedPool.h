@@ -106,10 +106,9 @@ public:
     // msNumAllocated = 0, msNumFree = msCapacity. X360 loops over the capacity (`lhz
     // 0xC`) filling the s16 free-index array, then stores 0 at +0x08 and the capacity
     // at +0x0A. The fastcall "return result" is a register artifact; Clear is void.
-    void Clear()
+    __declspec(noinline) void Clear()
     {
-        const IndexType lsCapacity = msCapacity;
-        for (IndexType lsIndex = 0; lsIndex < lsCapacity; ++lsIndex)
+        for (IndexType lsIndex = 0; lsIndex < msCapacity; ++lsIndex)
         {
             mpFreeIndices[lsIndex] = lsIndex;
         }
@@ -274,6 +273,23 @@ private:
     IndexType  msNumFree;       // +N(s16:+0x0A / s8:+0x09)  number of free slots
     IndexType  msCapacity;      // +N(s16:+0x0C / s8:+0x0A)  pool capacity
 };
+
+// ARTIST 0x829056FC binds the embedded records at +0x0C and the free list at +0xCC.
+template<typename T, s32 N, typename IndexType>
+struct FixedIndexedPool : public IndexedPool<T, N, IndexType>
+{
+    void Construct()
+    {
+        IndexedPool<T, N, IndexType>::Construct(maObjects, maiFreeIndices, static_cast<IndexType>(N));
+    }
+
+private:
+    T maObjects[N];
+    IndexType maiFreeIndices[N];
+};
+
+template<typename T, s32 N>
+struct IndexedPool8 : public FixedIndexedPool<T, N, s8> {};
 
 } // namespace CgsContainers
 

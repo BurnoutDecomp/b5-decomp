@@ -334,23 +334,15 @@ namespace core
     }
 
     // ARTIST 0x82BC0E28. Add the aligned allocator-object reserve to lane zero.
-    ::rw::BaseResourceDescriptors<5>* GeneralResourceAllocator::GetResourceDescriptor(::rw::BaseResourceDescriptors<5>* lpOut, const ::rw::BaseResourceDescriptors<5>* lpIn)
+    ::rw::ResourceDescriptor GeneralResourceAllocator::GetResourceDescriptor(const ::rw::ResourceDescriptor& lrCapacity)
     {
-        *lpOut = *lpIn;
-
-        ::rw::BaseResourceDescriptors<5> lOverhead;
-        for (uint32_t lu = 0; lu < 5; ++lu)
-        {
-            lOverhead.m_baseResourceDescriptors[lu].m_size      = 0;
-            lOverhead.m_baseResourceDescriptors[lu].m_alignment = 1;
-        }
-        const uint32_t luAlignment0 = lpIn->m_baseResourceDescriptors[0].m_alignment;
-        lOverhead.m_baseResourceDescriptors[0].m_size =
-            (sizeof(GeneralResourceAllocator) + luAlignment0 - 1u) & ~(luAlignment0 - 1u);
-        lOverhead.m_baseResourceDescriptors[0].m_alignment = luAlignment0;
-
-        *lpOut += lOverhead;
-        return lpOut;
+        ::rw::ResourceDescriptor lRequired(lrCapacity);
+        ::rw::ResourceDescriptor lOverhead;
+        const uint32_t luAlignment = lrCapacity.m_baseResourceDescriptors[0].m_alignment;
+        const uint32_t luReserve = (sizeof(GeneralResourceAllocator) + luAlignment - 1u) & ~(luAlignment - 1u);
+        lOverhead.m_baseResourceDescriptors[0] = ::rw::BaseResourceDescriptor(luReserve, luAlignment);
+        lRequired += lOverhead;
+        return lRequired;
     }
 
     // ARTIST 0x82BC0E00 has no receiver: resource lane zero is the placement address.

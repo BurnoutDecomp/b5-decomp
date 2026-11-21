@@ -25,7 +25,7 @@ namespace core
         ~GeneralResourceAllocator() ;
 
         // ARTIST 0x82BC0E28 adds the aligned allocator-object reserve to lane zero.
-        static ::rw::BaseResourceDescriptors<5>* GetResourceDescriptor(::rw::BaseResourceDescriptors<5>* lpOut, const ::rw::BaseResourceDescriptors<5>* lpIn);
+        static ::rw::ResourceDescriptor GetResourceDescriptor(const ::rw::ResourceDescriptor& lrCapacity);
 
         // ARTIST 0x82BC0E00: placement-construct at resource lane zero, or return null.
         // Backing must satisfy GetResourceDescriptor(capacity), including object alignment.

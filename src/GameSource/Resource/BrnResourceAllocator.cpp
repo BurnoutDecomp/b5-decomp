@@ -444,8 +444,8 @@ namespace BrnResource
         mGlobalSystemMemoryDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10000;
         mGlobalSystemMemoryDescriptor.m_baseResourceDescriptors[2].m_size = 0;
         mGlobalSystemMemoryDescriptor.m_baseResourceDescriptors[2].m_alignment = 0x10000;
-        rw::ResourceDescriptor lDescriptor;
-        rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lDescriptor, &mGlobalSystemMemoryDescriptor);
+        rw::ResourceDescriptor lDescriptor =
+            rw::core::GeneralResourceAllocator::GetResourceDescriptor(mGlobalSystemMemoryDescriptor);
         mGlobalSystemMemory.m_baseResources[0] = XPhysicalAlloc(
             lDescriptor.m_baseResourceDescriptors[0].m_size, MAXULONG_PTR, 0x10000, 0x20000004);
         ClearResource(mGlobalSystemMemory, lDescriptor);
@@ -460,8 +460,8 @@ namespace BrnResource
         mGlobalDebugMemoryDescriptor.m_baseResourceDescriptors[0].m_alignment = 0x10000;
         mGlobalDebugMemoryDescriptor.m_baseResourceDescriptors[2].m_size = 0x100000;
         mGlobalDebugMemoryDescriptor.m_baseResourceDescriptors[2].m_alignment = 0x10000;
-        rw::ResourceDescriptor lDescriptor;
-        rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lDescriptor, &mGlobalDebugMemoryDescriptor);
+        rw::ResourceDescriptor lDescriptor =
+            rw::core::GeneralResourceAllocator::GetResourceDescriptor(mGlobalDebugMemoryDescriptor);
         mGlobalDebugMemory.m_baseResources[0] = XPhysicalAlloc(
             lDescriptor.m_baseResourceDescriptors[0].m_size, MAXULONG_PTR, 0x10000, 0x20000004);
         mGlobalDebugMemory.m_baseResources[2] = XPhysicalAlloc(
@@ -506,8 +506,8 @@ namespace BrnResource
                 "..\\..\\..\\GameSource\\Resource/BrnResourceAllocator.h", 362);
             CgsDev::Assert::EndAssert();
         }
-        rw::ResourceDescriptor lDescriptor;
-        rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lDescriptor, &lRuntimeCapacity);
+        rw::ResourceDescriptor lDescriptor =
+            rw::core::GeneralResourceAllocator::GetResourceDescriptor(lRuntimeCapacity);
         rw::Resource lRuntimeMemory = mGlobalSystemAllocator.DoAllocate(lDescriptor, 0);
         ClearResource(lRuntimeMemory, lDescriptor);
         mRuntimeAllocator.Construct(rw::core::GeneralResourceAllocator::Initialize(

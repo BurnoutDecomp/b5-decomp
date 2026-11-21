@@ -160,11 +160,7 @@ namespace CgsResource
         CgsFileSystem::FileSystem mFileSystem;          // +0x4684C (a1+72204)
         DebugComponent            mDebugComponent;      // +0x52D18 (a1+84806)
         rw::core::GeneralResourceAllocator* mpFileSystemAllocator; // ARTIST+360492
-        CgsContainers::IndexedPool<PendingFileResponse,
-                                   KI_MAX_PENDING_FILE_SYSTEM_RESPONSES, s8>
-                                  mPendingFileResponses;
-        PendingFileResponse maPendingFileResponses[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
-        s8 maiPendingFileResponseFreeIndices[KI_MAX_PENDING_FILE_SYSTEM_RESPONSES];
+        CgsContainers::IndexedPool8<PendingFileResponse, KI_MAX_PENDING_FILE_SYSTEM_RESPONSES> mPendingFileResponses;
         bool mbPatchRequestPending;
         Events::AddPatchRequest mAddPatchRequest;
     };

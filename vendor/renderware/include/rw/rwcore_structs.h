@@ -31,7 +31,15 @@ struct BaseResourceDescriptor {  // sizeof = 8
     // The X360 out-of-line ctor @0x821F05C8 value-initialises to the
     // identity descriptor { m_size = 0, m_alignment = 1 }. Body in
     // renderware/src/rw/BaseResourceDescriptor.cpp.
-    BaseResourceDescriptor();
+    BaseResourceDescriptor()
+        : m_size(0), m_alignment(1)
+    {
+    }
+
+    BaseResourceDescriptor(uint32_t luSize, uint32_t luAlignment)
+        : m_size(luSize), m_alignment(luAlignment)
+    {
+    }
 };
 RW_SIZE_ASSERT(rw::BaseResourceDescriptor, 8);
 
@@ -42,6 +50,8 @@ struct BaseResources {
 
 template <uint32_t Count>
 struct BaseResourceDescriptors {
+    BaseResourceDescriptors() {}
+
     BaseResourceDescriptor m_baseResourceDescriptors[Count];
 
     // RenderWare accumulates each sub-allocation's requirement: round this entry's

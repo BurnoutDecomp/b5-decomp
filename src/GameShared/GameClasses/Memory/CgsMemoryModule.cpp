@@ -358,8 +358,8 @@ namespace CgsMemory
     {
         const MemoryIO::CreateGeneralAllocatorRequest* lpReq = static_cast<const MemoryIO::CreateGeneralAllocatorRequest*>(lpRequest);
         const rw::ResourceDescriptor lCapacity = *lpReq->GetDescriptor();
-        rw::BaseResourceDescriptors<5> lBackingBase;
-        rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lBackingBase, &lCapacity);
+        const rw::ResourceDescriptor lBackingBase =
+            rw::core::GeneralResourceAllocator::GetResourceDescriptor(lCapacity);
         rw::ResourceDescriptor lBackingDescriptor;
         for (s32 li = 0; li < MemoryBank::KI_NUM_TYPES; ++li)
             lBackingDescriptor.m_baseResourceDescriptors[li] = lBackingBase.m_baseResourceDescriptors[li];

@@ -245,7 +245,7 @@ namespace CgsFileSystem
     // ARTIST829033C0: native per-instance DVD/HDD devices and their logical remaps.
     void FileSystem::Construct(rw::IResourceAllocator* lpAllocator,
                                rw::IResourceAllocator* lpDebugAllocator,
-                               const char* lpcSearchPath, DiskLayout* lpDiskLayout)
+                               const char* lpcSearchPath, DiskLayout* lpDiskLayout, const char* /*lpcDiskCacheDrive*/)
     {
         for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu)
             maFiles[lu].Construct(this, &mLog, static_cast<s32>(lu));

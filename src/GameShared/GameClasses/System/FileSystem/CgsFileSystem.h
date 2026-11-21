@@ -48,7 +48,7 @@ namespace CgsFileSystem
         // Native allocator/device lifecycle.
         void Construct(rw::IResourceAllocator* lpAllocator,
                        rw::IResourceAllocator* lpDebugAllocator,
-                       const char* lpcSearchPath, DiskLayout* lpDiskLayout); // ARTIST829033C0
+                       const char* lpcSearchPath, DiskLayout* lpDiskLayout, const char* lpcDiskCacheDrive); // ARTIST829033C0
         bool Prepare();     // ARTIST828F04E8
         bool Release();     // 0x82903880
         void Destruct();    // 0x828E8A88

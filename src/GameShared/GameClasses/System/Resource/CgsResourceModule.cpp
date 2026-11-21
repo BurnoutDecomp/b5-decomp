@@ -138,16 +138,13 @@ namespace CgsResource
         mPoolModule.Construct(&lpOptions->mPoolInitOptions, lpAllocator, lpDebugAllocator);
         mDebugComponent.Construct(this, &lpOptions->mDebugParams);
         rw::ResourceDescriptor lCapacity;
-        lCapacity.m_baseResourceDescriptors[0].m_size = 0x160000;
-        lCapacity.m_baseResourceDescriptors[0].m_alignment = 16;
-        rw::ResourceDescriptor lRequired;
-        rw::core::GeneralResourceAllocator::GetResourceDescriptor(&lRequired, &lCapacity);
+        lCapacity.m_baseResourceDescriptors[0] = rw::BaseResourceDescriptor(0x160000, 16);
+        const rw::ResourceDescriptor lRequired = rw::core::GeneralResourceAllocator::GetResourceDescriptor(lCapacity);
         rw::Resource lResource = lpAllocator->Allocate(lRequired, 0);
         mpFileSystemAllocator = rw::core::GeneralResourceAllocator::Initialize(lResource, lCapacity);
         mFileSystem.Construct(mpFileSystemAllocator, lpDebugAllocator,
-                              lpOptions->macFileSearchPath, lpOptions->mpDiskLayout);
-        mPendingFileResponses.Construct(maPendingFileResponses,
-            maiPendingFileResponseFreeIndices, static_cast<s8>(KI_MAX_PENDING_FILE_SYSTEM_RESPONSES));
+                              lpOptions->macFileSearchPath, lpOptions->mpDiskLayout, lpOptions->mpcDiskCacheDrive);
+        mPendingFileResponses.Construct();
         // ARTIST8290571C..82906554: preserve idempotent registration order and
         // class-static homes shared with the timed native callers.
         if (ResourceModule::_miResourceUpdatePerfMon == -1)
@@ -666,8 +663,8 @@ namespace CgsResource
         CGS_STATIC_ASSERT(offsetof(ResourceModule, mDebugComponent) == 339224, "ARTIST resource debug owner");
         CGS_STATIC_ASSERT(offsetof(ResourceModule, mpFileSystemAllocator) == 0x5802c, "ARTIST filesystem allocator owner");
         CGS_STATIC_ASSERT(offsetof(ResourceModule, mPendingFileResponses) == 0x58030, "ARTIST pending-response pool");
-        CGS_STATIC_ASSERT(offsetof(ResourceModule, maPendingFileResponses) == 0x5803c, "ARTIST pending-response records");
-        CGS_STATIC_ASSERT(offsetof(ResourceModule, maiPendingFileResponseFreeIndices) == 0x580fc, "ARTIST pending-response free indices");
+        CGS_STATIC_ASSERT((sizeof(CgsContainers::IndexedPool8<PendingFileResponse,
+            KI_MAX_PENDING_FILE_SYSTEM_RESPONSES>) == 0xdc), "ARTIST pending-response pool and backing");
         CGS_STATIC_ASSERT(sizeof(Events::OpenFileRequest) == 148, "ARTIST open file request");
         CGS_STATIC_ASSERT(sizeof(Events::CloseFileRequest) == 16, "ARTIST close file request");
         CGS_STATIC_ASSERT(sizeof(Events::RegisterMemFileRequest) == 272, "ARTIST register memory file request");

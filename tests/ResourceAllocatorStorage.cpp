@@ -145,8 +145,8 @@ namespace
         for (unsigned alignment : {1u, 16u, 128u})
         {
             Lane(capacity, 0, 32768, alignment);
-            rw::ResourceDescriptor needed;
-            rw::core::GeneralResourceAllocator::GetResourceDescriptor(&needed, &capacity);
+            const rw::ResourceDescriptor needed =
+                rw::core::GeneralResourceAllocator::GetResourceDescriptor(capacity);
             Arena storage(needed.m_baseResourceDescriptors[0].m_size);
             rw::Resource backing;
             backing.m_baseResources[0] = storage.data;
