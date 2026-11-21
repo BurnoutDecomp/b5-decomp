@@ -18,7 +18,8 @@
 #include "rw/audio/core/Fir64.h"
 
 #include <cmath>   // cos (the X360 cos)
-#include <cstring> // memset / memcpy (the X360 XMemSet / XMemCpy)
+#include <cstring> // memcpy
+#include <xtl.h>   // XMemSet
 
 namespace rw
 {
@@ -29,8 +30,6 @@ namespace core
 
 namespace
 {
-// XMemSet / XMemCpy @ the X360 build = byte-wise memset / memcpy.
-inline void XMemSet(void *dst, int value, u32 bytes) { std::memset(dst, value, bytes); }
 inline void XMemCpy(void *dst, const void *src, u32 bytes) { std::memcpy(dst, src, bytes); }
 
 // One source/destination channel-buffer node read out of the rwaudio Process graph: the

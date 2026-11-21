@@ -3,7 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"    // CgsDev::StrStream (SetupGameMode's streamed assert)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // CgsDev::Log (the [p0-postable] witness)
-#include "GameShared/GameClasses/Network/CgsNetworkUtils.h"     // CgsNetwork::UsernameCompare
+#include "lobbyname.h"                                           // LobbyNameCmp
 #include "GameSource/Gui/BrnGuiCache.h"                         // BrnGui::GuiCache (GetFreeburnChallengeManager / GetGameMode)
 
 // includes folded in from the BrnPlayerPositionTable_w*.cpp partfiles (2026-09-15)
@@ -77,7 +77,7 @@ namespace BrnGui
 
     // ------------------------------------------------ FunctionSortTeamHighToLow @ 0x82413A20
     // qsort() comparator: order the team table high-to-low. Empty rows sink; disconnected
-    // rows tie-break alphabetically (CgsNetwork::UsernameCompare); within a team, higher
+    // rows tie-break alphabetically with LobbyNameCmp. Within a team, higher
     // mfTableValue first; across teams, the blue team (2) sorts after the red.
     s32 PlayerPositionTableComponent::FunctionSortTeamHighToLow(const void* lp1, const void* lp2)
     {
@@ -97,8 +97,8 @@ namespace BrnGui
         if (lpPlayer1->mePlayerColour == 11)
         {
             if (lpPlayer2->mePlayerColour == 11)
-                return CgsNetwork::UsernameCompare(lpPlayer1->mPlayerName.macName,
-                                                   lpPlayer2->mPlayerName.macName);
+                return ::LobbyNameCmp(lpPlayer1->mPlayerName.macName,
+                                      lpPlayer2->mPlayerName.macName);
             return 1;
         }
         if (lpPlayer2->mePlayerColour == 11)
@@ -814,8 +814,8 @@ namespace BrnGui
         if (lpPlayer1->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
         {
             if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
-                return CgsNetwork::UsernameCompare(lpPlayer1->mPlayerName.macName,
-                                                   lpPlayer2->mPlayerName.macName);
+                return ::LobbyNameCmp(lpPlayer1->mPlayerName.macName,
+                                      lpPlayer2->mPlayerName.macName);
             return 1;
         }
         if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
@@ -840,8 +840,8 @@ namespace BrnGui
         if (lpPlayer1->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
         {
             if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
-                return CgsNetwork::UsernameCompare(lpPlayer1->mPlayerName.macName,
-                                                   lpPlayer2->mPlayerName.macName);
+                return ::LobbyNameCmp(lpPlayer1->mPlayerName.macName,
+                                      lpPlayer2->mPlayerName.macName);
             return 1;
         }
         if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
@@ -867,8 +867,8 @@ namespace BrnGui
         if (lpPlayer1->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
         {
             if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
-                return CgsNetwork::UsernameCompare(lpPlayer1->mPlayerName.macName,
-                                                   lpPlayer2->mPlayerName.macName);
+                return ::LobbyNameCmp(lpPlayer1->mPlayerName.macName,
+                                      lpPlayer2->mPlayerName.macName);
             return 1;
         }
         if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
@@ -898,8 +898,8 @@ namespace BrnGui
         if (lpPlayer1->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
         {
             if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
-                return CgsNetwork::UsernameCompare(lpPlayer1->mPlayerName.macName,
-                                                   lpPlayer2->mPlayerName.macName);
+                return ::LobbyNameCmp(lpPlayer1->mPlayerName.macName,
+                                      lpPlayer2->mPlayerName.macName);
             return 1;
         }
         if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
@@ -931,14 +931,14 @@ namespace BrnGui
         if (lpPlayer1->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
         {
             if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
-                return CgsNetwork::UsernameCompare(lpPlayer1->mPlayerName.macName,
-                                                   lpPlayer2->mPlayerName.macName);
+                return ::LobbyNameCmp(lpPlayer1->mPlayerName.macName,
+                                      lpPlayer2->mPlayerName.macName);
             return 1;
         }
         if (lpPlayer2->mePlayerColour == KI_PLAYER_COLOUR_DISCONNECTED)
             return -1;
 
-        return CgsNetwork::UsernameCompare(lpPlayer1->mPlayerName.macName,
-                                           lpPlayer2->mPlayerName.macName);
+        return ::LobbyNameCmp(lpPlayer1->mPlayerName.macName,
+                              lpPlayer2->mPlayerName.macName);
     }
 }

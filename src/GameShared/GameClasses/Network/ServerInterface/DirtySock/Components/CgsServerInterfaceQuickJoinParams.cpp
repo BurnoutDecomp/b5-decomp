@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceQuickJoinParams.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 #include "lobbytagfield.h"                                // DirtySDK TagFieldSetNumber
-#include <cstring>                                        // std::memset
+#include <xtl.h>                                          // XMemSet
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::ServerInterfaceQuickJoinParamsBase::Prepare           @ 0x8287A398
@@ -36,7 +36,7 @@ bool ServerInterfaceQuickJoinParamsBase::Prepare()
     miNumParameters = 0;
     mbJoinUserset   = false;   // asm stores 0 at +0x49
     mbRanked        = false;   // asm stores 0 at +0x48
-    std::memset(maiQuickJoinParams, -1, sizeof(maiQuickJoinParams));   // 64 bytes
+    XMemSet(maiQuickJoinParams, -1, sizeof(maiQuickJoinParams));
     return true;
 }
 
@@ -75,11 +75,11 @@ bool ServerInterfaceQuickJoinParamsX360::Prepare()
     miNumParameters = 0;
     mbJoinUserset   = false;   // stb 0 @+0x49
     mbRanked        = false;   // stb 0 @+0x48
-    std::memset(maiQuickJoinParams, -1, sizeof(maiQuickJoinParams));   // XMemSet(+8,-1,64)
+    XMemSet(maiQuickJoinParams, -1, sizeof(maiQuickJoinParams));
 
     // X360-only payload (asm: stw 0 @+0x9C; XMemSet(+0x4C, 0, 80)).
     muX360Field_9C = 0;
-    std::memset(maX360Payload, 0, sizeof(maX360Payload));
+    XMemSet(maX360Payload, 0, sizeof(maX360Payload));
     return true;
 }
 

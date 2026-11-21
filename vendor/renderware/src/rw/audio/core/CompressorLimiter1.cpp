@@ -13,8 +13,9 @@
 #include "rw/audio/core/CompressorLimiter1.h"
 #include "rw/audio/core/Mixer.h"  // Mixer (the process context) + SampleBuffer
 
-#include <cstring> // std::memset (the X360 XMemSet) / std::memcpy (the gain-word compare)
+#include <cstring> // std::memcpy (the gain-word compare)
 #include <cmath>
+#include <xtl.h>   // XMemSet
 #include <vectorintrinsics.h>
 
 namespace rw
@@ -29,7 +30,7 @@ namespace core
 // -------------------------------------------------------------------------------------
 void *CompressorLimiter1::ClearBuffer(CompressorLimiter1 *self)
 {
-    return std::memset(self, 0, 0x30);
+    return XMemSet(self, 0, 0x30);
 }
 
 // -------------------------------------------------------------------------------------

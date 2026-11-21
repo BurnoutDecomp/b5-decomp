@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePrepareParams.h"
 
-#include <cstring>   // std::memset
+#include <xtl.h>     // XMemSet
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::ServerInterfacePrepareParams::Construct  @ 0x82580AF0
@@ -22,7 +22,7 @@ namespace CgsNetwork
 
 void ServerInterfacePrepareParams::Construct()
 {
-    std::memset(mapComponents, 0, sizeof(mapComponents));   // XMemSet(this, 0, 48)
+    XMemSet(mapComponents, 0, sizeof(mapComponents));
     mLobbyParams.miLanguage      = 0;
     mLobbyParams.mpcVersion      = 0;
     mLobbyParams.mpcSKU          = 0;

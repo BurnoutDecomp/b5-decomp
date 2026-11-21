@@ -1,7 +1,7 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"                  // NetworkPlayer / PlayerMenuData
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsSignalMessage.h"      // SignalMessage::PrepareAck / PrepareNack
-#include "GameShared/GameClasses/Network/CgsNetworkUtils.h"                           // UsernameCompare
+#include "lobbyname.h"                                                                  // LobbyNameCmp
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"                       // TimeManager::GetFrameCount
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"        // GetConnectionComponent
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"                 // GetLobbyAPIRef
@@ -374,7 +374,7 @@ NetworkPlayer* PlayerManager::GetPlayerByName(const char* lpcName)
     for (s32 liIndex = 0; liIndex < miNumActivePlayers; ++liIndex)
     {
         NetworkPlayer* lpNetworkPlayer = maActivePlayers[liIndex].GetNetworkPlayer();
-        if (lpNetworkPlayer != 0 && UsernameCompare(lpNetworkPlayer->GetName(), lpcName) == 0)
+        if (lpNetworkPlayer != 0 && ::LobbyNameCmp(lpNetworkPlayer->GetName(), lpcName) == 0)
         {
             return lpNetworkPlayer;
         }

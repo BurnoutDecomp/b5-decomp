@@ -14,6 +14,7 @@
 #include "GameSource/Network/Managers/BrnNetworkTrafficManager.h"
 
 #include <cstring>                                                                        // std::memcpy / std::memset
+#include <xtl.h>                                                                          // XMemSet
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT
 #include "GameShared/GameClasses/Numeric/CgsBranchlessOperations.h"                       // CgsNumeric::Max
@@ -227,7 +228,7 @@ namespace BrnNetwork
             lrMessage.mu16FramesSinceRoundStart  = CgsNetwork::KU16_INVALID_FRAME;
             lrMessage.mOwningNetworkPlayerID     = CgsNetwork::KI_INVALID_PLAYER_ID;
             lrMessage.miCrashingTrafficDataCount = -1;
-            std::memset(lrMessage.maCrashingTrafficData, 0, sizeof(lrMessage.maCrashingTrafficData));
+            XMemSet(lrMessage.maCrashingTrafficData, 0, sizeof(lrMessage.maCrashingTrafficData));
         }
     }
 

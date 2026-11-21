@@ -5,7 +5,8 @@
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 
 #include <cstddef>                                            // offsetof (uncalled layout assert)
-#include <cstring>                                            // memcpy / memset (the X360 64-byte payload moves)
+#include <cstring>                                            // memcpy (the X360 64-byte payload moves)
+#include <xtl.h>                                              // XMemSet
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::TeamSelectMessage::Construct             @ 0x8257D438
@@ -55,7 +56,7 @@ namespace BrnNetwork
 
         CgsNetwork::Message::Construct();
 
-        std::memset(maPlayerTeamInfo, 0, sizeof(maPlayerTeamInfo));   // XMemSet(+0x28, 0, 0x40)
+        XMemSet(maPlayerTeamInfo, 0, sizeof(maPlayerTeamInfo));
         miNumPlayers     = 0;                                         // stw 0, +0x68
         miNumTeams       = 0;                                         // stw 0, +0x6C
         mbAutobalance    = false;                                     // stb 0, +0x70
@@ -166,7 +167,7 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     s32 TeamSelectMessage::GetPackedMessageSize()
     {
-        std::memset(maPlayerTeamInfo, 0, sizeof(maPlayerTeamInfo));   // XMemSet(+0x28, 0, 0x40)
+        XMemSet(maPlayerTeamInfo, 0, sizeof(maPlayerTeamInfo));
         miNumPlayers     = 0;                                         // stw 0, +0x68
         miNumTeams       = 0;                                         // stw 0, +0x6C
         mbAutobalance    = false;                                     // stb 0, +0x70
