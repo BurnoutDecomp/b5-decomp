@@ -1412,9 +1412,6 @@ CGS_STATIC_ASSERT((sizeof(GuiEventRoadRuleNewRulers) == 8), "AddGuiEvent<GuiEven
 // JunctionInfoComponent::HandleJunctionChange (a 4-qword *lpEvent copy into this+0x100 with
 // stb 0 @ this+0x10C == mi8Difficulty at struct+0x0C, requiring CgsID==8B) and
 // SetupAptVariables (ld @+0x100 == mSpecialEventCarId, lwz @+0x108 == meGameModeType).
-// X360 AddGuiEvent<GuiEventJunctionInfo> @0x823D1AE0 bakes id 311 (was PS3-DWARF 309);
-// corrected to the X360 event id. (The record SIZE the producer copies is 32 bytes -- see
-// GuiModule::AddGuiEvent; the base is layout-neutral so only GetEventType() changes.)
 // id 169 size 12 -- the change-district record (HUD H1 wave, 2026-08-25; UPGRADED here from
 // BrnGuiDemangledEventTypes.h's opaque `GuiEvent<169> {}` placeholder, which did not match
 // the wire). The record is FLAT: three words at offset +0, no GuiEvent header. Pinned on the
@@ -1434,7 +1431,9 @@ struct GuiEventChangeDistrict
     s32 GetEventType() const { return 169; }
 };
 
-struct GuiEventJunctionInfo : public CgsGui::GuiEvent<311>
+// ARTIST 0x823EA810 writes this payload from offset zero. AddGuiEvent at 0x823D1AE0
+// queues the 32 bytes with event ID 311.
+struct GuiEventJunctionInfo
 {
     CgsID  mSpecialEventCarId;                                        // +0x00
     BrnGameState::GameStateModuleIO::EGameModeType meGameModeType;    // +0x08
@@ -1447,8 +1446,11 @@ struct GuiEventJunctionInfo : public CgsGui::GuiEvent<311>
     bool   mbSpecificCarEventValid;                                   // +0x17
     bool   mbIsNewlyDiscovered;                                       // +0x18
     bool   mbIsAutoUnlockedChallenge;                                 // +0x19
-    // pad to 0x20 (u64 alignment of the leading CgsID; total record size 0x20)
+
+    s32 GetEventType() const { return 311; }
 };
+
+CGS_STATIC_ASSERT((sizeof(GuiEventJunctionInfo) == 0x20), "ARTIST junction event payload");
 
 // ===================================================================================
 // HudMessageAnalyzer event-payload family (ADDITIVE GROW: BrnGuiHudMessageAnalyzer.cpp

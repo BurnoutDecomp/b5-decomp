@@ -668,20 +668,7 @@ namespace
         //   var_35C0+0x17 <- lbz 0x21(r31)   -> mbSpecificCarEventValid
         //   var_35C0+0x18 <- lbz 0x22(r31)   -> mbIsNewlyDiscovered
         //   var_35C0+0x19 <- lbz 0x23(r31)   -> mbIsAutoUnlockedChallenge
-        // That store map is EXACTLY the committed BrnGui::GuiEventJunctionInfo member list in
-        // BrnGuiEventTypeDefs.h:1192 -- which is what pins both ends of this arm: the same
-        // eleven fields, in the same eleven places. So this arm uses the SHARED type, not a
-        // TU-local wire; the consumer half (BrnJunctionInfoComponent::HandleJunctionChange +
-        // BrnFBurnMainHudState case 311 + BrnOdometerComponent::HandleJunctionChange) is MOUNTED
-        // and reads it by name.
-        //
-        // HOST SIZE DEVIATION, DELIBERATE AND SELF-CONSISTENT: the console record is 32 bytes
-        // (fields at +0). The PC GuiEventJunctionInfo derives from CgsGui::GuiEvent<311>, whose
-        // three-word header pads to 16 under the type's CgsID alignment, so sizeof is 48 here and
-        // PushGuiEvent posts 48. Both PC ends agree (BrnGuiModule::DispatchInboundGuiEvents hands
-        // the record base straight to the state, which reinterpret_casts it back to this type),
-        // so the panel works; the divergence is the standing project accommodation for the
-        // GuiEvent<N> base and is recorded on the type, not fixed here.
+        // The HUD, odometer and SatNav read the same 32-byte GuiEventJunctionInfo payload.
         case BrnGameState::GameStateModuleIO::E_ACTION_EVENT_AT_JUNCTION_AVAILABLE:
         {
             const BrnGameState::GameStateModuleIO::JunctionInfoAction* lpJunction =

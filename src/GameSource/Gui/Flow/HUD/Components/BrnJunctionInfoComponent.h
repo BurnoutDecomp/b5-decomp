@@ -28,9 +28,7 @@
 //     +0x123 mbGameComplete
 //     +0x128 mCurrentCarId            (CgsID, 8)   [4-byte pad at +0x124]
 //
-// GuiEventJunctionInfo is the canonical GUI-event payload homed in
-// GameSource/Gui/BrnGuiEventTypeDefs.h (DWARF: struct GuiEventJunctionInfo : public
-// GuiEvent<309>); included, not duplicated.
+// GuiEventJunctionInfo is the ARTIST payload defined in GameSource/Gui/BrnGuiEventTypeDefs.h.
 //
 // WAVE58 SLICE: the two data-driven methods SetupAptVariables (@0x824398A0) and
 // SetEventNameText (@0x82414E60) are DECLARED but bodied by a later slice -- their X360
