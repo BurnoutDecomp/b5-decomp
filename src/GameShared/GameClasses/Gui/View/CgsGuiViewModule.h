@@ -88,7 +88,8 @@ namespace CgsGui
         };
 
         ViewModule();
-        virtual ~ViewModule() {}
+        // ARTIST vtable 0x820D0B68 starts the ViewModule-specific slots with Construct.
+        ~ViewModule() {}
 
         // ----------------------------------------------------------------------------
         // Module lifecycle / IO virtuals (vtable order from the DecFIGS DWARF for
