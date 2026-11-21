@@ -12,6 +12,7 @@
 #include "GameSource/Gui/BrnGuiShared.h"                                   // gGuiResourceIdentifier (the apt movie name)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                            // GuiOverlayRequest
 
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // getenv ([opt])
@@ -19,12 +20,16 @@
 
 namespace BrnGui
 {
+    static const char KAC_OPTIONS_ASSERT_FILE[] =
+        "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavOptions.h";
+
     // @ 0x82482A28 -- pull the whole option model out of the persisted profile block.
     // Asserts the profile non-null (non-gating), then copies field by field via the
     // profile getters, in the X360 call order (each getter self-asserts !mbIsLocked).
     void CrashNavOptionsData::SetFromProfile(OptionsDataProfile* lpProfile)
     {
-        CGS_ASSERT(lpProfile != 0, "lpOptionsData");
+        CGS_ASSERT(lpProfile != 0,
+                   CgsDev::Assert::MessageAt("lpOptionsData", KAC_OPTIONS_ASSERT_FILE, 418));  // 0x82482A54
 
         meCameraUserOption = static_cast<s32>(lpProfile->GetCameraFeed());
         meVoipVolume       = static_cast<EOptionsVoipVolumes>(lpProfile->GetVoipVolume());
@@ -42,7 +47,8 @@ namespace BrnGui
     // profile setters, in the X360 call order (DefaultGameCamera loaded before Tips).
     void CrashNavOptionsData::SetToProfile(OptionsDataProfile* lpProfile)
     {
-        CGS_ASSERT(lpProfile != 0, "lpOptionsData");
+        CGS_ASSERT(lpProfile != 0,
+                   CgsDev::Assert::MessageAt("lpOptionsData", KAC_OPTIONS_ASSERT_FILE, 435));  // 0x82482B3C
 
         lpProfile->SetCameraFeed(
             static_cast<BrnNetwork::BrnNetworkModuleIO::ECameraUserOptions>(meCameraUserOption));

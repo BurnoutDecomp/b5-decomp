@@ -4,7 +4,7 @@
 #include "GameSource/GameState/BrnGameActions.h"                       // EGameActionType (X360-pinned)
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"                // CgsSound::Io::Message<T>
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"         // Environment::GetDynamicMixer
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include <cmath>                                                       // std::fabs (the inlined |delta|)
 
 // =============================================================================
@@ -231,7 +231,10 @@ BrnSound::ECameraModes CameraControl::GetCameraMode(
 {
     using BrnDirector::Camera::CameraState;
 
-    CGS_ASSERT(lpGameModeInterface != 0, "lpGameModeInterface");   // 8269C704.. (cpp:397)
+    CGS_ASSERT(lpGameModeInterface != 0, CgsDev::Assert::MessageAt(
+        "lpGameModeInterface",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+        "../Sound/Global/BrnCameraControl.cpp", 397));  // 0x8269C70C
 
     if (lrCameraState.IsFlagSet(CameraState::E_FLAG_JUMP_CAMERA))            // 8269C728
         return BrnSound::E_CAMERA_MODE_JUMP;                                 // 8269C748 li r3,3

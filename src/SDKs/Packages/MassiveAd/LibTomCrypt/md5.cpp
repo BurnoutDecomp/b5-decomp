@@ -129,7 +129,7 @@ static int md5_compress(hash_state* md, unsigned char* buf)
     return err;
 }
 
-int md5_init(hash_state* md)
+void md5_init(hash_state* md)
 {
     if (!md)
     {
@@ -141,7 +141,6 @@ int md5_init(hash_state* md)
     md->md5.state[3] = 0x10325476UL;
     md->md5.curlen = 0;
     md->md5.length = 0;
-    return CRYPT_OK;
 }
 
 // The LibTomCrypt HASH_PROCESS body for MD5 (64-byte blocks).

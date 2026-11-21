@@ -24,7 +24,7 @@
 
 #include "GameSource/GameState/ModeManager/ChallengeManager/BrnChallengeManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h" // CGS_ASSERT
 #include "SharedClasses/DataLists/ChallengeListEntry.h" // BrnResource::ChallengeListEntry::GetNumPlayers/GetChallengeStyle
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugComponent.h" // CgsDev::DebugComponent::Register
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint  ([fburn] diag)
@@ -264,6 +264,10 @@ bool ChallengeManager::ReceivedSuccessUpdatesFromAllPlayers()
     return liNumPlayers == liNumUpdatesReceived;
 }
 
+static const char KAC_CHALLENGE_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../GameState/ModeManager/ChallengeManager/BrnChallengeManager.cpp";
+
 // ----------------------------------------------------------------------------
 // GetNumPlayerSucceeding -- X360 0x82316F00. Tally the players whose per-action success status
 // is DONE (==3) for the given action slot (X360 indexes the grid as base 0x428 + 8*player +
@@ -282,7 +286,9 @@ s32 ChallengeManager::GetNumPlayerSucceeding(s32 liActionIndex)
     }
 
     CGS_ASSERT(liNumPlayersSucceeding <= mpCurrentChallenge->GetNumPlayers(),
-               "liNumPlayersSucceeding <= mpCurrentChallenge->GetNumPlayers()");
+               CgsDev::Assert::MessageAt(
+                   "liNumPlayersSucceeding <= mpCurrentChallenge->GetNumPlayers()",
+                   KAC_CHALLENGE_ASSERT_FILE, 5206));  // 0x82316FF0
 
     return liNumPlayersSucceeding;
 }
@@ -303,7 +309,9 @@ s32 ChallengeManager::GetNumPlayersContributing(s32 liActionIndex)
     }
 
     CGS_ASSERT(liNumPlayersContributing <= mpCurrentChallenge->GetNumPlayers(),
-               "liNumPlayersContributing <= mpCurrentChallenge->GetNumPlayers()");
+               CgsDev::Assert::MessageAt(
+                   "liNumPlayersContributing <= mpCurrentChallenge->GetNumPlayers()",
+                   KAC_CHALLENGE_ASSERT_FILE, 5237));  // 0x82317110
 
     return liNumPlayersContributing;
 }
