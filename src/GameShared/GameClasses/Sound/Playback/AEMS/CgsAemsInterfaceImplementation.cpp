@@ -22,7 +22,7 @@
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsInterfaceImplementation.h"
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsPlayerVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsEnvironment.h"
-
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h" // GetDefaultRwacSystem + RwacLock
 #include "rw/audio/core/PlugIn.h"           // System / PlugInRegistry (GetPlugInHandle)
 #include "rw/audio/core/DecoderRegistry.h"  // DecoderRegistry (the Xas/Xas1 registrations)
@@ -440,7 +440,10 @@ namespace Playback
 
     void AemsRWSamplePlayer::Pause()
     {
-        CGS_ASSERT(mPauseState == PAUSESTATE_UNPAUSED, "UNPAUSED == mPauseState");
+        CGS_ASSERT(mPauseState == PAUSESTATE_UNPAUSED,
+            CgsDev::Assert::MessageAt("mPauseState == PAUSESTATE_UNPAUSED",
+                "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/AEMS/CgsAemsInterfaceImplementation.cpp",
+                355 /* ARTIST 0x8268A99C */));
         rw::audio::core::PlugIn::SetAttribute(mpGain, 0, 0.0f);
         if (mpSendWet)
             rw::audio::core::PlugIn::SetAttribute(mpSendWet, 0, 0.0f);

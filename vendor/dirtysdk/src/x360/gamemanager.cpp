@@ -22,7 +22,7 @@ namespace
         return (s32)(((u32)(u8)a << 24) | ((u32)(u8)b << 16) | ((u32)(u8)c << 8) | (u32)(u8)d);
     }
 
-    const s32 KI_MEMID = FourCC('g', 'm', 'g', 'r');
+    const s32 KI_MEMID = 0x676D6772; // 'gmgr', ARTIST 0x82B1F8B0-0x82B1F8BC.
 
     // game manager states
     enum

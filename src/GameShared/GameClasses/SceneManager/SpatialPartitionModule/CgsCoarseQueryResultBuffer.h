@@ -33,7 +33,7 @@
 #include "types.hpp"
 
 #include <cstring>   // std::memcpy (PushResults)
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 namespace CgsSceneManager
 {
@@ -162,7 +162,9 @@ namespace CgsSceneManager
     void CoarseQueryResultBuffer<KU_MaxResults>::EndResultsBatch()
     {
         CGS_ASSERT(mbInABatch,
-                   "EndResultsBatch called without a matching call to BeginResultsBatch");
+            CgsDev::Assert::MessageAt("EndResultsBatch called without a matching call to BeginResultsBatch",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\"
+                "SpatialPartitionModule/CgsCoarseQueryResultBuffer.h", 246 /* ARTIST 0x828ADA44 */));
 
         const u16 lu16Count = static_cast<u16>(miNumResultsAttemptedThisBatch & 0xFFFF);
         mbInABatch = false;
