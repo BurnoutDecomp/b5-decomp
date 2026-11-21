@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint (overflow diagnostic)
 #include <stdlib.h>                                          // getenv (BRN_IOBUF_ZERO, host only)
 
@@ -12,21 +13,27 @@ namespace CgsModule
     {
         mpData = 0;
         muSize = 0;
-        muAlignment = 16;
+        muAlignment = 0;
         muAllocated = 0;
         muMaxAllocated = 0;
-        muNumAllocated = 0;
     }
 
     bool IOBufferStack::Prepare(void* lpMemory, u32 luSize, u32 luAlignment)
     {
+        // ARTIST 0x8286E120 validates the requested alignment and the buffer address.
+        const char* const lpcArtistFile =
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsIOBufferStack.cpp";
+        CGS_ASSERT(luAlignment >= 16, CgsDev::Assert::MessageAt("luAlignment >= 16", lpcArtistFile, 83));
+        CGS_ASSERT((reinterpret_cast<intptr_t>(lpMemory) & 0xf) == 0, CgsDev::Assert::MessageAt(
+            "0 == (reinterpret_cast<intptr_t>(lpData) & 0xf )", lpcArtistFile, 84));
+
         mpData = static_cast<u8*>(lpMemory);
         muSize = luSize;
-        muAlignment = luAlignment ? luAlignment : 16;
+        muAlignment = luAlignment;
         muAllocated = 0;
         muMaxAllocated = 0;
         muNumAllocated = 0;
-        return mpData != 0;
+        return true;
     }
 
     bool IOBufferStack::Release()
