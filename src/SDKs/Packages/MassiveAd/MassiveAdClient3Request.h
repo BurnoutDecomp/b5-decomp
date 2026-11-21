@@ -384,7 +384,7 @@ public:
     // ----- request writers (bPrepend routes front/back) --------------------
 
     // @ 0x82BD00F8 / 0x82BD0138 / 0x82BD0178. Fixed-width scalar writes.
-    int WriteU8(char bValue, int bPrepend);
+    int WriteU8(unsigned int uValue, int bPrepend);
     int WriteU16(short nValue, int bPrepend);
     int WriteU32(int nValue, int bPrepend);
 

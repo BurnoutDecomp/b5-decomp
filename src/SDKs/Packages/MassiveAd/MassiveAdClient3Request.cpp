@@ -704,12 +704,12 @@ int CRequestObject::VerifyHMACSignature()
 // CRequestObject::WriteU8 @ 0x82BD00F8 / WriteU16 @ 0x82BD0138 /
 // WriteU32 @ 0x82BD0178 -- fixed-width scalar writes through a stack slot.
 // ---------------------------------------------------------------------------
-int CRequestObject::WriteU8(char bValue, int bPrepend)
+int CRequestObject::WriteU8(unsigned int uValue, int bPrepend)
 {
-    char lbValue = bValue;  // stb r4 into the stack slot
+    unsigned char lu8Value = static_cast<unsigned char>(uValue);  // stb r4 into the stack slot
     if (bPrepend)
-        return PrependToRequestBuffer(&lbValue, 1);
-    return AppendToRequestBuffer(&lbValue, 1);
+        return PrependToRequestBuffer(&lu8Value, 1);
+    return AppendToRequestBuffer(&lu8Value, 1);
 }
 
 int CRequestObject::WriteU16(short nValue, int bPrepend)

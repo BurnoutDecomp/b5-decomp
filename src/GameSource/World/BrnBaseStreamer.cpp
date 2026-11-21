@@ -239,7 +239,7 @@ s32 InternalBaseStreamer::CalculatePotentialLoadList()
         {
             continue;
         }
-        if ( FindInCurrentList( lrTarget.mResourceId, lrTarget.muUserId ) < 0 )
+        if ( FindInCurrentList( lrTarget.mResourceId, lrTarget.muUserId ) == -1 )
         {
             mpPotentialList[miPotentialListLength] = lrTarget;
             miPotentialListLength++;
