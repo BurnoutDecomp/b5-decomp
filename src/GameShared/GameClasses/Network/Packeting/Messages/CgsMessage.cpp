@@ -1,4 +1,5 @@
 #include "CgsMessage.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsSmartBitStream.h"
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsIntQuantiser.h"
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsFloatQuantiser.h"
@@ -32,6 +33,9 @@
 //
 // All offsets/stores are store-for-store faithful to the X360 pseudocode + asm.
 // Members are referenced by name; asserts use the house CGS_ASSERT machinery.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h";
 
 namespace CgsNetwork
 {
@@ -685,7 +689,9 @@ namespace CgsNetwork
     // ---- PrepareForSend @ 0x8257D5F8 ------------------------------------------
     void Message::PrepareForSend(s32 leType, u16 lu16Frame)
     {
-        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME, "lu16Frame != KU16_INVALID_FRAME");
+        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
+            CgsDev::Assert::MessageAt(
+                "lu16Frame != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 594 /* ARTIST 0x8257D624 */));
         SetType(leType);
         mu16Frame = lu16Frame;
         mx8Flags |= KX8_FLAGS_VALID;
@@ -694,7 +700,8 @@ namespace CgsNetwork
     // ---- PrepareAck @ 0x8286F488 ----------------------------------------------
     void Message::PrepareAck(s32 leType, u16 lu16Frame, u8 lu8GameID)
     {
-        CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0, "!IsMessageValid()");
+        CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
+            CgsDev::Assert::MessageAt("!IsMessageValid()", KAC_ARTIST_ASSERT_FILE, 888 /* ARTIST 0x8286F4BC */));
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_ACK;
         SetType(leType);
@@ -705,7 +712,8 @@ namespace CgsNetwork
     // ---- PrepareNack @ 0x8286F508 ---------------------------------------------
     void Message::PrepareNack(s32 leType, u16 lu16Frame, u8 lu8GameID)
     {
-        CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0, "!IsMessageValid()");
+        CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
+            CgsDev::Assert::MessageAt("!IsMessageValid()", KAC_ARTIST_ASSERT_FILE, 915 /* ARTIST 0x8286F53C */));
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_NACK;
         SetType(leType);

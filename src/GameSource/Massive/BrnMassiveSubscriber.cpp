@@ -1,6 +1,6 @@
 #include "GameSource/Massive/BrnMassive.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"            // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // CgsDev::Log / Message / StrStreamBase
 
 // ===========================================================================
@@ -78,7 +78,10 @@ int BrnMassiveSubscriber::MediaDownloadComplete(const void* lpData, int liDataSi
 {
     const u32 luPayloadSize = static_cast<u32>(liDataSize - KI_MASSIVE_HEADER_SIZE);
 
-    CGS_ASSERT(mpTextureData != 0, "Invalid Pointer for Texture Data to be replaced by Massive");
+    CGS_ASSERT(mpTextureData != 0,
+        CgsDev::Assert::MessageAt(
+            "Invalid Pointer for Texture Data to be replaced by Massive",
+            "..\\..\\..\\GameSource\\Massive/BrnMassiveSubscriber.cpp", 205 /* ARTIST 0x823AB88C */));
 
     if (lpData == 0)
     {

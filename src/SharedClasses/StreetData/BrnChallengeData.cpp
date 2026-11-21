@@ -1,5 +1,5 @@
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "SharedClasses/StreetData/BrnChallengeData.h"   // BrnStreetData::ScoreType / ScoreList / ChallengeData (shared home)
 #include "BrnCommonTypes.h"                               // ::CgsID (u64)
 
@@ -17,6 +17,11 @@
 // (ScoreType / ScoreList / ChallengeData) now come from the single shared home
 // SharedClasses/StreetData/BrnChallengeData.h (no more file-local fork). The derived
 // ChallengePlayerScoreEntry / ChallengeParScoresEntry are local to this TU.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\GameState/StreetData/BrnChallengeHighScoreEntry.h";
+static const char KAC_ARTIST_ASSERT_SOURCE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../../SharedClasses/StreetData/BrnChallengeData.cpp";
 
 namespace BrnStreetData
 {
@@ -134,7 +139,8 @@ namespace BrnStreetData
 
     void ChallengePlayerScoreEntry::Copy(const ChallengePlayerScoreEntry* lpSource)
     {
-        CGS_ASSERT(lpSource != 0, "lpPlayerScoreEntry");
+        CGS_ASSERT(lpSource != 0,
+            CgsDev::Assert::MessageAt("lpPlayerScoreEntry", KAC_ARTIST_ASSERT_SOURCE, 144 /* ARTIST 0x82676694 */));
         ChallengeData::Copy(lpSource);
         maCarIDs[0] = lpSource->maCarIDs[0];
         maCarIDs[1] = lpSource->maCarIDs[1];
@@ -144,7 +150,8 @@ namespace BrnStreetData
     // StreetManager keystone promotion); only its method bodies live here.
     void ChallengeParScoresEntry::Copy(const ChallengeParScoresEntry* lpSource)
     {
-        CGS_ASSERT(lpSource != 0, "lpData");
+        CGS_ASSERT(lpSource != 0,
+            CgsDev::Assert::MessageAt("lpData", KAC_ARTIST_ASSERT_SOURCE, 166 /* ARTIST 0x8267672C */));
         ChallengeData::Copy(lpSource);
         mRivals[0] = lpSource->mRivals[0];
         mRivals[1] = lpSource->mRivals[1];
@@ -162,8 +169,10 @@ namespace BrnStreetData
                                             int32_t*  lpiScore,
                                             ::CgsID*  lpRivalId ) const
     {
-        CGS_ASSERT( lpiScore,  "lpiScore != NULL" );
-        CGS_ASSERT( lpRivalId, "lpRivalId != NULL" );
+        CGS_ASSERT( lpiScore,
+            CgsDev::Assert::MessageAt("lpiScore != NULL", KAC_ARTIST_ASSERT_FILE, 204 /* ARTIST 0x8231C814 */));
+        CGS_ASSERT( lpRivalId,
+            CgsDev::Assert::MessageAt("lpRivalId != NULL", KAC_ARTIST_ASSERT_FILE, 205 /* ARTIST 0x8231C838 */));
 
         *lpiScore  = ChallengeData::GetScore( leScoreType );
         *lpRivalId = mRivals[ leScoreType ];
@@ -181,7 +190,10 @@ namespace BrnStreetData
     {
         ScoreType leOld = leEnumIndex;
         leEnumIndex = static_cast<ScoreType>( leEnumIndex + 1 );
-        CGS_ASSERT( leEnumIndex <= E_SCORE_TYPE_COUNT, "leEnumIndex <= E_SCORE_TYPE_COUNT" );
+        CGS_ASSERT( leEnumIndex <= E_SCORE_TYPE_COUNT,
+            CgsDev::Assert::MessageAt(
+                "leEnumIndex <= E_SCORE_TYPE_COUNT",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\streetdata\\BrnChallengeData.h", 56 /* ARTIST 0x8230EBE4 */));
         return leOld;
     }
 

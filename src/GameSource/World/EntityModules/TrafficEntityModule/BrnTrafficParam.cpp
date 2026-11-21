@@ -1,5 +1,5 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficParam.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/vector3_operation.h"   // IsZero / IsValid / Normalize / Cross (ParamTransform)
 
 // Param::Construct / Param::Initialise reach these; all four are leaf headers.
@@ -34,6 +34,9 @@
 // 600) around every access; per the project's FastBitArray policy that StrStream
 // scaffolding is owned by the caller and is benign, so it is modelled here as a single
 // CGS_ASSERT on the index bound rather than reproduced StrStream-for-StrStream.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficParam.h";
 
 namespace BrnTraffic
 {
@@ -267,7 +270,8 @@ void Param::GetHistoryEntry(u32 luHistoryIndex, u32* lpOutSegmentIndex, u32* lpO
 // 0x82713C68 — flag that this param changed section this frame.
 void Param::SetChangedSection()
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(IsAlive(),
+        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 893 /* ARTIST 0x82713C94 */));
 
     mxEffectAndHistoryState |= E_HISTORY_CHANGED_SECTION;
 }
@@ -275,7 +279,8 @@ void Param::SetChangedSection()
 // 0x827134C0 — request removal (still alive at this point).
 void Param::SetShouldBeRemoved()
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
+    CGS_ASSERT(IsAlive(),
+        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 813 /* ARTIST 0x827134EC */));
 
     mxFlags |= E_FLAG_SHOULD_BE_REMOVED;
 }
@@ -297,12 +302,14 @@ void Param::SetInPurgatory(bool lbInPurgatory)
 {
     if (lbInPurgatory)
     {
-        CGS_ASSERT(!IsInPurgatory(), "!IsInPurgatory()");
+        CGS_ASSERT(!IsInPurgatory(),
+            CgsDev::Assert::MessageAt("!IsInPurgatory()", KAC_ARTIST_ASSERT_FILE, 925 /* ARTIST 0x82713D08 */));
         mxFlags = static_cast<u8>(mxFlags | E_FLAG_IN_PURGATORY);
     }
     else
     {
-        CGS_ASSERT(IsInPurgatory(), "IsInPurgatory()");
+        CGS_ASSERT(IsInPurgatory(),
+            CgsDev::Assert::MessageAt("IsInPurgatory()", KAC_ARTIST_ASSERT_FILE, 930 /* ARTIST 0x82713D3C */));
         mxFlags = static_cast<u8>(mxFlags & ~E_FLAG_IN_PURGATORY);
     }
 }

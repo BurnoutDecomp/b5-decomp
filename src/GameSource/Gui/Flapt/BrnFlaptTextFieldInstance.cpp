@@ -3,7 +3,7 @@
 #include "GameSource/Gui/Flapt/BrnFlaptRenderer.h"            // BrnFlapt::FlaptRenderer (mpFonts)
 #include "SharedClasses/Gui/Flapt/BrnFlaptFile.h"             // BrnFlapt::MovieClip / FlaptFile / TextField / FontStyle
 #include "GameShared/GameClasses/Fonts/CgsUnicode.h"          // CgsUnicode::CgsUtf8
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"            // CGS_ASSERT
 #include "SDKs/EATech/include/Apt/Apt.h"                      // AptAllocateStringParameters / AptStringAlignment
 
 // BrnFlapt::TextFieldInstance member functions, reconstructed from
@@ -18,6 +18,8 @@
 // string out into the instance's own UTF-8 buffer. SetUpAptStringParams translates
 // the TextField + FontStyle + initial text into the apt allocate-string descriptor.
 // The X360-baked file/line cites in the asserts are discarded per project convention.
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptTextFieldInstance.cpp";
 
 namespace BrnFlapt
 {
@@ -73,10 +75,14 @@ void TextFieldInstance::SetUpAptStringParams(const TextField* lpTextField,
                                              const CgsUnicode::CgsUtf8* lpInitialText,
                                              AptAllocateStringParameters* lpOutAptStringParams)
 {
-    CGS_ASSERT(lpTextField != 0, "lpTextField");
-    CGS_ASSERT(lpFontStyle != 0, "lpFontStyle");
-    CGS_ASSERT(lpInitialText != 0, "lpInitialText");
-    CGS_ASSERT(lpOutAptStringParams != 0, "lpOutAptStringParams");
+    CGS_ASSERT(lpTextField != 0,
+        CgsDev::Assert::MessageAt("lpTextField", KAC_ARTIST_ASSERT_FILE, 81 /* ARTIST 0x8246DF8C */));
+    CGS_ASSERT(lpFontStyle != 0,
+        CgsDev::Assert::MessageAt("lpFontStyle", KAC_ARTIST_ASSERT_FILE, 82 /* ARTIST 0x8246DFB0 */));
+    CGS_ASSERT(lpInitialText != 0,
+        CgsDev::Assert::MessageAt("lpInitialText", KAC_ARTIST_ASSERT_FILE, 83 /* ARTIST 0x8246DFD4 */));
+    CGS_ASSERT(lpOutAptStringParams != 0,
+        CgsDev::Assert::MessageAt("lpOutAptStringParams", KAC_ARTIST_ASSERT_FILE, 84 /* ARTIST 0x8246DFF8 */));
 
     // Flags byte (TextField+0x0B): bit0 -> word-wrap, bit1 -> multiline.
     lpOutAptStringParams->bWordWrap  = lpTextField->mxFlags & 1;

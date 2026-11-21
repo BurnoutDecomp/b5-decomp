@@ -2,7 +2,7 @@
 
 #include <cstring>   // std::memcpy / std::memset (the icon-table adopt + clear)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // OutputViewState / OutputInternalState
 
 // BrnGui::EventIconManager -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -27,6 +27,8 @@
 // The queue is reached as `lpStateInterface + 12`, which is mOutEventQueue on the console's
 // 4-byte-pointer ABI (mpObserver +0, mpAccessPointers +4, mpAllocator +8); on the host it is
 // reached BY NAME through the two template methods, which is the same thing.
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/SatNav/BrnEventIconManager.cpp";
 
 namespace BrnGui
 {
@@ -127,8 +129,11 @@ namespace BrnGui
     // @ 0x824F5938
     void EventIconManager::Update2DIcons(const EventIcon2D* lpaEventIcons, s32 liNumIcons)
     {
-        CGS_ASSERT(liNumIcons <= KI_MAX_2DEVENTICONS, "liNumIcons <= KI_MAX_2DEVENTICONS");
-        CGS_ASSERT(lpaEventIcons != NULL, "lpaEventIcons");
+        CGS_ASSERT(liNumIcons <= KI_MAX_2DEVENTICONS,
+            CgsDev::Assert::MessageAt(
+                "liNumIcons <= KI_MAX_2DEVENTICONS", KAC_ARTIST_ASSERT_FILE, 101 /* ARTIST 0x824F5968 */));
+        CGS_ASSERT(lpaEventIcons != NULL,
+            CgsDev::Assert::MessageAt("lpaEventIcons", KAC_ARTIST_ASSERT_FILE, 102 /* ARTIST 0x824F598C */));
 
         std::memcpy(ma2DEventIcons, lpaEventIcons, sizeof(EventIcon2D) * liNumIcons);
         miNumEventIcons = liNumIcons;
@@ -159,8 +164,11 @@ namespace BrnGui
     // @ 0x824F5A78
     u32 EventIconManager::GetEventIDForIconIndex(s32 liIconIndex) const
     {
-        CGS_ASSERT(liIconIndex >= 0, "liIconIndex >= 0");
-        CGS_ASSERT(liIconIndex < miNumEventIcons, "liIconIndex < miNumEventIcons");
+        CGS_ASSERT(liIconIndex >= 0,
+            CgsDev::Assert::MessageAt("liIconIndex >= 0", KAC_ARTIST_ASSERT_FILE, 153 /* ARTIST 0x824F5AA4 */));
+        CGS_ASSERT(liIconIndex < miNumEventIcons,
+            CgsDev::Assert::MessageAt(
+                "liIconIndex < miNumEventIcons", KAC_ARTIST_ASSERT_FILE, 154 /* ARTIST 0x824F5ACC */));
 
         return ma2DEventIcons[liIconIndex].muEventID;
     }

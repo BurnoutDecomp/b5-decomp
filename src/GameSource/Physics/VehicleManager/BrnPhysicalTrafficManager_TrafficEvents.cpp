@@ -54,7 +54,11 @@
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnSimpleVehiclePhysics.h"
 #include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"                   // FindModelIndexByEntityID / GetDeformableObject
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h" // ClearStoredContacts
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../Physics/VehicleManager/BrnPhysicalTrafficManager.cpp";
+
 namespace BrnPhysics
 {
 namespace Vehicle
@@ -79,11 +83,19 @@ void PhysicalTrafficManager::ProcessTrafficEvents(
     VehicleOutputInterface* lpVehicleOutputInterface,
     BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface)
 {
-    CGS_ASSERT(lpInputInterface         != 0, "lpInputInterface != NULL");          // :413
-    CGS_ASSERT(lpOutputRequestInterface != 0, "lpOutputInterface != NULL");         // :414
-    CGS_ASSERT(lpManagerOutputInterface != 0, "lpManagerOutputInterface != NULL");  // :415
-    CGS_ASSERT(lpVehicleOutputInterface != 0, "lpVehicleOutputInterface != NULL");  // :416
-    CGS_ASSERT(lpDeformationInterface   != 0, "lpDeformationInterface != NULL");    // :417
+    CGS_ASSERT(lpInputInterface         != 0,
+        CgsDev::Assert::MessageAt("lpInputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 413 /* ARTIST 0x82643FEC */));          // :413
+    CGS_ASSERT(lpOutputRequestInterface != 0,
+        CgsDev::Assert::MessageAt("lpOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 414 /* ARTIST 0x82644010 */));         // :414
+    CGS_ASSERT(lpManagerOutputInterface != 0,
+        CgsDev::Assert::MessageAt(
+            "lpManagerOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 415 /* ARTIST 0x82644034 */));  // :415
+    CGS_ASSERT(lpVehicleOutputInterface != 0,
+        CgsDev::Assert::MessageAt(
+            "lpVehicleOutputInterface != NULL", KAC_ARTIST_ASSERT_FILE, 416 /* ARTIST 0x82644058 */));  // :416
+    CGS_ASSERT(lpDeformationInterface   != 0,
+        CgsDev::Assert::MessageAt(
+            "lpDeformationInterface != NULL", KAC_ARTIST_ASSERT_FILE, 417 /* ARTIST 0x8264407C */));    // :417
 
     ProcessSetTrafficCrashingEvents(lpInputInterface, lpOutputRequestInterface,
                                     lpManagerOutputInterface, lpVehicleOutputInterface,

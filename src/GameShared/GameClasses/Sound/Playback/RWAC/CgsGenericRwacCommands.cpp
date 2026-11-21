@@ -39,7 +39,10 @@
 
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacCommands.h"
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacContent.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Rwac/CgsGenericRwacFactory.h";
 
 namespace CgsSound
 {
@@ -63,7 +66,8 @@ RwacCommandPluginEvent::RwacCommandPluginEvent(
     maOperand1    = auOperand1;                      // stw r5,8(this)
     maOperand2    = auOperand2;                      // stw r6,0xC(this)
 
-    CGS_ASSERT(mpPlugin != 0, "mpPlugin");
+    CGS_ASSERT(mpPlugin != 0,
+        CgsDev::Assert::MessageAt("mpPlugin", KAC_ARTIST_ASSERT_FILE, 289 /* ARTIST 0x826813F0 */));
 }
 
 // ---------------------------------------------------------------------------
@@ -240,10 +244,14 @@ RwacCommandVoiceCreateInstance::RwacCommandVoiceCreateInstance(
     mpConfig        = apConfig;                          // stw r7,0x10(this)
     maOperand       = auOperand;                         // stw r8,0x14(this)
 
-    CGS_ASSERT(mpPlaybackVoice != 0, "mpPlaybackVoice");
-    CGS_ASSERT(mppVoice != 0, "mppVoice");
-    CGS_ASSERT(mpppPlugin != 0, "mpppPlugin");
-    CGS_ASSERT(mpConfig != 0, "mpConfig");
+    CGS_ASSERT(mpPlaybackVoice != 0,
+        CgsDev::Assert::MessageAt("mpPlaybackVoice", KAC_ARTIST_ASSERT_FILE, 173 /* ARTIST 0x826811BC */));
+    CGS_ASSERT(mppVoice != 0,
+        CgsDev::Assert::MessageAt("mppVoice", KAC_ARTIST_ASSERT_FILE, 174 /* ARTIST 0x826811E4 */));
+    CGS_ASSERT(mpppPlugin != 0,
+        CgsDev::Assert::MessageAt("mpppPlugin", KAC_ARTIST_ASSERT_FILE, 175 /* ARTIST 0x8268120C */));
+    CGS_ASSERT(mpConfig != 0,
+        CgsDev::Assert::MessageAt("mpConfig", KAC_ARTIST_ASSERT_FILE, 176 /* ARTIST 0x82681234 */));
 }
 
 // ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModule.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Containers/CgsHash.h"    // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"       // CgsResource::ID::HashString
@@ -40,6 +40,9 @@
 // The X360-baked assert file/line pairs are discarded per project convention (CGS_ASSERT
 // supplies __FILE__/__LINE__); the streamed-StrStream assert forms are collapsed to their
 // attested message literals, as the sibling CgsPoolModule.cpp TU does.
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/Resources/CgsGuiResourceModule.cpp";
+
 namespace CgsGui
 {
     // The per-request-type path/name format-template table. DWARF CgsGuiResourceModule.cpp:29
@@ -154,7 +157,9 @@ namespace CgsGui
                 return true;
 
             default:
-                CGS_ASSERT(false, "Unknown prepare stage");
+                CGS_ASSERT(false,
+                    CgsDev::Assert::MessageAt(
+                        "Unknown prepare stage", KAC_ARTIST_ASSERT_FILE, 191 /* ARTIST 0x8284FD68 */));
                 return false;
         }
     }
@@ -331,7 +336,9 @@ namespace CgsGui
     // X360 0x82848468. Pops the tail record by value.
     GuiResourceModule::GuiBundleToLoad GuiResourceModule::PopFromBundleLoadQueue()
     {
-        CGS_ASSERT(miNumBundlesToLoad > 0, "miNumBundlesToLoad > 0");
+        CGS_ASSERT(miNumBundlesToLoad > 0,
+            CgsDev::Assert::MessageAt(
+                "miNumBundlesToLoad > 0", KAC_ARTIST_ASSERT_FILE, 949 /* ARTIST 0x82848498 */));
         --miNumBundlesToLoad;
         return maBundlesToLoad[miNumBundlesToLoad];
     }
@@ -446,7 +453,9 @@ namespace CgsGui
             GuiBundleToLoad& lrBundle = maBundlesPending[li];
             if (!lrBundle.mbLoaded && lrBundle.meLoadUnload == E_GUI_RESOURCEREQUEST_LOAD)
             {
-                CGS_ASSERT(lrBundle.mbParsed == false, "lBundle.mbParsed == false");
+                CGS_ASSERT(lrBundle.mbParsed == false,
+                    CgsDev::Assert::MessageAt(
+                        "lBundle.mbParsed == false", KAC_ARTIST_ASSERT_FILE, 283 /* ARTIST 0x8285F768 */));
                 LoadBundle(lrBundle, lpOutput);
             }
         }

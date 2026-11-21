@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/System/Resource/PoolModuleStates/CgsBaseDefragPoolModuleState.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePool.h"   // Pool, AllocListSet (GetAllocationResult)
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 // includes folded in from the CgsBaseDefragPoolModuleState_w*.cpp partfiles (2026-09-15)
 #include "GameShared/GameClasses/System/Resource/CgsResourceType.h"   // Type::GetCachedCanDefrag
@@ -20,6 +20,9 @@
 // (offsets verified in the owning header). The X360 asserts that stream a formatted message
 // into the debug buffer (BasePriorityQueue::Clear + StrStream machinery) are expressed through
 // CGS_ASSERT, which forwards the message via the same Begin/Fire/End assert sequence.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsBaseDefragPoolModuleState.cpp";
 
 namespace CgsResource
 {
@@ -64,13 +67,21 @@ namespace CgsResource
         muMaxLinearHeapNodes        = lpParams->muMaxLinearHeapNodes;       // result[13] = a2[10]
         muMaxRelocateSources        = lpParams->muMaxRelocateSources;       // result[14] = a2[11]
 
-        CGS_ASSERT(mpPool,                   "mpPool");                    // :87
-        CGS_ASSERT(mpAllocListSet,           "mpAllocListSet");            // :88
-        CGS_ASSERT(mpAddressedAllocRequests, "mpAddressedAllocRequests");  // :89
-        CGS_ASSERT(mpRelocateRequests,       "mpRelocateRequests");        // :90
-        CGS_ASSERT(mpDistributionEntries,    "mpDistributionEntries");     // :91
-        CGS_ASSERT(mpLinearHeapNodes,        "mpLinearHeapNodes");         // :92
-        CGS_ASSERT(mpRelocateSources,        "mpRelocateSources");         // :93
+        CGS_ASSERT(mpPool,
+            CgsDev::Assert::MessageAt("mpPool", KAC_ARTIST_ASSERT_FILE, 87 /* ARTIST 0x828DA12C */));                    // :87
+        CGS_ASSERT(mpAllocListSet,
+            CgsDev::Assert::MessageAt("mpAllocListSet", KAC_ARTIST_ASSERT_FILE, 88 /* ARTIST 0x828DA154 */));            // :88
+        CGS_ASSERT(mpAddressedAllocRequests,
+            CgsDev::Assert::MessageAt(
+                "mpAddressedAllocRequests", KAC_ARTIST_ASSERT_FILE, 89 /* ARTIST 0x828DA17C */));  // :89
+        CGS_ASSERT(mpRelocateRequests,
+            CgsDev::Assert::MessageAt("mpRelocateRequests", KAC_ARTIST_ASSERT_FILE, 90 /* ARTIST 0x828DA1A4 */));        // :90
+        CGS_ASSERT(mpDistributionEntries,
+            CgsDev::Assert::MessageAt("mpDistributionEntries", KAC_ARTIST_ASSERT_FILE, 91 /* ARTIST 0x828DA1CC */));     // :91
+        CGS_ASSERT(mpLinearHeapNodes,
+            CgsDev::Assert::MessageAt("mpLinearHeapNodes", KAC_ARTIST_ASSERT_FILE, 92 /* ARTIST 0x828DA1F4 */));         // :92
+        CGS_ASSERT(mpRelocateSources,
+            CgsDev::Assert::MessageAt("mpRelocateSources", KAC_ARTIST_ASSERT_FILE, 93 /* ARTIST 0x828DA21C */));         // :93
     }
 
     // -------- FindNextFreeNode @ 0x828DA248 --------

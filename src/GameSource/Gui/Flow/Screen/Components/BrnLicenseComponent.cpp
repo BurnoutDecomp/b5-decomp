@@ -33,7 +33,7 @@
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // CgsGui::GuiEventAptTriggerPayload
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // CgsLanguage::LanguageManager::FormatDateString
 #include "GameShared/GameClasses/System/Timer/PS3/CgsDateAndTimePS3.h"    // CgsSystem::DateAndTime
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"              // CgsDev::StrStream (the streamed asserts)
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h" // CgsDev::Assert::Begin/Fire/EndAssert
@@ -936,7 +936,10 @@ namespace BrnGui
     // ================================================================================
     void LicenseComponent::SetCachePointer(GuiCache* lpGuiCache)
     {
-        CGS_ASSERT(lpGuiCache != 0, "NULL != lpGuiCache");   // h:366
+        CGS_ASSERT(lpGuiCache != 0,
+            CgsDev::Assert::MessageAt(
+                "NULL != lpGuiCache",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.h", 366 /* ARTIST 0x824B3214 */));   // h:366
         mpGuiCache = lpGuiCache;
     }
 
@@ -1052,7 +1055,10 @@ namespace BrnGui
         if (mbFinishedGame || mbElite)
             return;
 
-        CGS_ASSERT(miWinsInCurrentRank >= 0, "miWinsInCurrentRank >= 0");   // cpp:1167
+        CGS_ASSERT(miWinsInCurrentRank >= 0,
+            CgsDev::Assert::MessageAt(
+                "miWinsInCurrentRank >= 0",
+                "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLicenseComponent.cpp", 1167 /* ARTIST 0x8242D8DC */));   // cpp:1167
 
         const s32 liRequiredWins = mpGuiCache->GetWorldDataController()->GetRequiredWinsInRank(miCurrentRank);
 

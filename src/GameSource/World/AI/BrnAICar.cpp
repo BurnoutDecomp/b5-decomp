@@ -6,7 +6,7 @@
 
 #include "GameSource/Math/BrnMathUtils.h"                      // BrnMath::IsNormal (SetRight unit-length check)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT + KI_MESSAGEBUFFERSIZE
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"              // CGS_ASSERT + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"    // CgsDev::StrStream (streamed assert message)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // CgsDev::Log::gpDebugPrint, Message::gxMessageFilterFlags
 #include "rw/math/vpu/vector3_operation.h"                     // rw::math::vpu vector ops (dot / length / IsValid)
@@ -28,6 +28,8 @@
 // BrnAICar_Constants.h with their initialiser address and derivation, so there are NO 0.0f
 // placeholder tunables left in this TU. Literal immediates Hex-Rays decoded from the float bits
 // (0.0/0.5/0.6/0.55/0.4/1.0/3.0/10.0/20.0/30.0/50.0/80.0/100.0/10000.0) are used inline.
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\World/AI/BrnAICar.h";
 
 namespace BrnAI
 {
@@ -718,7 +720,8 @@ namespace BrnAI
         if (meCarState == E_AI_CAR_STATE_IN_RANGE)
             return mfSpeedInRange;
 
-        CGS_ASSERT(meCarState == E_AI_CAR_STATE_OUT_OF_RANGE, "AI car in bad state");
+        CGS_ASSERT(meCarState == E_AI_CAR_STATE_OUT_OF_RANGE,
+            CgsDev::Assert::MessageAt("AI car in bad state", KAC_ARTIST_ASSERT_FILE, 1105 /* ARTIST 0x82764DB0 */));
         return mfSpeedOutOfRange;
     }
 
@@ -755,7 +758,9 @@ namespace BrnAI
     // ==================================================================================
     bool AICar::IsOnStartLine() const
     {
-        CGS_ASSERT(meCarState != E_AI_CAR_STATE_INACTIVE, "GetState() != E_AI_CAR_STATE_INACTIVE");
+        CGS_ASSERT(meCarState != E_AI_CAR_STATE_INACTIVE,
+            CgsDev::Assert::MessageAt(
+                "GetState() != E_AI_CAR_STATE_INACTIVE", KAC_ARTIST_ASSERT_FILE, 1272 /* ARTIST 0x82764E90 */));
         return mbIsOnStartLine;
     }
 
@@ -769,8 +774,11 @@ namespace BrnAI
     // ==================================================================================
     void AICar::SetBehaviour(EAIBehaviour leBehaviour)
     {
-        CGS_ASSERT(leBehaviour >= 0, "leBehaviour >= 0");
-        CGS_ASSERT(leBehaviour < E_AI_BEHAVIOUR_COUNT, "leBehaviour < E_AI_BEHAVIOUR_COUNT");
+        CGS_ASSERT(leBehaviour >= 0,
+            CgsDev::Assert::MessageAt("leBehaviour >= 0", KAC_ARTIST_ASSERT_FILE, 1193 /* ARTIST 0x82764E0C */));
+        CGS_ASSERT(leBehaviour < E_AI_BEHAVIOUR_COUNT,
+            CgsDev::Assert::MessageAt(
+                "leBehaviour < E_AI_BEHAVIOUR_COUNT", KAC_ARTIST_ASSERT_FILE, 1194 /* ARTIST 0x82764E30 */));
 
         mePreviousBehaviour = meBehaviour;
         meBehaviour         = leBehaviour;

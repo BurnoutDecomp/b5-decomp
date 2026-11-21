@@ -1,6 +1,6 @@
 #include "GameSource/Gui/Flow/HUD/States/BrnRaceMainHudState.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"                          // CgsID / CgsIDCompress
 #include "GameShared/GameClasses/Containers/CgsHash.h"                  // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface
@@ -48,6 +48,9 @@
 // own sub-object-vtable chain (no RaceMainHudState POD is written on console) and
 // BrnHudFlow.cpp -- which IS on the build -- placement-news the state, so its definition
 // has to be visible whether or not this TU is mounted. See the header for the citation.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnRaceMainHudState.cpp";
 
 namespace BrnGui
 {
@@ -2622,8 +2625,10 @@ namespace BrnGui
     // "transin". The mode word is GuiCache::meGameModeType (X360 cache+40536).
     void RaceMainHudState::SetupEventInfo()
     {
-        CGS_ASSERT(mpCache != 0, "mpCache");           // cpp:3804 (non-gating)
-        CGS_ASSERT(mbEventInfo, "mbEventInfo");        // cpp:3805 (non-gating)
+        CGS_ASSERT(mpCache != 0,
+            CgsDev::Assert::MessageAt("mpCache", KAC_ARTIST_ASSERT_FILE, 3804 /* ARTIST 0x82474A94 */));           // cpp:3804 (non-gating)
+        CGS_ASSERT(mbEventInfo,
+            CgsDev::Assert::MessageAt("mbEventInfo", KAC_ARTIST_ASSERT_FILE, 3805 /* ARTIST 0x82474ABC */));        // cpp:3805 (non-gating)
 
         const s32 liGameMode = mpCache->GetGameMode();
         mEventInfoComponent.SetEventType(
@@ -2729,7 +2734,8 @@ namespace BrnGui
     {
         if (mbPreRaceCountdown && meCurrentEventCountdownState == E_EVENT_COUNTDOWN_STATE_GO)
         {
-            CGS_ASSERT(mpCache != 0, "mpCache");   // cpp:3423 (non-gating)
+            CGS_ASSERT(mpCache != 0,
+                CgsDev::Assert::MessageAt("mpCache", KAC_ARTIST_ASSERT_FILE, 3423 /* ARTIST 0x82474930 */));   // cpp:3423 (non-gating)
             if (mpCache->GetTime() >= mfEventCountdownTimer)
             {
                 const bool lbRenders = mbPreRaceCountdownRenders;

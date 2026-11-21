@@ -1,7 +1,7 @@
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"
 
 #include <cstring>                                   // strcmp (the open-coded console compares)
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Director/Camera/Camera.h"       // Camera::Camera / GetEffects (EnsureEffectIsPlaying)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [diag] CgsDev::Log::gpDebugPrint
 #include <cstdlib>                                   // [diag] getenv
@@ -20,6 +20,9 @@
 // " maybe there's some limit set elsewhere?"; folded static per convention, non-gating:
 // the console still Set()s the null name) -- and latch mbGotHooks. The out-flag asks the
 // caller to (re)enumerate the hooks while none have been registered yet.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h";
 
 namespace BrnDirector
 {
@@ -70,7 +73,9 @@ namespace BrnDirector
     // an applied request stays pending and re-applies each frame.
     void BackgroundEffectRequest::RegisterAndUpdateRequest(EffectInterface* lpEffectInterface)
     {
-        CGS_ASSERT(lpEffectInterface != 0, "lpEffectInterface != NULL");
+        CGS_ASSERT(lpEffectInterface != 0,
+            CgsDev::Assert::MessageAt(
+                "lpEffectInterface != NULL", KAC_ARTIST_ASSERT_FILE, 361 /* ARTIST 0x82232EB8 */));
 
         if (mbStartRequested)
         {
@@ -102,7 +107,8 @@ namespace BrnDirector
 // The tripwire (non-gating), then the blend.
 f32 EffectInterface::GetCurrentEffectBlendAmount() const
 {
-    CGS_ASSERT(mbHasCurrentEffectName, "HasCurrentEffectName()");   // non-gating
+    CGS_ASSERT(mbHasCurrentEffectName,
+        CgsDev::Assert::MessageAt("HasCurrentEffectName()", KAC_ARTIST_ASSERT_FILE, 115 /* ARTIST 0x821F1840 */));   // non-gating
     return mfCurrentEffectBlendAmount;
 }
 

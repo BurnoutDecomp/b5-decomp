@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "lobbyapi.h"                                                                              // LobbyApiMsgT
 
 // The rankings component over the DirtySDK LobbyRank module. The getters are thin
@@ -14,6 +14,9 @@
 //
 // The asserts that the original builds by streaming into the assert buffer (with the
 // numeric error code appended) keep the console's message text as a plain literal.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceRankings.cpp";
 
 namespace CgsNetwork
 {
@@ -158,10 +161,12 @@ namespace CgsNetwork
 
     s32 ServerInterfaceRankings::GetNumberOfRows()
     {
-        CGS_ASSERT(mpLobbyRank != 0, "mpLobbyRank");
+        CGS_ASSERT(mpLobbyRank != 0,
+            CgsDev::Assert::MessageAt("mpLobbyRank", KAC_ARTIST_ASSERT_FILE, 307 /* ARTIST 0x8287BCD4 */));
 
         const s32 liNoOfRows = LobbyRankRowCount(mpLobbyRank);
-        CGS_ASSERT(liNoOfRows >= 0, "liNoOfRows >= 0");
+        CGS_ASSERT(liNoOfRows >= 0,
+            CgsDev::Assert::MessageAt("liNoOfRows >= 0", KAC_ARTIST_ASSERT_FILE, 310 /* ARTIST 0x8287BD04 */));
         return liNoOfRows;
     }
 
@@ -195,13 +200,15 @@ namespace CgsNetwork
 
     const char* ServerInterfaceRankings::GetCategoryName(s32 liCategory)
     {
-        CGS_ASSERT(mpLobbyRank != 0, "mpLobbyRank");
+        CGS_ASSERT(mpLobbyRank != 0,
+            CgsDev::Assert::MessageAt("mpLobbyRank", KAC_ARTIST_ASSERT_FILE, 544 /* ARTIST 0x8287C038 */));
         return LobbyRankCategoryName(mpLobbyRank, liCategory, 0, 0);
     }
 
     const char* ServerInterfaceRankings::GetIndexName(s32 liCategory, s32 liIndex)
     {
-        CGS_ASSERT(mpLobbyRank != 0, "mpLobbyRank");
+        CGS_ASSERT(mpLobbyRank != 0,
+            CgsDev::Assert::MessageAt("mpLobbyRank", KAC_ARTIST_ASSERT_FILE, 560 /* ARTIST 0x8287C0AC */));
         return LobbyRankIndexName(mpLobbyRank, liCategory, liIndex, 0, 0);
     }
 
@@ -219,13 +226,15 @@ namespace CgsNetwork
 
     const char* ServerInterfaceRankings::GetColumnTitle(s32 liColumn)
     {
-        CGS_ASSERT(mpLobbyRank != 0, "mpLobbyRank");
+        CGS_ASSERT(mpLobbyRank != 0,
+            CgsDev::Assert::MessageAt("mpLobbyRank", KAC_ARTIST_ASSERT_FILE, 615 /* ARTIST 0x8287C1D0 */));
         return LobbyRankColumnName(mpLobbyRank, liColumn, 0, 0);
     }
 
     void ServerInterfaceRankings::GetCell(s32 liColumn, s32 liRow, char* lpcBuffer, s32 liBufferSize)
     {
-        CGS_ASSERT(mpLobbyRank != 0, "mpLobbyRank");
+        CGS_ASSERT(mpLobbyRank != 0,
+            CgsDev::Assert::MessageAt("mpLobbyRank", KAC_ARTIST_ASSERT_FILE, 633 /* ARTIST 0x8287C24C */));
         LobbyRankData(mpLobbyRank, liColumn, liRow, lpcBuffer, liBufferSize);
     }
 

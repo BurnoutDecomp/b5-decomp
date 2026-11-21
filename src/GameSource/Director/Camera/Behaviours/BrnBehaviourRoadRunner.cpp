@@ -19,6 +19,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRoadRunner.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include <cstddef>   // offsetof
 
 // The lane graph the truck walks (TrafficLaneTruck::Prepare / CalcTransformFromLanePosition).
@@ -33,6 +34,9 @@
 #include "rw/math/fpu/scalar_operation.h"                       // rw::math::fpu::IsZero (the timestep guard)
 #include <cmath>                                                // std::floor (the lane walkers)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // the lane-seated diagnostic
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.h";
 
 namespace BrnDirector
 {
@@ -719,7 +723,8 @@ void TrafficLaneTruck::Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTim
 // ----------------------------------------------------------------------------
 rw::math::vpu::Matrix44Affine TrafficLaneTruck::GetTransform() const
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");
+    CGS_ASSERT(mbPrepared,
+        CgsDev::Assert::MessageAt("mbPrepared", KAC_ARTIST_ASSERT_FILE, 63 /* ARTIST 0x821F5408 */));
     return mTransform;                                 // 4x lvx128 (this+0x20) -> 4x stvx128 (sret)
 }
 
@@ -728,7 +733,8 @@ rw::math::vpu::Matrix44Affine TrafficLaneTruck::GetTransform() const
 // ----------------------------------------------------------------------------
 rw::math::vpu::Vector3 TrafficLaneTruck::GetLocalAngularVelocity() const
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");
+    CGS_ASSERT(mbPrepared,
+        CgsDev::Assert::MessageAt("mbPrepared", KAC_ARTIST_ASSERT_FILE, 73 /* ARTIST 0x821F54A0 */));
     return mLocalAngularVelocity;                      // lvx128 (this+0x60) -> stvx128 (sret)
 }
 
@@ -737,7 +743,8 @@ rw::math::vpu::Vector3 TrafficLaneTruck::GetLocalAngularVelocity() const
 // ----------------------------------------------------------------------------
 rw::math::vpu::Vector3 TrafficLaneTruck::GetLinearVelocity() const
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");
+    CGS_ASSERT(mbPrepared,
+        CgsDev::Assert::MessageAt("mbPrepared", KAC_ARTIST_ASSERT_FILE, 76 /* ARTIST 0x821F5510 */));
     return mLinearVelocity;                            // lvx128 (this+0x70) -> stvx128 (sret)
 }
 

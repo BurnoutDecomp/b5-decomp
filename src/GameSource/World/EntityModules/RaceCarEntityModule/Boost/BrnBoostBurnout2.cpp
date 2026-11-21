@@ -18,7 +18,7 @@
 
 // the union of the BoostBurnout2_w*.cpp partfiles' #include lines, first occurrence wins, mount order (2026-09-15)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout2.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the X360 Begin/Fire/EndAssert triple)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (the X360 Begin/Fire/EndAssert triple)
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h"
 #include "GameSource/AttribSys/Generated/classes/boostparamsasset.h"              // Attrib::Gen::boostparamsasset
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h" // Attrib::StringToKey
@@ -1661,7 +1661,11 @@ BoostBurnout2::Prepare()
 void
 BoostBurnout2::UpdateStuntBoost(const BrnGameState::GameStateModuleIO::CompletedStuntAction* lpCompletedStuntAction)
 {
-    CGS_ASSERT(lpCompletedStuntAction != NULL, "lpCompletedStuntAction != NULL");
+    CGS_ASSERT(lpCompletedStuntAction != NULL,
+        CgsDev::Assert::MessageAt(
+            "lpCompletedStuntAction != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout2.cpp", 772 /* ARTIST 0x822A64A4 */));
 
     if (lpCompletedStuntAction->muStuntActionComplete & BrnPhysics::E_STUNT_ACTION_COMPLETE_BARREL_ROLL)
     {

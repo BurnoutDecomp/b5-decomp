@@ -34,12 +34,15 @@
 
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsOverlapGenerationModule.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"  // CGS_ASSERT
 #include "GameShared/GameClasses/SceneManager/CgsOverlappingPair.h"  // CgsSceneManager::OverlappingPair (output element)
 
 // [DIAG] host-only, NOT in the X360 binary -- see the [Q5-sweep] block in OutputCollidingPairs.
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // CgsDev::Log::gpDebugPrint
 #include <stdlib.h>                                         // getenv (BRN_PROP_DIAG)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\ContactGen/CgsOverlapGenerationModule.cpp";
 
 namespace CgsSceneManager
 {
@@ -218,7 +221,8 @@ void OverlapGenerationModule::Destruct()
 // ---------------------------------------------------------------------------------
 void OverlapGenerationModule::Update(const OverlapGenerationIO::InputBuffer* lpInputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != NULL, "lpInputBuffer != NULL");
+    CGS_ASSERT(lpInputBuffer != NULL,
+        CgsDev::Assert::MessageAt("lpInputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 217 /* ARTIST 0x828CB8A4 */));
 
     lpInputBuffer->LockForRead();
 
@@ -433,7 +437,8 @@ void OverlapGenerationModule::ProcessForceNoPaddingQueue(const OverlapGeneration
 // ---------------------------------------------------------------------------------
 void OverlapGenerationModule::OutputCollidingPairs(OverlapGenerationIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer != NULL, "lpOutputBuffer != NULL");
+    CGS_ASSERT(lpOutputBuffer != NULL,
+        CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 398 /* ARTIST 0x828C1F7C */));
 
     const s32 liNumCollidingPairs = static_cast<s32>(mSweeper.GetNumCollidingPairs());
 

@@ -4,7 +4,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceEvents.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "lobbyapi.h"        // LobbyApiStatus / LobbyApiRequestCB / LobbyApiMsgT
 #include "lobbyname.h"       // LobbyNameCmp
 #include "lobbytagfield.h"   // TagFieldSetString / TagFieldSetNumber
@@ -25,6 +25,9 @@ extern "C"
     s32               DispListChange(DispListRef* ref, s32 set);
     s32               DispListOrder(DispListRef* ref);
 }
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceUsersets.cpp";
 
 namespace CgsNetwork
 {
@@ -230,7 +233,9 @@ namespace CgsNetwork
         {
             mpUsersInUsersetList = LobbyApiListAlloc(mpServerInterface->GetLobbyAPIRef(),
                                                      KI_LOBBY_LIST_USERSET_USERS, 0, 0);
-            CGS_ASSERT(mpUsersInUsersetList != 0, "Failed to create users in userset list");
+            CGS_ASSERT(mpUsersInUsersetList != 0,
+                CgsDev::Assert::MessageAt(
+                    "Failed to create users in userset list", KAC_ARTIST_ASSERT_FILE, 451 /* ARTIST 0x8287C42C */));
         }
     }
 
@@ -249,7 +254,8 @@ namespace CgsNetwork
 
     bool ServerInterfaceUsersets::GetUserSetParams(ServerInterfaceUsersetParamsBase* lpParams) const
     {
-        CGS_ASSERT(lpParams != 0, "lpUsersetParams");
+        CGS_ASSERT(lpParams != 0,
+            CgsDev::Assert::MessageAt("lpUsersetParams", KAC_ARTIST_ASSERT_FILE, 602 /* ARTIST 0x8287C4FC */));
 
         lpParams->Prepare();
 

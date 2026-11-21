@@ -1,6 +1,6 @@
 #include "GameSource/Replays/Serialisers/BrnReplayDirectorSerialiser.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Camera.h"   // BrnDirector::Camera::Camera (the static-layout image)
 
 // BrnReplays::DirectorSerialiser -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -11,6 +11,9 @@
 //
 // Both X360 bodies leave Unlock's result in r3 (an incidental bool); the
 // originals are modelled void.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorSerialiser.cpp";
 
 namespace BrnReplays
 {
@@ -24,7 +27,8 @@ void DirectorSerialiser::Read()
     BaseSerialiser::Lock();
 
     BrnDirector::Camera::Camera* lpStatic = GetStaticLayout();
-    CGS_ASSERT(lpStatic != 0, "lpStatic");   // :38 (non-gating)
+    CGS_ASSERT(lpStatic != 0,
+        CgsDev::Assert::MessageAt("lpStatic", KAC_ARTIST_ASSERT_FILE, 38 /* ARTIST 0x82650378 */));   // :38 (non-gating)
 
     const EMode leMode = GetMode();
     bool lbSkip = (leMode == E_MODE_RECORDING_STALLED || leMode == E_MODE_PLAYING_STALLED);
@@ -53,7 +57,8 @@ void DirectorSerialiser::Write()
     BaseSerialiser::Lock();
 
     BrnDirector::Camera::Camera* lpStatic = GetStaticLayout();
-    CGS_ASSERT(lpStatic != 0, "lpStatic");   // :69 (non-gating)
+    CGS_ASSERT(lpStatic != 0,
+        CgsDev::Assert::MessageAt("lpStatic", KAC_ARTIST_ASSERT_FILE, 69 /* ARTIST 0x82650470 */));   // :69 (non-gating)
 
     if (!mbStaticCameraConstructed)
     {

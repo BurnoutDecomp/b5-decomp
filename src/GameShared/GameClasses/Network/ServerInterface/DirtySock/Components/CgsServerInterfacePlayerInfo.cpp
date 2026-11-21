@@ -2,7 +2,7 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfoData.h" // ServerInterfacePlayerInfoDataBase
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // ServerInterfaceDirtySock (GetLobbyAPIRef/GetSettingRef/GetMessageBuffer)
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h" // DSErrorToServerInterfaceError(Table)
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 #include "lobbyapi.h"        // LobbyApiStatus / LobbyApiRequestCB / LobbyApiSetCallback / LobbyApiClearCallback
 #include "lobbyfinduser.h"   // LobbyFindUser* family
@@ -26,6 +26,9 @@
 // The three per-action tables below (names, lobby request codes, DirtySock-error
 // mappings) hold the console rodata values word for word.
 // ===========================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerInfo.cpp";
 
 namespace CgsNetwork
 {
@@ -405,7 +408,8 @@ namespace CgsNetwork
     // -----------------------------------------------------------------------------------
     void ServerInterfacePlayerInfo::GetLocalPlayerInfo(ServerInterfacePlayerInfoDataBase* lpPlayerInfo)
     {
-        CGS_ASSERT(lpPlayerInfo, "lpPlayerInfo");
+        CGS_ASSERT(lpPlayerInfo,
+            CgsDev::Assert::MessageAt("lpPlayerInfo", KAC_ARTIST_ASSERT_FILE, 652 /* ARTIST 0x82878E5C */));
 
         // Selector fourcc 0x73656C66 == 'self', buffer 0x234 (564) bytes into a local
         // scratch (recovered from the asm immediates @ 0x82878E78/0x82878E7C/0x82878E7C).
@@ -534,7 +538,8 @@ namespace CgsNetwork
     bool ServerInterfacePlayerInfo::GetPlayerStats(s32 liRow, char* lpacStatDataBuffer,
                                                    s32 liBufferLength)
     {
-        CGS_ASSERT(lpacStatDataBuffer, "lpacStatDataBuffer");
+        CGS_ASSERT(lpacStatDataBuffer,
+            CgsDev::Assert::MessageAt("lpacStatDataBuffer", KAC_ARTIST_ASSERT_FILE, 858 /* ARTIST 0x8287916C */));
 
         return LobbyStatbookRowData(mpStatbook, 0, static_cast<u32>(liRow),
                                     lpacStatDataBuffer, liBufferLength) != 0;
@@ -546,7 +551,8 @@ namespace CgsNetwork
     // -----------------------------------------------------------------------------------
     bool ServerInterfacePlayerInfo::GetRowType(s32 liRow, s32* lpnType)
     {
-        CGS_ASSERT(lpnType, "lpnType");
+        CGS_ASSERT(lpnType,
+            CgsDev::Assert::MessageAt("lpnType", KAC_ARTIST_ASSERT_FILE, 913 /* ARTIST 0x828791D8 */));
 
         LobbyStatbookRowInfoT* lpRowInfo =
             LobbyStatbookRowInfo(mpStatbook, static_cast<u32>(liRow));

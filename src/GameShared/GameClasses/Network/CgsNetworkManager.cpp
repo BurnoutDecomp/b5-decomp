@@ -1,5 +1,5 @@
 #include "GameShared/GameClasses/Network/CgsNetworkManager.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"   // CgsDev::PerfMonCpu
 
 // CgsNetwork::NetworkManager -- the platform-independent core of the online hub. See the
@@ -214,7 +214,10 @@ namespace CgsNetwork
             return true;
 
         default:
-            CGS_ASSERT(false, "unknown release stage");
+            CGS_ASSERT(false,
+                CgsDev::Assert::MessageAt(
+                    "unknown release stage",
+                    "..\\..\\..\\GameShared\\GameClasses\\Network\\CgsNetworkManager.cpp", 323 /* ARTIST 0x8289B638 */));
             return false;
         }
     }

@@ -2,7 +2,7 @@
 #include "GameSource/Network/Managers/BrnNetworkStateManager.h"
 
 #include <cstring>                                                                         // memset / memcpy / strlen / strncpy
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                         // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                                 // the memory checks' log line
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                           // GetFirstEvent / GetNextEvent / AddEvent
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                                        // CgsGui::GuiEvent<N>
@@ -74,6 +74,9 @@
 // Xbox Guide entry points, keyed by the signed-in user index, for a 64-bit XUID (0 == success).
 // Declared as extern "C" free functions, as the other network TUs that open the Guide do.
 
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStateManager.cpp";
 
 namespace BrnNetwork
 {
@@ -323,7 +326,8 @@ namespace BrnNetwork
     // ------------------------------------------------------------------------------------
     void StateManager::PostRoundFinishedCallback(bool lbSuccess, void* lpUserData)
     {
-        CGS_ASSERT(lbSuccess, "lbSuccess");
+        CGS_ASSERT(lbSuccess,
+            CgsDev::Assert::MessageAt("lbSuccess", KAC_ARTIST_ASSERT_FILE, 3636 /* ARTIST 0x82553DB0 */));
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
         lpStateManager->PostRoundProcessingFinished();
@@ -334,7 +338,8 @@ namespace BrnNetwork
     // ------------------------------------------------------------------------------------
     void StateManager::PostGameFinishedCallback(bool lbSuccess, void* lpUserData)
     {
-        CGS_ASSERT(lbSuccess, "lbSuccess");
+        CGS_ASSERT(lbSuccess,
+            CgsDev::Assert::MessageAt("lbSuccess", KAC_ARTIST_ASSERT_FILE, 3694 /* ARTIST 0x825730C8 */));
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
         lpStateManager->PostGameProcessingFinished();
@@ -424,7 +429,8 @@ namespace BrnNetwork
         {
             PlayerMenuData* lpMenuData =
                 static_cast<PlayerMenuData*>(mpNetworkManager->GetPlayerManager()->GetMenuDataByID(lPlayerID));
-            CGS_ASSERT(lpMenuData, "lpMenuData");
+            CGS_ASSERT(lpMenuData,
+                CgsDev::Assert::MessageAt("lpMenuData", KAC_ARTIST_ASSERT_FILE, 3663 /* ARTIST 0x82549208 */));
 
             lpMenuData->mMarkedManID = CgsNetwork::KI_INVALID_PLAYER_ID;
         }

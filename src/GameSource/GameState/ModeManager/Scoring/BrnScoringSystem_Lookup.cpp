@@ -1,7 +1,7 @@
 #include <float.h>
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // ============================================================================
 // BrnScoringSystem_Lookup.cpp
@@ -21,6 +21,9 @@
 // CgsNetwork::K_INVALID_PLAYER_ID has no committed home in the tree; the file-local -1
 // (the BrnGameStateSharedIO.cpp / FlybyManager precedent) stands in for it in the asserts.
 // ============================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h";
 
 namespace BrnGameState
 {
@@ -152,8 +155,12 @@ GameStateModuleIO::EPlayerScoringIndex ScoringSystem::GetPlayerScoringIndex(BrnN
 // COUNT sentinel.
 bool ScoringSystem::IsPlayerInScoringSystem(GameStateModuleIO::EPlayerScoringIndex leIndex) const
 {
-    CGS_ASSERT(leIndex >= GameStateModuleIO::E_PLAYER_SCORING_INDEX_0, "lePlayerScoringIndex >= GsmIO::E_PLAYER_SCORING_INDEX_0");
-    CGS_ASSERT(leIndex < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT, "lePlayerScoringIndex < GsmIO::E_PLAYER_SCORING_INDEX_COUNT");
+    CGS_ASSERT(leIndex >= GameStateModuleIO::E_PLAYER_SCORING_INDEX_0,
+        CgsDev::Assert::MessageAt(
+            "lePlayerScoringIndex >= GsmIO::E_PLAYER_SCORING_INDEX_0", KAC_ARTIST_ASSERT_FILE, 2924 /* ARTIST 0x8231DFF4 */));
+    CGS_ASSERT(leIndex < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT,
+        CgsDev::Assert::MessageAt(
+            "lePlayerScoringIndex < GsmIO::E_PLAYER_SCORING_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 2925 /* ARTIST 0x8231E018 */));
 
     return maCarData[leIndex].GetActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_COUNT;
 }
@@ -356,9 +363,15 @@ void ScoringSystem::SetBurnoutSkillzData(BrnNetwork::NetworkPlayerID lID, const 
 // X360 0x823112A8. Forward to the current online-mode scorer's per-car finishing position.
 s32 ScoringSystem::GetOnlineFinishPosition(EActiveRaceCarIndex leRaceCarIndex)
 {
-    CGS_ASSERT(mpCurrentOnlineModeScoring != NULL, "mpCurrentOnlineModeScoring");
-    CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(mpCurrentOnlineModeScoring != NULL,
+        CgsDev::Assert::MessageAt(
+            "mpCurrentOnlineModeScoring", KAC_ARTIST_ASSERT_FILE, 3526 /* ARTIST 0x823112D8 */));
+    CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 3527 /* ARTIST 0x823112FC */));
+    CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CgsDev::Assert::MessageAt(
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 3528 /* ARTIST 0x82311320 */));
 
     return mpCurrentOnlineModeScoring->GetPlayerPosition(leRaceCarIndex);
 }

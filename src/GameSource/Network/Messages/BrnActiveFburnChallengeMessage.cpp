@@ -2,7 +2,7 @@
 
 #include "GameSource/Network/Messages/BrnActiveFburnChallengeMessage.h"
 #include "GameSource/Network/BrnNetworkManager.h"        // BrnNetwork::BrnNetworkManager::PackOrUnpack (player-id field primitive)
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::ActiveFburnChallengeMessage::Construct             @ 0x8257CBD8
@@ -26,6 +26,9 @@
 //    ReliableMessage::GetPackedMessageSize body onto (ICF labelled it
 //    TestConnectionMessage::GetPackedMessageSize -- identical body). The semantic base
 //    call is ReliableMessage::GetPackedMessageSize(), matching the class hierarchy.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Messages/BrnActiveFburnChallengeMessage.cpp";
 
 namespace BrnNetwork
 {
@@ -78,14 +81,22 @@ namespace BrnNetwork
                                                      NetworkPlayerID* lpaPlayersInChallengeIDs,
                                                      s32 liNumPlayersInChallenge)
     {
-        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME, "lu16FrameCount != KU16_INVALID_FRAME");
-        CGS_ASSERT(!IsMessageValid(), "!CgsNetwork::ReliableMessage::IsMessageValid()");
+        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
+            CgsDev::Assert::MessageAt(
+                "lu16FrameCount != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 145 /* ARTIST 0x8257CD6C */));
+        CGS_ASSERT(!IsMessageValid(),
+            CgsDev::Assert::MessageAt(
+                "!CgsNetwork::ReliableMessage::IsMessageValid()", KAC_ARTIST_ASSERT_FILE, 146 /* ARTIST 0x8257CD98 */));
 
         mChallengeID            = lChallengeID;
         miNumPlayersInChallenge = liNumPlayersInChallenge;
 
-        CGS_ASSERT(liNumPlayersInChallenge > 0, "liNumPlayersInChallenge > 0");
-        CGS_ASSERT(liNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS, "liNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS");
+        CGS_ASSERT(liNumPlayersInChallenge > 0,
+            CgsDev::Assert::MessageAt(
+                "liNumPlayersInChallenge > 0", KAC_ARTIST_ASSERT_FILE, 151 /* ARTIST 0x8257CDC4 */));
+        CGS_ASSERT(liNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS,
+            CgsDev::Assert::MessageAt(
+                "liNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS", KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x8257CDE8 */));
 
         for (s32 liPlayer = 0; liPlayer < miNumPlayersInChallenge; ++liPlayer)
             maPlayersInChallengeIDs[liPlayer] = lpaPlayersInChallengeIDs[liPlayer];

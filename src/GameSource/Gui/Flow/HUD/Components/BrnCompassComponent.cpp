@@ -29,7 +29,7 @@
 #include "SDKs/XboxMath/XMVectorACos.h"                      // XboxMath::XMVectorACos (X360 0x821F0980)
 
 #include "rw/math/vpu/vector3_operation.h"                  // Dot / Cross / Normalize over Vector3
-#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"     // CgsCore::SnPrintf
 #include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameSource/Gui/BrnGuiCache.h"                     // GuiCache::GetLandmarkInfoFromIndex / GetFreeburnChallengeManager / GetWorldDataController
@@ -43,6 +43,9 @@
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"            // GuiTracker::Get{,Num}ActivelyTrackedLandmarks (Update's online arm)
 
 // The game-mode enum Update switches on; BrnGuiCache.h already pulls the owning header in.
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnCompassComponent.h";
+
 namespace GsmIO = BrnGameState::GameStateModuleIO;
 
 namespace BrnGui
@@ -181,8 +184,10 @@ namespace BrnGui
     // to a stack temp, overwrites only its X lane, then hands it to SetPosition.
     void CompassComponent::SetBearing(f32 lfBearing)
     {
-        CGS_ASSERT(lfBearing >= -0.1, "lfBearing >= -0.1");            // BrnCompassComponent.h:298
-        CGS_ASSERT(lfBearing <= 360.1f, "lfBearing <= 360.1f");        // BrnCompassComponent.h:299
+        CGS_ASSERT(lfBearing >= -0.1,
+            CgsDev::Assert::MessageAt("lfBearing >= -0.1", KAC_ARTIST_ASSERT_FILE, 298 /* ARTIST 0x8241EC78 */));            // BrnCompassComponent.h:298
+        CGS_ASSERT(lfBearing <= 360.1f,
+            CgsDev::Assert::MessageAt("lfBearing <= 360.1f", KAC_ARTIST_ASSERT_FILE, 299 /* ARTIST 0x8241ECA4 */));        // BrnCompassComponent.h:299
 
         // flt_82004920 == 0.0027777778 == 1/360 (degrees -> [0,1] strip fraction).
         Vector2 lPos = mv2InitialViewPos;
@@ -195,8 +200,12 @@ namespace BrnGui
     // (-180..180) maps linearly the same way SetBearing maps the compass view.
     void CompassComponent::SetMarkerPos(f32 lfMarkerBearing, bool lbShowMarker)
     {
-        CGS_ASSERT(lfMarkerBearing >= -180.1, "lfMarkerBearing >= -180.1");     // BrnCompassComponent.h:335
-        CGS_ASSERT(lfMarkerBearing <= 180.1f, "lfMarkerBearing <= 180.1f");     // BrnCompassComponent.h:336
+        CGS_ASSERT(lfMarkerBearing >= -180.1,
+            CgsDev::Assert::MessageAt(
+                "lfMarkerBearing >= -180.1", KAC_ARTIST_ASSERT_FILE, 335 /* ARTIST 0x8241ED4C */));     // BrnCompassComponent.h:335
+        CGS_ASSERT(lfMarkerBearing <= 180.1f,
+            CgsDev::Assert::MessageAt(
+                "lfMarkerBearing <= 180.1f", KAC_ARTIST_ASSERT_FILE, 336 /* ARTIST 0x8241ED78 */));     // BrnCompassComponent.h:336
 
         if (lbShowMarker)
         {

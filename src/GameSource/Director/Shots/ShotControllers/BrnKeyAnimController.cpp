@@ -30,6 +30,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Shots/ShotControllers/BrnKeyAnimController.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/Director/BrnDirectorResourceManager.h"    // DirectorResourceManager::GetKeyAnimFromGuid / GetIceResourceManager
 #include "GameSource/Director/Camera/Camera.h"                 // BrnDirector::Camera::Camera
@@ -41,6 +42,9 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // [DIAG] gpDebugPrint (bring-up only)
 #include <cmath>                                               // atan2
 #include <cstdlib>                                             // getenv ([DIAG] BRN_ICE_TRACE)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.h";
 
 namespace BrnDirector
 {
@@ -559,7 +563,8 @@ f32 KeyAnimController::GetParametricTime0To1() const
 // ============================================================================
 ICE::eICESpace KeyAnimController::GetEyeSpace() const
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");
+    CGS_ASSERT(mbPrepared,
+        CgsDev::Assert::MessageAt("mbPrepared", KAC_ARTIST_ASSERT_FILE, 107 /* ARTIST 0x821F4160 */));
     return mEyeSpace;
 }
 
@@ -568,7 +573,8 @@ ICE::eICESpace KeyAnimController::GetEyeSpace() const
 // ============================================================================
 ICE::eICESpace KeyAnimController::GetLookSpace() const
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");
+    CGS_ASSERT(mbPrepared,
+        CgsDev::Assert::MessageAt("mbPrepared", KAC_ARTIST_ASSERT_FILE, 110 /* ARTIST 0x821F41B8 */));
     return mLookSpace;
 }
 
@@ -579,7 +585,8 @@ ICE::eICESpace KeyAnimController::GetLookSpace() const
 // ============================================================================
 rw::math::vpu::Vector3 KeyAnimController::GetLookPos() const
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");
+    CGS_ASSERT(mbPrepared,
+        CgsDev::Assert::MessageAt("mbPrepared", KAC_ARTIST_ASSERT_FILE, 113 /* ARTIST 0x821F4218 */));
     return mLookPos;
 }
 

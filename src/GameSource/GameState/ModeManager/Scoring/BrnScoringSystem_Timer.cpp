@@ -1,7 +1,7 @@
 #include <float.h>
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 // BrnNetwork::NetworkRounder now has a committed declare-only home; StopModeTimer's force
 // (online) branch snaps the elapsed finish time + the round-end distance to the network grid
 // through it (X360 0x8231F804 / 0x8231F81C). The bodies live in BrnNetworkRounder.cpp; the gate
@@ -70,6 +70,9 @@
 //       guessed.
 // ============================================================================
 
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h";
+
 namespace BrnGameState
 {
 
@@ -106,7 +109,8 @@ const CgsSystem::Time ScoringSystem::GetTimeLimit() const
 // medal run nor an eliminator round).
 void ScoringSystem::SetTimeLimitSeconds(f32 lfSeconds)
 {
-    CGS_ASSERT(IsTimerActive(), "IsTimerActive()");
+    CGS_ASSERT(IsTimerActive(),
+        CgsDev::Assert::MessageAt("IsTimerActive()", KAC_ARTIST_ASSERT_FILE, 1406 /* ARTIST 0x82310868 */));
 
     mbMedalMode            = false;
     mbEliminationMode      = false;
@@ -121,8 +125,11 @@ void ScoringSystem::SetTimeLimitSeconds(f32 lfSeconds)
 // clear elimination mode, and set the deadline to start + gold.
 void ScoringSystem::SetMedalModeTimer(f32 lfGold, f32 lfSilver, f32 lfBronze)
 {
-    CGS_ASSERT(IsTimerActive(), "IsTimerActive()");
-    CGS_ASSERT(lfGold > 0.0f, "lfGoldTimeLimitSeconds > 0.0f");
+    CGS_ASSERT(IsTimerActive(),
+        CgsDev::Assert::MessageAt("IsTimerActive()", KAC_ARTIST_ASSERT_FILE, 1428 /* ARTIST 0x8231092C */));
+    CGS_ASSERT(lfGold > 0.0f,
+        CgsDev::Assert::MessageAt(
+            "lfGoldTimeLimitSeconds > 0.0f", KAC_ARTIST_ASSERT_FILE, 1430 /* ARTIST 0x82310958 */));
 
     mafMedalTimes[0] = lfGold;
     mafMedalTimes[1] = lfSilver;

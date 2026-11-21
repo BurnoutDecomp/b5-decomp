@@ -3,7 +3,7 @@
 #include "GameSource/Network/Parameters/BrnNetworkRoadRulesData.h"  // RoadRulesUploadData / *DownloadData
 #include "GameSource/GameState/BrnCgsPlayerName.h"                  // CgsNetwork::PlayerName
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
 #include "GameShared/GameClasses/Core/CgsID.h"          // CgsIDUnCompress
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"          // CgsDev::Log::gpDebugPrint (ConvertEventScoreUploadError)
@@ -35,6 +35,10 @@
 // repeated inlined copies into one call per use site is a pure de-optimisation that
 // preserves behaviour.
 // ===========================================================================
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../Network/Components/BrnServerInterfaceCustomCommands.cpp";
 
 namespace BrnNetwork
 {
@@ -146,7 +150,8 @@ bool ServerInterfaceCustomCommands::Prepare(CgsNetwork::ServerInterfaceDirtySock
     if (!CgsNetwork::ServerInterfaceCustomCommands::Prepare())
         return false;
 
-    CGS_ASSERT(lpServerInterface != 0, "lpServerInterface");
+    CGS_ASSERT(lpServerInterface != 0,
+        CgsDev::Assert::MessageAt("lpServerInterface", KAC_ARTIST_ASSERT_FILE, 209 /* ARTIST 0x825837B4 */));
 
     mpServerInterface    = lpServerInterface;  // a1[4]
     mpCallback           = 0;            // a1[9]
@@ -231,11 +236,16 @@ void ServerInterfaceCustomCommands::GetEloOfLocalPlayer(s32* lpiRaceElo, s32* lp
                                                         s32* lpiRoadRageElo,
                                                         CustomCommandCallback lCallback, void* lpData)
 {
-    CGS_ASSERT(lpiRaceElo != 0, "lpRaceElo");            // a2, cpp:601
-    CGS_ASSERT(lpiRoadRageElo != 0, "lpRoadRageElo");    // a4, cpp:602
-    CGS_ASSERT(lpiBurningHomeRunElo != 0, "lpBurningHomeRunElo"); // a3, cpp:603
-    CGS_ASSERT(lCallback != 0, "lCallback");            // a5, cpp:604
-    CGS_ASSERT(lpData != 0, "lpData");                  // a6, cpp:605
+    CGS_ASSERT(lpiRaceElo != 0,
+        CgsDev::Assert::MessageAt("lpRaceElo", KAC_ARTIST_ASSERT_FILE, 601 /* ARTIST 0x8258F12C */));            // a2, cpp:601
+    CGS_ASSERT(lpiRoadRageElo != 0,
+        CgsDev::Assert::MessageAt("lpRoadRageElo", KAC_ARTIST_ASSERT_FILE, 602 /* ARTIST 0x8258F150 */));    // a4, cpp:602
+    CGS_ASSERT(lpiBurningHomeRunElo != 0,
+        CgsDev::Assert::MessageAt("lpBurningHomeRunElo", KAC_ARTIST_ASSERT_FILE, 603 /* ARTIST 0x8258F174 */)); // a3, cpp:603
+    CGS_ASSERT(lCallback != 0,
+        CgsDev::Assert::MessageAt("lCallback", KAC_ARTIST_ASSERT_FILE, 604 /* ARTIST 0x8258F198 */));            // a5, cpp:604
+    CGS_ASSERT(lpData != 0,
+        CgsDev::Assert::MessageAt("lpData", KAC_ARTIST_ASSERT_FILE, 605 /* ARTIST 0x8258F1BC */));                  // a6, cpp:605
 
     mpCallbackData       = lpData;                 // a1[10] -- stw r25, 0x28
     mpCallback           = lCallback;              // a1[9]  -- stw r26, 0x24

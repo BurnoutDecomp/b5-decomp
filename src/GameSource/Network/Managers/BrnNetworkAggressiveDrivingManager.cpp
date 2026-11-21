@@ -20,9 +20,12 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"          // PlayerManager
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"          // NetworkPlayer::RegisterMessageType / UnRegisterMessageType
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"              // TimeManager::GetCurrentFrameNumber
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cstring>   // std::memmove (X360 RemoveAggressiveMove uses memmove)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkAggressiveDrivingManager.cpp";
 
 namespace BrnNetwork
 {
@@ -135,8 +138,10 @@ namespace BrnNetwork
     void NetworkAggressiveDrivingManager::ProcessBeforeSimulation(
             BrnNetworkModuleIO::OutputBuffer* lpOutput, f32 lfTimeStep)
     {
-        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
-        CGS_ASSERT(lpOutput != 0, "lpOutput");
+        CGS_ASSERT(mpNetworkModule != 0,
+            CgsDev::Assert::MessageAt("mpNetworkModule", KAC_ARTIST_ASSERT_FILE, 191 /* ARTIST 0x82573C78 */));
+        CGS_ASSERT(lpOutput != 0,
+            CgsDev::Assert::MessageAt("lpOutput", KAC_ARTIST_ASSERT_FILE, 192 /* ARTIST 0x82573C9C */));
 
         if (mbAreWeInOnlineGame)
         {
@@ -152,7 +157,8 @@ namespace BrnNetwork
     void NetworkAggressiveDrivingManager::ProcessAfterSimulation(
             const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
-        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule != 0,
+            CgsDev::Assert::MessageAt("mpNetworkModule", KAC_ARTIST_ASSERT_FILE, 215 /* ARTIST 0x82573D10 */));
 
         if (mbAreWeInOnlineGame)
         {
@@ -664,8 +670,10 @@ namespace BrnNetwork
     void NetworkAggressiveDrivingManager::ProcessInputQueue(
             const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
-        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
-        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
+        CGS_ASSERT(mpNetworkModule != 0,
+            CgsDev::Assert::MessageAt("mpNetworkModule", KAC_ARTIST_ASSERT_FILE, 925 /* ARTIST 0x82570F68 */));
+        CGS_ASSERT(mpPlayerManager != 0,
+            CgsDev::Assert::MessageAt("mpPlayerManager", KAC_ARTIST_ASSERT_FILE, 926 /* ARTIST 0x82570F90 */));
 
         const CgsModule::BaseEventQueue<BrnPhysics::Vehicle::ImpactEvent>* lpImpactQueue =
             lpInput->GetVehicleOutputInterface()->GetImpactEventQueue();

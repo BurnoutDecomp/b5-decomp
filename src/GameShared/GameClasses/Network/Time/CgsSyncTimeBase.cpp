@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeBase.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -16,6 +16,9 @@
 // Owning header: CgsSyncTimeBase.h. Every member is touched by name; the X360 byte
 // offsets in the asm (e.g. the 0x38-byte SyncTimeMessage stride, meMessageMode @ +0x32C)
 // are the platform layout the natively-laid-out C++ struct stands in for.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeBase.cpp";
 
 namespace CgsNetwork
 {
@@ -77,7 +80,9 @@ namespace CgsNetwork
     // Find the slot a given player id occupies, or -1 if the player is not registered.
     s32 SyncTimeMessageManager::GetPlayerMessageIndex(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(lPlayerID != KI_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID");
+        CGS_ASSERT(lPlayerID != KI_INVALID_PLAYER_ID,
+            CgsDev::Assert::MessageAt(
+                "lPlayerID != K_INVALID_PLAYER_ID", KAC_ARTIST_ASSERT_FILE, 246 /* ARTIST 0x8287D164 */));
 
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_SYNC_PLAYERS; ++liPlayerIndex)
         {
@@ -199,8 +204,11 @@ namespace CgsNetwork
     // state on every live slot so nothing stale is sent under the new role.
     void SyncTimeMessageManager::SwitchMode(EMessageMode leMessageMode)
     {
-        CGS_ASSERT(leMessageMode >= 0, "leMessageMode >= 0");
-        CGS_ASSERT(leMessageMode <= E_MESSAGE_MODE_NONE, "leMessageMode <= E_MESSAGE_MODE_NONE");
+        CGS_ASSERT(leMessageMode >= 0,
+            CgsDev::Assert::MessageAt("leMessageMode >= 0", KAC_ARTIST_ASSERT_FILE, 305 /* ARTIST 0x8288AC44 */));
+        CGS_ASSERT(leMessageMode <= E_MESSAGE_MODE_NONE,
+            CgsDev::Assert::MessageAt(
+                "leMessageMode <= E_MESSAGE_MODE_NONE", KAC_ARTIST_ASSERT_FILE, 306 /* ARTIST 0x8288AC68 */));
 
         meMessageMode = leMessageMode;
 

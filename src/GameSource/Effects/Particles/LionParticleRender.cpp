@@ -17,7 +17,7 @@
 #include "GameSource/Effects/Particles/LionParticleRender.h"
 
 #include "GameSource/Effects/Particles/Native/BrnLionBlendRenderer.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // the [texreg] witness
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleDescriptor.h"
@@ -32,6 +32,9 @@
 // flags); the 0x80000000 flag requests the "set immediately / no GPU stall" path. Declared
 // here as a free function so the texture-bind side effect is preserved (PC backend body / stub).
 extern IDirect3DDevice9* gpD3DDevice;
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/LionParticleRender.cpp";
 
 namespace renderengine
 {
@@ -263,7 +266,8 @@ LionParticleRender::LionParticleRender()
 // ----------------------------------------------------------------------------
 U32 LionParticleRender::HashMaterial(const cParticleMaterial* apMaterial)
 {
-    CGS_ASSERT(apMaterial != 0, "apMaterial != NULL");
+    CGS_ASSERT(apMaterial != 0,
+        CgsDev::Assert::MessageAt("apMaterial != NULL", KAC_ARTIST_ASSERT_FILE, 501 /* ARTIST 0x82279CE4 */));
 
     const u32 KU_FNV_OFFSET_BASIS = 0x811C9DC5u;
     const u32 KU_FNV_PRIME        = 0x01000193u;
@@ -284,7 +288,8 @@ U32 LionParticleRender::HashMaterial(const cParticleMaterial* apMaterial)
 // ----------------------------------------------------------------------------
 U32 LionParticleRender::GetMaterialHandle(U32 auMaterialHash)
 {
-    CGS_ASSERT(auMaterialHash != 0, "luMaterialHash != 0");
+    CGS_ASSERT(auMaterialHash != 0,
+        CgsDev::Assert::MessageAt("luMaterialHash != 0", KAC_ARTIST_ASSERT_FILE, 513 /* ARTIST 0x82279D74 */));
 
     for (s32 liIndex = 0; liIndex < siMaterialCount; ++liIndex)
     {

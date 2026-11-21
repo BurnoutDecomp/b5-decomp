@@ -23,6 +23,7 @@
 // FireAssert; CGS_ASSERT emits __FILE__/__LINE__ instead (project-wide benign assert YELLOW).
 
 #include <cstring>   // std::memcpy / std::memset (model the X360 XMemCpy / XMemSet block intrinsics)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h"
 #include "GameShared/GameClasses/Gui/CgsImageFileInfo.h" // typed image-load records (host-native pointer width)
 #include "GameSource/GameState/BrnGameActions.h" // typed image-gallery/image-save action records 289..294
@@ -32,6 +33,10 @@
 #include "GameSource/GameState/Progression/BrnProfile.h"           // BrnProgression::Profile / MugshotInfo
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"// BrnProgression::ProgressionManager
 #include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h" // OnMugshotAdded
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+    "../GameState/ImageManager/BrnGameStateImageManagerBase.cpp";
 
 namespace BrnGameState
 {
@@ -192,8 +197,10 @@ void GameStateImageManagerBase::PreWorldUpdate(::EActiveRaceCarIndex lePlayerRac
                                                const CgsModule::EventQueue<TakedownEvent, 8>* lpTakedownEventQueue,
                                                GameStateModuleIO::OutputBuffer* lpOutput)
 {
-    CGS_ASSERT(lpTakedownEventQueue != 0, "lpQueue");
-    CGS_ASSERT(lpOutput != 0, "lpOutput");
+    CGS_ASSERT(lpTakedownEventQueue != 0,
+        CgsDev::Assert::MessageAt("lpQueue", KAC_ARTIST_ASSERT_FILE, 221 /* ARTIST 0x82391A3C */));
+    CGS_ASSERT(lpOutput != 0,
+        CgsDev::Assert::MessageAt("lpOutput", KAC_ARTIST_ASSERT_FILE, 222 /* ARTIST 0x82391A60 */));
 
     UpdateTakedownEvents(lePlayerRaceCarIndex, lpTakedownEventQueue);
     UpdateNewImageRequests(lpOutput);
@@ -216,13 +223,15 @@ void GameStateImageManagerBase::HandleWorldRegionChangeEvent(const WorldRegionCh
 // ---------------------------------------------------------------------------
 void GameStateImageManagerBase::HandleImageFilesSavedEvent(const ImageFilesSavedEvent* lpImageFilesSavedEvent)
 {
-    CGS_ASSERT(lpImageFilesSavedEvent != 0, "lpImageFilesSavedEvent");
+    CGS_ASSERT(lpImageFilesSavedEvent != 0,
+        CgsDev::Assert::MessageAt("lpImageFilesSavedEvent", KAC_ARTIST_ASSERT_FILE, 1444 /* ARTIST 0x82357D04 */));
 
     for (s32 liSavedFileIndex = 0; liSavedFileIndex < lpImageFilesSavedEvent->miNumSavedFiles; ++liSavedFileIndex)
     {
         // Each saved entry strides 4 words; the file id is the entry's leading word.
         const s32 liSavedFileID = lpImageFilesSavedEvent->maSavedFileInfos[liSavedFileIndex * 4];
-        CGS_ASSERT(liSavedFileID >= 0, "liSavedFileID >= 0");
+        CGS_ASSERT(liSavedFileID >= 0,
+            CgsDev::Assert::MessageAt("liSavedFileID >= 0", KAC_ARTIST_ASSERT_FILE, 1454 /* ARTIST 0x82357D4C */));
 
         for (s32 liSlotIndex = 0; liSlotIndex < KI_NUM_PICTURES; ++liSlotIndex)
         {

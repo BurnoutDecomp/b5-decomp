@@ -1,7 +1,7 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficNetworkInterfaces.h"
 #include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"  // BrnTraffic::KU_MAX_HULLS, KU_MAX_HULLS_IN_PVS
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficStaticParam.h"  // BrnTraffic::KU_INVALID_HULL
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"            // CGS_ASSERT
 #include "GameSource/BurnoutConstants.h"                      // E_ACTIVE_RACE_CAR_INDEX_COUNT (== KU_MAX_HULLS_IN_PVS == 8)
 
 // BrnTraffic::BrnTrafficIO::TrafficNetworkOutputInterface
@@ -12,6 +12,9 @@
 //   queue @0x00 .. table mau16ActiveHulls[8] @0x6C .. mbHashValid @0x7C ..
 //   mbActiveHullsValid @0x7D .. mbHullSyncDivergence @0x7E .. muHash(u16) @0x80 ..
 //   muHashUpdateFrame(u32) @0x84.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficNetworkInterfaces.h";
 
 namespace BrnTraffic
 {
@@ -105,7 +108,8 @@ namespace BrnTrafficIO
     // then returns it. The X360 reads muHash with a halfword load (lhz), matching the u16 type.
     u16 TrafficNetworkOutputInterface::GetDataHash() const
     {
-        CGS_ASSERT(mbHashValid, "mbHashValid");   // BrnTrafficNetworkInterfaces.h:407
+        CGS_ASSERT(mbHashValid,
+            CgsDev::Assert::MessageAt("mbHashValid", KAC_ARTIST_ASSERT_FILE, 407 /* ARTIST 0x82542460 */));   // BrnTrafficNetworkInterfaces.h:407
         return muHash;
     }
 
@@ -113,7 +117,8 @@ namespace BrnTrafficIO
     // then returns the frame number the hash was taken on (muHashUpdateFrame, word load).
     u32 TrafficNetworkOutputInterface::GetUpdateFrameForHash() const
     {
-        CGS_ASSERT(mbHashValid, "mbHashValid");   // BrnTrafficNetworkInterfaces.h:421
+        CGS_ASSERT(mbHashValid,
+            CgsDev::Assert::MessageAt("mbHashValid", KAC_ARTIST_ASSERT_FILE, 421 /* ARTIST 0x825424B8 */));   // BrnTrafficNetworkInterfaces.h:421
         return muHashUpdateFrame;
     }
 
@@ -121,7 +126,8 @@ namespace BrnTrafficIO
     // (mbActiveHullsValid, non-gating) then returns a pointer to the table (this + 0x6C).
     const u16* TrafficNetworkOutputInterface::GetActiveHulls() const
     {
-        CGS_ASSERT(mbActiveHullsValid, "mbActiveHullsValid");   // BrnTrafficNetworkInterfaces.h:434
+        CGS_ASSERT(mbActiveHullsValid,
+            CgsDev::Assert::MessageAt("mbActiveHullsValid", KAC_ARTIST_ASSERT_FILE, 434 /* ARTIST 0x82542510 */));   // BrnTrafficNetworkInterfaces.h:434
         return mau16ActiveHulls;
     }
 

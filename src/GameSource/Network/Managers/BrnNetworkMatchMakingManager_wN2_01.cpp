@@ -10,7 +10,7 @@
 
 #include "GameSource/Network/Managers/BrnNetworkMatchMakingManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                       // CGS_ASSERT, CgsDev::Assert
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                       // CGS_ASSERT, CgsDev::Assert
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                            // CgsDev::StrStream (StartProcess assert)
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"                    // PlayerManager::GetTotalNumberPlayers
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterfaceErrors.h"    // E_SERVER_INTERFACE_GAMES_ERROR_NO_GAMES_FOUND
@@ -24,6 +24,9 @@
 #include "GameSource/Network/Parameters/BrnNetworkQuickJoinParams.h"                    // QuickJoinParams
 #include "GameSource/Network/Parameters/BrnNetworkUsersetParams.h"                      // UsersetParams
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfo.h" // GetLocalPlayerInfo
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMatchMakingManager.cpp";
 
 namespace BrnNetwork
 {
@@ -89,7 +92,9 @@ namespace BrnNetwork
     // Run the current sub-state's handler.
     void MatchMakingManager::Update()
     {
-        CGS_ASSERT(maUpdateFunctions[meSubState] != 0, "No update function supplied for the current substate");
+        CGS_ASSERT(maUpdateFunctions[meSubState] != 0,
+            CgsDev::Assert::MessageAt(
+                "No update function supplied for the current substate", KAC_ARTIST_ASSERT_FILE, 322 /* ARTIST 0x8254461C */));
         (this->*maUpdateFunctions[meSubState])();
     }
 
@@ -111,7 +116,9 @@ namespace BrnNetwork
 
         for (s32 liIndex = 0; liIndex < E_SUBSTATE_COUNT; ++liIndex)
         {
-            CGS_ASSERT(maUpdateFunctions[liIndex] != 0, "No update function supplied for this substate");
+            CGS_ASSERT(maUpdateFunctions[liIndex] != 0,
+                CgsDev::Assert::MessageAt(
+                    "No update function supplied for this substate", KAC_ARTIST_ASSERT_FILE, 99 /* ARTIST 0x82558D84 */));
         }
     }
 
@@ -263,7 +270,8 @@ namespace BrnNetwork
     // start a new process.
     void MatchMakingManager::ProcessComplete(bool lbSuccess)
     {
-        CGS_ASSERT(mCallback != 0, "mCallback");
+        CGS_ASSERT(mCallback != 0,
+            CgsDev::Assert::MessageAt("mCallback", KAC_ARTIST_ASSERT_FILE, 442 /* ARTIST 0x825447B8 */));
 
         Callback lCallback          = mCallback;
         void*    lpCallbackUserData = mpCallbackUserData;

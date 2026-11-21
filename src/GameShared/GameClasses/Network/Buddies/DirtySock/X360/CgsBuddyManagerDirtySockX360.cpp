@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Network/Buddies/DirtySock/X360/CgsBuddyManagerDirtySockX360.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Network/CgsNetworkManager.h"   // NetworkManager::GetActiveControllerPort
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"   // GetGameComponent / GetConnAPIRef
 #include "GameShared/GameClasses/Network/Texture/CgsNetworkTexture.h"
@@ -68,6 +68,9 @@ static const s32 KI_CONNAPI_SESSION_TEXT_SIZE = 128;
 // XPROFILE_GAMERCARD_PICTURE_KEY -- the single profile setting id requested per
 // buddy (dwNumSettingIds = 1; the value is read from the image's rodata).
 static const u32 KU_PROFILE_GAMERCARD_PICTURE_KEY = 0x4064000Fu;
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameShared\\GameClasses\\Network\\Buddies\\DirtySock\\X360\\CgsBuddyManagerDirtySockX360.cpp";
 
 namespace CgsSystem
 {
@@ -215,12 +218,15 @@ namespace CgsNetwork
     // =========================================================================
     u64 BuddyManagerX360::GetBuddyXUID(const PlayerName* lpBuddyName)
     {
-        CGS_ASSERT(mpBuddies, "mpBuddies");
-        CGS_ASSERT(lpBuddyName, "lpBuddyName");
+        CGS_ASSERT(mpBuddies,
+            CgsDev::Assert::MessageAt("mpBuddies", KAC_ARTIST_ASSERT_FILE, 222 /* ARTIST 0x8287F9E0 */));
+        CGS_ASSERT(lpBuddyName,
+            CgsDev::Assert::MessageAt("lpBuddyName", KAC_ARTIST_ASSERT_FILE, 223 /* ARTIST 0x8287FA04 */));
 
         DirtySock::HLBBudT* lpBuddy =
             DirtySock::HLBListGetBuddyByName(mpBuddies, lpBuddyName->GetPlayerName());
-        CGS_ASSERT(lpBuddy, "lpBuddy");
+        CGS_ASSERT(lpBuddy,
+            CgsDev::Assert::MessageAt("lpBuddy", KAC_ARTIST_ASSERT_FILE, 226 /* ARTIST 0x8287FA38 */));
 
         return DirtySock::HLBBudGetXenonXUID(lpBuddy);
     }
@@ -249,11 +255,13 @@ namespace CgsNetwork
     // =========================================================================
     bool BuddyManagerX360::HaveIInvitedMyBuddy(const PlayerName* lpPlayerName)
     {
-        CGS_ASSERT(lpPlayerName, "lpPlayerName");
+        CGS_ASSERT(lpPlayerName,
+            CgsDev::Assert::MessageAt("lpPlayerName", KAC_ARTIST_ASSERT_FILE, 616 /* ARTIST 0x8287FD8C */));
 
         DirtySock::HLBBudT* lpBuddy =
             DirtySock::HLBListGetBuddyByName(mpBuddies, lpPlayerName->GetPlayerName());
-        CGS_ASSERT(lpBuddy, "lpBuddy");
+        CGS_ASSERT(lpBuddy,
+            CgsDev::Assert::MessageAt("lpBuddy", KAC_ARTIST_ASSERT_FILE, 619 /* ARTIST 0x8287FDC0 */));
 
         // The "I have invited this buddy" flag is bit 26 of the buddy record's flag
         // word (+0x18).
@@ -585,7 +593,9 @@ namespace CgsNetwork
         {
             meCurrentStatus = E_BUDDY_ACTION_IDLE;
             const u32 luResult = XCancelOverlapped(mGamerPicOverlapped);
-            CGS_ASSERT(luResult == 0, "mGamerPicOverlapped.CancelXOverlapped()");
+            CGS_ASSERT(luResult == 0,
+                CgsDev::Assert::MessageAt(
+                    "mGamerPicOverlapped.CancelXOverlapped()", KAC_ARTIST_ASSERT_FILE, 316 /* ARTIST 0x8287FAA0 */));
         }
     }
 

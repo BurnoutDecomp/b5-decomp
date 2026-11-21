@@ -3,7 +3,7 @@
 #include <cstring>   // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
 #include <stdlib.h>  // [gateui r5] getenv (the BRN_PROP_DIAG probe in RefreshString)
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsID.h"           // [gateui r3] CgsIDUnCompress (StartMessage's log line)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // [gateui r3] gpDebugPrint / gxMessageFilterFlags
 
@@ -28,6 +28,11 @@ namespace
 // time is computed just before a wrap gets an end stamp far ABOVE the post-wrap `now`, so
 // `now >= end` never holds and that HUD message never ends -- it sits on screen until the
 // counter catches up. Same defect class as HudMessageDirector's repeat-rate gate; same fix.
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\hud\\components\\BrnInGameMessagesComponent.h";
+static const char KAC_ARTIST_ASSERT_HEADER[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/Hud/Components/BrnInGameMessagesComponent.h";
+
 namespace CgsSystem { u64 GetSystemTimerBaseTime(); u64 GetSystemTimerFrequency(); }
 
 #include "GameSource/Replays/Serialisers/BrnReplayGuiModuleSerialiser.h"
@@ -168,14 +173,18 @@ namespace
     // @ 0x8240EA80 -- h:310. Return the queue's live message slot index.
     u8 InGameMessagesComponent::GetCurrentIndex() const
     {
-        CGS_ASSERT(mpInGameMessagesQueue != 0, "mpInGameMessagesQueue != NULL");
+        CGS_ASSERT(mpInGameMessagesQueue != 0,
+            CgsDev::Assert::MessageAt(
+                "mpInGameMessagesQueue != NULL", KAC_ARTIST_ASSERT_FILE, 397 /* ARTIST 0x8240EAA8 */));
         return mpInGameMessagesQueue->muCurrentMessageIndex;
     }
 
     // @ 0x8240EAE0 -- h:314. The other of the two slots (double-buffered queue).
     u8 InGameMessagesComponent::GetNextIndex() const
     {
-        CGS_ASSERT(mpInGameMessagesQueue != 0, "mpInGameMessagesQueue != NULL");
+        CGS_ASSERT(mpInGameMessagesQueue != 0,
+            CgsDev::Assert::MessageAt(
+                "mpInGameMessagesQueue != NULL", KAC_ARTIST_ASSERT_FILE, 413 /* ARTIST 0x8240EB08 */));
         return static_cast<u8>(1 - mpInGameMessagesQueue->muCurrentMessageIndex);
     }
 
@@ -185,7 +194,9 @@ namespace
     // non-NULL; the store follows regardless.
     void InGameMessagesComponent::SwitchCurrentIndex()
     {
-        CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
+        CGS_ASSERT(mpInGameMessagesQueue != NULL,
+            CgsDev::Assert::MessageAt(
+                "mpInGameMessagesQueue != NULL", KAC_ARTIST_ASSERT_FILE, 429 /* ARTIST 0x8240EB70 */));
 
         mpInGameMessagesQueue->muCurrentMessageIndex =
             static_cast<u8>(1 - mpInGameMessagesQueue->muCurrentMessageIndex);
@@ -194,14 +205,16 @@ namespace
     // @ 0x82472BE8 -- h:216. Latch the HUD message controller pointer.
     void InGameMessagesComponent::SetController(const BrnResource::HudMessageController* lpController)
     {
-        CGS_ASSERT(lpController != 0, "lpController");
+        CGS_ASSERT(lpController != 0,
+            CgsDev::Assert::MessageAt("lpController", KAC_ARTIST_ASSERT_HEADER, 487 /* ARTIST 0x82472C14 */));
         mpMessageController = lpController;
     }
 
     // @ 0x82472C48 -- h:221. Latch the HUD message director pointer.
     void InGameMessagesComponent::SetDirector(const HudMessageDirector* lpDirector)
     {
-        CGS_ASSERT(lpDirector != 0, "lpDirector");
+        CGS_ASSERT(lpDirector != 0,
+            CgsDev::Assert::MessageAt("lpDirector", KAC_ARTIST_ASSERT_HEADER, 504 /* ARTIST 0x82472C74 */));
         mpDirector = lpDirector;
     }
 
@@ -363,7 +376,10 @@ namespace
     // the trigger frame id, unused here.
     void InGameMessagesComponent::TransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
     {
-        CGS_ASSERT(lpUserData != NULL, "lpUserData");
+        CGS_ASSERT(lpUserData != NULL,
+            CgsDev::Assert::MessageAt(
+                "lpUserData",
+                "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnInGameMessagesComponent.cpp", 789 /* ARTIST 0x82411384 */));
         static_cast<InGameMessagesComponent*>(lpUserData)->EndTransition();
     }
 

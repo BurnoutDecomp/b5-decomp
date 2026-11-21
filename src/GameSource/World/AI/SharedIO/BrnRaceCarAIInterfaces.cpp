@@ -1,4 +1,5 @@
 #include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/vector3_operation.h"   // rw::math::vpu::IsValid (SetPlayerActiveRaceCarData)
 
 // Out-of-line bodies of BrnAI::AIModuleIO::RaceCarAIInterface's 17-function TU: the
@@ -6,6 +7,9 @@
 // the player-data setter, and the per-active-car snapshot getters. All index math
 // and bit-array reads are X360-verified store-for-store against the grown layout in
 // BrnRaceCarAIInterfaces.h. Bounds asserts are non-gating tripwires per the asm.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\SharedIO/BrnRaceCarAIInterfaces.h";
 
 namespace BrnAI
 {
@@ -96,21 +100,24 @@ namespace AIModuleIO
     // @0x82764F80  The latched player-car world position.
     Vector3 RaceCarAIInterface::GetPlayerCarPosition() const
     {
-        CGS_ASSERT(mbPlayerDataSet, "mbPlayerDataSet");
+        CGS_ASSERT(mbPlayerDataSet,
+            CgsDev::Assert::MessageAt("mbPlayerDataSet", KAC_ARTIST_ASSERT_FILE, 693 /* ARTIST 0x82764FB0 */));
         return mPlayerCarPosition;
     }
 
     // @0x82764FF0  The latched player-car facing.
     Vector3 RaceCarAIInterface::GetPlayerCarDirection() const
     {
-        CGS_ASSERT(mbPlayerDataSet, "mbPlayerDataSet");
+        CGS_ASSERT(mbPlayerDataSet,
+            CgsDev::Assert::MessageAt("mbPlayerDataSet", KAC_ARTIST_ASSERT_FILE, 701 /* ARTIST 0x82765020 */));
         return mPlayerCarDirection;
     }
 
     // @0x82765060  The latched player active-race-car index.
     EActiveRaceCarIndex RaceCarAIInterface::GetPlayerActiveRaceCarIndex() const
     {
-        CGS_ASSERT(mbPlayerDataSet, "mbPlayerDataSet");
+        CGS_ASSERT(mbPlayerDataSet,
+            CgsDev::Assert::MessageAt("mbPlayerDataSet", KAC_ARTIST_ASSERT_FILE, 709 /* ARTIST 0x82765088 */));
         return mePlayerActiveRaceCarIndex;
     }
 

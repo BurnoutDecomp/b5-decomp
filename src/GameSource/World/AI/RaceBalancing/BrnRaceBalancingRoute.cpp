@@ -14,11 +14,14 @@
 
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingGraph.h" // ComputeSpeedRatio
 #include "GameSource/World/AI/Route/BrnRoute.h"                      // Route / RouteNode
-#include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                   // CGS_ASSERT
 #include "GameSource/Math/BrnMathUtils.h"                            // BrnMath::Flatten (Prepare's first segment)
 
 #include <cmath>   // sqrtf
 #include <cstddef> // offsetof
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\racebalancing\\BrnRaceBalancingRoute.h";
 
 namespace BrnAI
 {
@@ -87,11 +90,17 @@ f32 RaceBalancingRoute::ComputeRaceCompletionRatio(f32 lfDistanceToNextCheckpoin
 // of range; their messages are taken verbatim from the X360 FireAssert calls.
 f32 RaceBalancingRoute::GetTime(GraphType leGraphType, s32 liTimeIndex) const
 {
-    CGS_ASSERT(mbValid, "mbValid");
-    CGS_ASSERT(liTimeIndex >= 0, "liTimeIndex >= 0");
-    CGS_ASSERT(liTimeIndex < miTimeCount, "liTimeIndex < miTimeCount");
-    CGS_ASSERT(leGraphType >= 0, "leGraphType >= 0");
-    CGS_ASSERT(leGraphType < E_GRAPH_TYPE_COUNT, "leGraphType < E_GRAPH_TYPE_COUNT");
+    CGS_ASSERT(mbValid,
+        CgsDev::Assert::MessageAt("mbValid", KAC_ARTIST_ASSERT_FILE, 203 /* ARTIST 0x82765924 */));
+    CGS_ASSERT(liTimeIndex >= 0,
+        CgsDev::Assert::MessageAt("liTimeIndex >= 0", KAC_ARTIST_ASSERT_FILE, 204 /* ARTIST 0x82765948 */));
+    CGS_ASSERT(liTimeIndex < miTimeCount,
+        CgsDev::Assert::MessageAt("liTimeIndex < miTimeCount", KAC_ARTIST_ASSERT_FILE, 205 /* ARTIST 0x82765970 */));
+    CGS_ASSERT(leGraphType >= 0,
+        CgsDev::Assert::MessageAt("leGraphType >= 0", KAC_ARTIST_ASSERT_FILE, 206 /* ARTIST 0x82765994 */));
+    CGS_ASSERT(leGraphType < E_GRAPH_TYPE_COUNT,
+        CgsDev::Assert::MessageAt(
+            "leGraphType < E_GRAPH_TYPE_COUNT", KAC_ARTIST_ASSERT_FILE, 207 /* ARTIST 0x827659B8 */));
 
     return mafTimes[leGraphType][liTimeIndex]
            + static_cast<f32>(miTakenDownCount) * mfTakenDownTimePenalty;

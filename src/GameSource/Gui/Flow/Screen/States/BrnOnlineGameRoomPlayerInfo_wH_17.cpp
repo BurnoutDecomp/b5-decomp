@@ -27,9 +27,12 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Gui/BrnGuiCache.h"              // BrnGui::GuiCache (Clear/AppendExpectedAptComponent)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiFlow (E_GUIFLOW_SCREEN)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp";
 
 namespace BrnGui
 {
@@ -83,7 +86,8 @@ namespace BrnGui
     // menu and its button-prompt animation are the whole page.
     void OnlineGameRoomPlayerInfo::SetExpectedPauseComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:3944
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 3944 /* ARTIST 0x82485014 */));   // cpp:3944
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -97,7 +101,8 @@ namespace BrnGui
     // the route-info panel (which walks its own owned text fields).
     void OnlineGameRoomPlayerInfo::SetExpectedViewEventComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:4482
+        CGS_ASSERT(mpGuiCache != 0,
+            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 4482 /* ARTIST 0x824851DC */));   // cpp:4482
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 

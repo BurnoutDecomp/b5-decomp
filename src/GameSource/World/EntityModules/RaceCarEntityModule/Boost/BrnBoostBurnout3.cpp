@@ -56,7 +56,7 @@
 #include "types.hpp"                                                                 // f32 / s64
 #include "GameSource/GameState/BrnGameActions.h"             // BrnGameState::GameStateModuleIO::CompletedStuntAction
 #include "GameSource/Physics/VehicleManager/StuntOffences/BrnStuntOffencesManagerShared.h" // BrnPhysics::EStuntActionComplete
-#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (the X360 Begin/Fire/EndAssert triple)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"           // CGS_ASSERT (the X360 Begin/Fire/EndAssert triple)
 
 // ============================================================================
 // FOLDED FROM BoostBurnout3_wP_01.cpp (wave P) on 2026-09-15 by tools/work/fold_partfiles.py.
@@ -1724,7 +1724,11 @@ namespace BrnWorld
 // ---------------------------------------------------------------------------
 void BoostBurnout3::UpdateStuntBoost(const BrnGameState::GameStateModuleIO::CompletedStuntAction* lpCompletedStuntAction)
 {
-    CGS_ASSERT(lpCompletedStuntAction != 0, "lpCompletedStuntAction != NULL");
+    CGS_ASSERT(lpCompletedStuntAction != 0,
+        CgsDev::Assert::MessageAt(
+            "lpCompletedStuntAction != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout3.cpp", 330 /* ARTIST 0x822A6734 */));
 
     if( (lpCompletedStuntAction->muStuntActionComplete & BrnPhysics::E_STUNT_ACTION_COMPLETE_BARREL_ROLL) != 0 )
     {

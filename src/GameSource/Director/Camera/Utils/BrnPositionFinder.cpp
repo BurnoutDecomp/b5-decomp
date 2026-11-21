@@ -1,6 +1,6 @@
 #include "GameSource/Director/Camera/Utils/BrnPositionFinder.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                     // CGS_ASSERT
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"           // BehaviourSharedInfo (GetWorldMap)
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"             // BrnDirector::WorldMap
 
@@ -12,6 +12,9 @@
 //   PositionFinder::FindPosition @0x821F8E68
 //   PositionFinder::Update       @0x8223FCD8
 // FindPosition and Update are called by BrnDirector::Camera::BehaviourBystanderCam::Update.
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnPositionFinder.cpp";
 
 namespace BrnDirector
 {
@@ -34,7 +37,8 @@ void PositionFinder::Construct()
 void PositionFinder::FindPosition(Vector3 lTarget, Vector3 lDisplacement)
 {
     // Non-gating tripwire (cpp:75).
-    CGS_ASSERT(mbConstructed, "mbConstructed");
+    CGS_ASSERT(mbConstructed,
+        CgsDev::Assert::MessageAt("mbConstructed", KAC_ARTIST_ASSERT_FILE, 75 /* ARTIST 0x821F8EA8 */));
 
     mTarget          = lTarget;
     mDisplacement    = lDisplacement;
@@ -46,7 +50,8 @@ void PositionFinder::FindPosition(Vector3 lTarget, Vector3 lDisplacement)
 void PositionFinder::Update(const BehaviourSharedInfo& lrSharedInfo)
 {
     // Non-gating tripwire (cpp:90).
-    CGS_ASSERT(mbConstructed, "mbConstructed");
+    CGS_ASSERT(mbConstructed,
+        CgsDev::Assert::MessageAt("mbConstructed", KAC_ARTIST_ASSERT_FILE, 90 /* ARTIST 0x8223FD08 */));
 
     if (mbIsInitialised && !mbFoundPosition)
     {

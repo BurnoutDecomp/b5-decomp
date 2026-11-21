@@ -25,6 +25,7 @@
 // trick back onto the network-to-game-state queue.
 
 #include "GameSource/Network/Managers/BrnNetworkDirtyTrickManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // CgsDev::Log::gpDebugPrint (nack warning)
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"         // RegisterMessageType / GetRegisteredSendMessage
@@ -32,6 +33,9 @@
 #include "GameShared/GameClasses/Network/Time/CgsTimeManager.h"              // GetU16FrameCount
 #include "GameSource/Network/BrnNetworkModule.h"                              // mapping lookups, IO interfaces
 #include "GameSource/Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h" // DirtyTrickQueue
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkDirtyTrickManager.cpp";
 
 namespace BrnNetwork
 {
@@ -103,20 +107,23 @@ namespace BrnNetwork
     // Relay this frame's dirty-trick events from the game to every peer.
     void NetworkDirtyTrickManager::ProcessAfterSimulation(const BrnNetworkModuleIO::PostSimulationInputBuffer* /*lpInputBuffer*/)
     {
-        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule,
+            CgsDev::Assert::MessageAt("mpNetworkModule", KAC_ARTIST_ASSERT_FILE, 163 /* ARTIST 0x8255BA90 */));
         ProcessDirtyTrickEvents();
     }
 
     // Claim a free slot for the joining peer and register its send/recv messages with it.
     void NetworkDirtyTrickManager::AddPlayer(NetworkPlayerID lNetworkPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager,
+            CgsDev::Assert::MessageAt("mpPlayerManager", KAC_ARTIST_ASSERT_FILE, 293 /* ARTIST 0x82560BA8 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lNetworkPlayerID);
         if (lpNetworkPlayer != 0)
         {
             DirtyTrickData* lpDataEntry = GetDirtyTrickDataEntry(-1);
-            CGS_ASSERT(lpDataEntry, "lpDataEntry");
+            CGS_ASSERT(lpDataEntry,
+                CgsDev::Assert::MessageAt("lpDataEntry", KAC_ARTIST_ASSERT_FILE, 300 /* ARTIST 0x82560BF4 */));
 
             lpNetworkPlayer->RegisterMessageType(KI_DIRTY_TRICK_MESSAGE_TYPE,
                                                  sizeof(DirtyTrickMessage),
@@ -132,7 +139,8 @@ namespace BrnNetwork
     // Unregister the leaving peer's messages and free its slot.
     void NetworkDirtyTrickManager::RemovePlayer(NetworkPlayerID lNetworkPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager,
+            CgsDev::Assert::MessageAt("mpPlayerManager", KAC_ARTIST_ASSERT_FILE, 330 /* ARTIST 0x825536C8 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lNetworkPlayerID);
         if (lpNetworkPlayer != 0)
@@ -227,10 +235,12 @@ namespace BrnNetwork
                                                                      NetworkPlayerID lNetworkPlayerID, void* lpContext)
     {
         NetworkDirtyTrickManager* lpDirtyTrickManager = static_cast<NetworkDirtyTrickManager*>(lpContext);
-        CGS_ASSERT(lpDirtyTrickManager, "lpDirtyTrickManager");
+        CGS_ASSERT(lpDirtyTrickManager,
+            CgsDev::Assert::MessageAt("lpDirtyTrickManager", KAC_ARTIST_ASSERT_FILE, 465 /* ARTIST 0x8255BBE8 */));
 
         DirtyTrickMessage* lpDirtyTrickMessage = static_cast<DirtyTrickMessage*>(lpMessage);
-        CGS_ASSERT(lpDirtyTrickMessage, "lpDirtyTrickMessage");
+        CGS_ASSERT(lpDirtyTrickMessage,
+            CgsDev::Assert::MessageAt("lpDirtyTrickMessage", KAC_ARTIST_ASSERT_FILE, 466 /* ARTIST 0x8255BC0C */));
 
         lpDirtyTrickManager->ReceiveDirtyTrickMessage(lNetworkPlayerID, lpDirtyTrickMessage);
     }

@@ -9,7 +9,7 @@
 #include "GameSource/Director/Arbitrator/States/BrnArbStateTestbed.h"
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                           // CgsCore::SnPrintf
 #include "GameSource/AttribSys/Generated/classes/aftertouchcam.h"                 // Attrib::Gen::aftertouchcam
 #include "GameSource/AttribSys/Generated/classes/iceanim.h"                       // Attrib::Gen::iceanim
@@ -37,6 +37,9 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.h"  // DebugComponent::RegisterFunction
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h"      // DebugPrinter::Print
 #include "SDKs/Packages/ICE/ICEData.hpp"                                          // ICE::ICETakeData::GetName
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp";
 
 namespace BrnDirector
 {
@@ -407,8 +410,10 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     void ArbStateTestbed::RegisterParameters()
     {
-        CGS_ASSERT(mpParameters, "mpParameters");
-        CGS_ASSERT(spDebugComponent, "spDebugComponent");
+        CGS_ASSERT(mpParameters,
+            CgsDev::Assert::MessageAt("mpParameters", KAC_ARTIST_ASSERT_FILE, 344 /* ARTIST 0x82263F34 */));
+        CGS_ASSERT(spDebugComponent,
+            CgsDev::Assert::MessageAt("spDebugComponent", KAC_ARTIST_ASSERT_FILE, 345 /* ARTIST 0x82263F60 */));
 
         Camera::DebugMenuSerialiser lSerialiser;
         lSerialiser.Construct(spDebugComponent, Camera::DebugMenuSerialiser::E_MODE_ADD_TO_MENU);
@@ -419,7 +424,8 @@ namespace BrnDirector
     {
         if (mpParameters != 0)
         {
-            CGS_ASSERT(spDebugComponent, "spDebugComponent");
+            CGS_ASSERT(spDebugComponent,
+                CgsDev::Assert::MessageAt("spDebugComponent", KAC_ARTIST_ASSERT_FILE, 362 /* ARTIST 0x82263FE4 */));
 
             Camera::DebugMenuSerialiser lSerialiser;
             lSerialiser.Construct(spDebugComponent, Camera::DebugMenuSerialiser::E_MODE_REMOVE_FROM_MENU);
@@ -433,7 +439,8 @@ namespace BrnDirector
     // ------------------------------------------------------------------------
     void ArbStateTestbed::Deactivate(void* /*lpUnused*/)
     {
-        CGS_ASSERT(spTestbed != NULL, "spTestbed != NULL");
+        CGS_ASSERT(spTestbed != NULL,
+            CgsDev::Assert::MessageAt("spTestbed != NULL", KAC_ARTIST_ASSERT_FILE, 318 /* ARTIST 0x821F6200 */));
         spTestbed->meState = E_STATE_RELEASING;
     }
 

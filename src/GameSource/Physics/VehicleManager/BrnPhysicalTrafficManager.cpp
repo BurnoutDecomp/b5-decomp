@@ -11,7 +11,7 @@
 
 #include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/VehiclePhysics.h"  // VehiclePhysics::AddAirRam / GetTransform / SetCrashing (full-physics body)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // CreatePhysicalTrafficEvent (real layout) + ETrafficType
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"  // Deformation::StreamedDeformationSpec::GetBoundingBox + CgsGeometric::AxisAlignedBox
@@ -32,6 +32,9 @@
 #include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG witness below)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h" // VehicleManagerOutputInterface + the fine queue
 #include "GameSource/Physics/BrnPhysicsModuleIO_PotentialContactInterface.h"     // PotentialContactInterface::AddEvent + the custom-queue ids (AddArticulatedJointContacts)
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\BrnPhysicalTrafficManager.h";
 
 namespace BrnPhysics
 {
@@ -198,8 +201,12 @@ void PhysicalTrafficManager::AllocateInternalBuffers(CgsModule::IOBufferStack* l
 void PhysicalTrafficManager::BridgeArticulatedJointRequestsToSim(
         VehicleOutputRequestInterface* lpOutputRequestInterface)
 {
-    CGS_ASSERT(lpOutputRequestInterface != 0, "lpOutputRequestInterface != NULL");
-    CGS_ASSERT(mpArticulatedJointCreateBuffer != 0, "mpArticulatedJointCreateBuffer != NULL");
+    CGS_ASSERT(lpOutputRequestInterface != 0,
+        CgsDev::Assert::MessageAt(
+            "lpOutputRequestInterface != NULL", KAC_ARTIST_ASSERT_FILE, 880 /* ARTIST 0x82615B3C */));
+    CGS_ASSERT(mpArticulatedJointCreateBuffer != 0,
+        CgsDev::Assert::MessageAt(
+            "mpArticulatedJointCreateBuffer != NULL", KAC_ARTIST_ASSERT_FILE, 881 /* ARTIST 0x82615B6C */));
 
     mArticulatedJointPool.SendCreateRemoveJointEvents(lpOutputRequestInterface,
                                                       mpArticulatedJointCreateBuffer);
@@ -564,7 +571,10 @@ bool PhysicalTrafficVehicle::HasNonBrokenJoint() const
 //   '!HasBeenChecked()'; store the owner byte.
 void PhysicalTrafficVehicle::SetCheckOwner(EActiveRaceCarIndex leCheckOwner)
 {
-    CGS_ASSERT(!HasBeenChecked(), "!HasBeenChecked()");
+    CGS_ASSERT(!HasBeenChecked(),
+        CgsDev::Assert::MessageAt(
+            "!HasBeenChecked()",
+            "..\\..\\..\\GameSource\\Physics/VehicleManager/BrnPhysicalTrafficVehicle.h", 458 /* ARTIST 0x825C01E8 */));
     miCheckOwner = static_cast<s8>(leCheckOwner);
 }
 
@@ -1014,7 +1024,11 @@ bool PhysicalTrafficManager::ValidateTrafficContact(
 bool PhysicalTrafficManager::PrepareTriangleCache(
     CgsSceneManager::SceneManagerIO::InputBuffer_Update* lpSceneInputBuffer_Update)
 {
-    CGS_ASSERT(lpSceneInputBuffer_Update != NULL, "lpSceneInputBuffer_Update != NULL");   // :244
+    CGS_ASSERT(lpSceneInputBuffer_Update != NULL,
+        CgsDev::Assert::MessageAt(
+            "lpSceneInputBuffer_Update != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Physics/VehicleManager/BrnPhysicalTrafficManager.cpp", 244 /* ARTIST 0x825EE5C8 */));   // :244
 
     CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneUpdate =
         lpSceneInputBuffer_Update->GetInSceneUpdateInterface();

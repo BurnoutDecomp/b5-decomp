@@ -10,6 +10,7 @@
 // then returns the address of its embedded member.
 
 #include "GameSource/Network/BrnNetworkModule.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                         // CgsDev::PerfMonCpu::AddMonitor
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"            // CgsDev::DebugInterface (the two update-message toggles)
@@ -22,6 +23,9 @@
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h"                                 // AllocatorList::GetHeapAllocator
 #include "GameSource/Resource/BrnResourceAllocator.h"                                              // PrintConsoleMemory, GetAvailableMemory, BRN_RESOURCE_MEMORY_CHECK
 #include <cstddef>       // offsetof
+
+static const char KAC_ARTIST_ASSERT_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp";
 
 namespace BrnNetwork
 {
@@ -245,14 +249,19 @@ namespace BrnNetwork
     // Records, in registry order, every player the games component reports as in the game.
     void BrnNetworkModule::CacheNetworkPlayerIDsAtGameStart()
     {
-        CGS_ASSERT(mNetworkManager.GetServerInterface(), "mNetworkManager.GetServerInterface()");
+        CGS_ASSERT(mNetworkManager.GetServerInterface(),
+            CgsDev::Assert::MessageAt(
+                "mNetworkManager.GetServerInterface()", KAC_ARTIST_ASSERT_FILE, 515 /* ARTIST 0x82581A70 */));
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = mNetworkManager.GetServerInterface()->GetGameComponent();
         CgsNetwork::PlayerManager*        lpPlayerManager        = mNetworkManager.GetPlayerManager();
         NetworkPlayerID                   lPlayerID              = CgsNetwork::KI_INVALID_PLAYER_ID;
 
-        CGS_ASSERT(lpServerInterfaceGames, "lpServerInterfaceGames");
-        CGS_ASSERT(lpPlayerManager,        "lpPlayerManager");
+        CGS_ASSERT(lpServerInterfaceGames,
+            CgsDev::Assert::MessageAt(
+                "lpServerInterfaceGames", KAC_ARTIST_ASSERT_FILE, 521 /* ARTIST 0x82581AA4 */));
+        CGS_ASSERT(lpPlayerManager,
+            CgsDev::Assert::MessageAt("lpPlayerManager", KAC_ARTIST_ASSERT_FILE, 522 /* ARTIST 0x82581AC8 */));
 
         miCachedPlayersInGame = 0;
         while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))

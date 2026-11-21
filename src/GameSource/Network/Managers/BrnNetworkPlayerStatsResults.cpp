@@ -22,7 +22,7 @@
 #include "GameSource/Network/Debug Components/BrnNetworkStatsDebugComponent.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceGames.h"
 #include "GameSource/Network/Managers/BrnNetworkPlayerStats.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // ::LobbyNameCmp (the vendor name compare)
 
 namespace BrnNetwork
@@ -41,7 +41,10 @@ namespace BrnNetwork
 
         // Full: evict the oldest (smallest-timestamp) record whose player is no
         // longer in the game.
-        CGS_ASSERT(miCacheSize > 0, "miCacheSize > 0");
+        CGS_ASSERT(miCacheSize > 0,
+            CgsDev::Assert::MessageAt(
+                "miCacheSize > 0",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsResults.cpp", 237 /* ARTIST 0x82552D44 */));
 
         Time lSmallestTime  = maPlayerStatsCache[0].GetTimeStamp();
         s32  liSmallestIndex = 0;
