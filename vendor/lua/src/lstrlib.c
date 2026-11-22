@@ -1,5 +1,5 @@
 /*
-** $Id: lstrlib.c,v 1.132 2006/04/26 20:41:19 roberto Exp $
+** $Id: lstrlib.c,v 1.130 2005/12/29 15:32:11 roberto Exp $
 ** Standard library for string operations and pattern-matching
 ** See Copyright Notice in lua.h
 */
@@ -703,10 +703,6 @@ static void addquoted (lua_State *L, luaL_Buffer *b, int arg) {
         luaL_addchar(b, *s);
         break;
       }
-      case '\r': {
-        luaL_addlstring(b, "\\r", 2);
-        break;
-      }
       case '\0': {
         luaL_addlstring(b, "\\000", 4);
         break;
@@ -809,8 +805,7 @@ static int str_format (lua_State *L) {
           }
         }
         default: {  /* also treat cases `pnLlh' */
-          return luaL_error(L, "invalid option " LUA_QL("%%%c") " to "
-                               LUA_QL("format"), *(strfrmt - 1));
+          return luaL_error(L, "invalid option to " LUA_QL("format"));
         }
       }
       luaL_addlstring(&b, buff, strlen(buff));

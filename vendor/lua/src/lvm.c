@@ -1,5 +1,5 @@
 /*
-** $Id: lvm.c,v 2.63 2006/06/05 15:58:59 roberto Exp $
+** $Id: lvm.c,v 2.62 2006/01/23 19:51:43 roberto Exp $
 ** Lua virtual machine
 ** See Copyright Notice in lua.h
 */
@@ -127,7 +127,7 @@ void luaV_gettable (lua_State *L, const TValue *t, TValue *key, StkId val) {
       callTMres(L, val, tm, t, key);
       return;
     }
-    t = tm;  /* else repeat with `tm' */ 
+    t = tm;  /* else repeat with `tm' */
   }
   luaG_runerror(L, "loop in gettable");
 }
@@ -376,7 +376,6 @@ void luaV_execute (lua_State *L, int nexeccalls) {
   TValue *k;
   const Instruction *pc;
  reentry:  /* entry point */
-  lua_assert(isLua(L->ci));
   pc = L->savedpc;
   cl = &clvalue(L->ci->func)->l;
   base = L->base;
