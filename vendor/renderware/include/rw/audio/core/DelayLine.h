@@ -77,22 +77,9 @@ public:
     };
 
     // ----------------------------------------------------------------------------------
-    // The per-tap context ApplyFilter builds and hands to the installed IFilter apply func
-    // (the `a5` struct, 6 consecutive words on X360). ApplyFilter fills mpBase/mpOut/mpRamp
-    // per channel; MarshalDelayData fills mpTap/mpTap2/mpLoadedEnd; the whole struct is
-    // pointer-advanced by the chunk size between the two apply calls. A non-null mpTap2
-    // doubles as the filter's crossfade-active flag (the DelayFilter apply tests this word
-    // as a nonzero flag; see DelayFilter.h's DelayFilterContext).
+    // The per-tap record built for the installed IFilter callback.
     // ----------------------------------------------------------------------------------
-    struct TapContext
-    {
-        f32 *mpBase;      // +0x00 -- delayed-input read base for the channel
-        f32 *mpTap;       // +0x04 -- primary marshalled tap output (taps[0].mpOut)
-        f32 *mpTap2;      // +0x08 -- secondary tap output / crossfade flag (taps[1].mpOut or 0)
-        f32 *mpRamp;      // +0x0C -- crossfade coefficient ramp pointer (or 0)
-        f32 *mpLoadedEnd; // +0x10 -- end of loaded tap data (LoadTaps return)
-        f32 *mpOut;       // +0x14 -- output write base for the channel
-    };
+    typedef IFilter::LocationParams TapContext;
 
     DelayLine();                                                    // @0x82B67EE8
     ~DelayLine();                                                   // @0x82B6E498 (-> Release)
@@ -124,9 +111,9 @@ public:
     // buffer, run the installed filter over them (crossfading through the coefficient ramp
     // on the frame after a filter change), unmarshal the result back into the ring, and
     // advance the ring cursors by one frame. `pInput`/`pOutput` are the graph's per-channel
-    // sample descriptors; `src` is the pass-through argument handed to the filter apply.
+    // sample descriptors. The mode controls whether the filter adds to the output.
     void ApplyFilter(s32 count, const AudioChannelBuffer *pInput,
-                     const AudioChannelBuffer *pOutput, s32 src);  // @0x82B6E4A0
+                     const AudioChannelBuffer *pOutput, IFilter::FilterOutputMode mode); // @0x82B6E4A0
 
     // Free the ring back to the System allocator and clear the book-keeping pointers.
     void Release();                                                // @0x82B6CC08

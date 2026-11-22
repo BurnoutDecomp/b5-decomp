@@ -315,9 +315,9 @@ void DelayLine::IncrementalClean(s32 count, s32 offset, TapContext *pCtx) const
     if (n < 0)
         n = 0;
     for (s32 k = 0; k < n; ++k)
-        pCtx->mpTap[k] = KF_ZERO;
+        pCtx->pDelayFull[k] = KF_ZERO;
 
-    if (pCtx->mpTap2)
+    if (pCtx->pDelayCross)
     {
         const s32 base = miReadLength;                                     // +0x10
         s32 m = miFilterReadPosition - offset - miCleanCursor;             // +0x2C - offset - +0x24
@@ -329,7 +329,7 @@ void DelayLine::IncrementalClean(s32 count, s32 offset, TapContext *pCtx) const
         if (m < 0)
             m = 0;
         for (s32 k = 0; k < m; ++k)
-            pCtx->mpTap2[k] = KF_ZERO;
+            pCtx->pDelayCross[k] = KF_ZERO;
     }
 }
 
@@ -363,9 +363,9 @@ s32 DelayLine::MarshalDelayData(s32 channel, s32 count, s32 offset, TapContext *
     }
 
     f32 *const pLoadedEnd = LoadTaps(&ptrs, taps, tapCount);
-    pCtx->mpTap = taps[0].mpOut;      // a5[1]
-    pCtx->mpLoadedEnd = pLoadedEnd;   // a5[4]
-    pCtx->mpTap2 = mbFilterChanged ? taps[1].mpOut : 0; // a5[2]
+    pCtx->pDelayFull = taps[0].mpOut;      // a5[1]
+    pCtx->pDelayZero = pLoadedEnd;   // a5[4]
+    pCtx->pDelayCross = mbFilterChanged ? taps[1].mpOut : 0; // a5[2]
 
     IncrementalClean(count, offset, pCtx);
     return count;
@@ -379,7 +379,7 @@ void DelayLine::UnmarshalDelayData(s32 channel, s32 count, TapContext *pCtx)
 {
     ChannelPointers ptrs;
     CalcChannelPointers(&ptrs, channel, 0);
-    WriteData(&ptrs, pCtx->mpLoadedEnd - count, 0, count);
+    WriteData(&ptrs, pCtx->pDelayZero - count, 0, count);
 }
 
 // -------------------------------------------------------------------------------------
@@ -390,7 +390,7 @@ void DelayLine::UnmarshalDelayData(s32 channel, s32 count, TapContext *pCtx)
 // channel the ring cursors advance one frame and the filter-changed flag clears.
 // -------------------------------------------------------------------------------------
 void DelayLine::ApplyFilter(s32 count, const AudioChannelBuffer *pInput,
-                            const AudioChannelBuffer *pOutput, s32 src)
+                            const AudioChannelBuffer *pOutput, IFilter::FilterOutputMode mode)
 {
     // Descending crossfade coefficients 127/128 .. 0 (only built when a filter change is
     // pending; ApplyFilter re-tests the flag per channel below).
@@ -410,14 +410,14 @@ void DelayLine::ApplyFilter(s32 count, const AudioChannelBuffer *pInput,
         s32 rampRemaining = 0;
 
         TapContext ctx;
-        ctx.mpBase = pInput->mpSamples + static_cast<usize>(pInput->muStride) * channel;
-        ctx.mpOut = pOutput->mpSamples + static_cast<usize>(pOutput->muStride) * channel;
-        ctx.mpTap2 = 0;
-        ctx.mpRamp = 0;
+        ctx.pInput = pInput->mpSamples + static_cast<usize>(pInput->muStride) * channel;
+        ctx.pOutput = pOutput->mpSamples + static_cast<usize>(pOutput->muStride) * channel;
+        ctx.pDelayCross = 0;
+        ctx.pCrossFadeCoeff = 0;
         if (mbFilterChanged)
         {
             rampRemaining = KI_RAMP_LEN;
-            ctx.mpRamp = ramp;
+            ctx.pCrossFadeCoeff = ramp;
         }
 
         for (s32 i = 0; i < count; UnmarshalDelayData(channel, i, &ctx))
@@ -431,33 +431,33 @@ void DelayLine::ApplyFilter(s32 count, const AudioChannelBuffer *pInput,
                 if (rampRemaining >= total)
                     chunk = total;
 
-                ctx.mpRamp = ramp + (KI_RAMP_LEN - rampRemaining);
-                mpFilter->mpApplyFunc(mpFilter, chunk, src, channel, &ctx);
+                ctx.pCrossFadeCoeff = ramp + (KI_RAMP_LEN - rampRemaining);
+                mpFilter->mpApplyFunc(mpFilter, chunk, mode, channel, &ctx);
 
                 i += chunk;
                 rampRemaining -= chunk;
-                ctx.mpBase += chunk;
-                ctx.mpTap += chunk;
-                ctx.mpTap2 += chunk;
-                ctx.mpRamp += chunk;
-                ctx.mpLoadedEnd += chunk;
-                ctx.mpOut += chunk;
+                ctx.pInput += chunk;
+                ctx.pDelayFull += chunk;
+                ctx.pDelayCross += chunk;
+                ctx.pCrossFadeCoeff += chunk;
+                ctx.pDelayZero += chunk;
+                ctx.pOutput += chunk;
                 remainder = total - chunk;
             }
 
             if (remainder)
             {
-                ctx.mpTap2 = 0;
-                ctx.mpRamp = 0;
-                mpFilter->mpApplyFunc(mpFilter, remainder, src, channel, &ctx);
+                ctx.pDelayCross = 0;
+                ctx.pCrossFadeCoeff = 0;
+                mpFilter->mpApplyFunc(mpFilter, remainder, mode, channel, &ctx);
 
                 i += remainder;
-                ctx.mpBase += remainder;
-                ctx.mpTap += remainder;
-                ctx.mpTap2 += remainder;
-                ctx.mpRamp += remainder;
-                ctx.mpLoadedEnd += remainder;
-                ctx.mpOut += remainder;
+                ctx.pInput += remainder;
+                ctx.pDelayFull += remainder;
+                ctx.pDelayCross += remainder;
+                ctx.pCrossFadeCoeff += remainder;
+                ctx.pDelayZero += remainder;
+                ctx.pOutput += remainder;
             }
         }
     }

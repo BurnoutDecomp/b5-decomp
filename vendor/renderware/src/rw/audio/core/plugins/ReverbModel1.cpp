@@ -777,12 +777,11 @@ void ReverbModel1::UpdateLatencyAndDecay(ReverbModel1 *self)
 // RwacTimerClient @0x82BA5720 -- the per-frame timer callback. While the reverb is active it
 // reconfigures the network whenever a cached attribute (reverb time / room / damping) or the
 // sample rate diverges from the applied snapshot; on the frame the reverb time drops to zero
-// it flushes every comb / all-pass delay line and clears the comb loop state (a clean tail-
-// out). (Registered via a function-pointer cast; its return value is discarded by the
-// scheduler, so ConfigureModel's status is forwarded only when it runs.)
+// it flushes every comb / all-pass delay line and clears the comb loop state.
 // -------------------------------------------------------------------------------------
-int ReverbModel1::RwacTimerClient(ReverbModel1 *self)
+void ReverbModel1::RwacTimerClient(void *context, f32)
 {
+    ReverbModel1 *self = static_cast<ReverbModel1 *>(context);
     if (self->mfDecayTime > 0.0f)
     {
         if (self->mfDecayTime != self->mfLastDecayTime
@@ -790,7 +789,7 @@ int ReverbModel1::RwacTimerClient(ReverbModel1 *self)
             || self->mfDamping != self->mfLastDamping
             || self->mfLastSampleRate != KF_INTERNAL_RATE)
         {
-            return ConfigureModel(self, reinterpret_cast<System *>(self->mBase.mpSystem));
+            ConfigureModel(self, reinterpret_cast<System *>(self->mBase.mpSystem));
         }
     }
     else if (self->mfLastDecayTime > 0.0f)
@@ -803,16 +802,14 @@ int ReverbModel1::RwacTimerClient(ReverbModel1 *self)
         for (int i = 0; i < self->mbAllPassCount; ++i)
             self->mAllPassDelay[i].Reset(self->miAllPassDelaySamples[i]);
     }
-    return 1;
 }
 
 // -------------------------------------------------------------------------------------
 // ReleaseEvent @0x82B9ADB0 -- tear the reverb down: release every comb / all-pass delay line
 // back to the allocator, and (if it was registered) remove the reconfigure timer through the
-// shared System singleton. (The X360 return is the last cleanup call's register value, which
-// callers discard.)
+// shared System singleton. The Xbox 360 audio PDB declares this hook void.
 // -------------------------------------------------------------------------------------
-int ReverbModel1::ReleaseEvent(ReverbModel1 *self)
+void ReverbModel1::ReleaseEvent(ReverbModel1 *self)
 {
     for (int i = 0; i < 6; ++i)
         self->mCombDelay[i].Release();
@@ -823,7 +820,6 @@ int ReverbModel1::ReleaseEvent(ReverbModel1 *self)
     if (self->mbTimerAdded)
         System::RemoveTimer(off_83271928, &self->mTimer);
 
-    return 0;
 }
 
 // -------------------------------------------------------------------------------------
@@ -855,37 +851,31 @@ int ReverbModel1::Process(ReverbModel1 *self, AudioProcessContext *ctx)
     f32 *pLocalBuffer = pScratchTop - KI_REVERB_SCRATCH_SAMPLES; // r21 - 0xC00 bytes
     ppScratchTable[3] = pLocalBuffer;
 
-    // Install the comb sections' dispatch funcs through the IFilter view their delay lines
-    // call (the leading two slots of each section ARE the apply/reset function pointers).
     for (int i = 0; i < 6; ++i)
     {
-        IFilter *pCombInterface = static_cast<IFilter *>(&self->mComb[i]);
-        pCombInterface->mpApplyFunc =
-            reinterpret_cast<IFilterApplyFunc>(&CombFilter::CombFilterApplyFunc); // stw @ +0x00
-        pCombInterface->mpResetFunc =
-            reinterpret_cast<IFilterResetFunc>(&CombFilter::CombFilterResetFunc); // stw @ +0x04
-        self->mCombDelay[i].SetFilter(pCombInterface);
+        CombFilter *filter = &self->mComb[i];
+        filter->mpApplyFunc = &CombFilter::CombFilterApplyFunc;
+        filter->mpResetFunc = &CombFilter::CombFilterResetFunc;
+        self->mCombDelay[i].SetFilter(filter);
         self->mCombDelay[i].SetLocalBuffer(pLocalBuffer, KI_REVERB_SCRATCH_SAMPLES);
     }
 
     // Same for the live all-pass sections (the count is re-read every iteration, as in the asm).
     for (int i = 0; i < self->mbAllPassCount; ++i)
     {
-        IFilter *pAllPassInterface = static_cast<IFilter *>(&self->mAllPass[i]);
-        pAllPassInterface->mpApplyFunc =
-            reinterpret_cast<IFilterApplyFunc>(&AllPassFilter::AllPassFilterApplyFunc);
-        pAllPassInterface->mpResetFunc =
-            reinterpret_cast<IFilterResetFunc>(&AllPassFilter::AllPassFilterResetFunc);
-        self->mAllPassDelay[i].SetFilter(pAllPassInterface);
+        AllPassFilter *filter = &self->mAllPass[i];
+        filter->mpApplyFunc = &AllPassFilter::AllPassFilterApplyFunc;
+        filter->mpResetFunc = &AllPassFilter::AllPassFilterResetFunc;
+        self->mAllPassDelay[i].SetFilter(filter);
         self->mAllPassDelay[i].SetLocalBuffer(pLocalBuffer, KI_REVERB_SCRATCH_SAMPLES);
     }
 
     if (self->mfDecayTime > KF_ZERO)
     {
-        // Comb bank: section 0 overwrites the destination, the other five accumulate (src=1).
-        self->mCombDelay[0].ApplyFilter(256, pSrc, pDst, 0);
+        // The first comb section overwrites the destination. The rest accumulate.
+        self->mCombDelay[0].ApplyFilter(256, pSrc, pDst, IFilter::OVERWRITE);
         for (int i = 1; i < 6; ++i)
-            self->mCombDelay[i].ApplyFilter(256, pSrc, pDst, 1);
+            self->mCombDelay[i].ApplyFilter(256, pSrc, pDst, IFilter::ADD);
 
         // Ping-pong the context slots: the comb output becomes the all-pass input.
         AudioChannelBuffer *pOldSrc = ctx->mpSrcBuffer; // r31
@@ -899,37 +889,37 @@ int ReverbModel1::Process(ReverbModel1 *self, AudioProcessContext *ctx)
         const u8 mode = self->mBase.mbChannelCount;
         if (mode == 1)
         {
-            self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
         }
         else if (mode == 2)
         {
-            self->mAllPassDelay[1].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            self->mAllPassDelay[1].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
             memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 1,
                    pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 1 <- channel 0
-            self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
         }
         else if (mode == 4)
         {
-            self->mAllPassDelay[1].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            self->mAllPassDelay[1].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
             memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 1,
                    pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 1 <- channel 0
             memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 3,
                    pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 3 <- channel 0
-            self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
             memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 2,
                    pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 2 <- channel 0
         }
         else
         {
-            self->mAllPassDelay[2].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            self->mAllPassDelay[2].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
             memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 2,
                    pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 2 <- channel 0
             memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 4,
                    pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 4 <- channel 0
-            self->mAllPassDelay[1].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            self->mAllPassDelay[1].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
             memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 1,
                    pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 1 <- channel 0
-            self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, 0);
+            self->mAllPassDelay[0].ApplyFilter(256, pOldDst, pOldSrc, IFilter::OVERWRITE);
             memcpy(pOldSrc->mpSamples + pOldSrc->muStride * 3,
                    pOldSrc->mpSamples, 0x400); // XMemCpy -- channel 3 <- channel 0
             memset(pOldSrc->mpSamples + pOldSrc->muStride * 5,
@@ -1008,8 +998,8 @@ int ReverbModel1::CreateInstance(ReverbModel1 *self)
     System *pSystem = reinterpret_cast<System *>(self->mBase.mpSystem);
     if (TimerManager::AddTimer(
             &pSystem->mTimerManager, &self->mTimer,
-            reinterpret_cast<TimerManager::TimerCallback>(&ReverbModel1::RwacTimerClient),
-            self, "ReverbModel1", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
+            &ReverbModel1::RwacTimerClient, self, "ReverbModel1",
+            TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
     {
         return 0;
     }

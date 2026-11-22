@@ -33,25 +33,31 @@ namespace audio
 namespace core
 {
 
-struct IFilter;
-
-// The apply / reset processing function-pointer signatures an IFilter installs. The apply
-// func processes `count` samples of channel `channel` through the per-tap context `ctx`
-// (built by the caller, e.g. DelayLine::ApplyFilter); `src` is a caller-supplied
-// pass-through argument. Grounded in the DelayLine::ApplyFilter dispatch site
-// (@0x82B6E5D0: r4=count, r5=src, r6=channel, r7=&context) and the DelayFilter apply
-// prototype (DelayFilter.h). The context is opaque at this interface (void*) so IFilter
-// stays decoupled from any one filter's context shape.
-typedef void   *(*IFilterApplyFunc)(IFilter *pSelf, s32 count, s32 src, s32 channel,
-                                    void *pContext);
-typedef IFilter *(*IFilterResetFunc)(IFilter *pSelf);
-
 struct IFilter
 {
-    IFilterApplyFunc mpApplyFunc;  // +0x00 -- per-chunk processing function
-    IFilterResetFunc mpResetFunc;  // +0x04 -- reset-state function
-    s32              miReadLength; // +0x08 -- tap read length
-    s32              miChannels;   // +0x0C -- channel count
+    enum FilterOutputMode
+    {
+        OVERWRITE = 0,
+        ADD = 1
+    };
+
+    // The audio PDB declares this record. ARTIST passes its address in r7
+    // at the DelayLine dispatch at 0x82B6E5D0.
+    struct LocationParams
+    {
+        f32 *pInput;
+        f32 *pDelayFull;
+        f32 *pDelayCross;
+        f32 *pCrossFadeCoeff;
+        f32 *pDelayZero;
+        f32 *pOutput;
+    };
+
+    void (*mpApplyFunc)(IFilter *filter, s32 count, FilterOutputMode mode,
+                        s32 channel, LocationParams *locations);
+    void (*mpResetFunc)(IFilter *filter);
+    s32 miReadLength; // +0x08 on X360
+    s32 miChannels;   // +0x0C on X360
 };
 
 } // namespace core

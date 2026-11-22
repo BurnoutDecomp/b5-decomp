@@ -8,30 +8,26 @@
 // on PC; four console-width integers overlap the gains when dispatch is installed.
 namespace rw { namespace audio { namespace core {
 void AllPassFilterFunc(s32 count, f32 g1, f32 g2, f32* base, f32* work,
-                       f32* feedforwardA, f32* feedforwardB, s32 lowPass);
+                       f32* feedforwardA, f32* feedforwardB, IFilter::FilterOutputMode mode);
 f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 state,
-                   f32* base, f32* work, f32* accum, f32* feedforward, s32 lowPass);
+                   f32* base, f32* work, f32* accum, f32* feedforward, IFilter::FilterOutputMode mode);
 class AllPassFilter : public IFilter
 {
 public:
-    // ApplyFilter passes this exact six-pointer record. ARTIST +8/+0xC
-    // are the crossfade tap/ramp POINTERS, not two integer flags.
-    typedef DelayLine::TapContext Context;
     static AllPassFilter* AllPassFilter_ctor(AllPassFilter* self);
-    static void* AllPassFilterApplyFunc(AllPassFilter* self, s32 count, s32 src,
-                                        s32 channel, Context* ctx);
-    static AllPassFilter* AllPassFilterResetFunc(AllPassFilter* self);
+    static void AllPassFilterApplyFunc(IFilter* filter, s32 count, FilterOutputMode mode,
+                                      s32 channel, LocationParams* ctx);
+    static void AllPassFilterResetFunc(IFilter* filter);
     static AllPassFilter* SetGains(AllPassFilter* self, f32 g1, f32 g2);
     f32 mfGain1, mfGain2;
 };
 class CombFilter : public IFilter
 {
 public:
-    typedef DelayLine::TapContext Context;
     static CombFilter* CombFilter_ctor(CombFilter* self);
-    static void* CombFilterApplyFunc(CombFilter* self, s32 count, s32 src,
-                                     s32 channel, Context* ctx);
-    static CombFilter* CombFilterResetFunc(CombFilter* self);
+    static void CombFilterApplyFunc(IFilter* filter, s32 count, FilterOutputMode mode,
+                                   s32 channel, LocationParams* ctx);
+    static void CombFilterResetFunc(IFilter* filter);
     static CombFilter* SetGains(CombFilter* self, f32 g1, f32 g2, f32 g3, f32 g4);
     f32 mfGain1, mfGain2, mfGain3, mfGain4, mfState;
 };

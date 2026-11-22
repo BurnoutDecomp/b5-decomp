@@ -98,8 +98,8 @@ public:
     static int  CalculateG2Values(ReverbModel1 *self, f32 *pCombG2);        // @0x82B9B1F8
     static int  ConfigureModel(ReverbModel1 *self, System *pSystem);        // @0x82BA3A10
     static void UpdateLatencyAndDecay(ReverbModel1 *self);                  // @0x82B9F6A8
-    static int  RwacTimerClient(ReverbModel1 *self);                        // @0x82BA5720
-    static int  ReleaseEvent(ReverbModel1 *self);                          // @0x82B9ADB0
+    static void RwacTimerClient(void *context, f32 time);                  // @0x82BA5720
+    static void ReleaseEvent(ReverbModel1 *self);                         // @0x82B9ADB0
     static int  Process(ReverbModel1 *self, AudioProcessContext *ctx);     // @0x82B9F7D0
 
     // ---- layout (X360 offsets documentary; access by name/element) ----

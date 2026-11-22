@@ -35,52 +35,49 @@ static const f32 KF_FEEDBACK_CLAMP = 0.99000001f;
 DelayFilter *DelayFilter::DelayFilter_ctor(DelayFilter *self)
 {
     self->mfFeedback = KF_ZERO;     // stfs flt @ +0x10
-    self->miField00 = 0;            // stw r11 (0) @ +0x00
+    self->mpApplyFunc = 0;          // stw r11 (0) @ +0x00
     self->mfPrevFeedback = KF_ZERO; // stfs flt @ +0x14
-    self->miField04 = 0;            // stw r11 (0) @ +0x04
-    self->miField0C = 0;            // stw r11 (0) @ +0x0C
-    self->miMode = 1;               // stw r10 (1) @ +0x08
+    self->mpResetFunc = 0;          // stw r11 (0) @ +0x04
+    self->miChannels = 0;           // stw r11 (0) @ +0x0C
+    self->miReadLength = 1;         // stw r10 (1) @ +0x08
     return self;
 }
 
 // -------------------------------------------------------------------------------------
 // DelayFilter::DelayFilterApplyFunc @0x82B67DD0
 //
-// When a feedback change is in flight (ctx->mpCrossfadeSource != 0) it hands off to the
+// When a feedback change is in flight (ctx->pDelayCross != 0) it hands off to the
 // crossfade recurrence. Otherwise it runs the delay loop over `count` samples: the
 // delayed input (mpBase) mixed with the fed-back "work" stream (mpFeedback) scaled by the
 // current feedback gain lands in the accumulate buffer, and the raw work sample is copied
 // forward into the delay-write buffer.
-//   ctx->mpAccum[n]       = ctx->mpFeedback[n] * self->mfFeedback + ctx->mpBase[n];
-//   ctx->mpFeedforward[n] = ctx->mpFeedback[n];
-// (r3=self, r4=count, r7=ctx; src/extra are dead register params the body never reads.)
+// ARTIST uses r3 for the filter, r4 for the count and r7 for the locations.
 // -------------------------------------------------------------------------------------
-void *DelayFilter::DelayFilterApplyFunc(DelayFilter *self, s32 count, s32 src,
-                                        f32 *extra, Context *ctx)
+void DelayFilter::DelayFilterApplyFunc(IFilter *filter, s32 count, FilterOutputMode,
+                                       s32, LocationParams *ctx)
 {
-    (void)src;
-    (void)extra;
-
-    if (ctx->mpCrossfadeSource)
-        return reinterpret_cast<void *>(DelayFilterCrossFadeFunc(count, self->mfFeedback, self->mfPrevFeedback,
-                                        ctx->mpBase, ctx->mpFeedback, ctx->mpCrossfadeSource,
-                                        ctx->mpCrossfadeWeight, ctx->mpAccum, ctx->mpFeedforward));
+    DelayFilter *self = static_cast<DelayFilter *>(filter);
+    if (ctx->pDelayCross)
+    {
+        DelayFilterCrossFadeFunc(count, self->mfFeedback, self->mfPrevFeedback,
+                                 ctx->pInput, ctx->pDelayFull, ctx->pDelayCross,
+                                 ctx->pCrossFadeCoeff, ctx->pDelayZero, ctx->pOutput);
+        return;
+    }
 
     const f32 feedback = self->mfFeedback;
     for (s32 n = 0; n < count; ++n)
     {
-        f32 work = ctx->mpFeedback[n];
-        ctx->mpAccum[n] = (work * feedback) + ctx->mpBase[n]; // fmadds
-        ctx->mpFeedforward[n] = static_cast<volatile f32 *>(ctx->mpFeedback)[n]; // re-read after store
+        ctx->pDelayZero[n] = (ctx->pDelayFull[n] * feedback) + ctx->pInput[n];
+        ctx->pOutput[n] = ctx->pDelayFull[n];
     }
-    return self;
 }
 
 // ARTIST 82B67D40: each output is computed separately, with source streams
 // re-read after the accumulation store (the buffers may alias).
-s32 DelayFilterCrossFadeFunc(s32 count, f32 feedback, f32 prevFeedback,
-                            f32 *base, f32 *primary, f32 *secondary,
-                            f32 *weight, f32 *accum, f32 *feedforward)
+void DelayFilterCrossFadeFunc(s32 count, f32 feedback, f32 prevFeedback,
+                             f32 *base, f32 *primary, f32 *secondary,
+                             f32 *weight, f32 *accum, f32 *feedforward)
 {
     for (s32 i = 0; i < count; ++i)
     {
@@ -97,17 +94,16 @@ s32 DelayFilterCrossFadeFunc(s32 count, f32 feedback, f32 prevFeedback,
         volatile f32 oldAgain = secondary[i] * blendAgain;
         feedforward[i] = inverseAgain * primary[i] + oldAgain;
     }
-    return count;
 }
 
 // -------------------------------------------------------------------------------------
 // DelayFilter::DelayFilterResetFunc @0x82B67E88 -- clear both feedback gain snapshots.
 // -------------------------------------------------------------------------------------
-DelayFilter *DelayFilter::DelayFilterResetFunc(DelayFilter *self)
+void DelayFilter::DelayFilterResetFunc(IFilter *filter)
 {
+    DelayFilter *self = static_cast<DelayFilter *>(filter);
     self->mfFeedback = KF_ZERO;     // stfs flt @ +0x10
     self->mfPrevFeedback = KF_ZERO; // stfs flt @ +0x14
-    return self;
 }
 
 // -------------------------------------------------------------------------------------

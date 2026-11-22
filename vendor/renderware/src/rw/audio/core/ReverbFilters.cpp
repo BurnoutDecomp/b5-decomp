@@ -73,7 +73,7 @@ AllPassFilter *AllPassFilter::AllPassFilter_ctor(AllPassFilter *self)
 // (fmadds onto the prior value) -- exactly the asm's loc_82B645D4 vs fall-through split.
 // -------------------------------------------------------------------------------------
 void AllPassFilterFunc(s32 count, f32 g1, f32 g2, f32 *base, f32 *work,
-                       f32 *feedforwardA, f32 *feedforwardB, s32 lowPass)
+                       f32 *feedforwardA, f32 *feedforwardB, IFilter::FilterOutputMode mode)
 {
     for (s32 n = 0; n < count; ++n)
     {
@@ -85,33 +85,26 @@ void AllPassFilterFunc(s32 count, f32 g1, f32 g2, f32 *base, f32 *work,
         const f32 yBiased = y + KF_DENORMAL_FLUSH;
         feedforwardA[n] = yBiased - KF_DENORMAL_FLUSH;
         const f32 tap = feedforwardA[n] * g1 + work[n];
-        feedforwardB[n] = lowPass ? tap * g2 + feedforwardB[n] : tap * g2;
+        feedforwardB[n] = mode ? tap * g2 + feedforwardB[n] : tap * g2;
     }
 }
 
 // -------------------------------------------------------------------------------------
 // AllPassFilter::AllPassFilterApplyFunc @0x82B64640
-//   if (ctx->mpTap2) memset(ctx->mpOut, 0, count*sizeof(f32));
-//   else AllPassFilterFunc(count, self->mfGain1, self->mfGain2, ctx->mpBase,
-//                          ctx->mpTap, ctx->mpLoadedEnd, ctx->mpOut,
-//                          lowPass = (a3 != 0));
-// (r3=self, r4=count, r5=a3->lowPass, r7=ctx; r6=ctx+0, r7'=ctx+4, r8=ctx+0x10,
-//  r9=ctx+0x14.)
+// A second tap selects the crossfade fallback, which clears the output.
 // -------------------------------------------------------------------------------------
-void *AllPassFilter::AllPassFilterApplyFunc(AllPassFilter *self, s32 count, s32 src,
-                                            s32 channel, Context *ctx)
+void AllPassFilter::AllPassFilterApplyFunc(IFilter *filter, s32 count, FilterOutputMode mode,
+                                         s32, LocationParams *ctx)
 {
-    (void)channel;
-    if (ctx->mpTap2)
-        return std::memset(ctx->mpOut, 0, static_cast<usize>(count) * 4);
+    if (ctx->pDelayCross)
+    {
+        std::memset(ctx->pOutput, 0, static_cast<usize>(count) * sizeof(f32));
+        return;
+    }
 
+    AllPassFilter *self = static_cast<AllPassFilter *>(filter);
     AllPassFilterFunc(count, self->mfGain1, self->mfGain2,
-                      /*base a6  */ ctx->mpBase,
-                      /*work a7  */ ctx->mpTap,
-                      /*forwA a8 */ ctx->mpLoadedEnd,
-                      /*forwB a9 */ ctx->mpOut,
-                      /*lowPass  */ src != 0 ? 1 : 0);
-    return 0;
+                      ctx->pInput, ctx->pDelayFull, ctx->pDelayZero, ctx->pOutput, mode);
 }
 
 // -------------------------------------------------------------------------------------
@@ -120,11 +113,10 @@ void *AllPassFilter::AllPassFilterApplyFunc(AllPassFilter *self, s32 count, s32 
 // (ReverbModel1::Process @0x82B9F884..94): the original empty reset (the all-pass
 // section keeps no loop state to clear -- unlike the comb's mfState) was ICF-folded
 // onto that lone-`blr` thunk, exactly as the trivial ~TimerHandle teardown was. The
-// thunk returns r3 (self) unchanged, matching the family reset signature.
+// reset callback has no work to do.
 // -------------------------------------------------------------------------------------
-AllPassFilter *AllPassFilter::AllPassFilterResetFunc(AllPassFilter *self)
+void AllPassFilter::AllPassFilterResetFunc(IFilter *)
 {
-    return self;
 }
 
 // -------------------------------------------------------------------------------------
@@ -175,9 +167,9 @@ CombFilter *CombFilter::CombFilter_ctor(CombFilter *self)
 // the caller latches it into CombFilter::mfState.
 // -------------------------------------------------------------------------------------
 f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 state,
-                   f32 *base, f32 *work, f32 *accum, f32 *feedforward, s32 lowPass)
+                   f32 *base, f32 *work, f32 *accum, f32 *feedforward, IFilter::FilterOutputMode mode)
 {
-    if (lowPass)
+    if (mode)
     {
         for (s32 n = 0; n < count; ++n)
         {
@@ -202,39 +194,31 @@ f32 CombFilterFunc(s32 count, f32 g1, f32 g2, f32 g3, f32 g4, f32 state,
 
 // -------------------------------------------------------------------------------------
 // CombFilter::CombFilterApplyFunc @0x82B64D00
-//   if (ctx->mpTap2) memset(ctx->mpOut, 0, count*sizeof(f32));
-//   else self->mfState = CombFilterFunc(count, g1..g4, mfState, ctx->mpBase,
-//                                       ctx->mpTap, ctx->mpLoadedEnd,
-//                                       ctx->mpOut, lowPass = src);
-// (r3=self, r4=count, r5=src->lowPass, r7=ctx; the kernel's stack args are the caller's
-//  r8=ctx+0x10, r11=ctx+0x14, r5 stores. The address has no export JSON; the disasm was
-//  recovered from the XEX image via idat -- see the workflow repo,
-//  scratchpad/waveE/ReverbModel1.rodata.txt.)
+// Save the comb's damping state after applying a block. The crossfade
+// fallback clears the output without advancing that state.
 // -------------------------------------------------------------------------------------
-void *CombFilter::CombFilterApplyFunc(CombFilter *self, s32 count, s32 src,
-                                      s32 channel, Context *ctx)
+void CombFilter::CombFilterApplyFunc(IFilter *filter, s32 count, FilterOutputMode mode,
+                                    s32, LocationParams *ctx)
 {
-    (void)channel;
-    if (ctx->mpTap2)
-        return std::memset(ctx->mpOut, 0, static_cast<usize>(count) * 4);
+    if (ctx->pDelayCross)
+    {
+        std::memset(ctx->pOutput, 0, static_cast<usize>(count) * sizeof(f32));
+        return;
+    }
 
+    CombFilter *self = static_cast<CombFilter *>(filter);
     self->mfState = CombFilterFunc(count, self->mfGain1, self->mfGain2,
-                                   self->mfGain3, self->mfGain4, self->mfState,
-                                   /*base a33 */ ctx->mpBase,
-                                   /*work     */ ctx->mpTap,
-                                   /*accum    */ ctx->mpLoadedEnd,
-                                   /*forward  */ ctx->mpOut,
-                                   /*lowPass  */ src); // stfs f1 @ +0x20
-    return 0;
+                                  self->mfGain3, self->mfGain4, self->mfState,
+                                  ctx->pInput, ctx->pDelayFull, ctx->pDelayZero, ctx->pOutput, mode);
 }
 
 // -------------------------------------------------------------------------------------
 // CombFilter::CombFilterResetFunc @0x82B64D88 -- clear the loop damping state.
 // -------------------------------------------------------------------------------------
-CombFilter *CombFilter::CombFilterResetFunc(CombFilter *self)
+void CombFilter::CombFilterResetFunc(IFilter *filter)
 {
+    CombFilter *self = static_cast<CombFilter *>(filter);
     self->mfState = KF_ZERO; // stfs flt @ +0x20
-    return self;
 }
 
 // -------------------------------------------------------------------------------------

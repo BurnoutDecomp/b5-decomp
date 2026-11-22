@@ -151,14 +151,14 @@ int Delay::CreateInstance(Delay *self, f32 *pMaxDelayTime)
     // Size the ring: input-channel count, max delay in samples, and the filter's read length.
     const s32 channels    = self->mBase.mbFlag20; // lbz r4, 0x20(r31)
     const s32 maxSamples  = static_cast<s32>(self->mfMaxDelayTime * KF_INTERNAL_RATE);
-    const s32 readLength  = self->mFilter.miMode; // lwz r6, 0x4C(r31)
+    const s32 readLength  = self->mFilter.miReadLength; // lwz r6, 0x4C(r31)
 
     System *pSystem = reinterpret_cast<System *>(self->mBase.mpSystem);
     if (!self->mDelayLine.Init(channels, maxSamples, readLength)
         || TimerManager::AddTimer(
                &pSystem->mTimerManager, &self->mTimer,
-               reinterpret_cast<TimerManager::TimerCallback>(&Delay::RwacTimerClient),
-               self, "Delay", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
+               &Delay::RwacTimerClient, self, "Delay",
+               TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
     {
         return 0;
     }
@@ -184,15 +184,9 @@ int Delay::Process(Delay *self, AudioProcessContext *ctx)
     DelayFilter *pFilter    = &self->mFilter;
     DelayLine   *pDelayLine = &self->mDelayLine;
 
-    // Install the DelayFilter's IFilter dispatch funcs (its leading slots ARE the IFilter
-    // apply/reset function pointers; DelayLine::ApplyFilter dispatches mpApplyFunc through
-    // the mpFilter pointer). Set them through the IFilter view DelayLine uses.
-    IFilter *pFilterInterface = reinterpret_cast<IFilter *>(pFilter);
-    pFilterInterface->mpApplyFunc =
-        reinterpret_cast<IFilterApplyFunc>(&DelayFilter::DelayFilterApplyFunc); // stw @ +0x00
-    pFilterInterface->mpResetFunc =
-        reinterpret_cast<IFilterResetFunc>(&DelayFilter::DelayFilterResetFunc); // stw @ +0x04
-    pDelayLine->SetFilter(pFilterInterface);
+    pFilter->mpApplyFunc = &DelayFilter::DelayFilterApplyFunc;
+    pFilter->mpResetFunc = &DelayFilter::DelayFilterResetFunc;
+    pDelayLine->SetFilter(pFilter);
 
     // Reserve a 704-sample scratch region off the System object table's scratch cursor
     // (word [3]); the value is restored at the tail. (The object table is the shared runtime
@@ -214,7 +208,7 @@ int Delay::Process(Delay *self, AudioProcessContext *ctx)
     case 0: // idle / priming -- go live once a delay is requested
         if (requestedDelay > 0)
         {
-            DelayFilter::DelayFilterResetFunc(pFilter); // (*(v3+4))(v3)
+            pFilter->mpResetFunc(pFilter);
             DelayFilter::SetFeedback(pFilter, feedback);
             pDelayLine->Reset(requestedDelay);
             self->mState = 1;
@@ -265,7 +259,7 @@ int Delay::Process(Delay *self, AudioProcessContext *ctx)
     // When the delay is live, filter one frame through the ring and ping-pong the buffers.
     if (self->mState)
     {
-        pDelayLine->ApplyFilter(256, ctx->mpSrcBuffer, ctx->mpDstBuffer, 0);
+        pDelayLine->ApplyFilter(256, ctx->mpSrcBuffer, ctx->mpDstBuffer, IFilter::OVERWRITE);
         AudioChannelBuffer *pSwap = ctx->mpSrcBuffer;
         ctx->mpSrcBuffer = ctx->mpDstBuffer;
         ctx->mpDstBuffer = pSwap;
@@ -321,11 +315,12 @@ void Delay::UpdateLatencyAndDecay(Delay *self)
 // RwacTimerClient @0x82B972C8 -- the per-frame reconfigure timer callback. Clamp the max
 // delay time up to at least the live delay time, force the internal rate back to 48 kHz
 // (dropping the crossfade state if it had drifted), and grow the ring if the max delay no
-// longer fits. (Registered via a function-pointer cast; its return value is discarded by the
-// scheduler.)
+// longer fits. The Xbox 360 audio PDB declares a timer callback with a
+// context and a time argument. This callback only uses the context.
 // -------------------------------------------------------------------------------------
-int Delay::RwacTimerClient(Delay *self)
+void Delay::RwacTimerClient(void *context, f32)
 {
+    Delay *self = static_cast<Delay *>(context);
     if (self->mfMaxDelayTime < self->mfDelayTime)
         self->mfMaxDelayTime = self->mfDelayTime;
 
@@ -337,23 +332,21 @@ int Delay::RwacTimerClient(Delay *self)
 
     const s32 required = static_cast<s32>(self->mfMaxDelayTime * self->mfSampleRate);
     if (self->mDelayLine.miMaxDelaySamples < required)
-        return self->mDelayLine.Resize(required);
-    return 1;
+        self->mDelayLine.Resize(required);
 }
 
 // -------------------------------------------------------------------------------------
 // ReleaseEvent @0x82B97278 -- tear the delay down: release the ring back to the allocator,
 // and (if it was registered) remove the reconfigure timer through the shared System
-// singleton. (The X360 return is a cleanup register value callers discard.)
+// singleton. The Xbox 360 audio PDB declares the hook void.
 // -------------------------------------------------------------------------------------
-int Delay::ReleaseEvent(Delay *self)
+void Delay::ReleaseEvent(Delay *self)
 {
     self->mDelayLine.Release();
 
     if (self->mbActive)
         System::RemoveTimer(off_83271928, &self->mTimer);
 
-    return 0;
 }
 
 } // namespace core
