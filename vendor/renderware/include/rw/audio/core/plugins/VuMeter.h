@@ -13,9 +13,8 @@
 // on any tick where Process did not run.
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC); the asm is
-// authoritative for every member offset and store. There is NO LegacySrc reference source, NO
-// DecFIGS DWARF, and NO ProStreet08 rwaudio PDB entry for this TU, so each offset below is
-// grounded directly in the disassembly of the bodied member functions:
+// authoritative for member offsets and stores. The Xbox 360 audio PDB corroborates the
+// 0x150-byte layout, including the 18-slot attribute table at +0x40:
 //   GetSize                @0x82B98360 -> 336 (0x150)
 //   CreateInstance         @0x82BA0EA8
 //   EventEvent             @0x82BA0F80  (queues a deferred ResetHandler command)
@@ -38,10 +37,6 @@
 // active channel count lives in mBase.mbChannelCount (+0x21) and drives both the metering
 // loop bound and the display de-interleave.
 //
-// The embedded TimerHandle widens on the x64 PC target (it carries pointer members), so the
-// +0xNN annotations below are the X360 (32-bit) offsets and are documentary only -- only the
-// member ORDER is load-bearing, and every access is by name / by array index. GetSize returns
-// the X360 constant 336, not sizeof(VuMeter).
 // =====================================================================================
 
 #include "types.hpp" // f32, s32, u8, u16, u32
@@ -49,6 +44,7 @@
 #include <cstddef> // offsetof (layout pins below)
 
 #include "rw/audio/core/Iir2Filters.h" // PlugInBaseView / AudioChannelBuffer / AudioProcessContext
+#include "rw/audio/core/PlugIn.h" // PlugIn::Attribute_t
 #include "rw/audio/core/TimerHandle.h" // TimerHandle
 
 namespace rw
@@ -59,7 +55,7 @@ namespace core
 {
 
 // -------------------------------------------------------------------------------------
-// VuMeter -- byte-exact X360 layout (X360 sizeof 0x150 == 336; GetSize is hard-coded).
+// VuMeter -- X360 layout (sizeof 0x150 == 336).
 //
 // The metering state is held as columnar per-channel arrays (4-byte stride, indexed by
 // channel): rms sum-of-squares accumulator, computed RMS, running window peak, last-window
@@ -70,15 +66,13 @@ namespace core
 class VuMeter
 {
 public:
-    // Six output speaker positions and six input metering channels (5.1 max).
-    enum { KI_MAX_CHANNELS = 6 };
-
-    // One 8-byte display slot: the X360 stores only the level float; the trailing word is
-    // reserved (never written by any VuMeter body).
-    struct MeterLevel
+    enum
     {
-        f32 mfLevel;    // +0x00 -- the displayed level (RMS / peak / hold)
-        f32 mfReserved; // +0x04 -- unused by the X360 bodies (8-byte display stride)
+        KI_MAX_CHANNELS = 6,
+        KI_RMS_DISPLAY = 0,
+        KI_PEAK_DISPLAY = KI_MAX_CHANNELS,
+        KI_HOLD_DISPLAY = 2 * KI_MAX_CHANNELS,
+        KI_ATTRIBUTE_COUNT = 3 * KI_MAX_CHANNELS
     };
 
     // ---- factory / v-table surface ----
@@ -88,7 +82,7 @@ public:
 
     // ---- event / lifecycle handlers ----
     static VuMeter *EventEvent(VuMeter *self);          // @0x82BA0F80 (queue deferred reset)
-    static int      ReleaseEvent(VuMeter *self);        // @0x82B9D0A8
+    static void     ReleaseEvent(VuMeter *self);        // @0x82B9D0A8
 
     // ---- reset ----
     static VuMeter *ResetFunc(VuMeter *self);           // @0x82B9D038
@@ -98,7 +92,7 @@ public:
     static int      ResetHandler(void *cmd);            // @0x82B9D130
 
     // ---- per-frame processing ----
-    static VuMeter *RwacTimerClient(VuMeter *self);     // @0x82B9D0C8 (timer callback)
+    static void     RwacTimerClient(void *context, f32); // @0x82B9D0C8 (timer callback)
     static VuMeter *UpdateRunningPeakandRMS(VuMeter *self, AudioChannelBuffer *pSrc,
                                             int numSamples); // @0x82BA0FB0
     static void     UpdateAttributes(VuMeter *self);    // @0x82B9D158
@@ -107,10 +101,8 @@ public:
     // ---- layout (X360 offsets documentary; access by name / index) ----
     PlugInBaseView mBase;                       // +0x00 .. +0x23 (mbChannelCount @+0x21)
     TimerHandle    mTimer;                       // +0x24 -- per-frame decay/reset timer
-    // ---- speaker-position display bands (8-byte slots) ----
-    MeterLevel     mRmsDisplay[KI_MAX_CHANNELS];  // +0x40 -- de-interleaved RMS readout
-    MeterLevel     mPeakDisplay[KI_MAX_CHANNELS]; // +0x70 -- de-interleaved last-window peak
-    MeterLevel     mHoldDisplay[KI_MAX_CHANNELS]; // +0xA0 -- de-interleaved hold peak
+    // RMS at +0x40, peak at +0x70, and hold at +0xA0 (0x82BA0ECC / 0x82BA0EE4).
+    PlugIn::Attribute_t mAttribute[KI_ATTRIBUTE_COUNT];
     // ---- per-channel metering columns (4-byte stride, indexed by channel) ----
     f32            mRmsAccum[KI_MAX_CHANNELS];     // +0xD0  -- window sum-of-squares accumulator
     f32            mRms[KI_MAX_CHANNELS];          // +0xE8  -- computed RMS (sqrt(accum/window))
@@ -124,22 +116,12 @@ public:
     u8             mbTimerRegistered;              // +0x14D -- the decay timer is registered
 
 private:
-    // Never called; a member-function body is a complete-class context with private access, so
-    // the offsetof pins compile here where a bare in-class static_assert would not.
-    //
-    // Only POINTER-WIDTH-INVARIANT facts are pinned. The absolute +0xNN column offsets shift on
-    // this x64 gate (TimerHandle widens), but the RELATIVE deltas the asm actually indexes by do
-    // not: UpdateRunningPeakandRMS @0x82BA0FB0 bases r11 at self+0xD0 (mRmsAccum) and then uses
-    // the fixed displacements 0x00 / 0x18 / 0x30 / 0x48 / 0x60 for accum / rms / peakCurrent /
-    // peak / peakHold, and UpdateAttributes @0x82B9D158 steps the three display bands 0x30 apart.
     static void _AssertLayout()
     {
-        // Display bands: 6 slots x 8 bytes = 0x30 per band (asm 0x40 / 0x70 / 0xA0).
-        CGS_STATIC_ASSERT((sizeof(MeterLevel) == 8), "MeterLevel must be the 8-byte display stride");
-        CGS_STATIC_ASSERT((offsetof(VuMeter, mPeakDisplay) - offsetof(VuMeter, mRmsDisplay) == 0x30),
-                      "display band stride (asm 0x40 -> 0x70)");
-        CGS_STATIC_ASSERT((offsetof(VuMeter, mHoldDisplay) - offsetof(VuMeter, mPeakDisplay) == 0x30),
-                      "display band stride (asm 0x70 -> 0xA0)");
+        CGS_STATIC_ASSERT(sizeof(PlugIn::Attribute_t) == 8, "native attribute slot stride");
+        CGS_STATIC_ASSERT(__alignof(PlugIn::Attribute_t) == 8, "native attribute slot alignment");
+        CGS_STATIC_ASSERT(offsetof(VuMeter, mAttribute) == 0x40, "native attribute table");
+        CGS_STATIC_ASSERT(sizeof(VuMeter) == 0x150, "native meter extent");
 
         // Metering columns, all relative to the r11 base self+0xD0 (mRmsAccum).
         CGS_STATIC_ASSERT((offsetof(VuMeter, mRms) - offsetof(VuMeter, mRmsAccum) == 0x18),

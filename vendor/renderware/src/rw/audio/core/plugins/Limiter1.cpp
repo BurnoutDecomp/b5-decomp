@@ -169,11 +169,11 @@ int Limiter1::CreateInstance(Limiter1 *self)
     // Each attribute's initial value is ALSO written to its Process-side cache (+0x90..) so
     // the first Process sees "unchanged" only if the sample rate matches too -- the caches
     // are the change-detect snapshot, not defaults.
-    self->mAttribute[ATTRIBUTE_SETTHRESHOLD].mfValue   = KF_INIT_THRESHOLD;   // stfs @ +0x28 (120.0)
+    self->mAttribute[ATTRIBUTE_SETTHRESHOLD].f32   = KF_INIT_THRESHOLD;   // stfs @ +0x28 (120.0)
     self->mLastThreshold                                = KF_INIT_THRESHOLD;   // stfs @ +0x90
     self->mState                                        = STATE_OFF;           // stw  @ +0xA0
-    self->mAttribute[ATTRIBUTE_SETCHANNELMODE].mfValue  = KF_ONE;              // stfs @ +0x38 (GROUPED)
-    self->mAttribute[ATTRIBUTE_SETRELEASETIME].mfValue  = KF_INIT_RELEASETIME; // stfs @ +0x30 (0.1)
+    self->mAttribute[ATTRIBUTE_SETCHANNELMODE].f32  = KF_ONE;              // stfs @ +0x38 (GROUPED)
+    self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32  = KF_INIT_RELEASETIME; // stfs @ +0x30 (0.1)
     self->mLastReleaseTime                              = KF_INIT_RELEASETIME; // stfs @ +0x94
     self->mLastChannelMode                              = KF_ONE;              // stfs @ +0x98
     self->mLastSampleRate                               = KF_ZERO;             // stfs @ +0x9C
@@ -193,17 +193,17 @@ void Limiter1::Configure(Limiter1 *self, f32 afSampleRate)
 {
     // Clamp mAttribute[1] into [0, 10]. Both compares are fcmpu + a "not LT"/"not GT"
     // branch, so a NaN release time takes BOTH branch-arounds and is left UNCHANGED.
-    const f32 lfReleaseSeconds = self->mAttribute[ATTRIBUTE_SETRELEASETIME].mfValue;
+    const f32 lfReleaseSeconds = self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32;
     if (lfReleaseSeconds < KF_ZERO)
-        self->mAttribute[ATTRIBUTE_SETRELEASETIME].mfValue = KF_ZERO;            // stfs @ +0x30
+        self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32 = KF_ZERO;            // stfs @ +0x30
     else if (lfReleaseSeconds > KF_MAX_RELEASETIME)
-        self->mAttribute[ATTRIBUTE_SETRELEASETIME].mfValue = KF_MAX_RELEASETIME; // stfs @ +0x30
+        self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32 = KF_MAX_RELEASETIME; // stfs @ +0x30
 
     // thresholdOn = 10 ^ (thresholdDb / 20), through the CRT's DOUBLE pow core with the
     // exponent single-rounded first (fmuls) and the result narrowed after (frsp). The two
     // rounding points are load-bearing -- do not fold this into an algebraically equal exp.
     const f32 lfDbExponent =
-        self->mAttribute[ATTRIBUTE_SETTHRESHOLD].mfValue * KF_DB_SCALE_AND_ATTACK; // fmuls
+        self->mAttribute[ATTRIBUTE_SETTHRESHOLD].f32 * KF_DB_SCALE_AND_ATTACK; // fmuls
     const f32 lfThresholdOn =
         static_cast<f32>(std::pow(KD_TEN, static_cast<f64>(lfDbExponent)));        // pow + frsp
     const f32 lfThresholdOff = lfThresholdOn * KF_THRESHOLD_OFF_SCALE;             // fmuls (0.95)
@@ -216,14 +216,14 @@ void Limiter1::Configure(Limiter1 *self, f32 afSampleRate)
     // The attribute-driven release, re-read AFTER the clamp above. A zero result becomes 1
     // so the callee's `exponent / releaseSamples` step cannot divide by zero.
     s32 liReleaseSamples = RoundHalfAwayFromZero(
-        afSampleRate * self->mAttribute[ATTRIBUTE_SETRELEASETIME].mfValue);
+        afSampleRate * self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32);
     if (liReleaseSamples == 0)
         liReleaseSamples = 1;
 
     // CHANNELMODE_GROUPED is an EXACT 1.0 test: any other value -- NaN included -- is
     // CHANNELMODE_INDEPENDENT (the console's `beq` is false when unordered).
     const s32 liGroupChannels =
-        (self->mAttribute[ATTRIBUTE_SETCHANNELMODE].mfValue == KF_ONE) ? 1 : 0;
+        (self->mAttribute[ATTRIBUTE_SETCHANNELMODE].f32 == KF_ONE) ? 1 : 0;
 
     CompressorLimiter1::Configure(&self->mCompressorLimiter1, lfThresholdOn, lfThresholdOff,
                                   KF_COMP_EXPONENT, liAttackSamples, liReleaseSamples,
@@ -241,7 +241,7 @@ void Limiter1::Configure(Limiter1 *self, f32 afSampleRate)
 // -------------------------------------------------------------------------------------
 int Limiter1::Process(Limiter1 *self, AudioProcessContext *ctx, bool /*discontinuity*/)
 {
-    const f32 lfThreshold = self->mAttribute[ATTRIBUTE_SETTHRESHOLD].mfValue; // lfs +0x28
+    const f32 lfThreshold = self->mAttribute[ATTRIBUTE_SETTHRESHOLD].f32; // lfs +0x28
     const s32 liState = self->mState;                                          // lwz +0xA0
 
     // `blt` is false when unordered, so a NaN threshold takes the OFF path.
@@ -255,7 +255,7 @@ int Limiter1::Process(Limiter1 *self, AudioProcessContext *ctx, bool /*discontin
         // Only the THRESHOLD cache is refreshed on this path -- the release/mode/rate
         // caches stay stale, so a later reactivation skips Configure only if those still
         // match as well (asm-exact; not an oversight to "fix").
-        self->mLastThreshold = self->mAttribute[ATTRIBUTE_SETTHRESHOLD].mfValue; // stfs +0x90
+        self->mLastThreshold = self->mAttribute[ATTRIBUTE_SETTHRESHOLD].f32; // stfs +0x90
         return 1;
     }
 
@@ -267,17 +267,17 @@ int Limiter1::Process(Limiter1 *self, AudioProcessContext *ctx, bool /*discontin
     // Reconfigure when ANY of the four cached inputs differs. Each compare is fcmpu + bne,
     // so an unordered (NaN) live value counts as "changed".
     if (lfThreshold != self->mLastThreshold ||
-        self->mAttribute[ATTRIBUTE_SETRELEASETIME].mfValue != self->mLastReleaseTime ||
-        self->mAttribute[ATTRIBUTE_SETCHANNELMODE].mfValue != self->mLastChannelMode ||
+        self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32 != self->mLastReleaseTime ||
+        self->mAttribute[ATTRIBUTE_SETCHANNELMODE].f32 != self->mLastChannelMode ||
         lfSampleRate != self->mLastSampleRate)
     {
         Configure(self, lfSampleRate);
 
         // The caches are refreshed ONLY after Configure, and they re-read the live values
         // (Configure may have clamped the release time in place).
-        self->mLastThreshold   = self->mAttribute[ATTRIBUTE_SETTHRESHOLD].mfValue;   // +0x90
-        self->mLastReleaseTime = self->mAttribute[ATTRIBUTE_SETRELEASETIME].mfValue; // +0x94
-        self->mLastChannelMode = self->mAttribute[ATTRIBUTE_SETCHANNELMODE].mfValue; // +0x98
+        self->mLastThreshold   = self->mAttribute[ATTRIBUTE_SETTHRESHOLD].f32;   // +0x90
+        self->mLastReleaseTime = self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32; // +0x94
+        self->mLastChannelMode = self->mAttribute[ATTRIBUTE_SETCHANNELMODE].f32; // +0x98
         self->mLastSampleRate  = lfSampleRate;                                        // +0x9C
     }
 

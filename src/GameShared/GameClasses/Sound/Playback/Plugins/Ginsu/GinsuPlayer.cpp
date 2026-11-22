@@ -598,17 +598,17 @@ int GinsuPlayer::CreateInstance(GinsuPlayer *self, const PlayParams * /*params*/
     self->mSynthData.mSampleCount = 0;
     self->mSynthData.mSampleRate = 0;
 
-    self->mAttribute[ATTRIBUTE_SETJUMPSPAN].mfValue = KF_ZERO;
-    self->mAttribute[ATTRIBUTE_GETSAMPLERATE].mfValue = KF_ZERO;
-    self->mAttribute[ATTRIBUTE_GETMINFREQUENCY].mfValue = KF_ZERO;
-    self->mAttribute[ATTRIBUTE_GETMAXFREQUENCY].mfValue = KF_ZERO;
+    self->mAttribute[ATTRIBUTE_SETJUMPSPAN].f32 = KF_ZERO;
+    self->mAttribute[ATTRIBUTE_GETSAMPLERATE].f32 = KF_ZERO;
+    self->mAttribute[ATTRIBUTE_GETMINFREQUENCY].f32 = KF_ZERO;
+    self->mAttribute[ATTRIBUTE_GETMAXFREQUENCY].f32 = KF_ZERO;
 
     self->mPlaying = 0;
     self->mSampleRate = KF_DEFAULT_SAMPLE_RATE;
     self->mPrevSampleRate = KF_DEFAULT_SAMPLE_RATE;
 
     self->mpAttribute = self->mAttribute;                          // stw self+0x28 -> +0x0C
-    self->mAttribute[ATTRIBUTE_SETFREQUENCY].mfValue = KF_DEFAULT_FREQUENCY;
+    self->mAttribute[ATTRIBUTE_SETFREQUENCY].f32 = KF_DEFAULT_FREQUENCY;
     return 1;
 }
 
@@ -701,9 +701,9 @@ int GinsuPlayer::PlayHandler(void *apCommand)
         return 0;
     }
 
-    lpSelf->mAttribute[ATTRIBUTE_GETSAMPLERATE].mfValue = lpSelf->mSampleRate;
-    lpSelf->mAttribute[ATTRIBUTE_GETMINFREQUENCY].mfValue = lpSelf->mSynthData.mMinFrequency;
-    lpSelf->mAttribute[ATTRIBUTE_GETMAXFREQUENCY].mfValue = lpSelf->mSynthData.mMaxFrequency;
+    lpSelf->mAttribute[ATTRIBUTE_GETSAMPLERATE].f32 = lpSelf->mSampleRate;
+    lpSelf->mAttribute[ATTRIBUTE_GETMINFREQUENCY].f32 = lpSelf->mSynthData.mMinFrequency;
+    lpSelf->mAttribute[ATTRIBUTE_GETMAXFREQUENCY].f32 = lpSelf->mSynthData.mMaxFrequency;
 
     lpSelf->mSynthData.mOldDataBlockIndex = -1;
     lpSelf->mSynthData.mTempStoreBlockIndex = -1;
@@ -743,7 +743,7 @@ int GinsuPlayer::Process(GinsuPlayer *self, Mixer *ctx, bool /*isLastInput*/)
     }
 
     // The jump window width, clamped on its UPPER side only (the console has no lower clamp).
-    f32 lfJumpSpan = self->mAttribute[ATTRIBUTE_SETJUMPSPAN].mfValue;
+    f32 lfJumpSpan = self->mAttribute[ATTRIBUTE_SETJUMPSPAN].f32;
     const f32 lfMaxSpan = static_cast<f32>(self->mSynthData.mCycleCount - 1);
     if (lfJumpSpan > lfMaxSpan)
         lfJumpSpan = lfMaxSpan;
@@ -767,7 +767,7 @@ int GinsuPlayer::Process(GinsuPlayer *self, Mixer *ctx, bool /*isLastInput*/)
     {
         const f32 lfCurrentCycle = self->mSynthData.SampleToCycle(self->mPlaybackPos);
         const int liTargetSample = self->mSynthData.FrequencyToSample(
-            self->mAttribute[ATTRIBUTE_SETFREQUENCY].mfValue);
+            self->mAttribute[ATTRIBUTE_SETFREQUENCY].f32);
         const f32 lfTargetCycle = self->mSynthData.SampleToCycle(liTargetSample);
 
         // Centre a jumpSpan-wide window on the target cycle and clamp it into the table.
@@ -832,7 +832,7 @@ int GinsuPlayer::Process(GinsuPlayer *self, Mixer *ctx, bool /*isLastInput*/)
 
             // Output samples per source cycle at the requested frequency.
             const f32 lfSamplesPerCycle = (self->mSampleRate * KF_CYCLES_PER_MINUTE)
-                / self->mAttribute[ATTRIBUTE_SETFREQUENCY].mfValue;
+                / self->mAttribute[ATTRIBUTE_SETFREQUENCY].f32;
             const f32 lfOutputPerInput = KF_ONE / lfSamplesPerCycle;
 
             // Fade OUT the old position.
@@ -878,7 +878,7 @@ int GinsuPlayer::Process(GinsuPlayer *self, Mixer *ctx, bool /*isLastInput*/)
         const f32 lfCycle = self->mSynthData.SampleToCycle(self->mPlaybackPos);
         const f32 lfPeriod = self->mSynthData.CyclePeriod(lfCycle);
         const f32 lfSamplesPerCycle = (self->mSampleRate * KF_CYCLES_PER_MINUTE)
-            / self->mAttribute[ATTRIBUTE_SETFREQUENCY].mfValue;
+            / self->mAttribute[ATTRIBUTE_SETFREQUENCY].f32;
 
         // [DIAG] NOT IN THE X360 BINARY -- BRN_GINSU_DIAG=1.
         {
@@ -895,7 +895,7 @@ int GinsuPlayer::Process(GinsuPlayer *self, Mixer *ctx, bool /*isLastInput*/)
                         << "[ginsu] plug " << static_cast<s32>(
                                reinterpret_cast<intptr_t>(self) & 0xFFFFFF)
                         << " freq="
-                        << self->mAttribute[ATTRIBUTE_SETFREQUENCY].mfValue
+                        << self->mAttribute[ATTRIBUTE_SETFREQUENCY].f32
                         << " rate=" << self->mSampleRate
                         << " minF=" << self->mSynthData.mMinFrequency
                         << " maxF=" << self->mSynthData.mMaxFrequency

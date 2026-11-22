@@ -262,7 +262,7 @@ public:
     // ---- layout (console offsets in comments; ⭐ names/order now DWARF-authoritative,
     //      from the DecFIGS header for THIS class rather than the ProStreet PDB for the
     //      vendor SndPlayer1) ----
-    CGS_ALIGN(8) Attribute_t mAttribute[3];                   // ARTIST 0x826EA560, +0x28
+    Attribute_t mAttribute[3];                                // ARTIST 0x826EA560, +0x28
     TimerHandle      mTimerHandle;                           // +0x40 (mCpuTicks @ +0x50)
     RequestExternal* mpRequestExternal;                      // +0x58
     SndPlayer1FeedDesc mFeedDesc[KU_MAX_DECODERFEEDS];       // +0x5C (20 slots, 12-byte stride)

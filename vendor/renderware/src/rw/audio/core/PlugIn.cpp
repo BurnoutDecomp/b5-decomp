@@ -92,7 +92,7 @@ int PlugIn::Event(PlugIn *self, int aiEventId, void *apParam)
 // -------------------------------------------------------------------------------------
 PlugIn *PlugIn::GetAttribute(PlugIn *self, int index, f32 *outValue)
 {
-    *outValue = self->mpAttribute[index].mfValue; // *(8*a2 + *(self+0xC))
+    *outValue = self->mpAttribute[index].f32; // *(8*a2 + *(self+0xC))
     return self;
 }
 
@@ -133,7 +133,7 @@ PlugIn *PlugIn::SetAttribute(PlugIn *self, int index, f32 value)
 int PlugIn::SetAttributeHandler(void *cmd)
 {
     PlugInSetAttributeCommand *c = static_cast<PlugInSetAttributeCommand *>(cmd);
-    c->mpTarget->mpAttribute[c->miIndex].mfValue = c->mfValue; // *(8*idx + *(target+0xC)) = value
+    c->mpTarget->mpAttribute[c->miIndex].f32 = c->mfValue; // *(8*idx + *(target+0xC)) = value
     // The asm's `li r3,0x10` is the console sizeof(PlugInSetAttributeCommand); it must
     // stay identical to the producer's advance in SetAttribute above, so both sides use
     // the HOST sizeof (24 on x64).

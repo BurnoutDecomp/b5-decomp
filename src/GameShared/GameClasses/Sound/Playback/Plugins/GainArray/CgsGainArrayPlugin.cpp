@@ -109,7 +109,7 @@ int GainArray::CreateInstance(GainArray *self)
     for (int liChannel = 0; liChannel < KI_CHANNELS; ++liChannel)
     {
         self->maCurrentGain[liChannel] = KF_UNITY;             // stfs 0(r10), r10 += 4
-        self->maTargetGain[liChannel].mfValue = KF_UNITY;      // stfs 0(r9),  r9  += 8
+        self->maTargetGain[liChannel].f32 = KF_UNITY;      // stfs 0(r9),  r9  += 8
     }
     return 1;
 }
@@ -130,7 +130,7 @@ int GainArray::Process(GainArray *self, Mixer *ctx, bool firstPass)
     const u32 luCount = self->mOutputChannels;   // lbz 0x21(r3)
     for (u32 luChannel = 0; luChannel < luCount; ++luChannel)
     {
-        f32 &lrTarget = self->maTargetGain[luChannel].mfValue;
+        f32 &lrTarget = self->maTargetGain[luChannel].f32;
         f32 &lrCurrent = self->maCurrentGain[luChannel];
 
         if (firstPass)

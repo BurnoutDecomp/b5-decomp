@@ -2,9 +2,8 @@
 // rw::audio::core::VuMeter bodies -- the "VuMeter" per-channel level-metering plug-in.
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is
-// authoritative for every store/branch. No LegacySrc reference source, no DecFIGS DWARF, and no
-// ProStreet08 rwaudio PDB entry exist for this type. See plugins/VuMeter.h for the byte-exact
-// layout and the per-function X360 addresses.
+// authoritative for stores and branches. The Xbox 360 audio PDB supplies the attribute type
+// and corroborates the member offsets in plugins/VuMeter.h.
 //
 // The plug-in reuses the committed audio-core homes TimerHandle / TimerManager / System (it
 // does NOT fork them). All eleven ledger functions are reconstructed here.
@@ -73,13 +72,7 @@ struct VuMeterResetCommand
 // -------------------------------------------------------------------------------------
 int VuMeter::GetSize()
 {
-    // X360-LITERAL TRAP: the console immediate is this object's CONSOLE footprint, but
-    // GetSize is the plug-in factory's allocation stride -- it allocates GetSize() bytes and
-    // constructs the object into them. On the host the object is larger (widened vptr and
-    // pointers), so returning the console value under-allocates and corrupts what follows.
-    // Return host sizeof; the console immediate stays in the comment above.
-    return static_cast<int>(sizeof(VuMeter));   // X360: li r3, 0x150
-// 0x150
+    return sizeof(VuMeter);
 }
 
 // -------------------------------------------------------------------------------------
@@ -91,11 +84,9 @@ int VuMeter::GetSize()
 VuMeter *VuMeter::ResetFunc(VuMeter *self)
 {
     // Loop 1: the 18 contiguous 8-byte display level slots (bands rms / peak / hold).
-    for (int i = 0; i < KI_MAX_CHANNELS; ++i)
+    for (int i = 0; i < KI_ATTRIBUTE_COUNT; ++i)
     {
-        self->mRmsDisplay[i].mfLevel  = KF_ZERO;
-        self->mPeakDisplay[i].mfLevel = KF_ZERO;
-        self->mHoldDisplay[i].mfLevel = KF_ZERO;
+        self->mAttribute[i].f32 = KF_ZERO;
     }
 
     // The scattered stores: the RMS-result, last-window-peak and hold-peak columns.
@@ -156,7 +147,7 @@ VuMeter *VuMeter::EventEvent(VuMeter *self)
 // CreateInstance @0x82BA0EA8 -- placement-init a VuMeter over `self`.
 //
 // PlugIn::Initialize<VuMeter>(self, 0x40) constructs the plug-in base and bases its attribute
-// table at self+0x40 (mRmsDisplay). The templated PlugIn::Initialize helper lives in another
+// table at self+0x40 (mAttribute). The templated PlugIn::Initialize helper lives in another
 // (separate) TU; its locally-observable effect (v-table install + attribute-base wiring) is
 // reproduced inline here, exactly as the Gain / Limiter1 / Iir2* / Delay shapes do. FLAGGED:
 // the real Initialize<T> also performs the base mpSystem/mpVoice wiring from the owning
@@ -170,17 +161,15 @@ int VuMeter::CreateInstance(VuMeter *self)
 {
     // PlugIn::Initialize<VuMeter>(self, 0x40) -- observable effect reproduced inline.
     self->mBase.mpVTable     = KVU_VuMeterVTable;       // installed by Initialize (symbol hidden)
-    self->mBase.mpAttributes = &self->mRmsDisplay[0];   // attribute table base @ self+0x40
+    self->mBase.mpAttributes = self->mAttribute;        // attribute table base @ self+0x40
 
     self->mWindowSize       = KU_DEFAULT_WINDOW; // sth +0x148 = 479
     self->mbTimerRegistered = 0;                 // stb +0x14D
 
     // Loop 1: zero the 18 display level slots.
-    for (int i = 0; i < KI_MAX_CHANNELS; ++i)
+    for (int i = 0; i < KI_ATTRIBUTE_COUNT; ++i)
     {
-        self->mRmsDisplay[i].mfLevel  = KF_ZERO;
-        self->mPeakDisplay[i].mfLevel = KF_ZERO;
-        self->mHoldDisplay[i].mfLevel = KF_ZERO;
+        self->mAttribute[i].f32 = KF_ZERO;
     }
 
     self->mbUpdated = 0; // stb +0x14C
@@ -198,7 +187,7 @@ int VuMeter::CreateInstance(VuMeter *self)
     System *pSystem = reinterpret_cast<System *>(self->mBase.mpSystem);
     if (TimerManager::AddTimer(
             &pSystem->mTimerManager, &self->mTimer,
-            reinterpret_cast<TimerManager::TimerCallback>(&VuMeter::RwacTimerClient),
+            &VuMeter::RwacTimerClient,
             self, "VuMeter", 1, 1))
     {
         return 0; // AddTimer non-zero == registration failed
@@ -230,26 +219,24 @@ void *VuMeter::ScalarDeletingDestructor(VuMeter *self, char flags)
 
 // -------------------------------------------------------------------------------------
 // ReleaseEvent @0x82B9D0A8 -- if the decay timer was registered, remove it through the
-// plug-in's own System (mBase.mpSystem). (The X360 tail-calls System::RemoveTimer; its result
-// is a value callers discard.)
+// plug-in's own System (mBase.mpSystem). ARTIST tail-calls System::RemoveTimer at
+// 0x82B9D0BC, and the Xbox 360 audio PDB declares the hook void.
 // -------------------------------------------------------------------------------------
-int VuMeter::ReleaseEvent(VuMeter *self)
+void VuMeter::ReleaseEvent(VuMeter *self)
 {
     if (self->mbTimerRegistered == 1)
         System::RemoveTimer(reinterpret_cast<System *>(self->mBase.mpSystem), &self->mTimer);
-
-    return 0;
 }
 
 // -------------------------------------------------------------------------------------
 // RwacTimerClient @0x82B9D0C8 -- the per-frame decay timer callback. Restore the window length
 // if it was cleared, then: if Process ran since the last tick (mbUpdated) just clear the flag;
 // otherwise decay the momentary display (RMS + peak bands) to silence, leaving the hold band
-// intact. (Registered via a function-pointer cast; its return value is discarded by the
-// scheduler.)
+// intact. The timer callback takes the registered context and an unused time argument.
 // -------------------------------------------------------------------------------------
-VuMeter *VuMeter::RwacTimerClient(VuMeter *self)
+void VuMeter::RwacTimerClient(void *context, f32)
 {
+    VuMeter *self = static_cast<VuMeter *>(context);
     if (self->mWindowSize == 0)
         self->mWindowSize = KU_DEFAULT_WINDOW;
 
@@ -261,14 +248,11 @@ VuMeter *VuMeter::RwacTimerClient(VuMeter *self)
     {
         // No frame processed this tick: drop the momentary RMS + peak display to zero (the
         // hold band is deliberately left standing).
-        for (int i = 0; i < KI_MAX_CHANNELS; ++i)
+        for (int i = KI_RMS_DISPLAY; i < KI_HOLD_DISPLAY; ++i)
         {
-            self->mRmsDisplay[i].mfLevel  = KF_ZERO;
-            self->mPeakDisplay[i].mfLevel = KF_ZERO;
+            self->mAttribute[i].f32 = KF_ZERO;
         }
     }
-
-    return self;
 }
 
 // -------------------------------------------------------------------------------------
@@ -419,55 +403,55 @@ void VuMeter::UpdateAttributes(VuMeter *self)
     switch (self->mBase.mbChannelCount)
     {
     case 1: // mono -> centre position
-        self->mHoldDisplay[1].mfLevel = hold0;
-        self->mPeakDisplay[1].mfLevel = self->mPeak[0];
-        self->mRmsDisplay[1].mfLevel  = self->mRms[0];
+        self->mAttribute[KI_HOLD_DISPLAY + 1].f32 = hold0;
+        self->mAttribute[KI_PEAK_DISPLAY + 1].f32 = self->mPeak[0];
+        self->mAttribute[KI_RMS_DISPLAY + 1].f32  = self->mRms[0];
         return; // mono skips the shared slot-0 hold store
 
     case 2: // stereo -> L / R
-        self->mHoldDisplay[2].mfLevel = self->mPeakHold[1];
-        self->mPeakDisplay[0].mfLevel = self->mPeak[0];
-        self->mPeakDisplay[2].mfLevel = self->mPeak[1];
-        self->mRmsDisplay[0].mfLevel  = self->mRms[0];
-        self->mRmsDisplay[2].mfLevel  = self->mRms[1];
+        self->mAttribute[KI_HOLD_DISPLAY + 2].f32 = self->mPeakHold[1];
+        self->mAttribute[KI_PEAK_DISPLAY + 0].f32 = self->mPeak[0];
+        self->mAttribute[KI_PEAK_DISPLAY + 2].f32 = self->mPeak[1];
+        self->mAttribute[KI_RMS_DISPLAY + 0].f32  = self->mRms[0];
+        self->mAttribute[KI_RMS_DISPLAY + 2].f32  = self->mRms[1];
         break;
 
     case 4: // quad -> positions 0, 2, 3, 4
-        self->mHoldDisplay[2].mfLevel = self->mPeakHold[1];
-        self->mHoldDisplay[3].mfLevel = self->mPeakHold[2];
-        self->mHoldDisplay[4].mfLevel = self->mPeakHold[3];
-        self->mPeakDisplay[0].mfLevel = self->mPeak[0];
-        self->mPeakDisplay[2].mfLevel = self->mPeak[1];
-        self->mPeakDisplay[3].mfLevel = self->mPeak[2];
-        self->mPeakDisplay[4].mfLevel = self->mPeak[3];
-        self->mRmsDisplay[0].mfLevel  = self->mRms[0];
-        self->mRmsDisplay[2].mfLevel  = self->mRms[1];
-        self->mRmsDisplay[3].mfLevel  = self->mRms[2];
-        self->mRmsDisplay[4].mfLevel  = self->mRms[3];
+        self->mAttribute[KI_HOLD_DISPLAY + 2].f32 = self->mPeakHold[1];
+        self->mAttribute[KI_HOLD_DISPLAY + 3].f32 = self->mPeakHold[2];
+        self->mAttribute[KI_HOLD_DISPLAY + 4].f32 = self->mPeakHold[3];
+        self->mAttribute[KI_PEAK_DISPLAY + 0].f32 = self->mPeak[0];
+        self->mAttribute[KI_PEAK_DISPLAY + 2].f32 = self->mPeak[1];
+        self->mAttribute[KI_PEAK_DISPLAY + 3].f32 = self->mPeak[2];
+        self->mAttribute[KI_PEAK_DISPLAY + 4].f32 = self->mPeak[3];
+        self->mAttribute[KI_RMS_DISPLAY + 0].f32  = self->mRms[0];
+        self->mAttribute[KI_RMS_DISPLAY + 2].f32  = self->mRms[1];
+        self->mAttribute[KI_RMS_DISPLAY + 3].f32  = self->mRms[2];
+        self->mAttribute[KI_RMS_DISPLAY + 4].f32  = self->mRms[3];
         break;
 
     default: // 5.1 / 6-channel -> direct 1:1
-        self->mHoldDisplay[1].mfLevel = self->mPeakHold[1];
-        self->mHoldDisplay[2].mfLevel = self->mPeakHold[2];
-        self->mHoldDisplay[3].mfLevel = self->mPeakHold[3];
-        self->mHoldDisplay[4].mfLevel = self->mPeakHold[4];
-        self->mHoldDisplay[5].mfLevel = self->mPeakHold[5];
-        self->mPeakDisplay[0].mfLevel = self->mPeak[0];
-        self->mPeakDisplay[1].mfLevel = self->mPeak[1];
-        self->mPeakDisplay[2].mfLevel = self->mPeak[2];
-        self->mPeakDisplay[3].mfLevel = self->mPeak[3];
-        self->mPeakDisplay[4].mfLevel = self->mPeak[4];
-        self->mPeakDisplay[5].mfLevel = self->mPeak[5];
-        self->mRmsDisplay[0].mfLevel  = self->mRms[0];
-        self->mRmsDisplay[1].mfLevel  = self->mRms[1];
-        self->mRmsDisplay[2].mfLevel  = self->mRms[2];
-        self->mRmsDisplay[3].mfLevel  = self->mRms[3];
-        self->mRmsDisplay[4].mfLevel  = self->mRms[4];
-        self->mRmsDisplay[5].mfLevel  = self->mRms[5];
+        self->mAttribute[KI_HOLD_DISPLAY + 1].f32 = self->mPeakHold[1];
+        self->mAttribute[KI_HOLD_DISPLAY + 2].f32 = self->mPeakHold[2];
+        self->mAttribute[KI_HOLD_DISPLAY + 3].f32 = self->mPeakHold[3];
+        self->mAttribute[KI_HOLD_DISPLAY + 4].f32 = self->mPeakHold[4];
+        self->mAttribute[KI_HOLD_DISPLAY + 5].f32 = self->mPeakHold[5];
+        self->mAttribute[KI_PEAK_DISPLAY + 0].f32 = self->mPeak[0];
+        self->mAttribute[KI_PEAK_DISPLAY + 1].f32 = self->mPeak[1];
+        self->mAttribute[KI_PEAK_DISPLAY + 2].f32 = self->mPeak[2];
+        self->mAttribute[KI_PEAK_DISPLAY + 3].f32 = self->mPeak[3];
+        self->mAttribute[KI_PEAK_DISPLAY + 4].f32 = self->mPeak[4];
+        self->mAttribute[KI_PEAK_DISPLAY + 5].f32 = self->mPeak[5];
+        self->mAttribute[KI_RMS_DISPLAY + 0].f32  = self->mRms[0];
+        self->mAttribute[KI_RMS_DISPLAY + 1].f32  = self->mRms[1];
+        self->mAttribute[KI_RMS_DISPLAY + 2].f32  = self->mRms[2];
+        self->mAttribute[KI_RMS_DISPLAY + 3].f32  = self->mRms[3];
+        self->mAttribute[KI_RMS_DISPLAY + 4].f32  = self->mRms[4];
+        self->mAttribute[KI_RMS_DISPLAY + 5].f32  = self->mRms[5];
         break;
     }
 
-    self->mHoldDisplay[0].mfLevel = hold0; // shared slot-0 hold refresh (non-mono)
+    self->mAttribute[KI_HOLD_DISPLAY + 0].f32 = hold0; // shared slot-0 hold refresh (non-mono)
 }
 
 // -------------------------------------------------------------------------------------

@@ -99,7 +99,7 @@ int GainFader::CreateInstance(GainFader *self)
         ::new (static_cast<void *>(self)) GainFader;
     self->mLastGain = KF_ONE;                                     // stfs +0x64
     self->mpAttribute = &self->mAttribute[0];                     // stw  +0x0C
-    self->mAttribute[ATTRIBUTE_GETCURRENTGAIN].mfValue = KF_ONE;  // stfs +0x28
+    self->mAttribute[ATTRIBUTE_GETCURRENTGAIN].f32 = KF_ONE;  // stfs +0x28
     self->mUnservicedRequest = 0;                                 // stb  +0x68
     self->mFadeState = FADESTATE_FINISHED;                        // stb  +0x69
     return 1;
@@ -287,7 +287,7 @@ int GainFader::Process(GainFader *self, AudioProcessContext *ctx, bool /*discont
 
     // The frame's final gain becomes both the hold level and the readable attribute.
     self->mLastGain = lpGainVector[KI_FRAME_SAMPLES - 1];
-    self->mAttribute[ATTRIBUTE_GETCURRENTGAIN].mfValue = lpGainVector[KI_FRAME_SAMPLES - 1];
+    self->mAttribute[ATTRIBUTE_GETCURRENTGAIN].f32 = lpGainVector[KI_FRAME_SAMPLES - 1];
     return 1;   // BUFFERSTATUS_AVAILABLE
 }
 

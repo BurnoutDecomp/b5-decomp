@@ -95,14 +95,12 @@ typedef void (*PhysicalFreeHook)(void *block);
 class PlugIn
 {
 public:
-    // The attribute slot pair the GetAttribute/SetAttribute helpers index into.
-    // SetAttribute defers the actual write to SetAttributeHandler via the System's
-    // deferred-command ring (see SetAttribute body), so this is the resolved table.
-    // rwaudio PDB: rw::audio::core::PlugIn::Attribute_t (an 8-byte attribute slot).
-    struct Attribute_t
+    // The audio PDB defines a float/double union. ARTIST indexes slots at an
+    // eight-byte stride and places the VuMeter table at +0x40 after its timer.
+    union Attribute_t
     {
-        f32 mfValue; // +0x00 -- the attribute value (8-byte stride: value + pad/id)
-        u32 muPad;   // +0x04
+        double f64;
+        float f32;
     };
 
     // vtable[0] / vtable[1] / vtable[3] are virtual; declared so dispatch compiles.

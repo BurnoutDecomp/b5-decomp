@@ -80,7 +80,7 @@ char **Pause::GetPlugInDescRunTime()
 // CreateInstance @0x82BA36B8 -- placement-init a Pause over `self`.
 //   if (self) self->mpVTable = off_8217F4C4;
 //   self->mpAttribute(+0x0C) = &self->mAttribute[0](+0x28);
-//   self->mAttribute[0].mfValue = 0.0;  self->mGain = 1.0;
+//   self->mAttribute[0].f32 = 0.0;  self->mGain = 1.0;
 //   self->mPauseState = 2;      self->mDiscontinuity = 0;
 //   return 1;
 // -------------------------------------------------------------------------------------
@@ -94,7 +94,7 @@ int Pause::CreateInstance(Pause *self)
     // an opaque byte blob.)
     self->mBase.mpAttributes = &self->mAttribute[0];
 
-    self->mAttribute[ATTRIBUTE_SETPAUSECONTROL].mfValue = KF_ZERO; // flt_82001CC0 @ +0x28
+    self->mAttribute[ATTRIBUTE_SETPAUSECONTROL].f32 = KF_ZERO; // flt_82001CC0 @ +0x28
     self->mPauseState = STATE_UNPAUSED; // li r8,2; stb @ +0x37
     self->mGain = KF_ONE;               // flt_82001C98 @ +0x30
     self->mDiscontinuity = 0;           // li r9,0; stb @ +0x38
@@ -120,7 +120,7 @@ int Pause::PreProcess(Pause *self, int /*a2*/, char force, int length)
     if ((force & 0xFF) != 0 || self->mDiscontinuity != 0)
     {
         self->mDiscontinuity = 1; // stb r10(1) @ +0x38
-        f32 amount = self->mAttribute[ATTRIBUTE_SETPAUSECONTROL].mfValue;
+        f32 amount = self->mAttribute[ATTRIBUTE_SETPAUSECONTROL].f32;
         if (amount == KF_ONE) // fcmpu f0,f13(1.0) -- PAUSECONTROL_PAUSED
         {
             self->mSamplesRemainingUntilStateChange = 0; // li r10,0; stb @ +0x36
@@ -133,7 +133,7 @@ int Pause::PreProcess(Pause *self, int /*a2*/, char force, int length)
         }
     }
 
-    f32 amount = self->mAttribute[ATTRIBUTE_SETPAUSECONTROL].mfValue;
+    f32 amount = self->mAttribute[ATTRIBUTE_SETPAUSECONTROL].f32;
     u8 state = self->mPauseState;
 
     if (amount == KF_ZERO) // fully gated path
@@ -174,7 +174,7 @@ int Pause::Process(Pause *self, AudioProcessContext *ctx, bool /*discontinuity*/
 {
     SampleBuffer *lpSrc = ctx->mpSrcBuffer;   // lwz ctx+0x3000C
     SampleBuffer *lpDst = ctx->mpDstBuffer;   // lwz ctx+0x30010
-    const f32 lfControl = self->mAttribute[ATTRIBUTE_SETPAUSECONTROL].mfValue; // lfs +0x28
+    const f32 lfControl = self->mAttribute[ATTRIBUTE_SETPAUSECONTROL].f32; // lfs +0x28
 
     // ---- fast path A: fully PAUSED and settled -> publish silence, do NOT swap ----------
     if (lfControl == KF_ONE && self->mPauseState == STATE_PAUSED)

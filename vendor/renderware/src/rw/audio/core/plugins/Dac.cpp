@@ -310,11 +310,11 @@ int Dac::CreateInstance(Dac *self)
     // The capability/state seed block (console store order).
     sStarted = 0;
     sStartRequested = 0;
-    self->maAttributes[2].mfValue = 0.0f;     // stfs flt_82001CC0 -> +0x38
+    self->maAttributes[2].f32 = 0.0f;     // stfs flt_82001CC0 -> +0x38
     sCapNumModes = 0;
     sCapNumSampleRates = 0;
-    self->maAttributes[1].mfValue = 48000.0f; // stfs flt_820AA808 -> +0x30 (the rate)
-    self->maAttributes[0].mfValue = 3.0f;     // stfs flt_82004270 -> +0x28 (mode 3 == 5.1)
+    self->maAttributes[1].f32 = 48000.0f; // stfs flt_820AA808 -> +0x30 (the rate)
+    self->maAttributes[0].f32 = 3.0f;     // stfs flt_82004270 -> +0x28 (mode 3 == 5.1)
     sChannels = 6;
     sCapModes[sCapNumModes] = 3;              // the one supported mode
     sCapNumModes = static_cast<u8>(sCapNumModes + 1);
@@ -332,7 +332,7 @@ int Dac::CreateInstance(Dac *self)
     // Publish the frame period into the System: rate at +0x10C4, 256/rate at +0x10C0
     // AND into the TimerManager's callback-time slot (+0x60 + 0x38 == the v8[38]
     // store -- the manager hands it to every due timer).
-    f32 lfRate = self->maAttributes[1].mfValue;
+    f32 lfRate = self->maAttributes[1].f32;
     f32 lfPeriod = 256.0f / lfRate;                       // flt_820ADBFC / rate
     lpSystem->mfSampleRate = lfRate;                      // +0x10C4
     lpSystem->mfSystemTimerPeriod = lfPeriod;             // +0x10C0
@@ -506,7 +506,7 @@ int Dac::SetModeHandler(void *apCommand)
 
     if (!sCapNumModes)
     {
-        lpDac->maAttributes[0].mfValue = 1.0f;   // no capabilities: park stereo
+        lpDac->maAttributes[0].f32 = 1.0f;   // no capabilities: park stereo
     }
     else
     {
@@ -532,7 +532,7 @@ int Dac::SetModeHandler(void *apCommand)
             {
                 if (KAI_PREFERENCE[liSlot] == sCapModes[luEntry])
                 {
-                    lpDac->maAttributes[0].mfValue =
+                    lpDac->maAttributes[0].f32 =
                         static_cast<f32>(KAI_PREFERENCE[liSlot]);
                     lbMatched = true;
                     break;
@@ -540,7 +540,7 @@ int Dac::SetModeHandler(void *apCommand)
             }
         }
 
-        sChannels = SKAU8_MODE_CHANNELS[static_cast<int>(lpDac->maAttributes[0].mfValue)];
+        sChannels = SKAU8_MODE_CHANNELS[static_cast<int>(lpDac->maAttributes[0].f32)];
         if (sStarted)
         {
             StopImmediate(lpDac);

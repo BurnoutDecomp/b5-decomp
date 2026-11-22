@@ -156,20 +156,6 @@ namespace
         p[3] = static_cast<u8>(value);
     }
 
-    f64 LoadAttributeDouble(const PlugIn::Attribute_t& slot)
-    {
-        CGS_STATIC_ASSERT((sizeof(slot) == sizeof(f64)), "RWAC attribute slot");
-        f64 value;
-        std::memcpy(&value, &slot, sizeof(value));
-        return value;
-    }
-
-    void StoreAttributeDouble(PlugIn::Attribute_t& slot, f64 value)
-    {
-        CGS_STATIC_ASSERT((sizeof(slot) == sizeof(f64)), "RWAC attribute slot");
-        std::memcpy(&slot, &value, sizeof(value));
-    }
-
     template <class T>
     T* ReserveDeferred(System* system, u32 bytes)
     {
@@ -466,13 +452,13 @@ int SndPlayer1_CgsStreamMod::CreateInstance(PlugIn* apBase, void* apContext)
     self->mCurrentRequestSamplesPlayed = 0;
     self->mCurrentRequestNumSamples = 0;
     self->mMaxChannels = self->mOutputChannels;
-    self->mAttribute[0].mfValue = 0.0f;
+    self->mAttribute[0].f32 = 0.0f;
     self->mRequestHandle = 0.0f;
     self->mLastRequestHandleProcessed = 0.0f;
     self->mLastRequestHandleSuccessfullyProcessed = 0.0f;
     self->mCurrentRequestHandle = 0.0f;
-    StoreAttributeDouble(self->mAttribute[1], 0.0);
-    StoreAttributeDouble(self->mAttribute[2], 0.0);
+    self->mAttribute[1].f64 = 0.0;
+    self->mAttribute[2].f64 = 0.0;
     self->mDcOffsetsGathered = 0;
     self->mNumDeclickSamples = 0;
     self->mNextFeedSlotToFill = 0;
@@ -580,11 +566,11 @@ int SndPlayer1_CgsStreamMod::Event(int aiEventId, void* apParameter)
         const f32 requestHandle = params.requestHandle;
         params.isRequestDone = 0.0f;
         const bool reachesDurationTest =
-            (requestHandle == mAttribute[0].mfValue) ||
+            (requestHandle == mAttribute[0].f32) ||
             (!(requestHandle > mLastRequestHandleProcessed) &&
              !(requestHandle <= mLastRequestHandleSuccessfullyProcessed));
-        if ((requestHandle < mAttribute[0].mfValue) ||
-            (reachesDurationTest && LoadAttributeDouble(mAttribute[2]) == 0.0))
+        if ((requestHandle < mAttribute[0].f32) ||
+            (reachesDurationTest && mAttribute[2].f64 == 0.0))
             params.isRequestDone = 1.0f;
         break;
     }
@@ -1166,20 +1152,16 @@ void SndPlayer1_CgsStreamMod::RwacTimerClient(
     RequestInternal* request = &self->Request(index);
     if (!IsRequestActive(request->state))
     {
-        StoreAttributeDouble(self->mAttribute[1], 0.0);
-        StoreAttributeDouble(self->mAttribute[2], 0.0);
+        self->mAttribute[1].f64 = 0.0;
+        self->mAttribute[2].f64 = 0.0;
         return;
     }
 
-    self->mAttribute[0].mfValue = self->mCurrentRequestHandle;
-    StoreAttributeDouble(
-        self->mAttribute[2],
-        static_cast<f64>(self->mCurrentRequestNumSamples) /
-            self->mCurrentRequestSampleRate);
-    StoreAttributeDouble(
-        self->mAttribute[1],
-        static_cast<f64>(self->mCurrentRequestSamplesPlayed) /
-            self->mCurrentRequestSampleRate);
+    self->mAttribute[0].f32 = self->mCurrentRequestHandle;
+    self->mAttribute[2].f64 =
+        static_cast<f64>(self->mCurrentRequestNumSamples) / self->mCurrentRequestSampleRate;
+    self->mAttribute[1].f64 =
+        static_cast<f64>(self->mCurrentRequestSamplesPlayed) / self->mCurrentRequestSampleRate;
 
     while (IsRequestActive(request->state) && request->numSamples == 0)
     {

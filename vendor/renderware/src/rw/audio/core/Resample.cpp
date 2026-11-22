@@ -133,7 +133,7 @@ int Resample::CreateInstance(Resample *self)
     self->mIncr16_16 = 0;                  // @ +0x3C
     self->mAcc16_16 = 0;                   // @ +0x40
     self->mCurrentHistorySamples = 0;      // @ +0x48
-    self->mAttribute[ATTRIBUTE_SETPITCH].mfValue = 1.0f; // flt_82001C98 @ +0x28
+    self->mAttribute[ATTRIBUTE_SETPITCH].f32 = 1.0f; // flt_82001C98 @ +0x28
     self->mRequestedResampleRatio = -1.0f; // flt_820037C8 @ +0x34
     self->mTargetHistorySamples = 2;       // @ +0x49 (the 2 interpolation taps)
     return 1;
@@ -181,7 +181,7 @@ int Resample::PreProcess(Resample *self, AudioProcessContext *ctx, int /*a3*/,
 {
     const f32 outputRate = ctx->mpFormat->mfSampleRate;             // *(ctx+0x30018)->+0x0C
     const f32 ratio = (self->mPreviousSampleRate / outputRate)
-                    * self->mAttribute[ATTRIBUTE_SETPITCH].mfValue;
+                    * self->mAttribute[ATTRIBUTE_SETPITCH].f32;
     if (self->mRequestedResampleRatio != ratio)
         SetResampleIncrement(self, ratio);
 

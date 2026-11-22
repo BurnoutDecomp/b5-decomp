@@ -170,13 +170,6 @@ namespace
         return next;
     }
 
-    f64 ReadDoubleAttribute(const PlugIn::Attribute_t &slot)
-    {
-        f64 value;
-        std::memcpy(&value, &slot, sizeof(value));
-        return value;
-    }
-
     s32 StreamBytesBuffered(rw::core::filesys::Stream *stream)
     {
         return stream->miRemaining;
@@ -320,7 +313,7 @@ int SndPlayer1::CreateInstance(SndPlayer1 *self, const ConstructorParams *apPara
 
     // [phase 6] the flat seeding, in the assembly's store order.
     self->mMaxChannels = self->mOutputChannels;                              // [8]
-    self->mAttribute[ATTRIBUTE_GETCURRENTREQUEST].mfValue = KF_ZERO;         // [9]
+    self->mAttribute[ATTRIBUTE_GETCURRENTREQUEST].f32 = KF_ZERO;         // [9]
     self->SetSampleLengthAttribute(KD_ZERO);                                 // [10] f64
     self->SetSamplePositionAttribute(KD_ZERO);                               // [11] f64
     *self->mpRequestHandle = KF_ZERO;                                        // [12]
@@ -602,7 +595,7 @@ int SndPlayer1::Event(int aiEventId, void *apParam)
         SndPlayer1IsRequestDoneParams *query =
             static_cast<SndPlayer1IsRequestDoneParams *>(apParam);
         const f32 handle = query->requestHandle;
-        const f32 current = mAttribute[ATTRIBUTE_GETCURRENTREQUEST].mfValue;
+        const f32 current = mAttribute[ATTRIBUTE_GETCURRENTREQUEST].f32;
         bool done = handle < current;
         if (!done)
         {
@@ -611,7 +604,7 @@ int SndPlayer1::Event(int aiEventId, void *apParam)
                 (!(handle > mLastRequestHandleProcessed) &&
                  !(handle <= mLastRequestHandleSuccessfullyProcessed));
             done = inWindow &&
-                   ReadDoubleAttribute(mAttribute[ATTRIBUTE_GETSAMPLELENGTH]) == 0.0;
+                   mAttribute[ATTRIBUTE_GETSAMPLELENGTH].f64 == 0.0;
         }
         query->isRequestDone = done ? 1.0f : 0.0f;
         return 0;
@@ -647,7 +640,7 @@ int SndPlayer1::Event(int aiEventId, void *apParam)
                         s32 bytes;
                         if (request->loopStart >= 0 &&
                             static_cast<f32>(static_cast<f64>(static_cast<u64>(index))) ==
-                                mAttribute[ATTRIBUTE_GETCURRENTREQUEST].mfValue)
+                                mAttribute[ATTRIBUTE_GETCURRENTREQUEST].f32)
                         {
                             bytes = StreamBytesBuffered(stream);
                         }
@@ -1604,7 +1597,7 @@ void SndPlayer1::RwacTimerClient(void *apContext, f32 /*afTimeToNextCall*/)
 
     u8 index = self->mCurrentRequest;
     RequestInternal *request = self->GetRequestInternal(index);
-    self->mAttribute[ATTRIBUTE_GETCURRENTREQUEST].mfValue = self->mCurrentRequestHandle;
+    self->mAttribute[ATTRIBUTE_GETCURRENTREQUEST].f32 = self->mCurrentRequestHandle;
     if (!IsRequestActive(request->state))
     {
         self->SetSampleLengthAttribute(0.0);
