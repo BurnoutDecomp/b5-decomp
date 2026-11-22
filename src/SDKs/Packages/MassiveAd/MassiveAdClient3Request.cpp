@@ -25,8 +25,8 @@ namespace MassiveAdClient3
 char gacHMACKey[36];
 
 // dword_8327F2C4 / dword_8327F2C8 -- the third-party ID / service strings.
-char* gpcThirdPartyID = 0;
-char* gpcThirdPartyService = 0;
+char* CRequestObject::m_szThirdPartyID = 0;
+char* CRequestObject::m_szThirdPartyService = 0;
 
 // dword_8327F2CC / dword_8327F2D0 -- the client-wide session / player IDs.
 // Zero-initialised .data, stamped in by the session-open path elsewhere.
@@ -852,7 +852,7 @@ char* CRequestObject::SetThirdPartyID(const char* pcID)
         return 0;
 
     char* lpCopy = static_cast<char*>(MassiveMalloc(luLength + 1));
-    gpcThirdPartyID = lpCopy;  // stored before the null test
+    m_szThirdPartyID = lpCopy;  // stored before the null test
     if (!lpCopy)
         return 0;
 
@@ -872,7 +872,7 @@ char* CRequestObject::SetThirdPartyService(const char* pcService)
         return 0;
 
     char* lpCopy = static_cast<char*>(MassiveMalloc(luLength + 1));
-    gpcThirdPartyService = lpCopy;  // stored before the null test
+    m_szThirdPartyService = lpCopy;  // stored before the null test
     if (!lpCopy)
         return 0;
 
@@ -884,10 +884,10 @@ char* CRequestObject::SetThirdPartyService(const char* pcService)
 // ---------------------------------------------------------------------------
 void CRequestObject::ClearThirdPartyService()
 {
-    if (gpcThirdPartyService)
+    if (m_szThirdPartyService)
     {
-        MassiveFree(gpcThirdPartyService);
-        gpcThirdPartyService = 0;
+        MassiveFree(m_szThirdPartyService);
+        m_szThirdPartyService = 0;
     }
 }
 
@@ -896,10 +896,10 @@ void CRequestObject::ClearThirdPartyService()
 // ---------------------------------------------------------------------------
 void CRequestObject::ClearThirdPartyID()
 {
-    if (gpcThirdPartyID)
+    if (m_szThirdPartyID)
     {
-        MassiveFree(gpcThirdPartyID);
-        gpcThirdPartyID = 0;
+        MassiveFree(m_szThirdPartyID);
+        m_szThirdPartyID = 0;
     }
 }
 

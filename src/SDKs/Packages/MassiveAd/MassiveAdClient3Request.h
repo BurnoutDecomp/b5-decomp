@@ -128,11 +128,6 @@ float              MassiveNetOrderFloat(float fValue);
 // gap to the next slot (0x8327F2A0..0x8327F2C4), not from an attested store.
 extern char gacHMACKey[36];
 
-// dword_8327F2C4 / dword_8327F2C8 -- the third-party ID / service strings
-// (owned MassiveMalloc'd copies installed by the Set* helpers below, or 0).
-extern char* gpcThirdPartyID;
-extern char* gpcThirdPartyService;
-
 // dword_8327F2CC / dword_8327F2D0 -- the client-wide MassiveAd session / player
 // IDs, stamped into every outgoing request block (e.g. CRequestExitZone::
 // WriteExitZoneRequest writes gnMassivePlayerID under wire tag 42 and
@@ -406,19 +401,19 @@ public:
 
     // ----- client-wide protocol state (static; .data slice above) ----------
 
-    // @ 0x82BCF320. Installs an owned copy of pcID into gpcThirdPartyID.
+    // @ 0x82BCF320. Installs an owned copy of pcID into m_szThirdPartyID.
     // Returns the copy, or 0 on a null/empty string or failed allocation.
     static char* SetThirdPartyID(const char* pcID);
 
     // @ 0x82BCF3E8. Installs an owned copy of pcService into
-    // gpcThirdPartyService. Returns the copy, or 0 as above.
+    // m_szThirdPartyService. Returns the copy, or 0 as above.
     static char* SetThirdPartyService(const char* pcService);
 
-    // @ 0x82BCF460. Frees gpcThirdPartyService through the MassiveAd heap hook
+    // @ 0x82BCF460. Frees m_szThirdPartyService through the MassiveAd heap hook
     // and nulls it. (The X360 r3 return is incidental; modelled as void.)
     static void ClearThirdPartyService();
 
-    // Symmetric clear for gpcThirdPartyID (separate ledger TU; body lives in the
+    // Symmetric clear for m_szThirdPartyID (separate ledger TU; body lives in the
     // MassiveAd third-party-state slice). Declared here -- CRequestObject is its
     // home -- because CRequestManager::Shutdown bl's into it. (The X360 r3 return
     // is incidental; modelled as void.)
@@ -429,6 +424,10 @@ public:
     static int SetPublicKey(const void* pKey);
 
 protected:
+    // Protected statics in requestobject.obj, at ARTIST 0x8327F2C4 and 0x8327F2C8.
+    static char* m_szThirdPartyID;
+    static char* m_szThirdPartyService;
+
     // The derived request TUs (CRequestOpenSession::Parse and friends) walk the
     // same buffer state directly on the X360, so the members are protected
     // rather than private.

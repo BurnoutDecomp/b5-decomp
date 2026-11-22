@@ -112,22 +112,22 @@ int CRequestOpenSession::WriteOpenSessionRequest(const char* pcSKUName,
     WriteU8((char)nSessionType, 0);  // clrlwi r4, r28, 24 -- session type byte
     MassiveLog(5, GetName(), "Writing Session Type: %d", nSessionType);
 
-    if (gpcThirdPartyID)             // dword_8327F2C4
+    if (m_szThirdPartyID)            // dword_8327F2C4
     {
         WriteU8(65, 0);              // li r4, 0x41
-        WriteString(gpcThirdPartyID, 0);
-        MassiveLog(5, GetName(), "Writing UnHashed Third Party ID: %s", gpcThirdPartyID);
+        WriteString(m_szThirdPartyID, 0);
+        MassiveLog(5, GetName(), "Writing UnHashed Third Party ID: %s", m_szThirdPartyID);
     }
     else
     {
         MassiveLog(5, GetName(), "No Third Party ID Set");
     }
 
-    if (gpcThirdPartyService)        // dword_8327F2C8
+    if (m_szThirdPartyService)       // dword_8327F2C8
     {
         WriteU8(66, 0);              // li r4, 0x42
-        WriteString(gpcThirdPartyService, 0);
-        MassiveLog(5, GetName(), "Writing Third Party Service Name: %s", gpcThirdPartyService);
+        WriteString(m_szThirdPartyService, 0);
+        MassiveLog(5, GetName(), "Writing Third Party Service Name: %s", m_szThirdPartyService);
     }
     else
     {
