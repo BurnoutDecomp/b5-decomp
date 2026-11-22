@@ -10,7 +10,7 @@
 // of that class is grounded directly in the disassembly of the bodied member function.
 // (DWARF *does* cover neighbouring rwaudiocore vocabulary and is used where it applies:
 // `private/linklist.h` for ListDNode/ListDStack and `plugins/submix.h` for SubMix's two
-// private statics -- see the ListDStack and SubMix blocks below.)
+// private statics -- see the SubMix declaration below.)
 //
 // Disconnect unlinks this connector from its SubMix's doubly-linked connector list
 // (head pointer lives in the SubMix at +0x28, link via mpNext / mppPrev), then -- when
@@ -31,7 +31,8 @@
 // =====================================================================================
 
 #include "types.hpp"             // f32
-#include "rw/audio/core/ITask.h" // rw::audio::core::ListDNode (its home in this tree)
+#include "rw/audio/core/ITask.h"
+#include "rw/audio/core/private/linklist.h"
 
 #include <cstddef> // offsetof -- the relative layout pins below
 
@@ -41,30 +42,6 @@ namespace audio
 {
 namespace core
 {
-
-// -------------------------------------------------------------------------------------
-// ListDStack -- rwaudiocore's 1-pointer intrusive doubly-linked-list head.
-//
-// DWARF (references/DecFIGS/dwarfdump/SDKs/EATech/include/rw/audio/core/private/
-// linklist.h): `struct rw::audio::core::ListDStack { private: ListDNode *phead; public:
-// ListDStack(); Reset(); IsEmpty(); GetHead() const; Push(ListDNode*); Pop();
-// Remove(ListDNode*); }`. Corroborated by the ProStreet08Milestone map
-// (?Push@ListDStack@core@audio@rw@@QAAXPAVListDNode@234@@Z and siblings).
-//
-// FLAG (reconstruction shape): only the data member is modelled, and it is left public.
-// The accessors are inlined at every ARTIST call site (SubMix::CreateInstanceHandler
-// @0x82B9C380 / ReleaseEvent @0x82BA0C18 / Send::ConnectByNameHandler @0x82B9FF80 all
-// open-code the push/remove/walk against `phead`), so there is no out-of-line body to
-// home; this mirrors exactly how the sibling `ListDNode` is modelled in ITask.h.
-// FLAG (home): DWARF puts ListDNode *and* ListDStack in `rw/audio/core/private/
-// linklist.h`. This tree has no such header yet and already homes ListDNode in ITask.h,
-// so ListDStack lands beside its first consumer here. A future rwaudiocore pass should
-// move both into linklist.h; this file must not create a new shared header.
-// -------------------------------------------------------------------------------------
-struct ListDStack
-{
-    ListDNode *phead; // +0x00 (console)
-};
 
 // -------------------------------------------------------------------------------------
 // SubMix -- MOVED (phase E 2026-08-28). The partial, opaque-base SubMix that used to be

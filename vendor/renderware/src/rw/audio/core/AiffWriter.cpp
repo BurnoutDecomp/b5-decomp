@@ -487,30 +487,19 @@ int AiffWriter::StopHandler(void *pCommandRecord)
 }
 
 // -------------------------------------------------------------------------------------
-// ReleaseEvent @0x82BA53F8 -- finalise + tear down: run StopHandler over a throwaway record
-// pointing at this writer (to flush + close the file), then free the PCM buffer.
-//   char rec[8]; ((AiffWriter**)rec)[1] = self;
-//   result = StopHandler(rec);
-//   if (self->mpBuf) return System::Free(self->mpSystem, self->mpBuf, 0);
-//   return result;
-// (StopHandler reads only the record's mpWriter slot, so a header-only stop record on the
-// stack suffices -- the X360 reserves exactly its 8 bytes, the host struct is 16.)
+// ReleaseEvent @0x82BA53F8 finalizes the writer and frees the PCM buffer.
+// The audio PDB declares a void release hook. ARTIST passes the stop record
+// directly at 0x82BA5414, so only its writer field is initialized.
 // -------------------------------------------------------------------------------------
-int AiffWriter::ReleaseEvent(AiffWriter *self)
+void AiffWriter::ReleaseEvent(AiffWriter *self)
 {
     AiffStopCommandRecord rec;
-    rec.mpfnHandler = 0;
-    rec.mpWriter    = self;    // v5 = a1  (StopHandler reads *(rec+4))
+    rec.mpWriter = self;
 
-    int result = AiffWriter::StopHandler(&rec);
+    StopHandler(&rec);
 
-    void *buf = self->mpBuf; // v3 = *(a1+64)
-    if (buf)
-    {
-        System::Free(self->mpSystem, buf, 0);
-        return 0; // System::Free is void; the asm's returned r3 is that void register
-    }
-    return result;
+    if (self->mpBuf)
+        System::Free(self->mpSystem, self->mpBuf, 0);
 }
 
 // -------------------------------------------------------------------------------------

@@ -43,7 +43,7 @@
 
 #include "types.hpp" // f32, s32, u8, u32
 
-#include "rw/audio/core/Collection.h"  // Collection (embedded by value) + Collection::Node
+#include "rw/audio/core/Collection.h"
 #include "rw/audio/core/TimerHandle.h" // TimerHandle (referenced through the Nodes)
 
 namespace rw
@@ -95,7 +95,7 @@ public:
     f32 mfCallbackTime;                   // +0x38  time value handed to each callback
     TimerHandle *mpCurrentHandle;         // +0x3C  handle whose callback is running
     s32 miCurrentCollection;              // +0x40  Collection index for a deferred remove
-    Collection::Node *mpDeferredRemoveNode; // +0x44  pending self-remove node (0 = none)
+    Collection::ItemNode *mpDeferredRemoveNode; // +0x44  pending self-remove node (0 = none)
 };
 
 } // namespace core

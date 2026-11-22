@@ -42,11 +42,9 @@ TimerManager *TimerManager::TimerManager_ctor(TimerManager *self)
     for (int i = 0; i < 2; ++i)
     {
         Collection *pCollection = &self->maCollections[i];
-        pCollection->mpBlockHead = 0;
-        pCollection->mpBlockTail = 0;
-        pCollection->miBlockCount = 0;
-        pCollection->mpFreeHead = 0;
-        pCollection->mpUsedHead = 0;
+        pCollection->mNodeBlocks.Reset();
+        pCollection->mFree.Reset();
+        pCollection->mUsed.Reset();
         pCollection->mSize = 0;
         pCollection->mCapacity = 0;
     }
@@ -96,7 +94,7 @@ bool TimerManager::AddTimer(TimerManager *self, TimerHandle *handle, TimerCallba
 void TimerManager::ExecuteTimers(TimerManager *self, int collectionIndex)
 {
     Collection *pCollection = &self->maCollections[collectionIndex];
-    Collection::Node *pNode = pCollection->mpUsedHead; // +0x10
+    Collection::ItemNode *pNode = pCollection->GetNodes();
 
     while (pNode)
     {
@@ -111,9 +109,9 @@ void TimerManager::ExecuteTimers(TimerManager *self, int collectionIndex)
 
         pHandle->mpCallback(pHandle->mpContext, fTime);
 
-        Collection::Node *pDeferred = self->mpDeferredRemoveNode; // +0x44 (set by RemoveTimer)
+        Collection::ItemNode *pDeferred = self->mpDeferredRemoveNode;
         self->mpCurrentHandle = 0;         // +0x3C = 0
-        pNode = pNode->mpNext;                   // advance before any unlink
+        pNode = reinterpret_cast<Collection::ItemNode *>(pNode->node.pnext);
 
         if (pDeferred)
         {
@@ -147,8 +145,7 @@ void TimerManager::Defragment(TimerManager *self)
 
 // -------------------------------------------------------------------------------------
 // Release @0x82B6DEE8
-// Clear then release each of the two owned Collections (Clear returns the Collection,
-// which Release then frees).
+// Clear the handles, then release the blocks of each collection.
 // -------------------------------------------------------------------------------------
 void TimerManager::Release(TimerManager *self)
 {
@@ -156,7 +153,8 @@ void TimerManager::Release(TimerManager *self)
     int i = 2;
     do
     {
-        Collection::Release(Collection::Clear(pCollection));
+        Collection::Clear(pCollection);
+        Collection::Release(pCollection);
         --i;
         ++pCollection;
     } while (i);
@@ -178,14 +176,14 @@ void TimerManager::RemoveTimer(TimerManager *self, TimerHandle *handle)
     {
         // Deferred self-remove: hand the node off to ExecuteTimers.
         self->miCurrentCollection = stage; // +0x40
-        Collection::Node *pNode = handle->mItemHandle.pNode;
+        Collection::ItemNode *pNode = handle->mItemHandle.pNode;
         handle->mItemHandle.pNode = 0;
         pNode->pHandle = 0;
         self->mpDeferredRemoveNode = pNode; // +0x44
     }
     else if (stage != 3)
     {
-        Collection::Node *pNode = handle->mItemHandle.pNode;
+        Collection::ItemNode *pNode = handle->mItemHandle.pNode;
         handle->mItemHandle.pNode = 0;
         pNode->pHandle = 0;
         Collection::RemoveNode(&self->maCollections[stage], pNode);

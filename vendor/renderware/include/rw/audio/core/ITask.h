@@ -17,6 +17,7 @@
 // =====================================================================================
 
 #include "types.hpp" // f32
+#include "rw/audio/core/private/linklist.h"
 
 #include <cstddef> // offsetof
 
@@ -26,13 +27,6 @@ namespace audio
 {
 namespace core
 {
-
-// Intrusive doubly-linked list node (rwaudio PDB member names: pnext / pprev).
-struct ListDNode
-{
-    ListDNode *pnext; // +0x00
-    ListDNode *pprev; // +0x04
-};
 
 class ITask
 {

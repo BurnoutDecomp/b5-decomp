@@ -104,7 +104,7 @@ public:
 
     // Finalise a recording: run StopHandler to flush + close, then free the PCM buffer.
     // @0x82BA53F8.
-    static int ReleaseEvent(AiffWriter *self);
+    static void ReleaseEvent(AiffWriter *self);
 
     // Deferred "start recording" ring handler: open the file named in the record, write the
     // 82-byte header placeholder, and register the pump timer. Returns the record's byte
