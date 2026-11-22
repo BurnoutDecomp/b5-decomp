@@ -58,15 +58,15 @@ struct DataPoint
     bool HasChangedFrom(const T& lValue) const
     { return mCurrentValue != mPreviousValue && mPreviousValue == lValue; }
 
-    // Push a new sample: the old current becomes previous. (X360 paired-store
-    // semantics from FrameInformation::UpdateFatalityFlag.)
-    void Update(const T& lValue)
+    // DecFIGS CgsSoundUtils.h:896 takes the sample by value. A caller can pass
+    // GetPrevious(), so the sample must be captured before rotating the history.
+    void Update(T lValue)
     {
         mPreviousValue = mCurrentValue;
         mCurrentValue  = lValue;
     }
 
-    void Flush(const T& lValue)
+    void Flush(T lValue)
     {
         mCurrentValue  = lValue;
         mPreviousValue = lValue;
