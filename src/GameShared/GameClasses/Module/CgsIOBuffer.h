@@ -26,7 +26,12 @@ namespace CgsModule
             eStatusLockedForRead  = 0x10,
         };
 
-        void Construct();
+        // ARTIST inlines this byte initialization into the derived buffers.
+        void Construct()
+        {
+            mxStatusFlags.Clear();
+            mxStatusFlags.SetBit(eStatusConstructed);
+        }
         void Destruct();
         void LockForWrite();
         void UnlockForWrite();

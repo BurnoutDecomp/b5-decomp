@@ -34,7 +34,18 @@
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/vechashmap.h"           // Attrib::TableFreeFunc (old-array census release)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribinstance.h"     // Attrib::Collection (Remove: mpClass)
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/attribclassprivate.h" // Attrib::ClassPrivate (Remove: mStaticData)
+#include <cstdlib>   // _rotl64
 #include <new>   // placement new (in-place Node construction in Add)
+
+namespace
+{
+    // ARTIST reduces the low word of the rotated key with divwu (0x82807BC4).
+    inline u32 GetHomeIndex(u64 luKey, u32 luShift, u32 luCapacity)
+    {
+        const u32 luHash = static_cast<u32>(_rotl64(luKey, static_cast<int>(luShift)));
+        return luHash % luCapacity;
+    }
+}
 
 // ~ClassPrivate's bucket release (@0x8280F4D8 tail): free the bucket array by
 // its capacity (X360 capacity << 4 == capacity * node stride; sizeof-based for
@@ -115,9 +126,7 @@ bool Attrib::HashMap::Add(u64 luKey, u64 luTypeKey, void* lpValue, bool lbLaidOu
     const u8  lu8KeyShift = mu8KeyShift;
     const u32 luCapacity  = muCapacity;
 
-    // Home index = rotl32(key, keyShift) % capacity (the X360 twllei is the divide guard).
-    const u32 luHome = static_cast<u32>((luKey >> (64 - lu8KeyShift)) |
-                                        (luKey << lu8KeyShift)) % luCapacity;
+    const u32 luHome = GetHomeIndex(luKey, lu8KeyShift, luCapacity);
 
     int liSteps = 0;
     const unsigned int luDest = PreFlightAdd(luKey, luHome, &liSteps);
@@ -229,10 +238,11 @@ Attrib::HashMap::Node::Node(u64 luKey, u64 luTypeKey, void* lpValue,
 {
     mKey = luKey;
     mpValue = lpValue;
-    mTypeIndex = static_cast<u16>(Database::Get().GetTypeDesc(luTypeKey).mIndex);
+    mTypeIndex = static_cast<u16>(Database::GetInitializedDatabase()->GetTypeDesc(luTypeKey).mIndex);
     // (mu8SearchLen untouched -- the X360 ctor leaves the slot's cached run length)
-    mFlags = static_cast<u8>(lu8Flags | 0x80);
-    if (lbLaidOut && ((lu8Flags & 0x10) != 0 || (lu8Flags & 0x20) != 0))
+    const u8 lu8OccupiedFlags = static_cast<u8>(lu8Flags | 0x80);
+    mFlags = lu8OccupiedFlags;
+    if (lbLaidOut && ((lu8OccupiedFlags & 0x10) != 0 || (lu8OccupiedFlags & 0x20) != 0))
     {
         mpValue = reinterpret_cast<void*>(
             reinterpret_cast<uintptr_t>(lpValue) - reinterpret_cast<uintptr_t>(lpBase));
@@ -256,10 +266,7 @@ int Attrib::HashMap::CountSearchCacheLines(u64 luKey, u8 lu8CacheLineShift) cons
     const u32 luCapacity = muCapacity;
     Bucket* lpBuckets = mpBuckets;
 
-    // Home index = rotl32(key, keyShift) % capacity.
-    const u32 luHash = static_cast<u32>((luKey >> (64 - lu8KeyShift)) |
-                                        (luKey << lu8KeyShift));
-    u32 luIndex = luHash % luCapacity;
+    u32 luIndex = GetHomeIndex(luKey, lu8KeyShift, luCapacity);
 
     Bucket* lpBucket = &lpBuckets[luIndex];
     const u8 lu8SearchLen = lpBucket->mu8SearchLen;
@@ -326,10 +333,7 @@ unsigned int Attrib::HashMap::FindIndex(u64 luKey) const
     const u32 luCapacity = muCapacity;
     Bucket* lpBuckets = mpBuckets;
 
-    // Home index = rotl32(key, keyShift) % capacity.
-    const u32 luHash = static_cast<u32>((luKey >> (64 - lu8KeyShift)) |
-                                        (luKey << lu8KeyShift));
-    u32 luIndex = luHash % luCapacity;
+    u32 luIndex = GetHomeIndex(luKey, lu8KeyShift, luCapacity);
 
     Bucket* lpHome = &lpBuckets[luIndex];
     const u8 lu8SearchLen = lpHome->mu8SearchLen;
@@ -468,25 +472,26 @@ void* Attrib::HashMap::Remove(Node* lpNode, void* lpBase, const Collection* lpCo
     CGS_ASSERT(lpNode->IsOccupied()
                    && lpNode >= mpBuckets
                    && lpNode < mpBuckets + muCapacity,
-               "Attrib::HashMap removing node which is not valid node in table.");
+        CgsDev::Assert::MessageAt("Attrib::HashMap removing node which is not valid node in table.",
+            "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\attribsys/runtime/common/attribhashmap.h", 449 /* ARTIST 0x82807AD0 */));
 
     // The node's stored key (0 when the occupied bit is clear) drives the home-index rehash.
     const u64 lu64Key   = lpNode->Key();
-    const u8  lu8Flags  = lpNode->mFlags;
+    const u32 luFlags = lpNode->mFlags;
 
     // Resolve the address the caller must act on, per the payload's storage flags.
     u8* lpResult;
-    if ((lu8Flags & 0x40) != 0)
+    if ((luFlags & 0x40) != 0)
     {
         // By-value: the payload lives inline in the node's value word.
         lpResult = reinterpret_cast<u8*>(&lpNode->mpValue);
     }
-    else if ((lu8Flags & 0x10) != 0)
+    else if ((luFlags & 0x10) != 0)
     {
         // Laid out: an offset into the caller-supplied data base.
         lpResult = static_cast<u8*>(lpBase) + lpNode->muOffset;
     }
-    else if ((lu8Flags & 0x20) != 0)
+    else if ((luFlags & 0x20) != 0)
     {
         // Inherited: an offset into the owning class's static data block.
         const ClassPrivate* lpClassPrivate =
@@ -505,22 +510,18 @@ void* Attrib::HashMap::Remove(Node* lpNode, void* lpBase, const Collection* lpCo
     lpNode->mFlags  = 0;
     --muCount;
 
-    if (!lbRestore)
+    if (lbRestore)
+    {
+        const u32 luNodeIndex = static_cast<u32>(lpNode - mpBuckets);
+        const u32 luHome = GetHomeIndex(lu64Key, mu8KeyShift, muCapacity);
+        u32 luUpdated = UpdateSearchLength(luHome, luNodeIndex);
+        while (luUpdated < muCapacity)
+            luUpdated = UpdateSearchLength(luUpdated, luUpdated);
+    }
+    else
     {
         lpNode->mu8SearchLen = 0;
-        return lpResult;
     }
-
-    // Repair the search-length invariant from the vacated home bucket outward.
-    const u8 lu8KeyShift = mu8KeyShift;
-    const unsigned int luTableSize = muCapacity;
-    const unsigned int luNodeIndex = static_cast<unsigned int>(lpNode - mpBuckets);
-    const u64 lu64Rot = (lu64Key >> (64 - lu8KeyShift)) | (lu64Key << lu8KeyShift);
-    const unsigned int luHome = static_cast<unsigned int>(lu64Rot % luTableSize);
-
-    unsigned int luUpdated = UpdateSearchLength(luHome, luNodeIndex);
-    while (luUpdated < muCapacity)
-        luUpdated = UpdateSearchLength(luUpdated, luUpdated);
     return lpResult;
 }
 
@@ -545,8 +546,7 @@ void Attrib::HashMap::Transfer(Node& lrNode)
     const u8 lu8KeyShift = mu8KeyShift;
     const unsigned int luTableSize = muCapacity;
 
-    const u64 lu64Rot = (lu64Key >> (64 - lu8KeyShift)) | (lu64Key << lu8KeyShift);
-    const unsigned int luHome = static_cast<unsigned int>(lu64Rot % luTableSize);
+    const u32 luHome = GetHomeIndex(lu64Key, lu8KeyShift, luTableSize);
 
     int liProbeCount = 0;
     const unsigned int luDest = PreFlightAdd(lu64Key, luHome, &liProbeCount);
@@ -630,9 +630,7 @@ unsigned int Attrib::HashMap::UpdateSearchLength(unsigned int luIndex, unsigned 
     if (mpBuckets[luTail].IsOccupied())
     {
         const u64 lu64Value = mpBuckets[luTail].mKey;
-        const u8 lu8Shift = mu8KeyShift;
-        const u64 lu64Rot = (lu64Value >> (64 - lu8Shift)) | (lu64Value << lu8Shift);
-        CGS_ASSERT(luHome == static_cast<unsigned int>(lu64Rot % muCapacity),
+        CGS_ASSERT(luHome == GetHomeIndex(lu64Value, mu8KeyShift, muCapacity),
                    "Incorrect max search length found in table.");
     }
 
@@ -662,9 +660,7 @@ unsigned int Attrib::HashMap::UpdateSearchLength(unsigned int luIndex, unsigned 
         {
             const unsigned int luProbeIndex = (luProbe + luHome) % muCapacity;
             const u64 lu64V = mpBuckets[luProbeIndex].Key();
-            const u8 lu8Shift = mu8KeyShift;
-            const u64 lu64Rot = (lu64V << lu8Shift) | (lu64V >> (64 - lu8Shift));
-            if (static_cast<unsigned int>(lu64Rot % muCapacity) == luHome)
+            if (GetHomeIndex(lu64V, mu8KeyShift, muCapacity) == luHome)
                 luNewMax = luProbe;
         }
     }

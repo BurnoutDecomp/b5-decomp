@@ -1157,7 +1157,8 @@ namespace PropEntityIO
     //     nothing with it but LockForWrite @0x822C473C / UnlockForWrite @0x822C4800.
     struct OutputBuffer_PostScene : public CgsModule::IOBuffer
     {
-        void Construct() { CgsModule::IOBuffer::Construct(); }   // :666, ICF-folded
+        // FAKEMATCH: CreateIOBuffer calls the folded 12-byte initializer at 0x827B6C54.
+        __declspec(noinline) void Construct() { CgsModule::IOBuffer::Construct(); }
         void Destruct()  { CgsModule::IOBuffer::Destruct(); }    // :670, ICF-folded
     };
 }

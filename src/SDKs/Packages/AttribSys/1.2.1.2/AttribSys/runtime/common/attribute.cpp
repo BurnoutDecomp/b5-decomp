@@ -90,28 +90,31 @@ namespace Attrib
     // is never stored inside the node).
     unsigned int Node::GetCount(void* lpLayout, const Collection* lpCollection)
     {
-        if ((muFlags & 0x80u) == 0)
-            return 0;
-        if ((muFlags & 0x2u) == 0)
+        if ((muFlags & 0x80u) != 0)
+        {
+            if ((muFlags & 0x2u) != 0)
+            {
+                const Array* lpArray;
+                if ((muFlags & 0x10u) != 0)
+                {
+                    lpArray = reinterpret_cast<const Array*>(static_cast<u8*>(lpLayout) + muValue);
+                }
+                else if ((muFlags & 0x20u) != 0)
+                {
+                    const ClassPrivate* lpPrivate =
+                        lpCollection->mpClass->GetPrivates();
+                    lpArray = reinterpret_cast<const Array*>(
+                        static_cast<u8*>(lpPrivate->mStaticData) + muValue);
+                }
+                else
+                {
+                    lpArray = reinterpret_cast<const Array*>(mpValue);   // full-width payload
+                }
+                return lpArray->muNumElements;
+            }
             return 1;
-
-        const Array* lpArray;
-        if ((muFlags & 0x10u) != 0)
-        {
-            lpArray = reinterpret_cast<const Array*>(static_cast<u8*>(lpLayout) + muValue);
         }
-        else if ((muFlags & 0x20u) != 0)
-        {
-            const ClassPrivate* lpPrivate =
-                lpCollection->mpClass->GetPrivates();
-            lpArray = reinterpret_cast<const Array*>(
-                static_cast<u8*>(lpPrivate->mStaticData) + muValue);
-        }
-        else
-        {
-            lpArray = reinterpret_cast<const Array*>(mpValue);   // full-width payload
-        }
-        return lpArray->muNumElements;
+        return 0;
     }
 
     // ========================================================================

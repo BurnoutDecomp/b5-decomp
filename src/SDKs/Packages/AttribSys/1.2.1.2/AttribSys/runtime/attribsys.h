@@ -70,6 +70,7 @@ namespace Attrib
         // GetDatabasePrivate() helper (attribclassprivate.h seam) reads the
         // private singleton the same way the X360 reads off_83011BC4->+4 inline.
         friend struct DatabasePrivate;
+        friend class HashMap;
         friend DatabasePrivate* GetDatabasePrivate();
         // DatabaseExportPolicy::Initialize (@0x8280CAC8) installs the freshly
         // built registry as the singleton (off_83011BC4 store).

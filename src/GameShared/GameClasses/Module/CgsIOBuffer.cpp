@@ -14,13 +14,6 @@
 // LockForWrite/UnlockForWrite/LockForRead/UnlockForRead (CgsIOBuffer.h:217-219 et al).
 namespace CgsModule
 {
-    // @ CgsIOBuffer.h:61 - mark the buffer constructed (clears all other status bits).
-    void IOBuffer::Construct()
-    {
-        mxStatusFlags.Clear();
-        mxStatusFlags.SetBit(eStatusConstructed);
-    }
-
     // @ CgsIOBuffer.h:65
     void IOBuffer::Destruct()
     {

@@ -21,9 +21,6 @@ u64 AttribSysCollectionKey::GetHashKey() const
     char lacTemp[512];   // DWARF cpp:81
     rw::core::stdc::ConvertI64ToA(miAssetGuid, lacTemp, 10);
 
-    if (lacTemp[0] == '\0')
-        return 0;
-
     // ⭐ NARROWING RETIRED 2026-08-01 (physics wave 1). This used to return
     // `static_cast<Attribute::Key>(...)` -- a 32-bit truncation -- with a FLAG saying the
     // honest width was 64 but that Attribute::Key "is ALSO the type of 4-byte serialised
@@ -42,8 +39,12 @@ u64 AttribSysCollectionKey::GetHashKey() const
     // The X360 body @0x82805C20 tail-calls the hash and returns r3 whole, which is exactly
     // what this now does. (The ::Attribute::Key typedef itself is left at u32: the 4-byte
     // claim is still untested for BrnDirectorEvents.h:32 and BrnMessageData.h.)
-    return Attrib::StringToKey(lacTemp, static_cast<u32>(std::strlen(lacTemp)),
-                               0xABCDEF0011223344ULL);
+    if (lacTemp[0] != '\0')
+    {
+        return Attrib::StringToKey64(lacTemp, static_cast<u32>(std::strlen(lacTemp)),
+                                   Attrib::KU_ATTRIB_STRING_TO_KEY_SEED);
+    }
+    return 0;
 }
 
 }

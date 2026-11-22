@@ -576,7 +576,8 @@ void DatabaseExportPolicy::Initialize(Vault& lrVault, const TypeID& lrType,
                                       const ExportID& lrExport, void* lpData,
                                       unsigned int luSize)
 {
-    CGS_ASSERT(luSize >= 0x10, "Invalid DatabaseLoadData.");
+    CGS_ASSERT(luSize >= 0x10, CgsDev::Assert::MessageAt(
+        "Invalid DatabaseLoadData.", "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribdatabase.cpp", 130));
 
     void* lpBlock = Attrib::Alloc(sizeof(DatabasePrivate), NULL);
     Database::sThis = lpBlock != NULL
@@ -637,7 +638,8 @@ void CollectionExportPolicy::Initialize(Vault& lrVault, const TypeID& /*lrType*/
                                         const ExportID& /*lrExport*/, void* lpData,
                                         unsigned int luSize)
 {
-    CGS_ASSERT(luSize >= 0x30, "Invalid CollectionLoadData.");
+    CGS_ASSERT(luSize >= 0x30, CgsDev::Assert::MessageAt(
+        "Invalid CollectionLoadData.", "..\\..\\..\\SDKs\\Packages\\AttribSys\\1.2.1.2\\AttribSys/runtime/common/attribdatabase.cpp", 309));
 
     DatabasePrivate* lpPrivates = GetDatabasePrivate();
     const CollectionLoadData* lpLoad = static_cast<const CollectionLoadData*>(lpData);

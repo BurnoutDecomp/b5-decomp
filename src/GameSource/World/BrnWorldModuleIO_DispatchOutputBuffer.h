@@ -60,7 +60,8 @@ namespace BrnWorldIO
         // landing the producer, NOT a memset here (per the base-only-Construct policy in
         // CgsIOBufferStack.h). Modelled explicitly rather than left to inheritance so the next
         // reader of this header does not have to re-derive that from the binary.
-        void Construct() { CgsModule::IOBuffer::Construct(); }
+        // FAKEMATCH: CreateIOBuffer calls the folded 12-byte initializer at 0x823AEB7C.
+        __declspec(noinline) void Construct() { CgsModule::IOBuffer::Construct(); }
 
         // --- accessors bodied in BrnWorldModuleIO_DispatchOutputBuffer.cpp --------------
         // Getters read-lock (status bit 4); setters write-lock (status bit 3, "Not locked for

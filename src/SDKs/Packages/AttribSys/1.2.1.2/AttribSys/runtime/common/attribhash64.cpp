@@ -134,11 +134,11 @@ u64 StringToKey(const char* lpcText, u32 luLength, u64 luSeed)
     return StringToKey64(lpcText, luLength, luSeed);
 }
 
-// @ 0x82805828 -- NUL-terminated convenience form (strlen + the baked seed).
+// ARTIST 0x82805828 checks for null and empty keys before hashing.
 u64 StringToKey(const char* lpcText)
 {
-    return StringToKey(lpcText,
-                       static_cast<u32>(strlen(lpcText)),
-                       KU_ATTRIB_STRING_TO_KEY_SEED);
+    if (lpcText && lpcText[0] != '\0')
+        return StringToKey64(lpcText, static_cast<u32>(strlen(lpcText)), KU_ATTRIB_STRING_TO_KEY_SEED);
+    return 0;
 }
 }
