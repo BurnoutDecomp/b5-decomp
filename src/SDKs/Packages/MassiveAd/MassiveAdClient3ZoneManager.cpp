@@ -612,7 +612,7 @@ int CMassiveZoneManager::ReportImpressions()
 // CMassiveZoneManager::Tick @ 0x82BD3130
 //
 // The zone state machine, pumped once per client tick. It is gated on a live
-// session id (gnMassiveSessionID) and on a non-zero zone state; a live state
+// session id (m_u32MassiveSessionID) and on a non-zero zone state; a live state
 // first clears the base last-error dword, then dispatches:
 //   state 1  -- build + submit a CRequestEnterZone carrying the zone name and the
 //               client core's bandwidth-usage triple, moving BOTH the zone state
@@ -628,7 +628,7 @@ int CMassiveZoneManager::ReportImpressions()
 // ---------------------------------------------------------------------------
 int CMassiveZoneManager::Tick()
 {
-    if (!gnMassiveSessionID)  // dword_8327F2CC
+    if (!CRequestObject::GetMassiveSessionID())  // dword_8327F2CC
         return 0;
 
     int lnState = GetValid();  // v2 = a1[4]

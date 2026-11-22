@@ -57,8 +57,8 @@ CRequestExitZone::~CRequestExitZone()
 //
 // Block body (all appends, bPrepend = 0):
 //   [71,string zoneName]
-//   [42,u32 gnMassivePlayerID]
-//   [43,u32 gnMassiveSessionID]
+//   [42,u32 m_u32MassivePlayerID]
+//   [43,u32 m_u32MassiveSessionID]
 //   if (size && time && items):
 //     [16,u32 size][17,u32 time][18,u16 items]
 //   FinishBaseBlock(207, 1, 1);   return 1;
@@ -74,12 +74,12 @@ int CRequestExitZone::WriteExitZoneRequest(const char* pcZoneName, int nBandwidt
     MassiveLog(5, GetName(), "Writing Zone Name: %s", pcZoneName);
 
     WriteU8(42, 0);                  // li r4, 0x2A
-    WriteU32(gnMassivePlayerID, 0);  // dword_8327F2D0
-    MassiveLog(5, GetName(), "Writing Massive Player ID: %d", gnMassivePlayerID);
+    WriteU32(GetMassivePlayerID(), 0);  // dword_8327F2D0
+    MassiveLog(5, GetName(), "Writing Massive Player ID: %d", GetMassivePlayerID());
 
     WriteU8(43, 0);                  // li r4, 0x2B
-    WriteU32(gnMassiveSessionID, 0); // dword_8327F2CC
-    MassiveLog(5, GetName(), "Writing Massive Session ID: %d", gnMassiveSessionID);
+    WriteU32(GetMassiveSessionID(), 0); // dword_8327F2CC
+    MassiveLog(5, GetName(), "Writing Massive Session ID: %d", GetMassiveSessionID());
 
     if (nBandwidthTotalSize && nBandwidthTotalTime && sBandwidthTotalItems)
     {

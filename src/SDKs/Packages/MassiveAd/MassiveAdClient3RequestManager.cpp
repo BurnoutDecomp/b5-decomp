@@ -17,17 +17,8 @@
 namespace MassiveAdClient3
 {
 
-// off_8327F368 -- the live singleton pointer (null before init / after shutdown).
-CRequestManager* spRequestManager = 0;
+CRequestManager* CRequestManager::m_pInstance = 0;
 
-// ---------------------------------------------------------------------------
-// dword_8327F2CC / dword_8327F2D0 -- the client-wide MassiveAd session / player
-// IDs. Their real homes are gnMassiveSessionID / gnMassivePlayerID
-// (MassiveAdClient3Request.h, defined in MassiveAdClient3Request.cpp); the
-// earlier anonymous-namespace `gpMassiveClientState_*` placeholder pair this TU
-// carried was a duplicate model of the SAME two .data slots (it would have made
-// Shutdown clear file-local copies instead of the live IDs) and was removed
-// when the globals were homed.
 // ---------------------------------------------------------------------------
 // CRequestManager::CRequestManager @ 0x82BD06D0
 //
@@ -58,20 +49,6 @@ CRequestManager::~CRequestManager()
 }
 
 // ---------------------------------------------------------------------------
-// CRequestManager::`scalar deleting destructor' @ 0x82BD0BF8
-//
-// The compiler-emitted vftable slot-0 thunk: run the destructor, then -- iff
-// (bDelete & 1) -- free the object through the base operator delete. Returns this.
-// ---------------------------------------------------------------------------
-void* CRequestManager::ScalarDeletingDestructor(char bDelete)
-{
-    this->~CRequestManager();                  // bl ...~CRequestManager
-    if ((bDelete & 1) != 0)                     // clrlwi. r11, r30, 31; beq
-        CMassiveBaseObject::operator delete(this); // bl ...operator delete(a1)
-    return this;                                // r3 = r31
-}
-
-// ---------------------------------------------------------------------------
 // CRequestManager::Initialize @ 0x82BD0798
 //
 // Lazy singleton: if the slot is empty, allocate 0x60 bytes through the MassiveAd
@@ -81,36 +58,28 @@ void* CRequestManager::ScalarDeletingDestructor(char bDelete)
 // ---------------------------------------------------------------------------
 CRequestManager* CRequestManager::Initialize()
 {
-    CRequestManager* lpInstance = spRequestManager;         // lwz r3, off_8327F368
+    CRequestManager* lpInstance = m_pInstance;               // lwz r3, off_8327F368
     if (!lpInstance)                                        // bne -> skip
     {
         void* lpMemory = CMassiveListNode::operator new(sizeof(CRequestManager));
         lpInstance = lpMemory ? ::new (lpMemory) CRequestManager() // bl CRequestManager ctor
                               : 0;                            // li r3, 0
-        spRequestManager = lpInstance;                        // stw r3, off_8327F368
+        m_pInstance = lpInstance;                            // stw r3, off_8327F368
     }
     return lpInstance;
 }
 
 // ---------------------------------------------------------------------------
 // CRequestManager::Shutdown @ 0x82BD07F0
-//
-// Clear the client third-party ID / service state and two adjacent .data slots,
-// then -- if the singleton exists -- run its virtual scalar deleting destructor
-// (bDelete = 1) and clear the slot. Returns the former singleton pointer (the
-// X360 r3 carry-over from the destructor call).
 // ---------------------------------------------------------------------------
-void* CRequestManager::Shutdown()
+void CRequestManager::Shutdown()
 {
-    CRequestObject::ClearThirdPartyID();       // bl ...ClearThirdPartyID
-    CRequestObject::ClearThirdPartyService();  // bl ...ClearThirdPartyService (r3 noise dropped)
-    gnMassivePlayerID = 0;                     // stw 0, dword_8327F2D0
-    void* lpResult = spRequestManager;         // lwz r3, off_8327F368
-    gnMassiveSessionID = 0;                    // stw 0, dword_8327F2CC
-    if (spRequestManager)                      // beq -> skip
-        lpResult = spRequestManager->ScalarDeletingDestructor(1); // vtable[0](this, 1)
-    spRequestManager = 0;                      // stw 0, off_8327F368
-    return lpResult;
+    CRequestObject::ClearThirdPartyID();
+    CRequestObject::ClearThirdPartyService();
+    CRequestObject::ClearMassivePlayerID();
+    CRequestObject::ClearMassiveSessionID();
+    delete m_pInstance;
+    m_pInstance = 0;
 }
 
 // ---------------------------------------------------------------------------

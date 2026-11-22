@@ -66,22 +66,19 @@ public:
     // the reconstructed body is empty.
     virtual ~CRequestManager();
 
-    // @ 0x82BD0BF8. Vftable slot 0: runs the destructor, then frees the object
-    // through CMassiveBaseObject::operator delete when the low bit of bDelete is
-    // set. Returns this. (Shutdown reaches it as the virtual slot-0 dispatch.)
-    void* ScalarDeletingDestructor(char bDelete);
-
     // ----- lazy process singleton -----------------------------------------
+
+    // Instance() is emitted inline in the XDK's requestobject.obj.
+    static CRequestManager* Instance() { return m_pInstance; }
 
     // @ 0x82BD0798. Lazily allocates (through the MassiveAd heap hook) and
     // constructs the singleton into off_8327F368 on first call; a prior instance
     // is returned untouched. Returns null on allocation failure.
     static CRequestManager* Initialize();
 
-    // @ 0x82BD07F0. Clears the client third-party ID / service state, tears the
-    // singleton down (virtual scalar deleting destructor) and clears off_8327F368.
-    // Returns the (now-freed) former singleton pointer -- the X360 r3 carry-over.
-    static void* Shutdown();
+    // @ 0x82BD07F0. Clears the client request state and deletes the singleton.
+    // requestmanager.obj declares Shutdown with a void return.
+    static void Shutdown();
 
     // @ 0x82BD0860. Clears mbAcceptingRequests, then -- under the queue lock --
     // cancels every outstanding request except those whose stored index/type word
@@ -123,14 +120,12 @@ public:
     CMassiveCriticalSection* GetSharedCriticalSection() { return &mCriticalSection; }
 
 private:
+    static CRequestManager* m_pInstance; // requestmanager.obj, ARTIST 0x8327F368
+
     CMassiveList            mRequestQueue;       // +0x14 (outstanding requests)
     int                     mbAcceptingRequests; // +0x24 (1 at ctor)
     int                     mbSuspended;         // +0x28 (0 at ctor)
     CMassiveCriticalSection mCriticalSection;    // +0x2C ("RequestQueue")
 };
-
-// off_8327F368 -- the live CRequestManager singleton pointer (null before init /
-// after shutdown). Defined in MassiveAdClient3RequestManager.cpp.
-extern CRequestManager* spRequestManager;
 
 } // namespace MassiveAdClient3

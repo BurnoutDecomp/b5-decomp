@@ -12,7 +12,7 @@
 // the collection of outstanding CRequestObjects (an embedded CMassiveList at
 // +0x14) and the default submit status (+0x24). Suspend / Resume fan a suspend /
 // resume out to every pending request while holding the request manager's shared
-// critical section (spRequestManager + 0x2C). See MassiveAdClient3RequestBuilder.h
+// critical section (CRequestManager::Instance() + 0x2C). See MassiveAdClient3RequestBuilder.h
 // for the layout map; the vftable (off_82186008) is modelled by the virtual dtor
 // + the two callback virtuals, so no vftable store is written by hand.
 // ===========================================================================
@@ -99,8 +99,8 @@ int CRequestBuilder::RemoveFromRequestCollect(CRequestObject* pRequest)
 // ---------------------------------------------------------------------------
 int CRequestBuilder::Suspend()
 {
-    if (spRequestManager &&
-        spRequestManager->GetSharedCriticalSection()->TryEnter(GetName()))
+    if (CRequestManager::Instance() &&
+        CRequestManager::Instance()->GetSharedCriticalSection()->TryEnter(GetName()))
     {
         int lnResult;
         if (mRequestList.GetCount() > 0)  // *(this + 0x20) = list.mnCount
@@ -122,7 +122,7 @@ int CRequestBuilder::Suspend()
             lnResult = -998;  // -0x3E6
         }
 
-        spRequestManager->GetSharedCriticalSection()->Exit(GetName());
+        CRequestManager::Instance()->GetSharedCriticalSection()->Exit(GetName());
         return lnResult;
     }
 
@@ -132,13 +132,13 @@ int CRequestBuilder::Suspend()
 // ---------------------------------------------------------------------------
 // CRequestBuilder::Resume @ 0x82BD4918
 //
-// Symmetric to Suspend. NOTE: the asm does not null-check spRequestManager here
+// Symmetric to Suspend. NOTE: the asm does not null-check CRequestManager::Instance() here
 // before adding 0x2C to reach the section (only Suspend does); reproduced
 // verbatim -- the singleton pointer is dereferenced for the section directly.
 // ---------------------------------------------------------------------------
 int CRequestBuilder::Resume()
 {
-    if (spRequestManager->GetSharedCriticalSection()->TryEnter(GetName()))
+    if (CRequestManager::Instance()->GetSharedCriticalSection()->TryEnter(GetName()))
     {
         int lnResult;
         if (mRequestList.GetCount() > 0)  // *(this + 0x20) = list.mnCount
@@ -160,7 +160,7 @@ int CRequestBuilder::Resume()
             lnResult = -998;  // -0x3E6
         }
 
-        spRequestManager->GetSharedCriticalSection()->Exit(GetName());
+        CRequestManager::Instance()->GetSharedCriticalSection()->Exit(GetName());
         return lnResult;
     }
 

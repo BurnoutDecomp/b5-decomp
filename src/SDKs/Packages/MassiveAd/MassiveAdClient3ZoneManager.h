@@ -72,7 +72,7 @@
 //     the old int mnField38 model predated that attestation), so SetAssetExpired
 //     ByOrderID's `*(mpOrder + 0x14)` read is CMassiveOrder::mnNumber (the
 //     committed home in MassiveAdClient3Objects.h, now a zone-manager friend).
-//   - gnMassiveSessionID (dword_8327F2CC, MassiveAdClient3Request.h) gates Tick.
+//   - m_u32MassiveSessionID (dword_8327F2CC, MassiveAdClient3Request.h) gates Tick.
 //
 // Layout over the CRequestBuilder base (base = CMassiveBaseObject[+0x00..+0x13]
 // + CMassiveList mRequestList[+0x14] + int mnSubmitStatus[+0x24]; own members
@@ -199,7 +199,7 @@ public:
 
     // ----- zone lifecycle ----------------------------------------------------
 
-    // @ 0x82BD3130. The zone state machine, gated on a live gnMassiveSessionID
+    // @ 0x82BD3130. The zone state machine, gated on a live m_u32MassiveSessionID
     // and a non-zero zone state (returns 0 otherwise, clearing the base last-
     // error dword first when the state is live): state 1 builds + submits a
     // CRequestEnterZone (zone AND client-core state -> 15 on success); state 2

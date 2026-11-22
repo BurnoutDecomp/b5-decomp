@@ -59,8 +59,7 @@
 //     MassiveAdClient3::CMassiveList::~CMassiveList @ 0x82BCF1F0
 
 #include <cstddef>
-
-struct _RTL_CRITICAL_SECTION;
+#include <xtl.h> // RTL_CRITICAL_SECTION
 
 // Case-insensitive equality of two names (each at most 128 characters): 0 when equal, -1 when
 // either is null, -2 when the lengths differ, else the strncmp of the lower-cased copies.
@@ -147,21 +146,6 @@ extern const char* gpcDefaultBaseObjectName;
 //   MassiveLog(nLevel, pcName, pcFormat, ...) -> emit a formatted trace line
 // ---------------------------------------------------------------------------
 void MassiveLog(int nLevel, const char* pcName, const char* pcFormat, ...);
-
-// ---------------------------------------------------------------------------
-// Storage for the OS critical section CMassiveCriticalSection embeds at +0x14.
-// The console RTL_CRITICAL_SECTION is 28 bytes; the host one is wider, so the
-// member is an opaque host-sized block the TU views as CRITICAL_SECTION.
-// ---------------------------------------------------------------------------
-struct CGS_ALIGN(8) MassiveCriticalSectionStorage
-{
-    // Opaque OS critical-section storage. The X360 RTL_CRITICAL_SECTION is 28
-    // bytes; a host-sized reservation (64 bytes covers the wider 64-bit Win32
-    // CRITICAL_SECTION) keeps the wrapper self-contained without depending on
-    // <windows.h> here.
-    unsigned char abOpaque[64];
-};
-
 
 // ---------------------------------------------------------------------------
 // CMassiveBaseObject -- polymorphic base for MassiveAd client objects.
@@ -287,8 +271,7 @@ public:
     // CMassiveCriticalSection TU). Attempts to enter the OS critical section and
     // returns non-zero when it was acquired, 0 when it was already held. pcWho is
     // the caller tag. Attested by CRequestBuilder::Suspend / Resume, which lock
-    // the request manager's section (via spRequestManager) before walking the
-    // outstanding-request collection.
+    // the request manager's section before walking the outstanding requests.
     int TryEnter(const char* pcWho);
 
     // @ 0x82BD28C0. Releases the OS critical section and logs an
@@ -301,11 +284,8 @@ public:
     void* VectorDeletingDestructor(char bDelete);
 
 private:
-    // The embedded host critical section, viewed through its OS type.
-    _RTL_CRITICAL_SECTION* GetOsCriticalSection();
-
-    MassiveCriticalSectionStorage mCriticalSection; // +0x14 (RTL_CRITICAL_SECTION)
-    char*                         mpcSectionName;    // +0x30 (section-name copy, or 0)
+    RTL_CRITICAL_SECTION mCriticalSection; // +0x14, passed to RtlInitializeCriticalSection at 0x82BD2730
+    char*                mpcSectionName;   // +0x30 (section-name copy, or 0)
 };
 
 // ---------------------------------------------------------------------------

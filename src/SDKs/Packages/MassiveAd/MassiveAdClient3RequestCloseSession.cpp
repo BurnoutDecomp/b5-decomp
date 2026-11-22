@@ -145,15 +145,15 @@ int CRequestCloseSession::Parse()
 // CRequestCloseSession::WriteCloseSessionRequest @ 0x82BD3B20
 //
 // All writes bPrepend=1:
-//   WriteU32(gnMassiveSessionID);  WriteU8(43);
-//   WriteU32(gnMassivePlayerID);   WriteU8(42);
+//   WriteU32(m_u32MassiveSessionID);  WriteU8(43);
+//   WriteU32(m_u32MassivePlayerID);   WriteU8(42);
 //   return FinishBaseBlock(209, 1, 1);
 // ---------------------------------------------------------------------------
 int CRequestCloseSession::WriteCloseSessionRequest()
 {
-    WriteU32(gnMassiveSessionID, 1); // dword_8327F2CC ; li r5, 1
+    WriteU32(GetMassiveSessionID(), 1); // dword_8327F2CC ; li r5, 1
     WriteU8(43, 1);                  // li r4, 0x2B    ; li r5, 1
-    WriteU32(gnMassivePlayerID, 1);  // dword_8327F2D0 ; li r5, 1
+    WriteU32(GetMassivePlayerID(), 1);  // dword_8327F2D0 ; li r5, 1
     WriteU8(42, 1);                  // li r4, 0x2A    ; li r5, 1
     return FinishBaseBlock(209, 1, 1); // li r4, 0xD1 ; li r5, 1 ; li r6, 1
 }

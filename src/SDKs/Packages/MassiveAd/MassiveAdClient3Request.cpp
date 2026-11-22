@@ -30,8 +30,8 @@ char* CRequestObject::m_szThirdPartyService = 0;
 
 // dword_8327F2CC / dword_8327F2D0 -- the client-wide session / player IDs.
 // Zero-initialised .data, stamped in by the session-open path elsewhere.
-unsigned int gnMassiveSessionID = 0;
-unsigned int gnMassivePlayerID = 0;
+unsigned int CRequestObject::m_u32MassiveSessionID = 0;
+unsigned int CRequestObject::m_u32MassivePlayerID = 0;
 
 // unk_8327F2D8 -- the 144-byte public-key block.
 unsigned char gabPublicKey[144];
@@ -139,7 +139,7 @@ int CRequestObject::Submit()
 
     SetStatus(mpBuilder->GetSubmitStatus());  // SetStatus(*(mpBuilder + 0x24))
 
-    CRequestManager* lpManager = spRequestManager;  // off_8327F368
+    CRequestManager* lpManager = CRequestManager::Instance();  // off_8327F368
     if (lpManager)
     {
         int lnResult = lpManager->SubmitRequest(this);
@@ -190,7 +190,7 @@ void CRequestObject::Cancel()
 {
     SetStatus(0x103000);
 
-    CRequestManager* lpManager = spRequestManager;  // off_8327F368
+    CRequestManager* lpManager = CRequestManager::Instance();  // off_8327F368
     if (!lpManager)
         return;
 

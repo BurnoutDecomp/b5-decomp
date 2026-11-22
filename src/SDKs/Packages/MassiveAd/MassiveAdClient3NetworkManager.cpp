@@ -521,7 +521,7 @@ void CNetworkManager::Tick()
 
     // Heartbeat: while a session is live and the interval is armed, accumulate the
     // elapsed time and emit a heartbeat once it exceeds the interval.
-    if (gnMassiveSessionID)                               // dword_8327F2CC
+    if (CRequestObject::GetMassiveSessionID())                               // dword_8327F2CC
     {
         if (mnHeartbeatInterval > 0)
         {
@@ -545,7 +545,7 @@ void CNetworkManager::Tick()
     if (!mpCurrentRequest || mpCurrentRequest->IsComplete())
     {
         mnSendOffset = 0;                                 // stw 0, 0x84
-        mpCurrentRequest = spRequestManager->GetNextRequest();
+        mpCurrentRequest = CRequestManager::Instance()->GetNextRequest();
         if (mpCurrentRequest)
             mpTransaction->SetRequest(mpCurrentRequest);
     }
@@ -1022,26 +1022,9 @@ char* MassiveInet_ntop(int /*nFamily*/, const void* pSrc, char* pcDst, int nSize
 // ---------------------------------------------------------------------------
 // DNS
 //
-// The console service-info and title-server records the lookup reads (the
-// title-server record is 208 bytes).
 // ---------------------------------------------------------------------------
 namespace
 {
-
-struct XONLINE_SERVICE_INFO
-{
-    unsigned int   dwServiceID;
-    unsigned int   serviceIP;
-    unsigned short wServicePort;
-    unsigned short wReserved;
-};
-
-struct XTITLE_SERVER_INFO
-{
-    unsigned char inaServer[4];
-    unsigned int  dwFlags;
-    char          szServerInfo[200];
-};
 
 // The log channel name the lookup traces under.
 const char gcLspLogName[] = "X" "360 LSP";
@@ -1050,24 +1033,6 @@ const unsigned int KU_MASSIVE_SERVICE_ID = 22;
 const unsigned int KU_MAX_TITLE_SERVERS  = 10;
 
 } // anonymous namespace
-
-} // namespace MassiveAdClient3
-
-// Console system-software calls (PC bodies: GameShared/GameClasses/System/PC).
-extern "C"
-{
-long XOnlineGetServiceInfo(unsigned int dwServiceID, void* pServiceInfo);
-long XTitleServerCreateEnumerator(const char* pszServerInfo, unsigned int cItem, unsigned int* pcbBuffer,
-                                  void** phEnum);
-unsigned int XEnumerate(void* hEnum, void* pvBuffer, unsigned int cbBuffer, unsigned int* pcItemsReturned,
-                        void* pOverlapped);
-long XNetRandom(unsigned char* pb, unsigned int cb);
-int XNetServerToInAddr(unsigned int ina, unsigned int dwServiceId, unsigned int* pina);
-__declspec(dllimport) int __stdcall CloseHandle(void* hObject);
-}
-
-namespace MassiveAdClient3
-{
 
 unsigned long DNS(void* pParam)
 {
@@ -1090,27 +1055,26 @@ unsigned long DNS(void* pParam)
         CMassiveBaseObject::operator delete(lpAddresses);
     }
 
-    unsigned int lnServersReturned = 0;
+    DWORD lnServersReturned = 0;
     unsigned int lnMassiveServers = 0;
-    void* lhEnum = reinterpret_cast<void*>(-1);
-    unsigned int lnBufferSize = 0;
+    HANDLE lhEnum = INVALID_HANDLE_VALUE;
+    DWORD lnBufferSize = 0;
     XTITLE_SERVER_INFO laServers[KU_MAX_TITLE_SERVERS];
     XTITLE_SERVER_INFO laMassiveServers[KU_MAX_TITLE_SERVERS];
     XONLINE_SERVICE_INFO lServiceInfo;
     std::memset(laServers, 0, sizeof(laServers));
     std::memset(laMassiveServers, 0, sizeof(laMassiveServers));
 
-    long lnResult = XOnlineGetServiceInfo(KU_MASSIVE_SERVICE_ID, &lServiceInfo);
-    if (lnResult < 0)
+    DWORD lnResult = XOnlineGetServiceInfo(KU_MASSIVE_SERVICE_ID, &lServiceInfo);
+    if (FAILED(lnResult))
     {
         MassiveLog(2, gcLspLogName, "XOnlineGetServiceInfo failed with 0x%0x.", lnResult);
     }
-    else if ((lnResult = XTitleServerCreateEnumerator(0, KU_MAX_TITLE_SERVERS, &lnBufferSize, &lhEnum)) < 0)
+    else if (FAILED(lnResult = XTitleServerCreateEnumerator(0, KU_MAX_TITLE_SERVERS, &lnBufferSize, &lhEnum)))
     {
         MassiveLog(2, gcLspLogName, "XTitleServerCreateEnumerator failed with 0x%0x.", lnResult);
     }
-    else if ((lnResult = static_cast<long>(
-                  XEnumerate(lhEnum, laServers, sizeof(laServers), &lnServersReturned, 0))) < 0)
+    else if (FAILED(lnResult = XEnumerate(lhEnum, laServers, sizeof(laServers), &lnServersReturned, 0)))
     {
         MassiveLog(2, gcLspLogName, "XEnumerate failed with 0x%0x.", lnResult);
         CloseHandle(lhEnum);
@@ -1134,8 +1098,8 @@ unsigned long DNS(void* pParam)
                     ++lnMassiveServers;
                 }
                 MassiveLog(5, gcLspLogName, "%d:\"%hs\" located at %d.%d.%d.%d", i, lServer.szServerInfo,
-                           lServer.inaServer[0], lServer.inaServer[1], lServer.inaServer[2],
-                           lServer.inaServer[3]);
+                           lServer.inaServer.s_net, lServer.inaServer.s_host, lServer.inaServer.s_lh,
+                           lServer.inaServer.s_impno);
             }
 
             if (!lnMassiveServers)
@@ -1149,8 +1113,8 @@ unsigned long DNS(void* pParam)
                 {
                     XTITLE_SERVER_INFO& lServer = laMassiveServers[i];
                     MassiveLog(5, gcLspLogName, "%d:\"%hs\" located at %d.%d.%d.%d", i, lServer.szServerInfo,
-                               lServer.inaServer[0], lServer.inaServer[1], lServer.inaServer[2],
-                               lServer.inaServer[3]);
+                               lServer.inaServer.s_net, lServer.inaServer.s_host, lServer.inaServer.s_lh,
+                               lServer.inaServer.s_impno);
                 }
 
                 unsigned int luRandom;
@@ -1159,10 +1123,9 @@ unsigned long DNS(void* pParam)
                 MassiveLog(5, gcLspLogName, "Selected Server %d...", luSelected);
                 MassiveLog(5, gcLspLogName, "Getting secure address for Server %d...", luSelected);
 
-                unsigned int luServerAddress;
-                std::memcpy(&luServerAddress, laMassiveServers[luSelected].inaServer, sizeof(luServerAddress));
-                unsigned int luSecureAddress;
-                int lnError = XNetServerToInAddr(luServerAddress, KU_MASSIVE_SERVICE_ID, &luSecureAddress);
+                IN_ADDR lSecureAddress;
+                int lnError = XNetServerToInAddr(laMassiveServers[luSelected].inaServer,
+                                               KU_MASSIVE_SERVICE_ID, &lSecureAddress);
                 if (lnError)
                 {
                     MassiveLog(2, gcLspLogName, "XNetServerToInAddr failed with %d.", lnError);
@@ -1170,7 +1133,7 @@ unsigned long DNS(void* pParam)
                 else
                 {
                     for (unsigned int i = 0; i < 16; ++i)
-                        CNetworkManager::SetServerAddress(i, static_cast<int>(luSecureAddress), 0);
+                        CNetworkManager::SetServerAddress(i, static_cast<int>(lSecureAddress.s_addr), 0);
                 }
             }
         }

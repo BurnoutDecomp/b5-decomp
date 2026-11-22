@@ -128,14 +128,6 @@ float              MassiveNetOrderFloat(float fValue);
 // gap to the next slot (0x8327F2A0..0x8327F2C4), not from an attested store.
 extern char gacHMACKey[36];
 
-// dword_8327F2CC / dword_8327F2D0 -- the client-wide MassiveAd session / player
-// IDs, stamped into every outgoing request block (e.g. CRequestExitZone::
-// WriteExitZoneRequest writes gnMassivePlayerID under wire tag 42 and
-// gnMassiveSessionID under tag 43). Written elsewhere in the client (the
-// session-open path); read here by the request writers.
-extern unsigned int gnMassiveSessionID; // dword_8327F2CC
-extern unsigned int gnMassivePlayerID;  // dword_8327F2D0
-
 // unk_8327F2D8 -- the 144-byte public-key block SetPublicKey memcpy's in.
 extern unsigned char gabPublicKey[144];
 
@@ -395,7 +387,16 @@ public:
     // when signing, and finally prepends the protocol-version byte 4.
     int FinishBaseBlock(char bRequestType, int bWriteTimestamp, int bSign);
 
-    // ----- client-wide protocol state (static; .data slice above) ----------
+    // ----- client-wide protocol state -------------------------------------
+
+    // The XDK request objects provide these inline session and player accessors.
+    static unsigned int GetMassiveSessionID() { return m_u32MassiveSessionID; }
+    static void SetMassiveSessionID(unsigned int u32ID) { m_u32MassiveSessionID = u32ID; }
+    static void ClearMassiveSessionID() { m_u32MassiveSessionID = 0; }
+
+    static unsigned int GetMassivePlayerID() { return m_u32MassivePlayerID; }
+    static void SetMassivePlayerID(unsigned int u32ID) { m_u32MassivePlayerID = u32ID; }
+    static void ClearMassivePlayerID() { m_u32MassivePlayerID = 0; }
 
     // @ 0x82BCF320. Installs an owned copy of pcID into m_szThirdPartyID.
     // Returns the copy, or 0 on a null/empty string or failed allocation.
@@ -423,6 +424,9 @@ protected:
     // Protected statics in requestobject.obj, at ARTIST 0x8327F2C4 and 0x8327F2C8.
     static char* m_szThirdPartyID;
     static char* m_szThirdPartyService;
+
+    static unsigned int m_u32MassiveSessionID; // requestmanager.obj, ARTIST 0x8327F2CC
+    static unsigned int m_u32MassivePlayerID;  // requestmanager.obj, ARTIST 0x8327F2D0
 
     // The derived request TUs (CRequestOpenSession::Parse and friends) walk the
     // same buffer state directly on the X360, so the members are protected

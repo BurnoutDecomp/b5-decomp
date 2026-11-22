@@ -70,12 +70,12 @@ int CRequestEnterZone::WriteEnterZoneRequest(const char* pcZoneName, int nBandwi
     MassiveLog(5, GetName(), "Writing Zone Name: %s", pcZoneName);
 
     WriteU8(42, 0);
-    WriteU32(gnMassivePlayerID, 0);
-    MassiveLog(5, GetName(), "Writing Massive Player ID: %d", gnMassivePlayerID);
+    WriteU32(GetMassivePlayerID(), 0);
+    MassiveLog(5, GetName(), "Writing Massive Player ID: %d", GetMassivePlayerID());
 
     WriteU8(43, 0);
-    WriteU32(gnMassiveSessionID, 0);
-    MassiveLog(5, GetName(), "Writing Massive Session ID: %d", gnMassiveSessionID);
+    WriteU32(GetMassiveSessionID(), 0);
+    MassiveLog(5, GetName(), "Writing Massive Session ID: %d", GetMassiveSessionID());
 
     if (nBandwidthTotalSize && nBandwidthTotalTime && sBandwidthTotalItems)
     {

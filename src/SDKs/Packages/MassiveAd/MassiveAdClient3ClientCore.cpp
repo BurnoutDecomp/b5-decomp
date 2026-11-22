@@ -12,8 +12,8 @@
 
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3.h"
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Objects.h"
-#include "SDKs/Packages/MassiveAd/MassiveAdClient3Request.h"               // gnMassiveSessionID / gnMassivePlayerID
-#include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestManager.h"        // spRequestManager
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3Request.h"
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestManager.h"
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3NetworkManager.h"        // spNetworkManager
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3ZoneManager.h"
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestCloseSession.h"
@@ -24,9 +24,6 @@
 // LocateService port table install (consumes and frees the list).
 extern int  CompareStrings(const char* pcA, const char* pcB);
 extern void MassiveSetServerPorts(MassiveAdClient3::CMassiveList* pPortPairs);
-
-// Kernel sleep (the shutdown loop yields 10 ms per tick).
-extern "C" __declspec(dllimport) void __stdcall Sleep(unsigned long dwMilliseconds);
 
 namespace MassiveAdClient3
 {
@@ -288,8 +285,8 @@ int CMassiveClientCore::Shutdown(int bWait, unsigned int nTimeoutMs)
             spInstance->SetLastError(spInstance->mnLastError, "");
     }
 
-    if (spRequestManager)
-        spRequestManager->PrepareForShutdown();
+    if (CRequestManager::Instance())
+        CRequestManager::Instance()->PrepareForShutdown();
     if (spNetworkManager)
         spNetworkManager->PrepareForShutdown();
 
@@ -387,7 +384,7 @@ int CMassiveClientCore::Tick(int bForce)
             spInstance->SetLastError(lpZone->mnLastError, "");
             lbZoneTicked = 0;
             spInstance->mpCurrentZone = 0;
-            spInstance->SetValid(gnMassiveSessionID ? 13 : 0);
+            spInstance->SetValid(CRequestObject::GetMassiveSessionID() ? 13 : 0);
         }
         else
         {
@@ -475,7 +472,7 @@ int CMassiveClientCore::SuspendAll()
     }
 
     int lbSuspended = 0;
-    if (spRequestManager->SuspendAll() == 0)
+    if (CRequestManager::Instance()->SuspendAll() == 0)
     {
         lbSuspended = 1;
         spInstance->SetValid(3);
@@ -497,7 +494,7 @@ int CMassiveClientCore::ResumeAll()
     }
 
     int lbResumed = 0;
-    if (spRequestManager->ResumeAll() == 0)
+    if (CRequestManager::Instance()->ResumeAll() == 0)
     {
         lbResumed = 1;
         spInstance->SetValid(2);
@@ -561,7 +558,7 @@ int CMassiveClientCore::EnterZone(const char* pcZoneName)
             spInstance->ZoneManagerAdd(pcZoneName);
             if (spInstance->GetValid() == 5)
                 spInstance->SetValid(8);
-            if (!gnMassiveSessionID && spInstance->GetValid() == 13)
+            if (!CRequestObject::GetMassiveSessionID() && spInstance->GetValid() == 13)
                 spInstance->SetValid(10);
         }
         lbEntered = 1;
@@ -851,7 +848,7 @@ int CMassiveClientCore::RequestLocateService()
 
 int CMassiveClientCore::RequestSessionOpen()
 {
-    if (gnMassiveSessionID)
+    if (CRequestObject::GetMassiveSessionID())
     {
         const int lnCloseResult = RequestSessionClose();
         if (lnCloseResult)
@@ -889,7 +886,7 @@ int CMassiveClientCore::RequestSessionOpen()
 
 int CMassiveClientCore::RequestSessionClose()
 {
-    if (!gnMassiveSessionID)
+    if (!CRequestObject::GetMassiveSessionID())
         return spInstance->SetLastError(-188, "No Session to Close");
 
     void* lpMemory = CMassiveListNode::operator new(sizeof(CRequestCloseSession));
@@ -998,15 +995,15 @@ int CMassiveClientCore::HandleResponse(CRequestObject* pRequest)
     else if (lnType == 35)
     {
         CRequestOpenSession* lpOpen = static_cast<CRequestOpenSession*>(pRequest);
-        gnMassivePlayerID = lpOpen->mnMassivePlayerID;
-        gnMassiveSessionID = lpOpen->mnMassiveSessionID;
+        CRequestObject::SetMassivePlayerID(lpOpen->mnMassivePlayerID);
+        CRequestObject::SetMassiveSessionID(lpOpen->mnMassiveSessionID);
         SetValid(13);
         MassiveLog(4, GetName(), "Connected to Server %s",
                    CMassiveSystem::Instance()->mpcGuid ? "Multiplayer" : "Singleplayer");
     }
     else if (lnType == 115)
     {
-        gnMassiveSessionID = 0;
+        CRequestObject::ClearMassiveSessionID();
         if (GetValid() == 11)
             MPSessionCreate();
         else if (GetValid() == 12)
@@ -1059,7 +1056,7 @@ char* CMassiveClientCore::MPSessionCreate()
     if (!CMassiveSystem::Instance()->mpcGuid)
         CMassiveSystem::CreateMassiveGuid(&CMassiveSystem::Instance()->mpcGuid);
 
-    if (gnMassiveSessionID)
+    if (CRequestObject::GetMassiveSessionID())
     {
         const int lnCloseResult = spInstance->RequestSessionClose();
         if (lnCloseResult)
@@ -1106,7 +1103,7 @@ int CMassiveClientCore::MPSessionJoin(const char* pcGuid)
     CMassiveSystem::Instance()->SetGuid(pcGuid);
 
     int lbJoined;
-    if (gnMassiveSessionID)
+    if (CRequestObject::GetMassiveSessionID())
     {
         const int lnCloseResult = spInstance->RequestSessionClose();
         if (lnCloseResult)
@@ -1150,7 +1147,7 @@ unsigned long ShutdownTick(void* pTimeoutMs)
 
     lpCore->mCriticalSection.Enter("CMassiveClientCore::Initialize");
     const unsigned int lnStartTime = static_cast<unsigned int>(lpCore->mTime.GetTime());
-    while (gnMassiveSessionID)
+    while (CRequestObject::GetMassiveSessionID())
     {
         if (!CMassiveClientCore::Tick(0))
         {

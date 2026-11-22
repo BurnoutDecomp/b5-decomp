@@ -143,15 +143,15 @@ int CRequestHeartbeat::Parse()
 // CRequestHeartbeat::WriteHeartbeatRequest @ 0x82BD8798
 //
 // All writes bPrepend=1:
-//   WriteU32(gnMassiveSessionID);  WriteU8(43);
-//   WriteU32(gnMassivePlayerID);   WriteU8(42);
+//   WriteU32(m_u32MassiveSessionID);  WriteU8(43);
+//   WriteU32(m_u32MassivePlayerID);   WriteU8(42);
 //   return FinishBaseBlock(214, 1, 1);
 // ---------------------------------------------------------------------------
 int CRequestHeartbeat::WriteHeartbeatRequest()
 {
-    WriteU32(gnMassiveSessionID, 1); // dword_8327F2CC ; li r5, 1
+    WriteU32(GetMassiveSessionID(), 1); // dword_8327F2CC ; li r5, 1
     WriteU8(43, 1);                  // li r4, 0x2B    ; li r5, 1
-    WriteU32(gnMassivePlayerID, 1);  // dword_8327F2D0 ; li r5, 1
+    WriteU32(GetMassivePlayerID(), 1);  // dword_8327F2D0 ; li r5, 1
     WriteU8(42, 1);                  // li r4, 0x2A    ; li r5, 1
     return FinishBaseBlock(214, 1, 1); // li r4, 0xD6 ; li r5, 1 ; li r6, 1
 }

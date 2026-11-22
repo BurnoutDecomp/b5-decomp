@@ -594,11 +594,6 @@ int CMassiveSystem::CreateMassiveGuid(char** ppcOut)
 // CMassiveCriticalSection -- CMassiveBaseObject + one OS critical section.
 // ===========================================================================
 
-CRITICAL_SECTION* CMassiveCriticalSection::GetOsCriticalSection()
-{
-    return reinterpret_cast<CRITICAL_SECTION*>(&mCriticalSection);
-}
-
 // ---------------------------------------------------------------------------
 // CMassiveCriticalSection::CMassiveCriticalSection @ 0x82BD2700
 //
@@ -619,7 +614,7 @@ CMassiveCriticalSection::CMassiveCriticalSection(const char* pcSectionName)
     // *a1 = &off_821856B8 is the compiler-emitted vftable install for this
     // derived virtual-dtor class; nothing to write by hand.
 
-    InitializeCriticalSection(GetOsCriticalSection());
+    InitializeCriticalSection(&mCriticalSection);
 
     if (pcSectionName)                                   // if (a2)
     {
@@ -664,7 +659,7 @@ CMassiveCriticalSection::~CMassiveCriticalSection()
 // ---------------------------------------------------------------------------
 void CMassiveCriticalSection::Enter(const char* pcWho)
 {
-    EnterCriticalSection(GetOsCriticalSection());
+    EnterCriticalSection(&mCriticalSection);
     MassiveLog(7, GetName(),                          // r3 = 7, r4 = +0x0C (base name)
                "Try(blocking) succeeded on %s by %s",
                mpcSectionName,                        // r6 = +0x30 (section name)
@@ -677,7 +672,7 @@ void CMassiveCriticalSection::Enter(const char* pcWho)
 // ---------------------------------------------------------------------------
 int CMassiveCriticalSection::TryEnter(const char* pcWho)
 {
-    if (!TryEnterCriticalSection(GetOsCriticalSection()))
+    if (!TryEnterCriticalSection(&mCriticalSection))
     {
         MassiveLog(2, GetName(), "TryEnter failed on %s by %s", mpcSectionName, pcWho);
         return 0;
@@ -695,7 +690,7 @@ int CMassiveCriticalSection::TryEnter(const char* pcWho)
 // ---------------------------------------------------------------------------
 void CMassiveCriticalSection::Exit(const char* pcWho)
 {
-    LeaveCriticalSection(GetOsCriticalSection());
+    LeaveCriticalSection(&mCriticalSection);
     MassiveLog(7, GetName(),                          // r3 = 7, r4 = +0x0C (base name)
                "Exit succeeded on %s by %s",
                mpcSectionName,                        // r6 = +0x30 (section name)

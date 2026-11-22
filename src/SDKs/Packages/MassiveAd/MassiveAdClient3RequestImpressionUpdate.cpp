@@ -76,8 +76,8 @@ char* CRequestImpressionUpdate::GetRequestURL()
 //
 //   cmplwi r4, 0 ; beq -> li r3, -0x44C (-1100)
 //   bl CRequestObject::CreateRequest(this, pBuilder, 0x200, 0x200)
-//   bl WriteU32(this, gnMassivePlayerID, 1) ; bl WriteU8(this, 42, 1)
-//   bl WriteU32(this, gnMassiveSessionID, 1) ; bl WriteU8(this, 43, 1)
+//   bl WriteU32(this, m_u32MassivePlayerID, 1) ; bl WriteU8(this, 42, 1)
+//   bl WriteU32(this, m_u32MassiveSessionID, 1) ; bl WriteU8(this, 43, 1)
 //   bl SetStatus(this, 1) ; li r3, 0
 // ---------------------------------------------------------------------------
 int CRequestImpressionUpdate::CreateRequest(CRequestBuilder* pBuilder)
@@ -86,9 +86,9 @@ int CRequestImpressionUpdate::CreateRequest(CRequestBuilder* pBuilder)
         return -1100;
 
     CRequestObject::CreateRequest(pBuilder, 512, 512);
-    WriteU32(gnMassivePlayerID, 1);  // dword_8327F2D0 ; li r5, 1
+    WriteU32(GetMassivePlayerID(), 1);  // dword_8327F2D0 ; li r5, 1
     WriteU8(42, 1);
-    WriteU32(gnMassiveSessionID, 1); // dword_8327F2CC ; li r5, 1
+    WriteU32(GetMassiveSessionID(), 1); // dword_8327F2CC ; li r5, 1
     WriteU8(43, 1);
     SetStatus(1);
     return 0;
