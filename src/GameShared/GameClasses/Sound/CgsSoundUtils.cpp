@@ -247,8 +247,8 @@ f32 Graph::GetYValue(f32 lfX) const
 }
 
 Slope::Slope(const SlopeParams& params)
-    : mParams(params)
 {
+    mParams = params;
     if (std::fabs(mParams.mfMaxInput - mParams.mfMinInput) < KF_MIN_INPUT_SPAN)
     {
         mParams.mfMaxInput += KF_MIN_INPUT_SPAN;

@@ -16,7 +16,7 @@
 // ===========================================================================
 
 #include "GameShared/GameClasses/SceneManager/ContactGen/CgsOverlapGenerationModuleIO.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT (the lock tripwires)
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 namespace CgsSceneManager
 {
@@ -76,15 +76,21 @@ void OutputBuffer::Destruct()
 // (both test the status byte directly: `(*this >> 4) & 1` for read, `(*this >> 3) & 1`
 // for write -- eStatusLockedForRead / eStatusLockedForWrite.)
 // ---------------------------------------------------------------------------------
+// ARTIST assertion source path at 0x820F3FB0.
+static const char KAC_FILE[] =
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\contactgen\\CgsOverlapGenerationModuleIO.h";
+
 const OutOverlappingPairQueue* OutputBuffer::GetOverlappingPairQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(),
+               CgsDev::Assert::StreamMessageAt("Not locked for reading\n", KAC_FILE, 266));
     return &mOverlappingPairQueue;
 }
 
 OutOverlappingPairQueue* OutputBuffer::GetOverlappingPairQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(),
+               CgsDev::Assert::StreamMessageAt("Not locked for writing\n", KAC_FILE, 267));
     return &mOverlappingPairQueue;
 }
 
