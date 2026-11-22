@@ -1559,15 +1559,7 @@ void ICETake::Construct(const IResourceManager* lpResourceManager)
 // ---------------------------------------------------------------------------
 void ICETake::NewEditBuffer()
 {
-    // WIRING NOTE (not an algorithm change): ICETakeData::ComputeEditSize is called
-    // static-style (it reads no `this` -- the size is derived purely from the static
-    // ICEElementDescriptions[] schema + the fixed edit caps). The frozen ICEData.hpp
-    // declares ComputeEditSize as a non-static member, so it must be invoked on an
-    // object; a throwaway take supplies that `this`, and since ComputeEditSize ignores
-    // it the computed size is identical. FLAG: drop the temporary if ComputeEditSize is
-    // ever re-declared static in the frozen header.
-    ICETakeData lSizer;
-    const u32 luEditSize = lSizer.ComputeEditSize();
+    const u32 luEditSize = ICETakeData::ComputeEditSize();
 
     ICETakeData* lpEditData = (ICETakeData*)spICEMemory->GetMemory(luEditSize);
     lpEditData->Construct();

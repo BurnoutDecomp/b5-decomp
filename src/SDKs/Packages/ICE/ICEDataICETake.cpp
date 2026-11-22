@@ -413,7 +413,7 @@ namespace ICE
         // Allocate a fresh max-sized edit buffer, seed it from the current take's
         // 100-byte header, then overwrite this channel's counts (GetElementCounts()
         // is const-only, so write the resized counts via direct member access).
-        const u32 luEditSize = mpTakeData->ComputeEditSize();
+        const u32 luEditSize = ICETakeData::ComputeEditSize();
         ICETakeData* lpNewData = (ICETakeData*)spICEMemory->GetMemory(luEditSize);
         rw::core::stdc::MemCopy(lpNewData, mpTakeData, 100);
         lpNewData->mElementCounts[liChannel].mu16Intervals = (u16)liNewIntervals;

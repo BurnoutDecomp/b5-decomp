@@ -131,7 +131,7 @@ struct ICETakeData
     bool operator==(const ICETakeData& lrOther);
     ICETakeData& operator=(const ICETakeData& lrOther);
     void Construct();
-    u32  ComputeEditSize();
+    static u32 ComputeEditSize(); // Edit buffer size depends only on the schema and caps.
     u32  ComputeActualSize() const;
     u8*  GetVariableData() const;
     u32  GetVariableDataSize() const;

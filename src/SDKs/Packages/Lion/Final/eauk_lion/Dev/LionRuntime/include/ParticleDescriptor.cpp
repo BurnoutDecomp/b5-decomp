@@ -319,39 +319,40 @@ void cParticleDescriptor::GetSerialiseSize(cLionSerialiser& aSer) const
 // ----------------------------------------------------------------------------
 cParticleDescriptor* cParticleDescriptor::Serialise(cLionSerialiser& aSer) const
 {
-    if (this == 0)
-        return 0;
-
-    cParticleDescriptor* lpCopy =
-        reinterpret_cast<cParticleDescriptor*>(aSer.DataStore(this, 96));
-
-    tLionSerialisedPtr<cParticleBehaviour>* lppLastBeh = &lpCopy->mpBehaviours;
-    for (const cParticleBehaviour* lpBeh = mpBehaviours.Get(); lpBeh != 0;
-         lpBeh = lpBeh->mpNext.Get())
+    cParticleDescriptor* lpCopy = 0;
+    if (this != 0)
     {
-        cParticleBehaviour* lpBehCopy = lpBeh->Serialise(aSer);
-        lppLastBeh->Set(lpBehCopy);
-        lppLastBeh = &lpBehCopy->mpNext;
+        lpCopy =
+            reinterpret_cast<cParticleDescriptor*>(aSer.DataStore(this, 96));
+
+        tLionSerialisedPtr<cParticleBehaviour>* lppLastBeh = &lpCopy->mpBehaviours;
+        for (const cParticleBehaviour* lpBeh = mpBehaviours.Get(); lpBeh != 0;
+             lpBeh = lpBeh->mpNext.Get())
+        {
+            cParticleBehaviour* lpBehCopy = lpBeh->Serialise(aSer);
+            lppLastBeh->Set(lpBehCopy);
+            lppLastBeh = &lpBehCopy->mpNext;
+        }
+
+        if (mpBehaviourTemp)
+            lpCopy->mpBehaviourTemp.Set(mpBehaviourTemp->Serialise(aSer));
+        if (mpMaterial)
+            lpCopy->mpMaterial.Set(mpMaterial->Serialise(aSer));
+
+        tLionSerialisedPtr<cParticleDescriptor>* lppLastChild = &lpCopy->mpChild;
+        for (const cParticleDescriptor* lpChild = mpChild.Get(); lpChild != 0;
+             lpChild = lpChild->mpNext.Get())
+        {
+            cParticleDescriptor* lpChildCopy = lpChild->Serialise(aSer);
+            lppLastChild->Set(lpChildCopy);
+            lppLastChild = &lpChildCopy->mpNext;
+        }
+
+        // The asm interns the name unconditionally -- StringStore itself takes the null case.
+        char* lpName = aSer.StringStore(mpName.Get());
+        lpCopy->mpName.Set(lpName);
+        lpCopy->mpBehaviour.Set(lpCopy->mpBehaviours.Get());
     }
-
-    if (mpBehaviourTemp)
-        lpCopy->mpBehaviourTemp.Set(mpBehaviourTemp->Serialise(aSer));
-    if (mpMaterial)
-        lpCopy->mpMaterial.Set(mpMaterial->Serialise(aSer));
-
-    tLionSerialisedPtr<cParticleDescriptor>* lppLastChild = &lpCopy->mpChild;
-    for (const cParticleDescriptor* lpChild = mpChild.Get(); lpChild != 0;
-         lpChild = lpChild->mpNext.Get())
-    {
-        cParticleDescriptor* lpChildCopy = lpChild->Serialise(aSer);
-        lppLastChild->Set(lpChildCopy);
-        lppLastChild = &lpChildCopy->mpNext;
-    }
-
-    // The asm interns the name unconditionally -- StringStore itself takes the null case.
-    char* lpName = aSer.StringStore(mpName.Get());
-    lpCopy->mpBehaviour.SetRaw(lpCopy->mpBehaviours.Raw());
-    lpCopy->mpName.Set(lpName);
     return lpCopy;
 }
 

@@ -173,9 +173,12 @@ void cParticleWaveFormTable::SawToothTableBuild()
 //   mSawToothInvTable[i] = -((i / 511.0) - 1.0)  ==  1.0 - i/511
 void cParticleWaveFormTable::SawToothInvTableBuild()
 {
+    s32 liIndex = 0;
     f32* lpDst = mSawToothInvTable;
-    for (s32 i = 0; i < KU_TABLE_SIZE; ++i)
-        *lpDst++ = -(static_cast<f32>(i) * KF_INV_511 - 1.0f);   // fnmsubs
+    do
+    {
+        *lpDst++ = -(static_cast<f32>(liIndex) * KF_INV_511 - 1.0f);   // fnmsubs
+    } while (++liIndex < KU_TABLE_SIZE);
 }
 
 // cParticleWaveFormTable::SinTableBuild @ 0x8290A008

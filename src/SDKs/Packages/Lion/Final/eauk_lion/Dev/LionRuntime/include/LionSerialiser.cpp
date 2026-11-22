@@ -148,28 +148,17 @@ u8* cLionSerialiser::DataStore(const void* apData, u32 aSize)
 }
 
 // ----------------------------------------------------------------------------
-// cLionSerialiser::StringStore  @ 0x82908A50 -- TRAP STUB, and it has to be one.
-//
-// The function EXISTS in the X360 image and is named there: cParticleMaterial::Serialise
-// @0x8290E720 calls it five times (0x8290E764..0x8290E7BC) and the export's xrefs_from
-// resolves the target to 0x82908A50 with this exact name. But .ida-exports/
-// BURNOUT_X360_ARTIST.XEX has NO 0x82908A50.json -- the export set has holes (that is a
-// known, recorded property of it) -- so there is no pseudocode and no assembly to
-// reconstruct from, and this project does not invent bodies.
-//
-// A trap is safe here and a quiet body would not be. StringStore is on the SAVE path
-// only: its callers are cParticleMaterial::Serialise and cParticleDescriptor::Serialise,
-// which are reached only from cLionParticleEffect::Serialise <- cLionFX::BinSave, and
-// nothing in the PC build calls BinSave (the game loads .lef data, it never writes it).
-// What the definition buys is the LINK: without it ParticleMaterial.cpp and
-// ParticleDescriptor.cpp cannot be mounted at all, which is the state they were in.
-//
-// DELETE-WHEN 0x82908A50 is exported (re-run the exporter over that range) or the body
-// is recovered from the PS3 builds.
+// cLionSerialiser::StringStore @ 0x82908A50
+// Append a NUL-terminated string to the pre-sized string area.
 // ----------------------------------------------------------------------------
 char* cLionSerialiser::StringStore(const char* apcString)
 {
-    (void)apcString;
-    __debugbreak();
-    return 0;
+    char* lpcStored = 0;
+    if (apcString != 0 && mpStringBase != 0)
+    {
+        lpcStored = mpStringBase + mStringOffset;
+        ::strcpy(lpcStored, apcString);
+        mStringOffset += static_cast<u32>(::strlen(apcString)) + 1;
+    }
+    return lpcStored;
 }
