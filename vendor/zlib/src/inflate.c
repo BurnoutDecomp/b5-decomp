@@ -1,6 +1,7 @@
 /* inflate.c -- zlib interface to inflate modules
  * Copyright (C) 1995-2002 Mark Adler
  * For conditions of distribution and use, see copyright notice in zlib.h 
+ * Modified for the Xbox 360 ARTIST inflate state and initializer.
  */
 
 #include "zutil.h"
@@ -42,6 +43,7 @@ struct internal_state {
   } sub;        /* submode */
 
   /* mode independent information */
+  uInt method;          /* ARTIST +0x0c: initialized at 0x82ACCFD0, updated at 0x82ACD1D0 */
   int  nowrap;          /* flag for no wrapper */
   uInt wbits;           /* log2(window size)  (8..15, defaults to 15) */
   inflate_blocks_statef 
@@ -78,8 +80,10 @@ z_streamp z;
 }
 
 
-int ZEXPORT inflateInit2_(z, w, version, stream_size)
+/* ARTIST's extended initializer takes the compression method before w. */
+int ZEXPORT inflateInit3_(z, method, w, version, stream_size)
 z_streamp z;
+int method;
 int w;
 const char *version;
 int stream_size;
@@ -89,7 +93,7 @@ int stream_size;
       return Z_VERSION_ERROR;
 
   /* initialize state */
-  if (z == Z_NULL)
+  if (method != Z_DEFLATED || z == Z_NULL)
     return Z_STREAM_ERROR;
   z->msg = Z_NULL;
   if (z->zalloc == Z_NULL)
@@ -117,6 +121,7 @@ int stream_size;
     inflateEnd(z);
     return Z_STREAM_ERROR;
   }
+  z->state->method = (uInt)method;
   z->state->wbits = (uInt)w;
 
   /* create inflate_blocks state */
@@ -135,12 +140,22 @@ int stream_size;
 }
 
 
+int ZEXPORT inflateInit2_(z, w, version, stream_size)
+z_streamp z;
+int w;
+const char *version;
+int stream_size;
+{
+  return inflateInit3_(z, Z_DEFLATED, w, version, stream_size);
+}
+
+
 int ZEXPORT inflateInit_(z, version, stream_size)
 z_streamp z;
 const char *version;
 int stream_size;
 {
-  return inflateInit2_(z, DEF_WBITS, version, stream_size);
+  return inflateInit3_(z, Z_DEFLATED, DEF_WBITS, version, stream_size);
 }
 
 
@@ -162,13 +177,16 @@ int f;
   {
     case METHOD:
       NEEDBYTE
-      if (((z->state->sub.method = NEXTBYTE) & 0xf) != Z_DEFLATED)
+      b = NEXTBYTE;
+      z->state->sub.method = b;
+      if ((b & 0xf) != Z_DEFLATED)
       {
         z->state->mode = BAD;
         z->msg = (char*)"unknown compression method";
         z->state->sub.marker = 5;       /* can't try inflateSync */
         break;
       }
+      z->state->method = b;
       if ((z->state->sub.method >> 4) + 8 > z->state->wbits)
       {
         z->state->mode = BAD;
