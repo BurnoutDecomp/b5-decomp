@@ -38,7 +38,7 @@
 // implemented -- their collaborator layouts have since been homed. DeleteElements
 // needs only CMassiveList + the polymorphic CMassiveBaseObject deleting-destructor
 // (no concrete payload layout); AssetFind reads CMassiveAsset::mnAssetId (now a
-// friend); PreSubscriberAssignT reads CMassiveAdObjectSubscriber::mpcName (now a
+// friend); PreSubscriberAssignT reads XMassiveAdClientSubscriber::mpcName (now a
 // friend) and dispatches CMassiveAdObject::SubscriberAdd (a now-homed virtual).
 //
 // W41 UNBLOCK: MAOFind, SetAssetExpired, Resume and ReportImpressions are now
@@ -102,7 +102,7 @@ namespace MassiveAdClient3
 class CRequestObject;
 class CRequestImpressionUpdate;
 class CMassiveAdObject;
-class CMassiveAdObjectSubscriber;
+class XMassiveAdClientSubscriber;
 class CMassiveAsset;
 
 class CMassiveZoneManager : public CRequestBuilder
@@ -153,18 +153,18 @@ public:
 
     // @ 0x82BCEA30 / 0x82BD2BA8. Queues a subscriber for an ad object that has not
     // been located yet (a null subscriber records -500). Called as
-    // `currentZone->PreSubscriberAdd(subscriber)` by CMassiveAdObjectSubscriber's
+    // `currentZone->PreSubscriberAdd(subscriber)` by XMassiveAdClientSubscriber's
     // ctor when no ad object matched.
-    int PreSubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber);
+    int PreSubscriberAdd(XMassiveAdClientSubscriber* pSubscriber);
 
     // @ 0x82BD2C28. Removes pSubscriber from the pre-subscriber queue (a null
     // subscriber records -500; -500 when it was not queued). Returns 0 on removal.
-    int PreSubscriberRemove(CMassiveAdObjectSubscriber* pSubscriber);
+    int PreSubscriberRemove(XMassiveAdClientSubscriber* pSubscriber);
 
     // @ 0x82BD3630. Walks the pre-subscriber queue and, for every subscriber whose
     // name matches pcName, hands it to pAdObject (SubscriberAdd) and dequeues it,
     // restarting the walk after each removal. A bad name records -300; a null ad
-    // object records -400. Reads the subscriber's name (CMassiveAdObjectSubscriber
+    // object records -400. Reads the subscriber's name (XMassiveAdClientSubscriber
     // friend) and dispatches CMassiveAdObject::SubscriberAdd.
     int PreSubscriberAssignT(CMassiveAdObject* pAdObject, const char* pcName);
 

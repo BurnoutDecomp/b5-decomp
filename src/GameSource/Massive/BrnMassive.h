@@ -4,7 +4,7 @@
 #include "types.hpp"
 #include "GameSource/Massive/BrnMassiveDebugComponent.h"
 #include "SharedClasses/Massive/MassiveLookupTable.h"
-#include "SDKs/Packages/MassiveAd/MassiveAdClient3Subscriber.h"   // CMassiveAdObjectSubscriber (base of BrnMassiveSubscriber)
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3Subscriber.h"   // XMassiveAdClientSubscriber (base of BrnMassiveSubscriber)
 
 // ---------------------------------------------------------------------------
 // BrnMassive - Burnout's in-engine bridge to the MassiveAd in-game advertising
@@ -38,7 +38,7 @@ namespace BrnMassive
     // constructed in place by CreateSubscriber with the surface's MassiveAd zone
     // name. Implements the SDK's three download callbacks.
     // -----------------------------------------------------------------------
-    class BrnMassiveSubscriber : public MassiveAdClient3::CMassiveAdObjectSubscriber
+    class BrnMassiveSubscriber : public MassiveAdClient3::XMassiveAdClientSubscriber
     {
     public:
         // Constructs the SDK subscriber and logs "Creating Massive Subscriber IE: <zone>".
@@ -55,21 +55,7 @@ namespace BrnMassive
         void SetImpressionData(bool lbInView, f32 lfAngle, u32 luScreenSize,
                                u16 luScreenWidth, u16 luScreenHeight);
 
-        // The 32-byte impression record handed to the SDK by Tick
-        // (CMassiveAdObjectSubscriber::SetImpression copies it whole).
-        struct ImpressionData
-        {
-            u32  muAccumulator0;        // +0x00 reset with each new impression
-            u32  muAccumulator1;        // +0x04 reset with each new impression
-            bool mbInView;              // +0x08
-            u16  muScreenWidth;         // +0x0A reference screen (1280)
-            u16  muScreenHeight;        // +0x0C reference screen (720)
-            u32  muScreenSize;          // +0x10 projected size of the advert's box
-            f32  mfAngle;               // +0x14 facing term, clamped to [0, 1]
-            u8   maPad[8];              // +0x18
-        };
-
-        ImpressionData mImpression;     // +0x58
+        MassiveAdClient3::MAD_Impression mImpression; // +0x58
 
         u32  muCrexID;                  // +0x78 delivered creative id
         s32  miInvElementID;            // +0x7C delivered inventory-element id

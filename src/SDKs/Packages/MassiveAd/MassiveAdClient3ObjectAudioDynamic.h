@@ -24,10 +24,10 @@ public:
     int ReportImpressions() ;
     int Suspend() ;
     int Resume() ;
-    int SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber) ;
+    int SubscriberAdd(XMassiveAdClientSubscriber* pSubscriber) ;
     int GetNextAssetID() ;
 
-    CMassiveAdObject* CreateSlaveM(CMassiveAdObjectSubscriber* pSubscriber);
+    CMassiveAdObject* CreateSlaveMAO(XMassiveAdClientSubscriber* pSubscriber);
 
 private:
     int            mnCurrentAssetID;   // asset id handed to the newest slave

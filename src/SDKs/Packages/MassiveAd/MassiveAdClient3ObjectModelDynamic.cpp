@@ -6,7 +6,7 @@
 // SHAPE and BODIES are reconstructed from BURNOUT_X360_ARTIST.XEX (no reference
 // source / DecFIGS). Stores/branches are reproduced against the X360
 // disassembly; see MassiveAdClient3ObjectModelDynamic.h for the per-offset
-// layout map and for why CreateSlaveM / GetNextAssetID / Initialize are blocked.
+// layout map and for why CreateSlaveMAO / GetNextAssetID / Initialize are blocked.
 // The class installs its own X360 vftable (off_821872B4) over the
 // CMassiveAdObject slot -- modelled by the virtual destructor, so no vftable
 // store is written by hand.
@@ -203,16 +203,16 @@ int CMassiveAdObjectModelDynamic::SetAssetExpired(int nAssetId)
 //    subscriber ctor dispatches on the MAOFind result @ 0x82BCEA44)
 //
 // asm: if (pSubscriber == 0) return SetLastError(this, -500, &unk_820046A7);
-//      else CreateSlaveM(this, pSubscriber); return 0. (&unk_820046A7 is the
+//      else CreateSlaveMAO(this, pSubscriber); return 0. (&unk_820046A7 is the
 //      shared un-exported error-format rodata the leaf SetLastError ignores --
 //      modelled as a null format, per the established MassiveAd convention.)
 // ---------------------------------------------------------------------------
-int CMassiveAdObjectModelDynamic::SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber)
+int CMassiveAdObjectModelDynamic::SubscriberAdd(XMassiveAdClientSubscriber* pSubscriber)
 {
     if (!pSubscriber)
         return SetLastError(-500, "");
 
-    CreateSlaveM(pSubscriber);
+    CreateSlaveMAO(pSubscriber);
     return 0;
 }
 

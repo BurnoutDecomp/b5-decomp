@@ -91,7 +91,7 @@ extern void  (*MassiveFree)(void* pBlock);
 // this small fopen/fwrite/fflush/fclose-shaped hook family (the X360 routes them
 // to the title's own file system). MassiveFileOpen returns an opaque file handle
 // (null on failure); the write/flush/close hooks take that handle back.
-// CMassiveAdObjectSubscriber::MediaDownloadComplete @ 0x82BCEC70 is the recovered
+// XMassiveAdClientSubscriber::MediaDownloadComplete @ 0x82BCEC70 is the recovered
 // consumer. Declared here and supplied by the MassiveAd platform file layer
 // (another TU). FLAG: these wrap the OS file primitives -- external/platform, not
 // project-owned.

@@ -9,7 +9,7 @@
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Asset.h"      // CMassiveAsset (AssetFind / DeleteElements / Resume / ReportImpressions)
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Objects.h"    // CMassiveOrder complete type (SetAssetExpiredByOrderID reads mnNumber)
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3AdObject.h"   // CMassiveAdObject (SubscriberAdd / MAOFind name / SetAssetExpired / ReportImpressions / Resume)
-#include "SDKs/Packages/MassiveAd/MassiveAdClient3Subscriber.h" // CMassiveAdObjectSubscriber::mpcName (PreSubscriberAssignT)
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3Subscriber.h" // XMassiveAdClientSubscriber::mpcName (PreSubscriberAssignT)
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestImpressionUpdate.h" // CRequestImpressionUpdate::Finish / CreateRequest
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3ClientCore.h"        // CMassiveClientCore::Instance / mBenchmark / ZoneManagerRemove
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestEnterZone.h"  // CRequestEnterZone (Tick state 1, HandleResponse server type 0x33)
@@ -232,7 +232,7 @@ int CMassiveZoneManager::HandleError(CRequestObject* pRequest, int /*nErrorCode*
 // null subscriber (-500), otherwise allocates a list node over the subscriber and
 // appends it to the pre-subscriber queue. Returns 0.
 // ---------------------------------------------------------------------------
-int CMassiveZoneManager::PreSubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber)
+int CMassiveZoneManager::PreSubscriberAdd(XMassiveAdClientSubscriber* pSubscriber)
 {
     if (!pSubscriber)
         return SetLastError(-500, reinterpret_cast<const char*>(0)); // &unk_820046A7
@@ -251,7 +251,7 @@ int CMassiveZoneManager::PreSubscriberAdd(CMassiveAdObjectSubscriber* pSubscribe
 // (-500), walks the queue for the node carrying it, and removes (and deletes)
 // that node. Returns 0 on removal, -500 when the subscriber was not queued.
 // ---------------------------------------------------------------------------
-int CMassiveZoneManager::PreSubscriberRemove(CMassiveAdObjectSubscriber* pSubscriber)
+int CMassiveZoneManager::PreSubscriberRemove(XMassiveAdClientSubscriber* pSubscriber)
 {
     if (!pSubscriber)
         return SetLastError(-500, reinterpret_cast<const char*>(0)); // &unk_820046A7
@@ -358,8 +358,8 @@ int CMassiveZoneManager::PreSubscriberAssignT(CMassiveAdObject* pAdObject, const
         bool lbRemoved = false;
         while (mPreSubscriberList.GetCurrent())  // while (*(a1 + 0x30)) -- queue cursor
         {
-            CMassiveAdObjectSubscriber* lpSubscriber =
-                static_cast<CMassiveAdObjectSubscriber*>(mPreSubscriberList.GetCurrData());
+            XMassiveAdClientSubscriber* lpSubscriber =
+                static_cast<XMassiveAdClientSubscriber*>(mPreSubscriberList.GetCurrData());
             if (CompareStrings(pcName, lpSubscriber->mpcName) == 0)  // *(CurrData + 4)
             {
                 pAdObject->SubscriberAdd(lpSubscriber);  // (*(*a2 + 0x1C))(a2, subscriber)
@@ -380,7 +380,7 @@ int CMassiveZoneManager::PreSubscriberAssignT(CMassiveAdObject* pAdObject, const
 // Finds the ad object named pcName in this zone by comparing each ad object's
 // own name (CMassiveAdObject::mpcAdObjectName, X360 +0x14) against pcName. A bad
 // name records -300 and returns null; a miss returns null. Called as
-// `currentZone->MAOFind(name)` by CMassiveAdObjectSubscriber's ctor to bind a
+// `currentZone->MAOFind(name)` by XMassiveAdClientSubscriber's ctor to bind a
 // subscriber to an already-present ad object.
 // ---------------------------------------------------------------------------
 CMassiveAdObject* CMassiveZoneManager::MAOFind(const char* pcName)

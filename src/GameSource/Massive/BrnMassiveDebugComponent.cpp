@@ -95,13 +95,13 @@ void BrnMassiveDebugComponent::DrawSubscriber(const BrnMassiveSubscriber* lpSubs
     CgsCore::SPrintf(lacValue, 64, "%d", lpSubscriber->miInvElementID);
     DrawText(lpRender, "IE= ", lacValue, lfX, &lfY);
 
-    const BrnMassiveSubscriber::ImpressionData& lrImpression = lpSubscriber->mImpression;
+    const MassiveAdClient3::MAD_Impression& lrImpression = lpSubscriber->mImpression;
     DrawText(lpRender, "View= ", lrImpression.mbInView ? "True" : "False", lfX, &lfY);
 
     CgsCore::SPrintf(lacValue, 64, "%.2f", static_cast<double>(lrImpression.mfAngle));
     DrawText(lpRender, "Angle= ", lacValue, lfX, &lfY);
 
-    CgsCore::SPrintf(lacValue, 64, "%u", lrImpression.muScreenSize);
+    CgsCore::SPrintf(lacValue, 64, "%u", lrImpression.muSize);
     DrawText(lpRender, "Size= ", lacValue, lfX, &lfY);
 }
 

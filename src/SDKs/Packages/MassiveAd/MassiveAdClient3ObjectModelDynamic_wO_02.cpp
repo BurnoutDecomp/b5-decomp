@@ -9,7 +9,7 @@ namespace MassiveAdClient3
 {
 
 // ---------------------------------------------------------------------------
-// CMassiveAdObjectModelDynamic::CreateSlaveM @ 0x82BDE850
+// CMassiveAdObjectModelDynamic::CreateSlaveMAO @ 0x82BDE850
 //
 // Spawns one CMassiveAdObjectModel "slave", seeds it from the master's own
 // fields, hands it the next delivered asset id (and the subscriber, when there
@@ -91,7 +91,7 @@ namespace MassiveAdClient3
 //
 // PPC float-ABI check (gotcha 3): the base-ctor chain loads r4, r5, r6, r7 with
 // no gap and touches no FPR anywhere in the function, so no argument is a float
-// here. The sibling AudioDynamic::CreateSlaveM is the SAME shape -- its base-ctor
+// here. The sibling AudioDynamic::CreateSlaveMAO is the SAME shape -- its base-ctor
 // call is likewise four GPR args with no float argument; only its +0x60 MEMBER is
 // a float (lfs f31). There is no floating-point compare in this body either,
 // so the NaN-polarity rule does not apply.
@@ -100,8 +100,8 @@ namespace MassiveAdClient3
 // size copy as a plain `v5[24] = v6`) and drops AssetIDAdd's second argument --
 // the raw disassembly above is what is reproduced here.
 // ---------------------------------------------------------------------------
-CMassiveAdObject* CMassiveAdObjectModelDynamic::CreateSlaveM(
-    CMassiveAdObjectSubscriber* pSubscriber)
+CMassiveAdObject* CMassiveAdObjectModelDynamic::CreateSlaveMAO(
+    XMassiveAdClientSubscriber* pSubscriber)
 {
     void* lpSlaveMem = CMassiveListNode::operator new(sizeof(CMassiveAdObjectModel)); // li r3, 0x64
     CMassiveAdObjectModel* lpSlave = lpSlaveMem
@@ -148,7 +148,7 @@ CMassiveAdObject* CMassiveAdObjectModelDynamic::CreateSlaveM(
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3.h"            // CMassiveList
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3ClientCore.h"  // Instance / GetCurrentZone
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3ZoneManager.h" // mPreSubscriberList
-#include "SDKs/Packages/MassiveAd/MassiveAdClient3Subscriber.h"  // CMassiveAdObjectSubscriber::mpcName
+#include "SDKs/Packages/MassiveAd/MassiveAdClient3Subscriber.h"  // XMassiveAdClientSubscriber::mpcName
 
 // External MassiveAd string-compare helper (`bl CompareStrings` @ 0x82BDEF50).
 // Returns 0 when the two NUL-terminated strings are equal -- the strcmp
@@ -191,7 +191,7 @@ namespace MassiveAdClient3
 //   82BDEF58  bne     loc_82BDEF68           ; 0 == the names match
 //   82BDEF5C  mr      r4, r30
 //   82BDEF60  mr      r3, r31
-//   82BDEF64  bl      CMassiveAdObjectModelDynamic::CreateSlaveM
+//   82BDEF64  bl      CMassiveAdObjectModelDynamic::CreateSlaveMAO
 // loc_82BDEF68:
 //   82BDEF68  lwz     r11, 0x18(r31)
 //   82BDEF6C  addi    r3, r11, 0x28
@@ -244,13 +244,13 @@ int CMassiveAdObjectModelDynamic::Initialize()
 
         while (mpZone->mPreSubscriberList.GetCurrent())  // lwz zone+0x30 (the cursor)
         {
-            CMassiveAdObjectSubscriber* lpSubscriber =
-                static_cast<CMassiveAdObjectSubscriber*>(
+            XMassiveAdClientSubscriber* lpSubscriber =
+                static_cast<XMassiveAdClientSubscriber*>(
                     mpZone->mPreSubscriberList.GetCurrData());
 
             // CompareStrings == 0 is the match (strcmp convention).
             if (!CompareStrings(mpcAdObjectName, lpSubscriber->mpcName))  // subscriber + 0x04
-                CreateSlaveM(lpSubscriber);
+                CreateSlaveMAO(lpSubscriber);
 
             mpZone->mPreSubscriberList.GoToNext();
         }

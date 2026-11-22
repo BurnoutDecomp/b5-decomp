@@ -10,7 +10,7 @@
 namespace MassiveAdClient3
 {
 
-class CMassiveAdObjectSubscriber;
+class XMassiveAdClientSubscriber;
 
 class CMassiveAdObjectModelDynamic : public CMassiveAdObjectModel
 {
@@ -26,11 +26,11 @@ public:
     int Suspend() ;
     int SetAssetExpired(int nAssetId) ;
     int ReportImpressions() ;
-    int SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber) ;
+    int SubscriberAdd(XMassiveAdClientSubscriber* pSubscriber) ;
     int GetNextAssetID() ;
     int Initialize() ;
 
-    CMassiveAdObject* CreateSlaveM(CMassiveAdObjectSubscriber* pSubscriber);
+    CMassiveAdObject* CreateSlaveMAO(XMassiveAdClientSubscriber* pSubscriber);
 
 private:
     int            mnCurrentAssetID;   // +0x64 asset id handed to the newest slave

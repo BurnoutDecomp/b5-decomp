@@ -16,9 +16,6 @@
 namespace BrnMassive
 {
 
-CGS_STATIC_ASSERT((sizeof(BrnMassiveSubscriber::ImpressionData) == 32),
-              "the impression record SetImpression copies is 32 bytes");
-
 // The texture format the replacement ad must arrive in (DXT1).
 static const unsigned int KU_DXT1_MEDIA_TYPE = 35;
 
@@ -29,7 +26,7 @@ static const int KI_MASSIVE_HEADER_SIZE = 52;
 // Construct the SDK subscriber for the zone and announce it.
 // ---------------------------------------------------------------------------
 BrnMassiveSubscriber::BrnMassiveSubscriber(const char* lpcZoneName)
-    : MassiveAdClient3::CMassiveAdObjectSubscriber(lpcZoneName)
+    : MassiveAdClient3::XMassiveAdClientSubscriber(lpcZoneName)
 {
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {
@@ -132,15 +129,15 @@ int BrnMassiveSubscriber::MediaDownloadComplete(const void* lpData, int liDataSi
 void BrnMassiveSubscriber::SetImpressionData(bool lbInView, f32 lfAngle, u32 luScreenSize,
                                              u16 luScreenWidth, u16 luScreenHeight)
 {
-    if (mImpression.muScreenSize < luScreenSize || mbImpressionReported)
+    if (mImpression.muSize < luScreenSize || mbImpressionReported)
     {
         mImpression.mfAngle        = lfAngle;
         mImpression.mbInView       = lbInView;
-        mImpression.muScreenSize   = luScreenSize;
-        mImpression.muScreenWidth  = luScreenWidth;
-        mImpression.muScreenHeight = luScreenHeight;
-        mImpression.muAccumulator1 = 0;
-        mImpression.muAccumulator0 = 0;
+        mImpression.muSize         = luScreenSize;
+        mImpression.mnScreenWidth  = luScreenWidth;
+        mImpression.mnScreenHeight = luScreenHeight;
+        mImpression.mnAngleType    = 0;
+        mImpression.mnSizeType     = 0;
         mbImpressionReported       = false;
     }
 }

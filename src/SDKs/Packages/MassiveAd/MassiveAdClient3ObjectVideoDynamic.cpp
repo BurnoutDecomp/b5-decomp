@@ -28,7 +28,7 @@ CMassiveAdObjectVideoDynamic::~CMassiveAdObjectVideoDynamic()
 
 // Spawns a slave carrying this placement's name, id and thresholds, gives it the next
 // delivered asset and, when one is passed, the subscriber it serves.
-CMassiveAdObject* CMassiveAdObjectVideoDynamic::CreateSlaveM(CMassiveAdObjectSubscriber* pSubscriber)
+CMassiveAdObject* CMassiveAdObjectVideoDynamic::CreateSlaveMAO(XMassiveAdClientSubscriber* pSubscriber)
 {
     void* lpSlaveMemory = CMassiveListNode::operator new(sizeof(CMassiveAdObjectVideo));
     CMassiveAdObjectVideo* lpSlave =
@@ -156,11 +156,11 @@ int CMassiveAdObjectVideoDynamic::Resume()
 }
 
 // Each subscriber gets its own slave.
-int CMassiveAdObjectVideoDynamic::SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber)
+int CMassiveAdObjectVideoDynamic::SubscriberAdd(XMassiveAdClientSubscriber* pSubscriber)
 {
     if (!pSubscriber)
         return SetLastError(-500, "");
-    CreateSlaveM(pSubscriber);
+    CreateSlaveMAO(pSubscriber);
     return 0;
 }
 
@@ -175,10 +175,10 @@ int CMassiveAdObjectVideoDynamic::Initialize()
         (void)std::strlen(mpcAdObjectName);
         while (mpZone->mPreSubscriberList.GetCurrent())
         {
-            CMassiveAdObjectSubscriber* lpSubscriber =
-                static_cast<CMassiveAdObjectSubscriber*>(mpZone->mPreSubscriberList.GetCurrData());
+            XMassiveAdClientSubscriber* lpSubscriber =
+                static_cast<XMassiveAdClientSubscriber*>(mpZone->mPreSubscriberList.GetCurrData());
             if (!CompareStrings(mpcAdObjectName, lpSubscriber->mpcName))
-                CreateSlaveM(lpSubscriber);
+                CreateSlaveMAO(lpSubscriber);
             mpZone->mPreSubscriberList.GoToNext();
         }
     }

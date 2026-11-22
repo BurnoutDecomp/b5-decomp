@@ -69,7 +69,7 @@ void BrnMassive::Destruct()
         BrnMassiveSubscriber* lpSubscriber = mapSubscribers[liSlot];
         if (lpSubscriber != 0)
         {
-            lpSubscriber->MassiveAdClient3::CMassiveAdObjectSubscriber::~CMassiveAdObjectSubscriber();
+            lpSubscriber->MassiveAdClient3::XMassiveAdClientSubscriber::~XMassiveAdClientSubscriber();
             ::operator delete(lpSubscriber);
         }
     }
@@ -204,8 +204,8 @@ BrnMassiveSubscriber* BrnMassive::CreateSubscriber(s32 liIE, void* lpTextureData
     lpNew->mbImpressionReported = true;
     lpNew->muIdleFrames         = 0;
     std::memset(&lpNew->mImpression, 0, sizeof(lpNew->mImpression));
-    lpNew->mImpression.muScreenWidth  = 1280;
-    lpNew->mImpression.muScreenHeight = 720;
+    lpNew->mImpression.mnScreenWidth  = 1280;
+    lpNew->mImpression.mnScreenHeight = 720;
 
     mapSubscribers[mnNumActiveSubscribers]->mpTextureData  = lpTextureData;
     mapSubscribers[mnNumActiveSubscribers]->miIE           = liIE;

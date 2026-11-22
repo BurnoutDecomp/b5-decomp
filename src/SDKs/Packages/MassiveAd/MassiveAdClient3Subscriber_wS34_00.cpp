@@ -1,48 +1,43 @@
-// MassiveAdClient3::CMassiveAdObjectSubscriber -- the closure-free members (base callbacks, impression
+// MassiveAdClient3::XMassiveAdClientSubscriber -- the closure-free members (base callbacks, impression
 // record, inventory-element id); the constructor/destructor/GetCrexID/MediaDownloadComplete stay in the parent.
 
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Subscriber.h"
 
 #include <cstring>  // memset, memcpy
 
-#include "SDKs/Packages/MassiveAd/MassiveAdClient3AdObject.h"   // CMassiveAdObject::mnInvElementID
-
 namespace MassiveAdClient3
 {
 
 // Base download callbacks: MediaDownload accepts (returns 1), Tick does nothing.
-int CMassiveAdObjectSubscriber::MediaDownload(int /*nAdvertId*/)
+int XMassiveAdClientSubscriber::MediaDownload(int /*nAdvertId*/)
 {
     return 1;
 }
 
-void CMassiveAdObjectSubscriber::Tick()
+void XMassiveAdClientSubscriber::Tick()
 {
 }
 
-// Record a viewed impression: a null argument leaves the live record untouched (returns
-// this); otherwise the 32-byte live record is cleared, then overwritten (returns the record).
-void* CMassiveAdObjectSubscriber::SetImpression(void* pImpressionData)
+void XMassiveAdClientSubscriber::SetImpression(MAD_Impression* pImpression)
 {
-    if (pImpressionData)
+    if (pImpression)
     {
-        std::memset(macImpression, 0, sizeof(macImpression));
-        return std::memcpy(macImpression, pImpressionData, sizeof(macImpression));
+        std::memset(&m_CurrentImpression, 0, sizeof(m_CurrentImpression));
+        std::memcpy(&m_CurrentImpression, pImpression, sizeof(m_CurrentImpression));
     }
-    return this;
 }
 
 // Snapshot the live record and, when bClear is set, clear it; returns the snapshot.
-void* CMassiveAdObjectSubscriber::GetImpression(int bClear)
+MAD_Impression* XMassiveAdClientSubscriber::GetImpression(int bClear)
 {
-    std::memcpy(macImpressionSnapshot, macImpression, sizeof(macImpressionSnapshot));
+    std::memcpy(&m_CopyImpression, &m_CurrentImpression, sizeof(m_CopyImpression));
     if (bClear)
-        std::memset(macImpression, 0, sizeof(macImpression));
-    return macImpressionSnapshot;
+        std::memset(&m_CurrentImpression, 0, sizeof(m_CurrentImpression));
+    return &m_CopyImpression;
 }
 
 // The delivered ad's inventory-element id, or 0 when no ad object is attached.
-int CMassiveAdObjectSubscriber::GetInvElementID()
+unsigned int XMassiveAdClientSubscriber::GetInvElementID()
 {
     if (mpAdObject)
         return mpAdObject->mnInvElementID;

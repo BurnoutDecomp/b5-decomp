@@ -21,7 +21,7 @@ public:
     }
     virtual ~CMassiveAdObjectAudio();
 
-    int GetBestImpression(CMassiveListNode* pSubscriberNode, SMassiveImpression* pBest) ;
+    int GetBestImpression(CMassiveListNode* pSubscriberNode, MAD_Impression* pBest) ;
 
 protected:
     float mfMaxDistance; // +0x60

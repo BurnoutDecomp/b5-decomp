@@ -99,7 +99,7 @@ CMassiveAdObject::~CMassiveAdObject()
     mSubscriberList.GoToStart();
     while (mSubscriberList.GetCurrent())
     {
-        static_cast<CMassiveAdObjectSubscriber*>(mSubscriberList.GetCurrData())->mpAdObject = 0;
+        static_cast<XMassiveAdClientSubscriber*>(mSubscriberList.GetCurrData())->mpAdObject = 0;
         mSubscriberList.GoToNext();
     }
     mSubscriberList.RemoveAll();
@@ -456,7 +456,7 @@ float CMassiveAdObject::GetScreenRatio(unsigned short nScreenWidth, unsigned sho
     return sfCachedRatio;
 }
 
-CMassiveAdObjectSubscriber* CMassiveAdObject::SubscriberFind(CMassiveAdObjectSubscriber* pSubscriber)
+XMassiveAdClientSubscriber* CMassiveAdObject::SubscriberFind(XMassiveAdClientSubscriber* pSubscriber)
 {
     if (!pSubscriber)
     {
@@ -468,13 +468,13 @@ CMassiveAdObjectSubscriber* CMassiveAdObject::SubscriberFind(CMassiveAdObjectSub
     while (mSubscriberList.GetCurrent())
     {
         if (pSubscriber == mSubscriberList.GetCurrData())
-            return static_cast<CMassiveAdObjectSubscriber*>(mSubscriberList.GetCurrData());
+            return static_cast<XMassiveAdClientSubscriber*>(mSubscriberList.GetCurrData());
         mSubscriberList.GoToNext();
     }
     return 0;
 }
 
-int CMassiveAdObject::SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber)
+int CMassiveAdObject::SubscriberAdd(XMassiveAdClientSubscriber* pSubscriber)
 {
     if (!pSubscriber)
         return SetLastError(-500, "");
@@ -496,7 +496,7 @@ int CMassiveAdObject::SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber)
 
 // Unlinks a subscriber (releasing its hold on the downloading asset); the last one leaving
 // resets the placement to re-initialise.
-int CMassiveAdObject::SubscriberRemove(CMassiveAdObjectSubscriber* pSubscriber)
+int CMassiveAdObject::SubscriberRemove(XMassiveAdClientSubscriber* pSubscriber)
 {
     if (!pSubscriber)
         return SetLastError(-500, "Subscriber %s", 0);
@@ -532,8 +532,8 @@ int CMassiveAdObject::MediaDownload(int nAssetID)
     mSubscriberList.GoToStart();
     while (mSubscriberList.GetCurrent())
     {
-        CMassiveAdObjectSubscriber* lpSubscriber =
-            static_cast<CMassiveAdObjectSubscriber*>(mSubscriberList.GetCurrData());
+        XMassiveAdClientSubscriber* lpSubscriber =
+            static_cast<XMassiveAdClientSubscriber*>(mSubscriberList.GetCurrData());
         if (!lpSubscriber->MediaDownload(nAssetID))
             lbAllAccept = 0;
         mSubscriberList.GoToNext();
@@ -548,8 +548,8 @@ int CMassiveAdObject::MediaDownloadComplete(const void* pData, int nSize, unsign
     mSubscriberList.GoToStart();
     while (mSubscriberList.GetCurrent())
     {
-        CMassiveAdObjectSubscriber* lpSubscriber =
-            static_cast<CMassiveAdObjectSubscriber*>(mSubscriberList.GetCurrData());
+        XMassiveAdClientSubscriber* lpSubscriber =
+            static_cast<XMassiveAdClientSubscriber*>(mSubscriberList.GetCurrData());
         if (!lpSubscriber->MediaDownloadComplete(pData, nSize, nMediaType, nAssetID))
             lbAllAccept = 0;
         mSubscriberList.GoToNext();
@@ -642,7 +642,7 @@ int CMassiveAdObject::StateDownloadComplet()
     mSubscriberList.GoToStart();
     while (mSubscriberList.GetCurrent())
     {
-        static_cast<CMassiveAdObjectSubscriber*>(mSubscriberList.GetCurrData())->mnField10 = 1;
+        static_cast<XMassiveAdClientSubscriber*>(mSubscriberList.GetCurrData())->mnField10 = 1;
         mSubscriberList.GoToNext();
     }
 
@@ -652,9 +652,9 @@ int CMassiveAdObject::StateDownloadComplet()
         mSubscriberList.GoToStart();
         while (mSubscriberList.GetCurrent())
         {
-            CMassiveAdObjectSubscriber* lpSubscriber =
-                static_cast<CMassiveAdObjectSubscriber*>(mSubscriberList.GetCurrData());
-            if (static_cast<SMassiveImpression*>(lpSubscriber->GetImpression(0))->mbInView)
+            XMassiveAdClientSubscriber* lpSubscriber =
+                static_cast<XMassiveAdClientSubscriber*>(mSubscriberList.GetCurrData());
+            if (lpSubscriber->GetImpression(0)->mbInView)
                 return 0;
             mSubscriberList.GoToNext();
         }
@@ -702,7 +702,7 @@ int CMassiveAdObject::ReportImpressions()
 // running sums of size, angle and distance, the displayed time since the last sample (also
 // charged to the asset's order for an impression), and a record rollover once a counter
 // passes the sample cap.
-int CMassiveAdObject::SaveImpressionRecord(SMassiveImpression* pImpression)
+int CMassiveAdObject::SaveImpressionRecord(MAD_Impression* pImpression)
 {
     if (!pImpression)
         return SetLastError(-393, "");
@@ -811,7 +811,7 @@ int CMassiveAdObject::UpdateImpressions(int bOutOfView)
         }
     }
 
-    SMassiveImpression lBest;
+    MAD_Impression lBest;
     std::memset(&lBest, 0, sizeof(lBest));
 
     int lbQualified = 0;
@@ -819,7 +819,7 @@ int CMassiveAdObject::UpdateImpressions(int bOutOfView)
     while (mSubscriberList.GetCurrent())
     {
         if (!mbMediaDownloaded ||
-            static_cast<CMassiveAdObjectSubscriber*>(mSubscriberList.GetCurrData())->mnField10)
+            static_cast<XMassiveAdClientSubscriber*>(mSubscriberList.GetCurrData())->mnField10)
         {
             if (GetBestImpression(mSubscriberList.GetCurrent(), &lBest))
                 lbQualified = 1;
@@ -888,16 +888,16 @@ int CMassiveAdObject::Tick()
     mSubscriberList.GoToStart();
     while (mSubscriberList.GetCurrent())
     {
-        static_cast<CMassiveAdObjectSubscriber*>(mSubscriberList.GetCurrData())->mnLastError = 0;
-        static_cast<CMassiveAdObjectSubscriber*>(mSubscriberList.GetCurrData())->Tick();
-        if (!static_cast<CMassiveAdObjectSubscriber*>(mSubscriberList.GetCurrData())->mnLastError && GetLastError())
-            static_cast<CMassiveAdObjectSubscriber*>(mSubscriberList.GetCurrData())->mnLastError = GetLastError();
+        static_cast<XMassiveAdClientSubscriber*>(mSubscriberList.GetCurrData())->mnLastError = 0;
+        static_cast<XMassiveAdClientSubscriber*>(mSubscriberList.GetCurrData())->Tick();
+        if (!static_cast<XMassiveAdClientSubscriber*>(mSubscriberList.GetCurrData())->mnLastError && GetLastError())
+            static_cast<XMassiveAdClientSubscriber*>(mSubscriberList.GetCurrData())->mnLastError = GetLastError();
         mSubscriberList.GoToNext();
     }
     return 0;
 }
 
-int CMassiveAdObject::GetBestImpression(CMassiveListNode* /*pSubscriberNode*/, SMassiveImpression* /*pBest*/)
+int CMassiveAdObject::GetBestImpression(CMassiveListNode* /*pSubscriberNode*/, MAD_Impression* /*pBest*/)
 {
     return 0;
 }
@@ -909,19 +909,19 @@ int CMassiveAdObject::GetBestImpression(CMassiveListNode* /*pSubscriberNode*/, S
 // Normalises the subscriber's impression (area -> linear size, angle -> cosine) and scales its
 // size to the reference screen; qualifies it against the minimum size / angle and keeps it in
 // pBest when its size x facing score is at least the best seen this tick.
-int CMassiveAdObjectTexture::GetBestImpression(CMassiveListNode* pSubscriberNode, SMassiveImpression* pBest)
+int CMassiveAdObjectTexture::GetBestImpression(CMassiveListNode* pSubscriberNode, MAD_Impression* pBest)
 {
     unsigned short luMinSize = mpCurrentAsset ? mpCurrentAsset->msField5E : muMinSize;
     float lfMinAngle = mpCurrentAsset ? mpCurrentAsset->mfField60 : mfMinAngle;
 
-    CMassiveAdObjectSubscriber* lpSubscriber = static_cast<CMassiveAdObjectSubscriber*>(pSubscriberNode->GetOwner());
+    XMassiveAdClientSubscriber* lpSubscriber = static_cast<XMassiveAdClientSubscriber*>(pSubscriberNode->GetOwner());
     if (!lpSubscriber)
     {
         MassiveLog(2, GetName(), "Invalid Subscriber: %d", 0);
         return 0;
     }
 
-    SMassiveImpression* lpImpression = static_cast<SMassiveImpression*>(lpSubscriber->GetImpression(1));
+    MAD_Impression* lpImpression = lpSubscriber->GetImpression(1);
     if (!lpImpression)
     {
         MassiveLog(2, GetName(), "Invalid Subscriber Impression Data: %d", lpSubscriber);
@@ -998,19 +998,19 @@ int CMassiveAdObjectTexture::GetBestImpression(CMassiveListNode* pSubscriberNode
     if (lfScore < lfBestScore)
         return 0;
 
-    std::memcpy(pBest, lpImpression, sizeof(SMassiveImpression));
+    std::memcpy(pBest, lpImpression, sizeof(MAD_Impression));
     return lbQualified;
 }
 
 // Keeps the closest audible impression in pBest (an unset best distance counts as 1); it
 // qualifies within the maximum distance.
-int CMassiveAdObjectAudio::GetBestImpression(CMassiveListNode* pSubscriberNode, SMassiveImpression* pBest)
+int CMassiveAdObjectAudio::GetBestImpression(CMassiveListNode* pSubscriberNode, MAD_Impression* pBest)
 {
     if (!(pBest->mfDistance >= 0.000001f))
         pBest->mfDistance = 1.0f;
 
-    CMassiveAdObjectSubscriber* lpSubscriber = static_cast<CMassiveAdObjectSubscriber*>(pSubscriberNode->GetOwner());
-    SMassiveImpression* lpImpression = static_cast<SMassiveImpression*>(lpSubscriber->GetImpression(1));
+    XMassiveAdClientSubscriber* lpSubscriber = static_cast<XMassiveAdClientSubscriber*>(pSubscriberNode->GetOwner());
+    MAD_Impression* lpImpression = lpSubscriber->GetImpression(1);
     float lfMaxDistance = mpCurrentAsset ? mpCurrentAsset->mfField64 : mfMaxDistance;
 
     lpSubscriber->mnField54 = KI_IMPRESSION_NOT_SEEN;
@@ -1021,7 +1021,7 @@ int CMassiveAdObjectAudio::GetBestImpression(CMassiveListNode* pSubscriberNode, 
     }
 
     lpSubscriber->mnField54 = KI_IMPRESSION_SEEN;
-    std::memcpy(pBest, lpImpression, sizeof(SMassiveImpression));
+    std::memcpy(pBest, lpImpression, sizeof(MAD_Impression));
     if (lpImpression->mfDistance > lfMaxDistance)
         return 0;
 
@@ -1031,13 +1031,13 @@ int CMassiveAdObjectAudio::GetBestImpression(CMassiveListNode* pSubscriberNode, 
 
 // Keeps the in-view impression with the larger size x facing score in pBest; it qualifies
 // at or above the minimum angle and size.
-int CMassiveAdObjectVideo::GetBestImpression(CMassiveListNode* pSubscriberNode, SMassiveImpression* pBest)
+int CMassiveAdObjectVideo::GetBestImpression(CMassiveListNode* pSubscriberNode, MAD_Impression* pBest)
 {
     unsigned short luMinSize = mpCurrentAsset ? mpCurrentAsset->msField5E : muMinSize;
     float lfMinAngle = mpCurrentAsset ? mpCurrentAsset->mfField60 : mfMinAngle;
 
-    CMassiveAdObjectSubscriber* lpSubscriber = static_cast<CMassiveAdObjectSubscriber*>(pSubscriberNode->GetOwner());
-    SMassiveImpression* lpImpression = static_cast<SMassiveImpression*>(lpSubscriber->GetImpression(1));
+    XMassiveAdClientSubscriber* lpSubscriber = static_cast<XMassiveAdClientSubscriber*>(pSubscriberNode->GetOwner());
+    MAD_Impression* lpImpression = lpSubscriber->GetImpression(1);
     lpSubscriber->mnField54 = KI_IMPRESSION_NOT_SEEN;
     if (!lpImpression || !lpImpression->mbInView)
         return 0;
@@ -1050,7 +1050,7 @@ int CMassiveAdObjectVideo::GetBestImpression(CMassiveListNode* pSubscriberNode, 
     if (lfScore < lfBestScore)
         return 0;
 
-    std::memcpy(pBest, lpImpression, sizeof(SMassiveImpression));
+    std::memcpy(pBest, lpImpression, sizeof(MAD_Impression));
     if (lpImpression->mfAngle < lfMinAngle || lpImpression->muSize < luMinSize)
         return 0;
 
@@ -1059,10 +1059,10 @@ int CMassiveAdObjectVideo::GetBestImpression(CMassiveListNode* pSubscriberNode, 
 }
 
 // Keeps the larger in-view impression in pBest; it qualifies at or above the minimum size.
-int CMassiveAdObjectModel::GetBestImpression(CMassiveListNode* pSubscriberNode, SMassiveImpression* pBest)
+int CMassiveAdObjectModel::GetBestImpression(CMassiveListNode* pSubscriberNode, MAD_Impression* pBest)
 {
-    CMassiveAdObjectSubscriber* lpSubscriber = static_cast<CMassiveAdObjectSubscriber*>(pSubscriberNode->GetOwner());
-    SMassiveImpression* lpImpression = static_cast<SMassiveImpression*>(lpSubscriber->GetImpression(1));
+    XMassiveAdClientSubscriber* lpSubscriber = static_cast<XMassiveAdClientSubscriber*>(pSubscriberNode->GetOwner());
+    MAD_Impression* lpImpression = lpSubscriber->GetImpression(1);
     unsigned int luMinSize = mpCurrentAsset ? mpCurrentAsset->msField5E : muMinSize;
 
     lpSubscriber->mnField54 = KI_IMPRESSION_NOT_SEEN;
@@ -1073,7 +1073,7 @@ int CMassiveAdObjectModel::GetBestImpression(CMassiveListNode* pSubscriberNode, 
     if (!(lpImpression->muSize > pBest->muSize))
         return 0;
 
-    std::memcpy(pBest, lpImpression, sizeof(SMassiveImpression));
+    std::memcpy(pBest, lpImpression, sizeof(MAD_Impression));
     if (lpImpression->muSize < luMinSize)
         return 0;
 

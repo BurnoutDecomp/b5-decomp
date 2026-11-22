@@ -11,14 +11,14 @@
 namespace MassiveAdClient3
 {
 
-class CMassiveAdObjectSubscriber;
+class XMassiveAdClientSubscriber;
 class CMassiveZoneManager;
 class CMassiveAsset;
 class CMassiveRecord;
 
-// The 32-byte impression record a subscriber hands to the client (copied whole by
-// CMassiveAdObjectSubscriber::SetImpression / GetImpression).
-struct SMassiveImpression
+// The ARTIST revision of the SDK impression record. GetImpression copies all
+// 32 bytes at 0x82BCEC0C. The audio flag is a byte in the load at 0x82BD6C54.
+typedef struct _MAD_Impression
 {
     int           mnSizeType;     // +0x00 0 linear size, 1 on-screen area
     int           mnAngleType;    // +0x04 0 dot product, 1 radians, 2 degrees
@@ -29,8 +29,8 @@ struct SMassiveImpression
     float         mfAngle;        // +0x14
     unsigned char mbAudible;      // +0x18
     float         mfDistance;     // +0x1C
-};
-CGS_STATIC_ASSERT((sizeof(SMassiveImpression) == 32), "the impression record is 32 bytes");
+} MAD_Impression;
+CGS_STATIC_ASSERT((sizeof(MAD_Impression) == 32), "the impression record is 32 bytes");
 
 class CMassiveAdObject : public CMassiveBaseObject
 {
@@ -63,19 +63,19 @@ public:
     virtual int ReportImpressions();
     virtual int Suspend();
     virtual int Resume();
-    virtual int SubscriberAdd(CMassiveAdObjectSubscriber* pSubscriber);
+    virtual int SubscriberAdd(XMassiveAdClientSubscriber* pSubscriber);
     virtual int GetNextAssetID();
 
     // Folds the impression of the subscriber on pSubscriberNode into pBest when it beats it;
     // non-zero when the impression meets this placement's size/angle thresholds. The base
     // placement scores nothing.
-    virtual int GetBestImpression(CMassiveListNode* pSubscriberNode, SMassiveImpression* pBest);
+    virtual int GetBestImpression(CMassiveListNode* pSubscriberNode, MAD_Impression* pBest);
 
     int BaseFindPreSubscribers(CMassiveAdObject* pAdObject);
     int AssetIDRemove(int nAssetID);
     int AssetIDAdd(int nAssetID);
-    int SubscriberRemove(CMassiveAdObjectSubscriber* pSubscriber);
-    CMassiveAdObjectSubscriber* SubscriberFind(CMassiveAdObjectSubscriber* pSubscriber);
+    int SubscriberRemove(XMassiveAdClientSubscriber* pSubscriber);
+    XMassiveAdClientSubscriber* SubscriberFind(XMassiveAdClientSubscriber* pSubscriber);
     int GetCrexID();
     int ChangeViewState(int nViewState);
     float GetScreenRatio(unsigned short nScreenWidth, unsigned short nScreenHeight);
@@ -95,7 +95,7 @@ protected:
     int CheckRotation();
     int MediaDownload(int nAssetID);
     int MediaDownloadComplete(const void* pData, int nSize, unsigned int nMediaType, int nAssetID);
-    int SaveImpressionRecord(SMassiveImpression* pImpression);
+    int SaveImpressionRecord(MAD_Impression* pImpression);
     int UpdateImpressions(int bOutOfView);
 
     CMassiveZoneManager* mpZone;            // +0x18

@@ -9,7 +9,7 @@
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3AdObject.h"   // CMassiveAdObject::SubscriberAdd / GetCrexID / mnInvElementID
 
 // ===========================================================================
-// MassiveAdClient3::CMassiveAdObjectSubscriber definition home.
+// MassiveAdClient3::XMassiveAdClientSubscriber definition home.
 //
 // SHAPE and BODIES are both reconstructed from BURNOUT_X360_ARTIST.XEX (no reference
 // source / DecFIGS). Stores/branches are reproduced against the X360 disassembly;
@@ -22,7 +22,7 @@ namespace MassiveAdClient3
 {
 
 // ---------------------------------------------------------------------------
-// CMassiveAdObjectSubscriber::CMassiveAdObjectSubscriber @ 0x82BCE968
+// XMassiveAdClientSubscriber::XMassiveAdClientSubscriber @ 0x82BCE968
 //
 // Store order (all over the fresh object, after the compiler's vftable store):
 //   mpAdObject = 0; mnField10 = 0; mnField54 = 0; mpcName = 0; mnLastError = 0.
@@ -35,7 +35,7 @@ namespace MassiveAdClient3
 // in the current zone and attaches (SubscriberAdd) or queues (PreSubscriberAdd),
 // then logs "*ADDED MAO SUB: <name>". mnLastError stays 0.
 // ---------------------------------------------------------------------------
-CMassiveAdObjectSubscriber::CMassiveAdObjectSubscriber(const char* pcName)
+XMassiveAdClientSubscriber::XMassiveAdClientSubscriber(const char* pcName)
     : mpcName(0)        // a1[1]  = 0  (+0x04)
     , mpAdObject(0)     // a1[2]  = 0  (+0x08)
     , mnLastError(0)    // a1[3]  = 0  (+0x0C)
@@ -59,12 +59,12 @@ CMassiveAdObjectSubscriber::CMassiveAdObjectSubscriber(const char* pcName)
     if (!mpcName)
     {
         mnLastError = -99;
-        MassiveLog(2, "CMassiveAdObjectSubscriber", "ALLOCATION Failed for Subscriber name.");
+        MassiveLog(2, "XMassiveAdClientSubscriber", "ALLOCATION Failed for Subscriber name.");
         return;
     }
     std::strncpy(mpcName, pcName, luNameSize);
 
-    std::memset(macImpression, 0, sizeof(macImpression));  // clear the live impression (+0x14, 32 bytes)
+    std::memset(&m_CurrentImpression, 0, sizeof(m_CurrentImpression));
 
     CMassiveZoneManager* lpCurrentZone = CMassiveClientCore::Instance()->GetCurrentZone();
     if (!lpCurrentZone)
@@ -79,27 +79,27 @@ CMassiveAdObjectSubscriber::CMassiveAdObjectSubscriber(const char* pcName)
     else
         CMassiveClientCore::Instance()->GetCurrentZone()->PreSubscriberAdd(this);
 
-    MassiveLog(5, "CMassiveAdObjectSubscriber", "*ADDED MAO SUB: %s", pcName);
+    MassiveLog(5, "XMassiveAdClientSubscriber", "*ADDED MAO SUB: %s", pcName);
 }
 
 // ---------------------------------------------------------------------------
-// CMassiveAdObjectSubscriber::~CMassiveAdObjectSubscriber
+// XMassiveAdClientSubscriber::~XMassiveAdClientSubscriber
 //
 // Detach from the attached ad object, or -- when none is attached and a zone is
 // current -- from that zone's pre-subscriber queue, then free the name copy.
 // ---------------------------------------------------------------------------
-CMassiveAdObjectSubscriber::~CMassiveAdObjectSubscriber()
+XMassiveAdClientSubscriber::~XMassiveAdClientSubscriber()
 {
-    MassiveLog(5, "CMassiveAdObjectSubscriber", "*REMOVED MAO SUB: %s", mpcName);
+    MassiveLog(5, "XMassiveAdClientSubscriber", "*REMOVED MAO SUB: %s", mpcName);
 
     if (mpAdObject)
     {
-        MassiveLog(5, "CMassiveAdObjectSubscriber", "Removing From MAO");
+        MassiveLog(5, "XMassiveAdClientSubscriber", "Removing From MAO");
         mpAdObject->SubscriberRemove(this);
     }
     else if (CMassiveClientCore::Instance() && CMassiveClientCore::Instance()->GetCurrentZone())
     {
-        MassiveLog(5, "CMassiveAdObjectSubscriber", "Removing From ZoneManager (presub)");
+        MassiveLog(5, "XMassiveAdClientSubscriber", "Removing From ZoneManager (presub)");
         CMassiveClientCore::Instance()->GetCurrentZone()->PreSubscriberRemove(this);
     }
 
@@ -114,12 +114,12 @@ CMassiveAdObjectSubscriber::~CMassiveAdObjectSubscriber()
 // MassiveAdClient3Subscriber_wS34_00.cpp.
 
 // ---------------------------------------------------------------------------
-// CMassiveAdObjectSubscriber::GetCrexID @ 0x82BCEC58
+// XMassiveAdClientSubscriber::GetCrexID @ 0x82BCEC58
 //
 // asm: r3 = this->mpAdObject (+0x08); if (r3) tail-call CMassiveAdObject::GetCrexID();
 //      else return 0;
 // ---------------------------------------------------------------------------
-int CMassiveAdObjectSubscriber::GetCrexID()
+unsigned int XMassiveAdClientSubscriber::GetCrexID()
 {
     if (mpAdObject)
         return mpAdObject->GetCrexID();
@@ -127,7 +127,7 @@ int CMassiveAdObjectSubscriber::GetCrexID()
 }
 
 // ---------------------------------------------------------------------------
-// CMassiveAdObjectSubscriber::MediaDownloadComplete @ 0x82BCEC70
+// XMassiveAdClientSubscriber::MediaDownloadComplete @ 0x82BCEC70
 //
 // A null data buffer is a no-op returning 1. Otherwise the media-type code
 // selects the asset's file extension, the cache path "game:\<advertId>_<name><ext>"
@@ -140,7 +140,7 @@ int CMassiveAdObjectSubscriber::GetCrexID()
 //   6,7 -> .dds   0x15..0x17 -> .bmp   0x801 -> .wav  0x1002 -> .3ds
 //   everything else (incl. 0x08..0x14, 0x18+) -> .bin
 // ---------------------------------------------------------------------------
-int CMassiveAdObjectSubscriber::MediaDownloadComplete(const void* pData, int nSize,
+int XMassiveAdClientSubscriber::MediaDownloadComplete(const void* pData, int nSize,
                                                       unsigned int nMediaType, int nAdvertId)
 {
     if (!pData)
