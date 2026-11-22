@@ -967,17 +967,13 @@ namespace ICE
 // is the same packed-value / 65535 dequantise ICEParameter::GetValue performs.
 f32 ICEChannel::GetIntervalParameter(u16 lu16Interval) const
 {
-    if (lu16Interval == 0)
+    if (lu16Interval < 1)
         return 0.0f;
 
     if (lu16Interval >= mu16Intervals)
         return 1.0f;
 
-    // mpParameters[lu16Interval - 1] read as its packed u16 then dequantised by
-    // 1/ICE_PARAMETER_MAX. The packed halfword is loaded zero-extended and converted
-    // as a (non-negative) integer to float.
-    const u16 lu16Packed = *mpParameters[lu16Interval - 1].GetPackedPtr();
-    return (f32)(s32)lu16Packed * (1.0f / (f32)ICE_PARAMETER_MAX);
+    return mpParameters[lu16Interval - 1].GetValue();
 }
 
 // ICE::ICEChannel::GetIntervalBracket(f32*, f32*) const   @0x8252D6B8

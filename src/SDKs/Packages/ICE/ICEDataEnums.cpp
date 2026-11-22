@@ -114,7 +114,7 @@ void ICEChannel::EnforceSpacing(u16 lu16Interval, f32 lfMinSpacing)
 f32 ICEChannel::GetIntervalStart() const
 {
     const u16 lu16Current = mu16CurrentInterval;
-    if (lu16Current == 0)
+    if (lu16Current < 1)
         return 0.0f;
     if (lu16Current >= mu16Intervals)
         return 1.0f;

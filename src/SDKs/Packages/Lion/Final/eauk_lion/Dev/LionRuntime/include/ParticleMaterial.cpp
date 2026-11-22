@@ -138,21 +138,24 @@ void cParticleMaterial::Delocate(U32 aEndianTwiddleFlag)
 // ----------------------------------------------------------------------------
 void cParticleMaterial::GetSerialiseSize(cLionSerialiser& aSer) const
 {
+    if (this == 0)   // ARTIST 0x82909C78: an absent material contributes no bytes.
+        return;
+
     aSer.mDataSize += 176;
 
     if (mpTextureName)
-        aSer.mStringSize += static_cast<u32>(::strlen(mpTextureName.Get())) + 1;
+        aSer.mStringSize = aSer.mStringSize + static_cast<u32>(::strlen(mpTextureName.Get())) + 1;
     if (mpMeshName)
-        aSer.mStringSize += static_cast<u32>(::strlen(mpMeshName.Get())) + 1;
+        aSer.mStringSize = aSer.mStringSize + static_cast<u32>(::strlen(mpMeshName.Get())) + 1;
     if (mpLayerGroupName)
-        aSer.mStringSize += static_cast<u32>(::strlen(mpLayerGroupName.Get())) + 1;
+        aSer.mStringSize = aSer.mStringSize + static_cast<u32>(::strlen(mpLayerGroupName.Get())) + 1;
     if (mpNormalMapName)
-        aSer.mStringSize += static_cast<u32>(::strlen(mpNormalMapName.Get())) + 1;
+        aSer.mStringSize = aSer.mStringSize + static_cast<u32>(::strlen(mpNormalMapName.Get())) + 1;
 
     for (u32 luIndex = 0; luIndex < 5; ++luIndex)
     {
         if (mpMeshNames[luIndex])
-            aSer.mStringSize += static_cast<u32>(::strlen(mpMeshNames[luIndex].Get())) + 1;
+            aSer.mStringSize = aSer.mStringSize + static_cast<u32>(::strlen(mpMeshNames[luIndex].Get())) + 1;
     }
 }
 
