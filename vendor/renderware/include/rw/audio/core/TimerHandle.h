@@ -56,12 +56,8 @@ enum TimerVisibility
 class TimerHandle
 {
 public:
-    // Default-construct a timer entry: zero the leading field, point the name at the
-    // shared "Unknown" literal, zero +0x10, and set the state byte to 3.
-    // (IDA renders this as taking/returning `int` because `this` is the only arg; the
-    // asm register usage -- r3 = this -- is authoritative. The +0x14 store is a `stb`,
-    // so mbState is a single byte, not the word IDA's `*(result+20)=3` implies.)
-    static TimerHandle *TimerHandle_ctor(TimerHandle *self);
+    // ARTIST 0x82B6BEA8. Registration supplies the callback, context and visibility.
+    TimerHandle();
 
     // FLAG (rwaudio PDB reconcile -- IDA Files/ProStreet08Milestone.pdb,
     // rw::audio::core::TimerHandle [sizeof=24]): offsets match the ARTIST ctor; the PDB

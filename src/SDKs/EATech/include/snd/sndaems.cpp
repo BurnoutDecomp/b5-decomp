@@ -97,7 +97,7 @@ CGS_STATIC_ASSERT((sizeof(CsisRelocationRecord) == 12),
 
 InstanceLink* gpInstanceUpdateList = 0;
 
-rw::audio::core::TimerHandle gAemsTimerHandle = {};
+rw::audio::core::TimerHandle gAemsTimerHandle;
 bool gbAemsTimerAdded = false;
 f32 gfAemsTimerPeriod = -1.0f;
 f32 gfAemsStepMilliseconds = 0.0f;

@@ -26,6 +26,7 @@
 #include <cstdio>  // std::fopen / fwrite / fseek / fclose / FILE
 #include <cstring> // std::memcpy / std::memset
 #include <cstddef> // offsetof -- the start record's header size on the host
+#include <new>
 
 namespace rw
 {
@@ -147,7 +148,7 @@ char **AiffWriter::GetPlugInDescRunTime()
 
 // -------------------------------------------------------------------------------------
 // CreateInstance @0x82B9D488 -- placement-init an AiffWriter over `self`.
-//   if (self) { self->mpVTable = off_8217F308; TimerHandle_ctor(&self->mTimerHandle); }
+//   If self is present, install the writer vtable and construct its timer.
 //   self->mpFile = 0;  self->mbDataWritten = 0;  self->mbTimerCreated = 0;
 //   buf = System::Alloc(self->mpSystem, muBufferChannels<<9, "...mpBuf", 16, 0);
 //   self->mpBuf = buf;  return buf != 0;
@@ -157,7 +158,7 @@ int AiffWriter::CreateInstance(AiffWriter *self)
     if (self)
     {
         self->mpVTable = KAIFF_WriterVTable;                // off_8217F308 -> +0x00
-        TimerHandle::TimerHandle_ctor(&self->mTimerHandle); // ctor(self+0x24)
+        ::new (&self->mTimerHandle) TimerHandle;
     }
 
     // Buffer size = muBufferChannels * 512 bytes (rotlwi r4, r10, 9 == <<9).

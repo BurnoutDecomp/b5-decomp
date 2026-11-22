@@ -23,6 +23,7 @@
 #include "SDKs/EATech/include/snd/sndsys.h"
 
 #include <cstring> // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
+#include <new>
 
 namespace rw
 {
@@ -82,7 +83,7 @@ char **Snd9Service::GetPlugInDescRunTime()
 
 // -------------------------------------------------------------------------------------
 // CreateInstance @0x82BA0130 -- placement-init a Snd9Service over `self`.
-//   if (self) { self->mpVTable = off_8217F384; TimerHandle_ctor(&self->mTimerHandle); }
+//   If self is present, install the service vtable and construct its timer.
 //   self->mbTimerCreated = 0;
 //   buf = System::Alloc(self->mpSystem, 6144, "...mpMixBufStart", 128, 0);
 //   self->mpMixBufStart = buf;  if (!buf) return 0;
@@ -94,7 +95,7 @@ int Snd9Service::CreateInstance(Snd9Service *self)
     if (self)
     {
         self->mpVTable = KSND9_ServiceVTable;              // off_8217F384 -> +0x00
-        TimerHandle::TimerHandle_ctor(&self->mTimerHandle); // ctor(self+0x24)
+        ::new (&self->mTimerHandle) TimerHandle;
     }
 
     self->mbTimerCreated = 0; // stb 0 -> +0x68 (before the alloc)

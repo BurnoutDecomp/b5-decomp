@@ -90,7 +90,7 @@ Delay *Delay::Delay_ctor(Delay *self)
 
     DelayFilter::DelayFilter_ctor(&self->mFilter); // addi r3,r31,0x44 -> &mFilter
     new (&self->mDelayLine) DelayLine();           // addi r3,r31,0x5C -> &mDelayLine (real ctor)
-    TimerHandle::TimerHandle_ctor(&self->mTimer);  // addi r3,r31,0x98 -> &mTimer
+    ::new (&self->mTimer) TimerHandle;            // ctor at self+0x98
 
     return self;
 }

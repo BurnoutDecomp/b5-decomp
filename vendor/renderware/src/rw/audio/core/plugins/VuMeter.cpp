@@ -24,6 +24,7 @@
 #include "rw/audio/core/TimerManager.h" // rw::audio::core::TimerManager::AddTimer
 
 #include <cmath> // std::sqrt
+#include <new>
 
 namespace rw
 {
@@ -161,6 +162,7 @@ int VuMeter::CreateInstance(VuMeter *self)
 {
     // PlugIn::Initialize<VuMeter>(self, 0x40) -- observable effect reproduced inline.
     self->mBase.mpVTable     = KVU_VuMeterVTable;       // installed by Initialize (symbol hidden)
+    ::new (&self->mTimer) TimerHandle;                 // Initialize calls the ctor at 0x82B9D3FC
     self->mBase.mpAttributes = self->mAttribute;        // attribute table base @ self+0x40
 
     self->mWindowSize       = KU_DEFAULT_WINDOW; // sth +0x148 = 479

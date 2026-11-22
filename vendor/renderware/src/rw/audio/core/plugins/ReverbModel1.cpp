@@ -356,7 +356,7 @@ ReverbModel1 *ReverbModel1::ReverbModel1_ctor(ReverbModel1 *self)
     for (int i = 0; i < 3; ++i)
         new (&self->mAllPassDelay[i]) DelayLine();
 
-    TimerHandle::TimerHandle_ctor(&self->mTimer);
+    ::new (&self->mTimer) TimerHandle;
 
     for (int i = 0; i < 6; ++i)
         CombFilter::CombFilter_ctor(&self->mComb[i]);
