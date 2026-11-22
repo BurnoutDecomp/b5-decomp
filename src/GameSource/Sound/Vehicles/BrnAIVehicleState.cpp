@@ -137,7 +137,7 @@ void AIVehicleState::UpdateParams( f32 af32DeltaTime )
 {
     VehicleState::UpdateParams( af32DeltaTime );
 
-    if ( IsAttached() && mauUpdateState[0] == CgsSound::Logic::State::E_UPDATE_ATTACHED )
+    if ( IsAttached() && GetUpdateState().GetCurrent() == E_UPDATE_ATTACHED )
     {
         BrnSound::Module::SoundLogicModule* lpModule =
             static_cast<BrnSound::Module::SoundLogicModule*>( GetLogicModule() );
@@ -178,7 +178,7 @@ bool AIVehicleState::Detach()
         CgsSound::Logic::State* lpOther = lpManager->GetHeadState();
         while ( lpOther && lpOther->GetInstanceID() != liOther )
             lpOther = lpOther->GetNextState();
-        if ( lpOther && lpOther->mauUpdateState[0] == CgsSound::Logic::State::E_UPDATE_DETATCHING )
+        if ( lpOther && lpOther->GetUpdateState().GetCurrent() == E_UPDATE_DETATCHING )
             return false;
     }
 

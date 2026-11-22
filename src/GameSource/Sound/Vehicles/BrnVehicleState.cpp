@@ -127,7 +127,7 @@ void VehicleState::Clear()
 void VehicleState::UpdateParams(f32 af32DeltaTime)
 {
     CgsSound::Logic::State::UpdateParams(af32DeltaTime);
-    if (!IsAttached() || mauUpdateState[0] != CgsSound::Logic::State::E_UPDATE_ATTACHED)
+    if (!IsAttached() || GetUpdateState().GetCurrent() != E_UPDATE_ATTACHED)
         return;
 
     BrnSound::Module::SoundLogicModule* lpModule =
@@ -188,7 +188,7 @@ void VehicleState::UpdateParams(f32 af32DeltaTime)
 
 bool VehicleState::Detach()
 {
-    if (mauUpdateState[0] != CgsSound::Logic::State::E_UPDATE_ATTACHED)
+    if (GetUpdateState().GetCurrent() != E_UPDATE_ATTACHED)
         return false;
     CgsSound::Logic::State::Detach();
     Clear();

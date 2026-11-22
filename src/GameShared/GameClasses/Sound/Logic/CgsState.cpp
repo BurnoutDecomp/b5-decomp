@@ -100,14 +100,18 @@ State::State()
     , miSFXFlags(0)
     , miNumLoadedEffectObjects(0)
     , miNumLoadedEffectControls(0)
+    , meUpdateState(E_UPDATE_UNATTACHED)
     , mePrepareState(E_PREPARE_STATE_CREATE_OBJECTS)
     , mpCurrentEffect(0)
     , mbIsAttached(false)
     , mfCurTime(0.0f)
     , mfDeltaTime(0.0f)
 {
-    mauUpdateState[0] = 0u;
-    mauUpdateState[1] = 0u;
+    // ARTIST 0x826C47F8 and 0x826C4C50..0x826C4C54 access these two words.
+    CGS_STATIC_ASSERT(sizeof(meUpdateState) == 8, "State update history is two words");
+    CGS_STATIC_ASSERT(offsetof(State, meUpdateState) == 0x38, "ARTIST update state offset");
+    CGS_STATIC_ASSERT(offsetof(State, mePrepareState) == 0x40, "ARTIST prepare state offset");
+    CGS_STATIC_ASSERT(sizeof(State) == 0x54, "ARTIST sound state size");
 }
 
 // 0x826916D8. The X360 computes (mpvAttachment - apv == 0) as a boolean: true when
@@ -289,18 +293,14 @@ bool State::Prepare(s32 liSfxFlags, StateManager* apStateManager)
 
 void State::Attach(void* apvAttachment)
 {
-    CGS_ASSERT(mauUpdateState[0] == E_UPDATE_UNATTACHED ||
-               mauUpdateState[0] == E_UPDATE_DETATCHING,
+    CGS_ASSERT(meUpdateState.GetCurrent() == E_UPDATE_UNATTACHED ||
+               meUpdateState.GetCurrent() == E_UPDATE_DETATCHING,
                "meUpdateState == E_UPDATE_UNATTACHED || meUpdateState == E_UPDATE_DETATCHING");
-    const u32 luPreviousState = mauUpdateState[0];
     mpvAttachment = apvAttachment;
     mbIsAttached = true;
     mpCurrentEffect = 0;
-    if (luPreviousState == E_UPDATE_UNATTACHED)
-    {
-        mauUpdateState[0] = E_INITIALIZE_CONTROLS;
-        mauUpdateState[1] = luPreviousState;
-    }
+    if (meUpdateState.GetCurrent() == E_UPDATE_UNATTACHED)
+        meUpdateState.Update(E_INITIALIZE_CONTROLS);
 }
 
 bool State::AttachEffect()
@@ -351,48 +351,31 @@ bool State::AttachEffect()
 void State::UpdateParams(f32 af32DeltaTime)
 {
     mfDeltaTime = af32DeltaTime;
-    switch (mauUpdateState[0])
+    switch (meUpdateState.GetCurrent())
     {
     case E_INITIALIZE_CONTROLS:
-        mauUpdateState[1] = mauUpdateState[0];
-        mauUpdateState[0] = E_INITIALIZE_CONTROLS;
+        meUpdateState.Update(E_INITIALIZE_CONTROLS);
         mpCurrentEffect = mpHeadEffectControl;
-        mauUpdateState[1] = mauUpdateState[0];
-        mauUpdateState[0] = E_INITIALIZE_CONTROLS_UPDATE;
+        meUpdateState.Update(E_INITIALIZE_CONTROLS_UPDATE);
         // fall through
     case E_INITIALIZE_CONTROLS_UPDATE:
         while (mpCurrentEffect && AttachEffect()) {}
         if (mpCurrentEffect)
             return;
         mpCurrentEffect = mpHeadEffectObject;
-        mauUpdateState[1] = mauUpdateState[0];
-        mauUpdateState[0] = E_INITIALIZE_EFFECTS;
+        meUpdateState.Update(E_INITIALIZE_EFFECTS);
         // fall through
     case E_INITIALIZE_EFFECTS:
     case E_INITIALIZE_EFFECTS_UPDATE:
-        mauUpdateState[1] = mauUpdateState[0];
-        mauUpdateState[0] = E_INITIALIZE_EFFECTS_UPDATE;
+        meUpdateState.Update(E_INITIALIZE_EFFECTS_UPDATE);
         while (mpCurrentEffect && AttachEffect()) {}
         if (mpCurrentEffect)
             return;
-        // X360 @0x826C4850 LABEL_10 -> LABEL_18: ONE store pair when the effects have
-        // attached -- `v11 = *(+56); *(+56) = 5; *(+60) = v11` -- shared with case 5 below.
-        // The pair used to be written HERE as well as inside the case, which left
-        // mauUpdateState[1] == E_UPDATE_ATTACHED on the very frame the state arrived
-        // there: the one-update HasChangedTo(E_UPDATE_ATTACHED) edge that
-        // PlayerVehicleState::UpdateParams @0x826EF0B0 keys VehicleStateManager::
-        // OnAssetLoaded on never existed, the E_DATA_IS_LOADED reply never reached
-        // RaceCarAudioStreamer, its slot sat in E_RACECARSTREAMINGSOUND_ATTACHING for
-        // the whole session, and a car change could never detach and re-stream the
-        // new car's ENGINES bundles (the engine note stayed at idle: mfMaxRpm 0).
+        // ARTIST 0x826C4850 shares the transition with the attached case below.
+        // Updating twice would erase the transition before the caller reads it.
         // fall through
     case E_UPDATE_ATTACHED:
-        // DataPoint<EUpdateState>::Set writes the old value to its history word
-        // even when the new value is unchanged (the console's LABEL_18 for case 5):
-        // in the steady state [1] == [0] == E_UPDATE_ATTACHED, on the arrival frame
-        // [1] == E_INITIALIZE_EFFECTS_UPDATE -- exactly one update of HasChangedTo.
-        mauUpdateState[1] = mauUpdateState[0];
-        mauUpdateState[0] = E_UPDATE_ATTACHED;
+        meUpdateState.Update(E_UPDATE_ATTACHED);
         for (EffectBase* lpEffect = mpHeadEffectControl; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
         {
             lpEffect->UpdateTime(mfCurTime, af32DeltaTime);
@@ -406,8 +389,7 @@ void State::UpdateParams(f32 af32DeltaTime)
         break;
     case E_UPDATE_DETATCHING:
     {
-        mauUpdateState[1] = mauUpdateState[0];
-        mauUpdateState[0] = E_UPDATE_DETATCHING;
+        meUpdateState.Update(E_UPDATE_DETATCHING);
         bool lbStillDetaching = false;
         for (EffectBase* lpEffect = mpHeadEffectObject; lpEffect;
              lpEffect = lpEffect->mpNextEffectBase)
@@ -425,31 +407,27 @@ void State::UpdateParams(f32 af32DeltaTime)
         }
         if (!lbStillDetaching)
         {
-            const u32 luPreviousState = mauUpdateState[0];
             if (mbIsAttached)
             {
-                mauUpdateState[0] = E_INITIALIZE_CONTROLS;
-                mauUpdateState[1] = luPreviousState;
+                meUpdateState.Update(E_INITIALIZE_CONTROLS);
                 UpdateParams(0.0f);
             }
             else
             {
-                mauUpdateState[0] = E_UPDATE_UNATTACHED;
-                mauUpdateState[1] = luPreviousState;
+                meUpdateState.Update(E_UPDATE_UNATTACHED);
             }
         }
         break;
     }
     default:
-        mauUpdateState[1] = mauUpdateState[0];
-        mauUpdateState[0] = E_UPDATE_UNATTACHED;
+        meUpdateState.Update(E_UPDATE_UNATTACHED);
         break;
     }
 }
 
 void State::ProcessUpdate()
 {
-    if (static_cast<s32>(mauUpdateState[0]) != E_UPDATE_ATTACHED)
+    if (meUpdateState.GetCurrent() != E_UPDATE_ATTACHED)
         return;
     for (EffectBase* lpEffect = mpHeadEffectObject; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
     {
@@ -465,7 +443,7 @@ void State::ProcessUpdate()
 //   lwz r10, 0x38 ; cmpwi 5 ; beq ok ; li r3, 0 ; blr      ; not E_UPDATE_ATTACHED -> false, no store
 //   ok: stw 0, 0x10                                        ; mpvAttachment = 0
 //       stb 0, 0x48                                        ; mbIsAttached = false
-//       lwz r10, 0x38 ; stw 6, 0x38 ; stw r10, 0x3C        ; meUpdateState.Set(E_UPDATE_DETATCHING)
+//       lwz r10, 0x38 ; stw 6, 0x38 ; stw r10, 0x3C        ; meUpdateState.Update(E_UPDATE_DETATCHING)
 //       li r3, 1
 // VehicleState::Detach @0x826C9FF8 inlines the same body word for word before its Clear(), and
 // StreamingState::Detach @0x826C9C58 its tail. The PC detached from ANY update state (an
@@ -476,12 +454,11 @@ void State::ProcessUpdate()
 // ---------------------------------------------------------------------------
 bool State::Detach()
 {
-    if (mauUpdateState[0] != E_UPDATE_ATTACHED)
+    if (meUpdateState.GetCurrent() != E_UPDATE_ATTACHED)
         return false;
     mpvAttachment = 0;
     mbIsAttached = false;
-    mauUpdateState[1] = mauUpdateState[0];
-    mauUpdateState[0] = E_UPDATE_DETATCHING;
+    meUpdateState.Update(E_UPDATE_DETATCHING);
     return true;
 }
 

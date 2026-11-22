@@ -46,16 +46,16 @@ namespace LocalBackend
         : mpJobInstance(pJobInstance)
         , mbLocked(false)
     {
-        volatile long* lpLock =
-            reinterpret_cast<volatile long*>(&pJobInstance->mEventListLock);
+        volatile u32* lpLock = &pJobInstance->mEventListLock;
 
         // Fast bail-out: if the lock already reads non-zero, don't even attempt the
         // reservation (the asm's `lwz r9,0(r11) / bnelr`).
-        if (static_cast<u32>(*lpLock) != 0u)
+        if (*lpLock != 0u)
             return;
 
-        // try-CAS 0 -> 1; mbLocked records whether we actually won it.
-        const u32 luObserved = static_cast<u32>(_InterlockedCompareExchange(lpLock, 1, 0));
+        // The intrinsic accepts and returns a long. Interpret the old word as the lock's u32.
+        const u32 luObserved = static_cast<u32>(
+            _InterlockedCompareExchange(reinterpret_cast<volatile long*>(lpLock), 1, 0));
         if (luObserved == 0u)
             mbLocked = true;
     }

@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsClassTypeInfo.h"  // ClassTypeInfo<T> (canonical)
 
 #include "GameShared/GameClasses/Sound/CgsMemBase.h" // CgsSound::MemBase (the base)
+#include "GameShared/GameClasses/Sound/CgsSoundUtils.h"
 
 namespace CgsSound { namespace Io { class MessageHeader; } }
 
@@ -126,6 +127,7 @@ struct State : public CgsSound::MemBase
 
     s32 GetInstanceID() const { return miInstNum; }
     s32 GetStateType() const { return miStateInstType; }
+    Utils::DataPoint<EUpdateState> GetUpdateState() const { return meUpdateState; }
     State* GetNextState() const { return mpNextState; }
     State* GetPreviousState() const { return mpPrevState; }
     EffectBase* GetHeadEffectObject() const { return mpHeadEffectObject; }
@@ -162,9 +164,10 @@ public:
     s32           miSFXFlags;               // +44  CgsState.h:335
     s32           miNumLoadedEffectObjects; // +48  CgsState.h:336
     s32           miNumLoadedEffectControls;// +52  CgsState.h:337
-    // CgsState.h:344 DataPoint<EUpdateState> meUpdateState -- 8 bytes (value + dirty
-    // bookkeeping); modelled by its two zeroed words to keep the layout/offsets.
-    u32           mauUpdateState[2];        // +56  CgsState.h:344
+private:
+    Utils::DataPoint<EUpdateState> meUpdateState; // +0x38 current, +0x3C previous
+
+public:
     EPrepareState mePrepareState;           // +64  CgsState.h:345
     EffectBase*   mpCurrentEffect;          // +68  CgsState.h:346
     bool          mbIsAttached;             // +72  CgsState.h:347

@@ -230,7 +230,7 @@ f32 StreamingEffect::GetFadeOut() const
 {
     const StreamingState* lpState = static_cast<const StreamingState*>(mpState);
     CGS_ASSERT(lpState != 0, "lpState");
-    CGS_ASSERT(lpState && lpState->GetUpdateState() == CgsSound::Logic::State::E_UPDATE_DETATCHING,
+    CGS_ASSERT(lpState && lpState->GetUpdateState().GetCurrent() == CgsSound::Logic::State::E_UPDATE_DETATCHING,
                "lpState->GetUpdateState() == E_UPDATE_DETATCHING");
     return lpState ? lpState->GetFadeOut() : 0.0f;
 }

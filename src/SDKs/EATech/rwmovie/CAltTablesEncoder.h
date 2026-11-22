@@ -22,7 +22,7 @@
 // PC/x64 target, so the offsets below are documentary and access is by name.
 //   +0x00 muReady          set to 1 once the tables are prepared (checkFrame / clear)
 //   +0x04 muSymbolCapacity capacity (in records) of the symbol buffer
-//   +0x08 muFrameFlag      set to (checkFrame's flag argument != 0)
+//   +0x08 miFrameFlag      signed word tested by updateHistory at 0x82A7EA5C
 //   +0x0C muNumTables      always 11
 //   +0x10 muFrameParam     checkFrame's frame argument
 //   +0x14 muCounter14      zeroed by clear
@@ -77,7 +77,7 @@ private:
 
     u32                   muReady;            // +0x00
     u32                   muSymbolCapacity;   // +0x04
-    u32                   muFrameFlag;        // +0x08
+    s32                   miFrameFlag;        // +0x08
     u32                   muNumTables;        // +0x0C  (= 11)
     u32                   muFrameParam;       // +0x10
     u32                   muCounter14;        // +0x14

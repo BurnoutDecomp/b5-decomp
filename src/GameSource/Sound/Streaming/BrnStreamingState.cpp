@@ -109,13 +109,7 @@ bool StreamingState::Detach()
         if (lpEffect->IsBusy())
             return false;
     }
-    if (mauUpdateState[0] != E_UPDATE_ATTACHED)
-        return false;
-    mpvAttachment = 0;
-    mbIsAttached = false;
-    mauUpdateState[1] = mauUpdateState[0];
-    mauUpdateState[0] = E_UPDATE_DETATCHING;
-    return true;
+    return CgsSound::Logic::State::Detach();
 }
 
 StreamingStateManager* StreamingState::GetStreamingStateManager() const

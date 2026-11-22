@@ -39,7 +39,7 @@ int g_iAltTablesShortCodeFlag = 0;
 CAltTablesEncoder::CAltTablesEncoder(int liCapacity, u32* lpuError)
 {
     muNumTables = KI_NUM_TABLES;
-    muFrameFlag = 0;
+    miFrameFlag = 0;
     for (u32 luTable = 0; luTable < muNumTables; ++luTable)
         mpaTables[luTable] = 0;
     mpSymbolBase     = 0;
@@ -157,7 +157,7 @@ void CAltTablesEncoder::updateHistory()
     for (int liTable = 0; liTable < static_cast<int>(muNumTables); ++liTable)
     {
         CLocalHuffmanEncoder* lpEnc = mpaTables[liTable];
-        if (lpEnc->muDirtyFlag != 0 || static_cast<s32>(lpEnc->mpState->muFrameFlag) != 0)
+        if (lpEnc->muDirtyFlag != 0 || lpEnc->mpState->miFrameFlag != 0)
             lpEnc->muHistoryCode = lpEnc->muCurrentCode;
     }
 }
@@ -188,7 +188,7 @@ int CAltTablesEncoder::checkInRTCMV(int liTableIndex, void* lpContext)
 // -------------------------------------------------------------------------------------
 int CAltTablesEncoder::checkFrame(int liFrameParam, u32 luFrameFlag)
 {
-    muFrameFlag = (luFrameFlag != 0) ? 1u : 0u;
+    miFrameFlag = luFrameFlag != 0;
 
     int liTotal = 0;
     for (int liTable = 0; liTable < static_cast<int>(muNumTables); ++liTable)

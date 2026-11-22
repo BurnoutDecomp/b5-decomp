@@ -86,10 +86,6 @@ struct StreamingState : public BrnSound::Logic::BrnState
     StreamingStateManager* GetStreamingStateManager() const;
     void SetFadeOut(f32 afFadeOut) { mfFadeOut = afFadeOut; }
     f32 GetFadeOut() const { return mfFadeOut; }
-    CgsSound::Logic::State::EUpdateState GetUpdateState() const
-    {
-        return static_cast<CgsSound::Logic::State::EUpdateState>(mauUpdateState[0]);
-    }
 
 private:
     // DWARF :105. The stream request this state is servicing (the manager-ring

@@ -425,7 +425,7 @@ void PassbyStateManager::UpdateParams( f32 lfTimeStep )
             BrnSound::Debug::DebugComponent::mLogCombined
                 << "[" << lpState->GetInstanceID() << ","
                 << ( lpState->IsAttached() ? "Attached" : "NOT-Attached" ) << ","
-                << ( lpState->mauUpdateState[0] == CgsSound::Logic::State::E_UPDATE_ATTACHED
+                << ( lpState->GetUpdateState().GetCurrent() == CgsSound::Logic::State::E_UPDATE_ATTACHED
                     ? "Loaded" : "NOT-LOADED" ) << "]\t";
         }
         BrnSound::Debug::DebugComponent::mLogCombined << "\n";

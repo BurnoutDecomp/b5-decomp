@@ -114,8 +114,7 @@ void PlayerVehicleState::UpdateParams(f32 af32DeltaTime)
 {
     VehicleState::UpdateParams(af32DeltaTime);
 
-    if (mauUpdateState[0] == CgsSound::Logic::State::E_UPDATE_ATTACHED
-        && mauUpdateState[1] != mauUpdateState[0])
+    if (GetUpdateState().HasChangedTo(E_UPDATE_ATTACHED))
     {
         if (KI_PRINT_CAR_LOADING_STATES)
             BrnSound::Debug::DebugComponent::mLogCombined
@@ -128,7 +127,7 @@ void PlayerVehicleState::UpdateParams(f32 af32DeltaTime)
     }
 
     if (IsAttached()
-        && mauUpdateState[0] == CgsSound::Logic::State::E_UPDATE_ATTACHED
+        && GetUpdateState().GetCurrent() == E_UPDATE_ATTACHED
         && !VehicleStateManager::IsDesiredEntryPlayer(mAttachInfo.muVehicleIndex))
     {
         if (KI_PRINT_CAR_LOADING_STATES)

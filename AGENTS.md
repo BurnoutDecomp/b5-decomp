@@ -7,6 +7,10 @@ and `x360-toolchain` skills (`.agents/skills/` in BP-Decomp_Workflow).
 
 - ARTIST assembly controls behavior, signatures, widths and layouts, including Apt.
   DecFIGS corroborates declarations. Xbox One layouts cannot override ARTIST.
+- Recover the original type, API and behavior before adjusting code generation. Reuse the
+  owning type and existing helpers. Cite evidence for unusual casts, layout constraints,
+  directives, temporaries and control flow. Record a remaining byte difference when the
+  evidence supports the source and the XDK still emits different bytes.
 - Remove host replacements instead of maintaining a second PC path or adding stubs.
   Missing console implementations remain work to reconstruct.
 - `src/pc/` is retained as an unbuilt reference. Do not include, compile or link it.

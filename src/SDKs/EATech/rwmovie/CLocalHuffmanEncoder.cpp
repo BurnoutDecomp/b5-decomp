@@ -210,7 +210,7 @@ u32* CLocalHuffmanEncoder::encodeHeader(void* lpStream)
     if (muSecondaryTableSize > 1)
     {
         bool lbEmitCode = true;
-        if (mpState->muFrameFlag == 0)
+        if (mpState->miFrameFlag == 0)
         {
             if (muCurrentCode == muReferenceCode)
             {
@@ -456,7 +456,7 @@ int CLocalHuffmanEncoder::checkInRTCMV(void* lpContext)
 int CLocalHuffmanEncoder::checkFrame()
 {
     muReferenceCode = muHistoryCode;
-    if (mpState->muFrameFlag)
+    if (mpState->miFrameFlag)
     {
         muCurrentCode   = 0;
         muReferenceCode = 0;

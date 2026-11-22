@@ -478,7 +478,7 @@ CgsSound::Logic::State* StreamingStateManager::GetFreeState(void* apRequest)
     {
         StreamingState* lpState = static_cast<StreamingState*>(lpBase);
         if (!lpState->IsAttached() &&
-            (!lpFree || lpState->GetUpdateState() == CgsSound::Logic::State::E_UPDATE_UNATTACHED))
+            (!lpFree || lpState->GetUpdateState().GetCurrent() == CgsSound::Logic::State::E_UPDATE_UNATTACHED))
             lpFree = lpState;
     }
     if (lpFree)
