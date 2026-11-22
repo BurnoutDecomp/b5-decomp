@@ -4,6 +4,7 @@
 #endif
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Development/MapFile/Reader/CgsMapFileReader.h"
@@ -20,7 +21,6 @@ namespace Assert
     MapFile::Reader* Manager::mpMapFileReader;
     const char* Manager::mpcMapFileName;
     CgsSystem::ThreadLayout* Manager::mpThreadLayout;
-    extern rw::core::debug::detail::DebugCriticalSection gAssertMutex;
 
     // DecFIGS B1CA00 stores only these three fields; ARTIST independently pins
     // all offsets/roles and their zero initial values at global83019000.

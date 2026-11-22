@@ -1,4 +1,4 @@
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueueSafe.inl"
 #include "GameSource/World/AI/SharedIO/BrnRaceCarAIInterfaces.h"
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_CoarseQueryQueue.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRenderCommon.h"  // CgsDev::Internal::CInEventDraw* record homes
@@ -22,7 +22,14 @@ template s32    CgsModule::VariableEventQueue<16384, 16>::GetNextEvent(const Cgs
 template bool   CgsModule::VariableEventQueue<16384, 16>::AddEvent(const CgsModule::Event*, s32, s32);
 template bool   CgsModule::VariableEventQueue<16384, 16>::AddEventSafe(const CgsModule::Event*, s32, s32);
 template void*  CgsModule::VariableEventQueue<16384, 16>::AllocateEventSafe(s32, s32);
-template bool   CgsModule::VariableEventQueue<16384, 16>::AddStringEventSafe(const char*, s32);
+// ARTIST 0x82827340 uses the same locked diagnostic as the typed overload.
+template <>
+bool CgsModule::VariableEventQueue<16384, 16>::AddStringEventSafe(const char* lpacString, s32 liType)
+{
+    if (!mbIsConstructed)
+        detail::AssertQueueNotConstructed(665);  // ARTIST 0x828273C4
+    return AddEventSafe(reinterpret_cast<const Event*>(lpacString), liType, static_cast<s32>(strlen(lpacString)) + 1);
+}
 template void   CgsModule::VariableEventQueue<16384, 16>::OutputQueueContents() const;
 template char*  CgsModule::VariableEventQueue<16384, 16>::GetFirstWritePointer();
 template const char* CgsModule::VariableEventQueue<16384, 16>::GetFirstWritePointer() const;
@@ -53,15 +60,15 @@ template bool CgsModule::VariableEventQueue<16384, 16>::Append<512, 16>(const Cg
 // template in CgsVariableEventQueue.h (assert-constructed, then forward to the 3-arg AddEventSafe
 // with sizeof(EventT)). Each record's sizeof is cross-checked against the size immediate (li r6)
 // baked into that instance's asm via static_assert in CgsDebugRenderCommon.h (address per line).
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawText2D>(const CgsDev::Internal::CInEventDrawText2D*, s32);      // 0x82828418, size 0x10
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawBox2D>(const CgsDev::Internal::CInEventDrawBox2D*, s32);        // 0x82828588, size 0x14
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawText>(const CgsDev::Internal::CInEventDrawText*, s32);          // 0x82828640, size 0x14
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawLine>(const CgsDev::Internal::CInEventDrawLine*, s32);          // 0x828286F8, size 0x1C
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawQuad>(const CgsDev::Internal::CInEventDrawQuad*, s32);          // 0x828287B0, size 0x34
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawAxis>(const CgsDev::Internal::CInEventDrawAxis*, s32);          // 0x82828868, size 0x30
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawSphere>(const CgsDev::Internal::CInEventDrawSphere*, s32);      // 0x82828920, size 0x14
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawSolidSphere>(const CgsDev::Internal::CInEventDrawSolidSphere*, s32); // 0x828289D8, size 0x14
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawCircle>(const CgsDev::Internal::CInEventDrawCircle*, s32);      // 0x82828A90, size 0x20
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawBox>(const CgsDev::Internal::CInEventDrawBox*, s32);            // 0x82828B48, size 0x4C
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawSolidBox>(const CgsDev::Internal::CInEventDrawSolidBox*, s32);  // 0x82828C00, size 0x4C
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawArrow>(const CgsDev::Internal::CInEventDrawArrow*, s32);        // 0x82828CB8, size 0x1C
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawText2D>(const CgsDev::Internal::CInEventDrawText2D&, s32);      // 0x82828418, size 0x10
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawBox2D>(const CgsDev::Internal::CInEventDrawBox2D&, s32);        // 0x82828588, size 0x14
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawText>(const CgsDev::Internal::CInEventDrawText&, s32);          // 0x82828640, size 0x14
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawLine>(const CgsDev::Internal::CInEventDrawLine&, s32);          // 0x828286F8, size 0x1C
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawQuad>(const CgsDev::Internal::CInEventDrawQuad&, s32);          // 0x828287B0, size 0x34
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawAxis>(const CgsDev::Internal::CInEventDrawAxis&, s32);          // 0x82828868, size 0x30
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawSphere>(const CgsDev::Internal::CInEventDrawSphere&, s32);      // 0x82828920, size 0x14
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawSolidSphere>(const CgsDev::Internal::CInEventDrawSolidSphere&, s32); // 0x828289D8, size 0x14
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawCircle>(const CgsDev::Internal::CInEventDrawCircle&, s32);      // 0x82828A90, size 0x20
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawBox>(const CgsDev::Internal::CInEventDrawBox&, s32);            // 0x82828B48, size 0x4C
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawSolidBox>(const CgsDev::Internal::CInEventDrawSolidBox&, s32);  // 0x82828C00, size 0x4C
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEventSafe<CgsDev::Internal::CInEventDrawArrow>(const CgsDev::Internal::CInEventDrawArrow&, s32);        // 0x82828CB8, size 0x1C

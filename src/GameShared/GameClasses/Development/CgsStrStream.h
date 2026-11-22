@@ -76,6 +76,7 @@ namespace CgsDev
         void AppendFormat(const char* lpcFormat, ...);
 
     protected:
+        explicit StrStreamBase(PrintMode leMode) : mePrintMode(leMode) {}
         virtual void Append(const char* lpcText) = 0;
         void Append64IntDecimal(u64 luValue);
         void Append64IntHex(u64 luValue);
@@ -89,6 +90,15 @@ namespace CgsDev
     {
         StrStream(char* lpcBuffer, s32 liBufferSize)
             : mpcBuffer(lpcBuffer)
+            , miBufferSize(liBufferSize)
+        {
+            lpcBuffer[0] = '\0';
+        }
+
+        // ARTIST's inline assert setup constructs the stream directly in decimal mode.
+        StrStream(char* lpcBuffer, s32 liBufferSize, PrintMode leMode)
+            : StrStreamBase(leMode)
+            , mpcBuffer(lpcBuffer)
             , miBufferSize(liBufferSize)
         {
             lpcBuffer[0] = '\0';

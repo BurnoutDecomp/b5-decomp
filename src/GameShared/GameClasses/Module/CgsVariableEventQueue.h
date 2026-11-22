@@ -98,9 +98,9 @@ namespace CgsModule
         // constructed (CgsVariableEventQueue.h:711 inline), then forwards to the three-arg
         // AddEventSafe with liSize == sizeof(EventT). Used by the CgsDev debug-draw publishers
         // (CgsDev::DebugRender::Draw*). DWARF declares only the three-arg AddEventSafe; this
-        // typed form is an X360-attested additional member, added here additively.
+        // definition lives in CgsVariableEventQueueSafe.inl with the native assert lock.
         template <typename EventT>
-        bool AddEventSafe(const EventT* lpEvent, s32 liType);
+        bool AddEventSafe(const EventT& lrEvent, s32 liType);
 
         // ADDITIVE GROW (FLAG): bulk-append another (smaller) VariableEventQueue's packed
         // event bytes into this one. The X360 emits this as a distinct templated member of
@@ -183,6 +183,7 @@ namespace CgsModule
     {
         const char* const KAC_VEQ_FILE =
             "..\\..\\..\\GameShared\\GameClasses\\Module/CgsVariableEventQueue.h";
+
     }
 
     // -------- Construct @ X360 0x82211348 --------
@@ -471,29 +472,6 @@ namespace CgsModule
         }
 
         return AddEvent(reinterpret_cast<const Event*>(lpEvent), liType, (s32)sizeof(EventT));
-    }
-
-    // -------- AddEventSafe<EventT> (typed convenience, safe) --------
-    // X360: 0x82828868 (EventT = CgsDev::Internal::CInEventDrawAxis) and the sibling
-    // CInEventDraw* debug-draw records. Asserts constructed (inline at
-    // CgsVariableEventQueue.h:711) then forwards to the three-arg AddEventSafe with the
-    // compile-time event size. Mirror of AddEvent<EventT> above but over the non-asserting
-    // overflow-guarded AddEventSafe.
-    template <s32 BUFSIZE, s32 ALIGN>
-    template <typename EventT>
-    bool VariableEventQueue<BUFSIZE, ALIGN>::AddEventSafe(const EventT* lpEvent, s32 liType)
-    {
-        if (!mbIsConstructed)
-        {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Not Constructed\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 711);
-            CgsDev::Assert::EndAssert();
-        }
-
-        return AddEventSafe(reinterpret_cast<const Event*>(lpEvent), liType, (s32)sizeof(EventT));
     }
 
     // -------- Append<SRCBUF,SRCALIGN> @ X360 0x82504F68 (dest <18432,16>, src <4096,16>) --------
@@ -813,4 +791,7 @@ namespace CgsModule
         }
         return AddEventSafe(reinterpret_cast<const Event*>(lpacString), liType, (s32)strlen(lpacString) + 1);
     }
+
+    template <>
+    bool VariableEventQueue<16384, 16>::AddStringEventSafe(const char* lpacString, s32 liType);
 }

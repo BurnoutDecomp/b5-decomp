@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Module/CgsVariableEventQueueSafe.inl"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"  // the immediate renderer Dispatch2D replays into
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 
@@ -173,14 +174,14 @@ namespace CgsDev
         lEvent.mfZ = lPosition.mV.z;
         lEvent.mfSize = lfScale;
         lEvent.mColour = lColour;
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_TEXT);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_TEXT);
     }
 
     void DebugRender::DrawLine(Vector3 lFrom, Vector3 lTo, RGBA lColour)
     {
         Internal::CInEventDrawLine lEvent;
         FillLineEvent(lEvent, lFrom, lTo, lColour);
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_LINE);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_LINE);
     }
 
     void DebugRender::DrawPoint(Vector3 lPosition, RGBA lColour)
@@ -190,7 +191,7 @@ namespace CgsDev
         lEvent.mfY = lPosition.mV.y;
         lEvent.mfZ = lPosition.mV.z;
         lEvent.mColour = lColour;
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_POINT);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_POINT);
     }
 
     void DebugRender::DrawQuad(Vector3 lA, Vector3 lB, Vector3 lC, Vector3 lD, RGBA lColour)
@@ -201,7 +202,7 @@ namespace CgsDev
         lEvent.mfX3 = lC.mV.x; lEvent.mfY3 = lC.mV.y; lEvent.mfZ3 = lC.mV.z;
         lEvent.mfX4 = lD.mV.x; lEvent.mfY4 = lD.mV.y; lEvent.mfZ4 = lD.mV.z;
         lEvent.mColour = lColour;
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_QUAD);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_QUAD);
     }
 
     void DebugRender::DrawSolidQuad(Vector3 lA, Vector3 lB, Vector3 lC, Vector3 lD, RGBA lColour)
@@ -212,7 +213,7 @@ namespace CgsDev
         lEvent.mfX3 = lC.mV.x; lEvent.mfY3 = lC.mV.y; lEvent.mfZ3 = lC.mV.z;
         lEvent.mfX4 = lD.mV.x; lEvent.mfY4 = lD.mV.y; lEvent.mfZ4 = lD.mV.z;
         lEvent.mColour = lColour;
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_SOLID_QUAD);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_SOLID_QUAD);
     }
 
     void DebugRender::DrawAngleDeg(Vector3 lPosition, f32 lfAngle, RGBA lColour)
@@ -228,7 +229,7 @@ namespace CgsDev
         lEvent.mfZ = lPosition.mV.z;
         lEvent.mfAngle = lfAngle;
         lEvent.mColour = lColour;
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_ANGLE);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_ANGLE);
     }
 
     void DebugRender::DrawAxis(Matrix44Affine lTransform)
@@ -246,28 +247,28 @@ namespace CgsDev
         lEvent.mfPosX = lTransform.wAxis.mV.x;
         lEvent.mfPosY = lTransform.wAxis.mV.y;
         lEvent.mfPosZ = lTransform.wAxis.mV.z;
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_AXIS);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_AXIS);
     }
 
     void DebugRender::DrawSphere(Vector3 lCentre, f32 lfRadius, RGBA lColour)
     {
         Internal::CInEventDrawSphere lEvent;
         FillSphereEvent(lEvent, lCentre, lfRadius, lColour);
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_SPHERE);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_SPHERE);
     }
 
     void DebugRender::DrawSolidSphere(Vector3 lCentre, f32 lfRadius, RGBA lColour)
     {
         Internal::CInEventDrawSolidSphere lEvent;
         FillSphereEvent(lEvent, lCentre, lfRadius, lColour);
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_SOLID_SPHERE);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_SOLID_SPHERE);
     }
 
     void DebugRender::DrawHollowSphere(Vector3 lCentre, f32 lfRadius, RGBA lColour)
     {
         Internal::CInEventDrawHollowSphere lEvent;
         FillSphereEvent(lEvent, lCentre, lfRadius, lColour);
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_HOLLOW_SPHERE);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_HOLLOW_SPHERE);
     }
 
     void DebugRender::DrawCircle(Matrix44Affine lTransform, f32 lfRadius, RGBA lColour)
@@ -288,21 +289,21 @@ namespace CgsDev
         lEvent.mfDirZ = lNormal.mV.z;
         lEvent.mfRadius = lfRadius;
         lEvent.mColour = lColour;
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_CIRCLE);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_CIRCLE);
     }
 
     void DebugRender::DrawBox(Vector3 lMin, Vector3 lMax, Matrix44Affine lTransform, RGBA lColour)
     {
         Internal::CInEventDrawBox lEvent;
         FillOrientedBoxEvent(lEvent, lMin, lMax, lTransform, lColour);
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_BOX);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_BOX);
     }
 
     void DebugRender::DrawBox(Vector3 lMin, Vector3 lMax, RGBA lColour)
     {
         Internal::CInEventDrawBoxAA lEvent;
         FillAxisAlignedBoxEvent(lEvent, lMin, lMax, lColour);
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_BOX_AA);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_BOX_AA);
     }
 
     void DebugRender::DrawSolidBox(Vector3 lMin, Vector3 lMax,
@@ -310,28 +311,28 @@ namespace CgsDev
     {
         Internal::CInEventDrawSolidBox lEvent;
         FillOrientedBoxEvent(lEvent, lMin, lMax, lTransform, lColour);
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_SOLID_BOX);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_SOLID_BOX);
     }
 
     void DebugRender::DrawSolidBox(Vector3 lMin, Vector3 lMax, RGBA lColour)
     {
         Internal::CInEventDrawSolidBoxAA lEvent;
         FillAxisAlignedBoxEvent(lEvent, lMin, lMax, lColour);
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_SOLID_BOX_AA);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_SOLID_BOX_AA);
     }
 
     void DebugRender::DrawArrow(Vector3 lFrom, Vector3 lTo, RGBA lColour)
     {
         Internal::CInEventDrawArrow lEvent;
         FillLineEvent(lEvent, lFrom, lTo, lColour);
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_ARROW);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_ARROW);
     }
 
     void DebugRender::DrawSolidArrow(Vector3 lFrom, Vector3 lTo, RGBA lColour)
     {
         Internal::CInEventDrawSolidArrow lEvent;
         FillLineEvent(lEvent, lFrom, lTo, lColour);
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_SOLID_ARROW);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_SOLID_ARROW);
     }
 
     void DebugRender::DrawCapsule(Vector3 lStart, Vector3 lEnd, f32 lfRadius, RGBA lColour)
@@ -339,7 +340,7 @@ namespace CgsDev
         Internal::CInEventDrawCapsule lEvent;
         FillLineEvent(lEvent, lStart, lEnd, lColour);
         lEvent.mfRadius = lfRadius;
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_CAPSULE);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_CAPSULE);
     }
 
     void DebugRender::DrawCylinder(Vector3 lStart, Vector3 lEnd, f32 lfRadius, RGBA lColour)
@@ -347,7 +348,7 @@ namespace CgsDev
         Internal::CInEventDrawCylinder lEvent;
         FillLineEvent(lEvent, lStart, lEnd, lColour);
         lEvent.mfRadius = lfRadius;
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_CYLINDER);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_CYLINDER);
     }
 
     void DebugRender::DrawTriangle(Vector3 lA, Vector3 lB, Vector3 lC, RGBA lColour)
@@ -357,7 +358,7 @@ namespace CgsDev
         lEvent.mfX2 = lB.mV.x; lEvent.mfY2 = lB.mV.y; lEvent.mfZ2 = lB.mV.z;
         lEvent.mfX3 = lC.mV.x; lEvent.mfY3 = lC.mV.y; lEvent.mfZ3 = lC.mV.z;
         lEvent.mColour = lColour;
-        m3DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_3D_TRIANGLE);
+        m3DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_3D_TRIANGLE);
     }
 
     void DebugRender::DrawWireTriangle(Vector3 lA, Vector3 lB, Vector3 lC, RGBA lColour)
@@ -588,10 +589,18 @@ namespace CgsDev
             m3DQueue.Clear();
     }
 
+    // ARTIST 0x8282B1D0 queues the string followed by the typed text event.
     void DebugRender::Draw2DText(const char* lpcText, Vector2 lPosition,
                                  f32 lfScale, RGBA lColour)
     {
-        Draw2DText(lpcText, lPosition.mV.x, lPosition.mV.y, lfScale, lColour);
+        m2DQueue.AddStringEventSafe(lpcText, Internal::E_INEVENT_2D_STRING);
+
+        Internal::CInEventDrawText2D lEvent;
+        lEvent.mfX     = lPosition.mV.x;
+        lEvent.mfY     = lPosition.mV.y;
+        lEvent.mfSize  = lfScale;
+        lEvent.mColour = lColour;
+        m2DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_2D_TEXT);
     }
 
     void DebugRender::Draw2DLine(Vector2 lStart, Vector2 lEnd, RGBA lColour)
@@ -654,8 +663,7 @@ namespace CgsDev
         lEvent.mfWidth  = lSize.mV.x;
         lEvent.mfHeight = lSize.mV.y;
         lEvent.mColour  = lColour;
-        m2DQueue.AddEventSafe(reinterpret_cast<const CgsModule::Event*>(&lEvent),
-                              Internal::E_INEVENT_2D_BOX, static_cast<s32>(sizeof(lEvent)));
+        m2DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_2D_BOX);
     }
 
     void DebugRender::Draw2DFrame(Vector2 lMin, Vector2 lMax, RGBA lColour)
@@ -663,21 +671,10 @@ namespace CgsDev
         Draw2DFrame(lMin.mV.x, lMin.mV.y, lMax.mV.x, lMax.mV.y, lColour);
     }
 
-    // X360 Draw2DText 0x8282B1D0: queue the string (STRING event) then the text record (TEXT event).
+    // ARTIST 0x8282B250 builds a Vector2 from the scalar coordinates.
     void DebugRender::Draw2DText(const char* lpcText, f32 lfX, f32 lfY, f32 lfScale, RGBA lColour)
     {
-        if (!lpcText)
-            return;
-
-        m2DQueue.AddStringEventSafe(lpcText, Internal::E_INEVENT_2D_STRING);
-
-        Internal::CInEventDrawText2D lEvent;
-        lEvent.mfX     = lfX;
-        lEvent.mfY     = lfY;
-        lEvent.mfSize  = lfScale;
-        lEvent.mColour = lColour;
-        m2DQueue.AddEventSafe(reinterpret_cast<const CgsModule::Event*>(&lEvent),
-                              Internal::E_INEVENT_2D_TEXT, static_cast<s32>(sizeof(lEvent)));
+        Draw2DText(lpcText, Vector2(lfX, lfY), lfScale, lColour);
     }
 
     // X360 Draw2DTextJustified 0x8282BAC0 (DWARF CgsDebugRender.cpp:672). Measure the string at
@@ -726,8 +723,7 @@ namespace CgsDev
         lEvent.mfY     = lv2Position.mV.y;
         lEvent.mfSize  = lfSize;
         lEvent.mColour = lColour;
-        m2DQueue.AddEventSafe(reinterpret_cast<const CgsModule::Event*>(&lEvent),
-                              Internal::E_INEVENT_2D_TEXT, static_cast<s32>(sizeof(lEvent)));
+        m2DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_2D_TEXT);
     }
 
     // X360 Draw2DLine (CInEventDrawLine2D, ID 2).
@@ -757,7 +753,7 @@ namespace CgsDev
         lEvent.mfWidth = lfMaxX - lfMinX;
         lEvent.mfHeight = lfMaxY - lfMinY;
         lEvent.mColour = lColour;
-        m2DQueue.AddEventSafe(&lEvent, Internal::E_INEVENT_2D_FRAME);
+        m2DQueue.AddEventSafe(lEvent, Internal::E_INEVENT_2D_FRAME);
     }
 
     // X360 Dispatch2D 0x8282A4B8: walk the queue, replaying each event into lpRenderer. A STRING event
