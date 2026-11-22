@@ -263,23 +263,16 @@ namespace CgsContainers
     // 0x828150C8 - 0-based position of lpNode walking from the head, or -1 if absent.
     s32 BaseLinkedList::InternalGetNodeIndex(BaseLinkedListNode* lpNode)
     {
-        CGS_ASSERT(miCount != KI_UNINITIALISED, "BaseLinkedList accessed when uninitialised");
+        CGS_ASSERT(miCount != KI_UNINITIALISED, CgsDev::Assert::MessageAt(
+            "BaseLinkedList accessed when uninitialised", KAC_ARTIST_ASSERT_FILE, 282));
 
-        BaseLinkedListNode* lpCurrNode = mpFirst;
         s32 liPosition = 0;
-        if (!mpFirst)
+        for (BaseLinkedListNode* lpCurrNode = mpFirst; lpCurrNode != 0; lpCurrNode = lpCurrNode->mpNext)
         {
-            return -1;
-        }
-        while (lpCurrNode != lpNode)
-        {
-            lpCurrNode = lpCurrNode->mpNext;
+            if (lpCurrNode == lpNode)
+                return liPosition;
             ++liPosition;
-            if (!lpCurrNode)
-            {
-                return -1;
-            }
         }
-        return liPosition;
+        return -1;
     }
 }

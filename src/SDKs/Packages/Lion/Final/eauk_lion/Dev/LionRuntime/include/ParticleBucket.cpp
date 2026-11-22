@@ -17,6 +17,8 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionBindings.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleBucket.h"
 
+#include <cstddef>
+
 // cParticleBucket::AllocateParticle @ 0x82908750
 //
 // X360 store order reproduced exactly:
@@ -39,6 +41,11 @@ bool cParticleBucket::AllocateParticle(u32& arSlot,
                                        cVector** appVector,
                                        cMatrix** appMatrix)
 {
+    CGS_STATIC_ASSERT((offsetof(cParticleBucket, mnNextParticlePositionToFill) == 0x50),
+                      "ARTIST AllocateParticle at 0x82908754 reads the slot at 0x50");
+    CGS_STATIC_ASSERT((sizeof(cParticleBucket) == 0xE70),
+                      "ARTIST AppInit at 0x82912E7C allocates buckets with a 0xE70 stride");
+
     const u32 luSlot = mnNextParticlePositionToFill;        // r10 <- 0x50
     if (luSlot == KU_MAX_PARTICLES)                          // cmplwi 0x10
         return false;                                        // li r3,0 ; blr

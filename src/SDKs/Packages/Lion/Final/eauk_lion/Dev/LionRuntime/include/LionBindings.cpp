@@ -12,6 +12,8 @@
 #include "SDKs/Packages/Lion/Final/Allocator/include/CoreAllocator/ITaggedAllocator.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionEffectManager.h"
 
+#include <cstddef>
+
 // ⭐ THE LOCAL FORK IS GONE (2026-09-03). This TU used to declare its own one-method
 // `struct cLionEffectManager` plus `extern cLionEffectManager* gpLionEffectManager` -- a
 // re-declaration of a type that now has a real home, and an invented POINTER global that no
@@ -39,6 +41,11 @@
 // ----------------------------------------------------------------------------
 void cLionBindings::Init()
 {
+    CGS_STATIC_ASSERT((offsetof(cLionBindings, mpNext) == 0x60),
+                      "ARTIST Init at 0x82912994 clears the list link at 0x60");
+    CGS_STATIC_ASSERT((offsetof(cLionBindings, mpEmitter) == 0x64),
+                      "ARTIST BindingsAttach writes the emitter at 0x64");
+
     mpLocator     = 0;
     mpScaler      = 0;
     mpTrigger     = 0;

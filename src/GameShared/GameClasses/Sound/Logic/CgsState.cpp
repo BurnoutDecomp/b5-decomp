@@ -449,7 +449,7 @@ void State::UpdateParams(f32 af32DeltaTime)
 
 void State::ProcessUpdate()
 {
-    if (mauUpdateState[0] != E_UPDATE_ATTACHED)
+    if (static_cast<s32>(mauUpdateState[0]) != E_UPDATE_ATTACHED)
         return;
     for (EffectBase* lpEffect = mpHeadEffectObject; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
     {
