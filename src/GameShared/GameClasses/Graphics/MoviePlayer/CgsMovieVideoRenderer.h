@@ -60,7 +60,7 @@ namespace CgsGraphics
         TextureInfoType maTextureInfoTypes[KU_NUM_TEXTURES];
         u32 muTextureIndex;
         MovieTextureData mJobData;
-        EA::Jobs::Job mJob;
+        __declspec(align(128)) EA::Jobs::Job mJob; // ARTIST Init passes this + 0x180.
         s32 miMoviePlayerPM1, miMoviePlayerPM2;
     };
     MovieVideoRenderer* MovieVideoRendererVectorDeletingDtor(MovieVideoRenderer*, char);

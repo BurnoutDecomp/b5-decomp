@@ -12,6 +12,7 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Playback/CgsContent.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"   // Voice, Slot
 
 namespace CgsSound
@@ -20,9 +21,17 @@ namespace Playback
 {
     void Content::OnDetach(Voice& arVoice, Slot& arSlot)
     {
-        CGS_ASSERT(mu16LoadCount, "mu16LoadCount");
+        // ARTIST assertion at 0x826A2484.
+        CGS_ASSERT(mu16LoadCount, CgsDev::Assert::MessageAt(
+            "mu16LoadCount",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsObject.cpp", 104));
 
-        if (mu16LoadCount != 1 || DoUnload())
+        const u16 lu16LoadCount = mu16LoadCount;
+        if (lu16LoadCount != 1)
+        {
+            mu16LoadCount = static_cast<u16>(lu16LoadCount - 1);
+        }
+        else if (DoUnload())
         {
             --mu16LoadCount;
         }

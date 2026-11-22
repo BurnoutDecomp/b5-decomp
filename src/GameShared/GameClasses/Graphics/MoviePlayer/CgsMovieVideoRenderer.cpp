@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Graphics/MoviePlayer/CgsMoviePlayer.h"
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsImRenderer.h"
+#include <cstddef>
 #include <cstring>
 
 #include <new>   // ::operator delete
@@ -35,8 +36,10 @@ namespace CgsGraphics
             if (lrTexture.mpTexture != 0)
             {
                 lrTexture.mpTexture->Release();
-                CGS_ASSERT(lrTexture.mpTextureState != 0,
-                           "maTextureInfoTypes[i].mpTextureState");
+                // ARTIST assertion at 0x827EAAEC.
+                CGS_ASSERT(lrTexture.mpTextureState != 0, CgsDev::Assert::MessageAt(
+                    "maTextureInfoTypes[i].mpTextureState",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\graphics\\MoviePlayer/CgsMovieVideoRenderer.cpp", 144));
             }
         }
     }
@@ -44,10 +47,9 @@ namespace CgsGraphics
     rw::ResourceDescriptor MovieVideoRenderer::GetResourceDescriptor()
     {
         rw::ResourceDescriptor lDescriptor;
-        // ARTIST 827FAE60..8C requests 0x500 bytes, aligned to 128, for the
-        // 0x4D8-byte console object. Apply that same rounding to native sizeof.
-        lDescriptor.m_baseResourceDescriptors[0].m_size = 0x500u;
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 128;
+        // ARTIST 827FAE60..8C requests 0x500 bytes aligned to 128.
+        lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(MovieVideoRenderer);
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = __alignof(MovieVideoRenderer);
         return lDescriptor;
     }
 
@@ -60,6 +62,13 @@ namespace CgsGraphics
     void MovieVideoRenderer::Init(EA::Allocator::ICoreAllocator* lpAllocator, unsigned int luWidth,
                                   unsigned int luHeight)
     {
+        CGS_STATIC_ASSERT((offsetof(MovieVideoRenderer, mJob) == 0x180),
+                          "ARTIST Init at 0x827FB018 passes the job at 0x180");
+        CGS_STATIC_ASSERT((offsetof(MovieVideoRenderer, miMoviePlayerPM1) == 0x4D0),
+                          "ARTIST constructor at 0x827EF388 stores PM1 at 0x4D0");
+        CGS_STATIC_ASSERT((sizeof(MovieVideoRenderer) == 0x500),
+                          "ARTIST resource allocation at 0x827FAE60 reserves 0x500 bytes");
+
         mpAllocator = lpAllocator;
         muWidth = luWidth;
         muHeight = luHeight;
