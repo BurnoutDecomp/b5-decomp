@@ -54,12 +54,12 @@ CRequestHeartbeat::~CRequestHeartbeat()
 //   lis r11, off_82F91D10@ha ; lwz r3, off_82F91D10@l(r11)  # "/impsrv/4/heartbeat"
 //   blr
 //
-// off_82F91D10 is the .data pointer to the rodata endpoint string; returning the
-// literal is byte-identical to the indirection the X360 performs.
 // ---------------------------------------------------------------------------
-const char* CRequestHeartbeat::GetRequestURL()
+char* CRequestHeartbeat::m_szRequestURL = "/impsrv/4/heartbeat"; // ARTIST 0x82F91D10
+
+char* CRequestHeartbeat::GetRequestURL()
 {
-    return "/impsrv/4/heartbeat";
+    return m_szRequestURL;
 }
 
 // ---------------------------------------------------------------------------

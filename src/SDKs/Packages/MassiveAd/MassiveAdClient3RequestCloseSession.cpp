@@ -55,12 +55,12 @@ CRequestCloseSession::~CRequestCloseSession()
 //   lis r11, off_82F91C30@ha ; lwz r3, off_82F91C30@l(r11)  # "/adsrv/4/closeSession"
 //   blr
 //
-// off_82F91C30 is the .data pointer to the rodata endpoint string; returning the
-// literal is byte-identical to the indirection the X360 performs.
 // ---------------------------------------------------------------------------
-const char* CRequestCloseSession::GetRequestURL()
+char* CRequestCloseSession::m_szRequestURL = "/adsrv/4/closeSession"; // ARTIST 0x82F91C30
+
+char* CRequestCloseSession::GetRequestURL()
 {
-    return "/adsrv/4/closeSession";
+    return m_szRequestURL;
 }
 
 // ---------------------------------------------------------------------------

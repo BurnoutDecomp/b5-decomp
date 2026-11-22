@@ -84,7 +84,7 @@ public:
     // @ 0x82BD4DF0. Returns the open-session server endpoint. The X360 loads it
     // through the .data pointer off_82F91CAC -> "/adsrv/4/openSession". Overrides
     // the base slot-2 per-request-type endpoint getter.
-    const char* GetRequestURL() ;
+    char* GetRequestURL();
 
     // @ 0x82BD4E58 (body pending -- see the file header for the resolved
     // collaborator facts). Vftable slot-1 Parse override the response path
@@ -113,6 +113,8 @@ public:
                                 const char* pcMultiplayerGUID);
 
 private:
+    static char* m_szRequestURL;
+
     unsigned int mnMassivePlayerID;   // +0x50 (server player id; tag 42; 0 at ctor)
     unsigned int mnMassiveSessionID;  // +0x54 (server session id; tag 43; 0 at ctor)
 };

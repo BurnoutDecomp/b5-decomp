@@ -63,7 +63,7 @@ public:
     // @ 0x82BD8650. Returns the heartbeat server endpoint. The X360 loads it
     // through the .data pointer off_82F91D10 -> "/impsrv/4/heartbeat". Overrides
     // the base slot-2 per-request-type endpoint getter.
-    const char* GetRequestURL() ;
+    char* GetRequestURL();
 
     // @ 0x82BD86B8. Vftable Parse override the response path
     // (CRequestObject::Complete) dispatches. Walks the heartbeat response:
@@ -85,6 +85,9 @@ public:
     // FinishBaseBlock(214, timestamp, sign). Returns the FinishBaseBlock
     // result.
     int WriteHeartbeatRequest();
+
+private:
+    static char* m_szRequestURL;
 };
 
 } // namespace MassiveAdClient3

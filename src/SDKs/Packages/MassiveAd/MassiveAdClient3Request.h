@@ -173,12 +173,8 @@ public:
     // Vftable slot 2 (+0x08): the per-request-type server endpoint / URL getter.
     // Attested as a slot-2 virtual by CMassiveAsset::HandleError / HandleResponse
     // (both call `(*(*request + 8))(request)` and log the returned string), and
-    // overridden by CRequestImpressionUpdate::GetRequestURL. Non-pure here (each
-    // concrete request supplies its own; the base body lives in its own ledger
-    // slice) so the existing request subclasses that do not name an endpoint stay
-    // instantiable. Reproduced from the asm, not the pseudocode (which renders the
-    // virtual as a direct call).
-    virtual const char* GetRequestURL() = 0;
+    // overridden by each concrete request. The XDK's override symbols return char*.
+    virtual char* GetRequestURL() = 0;
 
     // ----- lifecycle ------------------------------------------------------
 

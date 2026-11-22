@@ -62,7 +62,7 @@ public:
     // @ 0x82BD39D8. Returns the close-session server endpoint. The X360 loads it
     // through the .data pointer off_82F91C30 -> "/adsrv/4/closeSession". Overrides
     // the base slot-2 per-request-type endpoint getter.
-    const char* GetRequestURL() ;
+    char* GetRequestURL();
 
     // @ 0x82BD3A40. Vftable Parse override the response path
     // (CRequestObject::Complete) dispatches. Walks the close-session response
@@ -84,6 +84,9 @@ public:
     // (tag 42). Seals it with FinishBaseBlock(209, timestamp, sign). Returns the
     // FinishBaseBlock result.
     int WriteCloseSessionRequest();
+
+private:
+    static char* m_szRequestURL;
 };
 
 } // namespace MassiveAdClient3

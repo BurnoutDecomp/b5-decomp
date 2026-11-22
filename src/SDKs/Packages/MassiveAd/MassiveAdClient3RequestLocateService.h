@@ -135,7 +135,7 @@ public:
     // FLAG: introduced as a virtual on this class (the per-request-type endpoint
     // getter of vftable off_82185A70); the base CRequestObject declaration is not
     // in this TU's ledger slice, so it is not marked `override`.
-    virtual const char* GetRequestURL();
+    virtual char* GetRequestURL();
 
     // @ 0x82BD3EE8. Vftable Parse override the response path (CRequestObject::
     // Complete) dispatches. Verifies the protocol version and block id (202),
@@ -169,6 +169,8 @@ public:
     void GetResponsePortIndexPairs(CMassiveList* pOutList);
 
 private:
+    static char* m_szRequestURL;
+
     CMassiveList   mAddressPairs;          // +0x50 (CAddressIndexPair entries)
     CMassiveList   mPortPairs;             // +0x60 (CPortIndexPair entries)
     long long      mnServerTime;           // +0x70 (server clock; tag 59; required)

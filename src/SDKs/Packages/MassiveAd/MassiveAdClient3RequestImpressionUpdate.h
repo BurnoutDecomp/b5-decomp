@@ -67,7 +67,7 @@ public:
     // FLAG: introduced as a virtual on this class (the per-request-type endpoint
     // getter of vftable off_82186F84); the base CRequestObject declaration is not
     // in this TU's ledger slice, so it is not marked `override`.
-    virtual const char* GetRequestURL();
+    virtual char* GetRequestURL();
 
     // Vftable Parse override the response path dispatches (defined in
     // MassiveAdClient3Request_wL_01.cpp).
@@ -125,6 +125,8 @@ public:
     int Finish();
 
 private:
+    static char* m_szRequestURL;
+
     unsigned short mnReportCount;      // +0x50 (model/texture/video/audio reports)
     unsigned short mnInteractionCount; // +0x52 (interaction reports)
 };

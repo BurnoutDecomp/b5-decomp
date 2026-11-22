@@ -51,12 +51,12 @@ CRequestImpressionUpdate::~CRequestImpressionUpdate()
 //   lis r11, off_82F91D34@ha ; lwz r3, off_82F91D34@l(r11)  # "/impsrv/4/activity"
 //   blr
 //
-// off_82F91D34 is the .data pointer to the rodata endpoint string; returning the
-// literal is byte-identical to the indirection the X360 performs.
 // ---------------------------------------------------------------------------
-const char* CRequestImpressionUpdate::GetRequestURL()
+char* CRequestImpressionUpdate::m_szRequestURL = "/impsrv/4/activity"; // ARTIST 0x82F91D34
+
+char* CRequestImpressionUpdate::GetRequestURL()
 {
-    return "/impsrv/4/activity";
+    return m_szRequestURL;
 }
 
 // ---------------------------------------------------------------------------

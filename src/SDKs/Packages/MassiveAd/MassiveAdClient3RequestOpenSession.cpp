@@ -62,12 +62,12 @@ CRequestOpenSession::~CRequestOpenSession()
 //   lis r11, off_82F91CAC@ha ; lwz r3, off_82F91CAC@l(r11)  # "/adsrv/4/openSession"
 //   blr
 //
-// off_82F91CAC is the .data pointer to the rodata endpoint string; returning the
-// literal is byte-identical to the indirection the X360 performs.
 // ---------------------------------------------------------------------------
-const char* CRequestOpenSession::GetRequestURL()
+char* CRequestOpenSession::m_szRequestURL = "/adsrv/4/openSession"; // ARTIST 0x82F91CAC
+
+char* CRequestOpenSession::GetRequestURL()
 {
-    return "/adsrv/4/openSession";
+    return m_szRequestURL;
 }
 
 // ---------------------------------------------------------------------------

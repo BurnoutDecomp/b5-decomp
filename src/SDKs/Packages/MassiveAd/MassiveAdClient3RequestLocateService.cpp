@@ -70,12 +70,12 @@ CRequestLocateService::~CRequestLocateService()
 //   lis r11, off_82F91C44@ha ; lwz r3, off_82F91C44@l(r11)  # "/adsrv/4/locateService"
 //   blr
 //
-// off_82F91C44 is the .data pointer to the rodata endpoint string; returning the
-// literal is byte-identical to the indirection the X360 performs.
 // ---------------------------------------------------------------------------
-const char* CRequestLocateService::GetRequestURL()
+char* CRequestLocateService::m_szRequestURL = "/adsrv/4/locateService"; // ARTIST 0x82F91C44
+
+char* CRequestLocateService::GetRequestURL()
 {
-    return "/adsrv/4/locateService";
+    return m_szRequestURL;
 }
 
 // ---------------------------------------------------------------------------

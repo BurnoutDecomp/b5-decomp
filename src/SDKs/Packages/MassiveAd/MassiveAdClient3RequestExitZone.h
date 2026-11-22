@@ -66,7 +66,7 @@ public:
     int Parse() ;
 
     // The exit-zone endpoint path.
-    const char* GetRequestURL() ;
+    char* GetRequestURL();
 
     // @ 0x82BDC8A0. Called by CMassiveZoneManager::Tick. Rejects a null builder
     // or a null zone name (returns -1100); otherwise chains the base
@@ -84,6 +84,9 @@ public:
     int WriteExitZoneRequest(const char* pcZoneName, int nBandwidthTotalSize,
                              int nBandwidthTotalTime,
                              unsigned short sBandwidthTotalItems);
+
+private:
+    static char* m_szRequestURL;
 };
 
 } // namespace MassiveAdClient3

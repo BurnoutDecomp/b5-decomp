@@ -53,9 +53,11 @@ CRequestEnterZone::~CRequestEnterZone()
 {
 }
 
-const char* CRequestEnterZone::GetRequestURL()
+char* CRequestEnterZone::m_szRequestURL = "/adsrv/4/enterZone"; // ARTIST 0x82F91D58
+
+char* CRequestEnterZone::GetRequestURL()
 {
-    return "/adsrv/4/enterZone";
+    return m_szRequestURL;
 }
 
 int CRequestEnterZone::WriteEnterZoneRequest(const char* pcZoneName, int nBandwidthTotalSize,

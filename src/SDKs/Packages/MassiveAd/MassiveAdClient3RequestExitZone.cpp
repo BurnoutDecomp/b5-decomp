@@ -223,9 +223,11 @@ int CRequestExitZone::CreateRequest(CRequestBuilder* pBuilder, const char* pcZon
 // ---------------------------------------------------------------------------
 // CRequestExitZone::GetRequestURL
 // ---------------------------------------------------------------------------
-const char* CRequestExitZone::GetRequestURL()
+char* CRequestExitZone::m_szRequestURL = "/adsrv/4/exitZone"; // ARTIST 0x82F91D6C
+
+char* CRequestExitZone::GetRequestURL()
 {
-    return "/adsrv/4/exitZone";
+    return m_szRequestURL;
 }
 
 } // namespace MassiveAdClient3

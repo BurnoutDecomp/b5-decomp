@@ -22,7 +22,7 @@ public:
     CRequestEnterZone();
     virtual ~CRequestEnterZone();
 
-    const char* GetRequestURL() ;
+    char* GetRequestURL();
     int Parse() ;
 
     // Builds the request block (zone name, player / session ids and, when all three are
@@ -44,6 +44,8 @@ public:
     CMassiveOrder* ReadOrderBlock();
 
 private:
+    static char* m_szRequestURL;
+
     CMassiveList   mMAOList;     // +0x50 parsed placements
     unsigned short mnIECount;    // +0x60 placement count the response announces
     CMassiveList   mAssetList;   // +0x64 parsed assets (every order's)
