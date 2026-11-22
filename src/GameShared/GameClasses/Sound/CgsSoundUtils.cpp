@@ -457,13 +457,13 @@ void PathLine<tuNumStages>::ClearStages()
     mfCurrentValue = 0.0f;
     mnCurrentStage = 0;
 
-    for (u32 lu = 0; lu < tuNumStages; ++lu)
+    for (s32 li = 0; li < static_cast<s32>(tuNumStages); ++li)
     {
-        maLength[lu]     = 0.0f;
-        maStart[lu]      = 0.0f;
-        maFinish[lu]     = 0.0f;
-        maIsLinked[lu]   = false;
-        maCurveTypes[lu] = Curve::E_LINEAR;
+        maLength[li]     = 0.0f;
+        maStart[li]      = 0.0f;
+        maFinish[li]     = 0.0f;
+        maIsLinked[li]   = false;
+        maCurveTypes[li] = Curve::E_LINEAR;
     }
 
     mbComplete = true;

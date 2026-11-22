@@ -31,7 +31,7 @@ namespace CgsResource
         uintptr_t lHeader = *reinterpret_cast<u32*>(lBase + 0);
         *reinterpret_cast<u32*>(lBase + 4) -= liDelta;
 
-        int       liCount = static_cast<int>(*reinterpret_cast<u32*>(lHeader + 0));
+        u32       luCount = *reinterpret_cast<u32*>(lHeader + 0);
         uintptr_t lParams = *reinterpret_cast<u32*>(lHeader + 8);
 
         if (*reinterpret_cast<u32*>(lHeader + 0))
@@ -39,11 +39,11 @@ namespace CgsResource
             uintptr_t lEntry = lParams + 4;
             do
             {
-                --liCount;
+                --luCount;
                 *reinterpret_cast<u32*>(lEntry + 8) -= liDelta;
                 *reinterpret_cast<u32*>(lEntry + 0) -= liDelta;
                 lEntry += 28;
-            } while (liCount);
+            } while (luCount);
         }
 
         *reinterpret_cast<u32*>(lHeader + 8) = static_cast<u32>(lParams - liDelta);

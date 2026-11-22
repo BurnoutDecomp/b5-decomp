@@ -10,13 +10,6 @@
 
 #include <cstring>
 
-// The RWAC engine's 3-arg plug-in event form (X360 rw::audio::core::PlugIn::Event with
-// (self, event, arg)). Declared BY NAME here exactly as in CgsEnvironment.h, mirroring
-// the committed RwacSystemLock / RwacSystemUnlock house entries; bodied in its own TU.
-namespace rw { namespace audio { namespace core {
-    void RwacPlugInEvent( PlugIn* apPlugIn, int aiEvent, int aiArg );
-} } }
-
 // The global SpliceManager singleton (X360 off_82FFB9F0). Its home is this TU; the ctor
 // installs `this` into it. The bank/statistics code reads it through the extern in
 // CgsSpliceBankStatistics.h / SpliceManager.h.
@@ -493,13 +486,13 @@ void SpliceManager::DestroyVoice( VoicePluginPair* apVoicePluginPair )
 
 void SpliceManager::FreeMonoVoicePlugInPair( VoicePluginPair* apVoicePluginPair )
 {
-    rw::audio::core::RwacPlugInEvent( *apVoicePluginPair->mppPlugIn, 1, 0 );
+    rw::audio::core::PlugIn::Event( *apVoicePluginPair->mppPlugIn, 1, 0 );
     mMonoVoicePool.FreeVoicePluginPair( apVoicePluginPair );
 }
 
 void SpliceManager::FreeStereoVoicePlugInPair( VoicePluginPair* apVoicePluginPair )
 {
-    rw::audio::core::RwacPlugInEvent( *apVoicePluginPair->mppPlugIn, 1, 0 );
+    rw::audio::core::PlugIn::Event( *apVoicePluginPair->mppPlugIn, 1, 0 );
     mStereoVoicePool.FreeVoicePluginPair( apVoicePluginPair );
 }
 

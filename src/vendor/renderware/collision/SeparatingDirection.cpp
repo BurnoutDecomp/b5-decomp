@@ -345,7 +345,7 @@ VecFloat FindBestSeparatingDirectionSphSph(Vector3& arBestSepDir,
     estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
     correction = __vnmsubfp(square, __vmulfp(estimate, estimate), one);
     estimate = __vmaddfp(__vmulfp(estimate, half), correction, estimate);
-    const __vector4 magnitude = __vsel(__vmulfp(square, estimate), zero, __vcmpeqfp(zero, square));
+    const __vector4 magnitude = __vsel(__vmulfp(square, estimate), zero, __vcmpeqfp(square, zero));
     arBestSepDir.mV = __vmulfp(delta, estimate);
     return VecFloat(magnitude);
 }
