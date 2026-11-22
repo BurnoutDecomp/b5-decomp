@@ -1,7 +1,7 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (operator[] range / full-buffer invariant)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // CgsContainers::RingBuffer<Type> / FixedRingBuffer<Type, Length>
 // ----------------------------------------------------------------
@@ -124,7 +124,10 @@ public:
 
     Type& operator[](u32 luIndex)
     {
-        CGS_ASSERT(luIndex < static_cast<u32>(miLength), "Attempt to access element outside range");
+        // ARTIST @ 0x8264E0D0 and 0x827B4F88, source path at 0x82018438.
+        CGS_ASSERT(luIndex < static_cast<u32>(miLength), CgsDev::Assert::MessageAt(
+            "Attempt to access element outside range",
+            "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsRingBuffer.h", 258));
         return mpData[(miReadPos + luIndex) % miMaxLength];
     }
 

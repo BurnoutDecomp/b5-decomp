@@ -51,12 +51,12 @@ namespace LocalBackend
 
         // Fast bail-out: if the lock already reads non-zero, don't even attempt the
         // reservation (the asm's `lwz r9,0(r11) / bnelr`).
-        if (*lpLock != 0)
+        if (static_cast<u32>(*lpLock) != 0u)
             return;
 
         // try-CAS 0 -> 1; mbLocked records whether we actually won it.
-        long lObserved = _InterlockedCompareExchange(lpLock, 1, 0);
-        if (lObserved == 0)
+        const u32 luObserved = static_cast<u32>(_InterlockedCompareExchange(lpLock, 1, 0));
+        if (luObserved == 0u)
             mbLocked = true;
     }
 
