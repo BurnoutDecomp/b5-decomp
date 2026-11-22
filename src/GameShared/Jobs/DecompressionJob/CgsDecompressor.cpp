@@ -7,8 +7,6 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include <xtl.h> // OutputDebugStringA (the X360 calls it directly on an inflate error)
 
-extern "C" int ZEXPORT CgsZlibRebindInflateStream(z_streamp lpStream);
-
 // Native EAThread id is the32-bit XDK thread handle (ARTIST82B42560).
 namespace EA { namespace Thread { void* GetThreadId(); } }
 
@@ -21,6 +19,9 @@ namespace CgsResource
     {
         // ARTIST83248280, six contexts at0x180-byte strides.
         Decompressor gaDecompressors[6];
+
+        // The version string passed by ARTIST at 0x82ACCA6C and 0x82ACCB28.
+        const char KAC_ARTIST_ZLIB_VERSION[] = "1.1.3"; // 0x82142708
     }
     CGS_STATIC_ASSERT(sizeof(Decompressor) == 0x180, "native decompressor context stride");
     // 0x82ACC9C0 -- zlib zalloc trampoline. zlib passes the z_stream::opaque (our `this`) and the
@@ -53,7 +54,7 @@ namespace CgsResource
         mStream.next_out  = static_cast<Bytef*>(lEntry.mpDestinationBuffer);
         mStream.avail_out = lEntry.muDestinationSize;
 
-        miLastInflateResult = inflateInit_(&mStream, ZLIB_VERSION, sizeof(mStream));
+        miLastInflateResult = inflateInit_(&mStream, KAC_ARTIST_ZLIB_VERSION, sizeof(mStream));
         return miLastInflateResult;
     }
 
@@ -74,7 +75,7 @@ namespace CgsResource
         mStream.next_out  = static_cast<Bytef*>(lEntry.mpDestinationBuffer);
         mStream.avail_out = lEntry.muDestinationSize;
 
-        miLastInflateResult = inflateInit_(&mStream, ZLIB_VERSION, sizeof(mStream));
+        miLastInflateResult = inflateInit_(&mStream, KAC_ARTIST_ZLIB_VERSION, sizeof(mStream));
         return miLastInflateResult;
     }
 
@@ -102,11 +103,6 @@ namespace CgsResource
         {
             BeginDecompressingFirstEntry();
         }
-        else if (liSavedResult == Z_OK && CgsZlibRebindInflateStream(&mStream) == Z_OK)
-        {
-            mStream.opaque = this;
-        }
-
         for (u32 i = 1; i < muNumEntries; ++i)
         {
             const CompressedData& lEntry = mpEntries[muCurrentEntry];
