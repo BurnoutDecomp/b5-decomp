@@ -54,6 +54,8 @@
 // ============================================================================
 
 #include "types.hpp"
+
+#include <cstddef>
 #include "SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h"   // cVector (mParentVel / mForce)
 #include "SDKs/Packages/Lion/Final/eauk_common/Maths/Matrix.h"   // cMatrix (mParentBaseMatrix)
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRandomSeed.h"
@@ -427,7 +429,7 @@ private:
     cVector              mForce;                    // 0x060
     sParticleNucleus     mParentEmitterNucleus;     // 0x070  DWARF ParticleEmitter.h:337
     cParticleRandomSeed  mParentRandomSeed;         // 0x150  (console span 0x40)
-    u8                   maPadParentSeed[0x10];     // 0x180  the seed's tail padding to 0x190
+    u8                   maPadParentSeed[0x40 - sizeof(cParticleRandomSeed)];   // Seed slot ends at 0x190.
     u32                  mParentIndex;              // 0x190
     cParticleEmitter*    mpParentEmitter;           // 0x194
     cTime                mParentTime;               // 0x198  DWARF ParticleEmitter.h:341
@@ -437,7 +439,7 @@ private:
     f32                  m_age;                     // 0x1A8
     f32                  mDt;                       // 0x1AC
     cParticleRandomSeed  mEmitterSeed;              // 0x1B0  (console span 0x40)
-    u8                   maPadEmitterSeed[0x10];    // 0x1E0  the seed's tail padding to 0x1F0
+    u8                   maPadEmitterSeed[0x40 - sizeof(cParticleRandomSeed)];  // Seed slot ends at 0x1F0.
     u32                  mFlags;                    // 0x1F0
     u32                  mEmissionCount;            // 0x1F4
     cParticleDescriptor* mpDescriptor;              // 0x1F8
@@ -463,13 +465,15 @@ private:
                       "with the record's fixed head at 0x220)");
         CGS_STATIC_ASSERT((__alignof(ParticleBuildData) == 16),
                       "every ParticleBuildData member is a VMX lane register");
+        CGS_STATIC_ASSERT((offsetof(cParticleEmitter, mpNext) == 0x204),
+                          "ARTIST Init at 0x8291327C stores the list link at 0x204");
+        CGS_STATIC_ASSERT((sizeof(cParticleEmitter) == 0x2D0),
+                          "ARTIST AppInit at 0x829134F8 allocates emitters with a 0x2D0 stride");
     }
 
-    // ⚠ THE TWO SEED PADS ABOVE ARE THE CONSOLE'S, NOT OURS. The wiki sizes cParticleRandomSeed
-    // 0x40 (0x30 of Random + mSeed + 0xC of padding) and the emitter's two seed slots span
-    // 0x150..0x190 and 0x1B0..0x1F0, i.e. 0x40 each. This project's ParticleRandomSeed.h models
-    // only the 0x34 the bucket's DWARF gap attests, so the remainder is carried here explicitly
-    // rather than silently changing that type's size for every other user of it.
+    // The emitter's two seed slots span 0x150..0x190 and 0x1B0..0x1F0.
+    // The XDK rounds cParticleRandomSeed up to 0x38, so the padding arrays
+    // account for the remaining bytes in each 0x40-byte slot.
 };
 
 // ParticleEmitter.cpp explicitly instantiates the three native helper variants.
