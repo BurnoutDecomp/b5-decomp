@@ -177,8 +177,12 @@ int f;
   {
     case METHOD:
       NEEDBYTE
-      b = NEXTBYTE;
+      /* ARTIST stores the method byte before advancing next_in (0x82ACD1A8). */
+      z->avail_in--;
+      z->total_in++;
+      b = *z->next_in;
       z->state->sub.method = b;
+      ++z->next_in;
       if ((b & 0xf) != Z_DEFLATED)
       {
         z->state->mode = BAD;

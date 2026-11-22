@@ -62,20 +62,17 @@ namespace CgsResource
         CgsMemory::HeapMalloc*  mpHeapMalloc;    // +12 heap the zlib callbacks allocate through
     };
 
-    // The inflate worker. It keeps a working zlib stream (mStream) into which it copies the saved
-    // stream snapshot, runs inflate per entry with Z_SYNC_FLUSH, and copies the stream back out.
-    // Layout follows the X360 ARTIST object (mStream embedded at +0x80; the entry cursor + heap
-    // handle trail it); members are accessed by name (the callbacks recover `this` from
-    // z_stream::opaque). Reconstructed at semantic parity, not byte-matched.
+    // The inflate worker restores a saved job status, inflates each entry with
+    // Z_SYNC_FLUSH and saves the status again. ARTIST copies the complete
+    // status at +0x80 in both directions at 0x82ACCB78 and 0x82ACCC90.
     class __declspec(align(128)) Decompressor
     {
     public:
-        // 0x82ACCB48 -- restore the saved stream, inflate every entry, copy the stream back.
-        // Returns the destination of the final snapshot copy (the X360 returns memcpy's result).
-        void* Execute(DecompressionJobData* lpJobData);
+        // 0x82ACCB48 -- restore the saved status, inflate every entry, copy the status back.
+        void Execute(DecompressionJobData* lpJobData);
 
     private:
-        // 0x82ACC9E0 -- (re)initialise mStream for the current entry and inflateInit_ it.
+        // 0x82ACC9E0 -- initialise the working stream for the current entry.
         s32 BeginDecompressingFirstEntry();
         // 0x82ACCA90 -- advance to the next entry, then (re)initialise + inflateInit_.
         s32 BeginDecompressingNextEntry();
@@ -86,11 +83,7 @@ namespace CgsResource
 
         DecompressionJobData* mpJobData;       // +0x000  the job being run (set by Execute)
         u8                    maPad0[0x7C];    // +0x004  (unused by the inflate path)
-        z_stream              mStream;         // +0x080  the working zlib stream (56B)
-        u32                   muAmountRead;    // +0x0B8
-        u32                   muAmountWritten; // +0x0BC
-        s32                   miLastInflateResult; // +0x0C0  zlib status of the last inflate
-        u8                    maPad1[0x3C];    // +0x0C4  (heap cache, untouched by inflate)
+        DecompressionJobStatus mStatus;       // +0x080 working copy of the 128-byte snapshot
         CompressedData*       mpEntries;       // +0x100  current entry array
         u32                   muNumEntries;    // +0x104  entry count
         u32                   muCurrentEntry;  // +0x108  current entry index
