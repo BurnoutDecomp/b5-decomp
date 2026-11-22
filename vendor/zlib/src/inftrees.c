@@ -1,6 +1,7 @@
 /* inftrees.c -- generate Huffman trees for efficient decoding
  * Copyright (C) 1995-2002 Mark Adler
  * For conditions of distribution and use, see copyright notice in zlib.h 
+ * Modified to emit the Xbox 360 ARTIST operation tags.
  */
 
 #include "zutil.h"
@@ -44,15 +45,17 @@ local const uInt cplens[31] = { /* Copy lengths for literal codes 257..285 */
         /* see note #13 above about 258 */
 local const uInt cplext[31] = { /* Extra bits for literal codes 257..285 */
         0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2,
-        3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0, 112, 112}; /* 112==invalid */
-local const uInt cpdist[30] = { /* Copy offsets for distance codes 0..29 */
+        3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0, HUFT_INVALID, HUFT_INVALID};
+/* ARTIST places 32 distance bases at 0x82142A78 and 32 widths at
+   0x82142AF8. The fixed-tree builder still takes the first 30. */
+local const uInt cpdist[32] = {
         1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193,
         257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145,
-        8193, 12289, 16385, 24577};
-local const uInt cpdext[30] = { /* Extra bits for distance codes */
+        8193, 12289, 16385, 24577, 32769, 49153};
+local const uInt cpdext[32] = {
         0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6,
         7, 7, 8, 8, 9, 9, 10, 10, 11, 11,
-        12, 12, 13, 13};
+        12, 12, 13, 13, 14, 14};
 
 /*
    Huffman code decoding is performed using a multi-level table lookup.
@@ -251,15 +254,15 @@ uIntf *v;               /* working area: values in order of bit length */
       /* set up table entry in r */
       r.bits = (Byte)(k - w);
       if (p >= v + n)
-        r.exop = 128 + 64;      /* out of values--invalid code */
+        r.exop = HUFT_INVALID;  /* out of values--invalid code */
       else if (*p < s)
       {
-        r.exop = (Byte)(*p < 256 ? 0 : 32 + 64);     /* 256 is end-of-block */
+        r.exop = (Byte)(*p < 256 ? 0 : HUFT_END);    /* 256 is end-of-block */
         r.base = *p++;          /* simple code is just the value */
       }
       else
       {
-        r.exop = (Byte)(e[*p - s] + 16 + 64);/* non-simple--look up in lists */
+        r.exop = (Byte)(e[*p - s] + HUFT_LENGTH_DISTANCE);
         r.base = d[*p++ - s];
       }
 

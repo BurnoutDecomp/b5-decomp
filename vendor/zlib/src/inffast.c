@@ -1,6 +1,7 @@
 /* inffast.c -- process literals and length/distance pairs fast
  * Copyright (C) 1995-2002 Mark Adler
  * For conditions of distribution and use, see copyright notice in zlib.h 
+ * Modified to decode the Xbox 360 ARTIST operation tags.
  */
 
 #include "zutil.h"
@@ -69,10 +70,10 @@ z_streamp z;
     }
     do {
       DUMPBITS(t->bits)
-      if (e & 16)
+      if ((e & HUFT_FLAGS) == HUFT_LENGTH_DISTANCE)
       {
         /* get extra bits for length */
-        e &= 15;
+        e &= HUFT_EXTRA_MASK;
         c = t->base + ((uInt)b & inflate_mask[e]);
         DUMPBITS(e)
         Tracevv((stderr, "inflate:         * length %u\n", c));
@@ -82,10 +83,10 @@ z_streamp z;
         e = (t = td + ((uInt)b & md))->exop;
         do {
           DUMPBITS(t->bits)
-          if (e & 16)
+          if ((e & HUFT_FLAGS) == HUFT_LENGTH_DISTANCE)
           {
             /* get extra bits to add to distance base */
-            e &= 15;
+            e &= HUFT_EXTRA_MASK;
             GRABBITS(e)         /* get extra bits (up to 13) */
             d = t->base + ((uInt)b & inflate_mask[e]);
             DUMPBITS(e)
@@ -130,7 +131,7 @@ z_streamp z;
             }
             break;
           }
-          else if ((e & 64) == 0)
+          else if ((e & HUFT_FLAGS) == 0)
           {
             t += t->base;
             e = (t += ((uInt)b & inflate_mask[e]))->exop;
@@ -145,7 +146,7 @@ z_streamp z;
         } while (1);
         break;
       }
-      if ((e & 64) == 0)
+      if ((e & HUFT_FLAGS) == 0)
       {
         t += t->base;
         if ((e = (t += ((uInt)b & inflate_mask[e]))->exop) == 0)
@@ -159,7 +160,7 @@ z_streamp z;
           break;
         }
       }
-      else if (e & 32)
+      else if ((e & HUFT_FLAGS) == HUFT_END)
       {
         Tracevv((stderr, "inflate:         * end of block\n"));
         UNGRAB

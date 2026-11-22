@@ -1,6 +1,7 @@
 /* infcodes.c -- process literals and length/distance pairs
  * Copyright (C) 1995-2002 Mark Adler
  * For conditions of distribution and use, see copyright notice in zlib.h 
+ * Modified to decode the Xbox 360 ARTIST operation tags.
  */
 
 #include "zutil.h"
@@ -133,20 +134,20 @@ int r;
         c->mode = LIT;
         break;
       }
-      if (e & 16)               /* length */
+      if ((e & HUFT_FLAGS) == HUFT_LENGTH_DISTANCE) /* length */
       {
-        c->sub.copy.get = e & 15;
+        c->sub.copy.get = e & HUFT_EXTRA_MASK;
         c->len = t->base;
         c->mode = LENEXT;
         break;
       }
-      if ((e & 64) == 0)        /* next table */
+      if ((e & HUFT_FLAGS) == 0) /* next table */
       {
         c->sub.code.need = e;
         c->sub.code.tree = t + t->base;
         break;
       }
-      if (e & 32)               /* end of block */
+      if ((e & HUFT_FLAGS) == HUFT_END) /* end of block */
       {
         Tracevv((stderr, "inflate:         end of block\n"));
         c->mode = WASH;
@@ -171,14 +172,14 @@ int r;
       t = c->sub.code.tree + ((uInt)b & inflate_mask[j]);
       DUMPBITS(t->bits)
       e = (uInt)(t->exop);
-      if (e & 16)               /* distance */
+      if ((e & HUFT_FLAGS) == HUFT_LENGTH_DISTANCE) /* distance */
       {
-        c->sub.copy.get = e & 15;
+        c->sub.copy.get = e & HUFT_EXTRA_MASK;
         c->sub.copy.dist = t->base;
         c->mode = DISTEXT;
         break;
       }
-      if ((e & 64) == 0)        /* next table */
+      if ((e & HUFT_FLAGS) == 0) /* next table */
       {
         c->sub.code.need = e;
         c->sub.code.tree = t + t->base;
