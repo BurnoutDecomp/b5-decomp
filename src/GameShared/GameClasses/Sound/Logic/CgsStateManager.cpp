@@ -279,7 +279,7 @@ bool StateManager::IsDataLoaded()
     for (const State* lpState = mpHeadState; lpState; lpState = lpState->mpNextState)
     {
         if (lpState->IsAttached()
-            && lpState->mauUpdateState[0] != State::E_UPDATE_ATTACHED)
+            && static_cast<s32>(lpState->mauUpdateState[0]) != State::E_UPDATE_ATTACHED)
         {
             return false;
         }

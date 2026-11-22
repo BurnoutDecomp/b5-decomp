@@ -1033,11 +1033,14 @@ void Module::UpdateStreamBuffers(Io::OutputBuffer::FreedBuffersArray& arFreedBuf
 // ---------------------------------------------------------------------------
 s32 Module::FindStreamBuffer(const CgsFileSystem::ReadStream* lpReadStream)
 {
-    CGS_ASSERT(lpReadStream != 0, "0 != lpReadStream");
+    // ARTIST assertion at 0x82689D0C.
+    CGS_ASSERT(lpReadStream != 0, CgsDev::Assert::MessageAt(
+        "0 != lpReadStream",
+        "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Module/CgsSoundPlaybackModule.cpp", 1426));
 
     for (s32 li = 0; li < static_cast<s32>(SKU_NUMBER_OF_STREAM_BUFFERS); ++li)
     {
-        if (lpReadStream == &maStreamBuffers[li].mReadStream)
+        if (&maStreamBuffers[li].mReadStream == lpReadStream)  // FAKEMATCH: ARTIST compares the member first.
             return li;
     }
     return -1;

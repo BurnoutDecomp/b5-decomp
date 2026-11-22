@@ -157,7 +157,7 @@ void CAltTablesEncoder::updateHistory()
     for (int liTable = 0; liTable < static_cast<int>(muNumTables); ++liTable)
     {
         CLocalHuffmanEncoder* lpEnc = mpaTables[liTable];
-        if (lpEnc->muDirtyFlag != 0 || lpEnc->mpState->muFrameFlag != 0)
+        if (lpEnc->muDirtyFlag != 0 || static_cast<s32>(lpEnc->mpState->muFrameFlag) != 0)
             lpEnc->muHistoryCode = lpEnc->muCurrentCode;
     }
 }

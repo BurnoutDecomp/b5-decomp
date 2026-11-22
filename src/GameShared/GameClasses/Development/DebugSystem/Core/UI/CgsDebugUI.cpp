@@ -93,7 +93,7 @@ namespace CgsDev
         }
         void DebugUI::RemoveWindow(Window* lpWindow)
         {
-            if (mpActiveWindow == lpWindow)
+            if (lpWindow == mpActiveWindow)  // FAKEMATCH: ARTIST compares the argument first.
             {
                 lpWindow->OnLostFocus();
                 mpActiveWindow = GetPreviousActiveWindow(lpWindow);

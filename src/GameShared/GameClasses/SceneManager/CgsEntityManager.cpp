@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/SceneManager/CgsVolumeManager.h"   // VolumeManager::GetVolumeIndexByID
 #include "GameShared/GameClasses/SceneManager/CgsVolumeStore.h"     // KI_INVALID_VOLUME_INDEX
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"          // [DIAG wave Q5] CgsDev::Log::gpDebugPrint
@@ -112,8 +113,10 @@ const VolumeInstance* EntityManager::GetFirstEntityVolumeInstance(
 // @ 0x828B9E10
 VolumeInstanceId EntityManager::GetVolumeInstanceIdByIndex(s32 liIndex) const
 {
-    CGS_ASSERT(liIndex < KI_MAX_NUM_VOLUME_INSTANCES && liIndex >= 0,
-               "liIndex < KI_MAX_NUM_VOLUME_INSTANCES && liIndex >= 0");
+    // ARTIST assertion at 0x828B9E40.
+    CGS_ASSERT(liIndex < KI_MAX_NUM_VOLUME_INSTANCES && liIndex >= 0, CgsDev::Assert::MessageAt(
+        "liIndex < KI_MAX_NUM_VOLUME_INSTANCES && liIndex >= 0",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityManager.h", 345));
 
     return mVolumeInstancePool[liIndex].mUserID;
 }
@@ -521,8 +524,10 @@ void EntityManager::RemoveVolumeInstanceFromEntity(s32 liVolumeInstanceIndex)
     VolumeInstance& lrVolumeInstance = mVolumeInstancePool[liVolumeInstanceIndex];   // cpp:301
     SceneManagerEntity& lrEntity = mEntityPool[lrVolumeInstance.mu16EntityIndex];    // cpp:302
 
-    CGS_ASSERT(lrEntity.mu16NumVolumeInstances > 0,
-               "lpEntity->mu16NumVolumeInstances > 0");                              // cpp:304
+    // ARTIST assertion at 0x828BA1D4.
+    CGS_ASSERT(lrEntity.mu16NumVolumeInstances > 0, CgsDev::Assert::MessageAt(
+        "lpEntity->mu16NumVolumeInstances > 0",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityManager.cpp", 304));
 
     s32 liCurrentVI = lrEntity.miFirstVolumeInstance;                                // cpp:307
     if (liCurrentVI == liVolumeInstanceIndex)
@@ -545,7 +550,10 @@ void EntityManager::RemoveVolumeInstanceFromEntity(s32 liVolumeInstanceIndex)
         liCurrentVI = lrCurrentVolumeInstance.miNextEntityVolumeInstance;
     }
 
-    CGS_ASSERT(false, "Entity does not contain the specified volume instance");      // cpp:329
+    // ARTIST assertion at 0x828BA240.
+    CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+        "Entity does not contain the specified volume instance",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityManager.cpp", 329));
 }
 
 // ===========================================================================
