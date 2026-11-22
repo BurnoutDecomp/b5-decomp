@@ -42,9 +42,8 @@
 //     +0x10 ListDStack mUsed       { ListDNode* phead; }  -> mpUsedHead
 //     +0x14 int        mSize                              -> renamed miItemCount->mSize
 //     +0x18 int        mCapacity                          -> miCapacity (already correct)
-//   Nested structs reconciled too (PDB names): Node->ItemNode, NodeBlock(header)->
-//   NodeBlockHeader; mppOwner's PDB type is ItemHandle* (a 1-field { ItemNode* pNode }),
-//   kept as void** here to preserve the ARTIST asm's untyped owner back-pointer stores.
+//   The PDB's ItemNode is Node here. Its back-pointer targets an ItemHandle
+//   containing the matching node pointer.
 // =====================================================================================
 
 #include "types.hpp" // s32 / u32
@@ -59,19 +58,20 @@ namespace core
 class Collection
 {
 public:
-    // One link record handed out by the Collection (12 bytes on X360, 24 bytes on x64).
-    // FLAG (rwaudio PDB reconcile): PDB name = Collection::ItemNode [sizeof = 12]
-    //   { ListDNode node { ListDNode* pnext; ListDNode* pprev; }; ItemHandle* pHandle; }.
-    //   Kept as flat Node here (ARTIST asm shape); mppOwner is PDB pHandle (PDB type
-    //   ItemHandle* = { ItemNode* pNode }), kept void** to mirror the untyped asm stores.
-    //   +0x00 mpNext  (Node*; PDB node.pnext)
-    //   +0x04 mpPrev  (Node*; PDB node.pprev)
-    //   +0x08 mppOwner(void**; PDB pHandle)
+    struct Node;
+
+    struct ItemHandle
+    {
+        Node *pNode;
+    };
+
+    // The audio PDB identifies the back-pointer as an ItemHandle pointer.
+    // ARTIST installs both links at 0x82B6E220 and 0x82B6E224.
     struct Node
     {
         Node *mpNext;     // +0x00 (PDB node.pnext)
         Node *mpPrev;     // +0x04 (PDB node.pprev)
-        void **mppOwner;  // +0x08 (PDB pHandle, type ItemHandle*)
+        ItemHandle *pHandle; // +0x08
     };
 
     // A pool block: an 8-byte X360 header (naturally 16 bytes on x64) followed by
@@ -90,14 +90,12 @@ public:
     };
 
     // Grow the pool by `count` free Node slots (allocates one NodeBlock and threads its
-    // Nodes onto the free list). Returns 0 on success, 1 on allocation failure.
-    // (IDA renders `this`/return as int; the asm r3 contract is authoritative.)
-    static int AddCapacity(Collection *self, int count);
+    // Nodes onto the free list). Returns true if allocation fails.
+    static bool AddCapacity(Collection *self, int count);
 
-    // Pop a free Node, push it onto the used list, and wire `outOwner` <-> Node. Grows
-    // the pool by one when the free list is empty. Returns 0 on success, non-zero on a
-    // failed grow.
-    static int AddItem(Collection *self, void **outOwner);
+    // Attach a free node to the handle and push it onto the used list.
+    // Returns true if the pool could not grow.
+    static bool AddItem(Collection *self, ItemHandle *handle);
 
     // Release every in-use Node back to the free list (clears each owner back-pointer).
     static Collection *Clear(Collection *self);

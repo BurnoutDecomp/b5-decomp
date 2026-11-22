@@ -188,7 +188,7 @@ int VuMeter::CreateInstance(VuMeter *self)
     if (TimerManager::AddTimer(
             &pSystem->mTimerManager, &self->mTimer,
             &VuMeter::RwacTimerClient,
-            self, "VuMeter", 1, 1))
+            self, "VuMeter", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
     {
         return 0; // AddTimer non-zero == registration failed
     }

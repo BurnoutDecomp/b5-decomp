@@ -158,7 +158,7 @@ int Delay::CreateInstance(Delay *self, f32 *pMaxDelayTime)
         || TimerManager::AddTimer(
                &pSystem->mTimerManager, &self->mTimer,
                reinterpret_cast<TimerManager::TimerCallback>(&Delay::RwacTimerClient),
-               self, "Delay", 1, 1))
+               self, "Delay", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
     {
         return 0;
     }

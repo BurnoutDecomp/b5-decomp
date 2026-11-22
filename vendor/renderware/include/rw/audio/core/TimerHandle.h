@@ -28,6 +28,7 @@
 // =====================================================================================
 
 #include "types.hpp" // (project primitives)
+#include "rw/audio/core/Collection.h"
 
 namespace rw
 {
@@ -35,6 +36,22 @@ namespace audio
 {
 namespace core
 {
+
+// The Xbox 360 audio PDB names both AddTimer arguments. ARTIST indexes the
+// stage at 0x82B6EB9C and saves both values as bytes at 0x82B6EBF0.
+enum TimerStage
+{
+    TIMERSTAGE_BEFORECOMMANDS = 0,
+    TIMERSTAGE_BEFOREMIXER = 1,
+    TIMERSTAGE_MAX = 2,
+    TIMERSTAGE_NONE = 3
+};
+
+enum TimerVisibility
+{
+    TIMERVISIBILITY_SHOWN = 0,
+    TIMERVISIBILITY_HIDDEN = 1
+};
 
 class TimerHandle
 {
@@ -50,7 +67,7 @@ public:
     // rw::audio::core::TimerHandle [sizeof=24]): offsets match the ARTIST ctor; the PDB
     // supplies authoritative names and fills the two ctor-untouched gaps (mpCallback @+0x04,
     // mpContext @+0x08) the earlier recon left opaque. x64 widths; +0xNN are X360 offsets.
-    void *mpItemHandleNode;          // +0x00  Collection::ItemHandle.pNode (was miField0)
+    Collection::ItemHandle mItemHandle; // +0x00
     void (*mpCallback)(void *, f32); // +0x04  per-tick callback (was opaque gap)
     void *mpContext;                 // +0x08  callback context (was opaque gap)
     const char *mpName;              // +0x0C

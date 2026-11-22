@@ -79,22 +79,6 @@ class Voice;   // the owning voice (Voice.h)
 
 struct PlugInBaseView
 {
-    // FLAG (pre-init slot reuse, 2026-08-25 wave 4): BEFORE CreateInstance installs the
-    // owning Voice, the factory parks the requested channel/section COUNT BYTE in the
-    // +0x08 slot (HighPassButterworth::GetSize @0x82B9DF88 reads it as `lbz r3,8(this)`
-    // -- a byte store/load on the not-yet-voice word). On the LE 64-bit host the raw
-    // "first byte of the pointer field" read is endian/width-broken, so the parked
-    // count is encoded as the pointer VALUE (mpVoice == (Voice*)(uintptr_t)count) and
-    // recovered through these helpers; a future host factory must park it the same way.
-    void SetPreInitOrderByte(u8 au8Order)
-    {
-        mpVoice = reinterpret_cast<Voice*>(static_cast<uintptr_t>(au8Order));
-    }
-    u8 GetPreInitOrderByte() const
-    {
-        return static_cast<u8>(reinterpret_cast<uintptr_t>(mpVoice));
-    }
-
     void  *mpVTable;           // +0x00 -- the installed v-table pointer
     void  *mpSystem;           // +0x04
     Voice *mpVoice;            // +0x08 -- the owning Voice (PDB name; see above)

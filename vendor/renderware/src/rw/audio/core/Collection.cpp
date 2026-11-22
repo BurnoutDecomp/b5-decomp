@@ -57,9 +57,9 @@ inline EA::Allocator::ICoreAllocator *Allocator()
 // chain, carve its Nodes onto the free list, and bump mCapacity by the new slot count.
 // Returns 0 on success, 1 if the allocation failed.
 // -------------------------------------------------------------------------------------
-int Collection::AddCapacity(Collection *self, int count)
+bool Collection::AddCapacity(Collection *self, int count)
 {
-    int result = 1; // r29 = 1 (failure default)
+    bool result = true;
 
     // v4 (r30) = count + mCapacity -- the number of Node slots the new block holds.
     const int slots = count + self->mCapacity;
@@ -74,7 +74,7 @@ int Collection::AddCapacity(Collection *self, int count)
 
     if (block)
     {
-        result = 0;
+        result = false;
         block->miNodeCount = slots; // stw r30 @ block+4
         block->mpNextBlock = 0;     // stw 0   @ block+0
 
@@ -94,7 +94,7 @@ int Collection::AddCapacity(Collection *self, int count)
             int remaining = slots;
             do
             {
-                node->mppOwner = 0;                 // stw 0 @ node+8
+                node->pHandle = 0;                 // stw 0 @ node+8
                 Node *oldFree = self->mpFreeHead;   // r10 = *(self+0xC)
                 node->mpPrev = 0;                   // stw 0 @ node+4
                 node->mpNext = oldFree;             // stw r10 @ node+0
@@ -116,14 +116,14 @@ int Collection::AddCapacity(Collection *self, int count)
 // to the caller's back-pointer slot, and push it onto the used list. Returns 0 on
 // success, the failed AddCapacity result otherwise.
 // -------------------------------------------------------------------------------------
-int Collection::AddItem(Collection *self, void **outOwner)
+bool Collection::AddItem(Collection *self, ItemHandle *handle)
 {
-    int result = 0; // r29
+    bool result = false;
 
     if (!self->mpFreeHead)
         result = AddCapacity(self, self->mSize + 1);   // asm: lwz r11,0x14(r31)=mSize; addi r4,r11,1
 
-    if (!(result & 0xFF)) // clrlwi. r11,r3,24 -- the low byte of the AddCapacity result
+    if (!result)
     {
         Node *node = self->mpFreeHead; // r11 = *(self+0xC)
         if (node)
@@ -134,8 +134,8 @@ int Collection::AddItem(Collection *self, void **outOwner)
                 next->mpPrev = 0;               // *(node->next+4) = 0
         }
 
-        node->mppOwner = outOwner; // stw a2 @ node+8
-        *outOwner = node;          // stw node @ *a2
+        node->pHandle = handle;
+        handle->pNode = node;
 
         // Push onto the used list (head@+0x10).
         Node *oldUsed = self->mpUsedHead; // r10 = *(self+0x10)
@@ -165,14 +165,14 @@ Collection *Collection::Clear(Collection *self)
         do
         {
             Node *node = self->mpUsedHead;  // r4 = *(self+0x10)
-            void **owner = node->mppOwner;  // r11 = *(node+8)
+            ItemHandle *owner = node->pHandle;
             if (owner)
             {
                 // r4 = *owner (the value the owner stored, normally == node); clear the
                 // owner slot, then clear that value's +8 owner-back-slot.
-                Node *stored = static_cast<Node *>(*owner);
-                *owner = 0;                 // stw 0 @ *owner
-                stored->mppOwner = 0;       // stw 0 @ stored+8
+                Node *stored = owner->pNode;
+                owner->pNode = 0;
+                stored->pHandle = 0;
                 node = stored;              // r4 carried into RemoveNode
             }
             result = RemoveNode(self, node);
@@ -213,7 +213,7 @@ int Collection::Defragment(Collection *self)
 
     Node *base = block->maNodes; // r30 = block + 8
 
-    // Pass 1: unlink this block's *free* Nodes (mppOwner == 0) from the free list.
+    // Pass 1: unlink this block's free nodes from the free list.
     {
         int i = 0; // r9
         Node *node = base; // r11
@@ -221,7 +221,7 @@ int Collection::Defragment(Collection *self)
         {
             do
             {
-                if (!node->mppOwner) // lwz 8(r11) == 0 -> a free slot
+                if (!node->pHandle) // lwz 8(r11) == 0 -> a free slot
                 {
                     if (node == self->mpFreeHead)
                         self->mpFreeHead = node->mpNext; // *(self+0xC) = *node
@@ -244,12 +244,12 @@ int Collection::Defragment(Collection *self)
         {
             do
             {
-                void **owner = node->mppOwner; // r9 = *(node+8)
+                ItemHandle *owner = node->pHandle;
                 if (owner)
                 {
-                    Node *stored = static_cast<Node *>(*owner); // r4 = *owner
-                    *owner = 0;            // stw 0 @ *owner
-                    stored->mppOwner = 0;  // stw 0 @ stored+8
+                    Node *stored = owner->pNode;
+                    owner->pNode = 0;
+                    stored->pHandle = 0;
                     RemoveNode(self, stored); // bl RemoveNode (r3=self, r4=stored)
 
                     // Unlink `node` from the block-local list view.

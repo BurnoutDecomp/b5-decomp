@@ -66,9 +66,9 @@ public:
 
     // Register a timer in Collection `collectionIndex`: grow that Collection if it has no
     // capacity yet (by 74 slots), allocate a Node wired to `handle`, then fill the handle.
-    // Returns 0 on success, non-zero if the Collection grow failed.
-    static int AddTimer(TimerManager *self, TimerHandle *handle, TimerCallback callback,
-                        void *context, const char *name, int collectionIndex, u8 visibility);
+    // Returns true if the collection could not grow.
+    static bool AddTimer(TimerManager *self, TimerHandle *handle, TimerCallback callback,
+                         void *context, const char *name, TimerStage stage, TimerVisibility visibility);
 
     // Walk Collection `collectionIndex`'s used list, invoking each handle's callback and
     // timing it into TimerHandle::mCpuTicks; honour any deferred self-remove.

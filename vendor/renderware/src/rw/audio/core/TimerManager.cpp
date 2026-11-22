@@ -62,29 +62,28 @@ TimerManager *TimerManager::TimerManager_ctor(TimerManager *self)
 // yet, grow it by 74 slots first. Allocate a Node (wired to the handle's owner slot);
 // on success fill the handle's callback/context/name, record the Collection index in the
 // stage byte, stash the visibility byte, and zero the cycle count.
-// Returns Collection::AddItem's result (0 on success, non-zero on a failed grow).
+// The audio PDB gives AddItem and AddTimer boolean results. ARTIST tests
+// AddItem's result at 0x82B6EBD8 before writing the handle.
 // -------------------------------------------------------------------------------------
-int TimerManager::AddTimer(TimerManager *self, TimerHandle *handle, TimerCallback callback,
-                           void *context, const char *name, int collectionIndex, u8 visibility)
+bool TimerManager::AddTimer(TimerManager *self, TimerHandle *handle, TimerCallback callback,
+                            void *context, const char *name, TimerStage stage, TimerVisibility visibility)
 {
-    Collection *pCollection = &self->maCollections[collectionIndex];
+    Collection *pCollection = &self->maCollections[stage];
 
     if (pCollection->mCapacity == 0)
         Collection::AddCapacity(pCollection, 74);
 
-    // AddItem stores the new Node into the handle's owner slot (mpItemHandleNode @+0x00)
-    // and points the Node's back-pointer at that slot.
-    int result = Collection::AddItem(pCollection, &handle->mpItemHandleNode);
-    if (result == 0)
+    const bool failed = Collection::AddItem(pCollection, &handle->mItemHandle);
+    if (!failed)
     {
         handle->mpCallback = callback;
         handle->mpContext = context;
         handle->mpName = name;
-        handle->mStage = static_cast<u8>(collectionIndex);
-        handle->mTimerVisibility = visibility;
+        handle->mStage = static_cast<u8>(stage);
+        handle->mTimerVisibility = static_cast<u8>(visibility);
         handle->mCpuTicks = 0;
     }
-    return result;
+    return failed;
 }
 
 // -------------------------------------------------------------------------------------
@@ -103,9 +102,8 @@ void TimerManager::ExecuteTimers(TimerManager *self, int collectionIndex)
     {
         u32 startCycle = GetCpuCycle();
 
-        // The Node's owner back-pointer is the address of the handle's mpItemHandleNode
-        // slot, which is the handle itself (that slot is at handle offset 0).
-        TimerHandle *pHandle = reinterpret_cast<TimerHandle *>(pNode->mppOwner);
+        // TimerHandle starts with the ItemHandle the collection registered.
+        TimerHandle *pHandle = reinterpret_cast<TimerHandle *>(pNode->pHandle);
 
         self->mpDeferredRemoveNode = 0;    // +0x44 = 0
         f32 fTime = self->mfCallbackTime;        // +0x38
@@ -180,16 +178,16 @@ void TimerManager::RemoveTimer(TimerManager *self, TimerHandle *handle)
     {
         // Deferred self-remove: hand the node off to ExecuteTimers.
         self->miCurrentCollection = stage; // +0x40
-        Collection::Node *pNode = reinterpret_cast<Collection::Node *>(handle->mpItemHandleNode);
-        handle->mpItemHandleNode = 0;
-        pNode->mppOwner = 0;
+        Collection::Node *pNode = handle->mItemHandle.pNode;
+        handle->mItemHandle.pNode = 0;
+        pNode->pHandle = 0;
         self->mpDeferredRemoveNode = pNode; // +0x44
     }
     else if (stage != 3)
     {
-        Collection::Node *pNode = reinterpret_cast<Collection::Node *>(handle->mpItemHandleNode);
-        handle->mpItemHandleNode = 0;
-        pNode->mppOwner = 0;
+        Collection::Node *pNode = handle->mItemHandle.pNode;
+        handle->mItemHandle.pNode = 0;
+        pNode->pHandle = 0;
         Collection::RemoveNode(&self->maCollections[stage], pNode);
     }
 

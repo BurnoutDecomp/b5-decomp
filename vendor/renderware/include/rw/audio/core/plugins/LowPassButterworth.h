@@ -65,7 +65,7 @@ class LowPassButterworth
 {
 public:
     static char **GetPlugInDescRunTime();                                  // @0x82B97BF0
-    static int    GetSize(const VoiceStageConfig *config);                 // @0x82B9E4B0
+    static u32    GetSize(const VoiceStageConfig *config);                 // @0x82B9E4B0
     static int    CreateInstance(LowPassButterworth *self);                // @0x82BA2FA0
     static int    Process(LowPassButterworth *self, AudioProcessContext *ctx,
                           bool discontinuity);                             // @0x82B97C00

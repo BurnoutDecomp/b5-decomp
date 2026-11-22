@@ -24,7 +24,7 @@ namespace core
 
 TimerHandle *TimerHandle::TimerHandle_ctor(TimerHandle *self)
 {
-    self->mpItemHandleNode = 0; // +0x00
+    self->mItemHandle.pNode = 0; // +0x00
     self->mpName = "Unknown";  // +0x0C
     self->mCpuTicks = 0;       // +0x10
     self->mStage = 3;          // +0x14 (stb)

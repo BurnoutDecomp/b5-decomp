@@ -1009,7 +1009,7 @@ int ReverbModel1::CreateInstance(ReverbModel1 *self)
     if (TimerManager::AddTimer(
             &pSystem->mTimerManager, &self->mTimer,
             reinterpret_cast<TimerManager::TimerCallback>(&ReverbModel1::RwacTimerClient),
-            self, "ReverbModel1", 1, 1))
+            self, "ReverbModel1", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
     {
         return 0;
     }

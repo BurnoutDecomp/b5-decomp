@@ -382,11 +382,10 @@ int AiffWriter::StartHandler(void *pCommandRecord)
 
             // Register the pump timer in the System TimerManager (collection 1, visible).
             // AddTimer returns 0 on success; the asm tests only its low byte.
-            if (!(TimerManager::AddTimer(
+            if (!TimerManager::AddTimer(
                       &self->mpSystem->mTimerManager, &self->mTimerHandle,
                       reinterpret_cast<TimerManager::TimerCallback>(&AiffWriter::RwacTimerClient),
-                      self, "AiffWriter", 1, 1) &
-                  0xFF))
+                      self, "AiffWriter", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
             {
                 self->mbTimerCreated = 1; // *(v1+77) = 1
             }

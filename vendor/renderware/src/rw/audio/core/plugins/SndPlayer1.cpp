@@ -346,7 +346,7 @@ int SndPlayer1::CreateInstance(SndPlayer1 *self, const ConstructorParams *apPara
     // byte is tested). A failure returns 0 WITHOUT freeing -- the teardown path frees.
     if (TimerManager::AddTimer(&self->mpSystemUseGetSystemAccessor->mTimerManager,
                                &self->mTimerClient, &SndPlayer1::RwacTimerClient,
-                               self, KSZ_TIMER_NAME, 1, 1) != 0)
+                               self, KSZ_TIMER_NAME, TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
         return 0;
 
     self->mbTimerAdded = 1;

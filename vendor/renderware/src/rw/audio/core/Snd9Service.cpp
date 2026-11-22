@@ -120,12 +120,12 @@ int Snd9Service::CreateInstance(Snd9Service *self)
     self->miSampleAccum     = 0;                   // +0x60
     self->miSamplesRemaining = 0;                  // +0x64
 
-    // Register the 100 Hz pump timer in the System's TimerManager (collection 1, visible).
+    // Register the 100 Hz pump before the mixer runs.
     if (TimerManager::AddTimer(&self->mpSystem->mTimerManager, &self->mTimerHandle,
                                &Snd9Service::RwacTimerClient,
-                               self, "Snd9Service", 1, 1) & 0xFF)
+                               self, "Snd9Service", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
     {
-        return 0; // AddTimer failed (non-zero low byte)
+        return 0;
     }
 
     self->mbTimerCreated = 1; // stb 1 -> +0x68

@@ -92,24 +92,13 @@ char **HighPassButterworth::GetPlugInDescRunTime()
 
 // -------------------------------------------------------------------------------------
 // GetSize @0x82B9DF88
-//   return Butterworth::GetSize(*(u8 *)(desc + 8)) + 96;
-// The size is queried BEFORE CreateInstance installs the owning Voice into the +0x08
-// slot: at query time the factory has parked the requested channel/section count (a
-// byte) there. On the host that park is encoded as the pointer value (see the
-// PlugInBaseView pre-init helpers -- the old "first byte of the pointer field" read
-// was endian/width-broken on x64 LE). The +96 is the X360 header size (0x60); the
-// embedded Butterworth follows.
+// Voice::CreateInstance passes the stage config to this hook. The channel byte
+// at config +0x08 sizes the kernel after the plug-in header.
 // -------------------------------------------------------------------------------------
-int HighPassButterworth::GetSize(HighPassButterworth *desc)
+u32 HighPassButterworth::GetSize(const VoiceStageConfig *config)
 {
-    // asm: lbz r3, 8(this) -- the parked count byte in the pre-init +0x08 slot.
-    const u8 order = desc->mBase.GetPreInitOrderByte();
-    // The console +96 (0x60) is the header span before the embedded kernel; the
-    // host header is wider (widened pointers), so the span is the host offsetof
-    // (the stage-carve audit). Butterworth::GetSize itself is pointer-free f32
-    // arithmetic and holds on the host.
-    return static_cast<int>(Butterworth::GetSize(order)
-                            + offsetof(HighPassButterworth, mButterworth));   // X360: +0x60
+    return Butterworth::GetSize(config->mu8OutputChannels)
+        + offsetof(HighPassButterworth, mButterworth);
 }
 
 // -------------------------------------------------------------------------------------

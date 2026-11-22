@@ -474,7 +474,7 @@ int SndPlayer1_CgsStreamMod::CreateInstance(PlugIn* apBase, void* apContext)
     if (TimerManager::AddTimer(
             &self->mpSystemUseGetSystemAccessor->mTimerManager,
             &self->mTimerHandle, &RwacTimerClient, self,
-            "SndPlayer", 1, 1) != 0)
+            "SndPlayer", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
         return 0;
     self->mTimerAdded = 1;
     return 1;

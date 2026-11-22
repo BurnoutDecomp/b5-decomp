@@ -74,19 +74,13 @@ char **LowPassButterworth::GetPlugInDescRunTime()
 // GetSize @0x82B9E4B0
 //   return Butterworth::GetSize(config->outputChannels) + 0x60;
 //
-// NOTE the r3 here is the stage CONFIG, not an instance: the console reads the channel count
-// with `lbz r3, 8(r3)` from PlugInConfig+0x08. (The committed high-pass sibling models the
-// same query through a pre-init parked byte because its console GetSize is a different
-// shape; this one takes the config directly, which is the vendor's own signature.)
-//
-// X360-LITERAL TRAP: the console's +0x60 is ITS OWN header span before the embedded kernel;
-// the host header is wider (widened base-view pointers), so the span is the host offsetof.
+// The factory passes the stage config to both Butterworth size hooks. The
+// channel count at +0x08 sizes the kernel after the plug-in header.
 // -------------------------------------------------------------------------------------
-int LowPassButterworth::GetSize(const VoiceStageConfig *config)
+u32 LowPassButterworth::GetSize(const VoiceStageConfig *config)
 {
-    const u8 lu8Channels = config->mu8OutputChannels;
-    return static_cast<int>(Butterworth::GetSize(lu8Channels)
-                            + offsetof(LowPassButterworth, mButterworth)); // X360: +0x60
+    return Butterworth::GetSize(config->mu8OutputChannels)
+        + offsetof(LowPassButterworth, mButterworth);
 }
 
 // -------------------------------------------------------------------------------------
