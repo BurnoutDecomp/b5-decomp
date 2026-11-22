@@ -164,6 +164,9 @@ void cParticleMaterial::GetSerialiseSize(cLionSerialiser& aSer) const
 // ----------------------------------------------------------------------------
 void cParticleMaterial::Relocate()
 {
+    if (this == 0)   // ARTIST 0x8290E660: an absent material needs no relocation.
+        return;
+
     // asm words 4, 7, 8, 6 then 24..28 -- each a 32-bit slot re-based against `this`.
     mpTextureName.Relocate(this);
     mpMeshName.Relocate(this);

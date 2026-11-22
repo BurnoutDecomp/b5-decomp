@@ -429,6 +429,10 @@ s32 Vsprintf(char* lpcDst, const char* lpcFormat, va_list lvaArgs)
 // widget info list -- format on-screen debug text into fixed stack buffers, so a
 // divergence is cosmetic. FLAG (truncation return): the CRT's vsnprintf returns the
 // length the formatted text WOULD have had; both call sites ignore the return value.
+#if defined(_XBOX)
+// ARTIST Snprintf calls this entry point even when the CRT fallback can inline.
+__declspec(noinline)
+#endif
 s32 Vsnprintf(char* lpcDst, s32 liSize, const char* lpcFormat, va_list lvaArgs)
 {
     return static_cast<s32>(::vsnprintf(lpcDst, static_cast<size_t>(liSize), lpcFormat, lvaArgs));

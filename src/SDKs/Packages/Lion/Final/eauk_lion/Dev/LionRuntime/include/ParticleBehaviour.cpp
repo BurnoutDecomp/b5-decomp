@@ -573,6 +573,9 @@ void cParticleBehaviour::Delocate(u32 aEndianTwiddleFlag)
 // ----------------------------------------------------------------------------
 void cParticleBehaviour::Relocate()
 {
+    if (this == 0)   // ARTIST 0x8290CC48: an absent behaviour needs no relocation.
+        return;
+
     // asm words 178..183 -- each a 32-bit slot re-based against `this`.
     mpWaveFormX.Relocate(this);
     mpWaveFormY.Relocate(this);
@@ -620,34 +623,37 @@ void cParticleBehaviour::GetSerialiseSize(cLionSerialiser& aSer) const
 // ----------------------------------------------------------------------------
 cParticleBehaviour* cParticleBehaviour::Serialise(cLionSerialiser& aSer) const
 {
-    cParticleBehaviour* lpCopy =
-        reinterpret_cast<cParticleBehaviour*>(aSer.DataStore(this, 1216));
+    cParticleBehaviour* lpCopy = 0;
+    if (this != 0)
+    {
+        lpCopy =
+            reinterpret_cast<cParticleBehaviour*>(aSer.DataStore(this, 1216));
 
-    cParticleWaveForm* lpStoredX = 0;
-    if (mpWaveFormX)
-        lpStoredX = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormX.Get(), 56));
-    lpCopy->mpWaveFormX.Set(lpStoredX);
+        cParticleWaveForm* lpStoredX = 0;
+        if (mpWaveFormX)
+            lpStoredX = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormX.Get(), 56));
+        lpCopy->mpWaveFormX.Set(lpStoredX);
 
-    cParticleWaveForm* lpStoredY = 0;
-    if (mpWaveFormY)
-        lpStoredY = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormY.Get(), 56));
-    lpCopy->mpWaveFormY.Set(lpStoredY);
+        cParticleWaveForm* lpStoredY = 0;
+        if (mpWaveFormY)
+            lpStoredY = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormY.Get(), 56));
+        lpCopy->mpWaveFormY.Set(lpStoredY);
 
-    cParticleWaveForm* lpStoredZ = 0;
-    if (mpWaveFormZ)
-        lpStoredZ = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormZ.Get(), 56));
-    lpCopy->mpWaveFormZ.Set(lpStoredZ);
+        cParticleWaveForm* lpStoredZ = 0;
+        if (mpWaveFormZ)
+            lpStoredZ = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormZ.Get(), 56));
+        lpCopy->mpWaveFormZ.Set(lpStoredZ);
 
-    cParticleWaveForm* lpStoredAlpha = 0;
-    if (mpWaveFormAlpha)
-        lpStoredAlpha = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormAlpha.Get(), 56));
-    lpCopy->mpWaveFormAlpha.Set(lpStoredAlpha);
+        cParticleWaveForm* lpStoredAlpha = 0;
+        if (mpWaveFormAlpha)
+            lpStoredAlpha = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormAlpha.Get(), 56));
+        lpCopy->mpWaveFormAlpha.Set(lpStoredAlpha);
 
-    cParticleWaveForm* lpStoredRGB = 0;
-    if (mpWaveFormRGB)
-        lpStoredRGB = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormRGB.Get(), 56));
-    lpCopy->mpWaveFormRGB.Set(lpStoredRGB);
-
+        cParticleWaveForm* lpStoredRGB = 0;
+        if (mpWaveFormRGB)
+            lpStoredRGB = reinterpret_cast<cParticleWaveForm*>(aSer.DataStore(mpWaveFormRGB.Get(), 56));
+        lpCopy->mpWaveFormRGB.Set(lpStoredRGB);
+    }
     return lpCopy;
 }
 

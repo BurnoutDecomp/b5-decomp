@@ -166,24 +166,24 @@ void cLionParticleEffect::Relocate()
 // descriptor's next pointer. Returns the serialised effect copy (null for a null effect).
 cLionParticleEffect* cLionParticleEffect::Serialise(cLionSerialiser& aSer) const
 {
-    if (this == 0)
-        return 0;
-
-    // Copy the 12-byte serialised effect header (mHash, mpDescriptors, mpNext -- console
-    // 3 x 4-byte words) into the buffer; DataStore returns the destination copy.
-    cLionParticleEffect* lpEff =
-        reinterpret_cast<cLionParticleEffect*>(aSer.DataStore(this, 12));
-
-    // Rebuild the descriptor chain in the copy: link the first descriptor copy through the
-    // copied effect's head, each subsequent copy through the previous copy's next pointer.
-    tLionSerialisedPtr<cParticleDescriptor>* lppLast = &lpEff->mpDescriptors;
-    for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != 0;
-         lpDes = lpDes->GetNextDescriptor())
+    cLionParticleEffect* lpEff = 0;
+    if (this != 0)
     {
-        cParticleDescriptor* lpCopy = lpDes->Serialise(aSer);
-        lppLast->Set(lpCopy);
-        lppLast = &lpCopy->mpNext;
-    }
+        // Copy the 12-byte serialised effect header (mHash, mpDescriptors, mpNext -- console
+        // 3 x 4-byte words) into the buffer; DataStore returns the destination copy.
+        lpEff =
+            reinterpret_cast<cLionParticleEffect*>(aSer.DataStore(this, 12));
 
+        // Rebuild the descriptor chain in the copy: link the first descriptor copy through the
+        // copied effect's head, each subsequent copy through the previous copy's next pointer.
+        tLionSerialisedPtr<cParticleDescriptor>* lppLast = &lpEff->mpDescriptors;
+        for (cParticleDescriptor* lpDes = mpDescriptors.Get(); lpDes != 0;
+             lpDes = lpDes->GetNextDescriptor())
+        {
+            cParticleDescriptor* lpCopy = lpDes->Serialise(aSer);
+            lppLast->Set(lpCopy);
+            lppLast = &lpCopy->mpNext;
+        }
+    }
     return lpEff;
 }
