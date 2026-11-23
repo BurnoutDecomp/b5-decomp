@@ -38,6 +38,7 @@
 #include "GameSource/Game/GameBridgeGameStateToX.h"        // BrnGame::ConvertTrainingTypeToStringId decl
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "SharedClasses/Progression/BrnTrainingTypes.h"    // BrnProgression::ETrainingType
 
 namespace BrnGame
@@ -184,7 +185,7 @@ namespace BrnGame
         const int liType = static_cast<int>(leTrainingType);
 
         CGS_ASSERT(liType >= 0 && liType < BrnProgression::E_TRAINING_TYPE_COUNT,
-                   "leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT");
+                   CgsDev::Assert::MessageAt("leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 160));
 
         if (liType < 128)
         {
@@ -200,7 +201,7 @@ namespace BrnGame
         const int liIndex = liType - 128;
         if (liIndex >= 128)
         {
-            CGS_ASSERT(liIndex < 128, "liIndex < ciNumGeneralTrainingStringIDs");
+            CGS_ASSERT(liIndex < 128, CgsDev::Assert::MessageAt("liIndex < ciNumGeneralTrainingStringIDs", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 169));
             return "ERROR - UNKNOWN TRAINING TYPE";
         }
         return KAC_GENERAL_TRAINING_TEXT[liIndex];

@@ -30,6 +30,7 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"                   // GameStateModuleIO::E_MODE_BURNING_ROUTE / GameActionQueue
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // gpDebugPrint / gxMessageFilterFlags
 #include <cstring>                                                        // std::memset (the record's 3 pad bytes)
 // ---- [progression wave 2026-09-06, lane rivals] ------------------------------------------
@@ -214,7 +215,7 @@ void ProgressionManager::OnPursuitWon(CgsID lRivalId, BrnGameState::GameStateMod
     {
         return;
     }
-    CGS_ASSERT(lpRival != 0, "lpRival != NULL");   // :2410
+    CGS_ASSERT(lpRival != 0, CgsDev::Assert::MessageAt("lpRival != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 2410));   // :2410
 
     RivalData* lpSavedRival = mProfile.FindRival(lRivalId);
     CGS_ASSERT(lpSavedRival != 0, "lpSavedRival");   // :2413
@@ -342,7 +343,7 @@ CgsID ProgressionManager::UnlockRivals(BrnGameState::GameStateModuleIO::GameActi
     for (s32 liIndex = 0; liIndex < lpProgressionData->GetRivalCount(); ++liIndex)
     {
         const Rival* lpRival = lpProgressionData->GetRival(liIndex);   // carries the :468 assert
-        CGS_ASSERT(lpRival != 0, "lpRival");                          // :1096
+        CGS_ASSERT(lpRival != 0, CgsDev::Assert::MessageAt("lpRival", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 1096));                          // :1096
         if (lpRival == 0)
         {
             continue;   // [GUARD] the console reads through it regardless

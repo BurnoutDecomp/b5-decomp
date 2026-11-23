@@ -135,11 +135,6 @@ public:
         // shutdown-takedown zoom blocks.
         void Construct();
 
-        EBehaviourTypeLooseAttachment GetType() const
-        {
-            return static_cast<EBehaviourTypeLooseAttachment>(mType);
-        }
-
         // +0x08..+0x2B is two by-value sub-blocks, not opaque bytes: the behaviour's Update
         // hands &(params +0x08) to PositionLag::Update and &(params +0x1C) to CameraShake::
         // Update. Neither is reached by a Serialise<S> visitor -- the field-walk starts at the
@@ -375,8 +370,8 @@ BehaviourLooseAttachment::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourLooseAttachment,
                CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourLooseAttachment", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h", 164));
-    mpParameters = lpParameters;               // stw r4, +0x324(this)
     SetDebugParametersName(lpParameters->GetDebugName());
+    mpParameters = lpParameters;               // stw r4, +0x324(this)
 }
 
 } // namespace Camera

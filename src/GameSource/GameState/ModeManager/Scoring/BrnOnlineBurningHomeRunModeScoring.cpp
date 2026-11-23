@@ -214,11 +214,10 @@ OnlineBurningHomeRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyst
     ComparisonData laComparisonData[E_ACTIVE_RACE_CAR_INDEX_COUNT];
 
     // Populate one comparison row per active-race-car index from the per-car record.
-    for (s32 liIndex = 0; liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liIndex)
+    for (EActiveRaceCarIndex liIndex = E_ACTIVE_RACE_CAR_INDEX_0; liIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; liIndex++)
     {
-        const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(liIndex);
 
-        CarData* lpCarData = lpScoringSystem->GetCarData(leSlot);
+        CarData* lpCarData = lpScoringSystem->GetCarData(liIndex);
         const GameStateModuleIO::CarScoreData* lpScore =
             (lpCarData != NULL) ? lpCarData->GetScoreData() : &lEmptyScoreData;
 
@@ -236,8 +235,6 @@ OnlineBurningHomeRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyst
 
         // BurnoutConstants.h:39 bound check carried over from the X360 build (post-increment guard:
         // leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT).
-        CGS_ASSERT(liIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
     }
 
     qsort(laComparisonData, E_ACTIVE_RACE_CAR_INDEX_COUNT, sizeof(ComparisonData),

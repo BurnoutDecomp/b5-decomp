@@ -39,7 +39,7 @@ namespace BrnGameState
 void StreetManager::ProcessUploadEvent(
     const GameStateModuleIO::OnlineRoadRulesUploadedEvent* lpUploadedEvent )
 {
-    CGS_ASSERT( lpUploadedEvent, "lpUploadedEvent" );
+    CGS_ASSERT( lpUploadedEvent, CgsDev::Assert::MessageAt("lpUploadedEvent", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3037) );
 
     for ( BrnStreetData::ChallengeIndex liChallengeIndex = lpUploadedEvent->mStartUploadIndex;
           liChallengeIndex < lpUploadedEvent->mEndUploadIndex;

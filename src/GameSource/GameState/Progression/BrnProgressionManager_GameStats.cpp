@@ -48,6 +48,7 @@
 #include "SharedClasses/DataLists/VehicleList.h"                       // VehicleList::GetVehicleIndex / GetVehicleData
 #include "SharedClasses/DataLists/VehicleListEntry.h"                  // IsTrophyCar / GetUnlockRank / GetLiveryType
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // CgsDev::Log::gpDebugPrint
 
 namespace BrnProgression
@@ -97,7 +98,7 @@ u32 ProgressionManager::GetTotalWinsForNextRank()
 
     const ProgressionRankData* lpProgressionRank =
         lpProgressionData->GetProgressionRankData(static_cast<u32>(liRank));
-    CGS_ASSERT(lpProgressionRank != 0, "lpProgressionRank");                // cpp:4159
+    CGS_ASSERT(lpProgressionRank != 0, CgsDev::Assert::MessageAt("lpProgressionRank", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 4159));                // cpp:4159
     if (lpProgressionRank == 0)
     {
         return 0;

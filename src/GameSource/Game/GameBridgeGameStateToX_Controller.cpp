@@ -12,6 +12,7 @@
 #include "GameSource/Game/GameBridgeGameStateToX.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h"  // CgsInput::InputIO::PostWorldInputBuffer / BaseInputEvent
 
 namespace BrnGame
@@ -34,8 +35,8 @@ namespace BrnGame
         const CgsInput::InputIO::PostWorldInputBuffer::UnBindRequestQueue* lpUnbindQueue =
             lpGameStateOutput->GetGameStateToControllerInterface()->GetUnBindRequestQueue();
 
-        CGS_ASSERT(lpBindQueue   != 0, "lpGameStateInputBindRequestQueue");
-        CGS_ASSERT(lpUnbindQueue != 0, "lpGameStateInputUnbindRequestQueue");
+        CGS_ASSERT(lpBindQueue   != 0, CgsDev::Assert::MessageAt("lpGameStateInputBindRequestQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 5055));
+        CGS_ASSERT(lpUnbindQueue != 0, CgsDev::Assert::MessageAt("lpGameStateInputUnbindRequestQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 5056));
 
         // Bind requests: element i carries {word0, word1} (asm ld 8 bytes then split r4/r5).
         const s32 liNumBind = lpBindQueue->GetLength();

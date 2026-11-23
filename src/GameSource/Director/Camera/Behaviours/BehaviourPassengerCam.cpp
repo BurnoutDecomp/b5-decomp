@@ -75,11 +75,13 @@ void BehaviourPassengerCam::Parameters::Construct()
 // tripwire -- the stores happen either way), then store the block pointer and its debug name.
 void BehaviourPassengerCam::SetParameters(const Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == eBehaviourPassengerCam,
-               "lpParameters->GetType() == eBehaviourPassengerCam");
+    // ARTIST 0x821F3A60 fires this at BehaviourPassengerCam.h:124 (an inline of the header).
+    CGS_ASSERT(lpParameters->GetType() == eBehaviourPassengerCam, CgsDev::Assert::MessageAt(
+               "lpParameters->GetType() == eBehaviourPassengerCam",
+               "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourPassengerCam.h", 124));
 
-    mpParameters = lpParameters;                                 // +0x14
     SetDebugParametersName(lpParameters->GetDebugName());        // +0x10
+    mpParameters = lpParameters;                                 // +0x14
 }
 
 // vtable slot 1: a bare `return true`, COMDAT-folded in the console image (hence no symbol of

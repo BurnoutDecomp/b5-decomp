@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                      // CgsSceneManager::EntityId (owner / entity-index decode of the packed crasher word)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                           // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include <cstring>                                                                  // std::memset (the residue-zeroed action records)
 #include <cstdlib>                                                                  // std::getenv ([td-detect] PC witness switch)
@@ -121,12 +122,12 @@ namespace BrnGameState
                                  GameStateModuleIO::OutputBuffer* lpOutput,
                                  TrafficTypeResponseQueue* lpLastTrafficTypeResponseQueue)
     {
-        CGS_ASSERT(lpActiveCarInterface != 0,           "lpActiveCarInterface != NULL");            // :180
-        CGS_ASSERT(lpRaceCarCrashEventQueue != 0,       "lpRaceCarCrashEventQueue != NULL");        // :181
-        CGS_ASSERT(lpCrashingVehicleInterface != 0,     "lpCrashingVehicleInterface != NULL");      // :182
-        CGS_ASSERT(lpInput != 0,                        "lpInput != NULL");                         // :183
-        CGS_ASSERT(lpOutput != 0,                       "lpOutput != NULL");                        // :184
-        CGS_ASSERT(lpLastTrafficTypeResponseQueue != 0, "lpLastTrafficTypeResponseQueue != NULL");  // :185
+        CGS_ASSERT(lpActiveCarInterface != 0,           CgsDev::Assert::MessageAt("lpActiveCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 180));            // :180
+        CGS_ASSERT(lpRaceCarCrashEventQueue != 0,       CgsDev::Assert::MessageAt("lpRaceCarCrashEventQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 181));        // :181
+        CGS_ASSERT(lpCrashingVehicleInterface != 0,     CgsDev::Assert::MessageAt("lpCrashingVehicleInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 182));      // :182
+        CGS_ASSERT(lpInput != 0,                        CgsDev::Assert::MessageAt("lpInput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 183));                         // :183
+        CGS_ASSERT(lpOutput != 0,                       CgsDev::Assert::MessageAt("lpOutput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 184));                        // :184
+        CGS_ASSERT(lpLastTrafficTypeResponseQueue != 0, CgsDev::Assert::MessageAt("lpLastTrafficTypeResponseQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 185));  // :185
         // (lpCrashingVehicleInterface is asserted and then never read -- as on the console.)
 
         UpdateTakedownTimes(lpActiveCarInterface, lfDeltaTime);
@@ -349,7 +350,7 @@ namespace BrnGameState
         CGS_ASSERT(leAggressorActiveRaceCarIndex != leVictimActiveRaceCarIndex,
                    "leAggressorActiveRaceCarIndex != leVictimActiveRaceCarIndex");                 // :533
         CGS_ASSERT(leAggressorActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
-                   "leAggressorActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID");            // :534
+                   CgsDev::Assert::MessageAt("leAggressorActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 534));            // :534
 
         if (!lpActiveCarInterface->IsRaceCarActive(GlobalIndex(leAggressorActiveRaceCarIndex)))
         {
@@ -431,15 +432,15 @@ namespace BrnGameState
             lTakedownEvent.meType              = lrQueuedEvent.meType;
 
             CGS_ASSERT(lTakedownEvent.meAggressorIndex != lTakedownEvent.meVictimIndex,
-                       "lTakedownEvent.meAggressorIndex != lTakedownEvent.meVictimIndex");          // :633
+                       CgsDev::Assert::MessageAt("lTakedownEvent.meAggressorIndex != lTakedownEvent.meVictimIndex", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 633));          // :633
             CGS_ASSERT(lTakedownEvent.meAggressorIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                       "lTakedownEvent.meAggressorIndex >= E_ACTIVE_RACE_CAR_INDEX_0");             // :634
+                       CgsDev::Assert::MessageAt("lTakedownEvent.meAggressorIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 634));             // :634
             CGS_ASSERT(lTakedownEvent.meAggressorIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       "lTakedownEvent.meAggressorIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");          // :635
+                       CgsDev::Assert::MessageAt("lTakedownEvent.meAggressorIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 635));          // :635
             CGS_ASSERT(lTakedownEvent.meVictimIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                       "lTakedownEvent.meVictimIndex >= E_ACTIVE_RACE_CAR_INDEX_0");                // :636
+                       CgsDev::Assert::MessageAt("lTakedownEvent.meVictimIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 636));                // :636
             CGS_ASSERT(lTakedownEvent.meVictimIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       "lTakedownEvent.meVictimIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");             // :637
+                       CgsDev::Assert::MessageAt("lTakedownEvent.meVictimIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 637));             // :637
 
             ProcessTakedownEvent(lpInput, lpActiveCarInterface, lpOutput, &lTakedownEvent);
 
@@ -506,7 +507,7 @@ namespace BrnGameState
                                                RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface,
                                                GameStateModuleIO::OutputBuffer* lpOutput, TakedownEvent* lpTakedownEvent)
     {
-        CGS_ASSERT(lpTakedownEvent->meType != E_TAKEDOWN_NONE, "lpTakedownEvent->meType != E_TAKEDOWN_NONE");  // :721
+        CGS_ASSERT(lpTakedownEvent->meType != E_TAKEDOWN_NONE, CgsDev::Assert::MessageAt("lpTakedownEvent->meType != E_TAKEDOWN_NONE", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 721));  // :721
 
         const EActiveRaceCarIndex leAggressorActiveRaceCarIndex = lpTakedownEvent->meAggressorIndex;
         const EActiveRaceCarIndex leVictimActiveRaceCarIndex    = lpTakedownEvent->meVictimIndex;
@@ -635,9 +636,9 @@ namespace BrnGameState
             }
         }
 
-        CGS_ASSERT(liResponseIndex < lpResponseQueue->GetLength(), "Missing traffic vehicle check!");   // :842
+        CGS_ASSERT(liResponseIndex < lpResponseQueue->GetLength(), CgsDev::Assert::MessageAt("Missing traffic vehicle check!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 842));   // :842
         CGS_ASSERT(lVehicleClass >= 0 && lVehicleClass < BrnTraffic::E_VEHICLECLASS_COUNT,
-                   "lVehicleClass >= 0 && lVehicleClass < BrnTraffic::E_VEHICLECLASS_COUNT");          // :845
+                   CgsDev::Assert::MessageAt("lVehicleClass >= 0 && lVehicleClass < BrnTraffic::E_VEHICLECLASS_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 845));          // :845
 
         ETakedownType leTakedownType;
         switch (lVehicleClass)

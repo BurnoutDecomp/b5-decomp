@@ -181,25 +181,21 @@ void OnlineRaceModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s
     IndexToFinishTuple laFinishTuples[E_ACTIVE_RACE_CAR_INDEX_COUNT];
 
     // ---- gather phase: one row per active-race-car slot ------------------------------------
-    for (s32 leEnumIndex = 0; leEnumIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++leEnumIndex)
+    for (EActiveRaceCarIndex leEnumIndex = E_ACTIVE_RACE_CAR_INDEX_0; leEnumIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leEnumIndex++)
     {
-        const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(leEnumIndex);
 
-        CarData* lpCarData = lpScoringSystem->GetCarData(leSlot);
+        CarData* lpCarData = lpScoringSystem->GetCarData(leEnumIndex);
         const GameStateModuleIO::CarScoreData* lpScore =
             (lpCarData != NULL) ? lpCarData->GetScoreData() : &lDefaultScoreData;
 
         IndexToFinishTuple& lTuple = laFinishTuples[leEnumIndex];
-        lTuple.meRaceCarIndex     = leSlot;
+        lTuple.meRaceCarIndex     = leEnumIndex;
         lTuple.mNetworkPlayerID   = (lpCarData != NULL) ? lpCarData->GetNetworkPlayerID() : -1;
         lTuple.mFinishTime        = lpScore->GetFinishTime();
         lTuple.mfDistanceToFinish = lpScore->GetDistanceToFinish();
         lTuple.mbTimedOut         = lpScore->GetTimedOut();
         lTuple.mbDisconnected     = lpScore->GetDisconnected();
         // mbFinished is left at its gather default; the sort derives "finished" from mFinishTime.
-
-        CGS_ASSERT(leEnumIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
     }
 
     // ---- sort into finishing order ---------------------------------------------------------

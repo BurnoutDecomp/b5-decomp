@@ -58,17 +58,13 @@ s32 OnlineStuntRunModeScoring::GetNumPlayersOnTeam(s32 liTeam, const ScoringSyst
 {
     s32 liNumPlayers = 0;
 
-    for (s32 leEnumIndex = 0; leEnumIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++leEnumIndex)
+    for (EActiveRaceCarIndex leEnumIndex = E_ACTIVE_RACE_CAR_INDEX_0; leEnumIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leEnumIndex++)
     {
-        const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(leEnumIndex);
-        const CarData* lpCarData = lpScoringSystem->GetCarData(leSlot);
+        const CarData* lpCarData = lpScoringSystem->GetCarData(leEnumIndex);
         if (lpCarData != NULL && static_cast<s32>(lpCarData->GetTeam()) == liTeam)
         {
             ++liNumPlayers;
         }
-
-        CGS_ASSERT(leEnumIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
     }
 
     return liNumPlayers;
@@ -108,17 +104,13 @@ s32 OnlineStuntRunModeScoring::GetTeamScore(s32 liTeam, const ScoringSystem* lpS
 {
     s32 liTeamScore = 0;
 
-    for (s32 leEnumIndex = 0; leEnumIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++leEnumIndex)
+    for (EActiveRaceCarIndex leEnumIndex = E_ACTIVE_RACE_CAR_INDEX_0; leEnumIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; leEnumIndex++)
     {
-        const EActiveRaceCarIndex leSlot = static_cast<EActiveRaceCarIndex>(leEnumIndex);
-        const CarData* lpCarData = lpScoringSystem->GetCarData(leSlot);
+        const CarData* lpCarData = lpScoringSystem->GetCarData(leEnumIndex);
         if (lpCarData != NULL && static_cast<s32>(lpCarData->GetTeam()) == liTeam)
         {
             liTeamScore += lpCarData->GetScoreData()->GetOnlineStuntScore();
         }
-
-        CGS_ASSERT(leEnumIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
     }
 
     return liTeamScore;

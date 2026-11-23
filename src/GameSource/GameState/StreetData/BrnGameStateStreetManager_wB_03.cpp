@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cstring>   // memcpy
 
@@ -72,7 +73,7 @@ namespace BrnGameState
     void StreetManager::CopyUserChallengeData( BrnStreetData::ChallengePlayerScoreEntry* lpDest,
                                                s32 liSizeInBytes )
     {
-        CGS_ASSERT( lpDest, "lpDest" );
+        CGS_ASSERT( lpDest, CgsDev::Assert::MessageAt("lpDest", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3941) );
 
         if ( liSizeInBytes >= static_cast<s32>( sizeof( maChallengeData ) ) )
         {

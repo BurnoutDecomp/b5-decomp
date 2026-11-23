@@ -393,11 +393,12 @@ CollisionPolicy* BehaviourGameplayExternal::GetCollisionPolicy()
 // ============================================================================
 void BehaviourGameplayExternal::SetParameters(const Behaviour::Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == static_cast<u32>(eBehaviourGameplayExternal),
-               "lpParameters->GetType() == eBehaviourGameplayExternal");
+    CGS_ASSERT(lpParameters->GetType() == static_cast<u32>(eBehaviourGameplayExternal), CgsDev::Assert::MessageAt(
+               "lpParameters->GetType() == eBehaviourGameplayExternal",
+               "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourGameplayExternal.cpp", 138));
 
-    mpParameters = static_cast<const Parameters*>(lpParameters);   // v3[704] = a2
     SetDebugParametersName(lpParameters->GetDebugName());          // v3[4]   = a2[1]
+    mpParameters = static_cast<const Parameters*>(lpParameters);   // v3[704] = a2
 }
 
 // ----------------------------------------------------------------------------

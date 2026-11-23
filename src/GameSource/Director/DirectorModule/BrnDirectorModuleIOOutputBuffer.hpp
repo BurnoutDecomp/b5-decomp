@@ -82,6 +82,7 @@ namespace DirectorIO
         // The generic PC CreateIOBuffer<T> template only placement-news, so every creation
         // site calls this explicitly -- same restoration as the GUI input buffer's Construct.
         void Construct();
+        void Destruct();    // DWARF BrnDirectorModuleIO.h:393; the base teardown (X360 0x822DC3D0, folded)
 
         // --- read-lock-asserted getters (return &member) ---
         // X360 0x823B33B0 -> mResourceInterface @0x02E0. The consumer is

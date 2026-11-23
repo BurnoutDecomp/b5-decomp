@@ -5,6 +5,7 @@
 #include "GameSource/GameState/BrnGameStateModule.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // AddEvent
 #include "GameSource/GameState/BrnGameActions.h"                         // RivalryOverviewAction
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"      // ProgressionManager
@@ -17,11 +18,11 @@ namespace BrnGameState
 
 void GameStateModule::SendAllRivalryData(GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    CGS_ASSERT(mProgressionManager.GetProgressionData(), "mProgressionManager.GetProgressionData()");
+    CGS_ASSERT(mProgressionManager.GetProgressionData(), CgsDev::Assert::MessageAt("mProgressionManager.GetProgressionData()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 4822));
     BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
-    CGS_ASSERT(lpProfile, "mProgressionManager.GetProfile()");
+    CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("mProgressionManager.GetProfile()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 4823));
     CGS_ASSERT(BrnProgression::Profile::KI_MAX_RIVAL_COUNT > mProgressionManager.GetProgressionData()->GetRivalCount(),
-               "BrnProgression::Profile::KI_MAX_RIVAL_COUNT > mProgressionManager.GetProgressionData()->GetRivalCount()");
+               CgsDev::Assert::MessageAt("BrnProgression::Profile::KI_MAX_RIVAL_COUNT > mProgressionManager.GetProgressionData()->GetRivalCount()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 4824));
 
     GameStateModuleIO::RivalryOverviewAction lRivalryOverview;
     lRivalryOverview.miRivalsReturned = mProgressionManager.GetProgressionData()->GetRivalCount();

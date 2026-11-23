@@ -35,6 +35,7 @@
 //     EXACTLY 0 to fire once.
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/BrnGameStateModule.h"                    // GetTakedownManager (arm 13)
 
 #include "GameSource/GameState/BrnGameStateModule.h"              // GetPlayerActiveRaceCarIndex, meControllerState
@@ -173,7 +174,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     (void)lpPlayerStatusInterface;
     (void)lbIsOnline;
 
-    CGS_ASSERT(mpCurrentGameMode != 0, "mpCurrentGameMode != NULL");   // BrnModeManager.cpp:1814
+    CGS_ASSERT(mpCurrentGameMode != 0, CgsDev::Assert::MessageAt("mpCurrentGameMode != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1814));   // BrnModeManager.cpp:1814
 
     // ---- (1) the delayed showtime mode-switch broadcast (hazards H6 latch 3) -------------------
     // PrepareForMode sets this to 30 for modes 2 / 16 only; it must reach EXACTLY 0 to fire once.
@@ -260,7 +261,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
     //   r24 = *(r27+16), f29 = *(r27+20)  == TimerStatus::GetTime()
     // IDA renders the null check as `if (a1 == -28088)`; it is the inlined assert of the accessor.
     const CgsSystem::TimerStatus* lpSimTimerStatus = mTimerStatusInterface.GetSimTimerStatus();
-    CGS_ASSERT(lpSimTimerStatus != 0, "lpSimTimerStatus");   // BrnModeManager.cpp:1839
+    CGS_ASSERT(lpSimTimerStatus != 0, CgsDev::Assert::MessageAt("lpSimTimerStatus", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1839));   // BrnModeManager.cpp:1839
 
     const f32 lfTimeStepSeconds = lpSimTimerStatus->GetCurrentTimeStep();
 
@@ -475,7 +476,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
             // host -- recorded here rather than written as a tautological CGS_ASSERT, exactly as the
             // BURNING_ROUTE arm above does with its own :1977 twin.
             CGS_ASSERT(mCurrentGameModeParams.GetOnlineTimeLimit() > 0.0f,
-                       "lpGameModeParams->GetOnlineTimeLimit() > 0.0f");             // :2010
+                       CgsDev::Assert::MessageAt("lpGameModeParams->GetOnlineTimeLimit() > 0.0f", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2010));             // :2010
             mScoringSystem.SetTimeLimitSeconds(mCurrentGameModeParams.GetOnlineTimeLimit());
             break;
 
@@ -577,7 +578,7 @@ void ModeManager::UpdateCurrentMode(GameStateModuleIO::OutputBuffer*            
             }
             else if (mScoringSystem.HasModeTimeExpired(lCurrentTime))
             {
-                CGS_ASSERT(!mbIsInTimeUpOutro, "!mbIsInTimeUpOutro");   // BrnModeManager.cpp:2135
+                CGS_ASSERT(!mbIsInTimeUpOutro, CgsDev::Assert::MessageAt("!mbIsInTimeUpOutro", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2135));   // BrnModeManager.cpp:2135
 
                 mbIsInTimeUpOutro  = true;
                 mfTimeUpStateTimer = KF_TIME_UP_OUTRO_SECONDS;
@@ -711,7 +712,7 @@ void ModeManager::CheckCountdownDisplay(GameStateModuleIO::GameActionQueue* lpGa
 {
     // The console inlines IsInGameMode() as `if (!mpCurrentGameMode)`; the assert string names the
     // predicate, so it is de-inlined back into the real call.
-    CGS_ASSERT(IsInGameMode(), "IsInGameMode()");   // BrnModeManager.cpp:2449
+    CGS_ASSERT(IsInGameMode(), CgsDev::Assert::MessageAt("IsInGameMode()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2449));   // BrnModeManager.cpp:2449
 
     s32 liNewCountdownDisplay = 0;
     if (mpCurrentGameMode->HasCountdownDisplayChanged(&liNewCountdownDisplay))
@@ -741,7 +742,7 @@ void ModeManager::UpdateCheckpointDistanceRequests(GameStateModuleIO::GameAction
     }
 
     CGS_ASSERT(muNextDistanceRequestCheckpoint < (muNumLandmarks - 1),
-               "muNextDistanceRequestCheckpoint < muNumLandmarks - 1");   // BrnModeManager.cpp:2288
+               CgsDev::Assert::MessageAt("muNextDistanceRequestCheckpoint < muNumLandmarks - 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2288));   // BrnModeManager.cpp:2288
 
     const u32 luCheckpoint = muNextDistanceRequestCheckpoint;
 
@@ -758,8 +759,8 @@ void ModeManager::UpdateCheckpointDistanceRequests(GameStateModuleIO::GameAction
     const BrnTrigger::Landmark* lpDestinationLandmark =
         GetCheckpointTriggerData()->GetLandmarkFromRegionIndex(liDestinationRegionIndex);
 
-    CGS_ASSERT(lpCurrentLandmark != 0, "lpCurrentLandmark");           // BrnModeManager.cpp:2297
-    CGS_ASSERT(lpDestinationLandmark != 0, "lpDestinationLandmark");   // BrnModeManager.cpp:2298
+    CGS_ASSERT(lpCurrentLandmark != 0, CgsDev::Assert::MessageAt("lpCurrentLandmark", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2297));           // BrnModeManager.cpp:2297
+    CGS_ASSERT(lpDestinationLandmark != 0, CgsDev::Assert::MessageAt("lpDestinationLandmark", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2298));   // BrnModeManager.cpp:2298
 
     GameStateModuleIO::LandmarkRouteRequestEvent lRouteRequest;
     std::memset(&lRouteRequest, 0, sizeof(lRouteRequest));   // +0x28..+0x2F / +0x46.. are never stored (stack residue)
@@ -826,9 +827,9 @@ void ModeManager::UpdateCheckpointDistanceRequests(GameStateModuleIO::GameAction
 //                           mbIsCalculatingCheckpointDistances (+0x8C0D) = 0, mbNeedToSendNextRequest = 0
 void ModeManager::HandleCheckpointDistanceResponse(const GameStateModuleIO::ModeManagerRouteInfoEvent* lpRouteInfoEvent)
 {
-    CGS_ASSERT(muNumLandmarks > 1, "muNumLandmarks > 1");                                          // BrnModeManager.cpp:2331
+    CGS_ASSERT(muNumLandmarks > 1, CgsDev::Assert::MessageAt("muNumLandmarks > 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2331));                                          // BrnModeManager.cpp:2331
     CGS_ASSERT(muNextDistanceRequestCheckpoint < muNumLandmarks,
-               "muNextDistanceRequestCheckpoint < muNumLandmarks");                                // BrnModeManager.cpp:2332
+               CgsDev::Assert::MessageAt("muNextDistanceRequestCheckpoint < muNumLandmarks", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2332));                                // BrnModeManager.cpp:2332
 
     if (lpRouteInfoEvent->miEventId == static_cast<s32>(muNextDistanceRequestCheckpoint))
     {
@@ -860,7 +861,7 @@ void ModeManager::HandleCheckpointDistanceResponse(const GameStateModuleIO::Mode
 // FinishCurrentMode for the next update.
 void ModeManager::PlayerFinishedMode(const GameStateModuleIO::PlayerFinishedModeEvent* lpEvent)
 {
-    CGS_ASSERT(lpEvent != 0, "lpPlayerFinishedModeEvent");   // BrnModeManager.cpp:2875
+    CGS_ASSERT(lpEvent != 0, CgsDev::Assert::MessageAt("lpPlayerFinishedModeEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2875));   // BrnModeManager.cpp:2875
 
     // [x] H4 SETTLED (closure round 2026-08-26) -- THIS BODY IS THE WRITER THAT DECIDED IT.
     // The console sets 0x94FD from the event's mbTimedOut and 0x94FE from its mbCarDestroyed, and
@@ -949,14 +950,14 @@ void ModeManager::HandleOnlineTeamModes(const GameStateModuleIO::PreWorldInputBu
         return;
     }
 
-    CGS_ASSERT(lpInput != NULL, "lpInput");     // BrnModeManager.cpp:4383
+    CGS_ASSERT(lpInput != NULL, CgsDev::Assert::MessageAt("lpInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4383));     // BrnModeManager.cpp:4383
     CGS_ASSERT(lpOutput != NULL, "lpOutput");   // BrnModeManager.cpp:4384
 
     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpPlayerStatusInterface =
         lpInput->GetPlayerStatusInterface();
     GameStateModuleIO::GameActionQueue* lpActionQueue = lpOutput->GetGameActionQueue();
 
-    CGS_ASSERT(lpPlayerStatusInterface != NULL, "lpPlayerStatusInterface");   // BrnModeManager.cpp:4388
+    CGS_ASSERT(lpPlayerStatusInterface != NULL, CgsDev::Assert::MessageAt("lpPlayerStatusInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4388));   // BrnModeManager.cpp:4388
     CGS_ASSERT(lpActionQueue != NULL, "lpActionQueue");                       // BrnModeManager.cpp:4389
 
     HandleOnlineTeamTakedowns(lpPlayerStatusInterface, lpTakedownQueue, lpActionQueue);
@@ -994,7 +995,7 @@ void ModeManager::HandleOnlineTeamTakedowns(const BrnNetwork::BrnNetworkModuleIO
                                             GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     ScoringSystem* lpScoringSystem = GetScoringSystem();                 // addi r24, r22, 0xDB0
-    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");      // BrnModeManager.cpp:4434
+    CGS_ASSERT(lpScoringSystem != NULL, CgsDev::Assert::MessageAt("lpScoringSystem != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4434));      // BrnModeManager.cpp:4434
     const ScoringSystem& lrScoringSystem = *lpScoringSystem;             // the const GetCarData twin (0x8231DCD0)
 
     s32 liNumBlueTeamPlayersLeft = 0;                                    // r23
@@ -1077,7 +1078,7 @@ void ModeManager::HandleOnlineTeamTakedowns(const BrnNetwork::BrnNetworkModuleIO
 void ModeManager::HandleOnlineTeamCheckForModeFinished()
 {
     ScoringSystem* lpScoringSystem = GetScoringSystem();                 // addi r30, r24, 0xDB0
-    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");      // BrnModeManager.cpp:4557
+    CGS_ASSERT(lpScoringSystem != NULL, CgsDev::Assert::MessageAt("lpScoringSystem != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4557));      // BrnModeManager.cpp:4557
     const ScoringSystem& lrScoringSystem = *lpScoringSystem;
 
     const s32 liNumActiveCars = static_cast<s32>(lpScoringSystem->GetNumberOfActiveCars());
@@ -1120,7 +1121,7 @@ void ModeManager::HandleOnlineTeamCheckForModeFinished()
 void ModeManager::HandleOnlineBurningHomeRunCheckForModeFinished()
 {
     ScoringSystem* lpScoringSystem = GetScoringSystem();                 // addi r27, r28, 0xDB0
-    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");      // BrnModeManager.cpp:4616
+    CGS_ASSERT(lpScoringSystem != NULL, CgsDev::Assert::MessageAt("lpScoringSystem != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4616));      // BrnModeManager.cpp:4616
 
     const s32 liNumActiveCars = static_cast<s32>(lpScoringSystem->GetNumberOfActiveCars());
     if (liNumActiveCars <= 0)

@@ -173,14 +173,14 @@ void StuntModeScoring::DealWithStunt(const GameStateModuleIO::WorldStuntAction* 
                 break;
 
             default:  // >= E_STUNT_ELEMENT_TYPE_COUNT (3)
-                CGS_ASSERT(false, "Unknown world stunt type.");
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown world stunt type.", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1247));
                 break;
         }
 
         if (lbScored)
         {
             CGS_ASSERT(mRecentStuntElementSet.GetLength() < mRecentStuntElementSet.GetCapacity(),
-                       "mRecentStuntElementSet.GetLength() < mRecentStuntElementSet.GetCapacity()");
+                       CgsDev::Assert::MessageAt("mRecentStuntElementSet.GetLength() < mRecentStuntElementSet.GetCapacity()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1254));
             mRecentStuntElementSet.Insert(lElementId);
         }
     }

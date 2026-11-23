@@ -34,6 +34,7 @@
 // ============================================================================
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cstddef>   // offsetof (the action-record layout pins)
 #include <cstdlib>   // getenv (the [showtime] BRN_SHOWTIME_DIAG witness)
@@ -247,7 +248,7 @@ void ModeManager::StartGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     meCurrentGameModeType = lpStartGameModeParams->GetGameModeType();
     CGS_ASSERT(meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE &&
                    static_cast<s32>(meCurrentGameModeType) < KI_GAME_MODE_SLOTS,
-               "( meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE ) && ( meCurrentGameModeType < GameStateModuleIO::E_MODE_COUNT )");
+               CgsDev::Assert::MessageAt("( meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE ) && ( meCurrentGameModeType < GameStateModuleIO::E_MODE_COUNT )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1073));
 
     // hazards H3: slots 6 (E_MODE_ELIMINATOR) and 9 (E_MODE_TRAFFIC_ATTACK) are AUTHORED NULLS.
     // Dispatching into them is a null call and THIS is the assert the console fires. Keep it.
@@ -540,7 +541,7 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
                                        bool                                lbTimedOut,
                                        GameStateModuleIO::EGameModeType    leNextGameModeType)
 {
-    CGS_ASSERT(mpNetworkRoundManager != NULL, "mpNetworkRoundManager");   // BrnModeManager.cpp:3695
+    CGS_ASSERT(mpNetworkRoundManager != NULL, CgsDev::Assert::MessageAt("mpNetworkRoundManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3695));   // BrnModeManager.cpp:3695
 
     // ---- the 24-byte action-39 summary (StopModeAction, BrnGameActions.h:1114) --------------
     // Field identities below are new this wave: BrnGameActions.h currently marks +0x08 / +0x10 /

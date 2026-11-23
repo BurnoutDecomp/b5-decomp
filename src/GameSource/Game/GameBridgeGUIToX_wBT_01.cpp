@@ -1,5 +1,6 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"                    // CgsGuiModuleIO::OutputBuffer (out events + game actions)
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"            // CgsGui::ModelIO::OutputBuffer::GetGuiResourceRequestQueue
 #include "GameShared/GameClasses/Module/CgsBaseEventReceiverQueue.h"      // EventReceiverQueue<256,16> -> BaseEventReceiverQueue
@@ -84,7 +85,7 @@ namespace BrnGame
                 else if (luRequest == CollisionWorldEvent::E_COLLISON_WORLD_VALIDATE)
                     lpWorldInput->GetWorldEntityRequestInterface()->ValidateCollisionWorld();
                 else
-                    CGS_ASSERT(false, "Invalid collsion world request event type");
+                    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid collsion world request event type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGUIToX.cpp", 1409));
             }
             liEventType = lpGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
         }

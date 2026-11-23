@@ -20,6 +20,7 @@
 #include "SharedClasses/StreetData/BrnStreetData.h"                     // StreetData / Road / RoadIndex / ChallengeIndex
 #include "SharedClasses/StreetData/BrnChallengeData.h"                  // ChallengePlayerScoreEntry / ChallengeParScoresEntry
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGameState
 {
@@ -124,7 +125,7 @@ namespace BrnGameState
 
                 mfTimeScoreTimeout = static_cast<f32>(liParScore) * (1.0f / KF_SECONDS_TO_MILLISECONDS)
                                    * KF_TIME_RULE_TIMEOUT_PROPORTION;
-                CGS_ASSERT(mfTimeScoreTimeout > 0.0f, "mfTimeScoreTimeout > 0.0f");
+                CGS_ASSERT(mfTimeScoreTimeout > 0.0f, CgsDev::Assert::MessageAt("mfTimeScoreTimeout > 0.0f", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 1072));
 
                 liBestScore = KI_DEFAULT_ONLINE_TIME;
                 if (lUserScoreData.ContainsData(BrnStreetData::E_SCORE_TYPE_TIME))
@@ -324,7 +325,7 @@ namespace BrnGameState
         BrnStreetData::ChallengePlayerScoreEntry lChallengeData;
         const BrnStreetData::RoadIndex           liRoadIndex = maiChallengeRoadIndex[leScoreType];
 
-        CGS_ASSERT(IsValidRoad(liRoadIndex), "IsValidRoad( liRoadIndex )");
+        CGS_ASSERT(IsValidRoad(liRoadIndex), CgsDev::Assert::MessageAt("IsValidRoad( liRoadIndex )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 1296));
 
         lChallengeData.Construct();
 
@@ -340,11 +341,11 @@ namespace BrnGameState
                 break;
 
             default:
-                CGS_ASSERT(false, "Unknown road rule type");
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown road rule type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 1318));
                 break;
         }
 
-        CGS_ASSERT(mpStreetManager, "mpStreetManager");
+        CGS_ASSERT(mpStreetManager, CgsDev::Assert::MessageAt("mpStreetManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 1324));
         mpStreetManager->ProcessNewRoadScore(lpOutputBuffer, lChallengeData, leScoreType, liRoadIndex, mbIsOnlineMode);
 
         mpModeManager->ProcessNewRoadScore(lpOutputBuffer, lChallengeData, leScoreType,

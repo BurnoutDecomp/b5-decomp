@@ -20,6 +20,7 @@
 #include "SharedClasses/StreetData/BrnStreetData.h"                      // KI_INVALID_ROAD_INDEX, ScoreType
 #include "SharedClasses/DataLists/ChallengeListEntry.h"                  // EFreeburnChallengeStyle
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // the opt-in witness below
 #include <cstdlib>                                                       // getenv
 
@@ -186,7 +187,7 @@ void RoadRulesManager::UpdateActiveRoadRule(GameStateModuleIO::OutputBuffer*    
             break;
 
         default:
-            CGS_ASSERT(false, "How did it end up here?");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("How did it end up here?", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 474));
             break;
     }
 
@@ -231,7 +232,7 @@ void RoadRulesManager::Update(const GameStateModuleIO::ControllerInput*         
     (void)lbInAir;
     (void)lbPlayerIsCrashing;
 
-    CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
+    CGS_ASSERT(lpOutputBuffer, CgsDev::Assert::MessageAt("lpOutputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 204));
     GameStateModuleIO::GameActionQueue* lpGameActionQueue = lpOutputBuffer->GetGameActionQueue();
 
     // Showtime is over: score the crash rule.

@@ -52,8 +52,8 @@ void StreetManager::Update( bool lbIsAnythingPaused,
 {
     mStreetManagerDebugComponent.Update( lpOutput );
 
-    CGS_ASSERT( lpInput, "lpInput" );
-    CGS_ASSERT( lpInput->GetNetworkToGameStateInterface(), "lpInput->GetNetworkToGameStateInterface()" );
+    CGS_ASSERT( lpInput, CgsDev::Assert::MessageAt("lpInput", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 466) );
+    CGS_ASSERT( lpInput->GetNetworkToGameStateInterface(), CgsDev::Assert::MessageAt("lpInput->GetNetworkToGameStateInterface()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 467) );
 
     if ( !lbCurrentGameModeDisablesUpcoming )
     {

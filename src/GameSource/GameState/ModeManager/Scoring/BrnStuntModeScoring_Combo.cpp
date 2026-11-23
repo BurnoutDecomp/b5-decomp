@@ -2,6 +2,7 @@
 
 #include "GameSource/GameState/BrnGameActions.h"      // GameStateModuleIO action types (parity with sibling bodies)
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [stunt] the running-total witness rung
 #include <cstdlib>                                          // getenv (BRN_STUNT_DIAG)
 
@@ -104,10 +105,10 @@ void StuntModeScoring::BeginCombo()
 
     // X360 lfs 0x1C -> RwMathFPU::IsZero assert (BrnStuntModeScoring.cpp:1460).
     CGS_ASSERT(RwMathFPU_IsZero(mfPendingGuaranteedScore),
-               "RwMathFPU::IsZero(mfPendingGuaranteedScore)");
+               CgsDev::Assert::MessageAt("RwMathFPU::IsZero(mfPendingGuaranteedScore)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1460));
     // X360 lfs 0x18 -> RwMathFPU::IsZero assert (BrnStuntModeScoring.cpp:1461).
     CGS_ASSERT(RwMathFPU_IsZero(mfPendingNonGuaranteedScore),
-               "RwMathFPU::IsZero(mfPendingNonGuaranteedScore)");
+               CgsDev::Assert::MessageAt("RwMathFPU::IsZero(mfPendingNonGuaranteedScore)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1461));
 }
 
 // ----------------------------------------------------------------------------
@@ -231,7 +232,7 @@ void StuntModeScoring::UpdateCombo(f32 lfDelta, const ActiveRaceCarOutputInterfa
 // Reconstructed store-for-store from the X360 asm.
 s32 StuntModeScoring::BankMultiplier(StuntInfo* lpRecentStunt)
 {
-    CGS_ASSERT(lpRecentStunt, "lpRecentStunt");  // X360 cmplwi r31,0 -> FireAssert ...:503
+    CGS_ASSERT(lpRecentStunt, CgsDev::Assert::MessageAt("lpRecentStunt", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 503));  // X360 cmplwi r31,0 -> FireAssert ...:503
 
     MultiplierOutInfo loMultiplierOutInfo;       // X360 24-byte stack record [sp+...] BYREF
     // X360: result = (*(*this + 0x28))(this, lpRecentStunt, &loMultiplierOutInfo)  (virtual CalculateMultiplier).
@@ -281,7 +282,7 @@ s32 StuntModeScoring::CalculateMultiplier(const StuntInfo* lpStuntInfo,
                            + liFlatSpinBonus
                            + static_cast<s32>(luBarrelRolls);
 
-    CGS_ASSERT(lpMultiplierOutInfo, "lpMultiplierOutInfo");  // X360 cmplwi r30,0 -> FireAssert ...:537
+    CGS_ASSERT(lpMultiplierOutInfo, CgsDev::Assert::MessageAt("lpMultiplierOutInfo", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 537));  // X360 cmplwi r30,0 -> FireAssert ...:537
 
     if ((luAwesome & 0x04u) == 0x04u)   // X360 rlwinm 0,29,29; cmplwi 4
     {

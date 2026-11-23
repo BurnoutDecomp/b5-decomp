@@ -86,8 +86,8 @@ public:
     {
         CGS_ASSERT(lpParameters->GetType() == eBehaviourFixedCam,
                    CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourFixedCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFixedCam.h", 124));   // h:124
-        mpParameters = lpParameters;                                    // stw r4, 0x2A0(this)
         SetDebugParametersName(lpParameters->GetDebugName());          // lwz 4(lp) ; stw 0x10(this)
+        mpParameters = lpParameters;                                    // stw r4, 0x2A0(this)
     }
 
     // ---- the virtual interface (vtable off_8200A620) ------------------------------------------

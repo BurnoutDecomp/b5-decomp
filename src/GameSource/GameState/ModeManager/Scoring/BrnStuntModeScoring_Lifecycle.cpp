@@ -4,6 +4,7 @@
 #include "GameSource/GameState/BrnGameActions.h"       // GameStateModuleIO action types (WorldStuntAction etc.)
 #include "GameSource/GameState/BrnGameStateTypes.h"    // BrnGameState::EStuntType
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // ============================================================================
 // BrnStuntModeScoring_Lifecycle.cpp
@@ -110,11 +111,11 @@ void StuntModeScoring::Construct(AchievementManager* lpAchievementManager)
 //   *(v2+45) = 1  -> mbInitialDriftOngoing (0x2D)
 void StuntModeScoring::Activate(s32 liTargetScore)
 {
-    CGS_ASSERT(miCurrentScore == 0, "miCurrentScore == 0");
-    CGS_ASSERT(RwMathFPU_IsZero(mfComboScore), "RwMathFPU::IsZero(mfComboScore)");
-    CGS_ASSERT(miComboMultiplier == 1, "miComboMultiplier == 1");
-    CGS_ASSERT(!mbTimeLimitExpired, "!mbTimeLimitExpired");
-    CGS_ASSERT(!mbPlayerCarCrashing, "!mbPlayerCarCrashing");
+    CGS_ASSERT(miCurrentScore == 0, CgsDev::Assert::MessageAt("miCurrentScore == 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 655));
+    CGS_ASSERT(RwMathFPU_IsZero(mfComboScore), CgsDev::Assert::MessageAt("RwMathFPU::IsZero(mfComboScore)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 656));
+    CGS_ASSERT(miComboMultiplier == 1, CgsDev::Assert::MessageAt("miComboMultiplier == 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 657));
+    CGS_ASSERT(!mbTimeLimitExpired, CgsDev::Assert::MessageAt("!mbTimeLimitExpired", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 658));
+    CGS_ASSERT(!mbPlayerCarCrashing, CgsDev::Assert::MessageAt("!mbPlayerCarCrashing", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 659));
 
     miTargetScore         = liTargetScore;   // X360 stw a2, 0x14
     mbStuntModeActive     = true;            // X360 stb 1, 0x28

@@ -147,8 +147,8 @@ void ScoringSystem::SetMedalModeTimer(f32 lfGold, f32 lfSilver, f32 lfBronze)
 // distance, rounded UP to the next whole 30-second block: deadline = start + roundedSeconds.
 void ScoringSystem::SetTimeLimitPerKm(f32 lfSecondsPerKm)
 {
-    CGS_ASSERT(IsTimerActive(), "IsTimerActive()");
-    CGS_ASSERT(0.0f != mfTotalRaceDistance, "0.0f != mfTotalRaceDistance");
+    CGS_ASSERT(IsTimerActive(), CgsDev::Assert::MessageAt("IsTimerActive()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2035));
+    CGS_ASSERT(0.0f != mfTotalRaceDistance, CgsDev::Assert::MessageAt("0.0f != mfTotalRaceDistance", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2036));
 
     // distance(m) -> km (* 0.001) -> seconds (* allowance), truncated to whole seconds.
     const s32 liRawSeconds = static_cast<s32>((mfTotalRaceDistance * 0.001f) * lfSecondsPerKm);
@@ -343,7 +343,7 @@ void ScoringSystem::ReducePlayerDurability()
 void ScoringSystem::StopModeTimer(const CgsSystem::Time& lTime, EActiveRaceCarIndex leRaceCarIndex, bool lbForce)
 {
     CGS_ASSERT((leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-               "(leLocalPlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+               CgsDev::Assert::MessageAt("(leLocalPlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 876));
 
     CarData* lpCarData = GetCarData(leRaceCarIndex);
     CGS_ASSERT(lpCarData != NULL, "lpCarData");

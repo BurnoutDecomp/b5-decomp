@@ -74,6 +74,7 @@
 // ============================================================================
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/GameState/BrnGameStateModule.h"                    // GameStateModule::IsOnlineGameMode (StartModeIntro)
 #include "GameSource/GameState/BrnGameActions.h"                        // the GameAction<> payload records + EGameActionType
@@ -317,7 +318,7 @@ void ModeManager::StartModeIntro(GameStateModuleIO::GameActionQueue* lpGameActio
         mpCurrentGameMode->SendEvent(E_GME_NEXT);
     }
     CGS_ASSERT(mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_INTRO,
-               "mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_INTRO");   // :3089
+               CgsDev::Assert::MessageAt("mpCurrentGameMode->GetCurrentState() == GameStateModuleIO::E_GMS_INTRO", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3089));   // :3089
 
     // ---- the online-event fork ----------------------------------------------------------------
     // X360 @0x823430D4..0x82343214. TWO conditions, and the compiler duplicates the second one:
@@ -357,7 +358,7 @@ void ModeManager::StartModeIntro(GameStateModuleIO::GameActionQueue* lpGameActio
             if (mScoringSystem.GetPlayerDisconnected(leRaceCarIndex))
             {
                 CGS_ASSERT(mScoringSystem.GetCarData(leRaceCarIndex) != 0,
-                           "mScoringSystem.GetCarData(leRaceCarIndex)");   // :3101
+                           CgsDev::Assert::MessageAt("mScoringSystem.GetCarData(leRaceCarIndex)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3101));   // :3101
 
                 // The console re-calls GetCarData a THIRD time after the assert and re-tests it --
                 // the assert is non-fatal, so the null guard is real control flow, not a duplicate.
@@ -446,7 +447,7 @@ void ModeManager::StartModeIntro(GameStateModuleIO::GameActionQueue* lpGameActio
 // ============================================================================
 void ModeManager::StopModeIntro(GameStateModuleIO::GameActionQueue* lpGameActionQueue)
 {
-    CGS_ASSERT(lpGameActionQueue != 0, "lpGameActionQueue != NULL");   // :3958
+    CGS_ASSERT(lpGameActionQueue != 0, CgsDev::Assert::MessageAt("lpGameActionQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3958));   // :3958
 
     // [x] header_request R2 (LANDED -- see the STATUS stamp at the top of this file): GameStateModuleIO::StopModeIntroAction (id 30, 8 bytes; DWARF
     // BrnGameActions.h:1191-1194).
@@ -532,7 +533,7 @@ void ModeManager::FinishOfflineModeIntro()
     // `mode ? mode->mbIsOnline(+0xAC) : 0` ladder (== IsOnlineGameMode(), the COMMITTED body at
     // BrnModeManager.cpp:37). De-inlined to both accessors.
     CGS_ASSERT(IsInGameMode(), "IsInGameMode()");             // :2521
-    CGS_ASSERT(!IsOnlineGameMode(), "!IsOnlineGameMode()");   // :2522
+    CGS_ASSERT(!IsOnlineGameMode(), CgsDev::Assert::MessageAt("!IsOnlineGameMode()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2522));   // :2522
 
     mpCurrentGameMode->SendEvent(E_GME_NEXT);
 }

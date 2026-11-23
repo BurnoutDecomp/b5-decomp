@@ -61,6 +61,14 @@ namespace DirectorIO
         mbRequestHookEnumeration  = false;
     }
 
+    // DWARF BrnDirectorModuleIO.h:393 (home BrnDirectorModuleIO.cpp). The X360 body is the base
+    // teardown alone, `b CgsModule::IOBuffer::Destruct`, ICF-folded with PropEntityIO's twin at
+    // 0x822DC3D0, which DestroyIOBuffer<OutputBuffer> calls at 0x823ACD6C.
+    void OutputBuffer::Destruct()
+    {
+        CgsModule::IOBuffer::Destruct();
+    }
+
     // ---- read-lock-asserted getters ---------------------------------------------------------
 
     // X360 0x823B33B0: return &mResourceInterface (this+0x2E0), read-lock asserted.

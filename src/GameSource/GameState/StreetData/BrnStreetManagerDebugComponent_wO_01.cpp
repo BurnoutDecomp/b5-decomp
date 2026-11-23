@@ -29,6 +29,7 @@
 #include "GameSource/GameState/Progression/BrnProfile.h"                // Profile::GetRoadRulesID / GetNetworkChallengeDownloadTimestamp
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<13312,16>::AddEvent / CgsModule::Event
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGameState
 {
@@ -83,14 +84,14 @@ namespace BrnGameState
     {
         if ( mbOutputRoadRulesScoresToNetwork )
         {
-            CGS_ASSERT( lpOutput != NULL, "lpOutput" );
-            CGS_ASSERT( lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()" );
+            CGS_ASSERT( lpOutput != NULL, CgsDev::Assert::MessageAt("lpOutput", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp", 111) );
+            CGS_ASSERT( lpOutput->GetGameActionQueue(), CgsDev::Assert::MessageAt("lpOutput->GetGameActionQueue()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp", 112) );
             CGS_ASSERT( mpStreetManager->GetProgressionManager(),
-                        "mpStreetManager->mpProgressionManager" );
+                        CgsDev::Assert::MessageAt("mpStreetManager->mpProgressionManager", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp", 113) );
             // The X360 spells this null-check `addic. r11,pm,0x170` -- the folded
             // `&pm->mProfile != NULL` of the embedded-by-value profile.
             CGS_ASSERT( mpStreetManager->GetProgressionManager()->GetProfile(),
-                        "mpStreetManager->mpProgressionManager->GetProfile()" );
+                        CgsDev::Assert::MessageAt("mpStreetManager->mpProgressionManager->GetProfile()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnStreetManagerDebugComponent.cpp", 114) );
 
             BrnProgression::Profile* lpProfile = mpStreetManager->GetProgressionManager()->GetProfile();
 

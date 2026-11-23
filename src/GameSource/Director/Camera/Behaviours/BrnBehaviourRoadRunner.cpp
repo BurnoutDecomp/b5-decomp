@@ -1162,10 +1162,14 @@ void BehaviourRoadRunner::SetParameters(const Behaviour::Parameters* lpParameter
     SetParameters(static_cast<const Parameters*>(lpParameters));
 }
 
+// ARTIST 0x821F5550: the tag assert (BrnBehaviourRoadRunner.h:314, the header inline) and the
+// one store; this setter does not touch the prepared flag or the debug name.
 void BehaviourRoadRunner::SetParameters(const Parameters* lpParameters)
 {
+    CGS_ASSERT(lpParameters->GetType() == eBehaviourRoadRunner, CgsDev::Assert::MessageAt(
+               "lpParameters->GetType() == eBehaviourRoadRunner",
+               "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.h", 314));
     mpParameters = lpParameters;
-    SetNotPrepared();   // every behaviour's typed SetParameters drops the prepared gate
 }
 
 // ============================================================================

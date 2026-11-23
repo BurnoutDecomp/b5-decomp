@@ -159,11 +159,6 @@ public:
             mbStickToGround = true;
         }
 
-        EBehaviourTypeGyroCam GetType() const
-        {
-            return static_cast<EBehaviourTypeGyroCam>(mType);
-        }
-
         // --- embedded sub-blocks (all but mLagParams walked as nested named sections) ---
         Utils::CameraShake::Parameters mShakeParams;           // +0x08  "Shake Params"
         Utils::PositionLag::Parameters mLagParams;             // +0x18  (not walked)
@@ -371,8 +366,8 @@ BehaviourGyroCam::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourGyroCam,
                CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourGyroCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.h", 240));
-    mpParameters = lpParameters;                 // stw r31, 0x14(this)
     SetDebugParametersName(lpParameters->GetDebugName());
+    mpParameters = lpParameters;                 // stw r31, 0x14(this)
 }
 
 // ----------------------------------------------------------------------------

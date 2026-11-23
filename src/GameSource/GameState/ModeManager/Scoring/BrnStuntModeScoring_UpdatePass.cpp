@@ -141,7 +141,7 @@ namespace BrnGameState
     // and UpdateScores' player-active gate is faithful (its body is bodied below).
     void StuntModeScoring::Update(const ActiveRaceCarOutputInterface* lpRaceCar, f32 lfDelta)
     {
-        CGS_ASSERT(mbStuntModeActive, "mbStuntModeActive");
+        CGS_ASSERT(mbStuntModeActive, CgsDev::Assert::MessageAt("mbStuntModeActive", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 184));
 
         // Clear the per-category "scored this frame" flag for every stunt category (asm: 18 wide).
         for (s32 liType = 0; liType < 18; ++liType)
@@ -275,14 +275,14 @@ namespace BrnGameState
         // maStuntTypeScoreCount[18]) is 18 -- the asm indexes up to type 17. FLAG: the committed
         // E_STUNT_TYPE_COUNT (15) disagrees with the asm's 18-wide range; the literal 18 is faithful.
         CGS_ASSERT(leStuntType > E_STUNT_TYPE_INVALID && static_cast<s32>(leStuntType) < 18,
-                   "leStuntType > E_STUNT_TYPE_INVALID && leStuntType < E_STUNT_TYPE_COUNT");
+                   CgsDev::Assert::MessageAt("leStuntType > E_STUNT_TYPE_INVALID && leStuntType < E_STUNT_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1047));
 
         if (!mbStuntInProgress)
         {
             CGS_ASSERT(HasAnyPendingScore() && mfPendingScoreTimer <= KF_ZERO,
-                       "mbStuntInProgress || (HasAnyPendingScore() && mfPendingScoreTimer<=0.0f)");
+                       CgsDev::Assert::MessageAt("mbStuntInProgress || (HasAnyPendingScore() && mfPendingScoreTimer<=0.0f)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1048));
         }
-        CGS_ASSERT(mbComboInProgress, "mbComboInProgress");
+        CGS_ASSERT(mbComboInProgress, CgsDev::Assert::MessageAt("mbComboInProgress", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1049));
 
         const s32 liType = static_cast<s32>(leStuntType);
 
@@ -297,7 +297,7 @@ namespace BrnGameState
             const f32 lfScoreScale =
                 ((lfRaw - KF_SCORE_FALLOFF_FLOOR) >= KF_ZERO) ? lfRaw : KF_SCORE_FALLOFF_FLOOR;
             CGS_ASSERT(lfScoreScale >= KF_ZERO && lfScoreScale <= KF_ONE,
-                       "lfScoreScale >= 0.0f && lfScoreScale <= 1.0f");
+                       CgsDev::Assert::MessageAt("lfScoreScale >= 0.0f && lfScoreScale <= 1.0f", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1058));
             lfScore = lfScoreScale * lfScore;
         }
 
@@ -355,7 +355,7 @@ namespace BrnGameState
     // being reconstructed).
     void StuntModeScoring::UpdateBufferedScore(f32 lfDelta)
     {
-        CGS_ASSERT(!mbRecentStunt, "!mbRecentStunt");
+        CGS_ASSERT(!mbRecentStunt, CgsDev::Assert::MessageAt("!mbRecentStunt", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 373));
 
         if (HasAnyPendingScore())
         {
@@ -382,7 +382,7 @@ namespace BrnGameState
                     mRecentStunt.muStuntTypes        = muStuntTypesInProgress;
                     mRecentStunt.muAwesomeStuntTypes = muAwesomeStuntTypesInProgress;
 
-                    CGS_ASSERT(mRecentStunt.muStuntTypes != 0, "mRecentStunt.muStuntTypes != 0");
+                    CGS_ASSERT(mRecentStunt.muStuntTypes != 0, CgsDev::Assert::MessageAt("mRecentStunt.muStuntTypes != 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 395));
 
                     // The reverse-takeoff bonus multiplier is applied to spin/roll banking when the
                     // REVERSE_TAKEOFF bit (bit 14) of muStuntTypesInProgress is set.

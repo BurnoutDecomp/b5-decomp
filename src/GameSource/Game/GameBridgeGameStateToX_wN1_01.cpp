@@ -43,6 +43,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"         // TelemetryData, ETelemetryHook
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"    // VariableEventQueue<N,16>
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                      // CgsIDConvertToString, KI_CGSID_STRING_LEN
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"             // CgsCore::StrCpy
 #include "SharedClasses/StreetData/BrnChallengeData.h"              // BrnStreetData::ScoreType, ChallengeData
@@ -60,8 +61,8 @@ namespace BrnGame
 
         const GsmIO::GameActionQueue* lpInQueue  = lpGameStateOutput->GetGameActionQueue();
         GsmIO::GameActionQueue*       lpOutQueue = lpNetworkInput->GetGameActionQueue();
-        CGS_ASSERT(lpInQueue, "lpInQueue");
-        CGS_ASSERT(lpOutQueue, "lpOutQueue");
+        CGS_ASSERT(lpInQueue, CgsDev::Assert::MessageAt("lpInQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 4284));
+        CGS_ASSERT(lpOutQueue, CgsDev::Assert::MessageAt("lpOutQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 4285));
 
         const CgsModule::Event* lpAction = 0;
         s32 liActionSize = 0;
@@ -244,7 +245,7 @@ namespace BrnGame
                 {
                     const GsmIO::RaceCarReachedCheckpointAction* lpCheckpointAction =
                         reinterpret_cast<const GsmIO::RaceCarReachedCheckpointAction*>(lpAction);
-                    CGS_ASSERT(lpCheckpointAction, "lpCheckpointAction");
+                    CGS_ASSERT(lpCheckpointAction, CgsDev::Assert::MessageAt("lpCheckpointAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 4880));
 
                     if (lpCheckpointAction->mbIsLocalPlayer)
                     {
@@ -259,7 +260,7 @@ namespace BrnGame
                 {
                     const GsmIO::ShowtimeUpdateAction* lpShowtimeUpdateAction =
                         reinterpret_cast<const GsmIO::ShowtimeUpdateAction*>(lpAction);
-                    CGS_ASSERT(lpShowtimeUpdateAction, "lpShowtimeUpdateAction");
+                    CGS_ASSERT(lpShowtimeUpdateAction, CgsDev::Assert::MessageAt("lpShowtimeUpdateAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 3976));
 
                     NetIO::NetworkInShowtimeUpdateEvent lNetworkShowtimeUpdateEvent;
                     lNetworkShowtimeUpdateEvent.mPlayerID       = lpShowtimeUpdateAction->mNetworkPlayerID;
@@ -273,7 +274,7 @@ namespace BrnGame
                 {
                     const GsmIO::ShowtimeModeSwitchAction* lpShowtimeModeSwitchAction =
                         reinterpret_cast<const GsmIO::ShowtimeModeSwitchAction*>(lpAction);
-                    CGS_ASSERT(lpShowtimeModeSwitchAction, "lpShowtimeModeSwitchAction");
+                    CGS_ASSERT(lpShowtimeModeSwitchAction, CgsDev::Assert::MessageAt("lpShowtimeModeSwitchAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 3992));
 
                     NetIO::NetworkInShowtimeSwitchEvent lNetworkShowtimeModeSwitchEvent;
                     lNetworkShowtimeModeSwitchEvent.mPlayerID             = lpShowtimeModeSwitchAction->mNetworkPlayerID;
@@ -632,7 +633,7 @@ namespace BrnGame
                 {
                     const GsmIO::ModeScoreLeaderboardAction* lpModeScoreLeaderboardAction =
                         reinterpret_cast<const GsmIO::ModeScoreLeaderboardAction*>(lpAction);
-                    CGS_ASSERT(lpModeScoreLeaderboardAction, "lpModeScoreLeaderboardAction");
+                    CGS_ASSERT(lpModeScoreLeaderboardAction, CgsDev::Assert::MessageAt("lpModeScoreLeaderboardAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 4939));
 
                     NetIO::NetworkInScoreLeaderboardEvent lScoreLeaderboardEvent;
                     lScoreLeaderboardEvent.mEventID       = lpModeScoreLeaderboardAction->mEventID;
@@ -647,7 +648,7 @@ namespace BrnGame
                 {
                     const GsmIO::NonUploadedModeScoresAction* lpNonUploadedModeScoresAction =
                         reinterpret_cast<const GsmIO::NonUploadedModeScoresAction*>(lpAction);
-                    CGS_ASSERT(lpNonUploadedModeScoresAction, "lpNonUploadedModeScoresAction");
+                    CGS_ASSERT(lpNonUploadedModeScoresAction, CgsDev::Assert::MessageAt("lpNonUploadedModeScoresAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 4959));
 
                     NetIO::NetworkInNonUploadedScoresEvent lNonUploadedScoresEvent;
                     lNonUploadedScoresEvent.mpNonUploadedScores = lpNonUploadedModeScoresAction->mpNonUploadedScores;

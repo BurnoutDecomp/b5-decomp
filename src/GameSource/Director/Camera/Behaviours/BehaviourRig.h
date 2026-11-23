@@ -326,8 +326,8 @@ inline void
 BehaviourRig::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourRig, CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourRig", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourRig.h", 255));
-    mpParameters = lpParameters;
     SetDebugParametersName(lpParameters->GetDebugName());
+    mpParameters = lpParameters;
     SetNotPrepared();
 }
 

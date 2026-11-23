@@ -5,6 +5,7 @@
 #include "SharedClasses/StreetData/BrnStreetData.h"                        // StreetData::GetRoadCount
 #include "SharedClasses/StreetData/BrnChallengeData.h"                     // BrnStreetData::ScoreType
 #include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // ---------------------------------------------------------------------------
 // BrnGameStateStreetManager_wB_04.cpp  --  wave-B group 5 ("tallies+trophies")
@@ -40,8 +41,8 @@ void StreetManager::UpdateTrophyUnlockOnRoadRuleWin( BrnStreetData::ScoreType le
 
     s32 liTotalNumberOfRoads = GetStreetData()->GetRoadCount();
 
-    CGS_ASSERT( liNumberOfShowTimeRoadsRuled <= liTotalNumberOfRoads,  "liNumberOfShowTimeRoadsRuled <= liTotalNumberOfRoads" );
-    CGS_ASSERT( liNumberOfTimeTrailRoadsRuled <= liTotalNumberOfRoads, "liNumberOfTimeTrailRoadsRuled <= liTotalNumberOfRoads" );
+    CGS_ASSERT( liNumberOfShowTimeRoadsRuled <= liTotalNumberOfRoads,  CgsDev::Assert::MessageAt("liNumberOfShowTimeRoadsRuled <= liTotalNumberOfRoads", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2807) );
+    CGS_ASSERT( liNumberOfTimeTrailRoadsRuled <= liTotalNumberOfRoads, CgsDev::Assert::MessageAt("liNumberOfTimeTrailRoadsRuled <= liTotalNumberOfRoads", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2808) );
 
     switch ( leScoreType )
     {

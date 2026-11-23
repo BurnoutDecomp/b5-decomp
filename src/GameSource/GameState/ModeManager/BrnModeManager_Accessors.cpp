@@ -94,6 +94,7 @@
 #include "SharedClasses/Progression/BrnProgressionData.h"                    // ProgressionData::{GetProgressionRankData, GetProgressionRankCount}
 #include "SharedClasses/Progression/BrnProgressionRankData.h"                // ProgressionRankData::GetRoadRageTakedownTarget
 #include "GameShared/GameClasses/Core/CgsAssert.h"                           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // GetRoadRageTakedownTarget's gated debug prints
 #include <cmath>                                                             // std::floor (the de-inlined fsel/magic-constant floor, same precedent as BrnChallengeManager_wC_06.cpp)
 
@@ -569,7 +570,7 @@ s32 ModeManager::GetOnlineCurrentRound() const
 u32 ModeManager::GetRoadRageTakedownTarget()
 {
     const BrnProgression::ProgressionData* lpProgressionData = mpProgressionManager->GetProgressionData();
-    CGS_ASSERT(lpProgressionData != 0, "lpProgressionData != NULL");   // BrnModeManager.cpp:1315
+    CGS_ASSERT(lpProgressionData != 0, CgsDev::Assert::MessageAt("lpProgressionData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1315));   // BrnModeManager.cpp:1315
 
     // The console re-fetches the resource pointer for the count read and inlines
     // ProgressionData::GetProgressionRankData (whose own bound assert is baked at
@@ -577,7 +578,7 @@ u32 ModeManager::GetRoadRageTakedownTarget()
     const s32 liLastRank = static_cast<s8>(lpProgressionData->GetProgressionRankCount() - 1);
     const BrnProgression::ProgressionRankData* lpProgressionRankDataLastRank =
         lpProgressionData->GetProgressionRankData(static_cast<u32>(liLastRank));
-    CGS_ASSERT(lpProgressionRankDataLastRank != 0, "lpProgressionRankDataLastRank");   // :1320
+    CGS_ASSERT(lpProgressionRankDataLastRank != 0, CgsDev::Assert::MessageAt("lpProgressionRankDataLastRank", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1320));   // :1320
 
     const s32 liThisRankForGameMode = static_cast<s8>(
         mpProgressionManager->GetProgressionRankForGameMode(GameStateModuleIO::E_MODE_ROAD_RAGE));
@@ -591,11 +592,11 @@ u32 ModeManager::GetRoadRageTakedownTarget()
 
     const BrnProgression::ProgressionRankData* lpProgressionRankDataThisRank =
         lpProgressionData->GetProgressionRankData(static_cast<u32>(liThisRankForGameMode));
-    CGS_ASSERT(lpProgressionRankDataThisRank != 0, "lpProgressionRankDataThisRank");   // :1331
+    CGS_ASSERT(lpProgressionRankDataThisRank != 0, CgsDev::Assert::MessageAt("lpProgressionRankDataThisRank", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1331));   // :1331
     const s32 liNextRankForGameMode = static_cast<s8>(liThisRankForGameMode + 1);
     const BrnProgression::ProgressionRankData* lpProgressionRankDataNextRank =
         lpProgressionData->GetProgressionRankData(static_cast<u32>(liNextRankForGameMode));
-    CGS_ASSERT(lpProgressionRankDataNextRank != 0, "lpProgressionRankDataNextRank");   // :1335
+    CGS_ASSERT(lpProgressionRankDataNextRank != 0, CgsDev::Assert::MessageAt("lpProgressionRankDataNextRank", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1335));   // :1335
 
     if (CgsDev::Message::gxMessageFilterFlags & 1)
     {

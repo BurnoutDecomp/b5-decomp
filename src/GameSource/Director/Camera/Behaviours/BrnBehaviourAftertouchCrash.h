@@ -113,11 +113,6 @@ public:
         // in this TU's .cpp.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
-        EBehaviourTypeAftertouchCrash GetType() const
-        {
-            return static_cast<EBehaviourTypeAftertouchCrash>(mType);
-        }
-
         // The shake post-process tunings sub-block ("Shake Params" section) the field-walk visitor
         // recurses into first (DebugMenu AddToPath+recurse, write, read
         //). Homed, by value, in BehaviourRig.h (four f32 tunables, +0x08..+0x17).
@@ -474,8 +469,8 @@ BehaviourAftertouchCrash::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourAftertouchCrash,
                CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourAftertouchCrash", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h", 252));
-    mpParameters = lpParameters;                   // stw r4, +0x3D8(this)
     SetDebugParametersName(lpParameters->GetDebugName());
+    mpParameters = lpParameters;                   // stw r4, +0x3D8(this)
 }
 
 } // namespace Camera

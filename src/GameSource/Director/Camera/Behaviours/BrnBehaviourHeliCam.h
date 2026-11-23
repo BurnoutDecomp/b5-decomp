@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"        // Utils::VersionNumber (the +0x7C tag)
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"  // Utils::CameraShake::Parameters (mShakeParams @+0x08)
 #include "GameSource/Director/Camera/Utils/BrnLooker.h"          // Utils::Looker::Parameters (mLookerParams @+0x18)
@@ -78,11 +79,6 @@ public:
 
         void Construct();   // the parameter bank's seed; body: BrnBehaviourHeliCam_wS34_05.cpp
 
-        EBehaviourTypeHeliCam GetType() const
-        {
-            return static_cast<EBehaviourTypeHeliCam>(mType);
-        }
-
         Utils::CameraShake::Parameters  mShakeParams;       // +0x08  "Shake Parameters"  (v1 + v2)
         Utils::Looker::Parameters       mLookerParams;      // +0x18  "Looker Parameters" (v2 only)
         Utils::VersionNumber            muVersion;          // +0x7C  version tag (code version = 2)
@@ -154,10 +150,12 @@ public:
 inline void
 BehaviourHeliCam::SetParameters(const Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == eBehaviourHeliCam,
-               "lpParameters->GetType() == eBehaviourHeliCam");
-    mpParameters = lpParameters;
+    // ARTIST 0x821F3AD0 fires this at BehaviourHeliCam.h:138.
+    CGS_ASSERT(lpParameters->GetType() == eBehaviourHeliCam, CgsDev::Assert::MessageAt(
+               "lpParameters->GetType() == eBehaviourHeliCam",
+               "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourHeliCam.h", 138));
     SetDebugParametersName(lpParameters->GetDebugName());
+    mpParameters = lpParameters;
 }
 
 } // namespace Camera

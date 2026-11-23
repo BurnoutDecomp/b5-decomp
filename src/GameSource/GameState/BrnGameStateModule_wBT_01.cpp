@@ -8,6 +8,7 @@
 #include "GameSource/GameState/BrnGameStateModule.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // AddEvent
 #include "GameSource/GameState/BrnGameEvents.h"                          // StreamingCompleteEvent
 #include "GameSource/GameState/BrnGameActions.h"                         // SetLoadingStateAction
@@ -20,9 +21,9 @@ namespace BrnGameState
 void GameStateModule::ProcessStreamingCompleteEvent(const GameStateModuleIO::StreamingCompleteEvent* lpStreamingCompleteEvent,
                                                     GameStateModuleIO::GameActionQueue*              lpActionQueue)
 {
-    CGS_ASSERT(lpStreamingCompleteEvent->meModule >= 0, "lpStreamingCompleteEvent->meModule >= 0");
+    CGS_ASSERT(lpStreamingCompleteEvent->meModule >= 0, CgsDev::Assert::MessageAt("lpStreamingCompleteEvent->meModule >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 6346));
     CGS_ASSERT(lpStreamingCompleteEvent->meModule < GameStateModuleIO::StreamingCompleteEvent::E_MODULE_COUNT,
-               "lpStreamingCompleteEvent->meModule < GsmIO::StreamingCompleteEvent::E_MODULE_COUNT");
+               CgsDev::Assert::MessageAt("lpStreamingCompleteEvent->meModule < GsmIO::StreamingCompleteEvent::E_MODULE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 6347));
 
     mabModuleStreamingComplete[lpStreamingCompleteEvent->meModule] = true;
 

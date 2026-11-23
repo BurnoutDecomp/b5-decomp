@@ -15,6 +15,7 @@
 // mode params; SetUpCheckPointsForGameMode also receives an unused ScoringSystem pointer.
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/GameState/BrnGameStateModule.h"                       // GetDistrictMap / GetActivePlayerCarId
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h" // AddLandmarkIndexForGameMode (BODIED)
@@ -188,12 +189,12 @@ void ModeManager::SetupPathfinding(const StartGameModeParams* lpStartGameModePar
         lpGameModeParams->SetAStarDistanceFunction(2);
         break;
     default:
-        CGS_ASSERT(false, "Unknow A* type");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknow A* type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5006));
         break;
     }
 
     CGS_ASSERT(lpRaceEventData->GetCheckpointCount() == lpGameModeParams->GetCheckpointCount(),
-               "lpRaceEventData->GetCheckpointCount() == lpGameModeParams->GetCheckpointCount()"); // :5012
+               CgsDev::Assert::MessageAt("lpRaceEventData->GetCheckpointCount() == lpGameModeParams->GetCheckpointCount()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5012)); // :5012
 
     // The console re-reads *(lpRaceEventData + 0x1C) on every pass of BOTH loops (0x8232932C
     // and 0x82329318) rather than caching it -- kept, it is the loop's real bound.
@@ -273,7 +274,7 @@ void ModeManager::SetupOpponentData(const StartGameModeParams* lpStartGameModePa
 
     // Console fires this assert BEFORE the event-data test (both operands are already loaded).
     // The missing space in "lpProgressionData!= NULL" is the console's own spelling -- verbatim.
-    CGS_ASSERT(lpProgressionData != 0, "lpProgressionData!= NULL");   // BrnModeManager.cpp:5045
+    CGS_ASSERT(lpProgressionData != 0, CgsDev::Assert::MessageAt("lpProgressionData!= NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5045));   // BrnModeManager.cpp:5045
 
     if (lpEventData == 0)
     {
@@ -290,7 +291,7 @@ void ModeManager::SetupOpponentData(const StartGameModeParams* lpStartGameModePa
 
     const BrnProgression::CarOpponentSet* lpOpponentSet =
         lpProgressionData->FindCarOpponentSet(lOriginalCarId, liPlayerRank);
-    CGS_ASSERT(lpOpponentSet != 0, "lpOpponentSet != NULL");            // BrnModeManager.cpp:5057
+    CGS_ASSERT(lpOpponentSet != 0, CgsDev::Assert::MessageAt("lpOpponentSet != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5057));            // BrnModeManager.cpp:5057
 
     for (s32 liIndex = 0; liIndex < liStartGridCount; ++liIndex)
     {

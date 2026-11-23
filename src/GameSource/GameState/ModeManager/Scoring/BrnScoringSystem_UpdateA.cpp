@@ -110,6 +110,7 @@
 // ----------------------------------------------------------------------------
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // ActiveRaceCarOutputInterface resolves (via the keystone typedef) to
 // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface; its public
@@ -181,7 +182,7 @@ namespace BrnGameState
     void ScoringSystem::UpdateTeamStats(f32 lfDeltaTime)
     {
         CGS_ASSERT(GetNumberOfActiveCars() <= static_cast<u32>(E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "muCarsInCurrentMode <= uint32_t(BrnWorld::KI_MAX_ACTIVE_RACE_CARS)");
+                   CgsDev::Assert::MessageAt("muCarsInCurrentMode <= uint32_t(BrnWorld::KI_MAX_ACTIVE_RACE_CARS)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 576));
 
         const CgsSystem::Time lDeltaTime(lfDeltaTime);
 
@@ -226,7 +227,7 @@ namespace BrnGameState
         muCarsInCurrentMode = lpOutput->maCarsInTheRace.GetLength();
 
         CGS_ASSERT(muCarsInCurrentMode <= static_cast<u32>(E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "Too many global race cars think they are in the current mode");
+                   CgsDev::Assert::MessageAt("Too many global race cars think they are in the current mode", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 601));
     }
 
     // ------------------------------------------------------------------------
@@ -263,11 +264,11 @@ namespace BrnGameState
                                                      s32* lpiScore,
                                                      EActiveRaceCarIndex* lpeRaceCarIndex)
     {
-        CGS_ASSERT(lpiScore != NULL, "lpiScore");
-        CGS_ASSERT(lpeRaceCarIndex != NULL, "lpeActiveRaceCarIndex");
+        CGS_ASSERT(lpiScore != NULL, CgsDev::Assert::MessageAt("lpiScore", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1431));
+        CGS_ASSERT(lpeRaceCarIndex != NULL, CgsDev::Assert::MessageAt("lpeActiveRaceCarIndex", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1432));
         // BrnGameState::KI_MAX_CHALLENGES == 64 (BrnGameStateStreetManager.h, not yet homed).
         CGS_ASSERT(lChallenge < 64 && lChallenge >= 0,
-                   "liIndex < BrnGameState::KI_MAX_CHALLENGES && liIndex >= 0");
+                   CgsDev::Assert::MessageAt("liIndex < BrnGameState::KI_MAX_CHALLENGES && liIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1433));
 
         // Best-score seed: higher-is-better types start at 0, lower-is-better (TIME) at INT_MAX.
         s32 liBestScore = (leScoreType != BrnStreetData::E_SCORE_TYPE_TIME) ? 0 : 0x7FFFFFFF;
@@ -552,7 +553,7 @@ namespace BrnGameState
                                         ::EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
                                         bool lbStuntChallengeActive)
     {
-        CGS_ASSERT(lpQueue != NULL, "lpTakedownQueue != NULL");
+        CGS_ASSERT(lpQueue != NULL, CgsDev::Assert::MessageAt("lpTakedownQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 987));
 
         for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
         {
@@ -565,9 +566,9 @@ namespace BrnGameState
 
             // The console's bounds asserts, compared on the raw value.
             CGS_ASSERT((liAggressor >= 0) && (liAggressor < 8),
-                       "(leAggressorRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leAggressorRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+                       CgsDev::Assert::MessageAt("(leAggressorRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leAggressorRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 997));
             CGS_ASSERT((liVictim >= 0) && (liVictim < 8),
-                       "(leVictimRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leVictimRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+                       CgsDev::Assert::MessageAt("(leVictimRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leVictimRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1001));
 
             CarData* lpAggressorCarData = GetCarData(leAggressor);
             CarData* lpVictimCarData    = GetCarData(leVictim);
@@ -631,7 +632,7 @@ namespace BrnGameState
     // left UNCHANGED -- the byte offset is X360-proven and the home is grow-only.
     void ScoringSystem::UpdateCrashes(const VehicleManagerOutputInterface::RaceCarCrashEventQueue* lpQueue)
     {
-        CGS_ASSERT(lpQueue != NULL, "lpRaceCarCrashQueue != NULL");
+        CGS_ASSERT(lpQueue != NULL, CgsDev::Assert::MessageAt("lpRaceCarCrashQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1107));
 
         for (s32 liEvent = 0; liEvent < lpQueue->GetLength(); ++liEvent)
         {
@@ -639,7 +640,7 @@ namespace BrnGameState
             // X360 asserts the per-event pointer non-NULL (cpp:1117). GetEvent returns a
             // reference into the inline buffer, so the address is non-NULL by construction;
             // the assert is preserved verbatim as a tripwire.
-            CGS_ASSERT(lpCrashEvent != NULL, "lpCrashEvent != NULL");
+            CGS_ASSERT(lpCrashEvent != NULL, CgsDev::Assert::MessageAt("lpCrashEvent != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1117));
 
             if (lpCrashEvent->mbIsPrimaryCrash)   // event +0x38
             {

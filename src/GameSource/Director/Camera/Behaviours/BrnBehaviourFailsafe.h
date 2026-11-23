@@ -63,11 +63,6 @@ public:
         // Body + instantiations: BrnBehaviourFailsafeSerialise.cpp.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
-        EBehaviourTypeFailsafe GetType() const
-        {
-            return static_cast<EBehaviourTypeFailsafe>(mType);
-        }
-
         // The head only: the parameter bank's Construct inlines exactly these two stores (the
         // cleared debug name and the tag) for its failsafe block and seeds nothing else.
         void Construct()
@@ -155,8 +150,8 @@ BehaviourFailsafe::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourFailsafe,
                CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourFailsafe", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.h", 146));
-    mpParameters = lpParameters;
     SetDebugParametersName(lpParameters->GetDebugName());
+    mpParameters = lpParameters;
 }
 
 } // namespace Camera

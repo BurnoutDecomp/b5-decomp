@@ -17,6 +17,7 @@
 #include "GameSource/Resource/BrnResourceAllocator.h"               // GetDebugAllocator
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"       // CgsMemory::LinearMalloc
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnReplays
 {
@@ -45,7 +46,7 @@ namespace BrnReplays
         }
         else if (luStage >= 3)
         {
-            CGS_ASSERT(false, "Invalid Stage\n");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Stage\n", "..\\..\\..\\GameSource\\Replays/BrnReplayModule.cpp", 218));
             return false;
         }
 

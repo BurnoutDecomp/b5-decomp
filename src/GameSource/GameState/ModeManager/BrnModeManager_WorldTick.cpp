@@ -71,6 +71,7 @@
 // sweep that feeds it.
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // The spine buffers. BrnModeManager.h keeps this include out; each partfile includes it locally.
 #include "GameSource/GameState/BrnGameStateModuleIO.h"
@@ -582,7 +583,7 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
     const GameStateModuleIO::NetworkToGameStateInterface* lpNetworkInput =
         lpPreWorldInputBuffer->GetNetworkToGameStateInterface();
     CGS_ASSERT(lpActiveRaceCarOutput != NULL, "lpActiveCarInterface");
-    CGS_ASSERT(lpPlayerStatusInterface != NULL, "lpPlayerStatusInterface");
+    CGS_ASSERT(lpPlayerStatusInterface != NULL, CgsDev::Assert::MessageAt("lpPlayerStatusInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4388));
     CGS_ASSERT(lpNetworkInput != NULL, "lpNetworkToGameStateInterface");
     mScoringSystemDebugComponent.DebugRenderChainableStunts(
         lpActiveRaceCarOutput,
@@ -620,8 +621,8 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
 {
     CgsDev::PerfMonCpu::StartMonitor(miPostWorldUpdatePM);
 
-    CGS_ASSERT(lpPostWorldInputBuffer != NULL, "lpInput != NULL");
-    CGS_ASSERT(lpTakedownQueue != NULL, "lpTakedownQueue != NULL");
+    CGS_ASSERT(lpPostWorldInputBuffer != NULL, CgsDev::Assert::MessageAt("lpInput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 769));
+    CGS_ASSERT(lpTakedownQueue != NULL, CgsDev::Assert::MessageAt("lpTakedownQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 770));
 
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutput =
         lpPostWorldInputBuffer->GetActiveRaceCarOutputInterface();
@@ -802,7 +803,7 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
             // The by-index skillz lookup walks the scoring table index -> network id first.
             OnlineFreeBurnLobbyMode* lpFreeburnLobbyMode =
                 static_cast<OnlineFreeBurnLobbyMode*>(mpCurrentGameMode);
-            CGS_ASSERT(lpFreeburnLobbyMode != NULL, "lpFreeburnLobbyMode");
+            CGS_ASSERT(lpFreeburnLobbyMode != NULL, CgsDev::Assert::MessageAt("lpFreeburnLobbyMode", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 887));
             CGS_ASSERT(mpGameStateModule != NULL, "mpGameStateModule");
 
             const ::EActiveRaceCarIndex leLocalPlayerIndex =

@@ -24,6 +24,7 @@
 //     (This file calls MarkCarHittingCheckpoint, one of them.)
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // BrnModeManager.h keeps BrnGameStateModuleIO.h out; each partfile includes it itself.
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                        // OutputBuffer::GetGameActionQueue
@@ -180,8 +181,8 @@ void ModeManager::HandleLoadingScreenLoaded(GameStateModuleIO::GameActionQueue* 
         return;
     }
 
-    CGS_ASSERT(lpGameActionQueue != NULL, "lpActionQueue");
-    CGS_ASSERT(mpNetworkRoundManager != NULL, "mpNetworkRoundManager");
+    CGS_ASSERT(lpGameActionQueue != NULL, CgsDev::Assert::MessageAt("lpActionQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1381));
+    CGS_ASSERT(mpNetworkRoundManager != NULL, CgsDev::Assert::MessageAt("mpNetworkRoundManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1382));
 
     // X360 @0x8234B954..0x8234B964: `lwz r10, 0x12C(r11)` / `lwz r11, 0x128(r11)` / `subf r11,r11,r10`
     // / `addi r6, r11, -1` -- miTotalRounds(+300) minus miRoundsRemaining(+296) minus one == the
@@ -244,7 +245,7 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     CGS_ASSERT(!mpCurrentGameMode->IsOnline()
                    || (liCurrentRound >= 0
                        && static_cast<u32>(liCurrentRound) < KU_MAX_ONLINE_ROUNDS_IN_MODE),
-               "!mpCurrentGameMode->IsOnline() || (liCurrentRound >= 0 && uint32_t(liCurrentRound) < GameStateModuleIO::KU_MAX_ONLINE_ROUNDS_IN_MODE)");
+               CgsDev::Assert::MessageAt("!mpCurrentGameMode->IsOnline() || (liCurrentRound >= 0 && uint32_t(liCurrentRound) < GameStateModuleIO::KU_MAX_ONLINE_ROUNDS_IN_MODE)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1166));
 
     const bool lbRoadRage = (meCurrentGameModeType == GameStateModuleIO::E_MODE_ROAD_RAGE);
 
@@ -398,7 +399,7 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
             lpProgressionData->GetProgressionRankData(static_cast<u32>(
                 mpProgressionManager->GetProgressionRankForGameMode(
                     GameStateModuleIO::E_MODE_ROAD_RAGE)));                           // 0x8234B544..0x8234B55C
-        CGS_ASSERT(lpProgressionRankDataRank != NULL, "lpProgressionRankDataRank");  // :1241
+        CGS_ASSERT(lpProgressionRankDataRank != NULL, CgsDev::Assert::MessageAt("lpProgressionRankDataRank", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1241));  // :1241
 
         // ss+0x4B40..0x4B57 -- the inlined RoadRageModeScoring::Prepare (0x8234B588..0x8234B5C4).
         mScoringSystem.GetRoadRageScoring()->Prepare(
@@ -413,7 +414,7 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         mScoringSystem.mauiMedalScores[1] = static_cast<u32>(liTakedownTarget - 1);
         mScoringSystem.mauiMedalScores[2] = static_cast<u32>(liTakedownTarget - 2);
 
-        CGS_ASSERT(muNumLandmarks == 0, "muNumLandmarks == 0");
+        CGS_ASSERT(muNumLandmarks == 0, CgsDev::Assert::MessageAt("muNumLandmarks == 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1245));
         return;
     }
 
@@ -629,7 +630,7 @@ void ModeManager::PrepareForMode(GameStateModuleIO::GameActionQueue* lpGameActio
             // sub_8231DD88 RESOLVED: the maCarData[8] search on GetNetworkPlayerID (base ss+20224,
             // stride 344, id at car+328) == ScoringSystem::GetCarData(NetworkPlayerID).
             CarData* lpCarData = mScoringSystem.GetCarData(lNetworkPlayerID);
-            CGS_ASSERT(lpCarData != NULL, "lpCarData");
+            CGS_ASSERT(lpCarData != NULL, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 150));
 
             // `*(car + 341) = *(nrm + 216 + i)`. SOURCE: mStartNetworkGameEvent.mabPlayerHasFever[i]
             // (the event's mafPlayerData[8] ends at +216 and BrnGameEvents.h pins

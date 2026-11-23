@@ -749,17 +749,14 @@ void TriggerQueryManager::SubmitTriggerQueries(
 // 8239F840..8239F8AC, split around the existing player-trigger fan-out.
 void TriggerQueryManager::CacheSoundQueryPositions(const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
 {
-    for (s32 liCar = 0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liCar)
+    for (EActiveRaceCarIndex liCar = E_ACTIVE_RACE_CAR_INDEX_0; liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; liCar++)
     {
-        const EActiveRaceCarIndex leCar = static_cast<EActiveRaceCarIndex>(liCar);
-        CGS_ASSERT(leCar >= E_ACTIVE_RACE_CAR_INDEX_0,
+        CGS_ASSERT(liCar >= E_ACTIVE_RACE_CAR_INDEX_0,
                    "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(leCar < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CGS_ASSERT(liCar < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                    "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-        if (lpActiveRaceCarInterface->IsRaceCarActive(leCar))
-            maActiveRaceCarPosLastFrame[liCar] = lpActiveRaceCarInterface->GetRaceCarState(leCar)->mTransform.Pos();
-        CGS_ASSERT(liCar + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        if (lpActiveRaceCarInterface->IsRaceCarActive(liCar))
+            maActiveRaceCarPosLastFrame[liCar] = lpActiveRaceCarInterface->GetRaceCarState(liCar)->mTransform.Pos();
     }
 }
 

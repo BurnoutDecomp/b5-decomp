@@ -18,6 +18,7 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 #include "GameSource/Game/GameBridgeGUIToX.h"                 // typed GetGuiOutEventQueue bridge
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"     // RootInputBuffer + GuiEventQueue
 
 namespace BrnGame
@@ -29,7 +30,7 @@ namespace BrnGame
         const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer)
     {
         CGS_ASSERT(lpSoundModuleInputBuffer != 0 && lpGuiOutputBuffer != 0,
-                   "lpSoundModuleInputBuffer && lpGuiOutputBuffer");
+                   CgsDev::Assert::MessageAt("lpSoundModuleInputBuffer && lpGuiOutputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGUIToX.cpp", 1694));
 
         const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue =
             GetGuiOutEventQueue(lpGuiOutputBuffer);

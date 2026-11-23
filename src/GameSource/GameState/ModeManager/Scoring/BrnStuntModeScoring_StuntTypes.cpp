@@ -50,6 +50,7 @@
 // ----------------------------------------------------------------------------
 
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // The four bodies dereference the WorldStuntAction / PowerParkResultAction-adjacent
 // GameStateModuleIO action family + the EStuntType / EActiveRaceCarIndex tags through the
@@ -348,7 +349,7 @@ namespace BrnGameState
                                              const ActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
     {
         const RaceCarState* lpPlayerRC = lpActiveRaceCarInterface->GetPlayerRaceCarState();
-        CGS_ASSERT(lpPlayerRC != NULL, "lpPlayerRC");
+        CGS_ASSERT(lpPlayerRC != NULL, CgsDev::Assert::MessageAt("lpPlayerRC", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 896));
 
         // The drift clock is RaceCarState::mfTimeDrifting (+0x400 of the state the getter returns),
         // the physics' own drifting timer -- NOT mfInProgressDriftTime (+0x428), the

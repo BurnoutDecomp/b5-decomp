@@ -33,6 +33,7 @@
 #include "GameSource/AttribSys/Generated/classes/aftertouchcam.h"    // KU_AFTERTOUCHCAM_CLASS_KEY
 #include "GameSource/AttribSys/Generated/classes/proceduralshot.h"   // Attrib::Gen::proceduralshot::ClassKey()
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT + CgsDev::Log::gpDebugPrint
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include <cstdlib>                                                   // getenv (the diag rung's env guard)
 
 namespace BrnDirector
@@ -73,16 +74,16 @@ namespace Camera
         // ---- the shared prologue: reserve a helper slot and book-keep it -----------------
         const BehaviourHelperIndex lHelperID = mBehaviourHelperPool.AllocateObject();
 
-        CGS_ASSERT(static_cast<s32>(lHelperID) >= 0, "lHelperID >= 0");                   // :623
-        CGS_ASSERT(liArgB >= 0, "liRefLimit >= 0");                                       // :625
+        CGS_ASSERT(static_cast<s32>(lHelperID) >= 0, CgsDev::Assert::MessageAt("lHelperID >= 0", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 623));                   // :623
+        CGS_ASSERT(liArgB >= 0, CgsDev::Assert::MessageAt("liRefLimit >= 0", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 625));                                       // :625
         CGS_ASSERT(!mBehaviourNeedsPreparingFlags.IsBitSet(static_cast<u32>(lHelperID)),
-                   "!mBehaviourNeedsPreparingFlags.IsBitSet(lHelperID)");                 // :627
+                   CgsDev::Assert::MessageAt("!mBehaviourNeedsPreparingFlags.IsBitSet(lHelperID)", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 627));                 // :627
         CGS_ASSERT(!mBehaviourNeedsReleasingFlags.IsBitSet(static_cast<u32>(lHelperID)),
-                   "!mBehaviourNeedsReleasingFlags.IsBitSet(lHelperID)");                 // :628
+                   CgsDev::Assert::MessageAt("!mBehaviourNeedsReleasingFlags.IsBitSet(lHelperID)", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 628));                 // :628
         CGS_ASSERT(!mBehaviourUsedByHandleFlags.IsBitSet(static_cast<u32>(lHelperID)),
-                   "!mBehaviourUsedByHandleFlags.IsBitSet(lHelperID)");                   // :629
+                   CgsDev::Assert::MessageAt("!mBehaviourUsedByHandleFlags.IsBitSet(lHelperID)", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 629));                   // :629
         CGS_ASSERT(mBehaviourRefCounts[static_cast<u32>(lHelperID)] == 0,
-                   "mBehaviourRefCounts[lHelperID] == 0");                                // :630
+                   CgsDev::Assert::MessageAt("mBehaviourRefCounts[lHelperID] == 0", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 630));                                // :630
 
         mBehaviourNeedsPreparingFlags.SetBit(static_cast<u32>(lHelperID));
         mBehaviourUpdateDuringPauseFlags.UnSetBit(static_cast<u32>(lHelperID));
@@ -104,7 +105,7 @@ namespace Camera
             const bool lbHelperPrepared =
                 lrHelper.Prepare(AllocateBehaviour<BehaviourIceAnim>());
             CGS_ASSERT(lbHelperPrepared,
-                       "lrHelper.Prepare(AllocateBehaviour<BehaviourIceAnim>())");        // :666
+                       CgsDev::Assert::MessageAt("lrHelper.Prepare(AllocateBehaviour<BehaviourIceAnim>())", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 666));        // :666
             (void)lbHelperPrepared;
 
             // X360 `lwz r3, 0(r31)` -- the helper's first word, i.e. the pooled object -- then
@@ -125,7 +126,7 @@ namespace Camera
             const bool lbHelperPrepared =
                 lrHelper.Prepare(AllocateBehaviour<BehaviourAftertouchCam>());
             CGS_ASSERT(lbHelperPrepared,
-                       "lrHelper.Prepare(AllocateBehaviour<BehaviourAftertouchCam>())");  // :655
+                       CgsDev::Assert::MessageAt("lrHelper.Prepare(AllocateBehaviour<BehaviourAftertouchCam>())", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 655));  // :655
             (void)lbHelperPrepared;
 
             // The helper's first word -- the pooled object -- then the bank's FIRST named
@@ -195,12 +196,12 @@ namespace Camera
             }
             else
             {
-                CGS_ASSERT(false, "Unsupported Procedural Shot Type");                    // :700
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unsupported Procedural Shot Type", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 700));                    // :700
             }
         }
         else
         {
-            CGS_ASSERT(false, "Unsupported Behavour Type");                               // :707
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unsupported Behavour Type", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 707));                               // :707
         }
 
         // [DIAG] NOT IN THE X360 BINARY. Off unless BRN_DRIVETHRU_DIAG is set. The class key is

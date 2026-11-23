@@ -5,6 +5,7 @@
 // 0x1B) and Destruct (early in GameStateModule::Destruct).
 
 #include "GameSource/GameState/ImageManager/BrnGameStateImageManagerBase.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGameState
 {
@@ -12,7 +13,7 @@ namespace BrnGameState
 // Cache the progression manager and clear every slot.
 void GameStateImageManagerBase::Construct(BrnProgression::ProgressionManager* lpProgression)
 {
-    CGS_ASSERT(lpProgression != 0, "lpProgression");
+    CGS_ASSERT(lpProgression != 0, CgsDev::Assert::MessageAt("lpProgression", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ImageManager/BrnGameStateImageManagerBase.cpp", 69));
 
     mpProgression       = lpProgression;        // this+0xB8
     miMugshotToSaveIndex = 0;                    // this+0xAC

@@ -11,6 +11,7 @@
 #include "GameSource/Director/Camera/Utils/BrnTextFileWriteSerialiser.h"   // Camera::TextFileWriteSerialiser
 #include "SDKs/Packages/ICE/ICEAuthor.hpp"                                  // ICE::ICEAuthor::CreateNewTake
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnDirector
 {
@@ -60,7 +61,7 @@ void DebugComponent::StartEditor(void* lpUserData)
     ICEWrapper&     lrICEWrapper = lpThis->mpDirectorModule->GetMainDirector().GetICEWrapper();
 
     ICE::ICETakeData* lpTakeData = lrICEWrapper.GetAuthor().CreateNewTake("New Take", -1);
-    CGS_ASSERT(lpTakeData, "lpTakeData");
+    CGS_ASSERT(lpTakeData, CgsDev::Assert::MessageAt("lpTakeData", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleDebugCompononent.cpp", 503));
     lrICEWrapper.EditorOn(lpTakeData);
 }
 

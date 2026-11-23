@@ -31,6 +31,7 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 // KI_MAX_LANDMARKS_IN_MODE (== 16) lives in GameStateModuleIO, already pulled in by the
 // keystone via BrnGameStateSharedIO.h; no extra include needed beyond the assert macro.
 
@@ -157,7 +158,7 @@ namespace BrnGameState
             return;
         }
 
-        CGS_ASSERT(luCompletedLaps < 4u, "luCompletedLaps < BrnWorld::KU_MAX_LAPS");
+        CGS_ASSERT(luCompletedLaps < 4u, CgsDev::Assert::MessageAt("luCompletedLaps < BrnWorld::KU_MAX_LAPS", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 437));
 
         // This lap's split = (now - mode start) minus every lap already banked for this car.
         CgsSystem::Time lLapTime = lTime - mStartTime;

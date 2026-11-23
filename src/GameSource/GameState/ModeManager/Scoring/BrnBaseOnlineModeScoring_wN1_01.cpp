@@ -86,10 +86,10 @@ void BaseOnlineModeScoring::AwardNetworkRatings(const ScoringSystem* lpScoringSy
         maOnlineAwards[liSlot] = E_ONLINE_AWARD_INVALID;
     }
 
-    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem");
+    CGS_ASSERT(lpScoringSystem != NULL, CgsDev::Assert::MessageAt("lpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.cpp", 263));
 
     const s32 liNumActiveRaceCars = static_cast<s32>(lpScoringSystem->GetNumberOfActiveCars());
-    CGS_ASSERT(liNumActiveRaceCars > 0, "liNumActiveRaceCars > 0");
+    CGS_ASSERT(liNumActiveRaceCars > 0, CgsDev::Assert::MessageAt("liNumActiveRaceCars > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.cpp", 268));
 
     if (liNumActiveRaceCars > 1)
     {
@@ -159,7 +159,7 @@ void BaseOnlineModeScoring::AwardNetworkRatings(const ScoringSystem* lpScoringSy
 // longest drift truncated to an integer. The other awards carry no parameter.
 s32 BaseOnlineModeScoring::GetAwardParameter(const NetworkAwardData* lpAwardData, EOnlineAwardID leAwardID)
 {
-    CGS_ASSERT(lpAwardData != NULL, "lpAwardData");
+    CGS_ASSERT(lpAwardData != NULL, CgsDev::Assert::MessageAt("lpAwardData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.cpp", 339));
 
     switch (leAwardID)
     {

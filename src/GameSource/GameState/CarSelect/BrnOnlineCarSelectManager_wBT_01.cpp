@@ -7,6 +7,7 @@
 // SaveChosenLiveryForCar serve the car-change state machine in BrnOnlineCarSelectManager.cpp.
 
 #include "GameSource/GameState/CarSelect/BrnOnlineCarSelectManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // gpDebugPrint / gxMessageFilterFlags
@@ -142,9 +143,9 @@ const BrnProgression::CarData* OnlineCarSelectManager::GetProfileCarData(CgsID& 
         *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "GetProfileCarData\n" << "\n";
     }
 
-    CGS_ASSERT(mpProgressionManager.Get(), "mpProgressionManager");
+    CGS_ASSERT(mpProgressionManager.Get(), CgsDev::Assert::MessageAt("mpProgressionManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 676));
     BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
-    CGS_ASSERT(lpProfile, "lpProfile");
+    CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 682));
 
     const s32 liCarCount = lpProfile->GetCarCount();
     for (s32 liCar = 0; liCar < liCarCount; ++liCar)

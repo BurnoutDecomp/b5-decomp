@@ -95,11 +95,6 @@ public:
         // BrnBehaviourGameplayBumperParameters.cpp.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
-        EBehaviourTypeGameplayBumper GetType() const
-        {
-            return static_cast<EBehaviourTypeGameplayBumper>(mType);
-        }
-
         // The source block this seeds from: a small object whose +0x04 holds a pointer to
         // the f32 source array Parameters::Set copies out of (lwz r11,4(r4); lfs ...(r11)).
         struct Source
@@ -275,8 +270,8 @@ BehaviourGameplayBumper::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourGameplayBumper,
                CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourGameplayBumper", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h", 152));
-    mpParameters = lpParameters;                                  // stw r4,  0x828(this)
     SetDebugParametersName(lpParameters->GetDebugName());         // stw r11, 0x10(this)
+    mpParameters = lpParameters;                                  // stw r4,  0x828(this)
 }
 
 } // namespace Camera

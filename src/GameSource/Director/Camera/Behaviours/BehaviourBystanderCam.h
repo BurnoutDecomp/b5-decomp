@@ -108,8 +108,8 @@ public:
     {
         CGS_ASSERT(lpParameters->GetType() == eBehaviourBystanderCam,
                    CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourBystanderCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourBystanderCam.h", 215));   // h:215
-        mpParameters = lpParameters;                                        // stw r31, 0x350(r30)
         SetDebugParametersName(lpParameters->GetDebugName());              // lwz 4(lp) ; stw 0x10(this)
+        mpParameters = lpParameters;                                        // stw r31, 0x350(r30)
     }
 
     // DWARF h:250, @0x821F3F80: the inlined VehicleRef::SetToRaceCar over mTarget (its four stores

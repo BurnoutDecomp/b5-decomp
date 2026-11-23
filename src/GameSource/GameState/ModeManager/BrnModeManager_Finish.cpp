@@ -23,6 +23,7 @@
 //     (bodied HERE -- it is agent 8's, listed in the H2 sheet only because HasPlayerWon calls it).
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cstring>   // memset / memcpy (the raw action payloads whose records are not homed yet)
 
@@ -184,7 +185,7 @@ f32 ModeManager::GetCountdownTimeForMode() const
     // Console: `if (meCurrentGameModeType <= -1 || >= 0x12) { assert }`.
     CGS_ASSERT((meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE) &&
                (static_cast<s32>(meCurrentGameModeType) < KI_GAME_MODE_SLOTS),
-               "(meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE) && (meCurrentGameModeType < GameStateModuleIO::E_MODE_COUNT)");
+               CgsDev::Assert::MessageAt("(meCurrentGameModeType > GameStateModuleIO::E_MODE_NONE) && (meCurrentGameModeType < GameStateModuleIO::E_MODE_COUNT)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2401));
     // (BrnModeManager.cpp:2401 -- the assert's own line; note it names E_MODE_COUNT while the asm
     //  compares against 18, which is exactly the 17-vs-18 split the header's KI_GAME_MODE_SLOTS
     //  banner resolves.)
@@ -305,7 +306,7 @@ s32 ModeManager::GetPlayersFinishPosition()
         // jumptable default, cases 2,5,7,10 == mode 1,4,6,9 (FACE_OFF, PURSUIT and the two
         // authored-NULL slots ELIMINATOR / TRAFFIC_ATTACK).
         default:
-            CGS_ASSERT(false, "Unknown or unsupported game mode type");   // BrnModeManager.cpp:3645
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown or unsupported game mode type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3645));   // BrnModeManager.cpp:3645
             return 0;
     }
 }
@@ -400,10 +401,10 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
                 liFinishPosition = static_cast<s32>(mScoringSystem.GetCarRacePosition(lePlayerRaceCarIndex));
             }
 
-            CGS_ASSERT(liFinishPosition != 0, "luFinishPosition > 0");                     // :1437
+            CGS_ASSERT(liFinishPosition != 0, CgsDev::Assert::MessageAt("luFinishPosition > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1437));                     // :1437
             liFinishType = liFinishPosition - 1;
-            CGS_ASSERT(liFinishType >= KI_FINISH_TYPE_1ST, "leFinishType >= BrnGui::E_FINISH_TYPE_1ST"); // :1439
-            CGS_ASSERT(liFinishType <= KI_FINISH_TYPE_8TH, "leFinishType <= BrnGui::E_FINISH_TYPE_8TH"); // :1440
+            CGS_ASSERT(liFinishType >= KI_FINISH_TYPE_1ST, CgsDev::Assert::MessageAt("leFinishType >= BrnGui::E_FINISH_TYPE_1ST", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1439)); // :1439
+            CGS_ASSERT(liFinishType <= KI_FINISH_TYPE_8TH, CgsDev::Assert::MessageAt("leFinishType <= BrnGui::E_FINISH_TYPE_8TH", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1440)); // :1440
 
             // Only a 1st place counts as a successful attempt (`cntlzw` + `extrwi 1,26` == "== 0").
             lbAttemptSucceeded = (liFinishType == KI_FINISH_TYPE_1ST);
@@ -709,19 +710,19 @@ void ModeManager::ShowModeResults(
     // read after the prologue). Kept in the signature because the DWARF and the caller pass it.
     (void)lpGlobalRaceCarOutput;
 
-    CGS_ASSERT(lpGameActionQueue != 0, "lpGameActionQueue != NULL");   // :3297
+    CGS_ASSERT(lpGameActionQueue != 0, CgsDev::Assert::MessageAt("lpGameActionQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3297));   // :3297
 
     const ::EActiveRaceCarIndex lePlayerRaceCarIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
     CGS_ASSERT(lePlayerRaceCarIndex >= 0,
-               "leLocalPlayerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");            // :3302
+               CgsDev::Assert::MessageAt("leLocalPlayerRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3302));            // :3302
     CGS_ASSERT(lePlayerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "leLocalPlayerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");         // :3303
+               CgsDev::Assert::MessageAt("leLocalPlayerRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3303));         // :3303
 
     // Console: `r24 = this + 0x8380` (== &mCurrentGameModeParams) and `addic.` sets the flag the
     // assert tests -- i.e. GetCurrentGameModeParams() != NULL, which for an embedded member is
     // always true. Kept as the console's own diagnostic.
     GameModeParams* lpGameModeParams = &mCurrentGameModeParams;
-    CGS_ASSERT(lpGameModeParams != 0, "GetCurrentGameModeParams()");           // :3304
+    CGS_ASSERT(lpGameModeParams != 0, CgsDev::Assert::MessageAt("GetCurrentGameModeParams()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3304));           // :3304
 
     // ------------------------------------------------------------------------------------------
     // The 232-byte results record.
@@ -833,7 +834,7 @@ void ModeManager::ShowModeResults(
 
         const BrnProgression::ProgressionData* lpProgressionData =
             mpProgressionManager->GetProgressionData();
-        CGS_ASSERT(lpProgressionData != 0, "lpProgressionData");   // :3341
+        CGS_ASSERT(lpProgressionData != 0, CgsDev::Assert::MessageAt("lpProgressionData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3341));   // :3341
 
         // The console walks the event-junction table inline: count at ProgressionData+0x1C, base at
         // +0x18, 16-byte stride, entry+0x00 == the id, entry+0x04 == the offline event pointer.
@@ -854,7 +855,7 @@ void ModeManager::ShowModeResults(
                 }
             }
         }
-        CGS_ASSERT(lpEventData != 0, "lpEventData");   // :3343
+        CGS_ASSERT(lpEventData != 0, CgsDev::Assert::MessageAt("lpEventData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3343));   // :3343
 
         // record+0xDA == !HasEventBeenWonPreviously(eventId) -- i.e. "this is a first win".
         lAction.mu8FieldDA =
@@ -951,7 +952,7 @@ void ModeManager::ShowModeResults(
                             ? static_cast<s32>(lAction.mfField0C * KF_SECONDS_TO_MILLISECONDS)
                             : lAction.miField08;
 
-                    CGS_ASSERT(lpGameActionQueue != 0, "lpGameActionQueue");   // :3439
+                    CGS_ASSERT(lpGameActionQueue != 0, CgsDev::Assert::MessageAt("lpGameActionQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3439));   // :3439
 
                     // The 16-byte payload the console builds on the stack before the AddEvent.
                     // FLAG: no homed record type for action 18 (see E_ACTION_EVENT_SCORE_TO_UPLOAD);
@@ -966,14 +967,14 @@ void ModeManager::ShowModeResults(
                         reinterpret_cast<const CgsModule::Event*>(lacEventScoreToUpload),
                         GameStateModuleIO::E_ACTION_EVENT_SCORE_TO_UPLOAD, 16);
 
-                    CGS_ASSERT(mpProgressionManager != 0, "mpProgressionManager");   // :3443
+                    CGS_ASSERT(mpProgressionManager != 0, CgsDev::Assert::MessageAt("mpProgressionManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3443));   // :3443
                     mpProgressionManager->GetProfile()->SetEventScoreToUpload(lEventId, liScoreToUpload,
                                                                              leGameModeType);
                 }
 
                 CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");            // :3449
                 CGS_ASSERT(mpGameStateModule->GetDeveloperChallengeManager() != 0,
-                           "mpGameStateModule->GetDeveloperChallengeManager()");          // :3450
+                           CgsDev::Assert::MessageAt("mpGameStateModule->GetDeveloperChallengeManager()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3450));          // :3450
                 mpGameStateModule->GetDeveloperChallengeManager()->OnEventEnd(
                     static_cast<s32>(meCurrentGameModeType),
                     (lAction.miFinishPosition == 1));

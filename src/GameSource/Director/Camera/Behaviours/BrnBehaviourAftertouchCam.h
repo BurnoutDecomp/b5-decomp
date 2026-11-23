@@ -72,11 +72,6 @@ public:
         // Body + instantiations: BrnBehaviourAftertouchCamParameters.cpp.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
-        EBehaviourTypeAftertouchCam GetType() const
-        {
-            return static_cast<EBehaviourTypeAftertouchCam>(mType);
-        }
-
         // "Shake Params", walked first by every visitor.
         Utils::CameraShake::Parameters mShakeParams;   // console +0x08 .. +0x17
         // Not walked; Construct seeds its four response/smoothing words.
@@ -247,8 +242,8 @@ BehaviourAftertouchCam::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourAftertouchCam,
                CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourAftertouchCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h", 198));
-    mpParameters = lpParameters;
     SetDebugParametersName(lpParameters->GetDebugName());
+    mpParameters = lpParameters;
 }
 
 } // namespace Camera

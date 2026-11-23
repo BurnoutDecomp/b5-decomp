@@ -18,6 +18,7 @@
 // [X] DO NOT re-implement anything from hazards H2's list of 16 committed bodies -- call them.
 
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/GameState/BrnGameStateModule.h"                 // GameStateModule::GetPlayerActiveRaceCarIndex (ProcessEvent)
 #include "GameSource/GameState/ModeManager/Scoring/BrnStuntModeScoring.h" // StuntModeScoring::DealWithInProgressStunt
@@ -127,15 +128,15 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     mChallengeManager.Construct(lpGameStateModule, this, lpProgressionManager,
                                 lpRoadRulesManager, lpTriggerQueryManager);
 
-    CGS_ASSERT(lpGameStateModule != 0, "lpGameStateModule");      // BrnModeManager.cpp:202
+    CGS_ASSERT(lpGameStateModule != 0, CgsDev::Assert::MessageAt("lpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 202));      // BrnModeManager.cpp:202
     mpGameStateModule = lpGameStateModule;                              // +27992
 
-    CGS_ASSERT(lpProgressionManager != 0, "lpProgressionManager");// BrnModeManager.cpp:205
+    CGS_ASSERT(lpProgressionManager != 0, CgsDev::Assert::MessageAt("lpProgressionManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 205));// BrnModeManager.cpp:205
     mpProgressionManager = lpProgressionManager;                        // +27996
 
     mpTriggerQueryManager = lpTriggerQueryManager;                      // +28000 (no assert on console)
 
-    CGS_ASSERT(lpNetworkRoundManager != 0, "lpNetworkRoundManager"); // BrnModeManager.cpp:210
+    CGS_ASSERT(lpNetworkRoundManager != 0, CgsDev::Assert::MessageAt("lpNetworkRoundManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 210)); // BrnModeManager.cpp:210
     mpNetworkRoundManager = lpNetworkRoundManager;                      // +28004
 
     // ------------------------------------------------------------------------

@@ -21,6 +21,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/CgsStrStream.h"           // CgsDev::StrStream (streamed dev assert)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT + KI_MESSAGEBUFFERSIZE
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <string.h>
 
@@ -60,7 +61,7 @@ void StreetManager::ProcessScoreRequestEvent(
     }
 
     CGS_ASSERT( lpOutput, "lpOutput" );
-    CGS_ASSERT( lpScoreRequestEvent, "lpRequestEvent" );
+    CGS_ASSERT( lpScoreRequestEvent, CgsDev::Assert::MessageAt("lpRequestEvent", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3129) );
 
     GameStateModuleIO::RoadRulesRoadScoreAction lResponse;
     lResponse.mPlayerName.Construct( "" );

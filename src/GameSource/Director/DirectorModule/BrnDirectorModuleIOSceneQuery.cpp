@@ -109,7 +109,10 @@ namespace DirectorIO
         CgsModule::IOBuffer::Construct();
         mResultsQueue.Construct();
         const bool lbPrepared = mResultsQueue.Prepare();
-        CGS_ASSERT(lbPrepared, "mResultsQueue.Prepare()");                        // BrnDirectorModuleIO.cpp:192
+        CGS_ASSERT(lbPrepared,
+            CgsDev::Assert::MessageAt(
+                "mResultsQueue.Prepare()",
+                "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.cpp", 192 /* ARTIST 0x8221B350 */));
         (void)lbPrepared;
     }
 

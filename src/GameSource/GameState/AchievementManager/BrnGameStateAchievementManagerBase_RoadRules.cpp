@@ -1,4 +1,5 @@
 #include "GameSource/GameState/AchievementManager/BrnGameStateAchievementManagerBase.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGameState
 {
@@ -27,7 +28,7 @@ void AchievementManagerBase::OnSetAllRoadRules(BrnStreetData::ScoreType leScoreT
     }
     else
     {
-        CGS_ASSERT(false, "dodgy road rule type!");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("dodgy road rule type!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 290));
     }
 }
 }

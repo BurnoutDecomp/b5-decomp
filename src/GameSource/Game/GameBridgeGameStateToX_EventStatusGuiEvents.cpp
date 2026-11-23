@@ -10,6 +10,7 @@
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGame
 {
@@ -86,7 +87,7 @@ void BridgeGameStateToGui_EventStatus(
     PushGuiEvent(lDistanceToCheckpoint, lpGuiInput); // 240 / 4
 
     const CgsSystem::TimerStatus* lpGameTimerStatus = lpTimerStatusInterface->GetGameTimerStatus();
-    CGS_ASSERT(lpGameTimerStatus != 0, "mTimerStatusInterface.GetGameTimerStatus()");
+    CGS_ASSERT(lpGameTimerStatus != 0, CgsDev::Assert::MessageAt("mTimerStatusInterface.GetGameTimerStatus()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 481));
     const EGameModeType leGameMode = lpScoringOutputInterface->meGameModeType;
     BrnGui::GuiEventCurrentStatus lCurrentStatus;
     const CgsSystem::Time lGameTime = lpGameTimerStatus->GetTime();
@@ -108,8 +109,8 @@ void BridgeGameStateToGui_EventStatus(
         lCurrentStatus.miNumRemainingCheckpoints = 0;
     else
     {
-        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_COUNT > leRunner, "E_ACTIVE_RACE_CAR_INDEX_COUNT > leRunnerActiveRaceCarIndex");
-        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_0 <= leRunner, "E_ACTIVE_RACE_CAR_INDEX_0 <= leRunnerActiveRaceCarIndex");
+        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_COUNT > leRunner, CgsDev::Assert::MessageAt("E_ACTIVE_RACE_CAR_INDEX_COUNT > leRunnerActiveRaceCarIndex", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 505));
+        CGS_ASSERT(E_ACTIVE_RACE_CAR_INDEX_0 <= leRunner, CgsDev::Assert::MessageAt("E_ACTIVE_RACE_CAR_INDEX_0 <= leRunnerActiveRaceCarIndex", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 506));
         lCurrentStatus.miNumRemainingCheckpoints = lpScoringOutputInterface->maCarCheckpointData[leRunner]
             .GetAllRemainingCheckpointIndexes(lCurrentStatus.maiRemainingCheckpointIndexes);
     }

@@ -54,6 +54,7 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"                              // CgsContainers::BitArray<64u>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                        // CgsModule::Event / VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cstddef>   // offsetof
 
@@ -131,9 +132,9 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
 
             bool lbUserScoreBeatsPar = false;
 
-            CGS_ASSERT( mpGameStateModule, "mpGameStateModule" );
+            CGS_ASSERT( mpGameStateModule, CgsDev::Assert::MessageAt("mpGameStateModule", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2614) );
             CGS_ASSERT( mpGameStateModule->GetDeveloperChallengeManager(),
-                        "mpGameStateModule->GetDeveloperChallengeManager()" );
+                        CgsDev::Assert::MessageAt("mpGameStateModule->GetDeveloperChallengeManager()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2615) );
 
             // The full 64-bit road id, as the console passes it.
             mpGameStateModule->GetDeveloperChallengeManager()->OnSetRoadRule(
@@ -144,7 +145,7 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
             if ( leScoreType == BrnStreetData::E_SCORE_TYPE_CRASH )
             {
                 BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-                CGS_ASSERT( lpProfile != NULL, "lpProfile != NULL" );
+                CGS_ASSERT( lpProfile != NULL, CgsDev::Assert::MessageAt("lpProfile != NULL", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2621) );
 
                 if ( liNewScore > lpProfile->GetNewHighShowtimeScore() )
                 {
@@ -211,7 +212,7 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
             }
         }
 
-        CGS_ASSERT( lpOutput->GetGameActionQueue(), "lpOutputBuffer->GetGameActionQueue()" );
+        CGS_ASSERT( lpOutput->GetGameActionQueue(), CgsDev::Assert::MessageAt("lpOutputBuffer->GetGameActionQueue()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2699) );
 
         if ( lNewEntry.ContainsData( BrnStreetData::E_SCORE_TYPE_COUNT ) )
         {
@@ -270,7 +271,7 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
 
             CGS_ASSERT( mpProgressionManager, "mpProgressionManager" );
             CGS_ASSERT( mpProgressionManager->GetAchievementManager(),
-                        "mpProgressionManager->GetAchievementManager()" );
+                        CgsDev::Assert::MessageAt("mpProgressionManager->GetAchievementManager()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2762) );
 
             mpProgressionManager->GetAchievementManager()->OnSetRoadRule(
                 leScoreType, mpStreetData->GetRoad( liChallengeIndex )->GetId() );

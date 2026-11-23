@@ -17,6 +17,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/vector3_operation.h"                          // Dot / operator- over Vector3
 
 namespace BrnGameState
@@ -32,7 +33,7 @@ void OnlineBurningHomeRunMode::PickNewBurningHomeRunRunner(
 {
     CGS_ASSERT(lpActionQueue != NULL, "lpActionQueue");
     CGS_ASSERT(mpModeManager != NULL, "mpModeManager");
-    CGS_ASSERT(mpModeManager->GetScoringSystem() != NULL, "mpModeManager->GetScoringSystem()");
+    CGS_ASSERT(mpModeManager->GetScoringSystem() != NULL, CgsDev::Assert::MessageAt("mpModeManager->GetScoringSystem()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineBurningHomeRunMode.cpp", 249));
 
     ScoringSystem* lpScoringSystem = mpModeManager->GetScoringSystem();
 

@@ -17,6 +17,7 @@
 #include "SharedClasses/StreetData/BrnStreetData.h"                      // StreetData / Road
 #include "SharedClasses/Progression/BrnTrainingTypes.h"                  // BrnProgression::ETrainingType
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT, CgsDev::Assert
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"             // CgsDev::StrStream (OnRoadLimit's message)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"               // the opt-in witness below
 #include <cstdlib>                                                       // getenv
@@ -114,11 +115,11 @@ void RoadRulesManager::OnRoadLimit(CgsID lRoadLimitId, bool lbEntryDirection,
 // on the road the player is on.
 void RoadRulesManager::OnShowtimeStart(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
+    CGS_ASSERT(lpOutputBuffer, CgsDev::Assert::MessageAt("lpOutputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 886));
     GameStateModuleIO::GameActionQueue* lpGameActionQueue = lpOutputBuffer->GetGameActionQueue();
 
     CGS_ASSERT(!IsValidRoad(maiChallengeRoadIndex[BrnStreetData::E_SCORE_TYPE_CRASH]),
-               "!IsValidRoad( maiChallengeRoadIndex[BrnStreetData::E_SCORE_TYPE_CRASH] )");
+               CgsDev::Assert::MessageAt("!IsValidRoad( maiChallengeRoadIndex[BrnStreetData::E_SCORE_TYPE_CRASH] )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 890));
 
     if (IsTimeRuleActive())
     {
@@ -166,7 +167,7 @@ void RoadRulesManager::SetRoadRulesMode(GameStateModuleIO::OutputBuffer* lpOutpu
             break;
 
         default:
-            CGS_ASSERT(false, "How did it end up here?");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("How did it end up here?", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 606));
             break;
         }
     }

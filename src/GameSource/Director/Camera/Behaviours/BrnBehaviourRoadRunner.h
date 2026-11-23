@@ -55,6 +55,13 @@ namespace BrnDirector
 namespace Camera
 {
 
+// The road-runner's behaviour-type tag, as the sibling headers slice it: SetParameters compares
+// the block's tag against 16 (`cmplwi r11, 0x10` @0x821F5570; BehaviourParameterBank's case 16).
+enum EBehaviourTypeRoadRunner
+{
+    eBehaviourRoadRunner = 16
+};
+
 // ----------------------------------------------------------------------------
 // TrafficLaneTruck -- the virtual vehicle the road-runner camera rides. It walks the
 // WorldMap's traffic-lane graph and publishes a world transform plus its velocities.

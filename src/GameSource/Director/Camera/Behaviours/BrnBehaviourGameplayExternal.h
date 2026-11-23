@@ -96,11 +96,6 @@ public:
         // Bodied in BrnBehaviourGameplayExternalParameters.cpp.
         template<class TSerialiser> void Serialise(TSerialiser& lrSerialiser);
 
-        EBehaviourTypeGameplayExternal GetType() const
-        {
-            return static_cast<EBehaviourTypeGameplayExternal>(mType);
-        }
-
         // The source block this seeds from: a small object whose +0x04 slot (mpfValues) holds
         // a pointer to the f32 source array Parameters::Set copies out of (the asm re-loads
         // lwz r11,4(r4) before each lfs ...(r11)).

@@ -49,6 +49,7 @@
 #include "SharedClasses/Progression/BrnTrainingTypes.h"          // BrnProgression::E_TRAINING_TYPE_DAMAGE_CRITICAL (57)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // CgsDev::Log::gpDebugPrint (the [rr] witness)
 
 namespace BrnGameState
@@ -64,7 +65,7 @@ void ScoringSystem::OnRoadRagePlayerCrashed(GameStateModuleIO::OutputBuffer* lpO
     if (CgsDev::Log::gpDebugPrint != 0)
     {
     }
-    CGS_ASSERT(miMaximumPlayerCrashedNumber != 0, "miMaximumPlayerCrashedNumber != 0");   // BrnScoringSystem.cpp:2550
+    CGS_ASSERT(miMaximumPlayerCrashedNumber != 0, CgsDev::Assert::MessageAt("miMaximumPlayerCrashedNumber != 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2550));   // BrnScoringSystem.cpp:2550
 
     ++miCurrentPlayerCrashedNumber;
 

@@ -6,6 +6,7 @@
 #include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"    // RoadRulesManager::GetCurrentRoadID
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<13312,16>::AddEvent / CgsModule::Event
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // ---------------------------------------------------------------------------
 // BrnGameStateStreetManager_wB_06.cpp  --  wave-B group 7 ("online-big")
@@ -34,13 +35,13 @@ void StreetManager::ProcessNetworkHighScoreEvent(
         GameStateModuleIO::OutputBuffer* lpOutput,
         const GameStateModuleIO::OnlineRoadRulesPersonalBestRecvEvent* lpPersonalBestEvent )
 {
-    CGS_ASSERT( lpPersonalBestEvent, "lpPersonalBestEvent" );
+    CGS_ASSERT( lpPersonalBestEvent, CgsDev::Assert::MessageAt("lpPersonalBestEvent", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2973) );
 
     BrnStreetData::ChallengeHighScoreEntry lPersonalBest = lpPersonalBestEvent->mPersonalBestScore;
 
     const BrnStreetData::ChallengeIndex liChallengeIndex = lpPersonalBestEvent->mPersonalBestChallengeIndex;
     CGS_ASSERT( liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES && liChallengeIndex >= 0,
-                "lChallengeIndex < BrnGameState::KI_MAX_CHALLENGES && lChallengeIndex >= 0" );
+                CgsDev::Assert::MessageAt("lChallengeIndex < BrnGameState::KI_MAX_CHALLENGES && lChallengeIndex >= 0", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2978) );
 
     const BrnStreetData::Road* lpRoad = mpStreetData->GetRoad( liChallengeIndex );
 
