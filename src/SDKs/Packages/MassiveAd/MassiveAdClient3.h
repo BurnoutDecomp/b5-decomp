@@ -92,19 +92,21 @@ extern void  (*MassiveFree)(void* pBlock);
 // to the title's own file system). MassiveFileOpen returns an opaque file handle
 // (null on failure); the write/flush/close hooks take that handle back.
 // XMassiveAdClientSubscriber::MediaDownloadComplete @ 0x82BCEC70 is the recovered
-// consumer. Declared here and supplied by the MassiveAd platform file layer
-// (another TU). FLAG: these wrap the OS file primitives -- external/platform, not
-// project-owned.
+// consumer. These wrappers use the C linkage of the ARTIST file hooks at
+// 0x82BD2518 through 0x82BD2558 and the XDK platform archive symbols.
 //   MassiveFileOpen(name, mode)            -> opaque file handle (0 on failure)
 //   MassiveFileWrite(data, size, count, f) -> bytes/records written
 //   MassiveFileFlush(f)                    -> flush buffered writes
 //   MassiveFileClose(f)                    -> close the handle
 // ---------------------------------------------------------------------------
-void* MassiveFileOpen(const char* pcFilename, const char* pcMode);
-int   MassiveFileWrite(const void* pData, unsigned int nElemSize, unsigned int nCount,
-                       void* pFile);
-void  MassiveFileFlush(void* pFile);
-void  MassiveFileClose(void* pFile);
+extern "C"
+{
+    void* MassiveFileOpen(const char* pcFilename, const char* pcMode);
+    int   MassiveFileWrite(const void* pData, unsigned int nElemSize, unsigned int nCount,
+                           void* pFile);
+    void  MassiveFileFlush(void* pFile);
+    void  MassiveFileClose(void* pFile);
+}
 
 // ---------------------------------------------------------------------------
 // MassiveAd string-format helper (sub_82C10930).
