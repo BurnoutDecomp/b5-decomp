@@ -17,6 +17,11 @@
 // the same singleton Collection.cpp / Decoder.cpp reach.
 // =====================================================================================
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces ARTIST Release at 0x82B6CC08 and preserves the other matches.
+#pragma optimize("s", on)
+#endif
+
 #include "rw/audio/core/DelayLine.h"
 
 #include "coreallocator/icoreallocator_interface.h" // EA::Allocator::ICoreAllocator

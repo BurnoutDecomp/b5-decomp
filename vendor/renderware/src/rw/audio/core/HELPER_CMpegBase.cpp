@@ -33,6 +33,11 @@
 // so they are dropped.
 // =====================================================================================
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces ARTIST GetBits at 0x82B85FE0 and Close at 0x82B86430.
+#pragma optimize("s", on)
+#endif
+
 #include "rw/audio/core/HELPER_CMpegBase.h"
 #include "rw/audio/core/PlugIn.h" // rw::audio::core::System (Alloc / Free)
 

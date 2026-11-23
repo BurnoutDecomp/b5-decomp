@@ -12,6 +12,11 @@
 // console) and EstimateLoad (the CPU-cost model ReverbIR1 budgets with).
 // =====================================================================================
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces the ARTIST destructor and Reset at 0x82B6E758 and 0x82B6E7C0.
+#pragma optimize("s", on)
+#endif
+
 #include "rw/audio/core/FastFirEngine.h"
 #include "rw/audio/core/PlugIn.h" // rw::audio::core::System (the shared allocator @+0x14)
 
