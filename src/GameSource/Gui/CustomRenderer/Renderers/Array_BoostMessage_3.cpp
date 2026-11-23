@@ -7,6 +7,6 @@
 // pattern.
 //   X360 0x8241D600 = Array<BoostMessage,3u>::Append  (memcpy 0x44; count @ +0xCC; CgsArray.h:225/226)
 //   X360 0x8241DD08 = Array<BoostMessage,3u>::GetItem  (returns &maElements[i]; CgsArray.h:556/557)
-template void                       Array<BrnGui::BoostMessage, 3>::Append(const BrnGui::BoostMessage&);
-template BrnGui::BoostMessage&       Array<BrnGui::BoostMessage, 3>::GetItem(u32);
-template const BrnGui::BoostMessage& Array<BrnGui::BoostMessage, 3>::GetItem(u32) const;
+template void                       CgsContainers::Array<BrnGui::BoostMessage, 3>::Append(const BrnGui::BoostMessage&);
+template BrnGui::BoostMessage&       CgsContainers::Array<BrnGui::BoostMessage, 3>::GetItem(u32);
+template const BrnGui::BoostMessage& CgsContainers::Array<BrnGui::BoostMessage, 3>::GetItem(u32) const;

@@ -24,8 +24,8 @@
 // Per-function (not `template class`): OverheadSignScore has no operator==, so a whole-class
 // instantiation would force the equality-based members (Contains/FindFirstInstanceOf/
 // CountInstancesOf/EraseInstancesOf) which do not compile for this element type.
-template void                       Array<BrnGui::OverheadSignScore, 32>::Append(const BrnGui::OverheadSignScore&);
-template BrnGui::OverheadSignScore& Array<BrnGui::OverheadSignScore, 32>::operator[](u32);
-template BrnGui::OverheadSignScore* Array<BrnGui::OverheadSignScore, 32>::Grow();
-template bool                       Array<BrnGui::OverheadSignScore, 32>::IsFull() const;
-template void                       Array<BrnGui::OverheadSignScore, 32>::AppendArray(const Array<BrnGui::OverheadSignScore, 32>&);
+template void                       CgsContainers::Array<BrnGui::OverheadSignScore, 32>::Append(const BrnGui::OverheadSignScore&);
+template BrnGui::OverheadSignScore& CgsContainers::Array<BrnGui::OverheadSignScore, 32>::operator[](u32);
+template BrnGui::OverheadSignScore* CgsContainers::Array<BrnGui::OverheadSignScore, 32>::Grow();
+template bool                       CgsContainers::Array<BrnGui::OverheadSignScore, 32>::IsFull() const;
+template void                       CgsContainers::Array<BrnGui::OverheadSignScore, 32>::AppendArray(const CgsContainers::Array<BrnGui::OverheadSignScore, 32>&);

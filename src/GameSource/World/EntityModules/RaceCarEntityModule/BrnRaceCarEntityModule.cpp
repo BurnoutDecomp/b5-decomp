@@ -2389,7 +2389,7 @@ void RaceCarEntityModule::HandleResetPlayerCarAction(
 // ============================================================================
 struct RaceCarEntityModule::SetPlayerOpponentsActionRecord
 {
-    Array<CgsID, 7u> maOpponents;   // DWARF BrnGameActions.h:726
+    CgsContainers::Array<CgsID, 7u> maOpponents;   // DWARF BrnGameActions.h:726
 };
 CGS_STATIC_ASSERT((sizeof(RaceCarEntityModule::SetPlayerOpponentsActionRecord) == 64),
               "X360 posts action 4 with size 64 (li r6, 0x40)");

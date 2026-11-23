@@ -19,4 +19,4 @@
 // specialized in this thin instantiation TU.
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<f32, 9>;
+template class CgsContainers::Array<f32, 9>;

@@ -138,7 +138,7 @@ namespace CgsGui
     // ARTIST82859704..798 / 82859844..8D0: key is the native texture pointer.
     static renderengine::TextureState* ResolveTextureState(
         AptRenderHandler::TextureStateTable& lrTable,
-        Array<AptRenderHandler::TextureStateElement, 256>& lrElements,
+        CgsContainers::Array<AptRenderHandler::TextureStateElement, 256>& lrElements,
         renderengine::Texture* lpTexture, bool lbClamp)
     {
         const u32 luKey = static_cast<u32>(reinterpret_cast<uintptr_t>(lpTexture));

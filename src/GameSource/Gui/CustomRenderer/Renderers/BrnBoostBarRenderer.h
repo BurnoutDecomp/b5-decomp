@@ -344,7 +344,7 @@ namespace BrnGui
 
         // DWARF h:595 -- the per-pass billboard collect array (global-namespace Array<T,N>;
         // the explicit instantiation lives in Array_BillboardInfo_32.cpp).
-        Array<CgsGui::BillboardInfo, 32> maBillboards;       // guest +51416
+        CgsContainers::Array<CgsGui::BillboardInfo, 32> maBillboards;       // guest +51416
 
         // DWARF h:597 -- the shard velocity/rotation roll source (Construct seeds it).
         CgsNumeric::Random   mRandom;                        // guest +53456

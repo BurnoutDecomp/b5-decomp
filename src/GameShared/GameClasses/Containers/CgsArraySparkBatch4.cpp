@@ -32,5 +32,5 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Effects/Particles/Native/BrnSparkRenderer.h"
 
-template void Array<BrnParticle::Native::SparkBatch, 4>::Append(
+template void CgsContainers::Array<BrnParticle::Native::SparkBatch, 4>::Append(
     const BrnParticle::Native::SparkBatch&);

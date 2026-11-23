@@ -12,4 +12,4 @@
 
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N>::Append (inline generic)
 
-template void Array<int, 16>::Append(const int&);
+template void CgsContainers::Array<int, 16>::Append(const int&);

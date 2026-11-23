@@ -1875,7 +1875,7 @@ void GameStateModule::OnPlayerCarChange(CgsID lCarId, CgsID lWheelId,
 
     // The X360 zeroes the opponent array's count word BEFORE the forwarded call (the local lives
     // across it), i.e. Array<CgsID,7>::Construct().
-    Array<s64, 7> laOpponentCarIds;
+    CgsContainers::Array<s64, 7> laOpponentCarIds;
     laOpponentCarIds.Construct();
 
     OnSpecialEventPlayerCarChange(lCarId, lWheelId, lpQueue, lbUpdateProfile);
@@ -1899,9 +1899,9 @@ void GameStateModule::OnPlayerCarChange(CgsID lCarId, CgsID lWheelId,
         if (lpCarOpponentSet != 0)
         {
             s32 liOpponents = lpCarOpponentSet->GetOpponentCount();
-            if (liOpponents >= static_cast<s32>(Array<s64, 7>::KU_SIZE))
+            if (liOpponents >= static_cast<s32>(CgsContainers::Array<s64, 7>::KU_SIZE))
             {
-                liOpponents = static_cast<s32>(Array<s64, 7>::KU_SIZE);
+                liOpponents = static_cast<s32>(CgsContainers::Array<s64, 7>::KU_SIZE);
             }
             for (s32 liCarOpponentIndex = 0; liCarOpponentIndex < liOpponents; ++liCarOpponentIndex)
             {

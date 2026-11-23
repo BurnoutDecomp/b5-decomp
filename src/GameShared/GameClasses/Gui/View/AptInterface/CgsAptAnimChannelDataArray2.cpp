@@ -21,4 +21,4 @@
 // `&v2[6 * count]`, so sizeof(AnimChannelData) must be 24 (0x18).
 CGS_STATIC_ASSERT((sizeof(CgsGui::AnimChannelData) == 24), "AnimChannelData stride 24 (X360 0x824E5CF8)");
 
-template void Array<CgsGui::AnimChannelData, 2>::Append(const CgsGui::AnimChannelData&);
+template void CgsContainers::Array<CgsGui::AnimChannelData, 2>::Append(const CgsGui::AnimChannelData&);

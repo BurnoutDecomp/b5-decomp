@@ -254,7 +254,7 @@ private:
     // Native member order: ARTIST827E3DA8 constructor and826C9330 Construct.
     Io::LogicInputBuffer* mpBrnLogicInputBuffer;   // +4C94
     Io::LogicOutputBuffer* mpBrnLogicOutputBuffer; // +4C98
-    Array<BrnGameState::GameStateModuleIO::SoundTriggerAction,16> maTriggerActions; // +4CA0
+    CgsContainers::Array<BrnGameState::GameStateModuleIO::SoundTriggerAction,16> maTriggerActions; // +4CA0
     Io::PreUpdateOutput mPreUpdateOutput;         // +4EB0
     CgsSound::Playback::Module::Io::OutputBuffer::FreedBuffersArray mFreedStreamBufferIds; // +51E0
     CgsSound::Logic::Voice mMasterVoice;           // +51F0

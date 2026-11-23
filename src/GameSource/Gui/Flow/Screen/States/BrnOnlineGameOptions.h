@@ -140,7 +140,7 @@ namespace BrnGui
         TextField                 mTitleText;            // +32232 "Title_text"
         GuiNetworkRouteInfo       mRouteInfoDisplay;     // +32528 "RouteInfo"
         GuiEventNetworkGameParams mGameOptions;          // +41152 (480 B, pointer-free)
-        Array<CreateMatchOption, 75> maOptions;          // +41632 (count word @ +42232)
+        CgsContainers::Array<CreateMatchOption, 75> maOptions;          // +41632 (count word @ +42232)
         const CreateMatchOption::EOption* mpCommonOptions; // +42236
         GuiCache*                 mpGuiCache;            // +42240
         EOptionsToLoad            meOptionsToLoad;       // +42244

@@ -23,7 +23,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // original streamed bounds-assert text
 
 template<>
-s32& Array<s32, 20>::GetItem(u32 luIndex)
+s32& CgsContainers::Array<s32, 20>::GetItem(u32 luIndex)
 {
     if (miCount == KI_UNCONSTRUCTED)
     {
@@ -55,7 +55,7 @@ s32& Array<s32, 20>::GetItem(u32 luIndex)
 }
 
 template<>
-const s32& Array<s32, 20>::GetItem(u32 luIndex) const
+const s32& CgsContainers::Array<s32, 20>::GetItem(u32 luIndex) const
 {
     if (miCount == KI_UNCONSTRUCTED)
     {
@@ -88,15 +88,15 @@ const s32& Array<s32, 20>::GetItem(u32 luIndex) const
 
 // The playlist's const operator[] reaches the same const GetItem body.
 template<>
-s32& Array<s32, 20>::operator[](u32 luIndex)
+s32& CgsContainers::Array<s32, 20>::operator[](u32 luIndex)
 {
     return GetItem(luIndex);
 }
 
 template<>
-const s32& Array<s32, 20>::operator[](u32 luIndex) const
+const s32& CgsContainers::Array<s32, 20>::operator[](u32 luIndex) const
 {
     return GetItem(luIndex);
 }
 
-template class Array<s32, 20>;
+template class CgsContainers::Array<s32, 20>;

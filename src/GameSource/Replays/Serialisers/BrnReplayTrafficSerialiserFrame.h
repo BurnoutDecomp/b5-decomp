@@ -11,7 +11,7 @@ namespace BrnReplays
 
     struct TrafficSerialiserFrame
     {
-        typedef ::Set<u16, BrnTraffic::KU_MAX_ACTIVE_HULLS> ActiveHullSet;
+        typedef CgsContainers::Set<u16, BrnTraffic::KU_MAX_ACTIVE_HULLS> ActiveHullSet;
 
         ActiveHullSet mActiveHullsForLocalPlayer;                     // +0x00
         u16 muLocalPlayerHull;                                        // +0x94

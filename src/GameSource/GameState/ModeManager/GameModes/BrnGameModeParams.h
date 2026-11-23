@@ -177,9 +177,9 @@ public:
     static const u64 KU_FLAG_ALLOW_REVENGE_TAKEDOWNS           = 0x800000000ull;
 
     // The DWARF spells the embedded fixed arrays as Array<T, N>.
-    typedef Array<StartLocation, 8u>        StartLocationArray;
-    typedef Array<CheckpointData, 16u>      CheckpointDataArray;
-    typedef Array<OpponentData, 7u>         OpponentDataArray;   // DWARF :140 (7 == BrnWorld::KI_MAX_RIVALS_IN_MODE)
+    typedef CgsContainers::Array<StartLocation, 8u>        StartLocationArray;
+    typedef CgsContainers::Array<CheckpointData, 16u>      CheckpointDataArray;
+    typedef CgsContainers::Array<OpponentData, 7u>         OpponentDataArray;   // DWARF :140 (7 == BrnWorld::KI_MAX_RIVALS_IN_MODE)
 
     // ---- X360-attested standalone methods (the only six in the ledger) -----------------
     // Construct: reset every field to its "no event" default. Takes the real
@@ -460,7 +460,7 @@ private:
 class StartGameModeParams
 {
 public:
-    typedef Array<CheckpointData, 16u> CheckpointDataArray;   // DWARF :99
+    typedef CgsContainers::Array<CheckpointData, 16u> CheckpointDataArray;   // DWARF :99
 
     // ---- X360-attested standalone methods (this TU) ----
     void Construct(GameStateModuleIO::EGameModeType leGameModeType,

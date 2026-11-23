@@ -52,7 +52,7 @@ struct InputBuffer : public CgsModule::IOBuffer
 // the stream-service posts) and the stream-buffer-freed voice-ident list.
 struct OutputBuffer : public CgsModule::IOBuffer
 {
-    typedef Array<CgsSound::Io::QueueElement, 3>  FreedBuffersArray;    // h:52
+    typedef CgsContainers::Array<CgsSound::Io::QueueElement, 3>  FreedBuffersArray;    // h:52
     typedef CgsModule::VariableEventQueue<4096, 16> ResourceRequestQueue; // h:50 (ResourceRequestQueue<4096>)
 
     void Construct();   // h:104  (@0x826C5C40 carve site: base + queue Construct/Clear + array Construct/Clear)

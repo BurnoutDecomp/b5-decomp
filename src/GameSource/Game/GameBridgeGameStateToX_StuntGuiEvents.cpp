@@ -794,9 +794,9 @@ namespace
 
             case 183:
             {
-                const Array<CgsID, 8>& lrCars =
-                    *reinterpret_cast<const Array<CgsID, 8>*>(lpAction);
-                Array<CgsID, 8> lReply;
+                const CgsContainers::Array<CgsID, 8>& lrCars =
+                    *reinterpret_cast<const CgsContainers::Array<CgsID, 8>*>(lpAction);
+                CgsContainers::Array<CgsID, 8> lReply;
                 lReply.Clear();
                 for (s32 liCar = 0; liCar < lrCars.GetLength(); ++liCar)
                     lReply.Append(lrCars.GetItem(liCar));

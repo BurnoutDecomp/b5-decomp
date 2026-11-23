@@ -27,10 +27,10 @@ struct RaceCarStateData
     // The four Append-grown lists: one entry per race car that passed the active/not-rival
     // filter, so their live counts are <= E_ACTIVE_RACE_CAR_INDEX_COUNT and index-parallel
     // to each other, NOT to an EActiveRaceCarIndex.
-    ::Array<Vector3,  E_ACTIVE_RACE_CAR_INDEX_COUNT> mRaceCarPositions;        // :56
-    ::Array<Vector3,  E_ACTIVE_RACE_CAR_INDEX_COUNT> mRaceCarLinearVelocities; // :57
-    ::Array<VecFloat, E_ACTIVE_RACE_CAR_INDEX_COUNT> mRaceCarSpeeds;           // :58
-    ::Array<Vector3,  E_ACTIVE_RACE_CAR_INDEX_COUNT> mRaceCarXZVelocityDirs;   // :59
+    CgsContainers::Array<Vector3,  E_ACTIVE_RACE_CAR_INDEX_COUNT> mRaceCarPositions;        // :56
+    CgsContainers::Array<Vector3,  E_ACTIVE_RACE_CAR_INDEX_COUNT> mRaceCarLinearVelocities; // :57
+    CgsContainers::Array<VecFloat, E_ACTIVE_RACE_CAR_INDEX_COUNT> mRaceCarSpeeds;           // :58
+    CgsContainers::Array<Vector3,  E_ACTIVE_RACE_CAR_INDEX_COUNT> mRaceCarXZVelocityDirs;   // :59
 
     // The two fixed tables, indexed BY EActiveRaceCarIndex.
     bool    mabRaceCarActive[E_ACTIVE_RACE_CAR_INDEX_COUNT];            // :62

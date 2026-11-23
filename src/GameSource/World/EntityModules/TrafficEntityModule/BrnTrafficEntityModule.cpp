@@ -2951,7 +2951,7 @@ void TrafficEntityModule::UpdateRaceCarHulls(const BrnTrafficIO::InputBuffer_Pos
                     maaRaceCarHulls[leRaceCar].Clear();
                     maaRaceCarHulls[leRaceCar].Append(luNewHull);
 
-                    const Set<u16, 8>& lrHullPvs = mpData->mpPvs->GetHullPvs(luNewHull);
+                    const CgsContainers::Set<u16, 8>& lrHullPvs = mpData->mpPvs->GetHullPvs(luNewHull);
                     for (u32 luPvsHull = 0; luPvsHull < lrHullPvs.GetLength(); ++luPvsHull)
                     {
                         maaRaceCarHulls[leRaceCar].Append(lrHullPvs[luPvsHull]);
@@ -3224,7 +3224,7 @@ void TrafficEntityModule::RecalculateActiveHulls(
              leRaceCar < E_ACTIVE_RACE_CAR_INDEX_COUNT;
              leRaceCar = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leRaceCar) + 1))
         {
-            const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrRaceCarHulls =
+            const CgsContainers::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrRaceCarHulls =
                 maaRaceCarHulls[leRaceCar];
 
             for (u32 luIndex = 0; luIndex < lrRaceCarHulls.GetLength(); ++luIndex)
@@ -3265,7 +3265,7 @@ void TrafficEntityModule::RecalculateActiveHulls(
 
     if (meLocalPlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
     {
-        const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrLocalHulls =
+        const CgsContainers::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrLocalHulls =
             maaRaceCarHulls[meLocalPlayerIndex];
 
         for (u32 luIndex = 0; luIndex < lrLocalHulls.GetLength(); ++luIndex)
@@ -4581,7 +4581,7 @@ void TrafficEntityModule::Reset()
                     muCurrentlyPredictedHull = luHull;
                 }
 
-                const Set<u16, 8>& lrHullPvs = mpData->mpPvs->GetHullPvs(luHull);
+                const CgsContainers::Set<u16, 8>& lrHullPvs = mpData->mpPvs->GetHullPvs(luHull);
                 for (u32 luPvsHull = 0; luPvsHull < lrHullPvs.GetLength(); ++luPvsHull)
                 {
                     maaRaceCarHulls[leRaceCar].Append(lrHullPvs[luPvsHull]);
@@ -5672,7 +5672,7 @@ void TrafficEntityModule::AddVehiclesToTargetList()
         // no signed numeric operation observes the element type, and the streamer consumes
         // the same storage as u8 bytes.
         const FlowType* lpFlowType = mpData->mpapFlowTypes[miDEBUGFlowtypeOverride];
-        Array<char, 16> laAssetIds;
+        CgsContainers::Array<char, 16> laAssetIds;
         laAssetIds.Construct();
 
         for (u32 luIndex = 0; luIndex < lpFlowType->muNumVehicleTypes; ++luIndex)
@@ -5700,7 +5700,7 @@ void TrafficEntityModule::AddVehiclesToTargetList()
     }
     else
     {
-        const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrPlayerHulls =
+        const CgsContainers::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrPlayerHulls =
             maaRaceCarHulls[meLocalPlayerIndex];
         if ( lrPlayerHulls.GetLength() == 0 )
         {
@@ -7593,7 +7593,7 @@ void TrafficEntityModule::UpdateParams(const BrnTrafficIO::InputBuffer_PostPhysi
     // Array at var_15B0, whose count word is cleared at 0x82744C50 (`stw r17(0), var_B0`,
     // and var_15B0 - var_B0 == 0x1500 == 168 * sizeof(CrashingThingData)) -- i.e. Clear()
     // immediately before the producer runs. Body in _wT2_06.cpp.
-    ::Array<CrashingThingData, 168u> laCurrentCrashingThings;
+    CgsContainers::Array<CrashingThingData, 168u> laCurrentCrashingThings;
     laCurrentCrashingThings.Clear();
     UpdateParams_BuildListOfCrashingThings(&laCurrentCrashingThings, lpInput,
                                            lPhysicalAliveVehicles);
@@ -9571,7 +9571,7 @@ void TrafficEntityModule::UpdateParam_CheckIfNeedToSlow(
         const Hull* lpHull,
         u32 luSectionIndex,
         const Section* lpSection,
-        const ::Array<PhysicalVehicleInfo, KU_MAX_PHYSICAL_VEHICLES_TO_CACHE>* lpaPhysicalVehicles)
+        const CgsContainers::Array<PhysicalVehicleInfo, KU_MAX_PHYSICAL_VEHICLES_TO_CACHE>* lpaPhysicalVehicles)
 {
     CGS_ASSERT(lpaPhysicalVehicles != 0, "lpPhysicalVehicleArray");      // .cpp 11110
     CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");      // .h 2350
@@ -10765,7 +10765,7 @@ void TrafficEntityModule::UpdateParams_DoTimeSlicedLogic(
     CGS_ASSERT(lpActiveRaceCarInterface != 0, "lpActiveRaceCarInterface");     // 0x82744078
 
     // .cpp 9778 -- the shared physical-vehicle cache.
-    ::Array<PhysicalVehicleInfo, KU_MAX_PHYSICAL_VEHICLES_TO_CACHE> lPhysicalVehicleInfo;
+    CgsContainers::Array<PhysicalVehicleInfo, KU_MAX_PHYSICAL_VEHICLES_TO_CACHE> lPhysicalVehicleInfo;
     lPhysicalVehicleInfo.Construct();
 
     // 0x827440AC..0x827440C0 -- the WHOLE cache build is skipped when divergent behaviour is
@@ -11065,7 +11065,7 @@ bool TrafficEntityModule::GetSympCrashingTargetPos(EntityId lTargetEntityId,
 // The shared producer. Three appends, in the console's order.
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateParams_BuildListOfCrashingThings(
-        ::Array<CrashingThingData, 168u>* lpaOutCurrentCrashingThings,
+        CgsContainers::Array<CrashingThingData, 168u>* lpaOutCurrentCrashingThings,
         const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
         const CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>& lrVehicles_Alive_And_Physical)
 {
@@ -11252,7 +11252,7 @@ void TrafficEntityModule::UpdateParams_BuildListOfCrashingThings(
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateParams_TryAvoidCrashing(
         u32 luParam,
-        const ::Array<CrashingThingData, 168u>* lpaCrashingThings)
+        const CgsContainers::Array<CrashingThingData, 168u>* lpaCrashingThings)
 {
     CGS_ASSERT(lpaCrashingThings != 0, "lpCurrentCrashingThings");   // .cpp 10489
 
@@ -11328,7 +11328,7 @@ void TrafficEntityModule::UpdateParams_TryAvoidCrashing(
 // ----------------------------------------------------------------------------
 void TrafficEntityModule::UpdateParams_TryStartSympatheticCrashing(
         u32 luParam,
-        const ::Array<CrashingThingData, 168u>* lpaCrashingThings)
+        const CgsContainers::Array<CrashingThingData, 168u>* lpaCrashingThings)
 {
     CGS_ASSERT(lpaCrashingThings != 0, "lpCurrentCrashingThings");   // .cpp 10375
 
@@ -15731,7 +15731,7 @@ void TrafficEntityModule::UpdateCollidableVehicles(
     // The console's own 33-slot stack list (Array<rw::math::vpu::Vector3,33>, the committed
     // CgsArrayVpuVector3_33.cpp instantiation): 8 active race cars + the 25-slot physical
     // traffic budget.
-    ::Array<Vector3, KU_MAX_PHYSICAL_TRAFFIC_VEHICLES + E_ACTIVE_RACE_CAR_INDEX_COUNT>
+    CgsContainers::Array<Vector3, KU_MAX_PHYSICAL_TRAFFIC_VEHICLES + E_ACTIVE_RACE_CAR_INDEX_COUNT>
         lSourcePositions;
     lSourcePositions.Clear();
 
@@ -17323,7 +17323,7 @@ void TrafficEntityModule::NukeTrafficJams()
     CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS> lxParamsAlreadyInAJam;
     lxParamsAlreadyInAJam.Construct();
 
-    ::Array<u16, KU_JAM_RUN_CAPACITY> laJamRun;
+    CgsContainers::Array<u16, KU_JAM_RUN_CAPACITY> laJamRun;
     laJamRun.Clear();
 
     // 0x82735424..0x8273554C. `addis r9,r16,4 ; addi r9,r9,-0x2900` == this+0x3D700 ==
@@ -19223,7 +19223,7 @@ void TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults(
                         lDirectorEntity.mVehicleId      = lVehicleId;
                         lDirectorEntity.mu16EntityIndex = static_cast<u16>( luIndex );
 
-                        Array<BrnTrafficIO::TrafficDirectorEntity, 32u>& lrDirectorEntities =
+                        CgsContainers::Array<BrnTrafficIO::TrafficDirectorEntity, 32u>& lrDirectorEntities =
                             lpOutput->GetTrafficDirectorOutputInterface()
                                     ->GetTrafficDirectorEntityArray();
 

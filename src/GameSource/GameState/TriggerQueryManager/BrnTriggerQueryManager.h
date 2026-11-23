@@ -53,7 +53,7 @@ namespace BrnGameState
 // X360-attested fixed array of the landmark/region indexes currently armed for the active game
 // mode. The element home (BrnGameState::LandmarkIndex) and the generic Array<T,N> body are both
 // committed; the leaf explicit instantiation lives in Array_LandmarkIndex_16.cpp.
-typedef Array<LandmarkIndex, 16> LandmarkIndexArray;
+typedef CgsContainers::Array<LandmarkIndex, 16> LandmarkIndexArray;
 
 class ModeManager;
 
@@ -198,20 +198,20 @@ private:
     CgsID mPlayerSuperJumpGroupID;                   // this+360 (0x168)
     CgsID mPlayerRoadLimitGroupID;                   // this+368 (0x170)
     // DWARF h:217. ARTIST array starts at384 after SIMD alignment; count896.
-    Array<GameStateModuleIO::SoundTriggerAction, 16> maSoundActions;
+    CgsContainers::Array<GameStateModuleIO::SoundTriggerAction, 16> maSoundActions;
 
     // this+912. The per-frame active-trigger set (region indexes currently armed in the world
     // TriggerEntityModule). DWARF BrnTriggerQueryManager.h:220 (Array<uint16_t,256u>). Element
     // store this+912..this+1423 (256 * 2B), live-count word this+1424 (== *(this+1424) in X360).
-    Array<u16, 256> maActiveTriggers;                // this+912 (elements), count @ this+1424
+    CgsContainers::Array<u16, 256> maActiveTriggers;                // this+912 (elements), count @ this+1424
 
     // this+1428 / this+1496 (DWARF h:221/222). The previous-frame trigger sets. RenderWorld reads
     // maLastFrameTriggers by name to tint regions active in the previous frame; the per-frame
     // trigger pump fills both arrays. Array<u16,32> is 32*2 + a 4-byte count == 68 bytes, pointer-
     // free, so each array retains its native size on the 64-bit gate even though its start offset
     // grows with the typed component and ResourcePtr members above.
-    Array<u16, 32> maLastPlayerTriggers;             // this+1428 (elements), count @ this+1492
-    Array<u16, 32> maLastFrameTriggers;              // this+1496 (elements), count @ this+1560
+    CgsContainers::Array<u16, 32> maLastPlayerTriggers;             // this+1428 (elements), count @ this+1492
+    CgsContainers::Array<u16, 32> maLastFrameTriggers;              // this+1496 (elements), count @ this+1560
 
     // this+1564 (0x61C) (DWARF h:225). ⭐ The resource-load stage word Prepare switches on --
     // the X360 reads/writes `*(this + 0x61C)` at every case. Grown from the reserved blob

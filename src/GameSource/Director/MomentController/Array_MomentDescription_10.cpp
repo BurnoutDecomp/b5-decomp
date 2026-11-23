@@ -21,17 +21,17 @@
 // opaque span in BrnMomentController.h; that hypothesis was wrong -- see the note there).
 #include "GameSource/Director/MomentController/BrnMomentSelector.h"
 
-template void Array<BrnDirector::MomentDescription, 10>::Append(
+template void CgsContainers::Array<BrnDirector::MomentDescription, 10>::Append(
     const BrnDirector::MomentDescription&);
 
 // Array<BrnDirector::MomentDescription,10>::operator[](u32)
 // Non-const checked accessor (generic body inline in CgsArray.h; asserts 0x21A/0x21B).
 // count @+0xA0, stride 0x10 == sizeof(MomentDescription). Caller MomentSelector::ActualDebugRender.
 template BrnDirector::MomentDescription&
-Array<BrnDirector::MomentDescription, 10>::operator[](u32);
+CgsContainers::Array<BrnDirector::MomentDescription, 10>::operator[](u32);
 
 // Array<BrnDirector::MomentDescription,10>::operator[](u32) const
 // Const checked accessor (generic body inline in CgsArray.h; asserts 0x22C/0x22D).
 // count @+0xA0, stride 0x10. 6 read-side callers (SelectBestLRUMomentWithExclusion/...).
 template const BrnDirector::MomentDescription&
-Array<BrnDirector::MomentDescription, 10>::operator[](u32) const;
+CgsContainers::Array<BrnDirector::MomentDescription, 10>::operator[](u32) const;

@@ -14,4 +14,4 @@
 // Callers: RacingLineGenerator::ExtrapolateRoute{Forwards,Backwards}/ExtrapolateTwistyRoute,
 // ResetOnTrackManager::Scan{Forwards,Backwards}AlongExtrapolatedRoute, RouteMapModule::ProcessExtrapolatedRoute.
 template const BrnAI::SectionAndPortalIndices&
-Array<BrnAI::SectionAndPortalIndices, 16>::operator[](u32) const;
+CgsContainers::Array<BrnAI::SectionAndPortalIndices, 16>::operator[](u32) const;

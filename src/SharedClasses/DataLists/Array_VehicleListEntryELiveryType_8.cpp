@@ -16,4 +16,4 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "SharedClasses/DataLists/VehicleListEntry.h"
 
-template class Array<BrnResource::VehicleListEntry::ELiveryType, 8>;
+template class CgsContainers::Array<BrnResource::VehicleListEntry::ELiveryType, 8>;

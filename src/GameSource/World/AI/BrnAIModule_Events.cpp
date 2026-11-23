@@ -1215,7 +1215,7 @@ void AIModule::SetupRaceBalancingManager(const BrnGameState::GameModeParams* lpG
 
     // 448-byte stack array + its count word; the console clears the count in place before the
     // opponent loop (`stw r10(0), graphs+0x1C0`) -- Append does the rest.
-    Array<RaceBalancingGraph, 7u> laRaceBalancingGraphs;
+    CgsContainers::Array<RaceBalancingGraph, 7u> laRaceBalancingGraphs;
     laRaceBalancingGraphs.Clear();
 
     // The opponent count is re-read from the params every iteration on the console

@@ -115,7 +115,7 @@ namespace CgsGui
         const char      (*mpaChannelTypeNames)[KI_MAX_CHANNEL_NAME_LEN]; // [+0x08] name table (h:128)
         s32               miNumChannels;       // [+0x0C] active channel count (h:129)
         ObjectController* mpObjectController;   // [+0x10] apt control bridge (h:131)
-        Array<AnimChannel, 6> maAnimChannels;   // [+0x14] live channels (h:133)
+        CgsContainers::Array<AnimChannel, 6> maAnimChannels;   // [+0x14] live channels (h:133)
     };
 }
 

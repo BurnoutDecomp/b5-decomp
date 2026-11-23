@@ -94,7 +94,7 @@ void GameStateModule::ProcessGameEvents_Group4(s32                              
         // array, count word included).
         const BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
 
-        Array<BrnProgression::ProfileEvent, 175> lDiscoveredEvents;
+        CgsContainers::Array<BrnProgression::ProfileEvent, 175> lDiscoveredEvents;
         lDiscoveredEvents.Construct();
 
         for (u32 luEvent = 0; luEvent < lpProfile->GetEventCount(); ++luEvent)

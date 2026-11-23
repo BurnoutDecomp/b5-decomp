@@ -57,8 +57,8 @@ namespace BrnTrafficIO
     //   mfClosestPerpendicularDist  f32                        @ 540
     struct TrafficToRaceCarInterface_PreScene
     {
-        typedef Array<NearMissData, 16> NearMissTrafficCollection;   // DWARF :65
-        typedef Array<NearMissData,  8> NearMissRaceCarCollection;   // DWARF :66
+        typedef CgsContainers::Array<NearMissData, 16> NearMissTrafficCollection;   // DWARF :65
+        typedef CgsContainers::Array<NearMissData,  8> NearMissRaceCarCollection;   // DWARF :66
 
         static const s32 KI_MAX_POTENTIAL_STOMPEES = 8;   // asm `cmpwi count,8`
 

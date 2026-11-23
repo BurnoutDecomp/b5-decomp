@@ -11,4 +11,4 @@
 // Element type unsigned short: 2-byte slot stride and the count word at this+0x8000
 // (== 16384 * sizeof(u16)) together fix element = u16 and extent N = 16384. Non-const GetItem
 // overload returning T& = u16&. A primitive element needs no element_home include.
-template u16& Array<u16, 16384>::GetItem(u32);
+template u16& CgsContainers::Array<u16, 16384>::GetItem(u32);

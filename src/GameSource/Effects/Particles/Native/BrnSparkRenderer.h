@@ -92,7 +92,7 @@ namespace Native
     // committed container is the unqualified Array<T,N> (see CgsArray.h's banner); the
     // count word lands at +0x30 == 4 * sizeof(SparkBatch), which is what
     // SparkRenderer::Dispatch's `lwz r11, 0x30(r21)` and Append @0x8291FAD0 both read.
-    typedef Array<SparkBatch, 4> SparkBatchArray;
+    typedef CgsContainers::Array<SparkBatch, 4> SparkBatchArray;
 
     // BrnSparkRenderer.h:75 (DWARF). 192 payload bytes + a 16-byte alignment hole ->
     // sizeof 0xD0 == 208 (stride attested by SparkFrameDataSet::GetFrame @0x8291FA40

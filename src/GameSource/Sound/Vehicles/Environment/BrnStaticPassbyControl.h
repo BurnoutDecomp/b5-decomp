@@ -46,7 +46,7 @@ struct StaticPassbyControl : public BrnSound::Logic::BrnEffectControl
     // DWARF BrnStaticPassbyControl.h (PassbyHistory). A fixed 5-slot ring of pass-bys.
     struct PassbyHistory
     {
-        Array<PassbyRecord, 5> mPassbyRecords;  // committed Array<T,N> (DWARF h:184/196)
+        CgsContainers::Array<PassbyRecord, 5> mPassbyRecords;  // committed Array<T,N> (DWARF h:184/196)
 
         // @ 0x8269B7D0 -- refuse-if-near-existing then append; true if a new record added.
         bool Record( rw::math::vpu::Vector3 lvPosition );

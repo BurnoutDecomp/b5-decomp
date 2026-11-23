@@ -945,7 +945,7 @@ private:
     // reached the same member independently in this wave.
     static const s32 KI_DISTRICT_COUNT                    = 18;   // the ctor / SetupRoamingSections loop bound
     static const s32 KI_MAX_ROAMING_SECTIONS_PER_DISTRICT = 8;    // "Too many roaming locations in district"
-    typedef Array<u16, KI_MAX_ROAMING_SECTIONS_PER_DISTRICT> RoamingSections;   // DWARF BrnGameStateTypes.h:202
+    typedef CgsContainers::Array<u16, KI_MAX_ROAMING_SECTIONS_PER_DISTRICT> RoamingSections;   // DWARF BrnGameStateTypes.h:202
 
     // The player's persisted profile (the X360 reaches it as the by-value sub-object at this+0x170).
     // Every Profile-facing bodied function (IsCarUnlocked / RepairUnlockedVehicle / SetRoadRule* /
@@ -1411,12 +1411,12 @@ private:
     // All positions follow from genuine member types and their natural alignment.
     RoamingSections maRoamingSections[KI_DISTRICT_COUNT];          //00000
     Profile mProfile;                                             //00170
-    Array<Race, 64> maPresetRaces;                                 //1D980
+    CgsContainers::Array<Race, 64> maPresetRaces;                                 //1D980
     LandmarkAISectionIndexPair maLandmarkAISectionIndices[KI_LANDMARK_AI_SECTION_INDEX_COUNT]; //1F788
     ProgressionDebugComponent mDebugComponent;                     //20788
     bool mbSendAchievementAwardedEvent_DEBUG;                      //20800
     s32 miAchievementToAward_DEBUG;                               //20804
-    Array<BrnGameState::GameStateModuleIO::TrophyUnlockAction, 12> mQueueOfTrophyCarUnLocks; //20808
+    CgsContainers::Array<BrnGameState::GameStateModuleIO::TrophyUnlockAction, 12> mQueueOfTrophyCarUnLocks; //20808
     CarData* mpCurrentCarData;                                    //208D0
     LiveryData* mpCurrentLiveryData;                              //208D4
     u32 muNumPresetRaces;                                         //208D8

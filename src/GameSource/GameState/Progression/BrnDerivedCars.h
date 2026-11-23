@@ -80,7 +80,7 @@ namespace BrnProgression
     // the base-clause below, which rules out a member of DerivedCarArray.
     const u32 KU_MAX_AMOUNT_OF_DERIVED_CARS = 8;
 
-    struct DerivedCarArray : public Array<CgsID, KU_MAX_AMOUNT_OF_DERIVED_CARS>
+    struct DerivedCarArray : public CgsContainers::Array<CgsID, KU_MAX_AMOUNT_OF_DERIVED_CARS>
     {
         // DWARF h:56, body h:~90-140 IN THIS HEADER, emitted out-of-line @0x82374F60.
         // [map arm 2026-08-27] BODIED (the BrnMainMapLinkGates stand-in died with it).
@@ -265,7 +265,7 @@ namespace BrnProgression
 
     private:
         // DWARF h:73. X360 @+0x48 (elements) / @+0x68 (count word).
-        Array<BrnResource::VehicleListEntry::ELiveryType, KU_MAX_AMOUNT_OF_DERIVED_CARS> maLiveryTypes;
+        CgsContainers::Array<BrnResource::VehicleListEntry::ELiveryType, KU_MAX_AMOUNT_OF_DERIVED_CARS> maLiveryTypes;
 
         // Never called. offsetof on a private member is legal here (member-function body
         // == complete-class context). RELATIVE pin only: the livery array must start
@@ -276,7 +276,7 @@ namespace BrnProgression
         static void _AssertLayout()
         {
             CGS_STATIC_ASSERT((offsetof(DerivedCarArray, maLiveryTypes)
-                              == sizeof(Array<CgsID, KU_MAX_AMOUNT_OF_DERIVED_CARS>)),
+                              == sizeof(CgsContainers::Array<CgsID, KU_MAX_AMOUNT_OF_DERIVED_CARS>)),
                           "maLiveryTypes must abut the CgsID base sub-object (X360: the "
                           "livery elements sit at base+0x48, their count word at +0x68)");
         }

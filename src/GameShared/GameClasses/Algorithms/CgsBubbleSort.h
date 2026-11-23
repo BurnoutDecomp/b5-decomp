@@ -43,7 +43,7 @@ namespace CgsAlgorithms
     // it stays correct for any element type. The console's only assert is the range guard.
     // ------------------------------------------------------------------------
     template <typename T, s32 TI_SIZE>
-    void BubbleSort(Array<T, TI_SIZE>& lrArray, s32 liFirst, s32 liLast)
+    void BubbleSort(CgsContainers::Array<T, TI_SIZE>& lrArray, s32 liFirst, s32 liLast)
     {
         CGS_ASSERT(liFirst <= liLast, "liStart <= liEnd");   // CgsBubbleSort.h:93
 
@@ -73,7 +73,7 @@ namespace CgsAlgorithms
     // 1-arg entry (X360 0x8222D8F8, BubbleSort<NearestCarInfo,8>). Assert constructed +
     // non-empty, then sort the whole live window [0, GetLength()-1] via the range worker.
     template <typename T, s32 TI_SIZE>
-    void BubbleSort(Array<T, TI_SIZE>& lrArray)
+    void BubbleSort(CgsContainers::Array<T, TI_SIZE>& lrArray)
     {
         // *(a1+96) == -1 guard: GetLength() itself asserts miCount != KI_UNCONSTRUCTED(-1)
         // ("Array used before Construct/Clear was called").

@@ -18,7 +18,7 @@
 // memberwise `maElements[miCount] = lrElement` for the 120-byte POD-shaped Race) and `++miCount`.
 // Emitted as an explicit instantiation of that generic body. Called by
 // BrnProgression::ProgressionManager::ProcessLoadedPresetRaces.
-template void Array<BrnProgression::Race, 64>::Append(const BrnProgression::Race&);
+template void CgsContainers::Array<BrnProgression::Race, 64>::Append(const BrnProgression::Race&);
 
 // X360 0x82360108. The bounds-checked indexed accessor. The generic GetItem in CgsArray.h is a
 // plain no-assert inline forwarding to operator[], so -- exactly like the committed
@@ -32,7 +32,7 @@ template void Array<BrnProgression::Race, 64>::Append(const BrnProgression::Race
 // bounds. Index: <n>, length: <len>" StrStream message is collapsed to the static expression
 // string the bounds assert reports.
 template<>
-BrnProgression::Race& Array<BrnProgression::Race, 64>::GetItem(u32 luIndex)
+BrnProgression::Race& CgsContainers::Array<BrnProgression::Race, 64>::GetItem(u32 luIndex)
 {
     // X360: *(a1 + 7680) == -1
     CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");

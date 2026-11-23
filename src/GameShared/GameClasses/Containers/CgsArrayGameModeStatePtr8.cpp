@@ -15,4 +15,4 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/GameState/ModeManager/GameModeStates/BrnGameModeState.h"
 
-template class Array<BrnGameState::GameModeState*, 8>;
+template class CgsContainers::Array<BrnGameState::GameModeState*, 8>;

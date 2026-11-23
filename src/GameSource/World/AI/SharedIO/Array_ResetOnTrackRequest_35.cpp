@@ -16,9 +16,9 @@
 // Both match the generic CgsArray.h Append/Erase bodies for a 16-byte element; this TU only forces
 // their emission for the ,35> instantiation.
 
-template void Array<BrnAI::AIModuleIO::ResetOnTrackRequest, 35>::Append(
+template void CgsContainers::Array<BrnAI::AIModuleIO::ResetOnTrackRequest, 35>::Append(
     const BrnAI::AIModuleIO::ResetOnTrackRequest&);
-template void Array<BrnAI::AIModuleIO::ResetOnTrackRequest, 35>::Erase(u32);
+template void CgsContainers::Array<BrnAI::AIModuleIO::ResetOnTrackRequest, 35>::Erase(u32);
 
 // operator[](u32) const @0x8276A4E0 (BrnAI::ResetOnTrackManager::PushResetOnTrackRequest / ::Update):
 // the CONST operator[] overload -- asserts miCount != -1 and unsigned-bounds-checks the index
@@ -26,4 +26,4 @@ template void Array<BrnAI::AIModuleIO::ResetOnTrackRequest, 35>::Erase(u32);
 // sizeof(ResetOnTrackRequest)==16). Generic body inline in CgsArray.h; this TU only forces the
 // out-of-line emission for the ,35> instantiation.
 template const BrnAI::AIModuleIO::ResetOnTrackRequest&
-Array<BrnAI::AIModuleIO::ResetOnTrackRequest, 35>::operator[](u32) const;
+CgsContainers::Array<BrnAI::AIModuleIO::ResetOnTrackRequest, 35>::operator[](u32) const;

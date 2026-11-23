@@ -392,7 +392,7 @@ public:
         // The vector args: v1 = fog scattering, v2 = fog colour + white level,
         // v3 = the camera position (the `vsubfp128 v13, v123, v13` operand).
         void GenerateDispatchLists( RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists* lpInput,
-                                    const Array<CgsSceneManager::EntityId, 32u>& lrVisibleEntities,
+                                    const CgsContainers::Array<CgsSceneManager::EntityId, 32u>& lrVisibleEntities,
                                     s32  liObjectList,
                                     s32  liOpaqueMeshList,
                                     s32  liTransparentMeshList,

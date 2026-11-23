@@ -30,4 +30,4 @@
 #include "GameSource/Effects/Particles/Native/BrnSparkRenderer.h"
 
 template BrnParticle::Native::SparkBatch&
-Array<BrnParticle::Native::SparkBatch, 4>::operator[](u32);
+CgsContainers::Array<BrnParticle::Native::SparkBatch, 4>::operator[](u32);

@@ -550,7 +550,7 @@ const u32 KU_X360_SIZEOF_PHYSICAL_TRAFFIC_MANAGER = 105648u;
 class PhysicalTrafficManager
 {
 public:
-    typedef Array<EntityId, 20u>            RecycledTrafficIdArray;
+    typedef CgsContainers::Array<EntityId, 20u>            RecycledTrafficIdArray;
     typedef CgsContainers::BitArray<20u>    TotalPhysicalTrafficBitArray;
     typedef CgsContainers::BitArray<20u>    FullyPhysicalTrafficBitArray;
     typedef CgsContainers::BitArray<1u>     SimpleTrafficBitArray;

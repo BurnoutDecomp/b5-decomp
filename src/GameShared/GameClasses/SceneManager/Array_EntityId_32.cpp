@@ -19,13 +19,13 @@
 CGS_STATIC_ASSERT((sizeof(CgsSceneManager::EntityId) == 4),
               "EntityId must be 4 bytes (Array<...,32> Append stride 4 / 0x80 count offset)");
 
-template void Array<CgsSceneManager::EntityId, 32>::Append(
+template void CgsContainers::Array<CgsSceneManager::EntityId, 32>::Append(
     const CgsSceneManager::EntityId&);
 
 // const GetItem overload (0x822AFAB8, CgsArray.h:538/539)
 template const CgsSceneManager::EntityId&
-    Array<CgsSceneManager::EntityId, 32>::GetItem(u32) const;
+    CgsContainers::Array<CgsSceneManager::EntityId, 32>::GetItem(u32) const;
 
 // non-const GetItem overload (0x827BA878, CgsArray.h:556/557)
 template CgsSceneManager::EntityId&
-    Array<CgsSceneManager::EntityId, 32>::GetItem(u32);
+    CgsContainers::Array<CgsSceneManager::EntityId, 32>::GetItem(u32);

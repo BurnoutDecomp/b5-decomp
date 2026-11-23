@@ -82,7 +82,7 @@ namespace BrnDirector
         u32 GetLength() const { return mPostBoxMap.GetLength(); }   // [PC accessor for tests]
 
     private:
-        ::Array<PostBox<Type>*, N> mPostBoxMap;   // h:68 (CgsArray.h declares Array at global scope)
+        CgsContainers::Array<PostBox<Type>*, N> mPostBoxMap;   // h:68
     };
 
     // The fine-line-test office's Clear (PS3 @0x2CEA8, X360 sub_8221CC98 -- also called by

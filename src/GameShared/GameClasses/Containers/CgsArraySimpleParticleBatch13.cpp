@@ -30,6 +30,6 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleBatch.h"
 
-template void Array<BrnParticle::Native::SimpleParticleBatch, 13>::Append(
+template void CgsContainers::Array<BrnParticle::Native::SimpleParticleBatch, 13>::Append(
     const BrnParticle::Native::SimpleParticleBatch&);
-template u32 Array<BrnParticle::Native::SimpleParticleBatch, 13>::GetLength() const;
+template u32 CgsContainers::Array<BrnParticle::Native::SimpleParticleBatch, 13>::GetLength() const;

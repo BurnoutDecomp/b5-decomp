@@ -49,7 +49,7 @@ namespace BrnNetwork
     };
 
     // DWARF BrnHullSyncMessage.h:45 (typedef Array<HullToActivateInfo,7u>).
-    typedef Array<HullToActivateInfo, 7> BufferedHullsToActivate;
+    typedef CgsContainers::Array<HullToActivateInfo, 7> BufferedHullsToActivate;
 
     // Reliable message syncing the set of traffic hulls a peer should activate.
     struct HullSyncMessage : CgsNetwork::ReliableMessage

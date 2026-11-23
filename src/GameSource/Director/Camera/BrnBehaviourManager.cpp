@@ -146,7 +146,7 @@ namespace Camera
         // 28 empty per-behaviour ref-count audit logs.
         mDebugBehaviourRefCountIndexLog.Clear();             // length word @+88052
         {
-            Array<BehaviourHelperIndex, 28u> lEmptyLog;
+            CgsContainers::Array<BehaviourHelperIndex, 28u> lEmptyLog;
             lEmptyLog.Clear();
             for (s32 liSlot = 0; liSlot < 28; ++liSlot)
             {
@@ -477,7 +477,7 @@ namespace Camera
                                        << ": (chronological order)\n";
         }
 
-        const Array<BehaviourHelperIndex, 28u>& lrLog =
+        const CgsContainers::Array<BehaviourHelperIndex, 28u>& lrLog =
             mDebugBehaviourRefCountIndexLog[static_cast<u32>(lrHelper)];
         for (u32 luI = 0; luI < lrLog.GetLength(); ++luI)
         {

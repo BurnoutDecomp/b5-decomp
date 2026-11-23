@@ -82,7 +82,7 @@ struct SectionAndPortalIndices;   // fwd (GameSource/World/AI/Route/BrnRouteMapM
 // 16u> ExtrapolatedIndexArray;`. Its DWARF home is BrnRouteMapModule.h (not this lane's file); a
 // typedef may be redeclared to the same type, so this copy stays legal once it lands there too.
 // The tree spells the container as the unqualified Array<T,N> (see the CgsArray.h banner).
-typedef Array<SectionAndPortalIndices, 16> ExtrapolatedIndexArray;
+typedef CgsContainers::Array<SectionAndPortalIndices, 16> ExtrapolatedIndexArray;
 
 class RacingLineGenerator
 {

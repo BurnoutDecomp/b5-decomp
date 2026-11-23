@@ -328,7 +328,7 @@ namespace BrnGui
         // reads with the CgsArray "used before Construct/Clear" assert -- so the old
         // `miRouteInfoCount` member was this array's count all along, and the two
         // independently-recovered offsets corroborate each other.
-        Array<rw::math::vpu::Vector3, KU_ROUTE_POINT_CAPACITY> mRoutePoints;
+        CgsContainers::Array<rw::math::vpu::Vector3, KU_ROUTE_POINT_CAPACITY> mRoutePoints;
 
 
         s32 miCurrentlyTrackedIndex; // +0x65060  index into maTrackerRecords of the tracker

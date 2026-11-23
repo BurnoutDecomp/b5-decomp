@@ -238,7 +238,7 @@ private:
 private:
     // ---- data members at exact X360 byte offsets (vptr leads at +0x00) -----------------
     CgsNetwork::NetworkTexture maImageGalleryMugshots[KI_IMAGE_GALLERY_NUM_PICTURES]; // +0x08 (3 * 28)
-    Array<ImageLoadRequest, 3u> maImageLoadRequests;                                  // +0x5C (count word @+0x80)
+    CgsContainers::Array<ImageLoadRequest, 3u> maImageLoadRequests;                                  // +0x5C (count word @+0x80)
     s32                        maLoadedImagesToSlotMapping[KI_IMAGE_GALLERY_NUM_PICTURES]; // +0x84
     s32                        maiImagesLockedForSave[KI_IMAGE_GALLERY_NUM_PICTURES];      // +0x90
     BrnWorld::WorldRegion      meCurrentWorldRegion;                                  // +0x9C (8 bytes)

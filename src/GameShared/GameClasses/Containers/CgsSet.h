@@ -21,11 +21,9 @@
 //     typedef Set<CgsID,512u> StuntElementSet;                 // BrnStuntModeScoring.h:70
 //     StuntModeScoring::StuntElementSet mRecentStuntElementSet;// BrnStuntModeScoring.h:348
 //
-// Spelled as the unqualified Set<T,N> at global scope to match the committed Array<T,N> /
-// FifoQueue<T,N> container convention (the DWARF spells these CgsContainers::Set, but the
-// project's committed containers live at global scope, and the embedding typedef itself is
-// the unqualified `Set<CgsID,512u>`). The capacity is a u32 non-type parameter to match the
-// DWARF spelling `<...,512u>`.
+// Declared in namespace CgsContainers, as the DWARF spells every instantiation and the
+// LegacySrc copy of this header declares it (CgsSet.h:25 `namespace CgsContainers`). The
+// capacity is a u32 non-type parameter to match the DWARF spelling `<...,512u>`.
 //
 // Bodies are the canonical Set<T,N> template (recovered intact from the LegacySrc reference
 // tree, references/LegacySrc/.../Containers/CgsSet.h); the original guarded each public method
@@ -37,6 +35,9 @@
 // live elements + the length word. rw::EndianSwap lands with a later (not-yet-reconstructed)
 // TU, so those two are declared-only here -- StuntModeScoring uses only Insert/Contains/Clear
 // /Find and iteration (GetLength + operator[]), all of which are fully bodied below.
+namespace CgsContainers
+{
+
 template <typename T, u32 N>
 class Set
 {
@@ -198,3 +199,5 @@ private:
     T   maElements[N];   // CgsSet.h:147  (+0x00)  inline element buffer
     u32 muLength;        // CgsSet.h:148  live element count; KU_INVALID until Construct/Clear
 };
+
+} // namespace CgsContainers

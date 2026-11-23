@@ -150,13 +150,13 @@ namespace BrnWorld
         if (leOwner == static_cast<EActiveRaceCarIndex>(-1))
         {
             for (s32 liPlayer = 0; liPlayer < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liPlayer)
-                if (maCrashingTrafficForPlayers[liPlayer].Find(luVehicle) != Set<u16, 160>::KU_INVALID)
+                if (maCrashingTrafficForPlayers[liPlayer].Find(luVehicle) != CgsContainers::Set<u16, 160>::KU_INVALID)
                 {
                     maCrashingTrafficForPlayers[liPlayer].Erase(luVehicle);
                     break;
                 }
         }
-        else if (maCrashingTrafficForPlayers[leOwner].Find(luVehicle) != Set<u16, 160>::KU_INVALID)
+        else if (maCrashingTrafficForPlayers[leOwner].Find(luVehicle) != CgsContainers::Set<u16, 160>::KU_INVALID)
             maCrashingTrafficForPlayers[leOwner].Erase(luVehicle);
     }
 

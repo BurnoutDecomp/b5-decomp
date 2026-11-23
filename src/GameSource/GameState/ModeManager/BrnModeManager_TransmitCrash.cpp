@@ -122,7 +122,7 @@ struct SetWayPointDistancesToFinishActionRecord
 {
     // (the console symbol is CgsContainers::Array<float,16>::Append @0x823182B8; this tree homes
     //  the Array template at GLOBAL scope -- CgsArray.h -- so it is spelled ::Array here)
-    ::Array<f32, 16> maDistances;
+    CgsContainers::Array<f32, 16> maDistances;
 };
 
 // The three wire sizes, pinned against the `li r6,<size>` immediates the console hands AddEvent.

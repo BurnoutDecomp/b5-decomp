@@ -368,7 +368,7 @@ namespace BrnNetworkModuleIO
     // array onto its pending uploads. Console 4 bytes; the pointer is 8 bytes on the host.
     struct NetworkInNonUploadedScoresEvent : public NetworkEvent<57>
     {
-        const Array<LocalEventScoreUploadData, 49>* mpNonUploadedScores;  // +0x00
+        const CgsContainers::Array<LocalEventScoreUploadData, 49>* mpNonUploadedScores;  // +0x00
     };
 
     // ====================================================================================

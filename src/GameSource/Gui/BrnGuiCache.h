@@ -285,7 +285,7 @@ namespace BrnGui
         static const s32 KI_NUM_LOAD_REQUEST_QUEUES = 2;
 
         ResourceInfo               maResources[KU_MAX_RESOURCES_TO_WATCH];
-        Array<u32, KU_MAX_RESOURCES_TO_WATCH> maRequestDirtyList;
+        CgsContainers::Array<u32, KU_MAX_RESOURCES_TO_WATCH> maRequestDirtyList;
         CgsGui::GuiEventQueueSmall mLoadRequestQueues[KI_NUM_LOAD_REQUEST_QUEUES];
         s32                        miCurrentLoadRequestQueue;
         ComponentsToWatch          maComponentsToWatch[3];

@@ -473,7 +473,7 @@ namespace BrnGameState
 
         // The set of stunt-element CgsIDs already counted this run (KI capacity 512). DWARF
         // typedef BrnStuntModeScoring.h:70 StuntElementSet == Set<CgsID,512u>.
-        typedef Set<CgsID, 512> StuntElementSet;                                         // :70
+        typedef CgsContainers::Set<CgsID, 512> StuntElementSet;                                         // :70
         StuntElementSet mRecentStuntElementSet; // :348
 
         // The recent-prop ring buffer (KI_MAX_RECENT_PROPS = 64 prop-id u16 entries). DWARF

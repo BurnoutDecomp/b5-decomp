@@ -23,4 +23,4 @@
 #include "GameShared/GameClasses/Containers/CgsSet.h"
 #include "BrnCommonTypes.h"   // typedef u64 CgsID (8-byte element)
 
-template class Set<CgsID, 512>;
+template class CgsContainers::Set<CgsID, 512>;

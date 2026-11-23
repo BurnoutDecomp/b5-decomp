@@ -17,7 +17,7 @@
 // plain primitive whose built-in operator== satisfies the equality-based generic Find/Contains.
 #include "GameShared/GameClasses/Containers/CgsSet.h"
 
-template class Set<u16, 15>;
+template class CgsContainers::Set<u16, 15>;
 
 // SetDifference is a member-function TEMPLATE (parameterised on the two source-set
 // capacities), so the explicit `template class Set<u16,15>` above does NOT emit it -- it
@@ -28,4 +28,4 @@ template class Set<u16, 15>;
 // lA, Insert it when lB does not Contain it. In the emitted asm Contains is inlined, so the
 // CgsSet.h:332 constructed-assert is followed by a direct Find call (Contains == Find !=
 // KU_INVALID); GetLength (:227) and operator[]/GetItem (:257/:258) asserts all match.
-template void Set<u16, 15>::SetDifference<15, 15>(const Set<u16, 15>& lA, const Set<u16, 15>& lB);
+template void CgsContainers::Set<u16, 15>::SetDifference<15, 15>(const CgsContainers::Set<u16, 15>& lA, const CgsContainers::Set<u16, 15>& lB);

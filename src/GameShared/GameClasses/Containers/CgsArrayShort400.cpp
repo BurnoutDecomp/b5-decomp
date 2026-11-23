@@ -22,7 +22,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameShared/GameClasses/Containers/CgsStack.h"
 
-template class Array<u16, 400>;
+template class CgsContainers::Array<u16, 400>;
 
 // Stack<u16,400> attests four members for this TU (Contains/Push/Pop/operator[]); force just
 // those rather than the whole class (Grow/Construct/etc. are not part of this using-TU).

@@ -27,6 +27,6 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N>::Append / ::Erase / ::GetItem (inline generic)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h" // PurgatoryInfo (4-byte element)
 
-template void Array<BrnTraffic::PurgatoryInfo, 1>::Append(const BrnTraffic::PurgatoryInfo&);
-template void Array<BrnTraffic::PurgatoryInfo, 1>::Erase(u32);
-template BrnTraffic::PurgatoryInfo& Array<BrnTraffic::PurgatoryInfo, 1>::GetItem(u32);
+template void CgsContainers::Array<BrnTraffic::PurgatoryInfo, 1>::Append(const BrnTraffic::PurgatoryInfo&);
+template void CgsContainers::Array<BrnTraffic::PurgatoryInfo, 1>::Erase(u32);
+template BrnTraffic::PurgatoryInfo& CgsContainers::Array<BrnTraffic::PurgatoryInfo, 1>::GetItem(u32);

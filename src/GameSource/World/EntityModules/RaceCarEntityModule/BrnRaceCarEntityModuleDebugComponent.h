@@ -87,7 +87,7 @@ namespace BrnWorld
         Matrix44Affine        mLastResetTransform;            // +0x30
         Vector3               mLastResetLineTestStart;        // +0x70
         Vector3               mLastResetLineTestEnd;          // +0x80
-        Array<Vector3, 10>    mLastResetLineTestIntersections;// +0x90
+        CgsContainers::Array<Vector3, 10>    mLastResetLineTestIntersections;// +0x90
         bool                  mbRenderTailgateCones;          // +0x140
         bool                  mbDrawDamageHUD;                // +0x141
         bool                  mbShowEngineState;              // +0x142

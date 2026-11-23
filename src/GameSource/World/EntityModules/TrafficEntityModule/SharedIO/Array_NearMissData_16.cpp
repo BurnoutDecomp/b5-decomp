@@ -11,4 +11,4 @@
 //     via an 8-byte stride (slwi r11,r11,3), then increments the count word.
 // The live-element count sits at byte offset 0x80 == 16 * sizeof(NearMissData) == the inline
 // maElements[16] buffer end, confirming sizeof(NearMissData) == 8.
-template void Array<BrnTraffic::BrnTrafficIO::NearMissData, 16>::Append(const BrnTraffic::BrnTrafficIO::NearMissData&);
+template void CgsContainers::Array<BrnTraffic::BrnTrafficIO::NearMissData, 16>::Append(const BrnTraffic::BrnTrafficIO::NearMissData&);

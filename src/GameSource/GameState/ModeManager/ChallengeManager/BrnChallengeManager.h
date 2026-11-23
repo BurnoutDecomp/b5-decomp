@@ -502,7 +502,7 @@ namespace BrnGameState
         f32   mfLeapCarsValidTimer;                                  // +0x110 (:382; -1.0f == invalid)
         s32   miNumCarsLeapt;                                        // +0x114 (:383)
         bool  mbUpdateLeaptCars;                                     // +0x118 (:384) (+7 pad)
-        Array<CgsID, 80u> maBillboardsCollected;                     // +0x120 (:386; ids 0x120-0x3A0, miCount @0x3A0, +4 pad; KI_MAX_BILLBOARDS_TO_TRACK == 80)
+        CgsContainers::Array<CgsID, 80u> maBillboardsCollected;                     // +0x120 (:386; ids 0x120-0x3A0, miCount @0x3A0, +4 pad; KI_MAX_BILLBOARDS_TO_TRACK == 80)
         CgsContainers::FastBitArray<120> maPlayerSuccessUpdateArray[KI_MAX_CHALLENGE_PLAYERS];       // +0x3A8 (:387; 16B each)
         GameStateModuleIO::EFreeburnChallengeSuccess maaePlayersSuccessStatus[KI_MAX_CHALLENGE_PLAYERS][KI_MAX_CHALLENGE_ACTIONS]; // +0x428 (:388)
         f32   maafCurrentActionsScores[KI_MAX_CHALLENGE_PLAYERS][KI_MAX_CHALLENGE_ACTIONS];          // +0x468 (:389)

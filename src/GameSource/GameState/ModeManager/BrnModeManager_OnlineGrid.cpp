@@ -142,7 +142,7 @@ void ModeManager::SetOnlineRaceCars(GameModeParams* lpGameModeParams,
 void ModeManager::SetupOnlineStartingGrid(GameModeParams* lpGameModeParams, s32 liCarCount,
                                           CgsNumeric::Random* lpRandom, bool lbUseCurrentStandings) const
 {
-    Array<GridPositionAndScoreData, 8> laaiTeamMembers[KI_PLAYER_TEAM_BUCKET_COUNT + 1];
+    CgsContainers::Array<GridPositionAndScoreData, 8> laaiTeamMembers[KI_PLAYER_TEAM_BUCKET_COUNT + 1];
     for (s32 liBucket = 0; liBucket <= KI_DISCONNECTED_BUCKET; ++liBucket)
     {
         laaiTeamMembers[liBucket].Construct();
@@ -205,7 +205,7 @@ void ModeManager::SetupOnlineStartingGrid(GameModeParams* lpGameModeParams, s32 
     }
 
     // ---- 3. flatten, highest team index first, disconnected players last --------------------
-    Array<s32, 8> laiRaceCarOrder;
+    CgsContainers::Array<s32, 8> laiRaceCarOrder;
     laiRaceCarOrder.Construct();
 
     for (s32 liTeam = KI_PLAYER_TEAM_BUCKET_COUNT - 1; liTeam >= 0; --liTeam)

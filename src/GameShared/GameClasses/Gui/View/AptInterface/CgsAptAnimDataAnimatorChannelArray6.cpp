@@ -18,4 +18,4 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptAnimData.h"
 
-template void Array<CgsGui::AnimData::AnimatorChannel, 6>::Append(const CgsGui::AnimData::AnimatorChannel&);
+template void CgsContainers::Array<CgsGui::AnimData::AnimatorChannel, 6>::Append(const CgsGui::AnimData::AnimatorChannel&);

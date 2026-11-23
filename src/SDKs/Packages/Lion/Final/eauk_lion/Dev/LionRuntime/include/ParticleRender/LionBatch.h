@@ -58,4 +58,4 @@ public:
 
 // The frame's batch list. Capacity 512 matches the X360 Array<LionBatch,512u> instantiation
 // (the length word Dispatch reads sits at guest +0x1800 == 512 * 12).
-typedef Array<LionBatch, 512> LionBatchArray;
+typedef CgsContainers::Array<LionBatch, 512> LionBatchArray;

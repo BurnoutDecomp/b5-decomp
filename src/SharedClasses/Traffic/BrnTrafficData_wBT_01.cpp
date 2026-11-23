@@ -60,7 +60,7 @@ namespace BrnTraffic
             -rw::math::vpu::GetVector3_XAxis(),
         };
 
-        Array<u16, 400> lHulls;
+        CgsContainers::Array<u16, 400> lHulls;
         lHulls.Clear();
         lHulls.Append(static_cast<u16>(mpPvs->GetHullIndexForPoint(lPosition)));
 

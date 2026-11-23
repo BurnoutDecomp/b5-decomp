@@ -242,7 +242,7 @@ private:
     bool mbHitOverheadSign;           // +0xBC
     u8   maPadBD[3];                  // +0xBD..+0xBF
 
-    Array<BoostMessageSlot, 3> mSlots;// +0xC0 (elements 3*0x44 == 0xCC; count word at
+    CgsContainers::Array<BoostMessageSlot, 3> mSlots;// +0xC0 (elements 3*0x44 == 0xCC; count word at
                                       //        +0x18C, Append'd to 3 by Construct)
 };
 

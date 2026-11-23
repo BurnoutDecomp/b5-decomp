@@ -36,9 +36,9 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Network/Managers/BrnEventScoresManager.h"  // BrnNetwork::LocalEventScoreUploadData (16B element)
 
-template void Array<BrnNetwork::LocalEventScoreUploadData, 49>::Append(const BrnNetwork::LocalEventScoreUploadData&);
-template void Array<BrnNetwork::LocalEventScoreUploadData, 49>::Erase(u32);
-template void Array<BrnNetwork::LocalEventScoreUploadData, 49>::EraseFast(u32);
+template void CgsContainers::Array<BrnNetwork::LocalEventScoreUploadData, 49>::Append(const BrnNetwork::LocalEventScoreUploadData&);
+template void CgsContainers::Array<BrnNetwork::LocalEventScoreUploadData, 49>::Erase(u32);
+template void CgsContainers::Array<BrnNetwork::LocalEventScoreUploadData, 49>::EraseFast(u32);
 
 // non-const operator[]  @ 0x8254E3E8  (checked indexed accessor; reached through
 // CgsContainers::AppendArray<..>(Array<LocalEventScoreUploadData,49>&) which indexes the source
@@ -49,7 +49,7 @@ template void Array<BrnNetwork::LocalEventScoreUploadData, 49>::EraseFast(u32);
 // length: <n>" StrStream message is the documented generic-body parity gap (kept as the static
 // CGS_ASSERT string).
 template BrnNetwork::LocalEventScoreUploadData&
-    Array<BrnNetwork::LocalEventScoreUploadData, 49>::operator[](u32);
+    CgsContainers::Array<BrnNetwork::LocalEventScoreUploadData, 49>::operator[](u32);
 
 // AddNew  @ 0x8235C268  (reserve-a-slot accessor; called by
 // BrnNetwork::EventScoresManager::StoreEventScoreForUpload @0x8255DFB0 via maPendingUploads.AddNew()
@@ -58,7 +58,7 @@ template BrnNetwork::LocalEventScoreUploadData&
 // guard, then `slwi r10,r11,4` (16*miCount) + add this -> returns &maElements[miCount] and
 // post-increments miCount (stw r11+1,0x310). Stride 0x10 == 16 == sizeof(LocalEventScoreUploadData).
 template BrnNetwork::LocalEventScoreUploadData*
-    Array<BrnNetwork::LocalEventScoreUploadData, 49>::AddNew();
+    CgsContainers::Array<BrnNetwork::LocalEventScoreUploadData, 49>::AddNew();
 
 // AppendArray  @ 0x8255E940  (append every live element of a same-instantiation source Array;
 // called by BrnNetwork::EventScoresManager::ProcessNetworkEvents, which folds the drained
@@ -73,5 +73,5 @@ template BrnNetwork::LocalEventScoreUploadData*
 // StrStream "Length/Capacity" message is the documented generic-body parity gap (kept as the
 // static CGS_ASSERT string). Reuses the already-instantiated operator[] and Append above.
 template void
-    Array<BrnNetwork::LocalEventScoreUploadData, 49>::AppendArray(
-        const Array<BrnNetwork::LocalEventScoreUploadData, 49>&);
+    CgsContainers::Array<BrnNetwork::LocalEventScoreUploadData, 49>::AppendArray(
+        const CgsContainers::Array<BrnNetwork::LocalEventScoreUploadData, 49>&);

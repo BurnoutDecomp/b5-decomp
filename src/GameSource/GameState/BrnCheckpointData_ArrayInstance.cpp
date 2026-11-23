@@ -11,4 +11,4 @@
 // returning &maElements[i] (stride 44 == sizeof(CheckpointData); 16*44 == 704 == the owner+704 count
 // offset the callers index). Non-const overload (AddRaceCarToStartingGrid / SetupOpponents /
 // TranslateGameActionsToGuiEvents / OnModeStart all index a mutable checkpoint record).
-template BrnGameState::CheckpointData& Array<BrnGameState::CheckpointData, 16>::operator[](u32);
+template BrnGameState::CheckpointData& CgsContainers::Array<BrnGameState::CheckpointData, 16>::operator[](u32);

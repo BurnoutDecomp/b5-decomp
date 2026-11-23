@@ -40,9 +40,9 @@
 // CgsArrayUnsignedShort72.cpp, a separate TU.)
 #include "GameShared/GameClasses/Containers/CgsSet.h"
 
-template class Set<u16, 72>;
+template class CgsContainers::Set<u16, 72>;
 
 // Force the out-of-line copy of the member template SetDifference<72u,72u> @ 0x8272C810
 // (the class instantiation above does not emit nested member templates). Body is the generic
 // CgsSet.h SetDifference<Capacity1,Capacity2>. Spelled GLOBAL scope (::Set), matching committed CgsSet.h.
-template void Set<u16, 72>::SetDifference<72, 72>(const Set<u16, 72>& lA, const Set<u16, 72>& lB);
+template void CgsContainers::Set<u16, 72>::SetDifference<72, 72>(const CgsContainers::Set<u16, 72>& lA, const CgsContainers::Set<u16, 72>& lB);

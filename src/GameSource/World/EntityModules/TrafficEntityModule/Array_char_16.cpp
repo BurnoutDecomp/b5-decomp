@@ -19,7 +19,7 @@
 
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N> (inline generic)
 
-template void  Array<char, 16>::Append(const char&);
-template s32   Array<char, 16>::FindFirstInstanceOf(const char&) const;
-template char& Array<char, 16>::GetItem(u32);
-template bool  Array<char, 16>::Contains(const char&) const;
+template void  CgsContainers::Array<char, 16>::Append(const char&);
+template s32   CgsContainers::Array<char, 16>::FindFirstInstanceOf(const char&) const;
+template char& CgsContainers::Array<char, 16>::GetItem(u32);
+template bool  CgsContainers::Array<char, 16>::Contains(const char&) const;

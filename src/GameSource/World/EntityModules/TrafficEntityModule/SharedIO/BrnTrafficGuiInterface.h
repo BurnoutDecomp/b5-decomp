@@ -32,7 +32,7 @@ namespace BrnTrafficIO
     CGS_STATIC_ASSERT((sizeof(VehicleScoreData) == 0x20), "VehicleScoreData stride 0x20");
 
     // The score-target list: the GUI traffic-car-info event IS this array (no event header).
-    typedef Array<VehicleScoreData, KI_MAX_CAR_SCORES_TO_SHOW> ScoringVehicleArray;
+    typedef CgsContainers::Array<VehicleScoreData, KI_MAX_CAR_SCORES_TO_SHOW> ScoringVehicleArray;
 
     CGS_STATIC_ASSERT((sizeof(ScoringVehicleArray) == 656), "ScoringVehicleArray is the 656-byte GUI payload");
 }

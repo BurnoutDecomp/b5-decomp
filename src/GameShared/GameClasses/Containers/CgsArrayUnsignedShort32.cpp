@@ -21,4 +21,4 @@
 // built-in operator== satisfies the equality-based generic members.
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<u16, 32>;
+template class CgsContainers::Array<u16, 32>;

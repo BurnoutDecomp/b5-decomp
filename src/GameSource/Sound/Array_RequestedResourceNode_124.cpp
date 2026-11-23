@@ -22,11 +22,11 @@
 //
 // RequestedNode = CgsContainers::LinkedListNode<BrnSound::Logic::ResourceRegistrar::RequestedResource>.
 template void
-Array< CgsContainers::LinkedListNode<BrnSound::Logic::ResourceRegistrar::RequestedResource>*, 124 >
+CgsContainers::Array< CgsContainers::LinkedListNode<BrnSound::Logic::ResourceRegistrar::RequestedResource>*, 124 >
     ::Append(
         CgsContainers::LinkedListNode<BrnSound::Logic::ResourceRegistrar::RequestedResource>* const& );
 
 template s32
-Array< CgsContainers::LinkedListNode<BrnSound::Logic::ResourceRegistrar::RequestedResource>*, 124 >
+CgsContainers::Array< CgsContainers::LinkedListNode<BrnSound::Logic::ResourceRegistrar::RequestedResource>*, 124 >
     ::FindFirstInstanceOf(
         CgsContainers::LinkedListNode<BrnSound::Logic::ResourceRegistrar::RequestedResource>* const& ) const;

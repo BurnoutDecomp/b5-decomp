@@ -15,6 +15,6 @@
 //                                   returns &maElements[index] (8*index + base).
 //   Grow()         @ 0x827B54D8  -- reserve the next free slot (CgsArray.h:289/290), returns
 //                                   &maElements[count] (8*count + base) then count++.
-template void                Array<BrnWorld::TrafficCrash, 160>::EraseFast(u32);
-template BrnWorld::TrafficCrash& Array<BrnWorld::TrafficCrash, 160>::GetItem(u32);
-template BrnWorld::TrafficCrash* Array<BrnWorld::TrafficCrash, 160>::Grow();
+template void                CgsContainers::Array<BrnWorld::TrafficCrash, 160>::EraseFast(u32);
+template BrnWorld::TrafficCrash& CgsContainers::Array<BrnWorld::TrafficCrash, 160>::GetItem(u32);
+template BrnWorld::TrafficCrash* CgsContainers::Array<BrnWorld::TrafficCrash, 160>::Grow();

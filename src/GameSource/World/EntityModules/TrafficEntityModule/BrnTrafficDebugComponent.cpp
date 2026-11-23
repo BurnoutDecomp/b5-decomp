@@ -602,7 +602,7 @@ namespace BrnTraffic
         char lacText[5120];
         CgsDev::StrStream lStream(lacText, sizeof(lacText));
 
-        const ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrRaceCarHulls = mpModule->maaRaceCarHulls[0];
+        const CgsContainers::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>& lrRaceCarHulls = mpModule->maaRaceCarHulls[0];
         if (lrRaceCarHulls.GetLength() < 1)
         {
             return;

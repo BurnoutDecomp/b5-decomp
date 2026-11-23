@@ -20,4 +20,4 @@
 // no element_home include.
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<u32, 8>;
+template class CgsContainers::Array<u32, 8>;

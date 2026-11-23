@@ -425,7 +425,7 @@ void PlaceOnTrackManager::PrePhysicsUpdate(
 
             // ARTIST 822F70BC..822F7100: inlined PushLineTestIntersection.
             // Clear even an empty accepted result; retain each complete position vector.
-            Array<Vector3, 10>& lrHistory = mpRaceCarEntityModule->mRCEntityModuleDebugComponent.mLastResetLineTestIntersections;
+            CgsContainers::Array<Vector3, 10>& lrHistory = mpRaceCarEntityModule->mRCEntityModuleDebugComponent.mLastResetLineTestIntersections;
             lrHistory.Clear();
             for (s32 liIntersection = 0; liIntersection < lpLineTestResult->muNumCandidates; ++liIntersection)
             {

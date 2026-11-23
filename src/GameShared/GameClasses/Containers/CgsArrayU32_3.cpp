@@ -14,4 +14,4 @@
 // committed Array<T,N> container convention (CgsArray.h).
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<u32, 3>;
+template class CgsContainers::Array<u32, 3>;

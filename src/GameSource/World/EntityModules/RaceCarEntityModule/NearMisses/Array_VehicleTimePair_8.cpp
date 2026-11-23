@@ -24,5 +24,5 @@
 //
 // Append is called by NearMissData<4,8>::AddCrashed / AddChecked; Erase by
 // NearMissData<4,8>::UpdateTimers / AddCrashed / AddChecked.
-template void Array<BrnWorld::VehicleTimePair, 8>::Append(const BrnWorld::VehicleTimePair&);
-template void Array<BrnWorld::VehicleTimePair, 8>::Erase(u32);
+template void CgsContainers::Array<BrnWorld::VehicleTimePair, 8>::Append(const BrnWorld::VehicleTimePair&);
+template void CgsContainers::Array<BrnWorld::VehicleTimePair, 8>::Erase(u32);

@@ -222,7 +222,7 @@ struct ICEMoviePlaylist
     // +0x000  the live IceMovie storage (20 inline slots + free queue + occupancy).
     CgsContainers::ObjectPool<IceMovie, 20, s32> mMoviePool;
     // +0x380  the playback order: pool indices, count == number of movies in the list.
-    Array<s32, 20>                               mMoviePoolIndicies;
+    CgsContainers::Array<s32, 20>                               mMoviePoolIndicies;
     // +0x3D8  the dev-menu remove-command pool (one slot per movie).
     CgsContainers::ObjectPool<DebugMenuRemoveData, 20, s32> mDebugMenuRemoveData;
     s32                                          miDebugMenuNewMovieIndex;

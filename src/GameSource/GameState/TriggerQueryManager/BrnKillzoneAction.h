@@ -32,7 +32,7 @@ namespace GameStateModuleIO
     struct KillzoneAction : public CgsModule::Event
     {
         // The killzone's region-id list (DWARF BrnTriggerQueryManager.cpp:976 -- Array<CgsID,32>).
-        Array<CgsID, 32> maRegionIds;
+        CgsContainers::Array<CgsID, 32> maRegionIds;
     };
 }
 }

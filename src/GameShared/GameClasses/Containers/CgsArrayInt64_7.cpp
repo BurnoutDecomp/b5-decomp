@@ -13,4 +13,4 @@
 // A primitive element needs no element_home include.
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<s64, 7>;
+template class CgsContainers::Array<s64, 7>;

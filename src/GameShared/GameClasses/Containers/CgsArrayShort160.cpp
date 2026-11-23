@@ -43,11 +43,11 @@
 // Array<u16,160> -- the storage layer. `template class` forces the full set of Array-string members
 // the X360 emitted out-of-line for this instance (Append / Erase / EraseInstancesOf /
 // FindFirstInstanceOf / Contains / GetItem), all inline in CgsArray.h.
-template class Array<u16, 160>;
+template class CgsContainers::Array<u16, 160>;
 
 // Set<u16,160> -- the uniqueness layer. Only Insert + Find are emitted out-of-line for this instance
 // (the Set-string members); force just those rather than the whole class, so the Set generic's own
 // GetItem ("Set index out of bounds") is NOT emitted -- the Array<u16,160>::GetItem above is the one
 // the X360 rodata attests. Spelled GLOBAL scope (::Set), matching committed CgsSet.h.
-template void Set<u16, 160>::Insert(const u16&);
-template u32  Set<u16, 160>::Find(const u16&) const;
+template void CgsContainers::Set<u16, 160>::Insert(const u16&);
+template u32  CgsContainers::Set<u16, 160>::Find(const u16&) const;

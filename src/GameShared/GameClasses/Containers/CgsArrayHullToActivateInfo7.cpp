@@ -29,4 +29,4 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Network/Messages/BrnHullSyncMessage.h"
 
-template class Array<BrnNetwork::HullToActivateInfo, 7>;
+template class CgsContainers::Array<BrnNetwork::HullToActivateInfo, 7>;

@@ -77,7 +77,7 @@ private:
     rw::IResourceAllocator* mpHeapAllocator;
     PlayerGamerTagAboveCarInfo maCachedPlayerGameTagInfos[8];
     CgsResource::SafeResourceHandle<CgsResource::Font> mpScoreFont;
-    Array<BankingScore, KI_MAX_BANKING_SCORES> maBankingScores;
+    CgsContainers::Array<BankingScore, KI_MAX_BANKING_SCORES> maBankingScores;
     CgsContainers::BitArray<601u> mRecentCrashSet;
     rw::Resource mBlendStateResource;
     renderengine::BlendMaterialState* mpBlendState;

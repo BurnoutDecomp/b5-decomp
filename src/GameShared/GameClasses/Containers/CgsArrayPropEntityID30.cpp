@@ -25,4 +25,4 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "SharedClasses/Physics/Props/BrnPropEntityID.h"
 
-template class Array<BrnWorld::PropEntityID, 30>;
+template class CgsContainers::Array<BrnWorld::PropEntityID, 30>;

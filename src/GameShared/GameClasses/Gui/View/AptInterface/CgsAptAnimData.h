@@ -72,8 +72,8 @@ namespace CgsGui
             ANIMATOR_CHANNEL_MAX      = 6,
         };
 
-        Array<AnimChannelData, 6> mChannelData;  // [+0x00] keyframe payload per active channel (h:137)
-        Array<AnimatorChannel, 6> meChannels;    // [+0x94] which channels this animation drives (h:138)
+        CgsContainers::Array<AnimChannelData, 6> mChannelData;  // [+0x00] keyframe payload per active channel (h:137)
+        CgsContainers::Array<AnimatorChannel, 6> meChannels;    // [+0x94] which channels this animation drives (h:138)
 
         // ----- methods homed by class:CgsGui::AnimData (CgsAptAnimDataAnimData.cpp) -----
 

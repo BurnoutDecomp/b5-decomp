@@ -74,7 +74,7 @@ namespace BrnDirector
         // The 8-slot nearest-car container (inline buffer 8*12 = 0x60 bytes, live
         // count word at +0x60 -- the Append @0x821FBA48 instantiation's element
         // math). Kept from the earlier slice for the .cpp's instantiation anchor.
-        typedef Array<NearestCarInfo, 8u> NearestCarInfoArray;
+        typedef CgsContainers::Array<NearestCarInfo, 8u> NearestCarInfoArray;
 
         // ---- DWARF :54-:103 -- declared-only (their own ledger functions) ----
         // ⭐ Construct @0x8221D760 -- BODIED INLINE 2026-08-01 (junkyard-fire wave), in the
@@ -132,7 +132,7 @@ namespace BrnDirector
         void Update(CgsContainers::BitArray<8u> lUsedRaceCars,
                     const Camera::VehicleInfo*  lpRaceCars,
                     EActiveRaceCarIndex         lePlayerIndex,
-                    const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* lpTrafficVehicleArray,
+                    const CgsContainers::Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* lpTrafficVehicleArray,
                     const u32*                  lpaVehicleTeams)
         {
             mpRaceCars           = lpRaceCars;
@@ -385,7 +385,7 @@ namespace BrnDirector
         // VehicleCollisionPredictor::Update @0x822230D8 and FrustrumCollisionResolver::
         // ResolveVehicleCollisions @0x82223890, each load `lwz 0xD0` off the AllVehicleData
         // pointer themselves (0x822230FC / 0x822238C0) and assert it non-null.
-        const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* GetTraffic() const  // :94
+        const CgsContainers::Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* GetTraffic() const  // :94
         {
             return mpTrafficVehicleArray;
         }
@@ -494,7 +494,7 @@ namespace BrnDirector
         const Camera::VehicleInfo* mpRaceCars;     // :125  +0xC0 (stride 0x4F0 == sizeof(VehicleInfo))
         EActiveRaceCarIndex mePlayerRaceCarIndex;  // :126  +0xC4
         CgsContainers::BitArray<8u> mUsedRaceCars; // :127  +0xC8
-        const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>*
+        const CgsContainers::Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>*
                        mpTrafficVehicleArray;      // :129  +0xD0
         // mutable: the two const distance queries lazily sort on first use (the
         // consumers hold a const pointer; see the query comment above).

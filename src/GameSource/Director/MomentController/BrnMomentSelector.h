@@ -266,9 +266,9 @@ private:
     void ActualDebugRender(DebugPrinter& lrDebugPrinter) const;
 
     // Member list, in declaration order --------
-    Array<MomentDescription, KU_MAX_MOMENTS>                  mMomentDescriptionArray; // +0x000
-    Array<MomentController::MomentHandle, KU_MAX_MOMENTS>     mMomentHandleArray;      // +0x0A4
-    Array<f32, KU_MAX_MOMENTS>                                mRecencyArray;           // +0x198
+    CgsContainers::Array<MomentDescription, KU_MAX_MOMENTS>                  mMomentDescriptionArray; // +0x000
+    CgsContainers::Array<MomentController::MomentHandle, KU_MAX_MOMENTS>     mMomentHandleArray;      // +0x0A4
+    CgsContainers::Array<f32, KU_MAX_MOMENTS>                                mRecencyArray;           // +0x198
 
     f32            mfTimeActive;            // +0x1C4  (Release zeroes it)
     u32            miFramesActive;          // +0x1C8  (declaration types it uint32_t despite the mi prefix)

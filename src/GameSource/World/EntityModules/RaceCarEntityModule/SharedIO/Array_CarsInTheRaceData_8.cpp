@@ -29,7 +29,7 @@
 // lrElement, ++miCount) reproduces this exactly.
 // =============================================================================
 template void
-Array<BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData, 8u>::Append(
+CgsContainers::Array<BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData, 8u>::Append(
     const BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData&);
 
 // Array<CarsInTheRaceData,8>::operator[](u32) @ 0x8231A960 (NON-const) -- generic body inline in
@@ -39,10 +39,10 @@ Array<BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData, 8u>::Append(
 // {UpdateRacePositions,UpdateDistanceToPlayer,StoreCarIds,UpdateGeneralStats} +
 // TriggerQueryManager::SubmitTriggerQueries.
 template BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData&
-Array<BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData, 8u>::operator[](u32);
+CgsContainers::Array<BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData, 8u>::operator[](u32);
 
 // Array<CarsInTheRaceData,8>::operator[](u32) const @ 0x8235F8E8 -- const overload (baked
 // CgsArray.h:556/557). Same instantiation, count @+0x200, stride 64. Sole caller
 // GameStateModule::CopyScoringDataToOutput.
 template const BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData&
-Array<BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData, 8u>::operator[](u32) const;
+CgsContainers::Array<BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData, 8u>::operator[](u32) const;

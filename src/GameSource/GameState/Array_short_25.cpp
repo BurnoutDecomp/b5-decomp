@@ -13,6 +13,6 @@
 //
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template u32  Array<u16, 25>::GetLength() const;
-template u16& Array<u16, 25>::GetItem(u32);
-template void Array<u16, 25>::Append(const u16&);
+template u32  CgsContainers::Array<u16, 25>::GetLength() const;
+template u16& CgsContainers::Array<u16, 25>::GetItem(u32);
+template void CgsContainers::Array<u16, 25>::Append(const u16&);

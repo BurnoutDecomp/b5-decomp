@@ -28,6 +28,6 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N>::Append / ::operator[] / ::GetLength (inline generic)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h" // VehicleRenderInfo (12-byte element)
 
-template void Array<BrnTraffic::VehicleRenderInfo, 64>::Append(const BrnTraffic::VehicleRenderInfo&);
-template const BrnTraffic::VehicleRenderInfo& Array<BrnTraffic::VehicleRenderInfo, 64>::GetItem(u32) const;
-template u32 Array<BrnTraffic::VehicleRenderInfo, 64>::GetLength() const;
+template void CgsContainers::Array<BrnTraffic::VehicleRenderInfo, 64>::Append(const BrnTraffic::VehicleRenderInfo&);
+template const BrnTraffic::VehicleRenderInfo& CgsContainers::Array<BrnTraffic::VehicleRenderInfo, 64>::GetItem(u32) const;
+template u32 CgsContainers::Array<BrnTraffic::VehicleRenderInfo, 64>::GetLength() const;

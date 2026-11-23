@@ -33,7 +33,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Network/Managers/BrnNetworkLiveRevengeRelationship.h"  // BrnNetwork::LiveRevengeRelationship (120B element)
 
-template void Array<BrnNetwork::LiveRevengeRelationship, 250>::Append(const BrnNetwork::LiveRevengeRelationship&);
+template void CgsContainers::Array<BrnNetwork::LiveRevengeRelationship, 250>::Append(const BrnNetwork::LiveRevengeRelationship&);
 
 // const operator[]  @ 0x824F7388  (checked indexed accessor; called by ~15 LiveRevengeManager
 // sites, e.g. GetNonConstRevengeRelation/OnRoundFinish/FindPlayerInTableByName/AddNewTableEntry).
@@ -43,4 +43,4 @@ template void Array<BrnNetwork::LiveRevengeRelationship, 250>::Append(const BrnN
 // stride 0x78 == 120). The dynamic "Array index out of bounds. Index: <i>, length: <n>" StrStream
 // message is the documented generic-body parity gap (kept as the static CGS_ASSERT string).
 template const BrnNetwork::LiveRevengeRelationship&
-    Array<BrnNetwork::LiveRevengeRelationship, 250>::operator[](u32) const;
+    CgsContainers::Array<BrnNetwork::LiveRevengeRelationship, 250>::operator[](u32) const;

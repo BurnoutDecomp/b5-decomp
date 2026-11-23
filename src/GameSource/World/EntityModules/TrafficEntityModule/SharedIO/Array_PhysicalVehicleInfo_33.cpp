@@ -12,4 +12,4 @@
 //     via the 48-byte element stride (slwi/add index math), then increments the count word.
 // The live-element count sits at byte offset 0x630 == 33 * sizeof(PhysicalVehicleInfo)
 // == the inline maElements[33] buffer end, confirming sizeof(PhysicalVehicleInfo) == 48.
-template void Array<BrnTraffic::PhysicalVehicleInfo, 33>::Append(const BrnTraffic::PhysicalVehicleInfo&);
+template void CgsContainers::Array<BrnTraffic::PhysicalVehicleInfo, 33>::Append(const BrnTraffic::PhysicalVehicleInfo&);

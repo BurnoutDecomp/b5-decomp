@@ -77,10 +77,10 @@ namespace BrnWorld
 
         void Destruct() {} // :107
 
-        Array<CgsSceneManager::EntityId, 4500u> maWorldEntityIds;    // :109
-        Array<CgsSceneManager::EntityId, 32u>   maRaceCarEntityIds;  // :110
-        Array<CgsSceneManager::EntityId, 650u>  maTrafficEntityIds;  // :111
-        Array<CgsSceneManager::EntityId, 5400u> maPropEntityIds;     // :112
+        CgsContainers::Array<CgsSceneManager::EntityId, 4500u> maWorldEntityIds;    // :109
+        CgsContainers::Array<CgsSceneManager::EntityId, 32u>   maRaceCarEntityIds;  // :110
+        CgsContainers::Array<CgsSceneManager::EntityId, 650u>  maTrafficEntityIds;  // :111
+        CgsContainers::Array<CgsSceneManager::EntityId, 5400u> maPropEntityIds;     // :112
     };
 
     // ------------------------------------------------------------------------
@@ -482,10 +482,10 @@ namespace BrnWorld
         // category into the filtered-entity buffer.
         void FilterFrustumTestResults(
             const CgsModule::Event* lpFrustumTestResult,
-            Array<CgsSceneManager::EntityId, 4500u>* lpWorldIds,
-            Array<CgsSceneManager::EntityId, 32u>* lpRaceCarIds,
-            Array<CgsSceneManager::EntityId, 650u>* lpTrafficIds,
-            Array<CgsSceneManager::EntityId, 5400u>* lpPropIds );
+            CgsContainers::Array<CgsSceneManager::EntityId, 4500u>* lpWorldIds,
+            CgsContainers::Array<CgsSceneManager::EntityId, 32u>* lpRaceCarIds,
+            CgsContainers::Array<CgsSceneManager::EntityId, 650u>* lpTrafficIds,
+            CgsContainers::Array<CgsSceneManager::EntityId, 5400u>* lpPropIds );
 
         // @0x827C3778 -- derive this frame's per-vehicle LOD set from the render
         // budget (the KA_VEHICLE_*_LOD_DISTANCE policy tables). BODIED in
@@ -517,8 +517,8 @@ namespace BrnWorld
         void CalculateVehicleLODs(
             Vector3 lCameraPos,
             f32 lfZoomFactor,
-            Array<CgsSceneManager::EntityId, 32u>& laRaceCarEntityIDs,
-            Array<BrnTraffic::VehicleRenderInfo, 64u>& laTrafficRenderInfos );
+            CgsContainers::Array<CgsSceneManager::EntityId, 32u>& laRaceCarEntityIDs,
+            CgsContainers::Array<BrnTraffic::VehicleRenderInfo, 64u>& laTrafficRenderInfos );
 
         // @0x827D1410 -- stage the frame's global shader constants before any
         // dispatch-list generation. BODIED (post-fx step 9).

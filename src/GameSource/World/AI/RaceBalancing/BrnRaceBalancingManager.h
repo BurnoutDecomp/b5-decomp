@@ -81,7 +81,7 @@ namespace BrnAI
         // -- a bool that selects each route's initial mfTakenDownTimePenalty (20.0s when
         // set, 5.0s otherwise). Reproduced here as an explicit 3rd param (likely a
         // defaulted arg the DWARF dropped); see open_questions.
-        void OnRaceStart(const Array<RaceBalancingGraph, 7u>* lpRaceBalancingGraphArray,
+        void OnRaceStart(const CgsContainers::Array<RaceBalancingGraph, 7u>* lpRaceBalancingGraphArray,
                          s32 liCheckpointCount, bool lbHighTakenDownPenalty);   // :61
 
         // :64  -- bodied in this TU from AIModule::OnModeStartRacing's inlining.
@@ -137,8 +137,8 @@ namespace BrnAI
         static void _AssertLayout();
 
         // ---- storage (declaration order == layout order; DWARF :123-131) -------------------
-        Array<RaceBalancingGraph, 7u> maRaceBalancingGraphs;  // +0x0000 (graphs.miCount @+0x01C0)
-        Array<RaceBalancingRoute, 7u> maRaceBalancingRoutes;  // +0x01C4 (routes.miCount @+0x486C)
+        CgsContainers::Array<RaceBalancingGraph, 7u> maRaceBalancingGraphs;  // +0x0000 (graphs.miCount @+0x01C0)
+        CgsContainers::Array<RaceBalancingRoute, 7u> maRaceBalancingRoutes;  // +0x01C4 (routes.miCount @+0x486C)
         f32  mfRaceTime;                                      // +0x4870 (18544)
         s32  miCheckpointCount;                               // +0x4874 (18548)
         bool mbInRace;                                        // +0x4878 (18552)

@@ -301,7 +301,7 @@ void AboveCarRenderer::RecvEvent(const CgsModule::Event* lpEvent, s32 liEventTyp
         break;
     case 209:
     {
-        const Array<u16, 25>& lrRemoved = reinterpret_cast<const GuiRemovedTrafficEvent*>(lpEvent)->mRemovedTrafficArray;
+        const CgsContainers::Array<u16, 25>& lrRemoved = reinterpret_cast<const GuiRemovedTrafficEvent*>(lpEvent)->mRemovedTrafficArray;
         for (u32 luIndex = 0; luIndex < lrRemoved.GetLength(); ++luIndex)
         {
             const u16 luVehicle = lrRemoved.GetItem(luIndex);
@@ -627,7 +627,7 @@ void AboveCarRenderer::RenderBankingScores(CgsGui::ImRendererSet* lpImRenderers)
     CgsGraphics::Camera& lrCamera = lpImRenderers->mCamera;
     const f32 lfSavedNear = lrCamera.maProjectionScalars[7]; //ARTIST camera+15C
     lrCamera.SetNearClipPlane(lfSavedNear * 1.1f); //82F257E4
-    CGS_ASSERT((maBankingScores.GetCount() != Array<BankingScore,6>::KI_UNCONSTRUCTED),
+    CGS_ASSERT((maBankingScores.GetCount() != CgsContainers::Array<BankingScore,6>::KI_UNCONSTRUCTED),
                "Array used before Construct/Clear was called");
     u32 luCount = maBankingScores.GetLength();
     if (luCount)

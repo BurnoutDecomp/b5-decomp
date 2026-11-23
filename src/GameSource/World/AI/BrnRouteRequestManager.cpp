@@ -89,7 +89,7 @@ void RouteRequestManager::Construct()
 //   0x82791ED4..0x82791EF8  assert(0 <= i < KI_MAX_LANDMARKS_IN_MODE)   (:101, li r5,0x65)
 //   0x82791F04              `stw 0, 0x20(slot)`                          -- Construct (count = 0)
 //   0x82791F08              Array<u32,8>::AppendArray<8>(slot, ids)      @0x8278A108
-void RouteRequestManager::SetBlockSections(s32 liCheckpointIndex, const Array<u32, 8u>* laBlockSectionIds)
+void RouteRequestManager::SetBlockSections(s32 liCheckpointIndex, const CgsContainers::Array<u32, 8u>* laBlockSectionIds)
 {
     CGS_ASSERT(liCheckpointIndex >= 0
                && liCheckpointIndex < BrnGameState::GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE,
@@ -246,7 +246,7 @@ void RouteRequestManager::GenerateStandardRouteRequest(
         // 0x82791600..0x82791678: slot = this + 36*checkpoint; for (i < slot.GetLength()) -- the
         // length is re-read (and its "Array used before Construct/Clear" assert re-run, CgsArray.h
         // :336) every pass -- AddBlockSectionId(slot.GetItem(i)) (int_8_::GetItem, the checked get).
-        const Array<u32, 8u>& lrBlockSectionIds = mauBlockSectionIds[liCheckpoint];
+        const CgsContainers::Array<u32, 8u>& lrBlockSectionIds = mauBlockSectionIds[liCheckpoint];
         for (u32 luIndex = 0; luIndex < lrBlockSectionIds.GetLength(); ++luIndex)
         {
             lRouteRequest.AddBlockSectionId(lrBlockSectionIds.GetItem(luIndex));

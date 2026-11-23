@@ -8,7 +8,7 @@
 //   X360 0x8231AB70 = Array<...LandmarkIndex,16u>::FindFirstInstanceOf
 //   X360 0x8231AC10 = Array<...LandmarkIndex,16u>::GetItem (non-const)
 //   X360 0x82325220 = Array<...LandmarkIndex,16u>::Contains
-template void Array<BrnGameState::LandmarkIndex, 16>::Append(const BrnGameState::LandmarkIndex&);
-template s32 Array<BrnGameState::LandmarkIndex, 16>::FindFirstInstanceOf(const BrnGameState::LandmarkIndex&) const;
-template BrnGameState::LandmarkIndex& Array<BrnGameState::LandmarkIndex, 16>::GetItem(u32);
-template bool Array<BrnGameState::LandmarkIndex, 16>::Contains(const BrnGameState::LandmarkIndex&) const;
+template void CgsContainers::Array<BrnGameState::LandmarkIndex, 16>::Append(const BrnGameState::LandmarkIndex&);
+template s32 CgsContainers::Array<BrnGameState::LandmarkIndex, 16>::FindFirstInstanceOf(const BrnGameState::LandmarkIndex&) const;
+template BrnGameState::LandmarkIndex& CgsContainers::Array<BrnGameState::LandmarkIndex, 16>::GetItem(u32);
+template bool CgsContainers::Array<BrnGameState::LandmarkIndex, 16>::Contains(const BrnGameState::LandmarkIndex&) const;

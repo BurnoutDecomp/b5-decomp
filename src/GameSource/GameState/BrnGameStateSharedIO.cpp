@@ -544,7 +544,7 @@ void CarScoreData::CopyFromNativeRecord(const u8* lpRecord)
 // X360 0x8231C170. While a chain is active and the current multiplier is below the supplied ceiling,
 // reserve a ChainableMultiplierInfo and fill it from the chainable fields + the caller's value.
 void CarScoreData::GetChainableStuntMultipliers(s32 liMaxMultiplier, s32 liSuppliedValue,
-                                                Array<ChainableMultiplierInfo, 8>* lpaMultiplierInfo) const
+                                                CgsContainers::Array<ChainableMultiplierInfo, 8>* lpaMultiplierInfo) const
 {
     if (mbChainActive && miCurrentChainableMultiplier < liMaxMultiplier)
     {

@@ -23,4 +23,4 @@
 // CgsArray.h body so every instantiation re-verifies, so it is not specialized in this thin TU.
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<s32, 237>;
+template class CgsContainers::Array<s32, 237>;

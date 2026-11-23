@@ -24,4 +24,4 @@
 // Array<s32,64> (a DIFFERENT type), so a distinct new file is required.
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<s64, 128>;
+template class CgsContainers::Array<s64, 128>;

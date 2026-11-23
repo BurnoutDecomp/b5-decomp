@@ -28,6 +28,6 @@
 // member templates) -- that is the ledger-key function for this TU.
 #include "GameShared/GameClasses/Containers/CgsSet.h"
 
-template class Set<u16, 160>;
-template void Set<u16, 160>::SetDifference<160u, 160u>(const Set<u16, 160>& lA,
-                                                       const Set<u16, 160>& lB);
+template class CgsContainers::Set<u16, 160>;
+template void CgsContainers::Set<u16, 160>::SetDifference<160u, 160u>(const CgsContainers::Set<u16, 160>& lA,
+                                                       const CgsContainers::Set<u16, 160>& lB);

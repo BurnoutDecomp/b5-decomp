@@ -83,7 +83,7 @@ namespace BrnGui
         // Event 412 payload view: the car ids of the lobby's players.
         struct GuiEventCarInfoResponsePayload : public CgsModule::Event
         {
-            Array<CgsID, 128> maCarIds;   // +0x000 (count at +0x400)
+            CgsContainers::Array<CgsID, 128> maCarIds;   // +0x000 (count at +0x400)
         };
 
         // { 4, 193, 12, <list> }, channel 40, 16 bytes: ask for a preset-race list.

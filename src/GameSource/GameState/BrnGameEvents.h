@@ -918,7 +918,7 @@ struct DldScoreboardEvent
 // Id 175 ("lpUploadedModeScoresEvent"): the events whose pending score uploads completed.
 struct UploadedModeScoresEvent
 {
-    Array<s64, 15> maEventIds;   // 0x00 (count word at +0x78)
+    CgsContainers::Array<s64, 15> maEventIds;   // 0x00 (count word at +0x78)
 };
 
 // GUI requests the score breakdown for one road (DWARF :2063).

@@ -246,9 +246,9 @@ namespace CgsGui
         u8 mabUnusedAptStrings[KU_NUM_APT_STRINGS];
         CgsLanguage::LanguageManager* mpLanguageManager;
         TextureStateTable mWrapTextureStateTable;
-        Array<TextureStateElement, 256> maWrapTextureStateTableElements;
+        CgsContainers::Array<TextureStateElement, 256> maWrapTextureStateTableElements;
         TextureStateTable mClampTextureStateTable;
-        Array<TextureStateElement, 256> maClampTextureStateTableElements;
+        CgsContainers::Array<TextureStateElement, 256> maClampTextureStateTableElements;
         s32 miTextEffect;
         f32 mfFontSizeScale;
         ImRendererSet* mpImRenderers;

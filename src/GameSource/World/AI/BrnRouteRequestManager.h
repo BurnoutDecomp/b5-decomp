@@ -75,7 +75,7 @@ public:
     // DWARF :85 / BrnRouteRequestManager.cpp:99. Inlined on X360 in AIModule::OnModeStart's
     // checkpoint loop (0x82791ED4..0x82791F08): assert (:101), `stw 0, 0x20(slot)` == Construct,
     // then Array<u32,8>::AppendArray<8>(slot, ids) @0x8278A108.
-    void SetBlockSections(s32 liCheckpointIndex, const Array<u32, 8u>* laBlockSectionIds);
+    void SetBlockSections(s32 liCheckpointIndex, const CgsContainers::Array<u32, 8u>* laBlockSectionIds);
 
     // DWARF :88 / BrnRouteRequestManager.cpp:116. Inlined on X360 in AIModule::OnModeEnd
     // (0x8277BB8C..0x8277BBC8): 16 x `stw 0, 0(r9); r9 += 0x24` from this+0x20 == every count.
@@ -128,7 +128,7 @@ private:
     // ---- storage (declaration order == X360 layout order) -------------------------------
     // One slot per mode checkpoint: 16 == BrnGameState::GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE
     // (the DWARF spells the extent as the literal; SetBlockSections asserts against the constant).
-    Array<u32, 8u>        mauBlockSectionIds[16];                          // +0x000 (16 * 36 == 576) DWARF :157
+    CgsContainers::Array<u32, 8u>        mauBlockSectionIds[16];                          // +0x000 (16 * 36 == 576) DWARF :157
     AStarDistanceFunction meDefaultAStarDistanceFunction;                 // +0x240 (576) DWARF :159
 };
 }

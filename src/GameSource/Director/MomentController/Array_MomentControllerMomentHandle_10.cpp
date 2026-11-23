@@ -19,17 +19,17 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Director/MomentController/BrnMomentController.h"
 
-template void Array<BrnDirector::MomentController::MomentHandle, 10>::Append(
+template void CgsContainers::Array<BrnDirector::MomentController::MomentHandle, 10>::Append(
     const BrnDirector::MomentController::MomentHandle&);
 
 // Array<BrnDirector::MomentController::MomentHandle,10>::operator[](u32)
 // Non-const checked accessor (generic body inline in CgsArray.h; asserts 0x21A/0x21B).
 // count @+0xF0, stride 0x18 == sizeof(MomentHandle). Caller MomentSelector::ActualDebugRender.
 template BrnDirector::MomentController::MomentHandle&
-Array<BrnDirector::MomentController::MomentHandle, 10>::operator[](u32);
+CgsContainers::Array<BrnDirector::MomentController::MomentHandle, 10>::operator[](u32);
 
 // Array<BrnDirector::MomentController::MomentHandle,10>::operator[](u32) const
 // Const checked accessor (generic body inline in CgsArray.h; asserts 0x22C/0x22D).
 // count @+0xF0, stride 0x18. 9 read-side callers (GetSelectedMoment/Release/...).
 template const BrnDirector::MomentController::MomentHandle&
-Array<BrnDirector::MomentController::MomentHandle, 10>::operator[](u32) const;
+CgsContainers::Array<BrnDirector::MomentController::MomentHandle, 10>::operator[](u32) const;

@@ -69,4 +69,4 @@ void AllVehicleData_AppendNearestCarAnchor(
 // scope, not inside namespace BrnDirector.)
 template
 const BrnDirector::AllVehicleData::NearestCarInfo&
-Array<BrnDirector::AllVehicleData::NearestCarInfo, 8>::operator[](u32) const;
+CgsContainers::Array<BrnDirector::AllVehicleData::NearestCarInfo, 8>::operator[](u32) const;

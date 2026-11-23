@@ -355,7 +355,7 @@ namespace BrnGui
         // h:417 X360 +0x130 (count word @+0x144). The DWARF types the element uint32_t, but
         // the X360 MANGLING is Array<int,5> (Append @0x82448C28 / Contains @0x8244FE48, the
         // instantiation committed in CgsArrayInt5.cpp), so the element is s32 here.
-        Array<s32, 5>                 mOnlineStartpointsToIgnore;
+        CgsContainers::Array<s32, 5>                 mOnlineStartpointsToIgnore;
         u32                           muInspectedEventID;           // h:420 X360 +0x148 (event 558)
         GuiEventSetHoveredEventIcon   mHoveredEventIcon;            // h:423 X360 +0x150 (24 B, event 559)
         GuiEventSetHoveredEventIcon   mHoveredEventIconLastFrame;   // h:424 X360 +0x168 (24 B)
@@ -417,7 +417,7 @@ namespace BrnGui
             CGS_STATIC_ASSERT((E_CRASHNAVICON_NUM == 2),
                           "InitResources walks exactly two icon atlases (ids 204/205)");
             // Construct's five int_5_::Append calls must fit the array (X360 +0x130).
-            CGS_STATIC_ASSERT((Array<s32, 5>::KU_SIZE == 5),
+            CGS_STATIC_ASSERT((CgsContainers::Array<s32, 5>::KU_SIZE == 5),
                           "Construct appends five online start-points to ignore");
             // The four big UV tables are 2 x 11 entries; the four mini tables 2 x 6.
             CGS_STATIC_ASSERT((KU_ICON_EVENT_TYPE_COUNT == 11),

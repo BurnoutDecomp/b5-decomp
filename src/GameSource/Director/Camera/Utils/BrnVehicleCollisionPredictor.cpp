@@ -126,7 +126,7 @@ void VehicleCollisionPredictor::Update(const AllVehicleData& lAllVehicleData, Ve
     (void)lTimestep;   // v1 is overwritten before any read (0x822232B4)
 
     // GetTraffic, inlined with its BrnDirectorAllVehicleData.h:96 assert (0x822230FC..0x82223128).
-    const Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* lpTraffic = lAllVehicleData.GetTraffic();
+    const CgsContainers::Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* lpTraffic = lAllVehicleData.GetTraffic();
     CGS_ASSERT(lpTraffic != 0, "mpTrafficVehicleArray != NULL");
 
     mbHasPredictedCollision = false;                                   // stb r28 (0), 0(r27) @0x82223144

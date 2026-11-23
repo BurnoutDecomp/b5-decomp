@@ -88,7 +88,7 @@ namespace BrnAI
             Vector3                mEndPosition;          // +0x10
             u16                    muStartSectionIndex;   // +0x20
             u16                    muEndSectionIndex;     // +0x22
-            Array<u32, 16>         mauBlockSections;      // +0x24 (16 ids; count @ +0x64)
+            CgsContainers::Array<u32, 16>         mauBlockSections;      // +0x24 (16 ids; count @ +0x64)
             u16                    muOwnerId;             // +0x68
             u16                    muEventId;             // +0x6A
             AStarQuality           meQuality;             // +0x6C

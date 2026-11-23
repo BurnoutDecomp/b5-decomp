@@ -4,7 +4,7 @@
 
 // Explicit instantiation(s) of the generic Array<T,N> container methods (inline in CgsArray.h)
 // for the ChainableMultiplierInfo leaf instantiation -- the committed Array_/EventQueue_ explicit-instantiation pattern.
-template BrnGameState::GameStateModuleIO::ChainableMultiplierInfo* Array<BrnGameState::GameStateModuleIO::ChainableMultiplierInfo, 8>::QSort(int (*)(const void*, const void*));
+template BrnGameState::GameStateModuleIO::ChainableMultiplierInfo* CgsContainers::Array<BrnGameState::GameStateModuleIO::ChainableMultiplierInfo, 8>::QSort(int (*)(const void*, const void*));
 
 // ============================================================================
 // X360 BrnGameState::GameStateModuleIO::ChainableMultiplierInfo,8>::Ge @ 0x823178F8
@@ -32,7 +32,7 @@ template BrnGameState::GameStateModuleIO::ChainableMultiplierInfo* Array<BrnGame
 // CgsArray.h:336 - the accepted trade-off, matching the GameModeParams::GetCheckpointCount/
 // GetStartLocationCount precedent.
 template<>
-s32 Array<BrnGameState::GameStateModuleIO::ChainableMultiplierInfo, 8>::GetCount() const
+s32 CgsContainers::Array<BrnGameState::GameStateModuleIO::ChainableMultiplierInfo, 8>::GetCount() const
 {
     // X360: the unconstructed sentinel is *(a1 + 128) == -1.
     CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");

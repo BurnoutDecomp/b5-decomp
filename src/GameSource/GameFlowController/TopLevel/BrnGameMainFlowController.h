@@ -67,7 +67,7 @@ namespace BrnGameMainFlowController
         MainGameFlowStateCompleteLoading      mCompleteLoading;
         MainGameFlowStateInGame               mInGame;
 
-        Array<MainGameFlowState*, 7u>         maStates;
+        CgsContainers::Array<MainGameFlowState*, 7u>         maStates;
         EMainGameFlowState                    meCurrentState;
         bool                                  mbSaveLoadState;
         bool                                  mbVideoState;

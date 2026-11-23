@@ -122,9 +122,9 @@ private:
         mbNormalised = true;
     }
 
-    Array<T,   N>             mOutputArray;      // +0x00
-    mutable Array<f32, N>     mOriginalWeights;  // +0x2C (rebuilt under const GetSelection)
-    mutable Array<f32, N - 1> mIntervalEnds;     // +0x58 (cumulative-distribution cache)
+    CgsContainers::Array<T,   N>             mOutputArray;      // +0x00
+    mutable CgsContainers::Array<f32, N>     mOriginalWeights;  // +0x2C (rebuilt under const GetSelection)
+    mutable CgsContainers::Array<f32, N - 1> mIntervalEnds;     // +0x58 (cumulative-distribution cache)
     mutable bool              mbNormalised;      // +0x80 (cache-valid flag)
 };
 

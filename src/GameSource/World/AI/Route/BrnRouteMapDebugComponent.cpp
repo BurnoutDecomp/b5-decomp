@@ -781,7 +781,7 @@ void RouteMapDebugComponent::DrawEventBlockSectionsInMap(CgsDev::Debug2DImmediat
     for (s32 liCheckpoint = 0; liCheckpoint < 16; ++liCheckpoint)
     {
         CgsDev::SimpleStrStream lStream;
-        const Array<u32, 8u>& lrBlockIds = mpAIModule->mRouteRequestManager.mauBlockSectionIds[liCheckpoint];
+        const CgsContainers::Array<u32, 8u>& lrBlockIds = mpAIModule->mRouteRequestManager.mauBlockSectionIds[liCheckpoint];
         // GetLength retains the original unconstructed-array assert. The signed
         // comparison after that assert is also original; do not widen -1 to a loop.
         const s32 liCount = static_cast<s32>(lrBlockIds.GetLength());

@@ -49,7 +49,7 @@ namespace BrnTraffic
     };
 
     // DWARF BrnTrafficMiscRuntimeClasses.h:80. Fixed 25-slot request list.
-    struct PhysicalRequestInfoList : public Array<PhysicalRequestInfo, 25>
+    struct PhysicalRequestInfoList : public CgsContainers::Array<PhysicalRequestInfo, 25>
     {
     };
 }

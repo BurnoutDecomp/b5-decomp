@@ -1822,7 +1822,7 @@ CGS_STATIC_ASSERT((offsetof(PlayerInfoResponseAction, mbIsCarDamaged) == 0x38 &&
 // Action 183: the members of a car's colour-livery family the player may pick (case 82).
 struct UnlockedLiveryResponseAction : public GameAction<E_ACTION_UNLOCKED_LIVERY_RESPONSE>
 {
-    Array<CgsID, 8> maCars;   // +0x00, count word at +0x40
+    CgsContainers::Array<CgsID, 8> maCars;   // +0x00, count word at +0x40
 };
 CGS_STATIC_ASSERT((sizeof(UnlockedLiveryResponseAction) == 72), "posted with size 72");
 
@@ -1832,7 +1832,7 @@ struct CarSelectionResponseAction : public GameAction<E_ACTION_CAR_SELECTION_RES
 {
     static const u32 KU_MAX_CARS_IN_RESPONSE_ACTION = 128;
 
-    Array<CgsID, KU_MAX_CARS_IN_RESPONSE_ACTION>              maCars;                  // +0x000, count +0x400
+    CgsContainers::Array<CgsID, KU_MAX_CARS_IN_RESPONSE_ACTION>              maCars;                  // +0x000, count +0x400
     CgsContainers::BitArray<KU_MAX_CARS_IN_RESPONSE_ACTION>  mHasBeenDrivenBitArray;  // +0x408
     CgsContainers::BitArray<KU_MAX_CARS_IN_RESPONSE_ACTION>  mWreckedArray;           // +0x418
     s32                                                      miMaxAvailableCars;      // +0x428
@@ -2169,7 +2169,7 @@ struct SetUpAllDriveThrusAction : public GameAction<E_ACTION_SET_UP_ALL_DRIVE_TH
         BrnTrigger::GenericRegion::Type meType;       // 0x10  (BrnGameActions.h:1718)
     };
 
-    Array<DriveThruInfo, 46> maDriveThrus;            // 0x00  (DWARF BrnGameActions.h:1723)
+    CgsContainers::Array<DriveThruInfo, 46> maDriveThrus;            // 0x00  (DWARF BrnGameActions.h:1723)
 };
 
 // X360 0x8231CA38 (SetPosition) / 0x82558580 (GetPosition). Per-player online-round result action:
@@ -2192,7 +2192,7 @@ struct OnlineRoundResults : public GameAction<E_ACTION_ONLINE_ROUND_RESULT>
 
 private:
     BrnNetwork::NetworkPlayerID                        maPlayerPosition[KI_MAX_PLAYERS];   // +0x00 (DWARF :5248)
-    Array<BrnNetwork::NetworkPlayerID, KI_MAX_PLAYERS> maDisconnectedPlayers;              // +0x20 (DWARF :5249)
+    CgsContainers::Array<BrnNetwork::NetworkPlayerID, KI_MAX_PLAYERS> maDisconnectedPlayers;              // +0x20 (DWARF :5249)
 };
 
 // X360 online end-of-game results (DWARF home BrnGameActions.h:5153,
@@ -4107,7 +4107,7 @@ CGS_STATIC_ASSERT((sizeof(ModeScoreLeaderboardAction) == 16), "ModeScoreLeaderbo
 // 19 -- the profile's scores still waiting for upload, by pointer (console 4 bytes).
 struct NonUploadedModeScoresAction : public GameAction<E_ACTION_NON_UPLOADED_MODE_SCORES>
 {
-    const Array<BrnNetwork::LocalEventScoreUploadData, 49>* mpNonUploadedScores;   // +0x00
+    const CgsContainers::Array<BrnNetwork::LocalEventScoreUploadData, 49>* mpNonUploadedScores;   // +0x00
 };
 
 // 20 -- the local player's current stunt score (4 bytes).

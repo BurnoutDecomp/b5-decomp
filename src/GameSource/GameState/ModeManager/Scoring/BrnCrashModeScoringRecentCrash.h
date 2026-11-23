@@ -204,7 +204,7 @@ struct CrashModeScoring
 
     CgsContainers::FixedRingBuffer<u16, 8> mRecentlyHitPropSet; // +0x58  h:231 (KI_MAX_RECENTLY_HIT_PROPS == 8)
 
-    Array<RecentCrash, KI_MAX_RECENTLY_HIT_CARS> maRecentCrashes; // +0x7C  h:234 the live recent-hit-cars set
+    CgsContainers::Array<RecentCrash, KI_MAX_RECENTLY_HIT_CARS> maRecentCrashes; // +0x7C  h:234 the live recent-hit-cars set
                                                                   //        (count word @+0x27C; ends @+0x280)
 
     // +0x280 h:237 -- the recent-stunt de-dupe window. UN-OPAQUED 2026-08-29 (showtime-score

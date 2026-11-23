@@ -358,7 +358,7 @@ private:
     bool mbHighTakenDownPenalty;
     bool mbAIDrivesPlayer;
     bool mbAIPlayerInvulnerable;
-    Array<f32, 16> maWayPointDistance;
+    CgsContainers::Array<f32, 16> maWayPointDistance;
     EActiveRaceCarIndex meCurrentRoundRobin[E_ROUND_ROBIN_COUNT];
     EActiveRaceCarIndex meAggressorIndex;
     EActiveRaceCarIndex meVictimIndex;

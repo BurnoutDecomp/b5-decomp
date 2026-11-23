@@ -326,7 +326,7 @@ namespace BrnAI
     private:
         // +0x000 : 35 pending reset requests (16B each) + trailing s32 miCount@0x230.
         //          sizeof == 0x234. `Array` is the GLOBAL container (CgsArray.h).
-        Array<AIModuleIO::ResetOnTrackRequest, 35u> mResetOnTrackRequestQueue;
+        CgsContainers::Array<AIModuleIO::ResetOnTrackRequest, 35u> mResetOnTrackRequestQueue;
 
         // +0x234 : align pad to the 16-aligned ring buffer at 0x240.
         u8 mPad0234[0x0C];

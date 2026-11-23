@@ -25,7 +25,7 @@
 //   X360 0x8235D938 = Array<u16,32>::FindFirstInstanceOf(const) -- CgsArray.h:480 assert
 //   X360 0x8235FEF8 = Array<u16,32>::GetItem   (non-const)      -- CgsArray.h:556/557 asserts
 //
-template void Array<u16, 32>::Append(const u16&);
-template u32  Array<u16, 32>::GetLength() const;
-template s32  Array<u16, 32>::FindFirstInstanceOf(const u16&) const;
-template u16& Array<u16, 32>::GetItem(u32);
+template void CgsContainers::Array<u16, 32>::Append(const u16&);
+template u32  CgsContainers::Array<u16, 32>::GetLength() const;
+template s32  CgsContainers::Array<u16, 32>::FindFirstInstanceOf(const u16&) const;
+template u16& CgsContainers::Array<u16, 32>::GetItem(u32);

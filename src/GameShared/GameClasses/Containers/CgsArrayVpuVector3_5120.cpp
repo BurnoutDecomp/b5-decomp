@@ -24,4 +24,4 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "rw/math/vpu/types.h"
 
-template void Array<rw::math::vpu::Vector3, 5120>::Append(const rw::math::vpu::Vector3&);
+template void CgsContainers::Array<rw::math::vpu::Vector3, 5120>::Append(const rw::math::vpu::Vector3&);

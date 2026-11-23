@@ -19,5 +19,5 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N>::Append / ::Erase (inline generic)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h" // FiredKillZoneInfo (16-byte element)
 
-template void Array<BrnTraffic::FiredKillZoneInfo, 8>::Append(const BrnTraffic::FiredKillZoneInfo&);
-template void Array<BrnTraffic::FiredKillZoneInfo, 8>::Erase(u32);
+template void CgsContainers::Array<BrnTraffic::FiredKillZoneInfo, 8>::Append(const BrnTraffic::FiredKillZoneInfo&);
+template void CgsContainers::Array<BrnTraffic::FiredKillZoneInfo, 8>::Erase(u32);

@@ -11,4 +11,4 @@
 // (stride 32 == sizeof(TriggerQueryRecord); 16*32 == 512 == the *(this+512) count word the body reads).
 // Read by TriggerQueryManager::PreWorldUpdate, which consumes the record's +0x10/+0x14 words.
 template const BrnGameState::GameStateModuleIO::TriggerQueryRecord&
-    Array<BrnGameState::GameStateModuleIO::TriggerQueryRecord, 16>::operator[](u32) const;
+    CgsContainers::Array<BrnGameState::GameStateModuleIO::TriggerQueryRecord, 16>::operator[](u32) const;

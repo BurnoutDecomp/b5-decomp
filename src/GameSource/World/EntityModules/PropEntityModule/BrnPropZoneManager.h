@@ -563,7 +563,7 @@ namespace BrnWorld
         PropEntityRotationParams maRotationParams[KU_MAX_ROTATION_PARAMS];
         // Array<T,N> is the project's unqualified fixed-array container (CgsArray.h); the
         // DWARF spells it CgsContainers::Array<u32,80u>.
-        ::Array<u32, KU_MAX_TRAFFIC_LIGHTS_TO_RESTORE> mauTrafficLightsToRestore;
+        CgsContainers::Array<u32, KU_MAX_TRAFFIC_LIGHTS_TO_RESTORE> mauTrafficLightsToRestore;
 
         friend class PropEntityDebugComponent;
     };

@@ -1171,7 +1171,7 @@ static rw::math::vpu::VecFloat RaceCarDistance(__vector4 lvCamera, __vector4 lvP
 
 void RaceCarEntityModule::GenerateDispatchLists(
     RaceCarEntityModuleIO::InputBuffer_GenerateDispatchLists* lpInput,
-    const Array<CgsSceneManager::EntityId, 32u>& lrVisibleEntities,
+    const CgsContainers::Array<CgsSceneManager::EntityId, 32u>& lrVisibleEntities,
     s32 liObjectList, s32 liOpaqueMeshList, s32 liTransparentMeshList,
     bool lbEnvironmentMapPass, Vector4 lvFogScattering,
     Vector4 lvFogColourPlusWhiteLevel, Vector3 lvCameraPosition)

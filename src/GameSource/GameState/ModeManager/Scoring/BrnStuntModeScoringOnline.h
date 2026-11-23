@@ -165,10 +165,10 @@ namespace BrnGameState
         CgsContainers::ObjectPool<StoredLeapingData, KI_LEAPING_POOL_CAPACITY, s32> mStoredLeapingDataPool;
 
         // +0x23F0 -- the gathered/sorted chainable-multiplier rows for the local player's combo (8 max).
-        Array<GameStateModuleIO::ChainableMultiplierInfo, KI_MAX_ACTIVE_RACE_CARS> maChainableMultiplierInfo;
+        CgsContainers::Array<GameStateModuleIO::ChainableMultiplierInfo, KI_MAX_ACTIVE_RACE_CARS> maChainableMultiplierInfo;
 
         // +0x2478 -- the live banked multipliers awaiting expiry/unbuffering (capacity 3).
-        Array<MultiplierData, 3> maMultiplierData;
+        CgsContainers::Array<MultiplierData, 3> maMultiplierData;
 
         // +0x24F8 -- the pending-multiplier record handed to WasStuntRecentlyPerformed (6 words / 24B).
         // Copied verbatim in BankMultiplier-style stores; surfaced when mbPendingMultiplierValid is set.

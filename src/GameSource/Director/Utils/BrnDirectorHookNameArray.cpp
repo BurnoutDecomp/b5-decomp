@@ -27,7 +27,7 @@ namespace BrnDirector
 {
 
 // Out-of-line anchor: exercises exactly the three exported members.
-bool HookNameArray_ContainsAnchor(Array<HookNameStringWrapper, 100>& lrArray,
+bool HookNameArray_ContainsAnchor(CgsContainers::Array<HookNameStringWrapper, 100>& lrArray,
                                   const HookNameStringWrapper& lrName)
 {
     lrArray.Append(lrName);

@@ -2963,10 +2963,10 @@ WorldModule::Update( BrnUpdateSet lUpdateSet,
 void
 WorldModule::FilterFrustumTestResults(
     const CgsModule::Event* lpFrustumTestResult,
-    Array<CgsSceneManager::EntityId, 4500u>* lpWorldIds,
-    Array<CgsSceneManager::EntityId, 32u>* lpRaceCarIds,
-    Array<CgsSceneManager::EntityId, 650u>* lpTrafficIds,
-    Array<CgsSceneManager::EntityId, 5400u>* lpPropIds )
+    CgsContainers::Array<CgsSceneManager::EntityId, 4500u>* lpWorldIds,
+    CgsContainers::Array<CgsSceneManager::EntityId, 32u>* lpRaceCarIds,
+    CgsContainers::Array<CgsSceneManager::EntityId, 650u>* lpTrafficIds,
+    CgsContainers::Array<CgsSceneManager::EntityId, 5400u>* lpPropIds )
 {
     const CgsSceneManager::SceneManagerIO::OutCoarseQueryResult* lpResult =
         static_cast< const CgsSceneManager::SceneManagerIO::OutCoarseQueryResult* >(
@@ -3169,8 +3169,8 @@ void
 WorldModule::CalculateVehicleLODs(
     Vector3 lCameraPos,
     f32 lfZoomFactor,
-    Array<CgsSceneManager::EntityId, 32u>& laRaceCarEntityIDs,
-    Array<BrnTraffic::VehicleRenderInfo, 64u>& laTrafficRenderInfos )
+    CgsContainers::Array<CgsSceneManager::EntityId, 32u>& laRaceCarEntityIDs,
+    CgsContainers::Array<BrnTraffic::VehicleRenderInfo, 64u>& laTrafficRenderInfos )
 {
     const s32 liRaceCarCount = static_cast< s32 >( laRaceCarEntityIDs.GetLength() );
     const s32 liTrafficCount = static_cast< s32 >( laTrafficRenderInfos.GetLength() );
@@ -5013,7 +5013,7 @@ void BridgeTrafficCarEntityInfoToOutput_PrePhysics(
     const BrnPhysics::Vehicle::VehicleInputInterface::RemoveTrafficEventQueue* lpRemoveRequests =
         lpTrafficOutput_PrePhysics->GetVehicleInputInterface()->GetRemoveTrafficEvents();
 
-    Array<short, 25> lCrashedCars;
+    CgsContainers::Array<short, 25> lCrashedCars;
     CGS_STATIC_ASSERT((sizeof(lCrashedCars) == 56),
                   "the GUI record's byte image must match the console's baked event size");
     lCrashedCars.Clear();

@@ -285,11 +285,11 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
     CGS_ASSERT( lpInput != 0, "lpInput" );
     CGS_ASSERT( lpOutput != 0, "lpOutput" );
 
-    ::Array< VehicleRenderInfo, 64u >& lrRenderInfos = lpOutput->maTrafficRenderInfos;
+    CgsContainers::Array< VehicleRenderInfo, 64u >& lrRenderInfos = lpOutput->maTrafficRenderInfos;
     lrRenderInfos.Clear();
 
     const Vector3 lCameraPosition = lpInput->mCameraPosition;
-    const ::Array< CgsSceneManager::EntityId, 650u >& lrVisible = lpInput->maTrafficEntityIds;
+    const CgsContainers::Array< CgsSceneManager::EntityId, 650u >& lrVisible = lpInput->maTrafficEntityIds;
 
     // DWARF :19315 -- `FastBitArray<601>::UnSetAll` at the top of the body, before the walk.
     // See note (1) in this function's header for the ship-vs-DWARF extent.
@@ -654,7 +654,7 @@ void TrafficEntityModule::SubmitCoronasForVehicle(
 // ============================================================================
 void
 TrafficEntityModule::GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Dispatch* lpInput,
-                                            const ::Array< VehicleRenderInfo, 64u >& laTrafficRenderInfos,
+                                            const CgsContainers::Array< VehicleRenderInfo, 64u >& laTrafficRenderInfos,
                                             Vector4 lFogScattering,
                                             Vector4 lFogColourPlusWhiteLevel,
                                             Vector3 lCameraPosition,

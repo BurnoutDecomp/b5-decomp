@@ -18,4 +18,4 @@
 // instantiation re-verifies; it is deliberately not specialized in this thin TU.
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<s32, 50>;
+template class CgsContainers::Array<s32, 50>;

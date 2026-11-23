@@ -166,7 +166,7 @@ namespace BrnDirector
         f32 mfStringDuration;   // +0x00  on-screen lifetime handed to each new entry
         // (+0x04 implicit pad: mStringPool is 8-byte aligned by its trailing BitArray<20> u64)
         CgsContainers::ObjectPool<LogString, 20, int> mStringPool;   // +0x08
-        Array<s32, 20>                                mStringIndices; // +0x608 (live order, count @ +0x50)
+        CgsContainers::Array<s32, 20>                                mStringIndices; // +0x608 (live order, count @ +0x50)
     };
 }
 

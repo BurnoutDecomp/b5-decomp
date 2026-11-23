@@ -40,7 +40,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Gui/CustomRenderer/Renderers/BrnAboveCarRenderer.h"
 
-template void              Array<BrnGui::BankingScore, 6>::Append(const BrnGui::BankingScore&);
-template void              Array<BrnGui::BankingScore, 6>::EraseFast(u32);
-template BrnGui::BankingScore& Array<BrnGui::BankingScore, 6>::GetItem(u32);
-template bool              Array<BrnGui::BankingScore, 6>::IsFull() const;
+template void              CgsContainers::Array<BrnGui::BankingScore, 6>::Append(const BrnGui::BankingScore&);
+template void              CgsContainers::Array<BrnGui::BankingScore, 6>::EraseFast(u32);
+template BrnGui::BankingScore& CgsContainers::Array<BrnGui::BankingScore, 6>::GetItem(u32);
+template bool              CgsContainers::Array<BrnGui::BankingScore, 6>::IsFull() const;

@@ -17,6 +17,6 @@
 CGS_STATIC_ASSERT((sizeof(CgsSceneManager::EntityId) == 4),
               "EntityId must be 4 bytes (Array<...,4500> Append stride 4 / count offset 18000)");
 
-template void                       Array<CgsSceneManager::EntityId, 4500>::Append(const CgsSceneManager::EntityId&);
-template CgsSceneManager::EntityId& Array<CgsSceneManager::EntityId, 4500>::GetItem(u32);
-template u32                        Array<CgsSceneManager::EntityId, 4500>::GetLength() const;
+template void                       CgsContainers::Array<CgsSceneManager::EntityId, 4500>::Append(const CgsSceneManager::EntityId&);
+template CgsSceneManager::EntityId& CgsContainers::Array<CgsSceneManager::EntityId, 4500>::GetItem(u32);
+template u32                        CgsContainers::Array<CgsSceneManager::EntityId, 4500>::GetLength() const;

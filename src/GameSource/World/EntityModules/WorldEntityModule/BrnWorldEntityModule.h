@@ -222,7 +222,7 @@ public:
     // ---- dispatch-list generation (render feed) --------------------------
     void GenerateDispatchLists(                                          // @0x822D5AB0
         const WorldEntityIO::InputBuffer_GenerateDispatchLists* lpInputBuffer,
-        const Array<CgsSceneManager::EntityId, 4500u>& lrVisibleEntities,
+        const CgsContainers::Array<CgsSceneManager::EntityId, 4500u>& lrVisibleEntities,
         Matrix44::InParam lCameraViewProjection,
         Vector3::InParam lCameraPosition,
         Vector3::InParam lCameraDirection,
@@ -242,7 +242,7 @@ public:
 
     void GenerateDispatchListsForEnvironmentMap(                         // @0x822D7298
         const WorldEntityIO::InputBuffer_GenerateDispatchLists* lpInputBuffer,
-        const Array<CgsSceneManager::EntityId, 4500u>& lrVisibleEntities,
+        const CgsContainers::Array<CgsSceneManager::EntityId, 4500u>& lrVisibleEntities,
         Matrix44::InParam lCameraViewProjection,
         Vector3::InParam lCameraPosition,
         const ShaderLodInfo* lpShaderLodInfo,

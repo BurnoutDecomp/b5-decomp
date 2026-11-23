@@ -144,7 +144,7 @@ namespace RaceCarEntityModuleIO
         typedef BrnPhysics::Vehicle::RaceCarState RaceCarState;   // :61
 
         // DWARF :415 -- public live race-car list.
-        Array<CarsInTheRaceData, 8u> maCarsInTheRace;             // :415
+        CgsContainers::Array<CarsInTheRaceData, 8u> maCarsInTheRace;             // :415
 
         // X360 0x826BB258 -- the member-wise copy constructor the build emitted out-of-line
         // (memcpy of the leading POD spans + per-element RaceCarState copy-construction). The

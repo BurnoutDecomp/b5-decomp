@@ -22,4 +22,4 @@
 // element needs no element_home include (CgsArray.h already pulls types.hpp).
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<s32, 4>;
+template class CgsContainers::Array<s32, 4>;

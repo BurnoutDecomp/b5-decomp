@@ -1639,7 +1639,7 @@ CGS_STATIC_ASSERT((sizeof(GuiImpactEvent) == 12), "X360 AddGuiEvent size 12 (id 
 // to CrashModeScoring::DealWithRemovedTraffic @0x8232BF90, which reads it with `lhz` (u16).
 struct GuiRemovedTrafficEvent
 {
-    Array<u16, 25> mRemovedTrafficArray;   // DWARF :1994  +0x00 (count word +0x34)
+    CgsContainers::Array<u16, 25> mRemovedTrafficArray;   // DWARF :1994  +0x00 (count word +0x34)
 
     s32 GetEventType() const { return 209; }
 };
@@ -1668,7 +1668,7 @@ CGS_STATIC_ASSERT((sizeof(GuiTrafficCarInfoEvent) == 656), "X360 AddEvent size 6
 // the mode is not in progress.
 struct GuiOverheadSignInfoEvent
 {
-    typedef Array<OverheadSignScore, 32> VisibleOverheadSignArray;   // DWARF :129
+    typedef CgsContainers::Array<OverheadSignScore, 32> VisibleOverheadSignArray;   // DWARF :129
 
     VisibleOverheadSignArray mVisibleOverheadSignArray;   // DWARF :1987  +0x00 (count word +0x400)
 
@@ -2950,7 +2950,7 @@ struct GuiEventOfflinePostEvent
         s32   miBaseScore;                       // +0x24  DWARF :2393
         s32   miScoreMultiplier;                 // +0x28  DWARF :2394, ASSERT-ATTESTED
         f32   mfDistanceTravelled;               // +0x2C  DWARF :2395 (metres)
-        Array<CgsID, 8> maCarsToUnlockFromSpecialEvent;  // +0x30  GetLength; miCount @0x22E8
+        CgsContainers::Array<CgsID, 8> maCarsToUnlockFromSpecialEvent;  // +0x30  GetLength; miCount @0x22E8
         u8    maReserved78[32];                  // +0x78  UNNAMED
         s32   miCtorSentinel98;                  // +0x98  a SECOND -1 CgsArray sentinel. ITS
                                                  //   OWNING ARRAY IS DELIBERATELY NOT NAMED:
@@ -3090,7 +3090,7 @@ struct GuiEventNetworkVehicleListRequest
 // 12-byte CgsGui::GuiEvent header in front of this data.
 struct GuiCarSelectionEvent
 {
-    Array<CgsID, 128>             maCars;                 // +0x000, count word +0x400
+    CgsContainers::Array<CgsID, 128>             maCars;                 // +0x000, count word +0x400
     CgsContainers::BitArray<128>  mHasBeenDrivenBitArray; // +0x408
     CgsContainers::BitArray<128>  mWreckedArray;          // +0x418
     s32                           miMaxAvailableCars;     // +0x428

@@ -32,4 +32,4 @@
 #include "GameShared/GameClasses/Containers/CgsSet.h"
 #include "SharedClasses/Physics/Props/BrnPropEntityID.h"
 
-template class Set<BrnWorld::PropEntityID, 32>;
+template class CgsContainers::Set<BrnWorld::PropEntityID, 32>;

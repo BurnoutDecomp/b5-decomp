@@ -313,7 +313,7 @@ public:
 
     void RequestStreamingForVehicleSelection(GameStateModuleIO::GameActionQueue* lpActionQueue, CgsID lCarId);
 
-    void GetListOfPlayerSelectableVehicles(Array<CgsID, 128>& lrCars);
+    void GetListOfPlayerSelectableVehicles(CgsContainers::Array<CgsID, 128>& lrCars);
 
     void OnSpecialEventPlayerCarChange(CgsID lCarId, CgsID lWheelId,
                                        GameStateModuleIO::GameActionQueue* lpQueue, bool lbUpdateProfile);

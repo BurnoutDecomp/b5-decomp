@@ -22,5 +22,5 @@
 // The live-element count sits at byte offset 0x40 == 8 * sizeof(NearMissData) == the inline
 // maElements[8] buffer end, confirming sizeof(NearMissData) == 8 (muCarId + mfDistance), the same
 // 8-byte element as the ,16 instantiation in Array_NearMissData_16.cpp.
-template void Array<BrnTraffic::BrnTrafficIO::NearMissData, 8>::Append(const BrnTraffic::BrnTrafficIO::NearMissData&);
-template bool Array<BrnTraffic::BrnTrafficIO::NearMissData, 8>::IsFull() const;
+template void CgsContainers::Array<BrnTraffic::BrnTrafficIO::NearMissData, 8>::Append(const BrnTraffic::BrnTrafficIO::NearMissData&);
+template bool CgsContainers::Array<BrnTraffic::BrnTrafficIO::NearMissData, 8>::IsFull() const;

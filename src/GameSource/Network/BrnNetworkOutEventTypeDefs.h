@@ -511,7 +511,7 @@ namespace BrnNetworkModuleIO
     // game-state side reads it as the Array<s64,15> it is.
     struct NetworkOutUploadedModeScoresEvent : public NetworkEvent<74>
     {
-        ::Array<s64, 15> maUploadedModeScores;                // +0x00 (15 x 8 + count)
+        CgsContainers::Array<s64, 15> maUploadedModeScores;                // +0x00 (15 x 8 + count)
     };
 
     // ---------------------------------------------------------------------------------

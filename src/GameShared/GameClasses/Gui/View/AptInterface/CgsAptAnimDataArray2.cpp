@@ -24,4 +24,4 @@
 // +0x90, meChannels.miCount @ +0xAC) the AnimData ctor (@ 0x824E8FC8) stores -1 into.
 CGS_STATIC_ASSERT((sizeof(CgsGui::AnimData) == 176), "AnimData stride 176 (X360 0x824E5BD0)");
 
-template void Array<CgsGui::AnimData, 2>::Append(const CgsGui::AnimData&);
+template void CgsContainers::Array<CgsGui::AnimData, 2>::Append(const CgsGui::AnimData&);

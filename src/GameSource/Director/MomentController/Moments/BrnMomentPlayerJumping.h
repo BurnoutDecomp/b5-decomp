@@ -65,7 +65,7 @@ namespace BrnDirector
             const TParameters*                  mpParams;
         };
 
-        Array<Shot, N>         maShots;
+        CgsContainers::Array<Shot, N>         maShots;
         const ArbitratorState* mpArbStateOwner;
         const Moment*          mpMomentOwner;
         s32                    miCurrentCamera;

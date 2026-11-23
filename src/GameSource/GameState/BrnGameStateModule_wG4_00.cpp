@@ -44,7 +44,7 @@ namespace BrnGameState
 // chooses). Online, the first race vehicle at exactly the class limit that is a base car (no
 // parent) is appended last when it is not already in the list.
 // ============================================================================
-void GameStateModule::GetListOfPlayerSelectableVehicles(Array<CgsID, 128>& lrCars)
+void GameStateModule::GetListOfPlayerSelectableVehicles(CgsContainers::Array<CgsID, 128>& lrCars)
 {
     s32  liVehicleClassLimit        = 9;
     bool lbFoundVehicleAtClassLimit = false;
@@ -150,7 +150,7 @@ void GameStateModule::GetListOfPlayerSelectableVehicles(Array<CgsID, 128>& lrCar
 void GameStateModule::RequestStreamingForVehicleSelection(GameStateModuleIO::GameActionQueue* lpActionQueue,
                                                           CgsID lCurrentVehicle)
 {
-    Array<CgsID, 128> lCars;
+    CgsContainers::Array<CgsID, 128> lCars;
     lCars.Construct();
     GetListOfPlayerSelectableVehicles(lCars);
 

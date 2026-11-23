@@ -19,12 +19,12 @@
 CGS_STATIC_ASSERT((sizeof(CgsSceneManager::EntityId) == 4),
               "EntityId must be 4 bytes (Array<...,650> Append stride 4 / count offset 2600)");
 
-template void Array<CgsSceneManager::EntityId, 650>::Append(const CgsSceneManager::EntityId&);
+template void CgsContainers::Array<CgsSceneManager::EntityId, 650>::Append(const CgsSceneManager::EntityId&);
 
 // X360 0x8270C278. The bounds-checked indexed accessor (dossier "GetI" == truncated GetItem),
 // carried via full member specialisation (mirrors Array_Race_64.cpp::GetItem).
 template<>
-CgsSceneManager::EntityId& Array<CgsSceneManager::EntityId, 650>::GetItem(u32 luIndex)
+CgsSceneManager::EntityId& CgsContainers::Array<CgsSceneManager::EntityId, 650>::GetItem(u32 luIndex)
 {
     // X360: *(a1 + 2600) == -1
     CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
@@ -33,4 +33,4 @@ CgsSceneManager::EntityId& Array<CgsSceneManager::EntityId, 650>::GetItem(u32 lu
     return maElements[luIndex];                            // X360: return 4 * a2 + a1
 }
 
-template u32 Array<CgsSceneManager::EntityId, 650>::GetLength() const;
+template u32 CgsContainers::Array<CgsSceneManager::EntityId, 650>::GetLength() const;

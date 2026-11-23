@@ -28,5 +28,5 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficMiscRuntimeClasses.h"
 
-template void Array<BrnTraffic::PhysicalRequestInfo, 25>::Append(const BrnTraffic::PhysicalRequestInfo&);
-template u32  Array<BrnTraffic::PhysicalRequestInfo, 25>::GetLength() const;
+template void CgsContainers::Array<BrnTraffic::PhysicalRequestInfo, 25>::Append(const BrnTraffic::PhysicalRequestInfo&);
+template u32  CgsContainers::Array<BrnTraffic::PhysicalRequestInfo, 25>::GetLength() const;

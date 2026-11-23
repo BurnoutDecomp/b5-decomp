@@ -387,10 +387,10 @@ namespace Camera
         CgsContainers::BitArray<28u> mBehaviourUsedByHandleFlags;                          // :331
 
         // Per-behaviour reference counts + the debug ref-count audit log (DWARF :333..:338).
-        Array<s32, 28u> mBehaviourRefCounts;                                // :333
-        Array<Array<BehaviourHelperIndex, 28u>, 28u>
+        CgsContainers::Array<s32, 28u> mBehaviourRefCounts;                                // :333
+        CgsContainers::Array<CgsContainers::Array<BehaviourHelperIndex, 28u>, 28u>
                                        mDebugBehaviourRefCountIndexLog;                     // :337
-        Array<s32, 28u> mDebugBehaviourRefCountLimits;                       // :338
+        CgsContainers::Array<s32, 28u> mDebugBehaviourRefCountLimits;                       // :338
 
         // Camera responders and rotation state (DecFIGS :346..:350).
         Utils::TempCameraBoostResponder mTempCameraBoostResponder;                                            // :346
@@ -403,7 +403,7 @@ namespace Camera
 
         // +console 0x16348 (90952), count word +0x16458 (91064)  the active helper-index table
         // (DWARF :362). This array drives every iterate-all-behaviours loop in the asm.
-        Array<BehaviourHelperIndex, 28u> mBehaviourHelperIndexArray;        // :362
+        CgsContainers::Array<BehaviourHelperIndex, 28u> mBehaviourHelperIndexArray;        // :362
 
         const DirectorResourceManager* mpDirectorResourceManager;                          // :364
         f32                            mfLastHandbrakeTime;                                // :366

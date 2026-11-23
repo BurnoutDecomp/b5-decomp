@@ -33,4 +33,4 @@ CgsAlgorithms::Shuffle<u16, CgsContainers::Stack<u16, 400> >(
 // ---- CgsAlgorithms::BubbleSort 1-arg entry (CgsBubbleSort.h inline body) ------------------
 template void
 CgsAlgorithms::BubbleSort<BrnDirector::AllVehicleData::NearestCarInfo, 8>(
-    Array<BrnDirector::AllVehicleData::NearestCarInfo, 8>&);
+    CgsContainers::Array<BrnDirector::AllVehicleData::NearestCarInfo, 8>&);

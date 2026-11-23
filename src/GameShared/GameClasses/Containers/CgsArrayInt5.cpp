@@ -11,4 +11,4 @@
 // the DWARF spells the type CgsContainers::Array<int,5u>. int == s32 (types.hpp).
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<s32, 5>;
+template class CgsContainers::Array<s32, 5>;

@@ -1,333 +1,646 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Append/Erase/EraseFast bounds)
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 #include <cstdlib>   // std::qsort (Array<T,N>::QSort)
 
-template <typename T, u32 N> class Set;
-
-// Array<T, N> - a thin fixed-size array wrapper used across the Cgs containers
-// (e.g. StateLoadingHelper's request dirty list). The DecFIGS DWARF spells this
-// CgsContainers::Array<T,N> (matches the X360 manglings, e.g.
-// '?$Array@VRaceBalancingGraph@BrnAI@@$06@CgsContainers@@'); it is committed here
-// as the unqualified Array<T,N> to match the established convention used by every
-// existing instantiation site across the repo (renaming/namespacing would be a
-// repo-wide, cross-TU change and is out of scope for this TU).
+// CgsContainers::Array<T, N> - the fixed-capacity inline array of the Cgs containers.
+// Namespace, member set, names and lines from the DecFIGS DWARF
+// (references/DecFIGS/dwarfdump/GameShared/GameClasses/Containers/CgsArray.h); the shape of
+// the header (namespace CgsContainers, the class declaring its members, then the inline
+// definitions after it) from the LegacySrc copy of the same header; every body from ARTIST.
+// ARTIST names every out-of-line copy CgsContainers::Array<T,N>::..., e.g.
+// CgsContainers::Array<int,20>::Append @0x821FBCD0.
 //
-// X360 layout note (recovered from CgsArray.h assert sites in the X360 build, e.g.
-// BrnGameState::StartLocation,8>::Ge @ 0x822AE208 and
-// BrnGameState::GameModeParams::GetCheckpointCount @ 0x822B1EF0): the inline element
-// buffer is followed by a single live-element count word, initialised to the sentinel
-// -1 ("Array used before Construct/Clear was called") and set to a real length by
-// Construct/Clear. Element access (Ge) bounds-checks the index against this count.
-// The count member is appended *after* the element buffer to match that on-disk shape.
-// The default constructor writes the -1 sentinel, so every owner must Construct/Clear its
-// arrays before use, exactly as on the console.
+// LAYOUT (ARTIST): the inline element buffer, then one count word that holds the -1 sentinel
+// until Construct/Clear and the live length afterwards. The DWARF names the pair maElements
+// (h:171) and muLength (h:172, uint32_t; sentinel KU_INVALID = 0xFFFFFFFF, h:49). The tree
+// keeps the names miCount / KI_UNCONSTRUCTED (same width and bit pattern) because explicit
+// specializations in other directories read them.
+//
+// SOURCE LINES: ARTIST bakes this header's line numbers into every inlined assert (li r5,
+// <line> before CgsDev::Assert::FireAssert, file string @0x82005634). The DWARF puts each
+// definition on the line named below; its asserts sit ten lines lower, on the lines ARTIST
+// passes. The comment lines inside each body hold those positions.
+//
+//
+namespace CgsContainers
+{
+    template <typename T, u32 N> class Set;
+
+// STILL DIFFERENT from ARTIST (recorded, not yet restored):
+// - The out-of-space (226/290), insert-index (312), bounds (539/557) and QSort (636) asserts
+//   stream their message into CgsDev::Assert::gpcMessageBuffer through a StrStream on the
+//   console; here they pass a plain string.
+// - The DWARF signatures differ where explicit instantiations in other directories depend on
+//   ours: AppendArray is a member template on the other array's capacity
+//   (??$AppendArray@$0CA@@...), FindFirstInstanceOf returns uint32_t (KU_INVALID),
+//   InsertBefore takes a T&, QSort returns void.
+// - h:201 Construct(uint32_t) is declared by the DWARF; no ARTIST copy attests its body, so it
+//   is not reconstructed.
+//
+//
+//
 template <typename T, u32 N>
 class Array
 {
 public:
+    static const s32 KI_UNCONSTRUCTED = -1; // DWARF h:49 KU_INVALID (uint32_t 0xFFFFFFFF)
     static const u32 KU_SIZE          = N;
-    static const s32 KI_UNCONSTRUCTED = -1; // sentinel before Construct/Clear has run
 
-    // Default constructor: default-constructs the N inline elements (a vector-construct over
-    // the element buffer) and stores the KI_UNCONSTRUCTED(-1) sentinel into the count word.
-    // Owners whose constructors are inlined show it as a bare `stw -1` into the count; the
-    // out-of-line copy is the Array<Array<BehaviourHelperIndex,28>,28> instantiation built by
-    // BehaviourManager::BehaviourManager (inner arrays: elements then count +0x70 = -1, per
-    // element; outer count +0xCB0 = -1 last).
-    Array() : miCount(KI_UNCONSTRUCTED) {}
+    Array() { miCount = KI_UNCONSTRUCTED; }
 
-    // Checked indexed accessor (X360 Array<T,N>::operator[]). The X360 body asserts the
-    // array was Construct/Clear'd (miCount != the -1 sentinel) then bounds-checks the index
-    // against the live count, streaming "Array index out of bounds. Index: <i>, length: <n>"
-    // before returning &maElements[luIndex]. Generic body shared by every instantiation:
-    //   non-const  CgsArray.h:538/539  (X360 0x823AFEC8 [sizeof T 24], 0x82200248 [116], 0x8241D4F8 [44])
-    //   const      CgsArray.h:556/557  (X360 0x8235B918 [sizeof T 48], 0x82200140 [116], 0x8235BB50 [44])
-    T& operator[](u32 luIndex)
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Array index out of bounds");
-        return maElements[luIndex];
-    }
-    const T& operator[](u32 luIndex) const
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Array index out of bounds");
-        return maElements[luIndex];
-    }
+    // The default constructor (h:52) leaves the count word on the KI_UNCONSTRUCTED(-1)
+    // sentinel. Owners whose constructors are inlined show it as a bare `stw -1` into the
+    // count; the out-of-line copy is the Array<Array<BehaviourHelperIndex,28>,28>
+    // instantiation built by BehaviourManager::BehaviourManager (inner counts +0x70 = -1 per
+    // element, outer count +0xCB0 = -1 last).
 
-    // GetItem - the DWARF spells the indexed accessor as Array<T,N>::GetItem (e.g.
-    // GameMainFlowController dispatches its active state via maStates.GetItem(index)).
-    T&       GetItem(u32 luIndex)       { return (*this)[luIndex]; }
-    const T& GetItem(u32 luIndex) const { return (*this)[luIndex]; }
+    // Construct h:186 / Clear h:355: empty but usable (count 0).
+    inline void Construct();
 
-    // Bring the array to its empty-but-usable state: zero live elements. This is what the
-    // X360 build does to each embedded Array<> in its owner's Construct (a single `stw 0`
-    // into the count word, e.g. GameModeParams::Construct @ 0x8231C370 stores 0 to
-    // maStartLocations.miCount @ +0x250 and maCheckpointDataArray.miCount @ +0x520). It
-    // flips the count off the KI_UNCONSTRUCTED(-1) sentinel so the count getters / Ge()
-    // bounds checks no longer fire the "Array used before Construct/Clear was called" assert.
-    // Construct() and Clear() are the two names the assert string itself attests; both have
-    // the same observable effect here (the inline element buffer needs no per-element work).
-    void Construct() { miCount = 0; }
-    void Clear()     { miCount = 0; }
+    // Append h:215: push one element.
+    inline void Append(const T& lrElement);
 
-    // Drop the array back to the pre-Construct state: store the KI_UNCONSTRUCTED(-1)
-    // sentinel into the count word so the next access fires the "Array used before
-    // Construct/Clear was called" assert. The X360 emits this as a single `stw -1`
-    // into the count member from an owner's constructor (e.g. CgsGui::AnimData::AnimData
-    // @0x824E8FC8 stores -1 into both embedded arrays' count words @+0x90/+0xAC before
-    // any Construct runs). Additive accessor over the existing miCount field; does not
-    // change layout/sizeof.
+    // AppendArray h:235: append every live element of another array.
+    inline void AppendArray(const Array<T, N>& lrSource);
+
+    // AppendSet h:258: append a set's elements in encounter order.
+    template <u32 M>
+    inline void AppendSet(const Set<T, M>& lSet);
+
+    // Grow h:279: reserve the next free slot and return it unwritten.
+    inline T* Grow();
+
+    // InsertBefore h:302: insert so the element sits at luIndex.
+    inline void InsertBefore(u32 luIndex, const T& lrElement);
+
+    // GetLength h:326 / GetCapacity h:341: the checked live count and the capacity.
+    inline u32 GetLength() const;
+    inline u32 GetCapacity() const;
+
+    // Clear h:355.
+    inline void Clear();
+
+    // Erase h:370 (order-preserving), EraseFast h:395 (unordered), EraseInstancesOf h:416.
+    inline void Erase(u32 luIndex);
+    inline void EraseFast(u32 luIndex);
+    inline void EraseInstancesOf(const T& lrElement);
+
+    // CountInstancesOf h:443, FindFirstInstanceOf h:470, Contains h:496, IsFull h:512.
+    inline u32 CountInstancesOf(const T& lrElement) const;
+    inline s32 FindFirstInstanceOf(const T& lrElement) const;
+    inline bool Contains(const T& lrElement) const;
+    inline bool IsFull() const;
+
+    // GetItem h:528 (const) / h:546: the checked accessors; operator[] h:563 / h:577 forward.
+    inline const T& GetItem(u32 luIndex) const;
+    inline T& GetItem(u32 luIndex);
+    inline const T& operator[](u32 luIndex) const;
+    inline T& operator[](u32 luIndex);
+
+    // Begin h:593 / End h:610: the live range.
+    inline T* Begin();
+    inline T* End();
+
+    // QSort (h:626): in-place sort through the C library qsort.
+    inline T* QSort(int (*lpfComparator)(const void* lpA, const void* lpB));
+
+    // ===== Members the tree's callers use that the DWARF does not declare =====
+    // Each is a raw count access that ARTIST shows inline without an assert, or a forwarding
+    // alias of an original member (it inlines that member's body with its original lines).
+
+    // Drop back to the pre-Construct state. ARTIST shows it as a bare `stw -1` into the count
+    // word from an owner's constructor, e.g. CgsGui::AnimData::AnimData @0x824E8FC8 (both
+    // embedded counts @+0x90/+0xAC) before any Construct runs.
     void MarkUnconstructed() { miCount = KI_UNCONSTRUCTED; }
 
-    // Initialise a FIXED index->element table as fully populated: live count = capacity N. Used
-    // where the X360 fills every slot by index (rather than growing via Append) -- e.g.
-    // GameMainFlowController::Construct (X360 0x823C6440) stores N(7) directly into maStates' count
-    // word @ +0x4C, then assigns all N entries; the checked operator[] then bounds-checks indices
-    // 0..N-1 against this count. Distinct from Construct()/Clear() (empty list, count=0, Append-grown).
+    // Fill a fixed index->element table: live count = capacity N. ARTIST
+    // GameMainFlowController::Construct @0x823C6440 stores N(7) straight into maStates' count
+    // word @+0x4C, then assigns all N entries through the checked accessor.
     void SetFullCount() { miCount = static_cast<s32>(N); }
 
-    // Number of live elements (-1 until Construct/Clear initialises it).
+    // The raw count word (-1 before Construct/Clear), read without GetLength's assert.
     s32 GetCount() const { return miCount; }
 
-    bool IsFull() const
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        return static_cast<u32>(miCount) == N;
-    }
-
-    // Checked live-element count (the X360 build's Array<T,N>::GetLength; the DWARF spells it
-    // GetLength returning u32). Asserts the array was Construct/Clear'd (count != the -1 sentinel)
-    // then returns it; the unsigned return matches the DWARF. (X360 0x823AC200 = the DriveThruInfo,46
-    // instantiation of this body.)
-    u32 GetLength() const
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        return static_cast<u32>(miCount);
-    }
-
-    // Capacity of the inline buffer.
+    // The capacity under the tree's older name; GetCapacity (h:341) is the original.
     u32 GetSize() const { return N; }
 
-    // GetCapacity - the same value under the name the X360 source itself uses. Attested by the
-    // assert text baked into BrnDirector::MomentSelector::AddMoment @0x82209F80:
-    // "mMomentDescriptionArray.GetLength() < mMomentDescriptionArray.GetCapacity()" (the
-    // stringized condition IS the original source expression). Additive alias over GetSize();
-    // no layout/sizeof change, no existing caller affected.
-    u32 GetCapacity() const { return N; }
+    // The tree's older names for GetItem (h:528 / h:546) and Grow (h:279).
+    T&       Ge(u32 luIndex)       { return GetItem(luIndex); }
+    const T& Ge(u32 luIndex) const { return GetItem(luIndex); }
+    T*       AddNew()              { return Grow(); }
 
-    // ===== Added for the Array<LandmarkIndex,16> TU =====
-    // Linear search for the first element equal to lrElement. Returns the index, or the
-    // KI_UNCONSTRUCTED(-1) sentinel when absent/empty (X360 0x8231AB70 returns -1 literally;
-    // DWARF spells the return uint32_t with KU_INVALID==0xffffffff -- same bit pattern, X360
-    // signed -1 authoritative). Asserts the array was Construct/Clear'd.
-    s32 FindFirstInstanceOf(const T& lrElement) const
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        const u32 luCount = static_cast<u32>(miCount);
-        if (luCount == 0)
-        {
-            return KI_UNCONSTRUCTED;
-        }
-        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
-        {
-            if (maElements[luIndex] == lrElement)
-            {
-                return static_cast<s32>(luIndex);
-            }
-        }
-        return KI_UNCONSTRUCTED;
-    }
 
-    // True when lrElement is present (X360 0x82325220: FindFirstInstanceOf(..) != -1). The double
-    // constructed-assert (Contains then FindFirstInstanceOf) is faithful to the X360.
-    bool Contains(const T& lrElement) const
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        return FindFirstInstanceOf(lrElement) != KI_UNCONSTRUCTED;
-    }
 
-    // Count how many live elements equal lrElement (X360 Array<T,N>::CountInstancesOf,
-    // generic template body shared by every instantiation; e.g.
-    // Array<BehaviourHelperIndex,28>::CountInstancesOf @ 0x821FCC40, CgsArray.h:453).
-    // Asserts the array was Construct/Clear'd, then linearly scans the live [0,count)
-    // range tallying element==lrElement matches. Faithful to the X360 count-loop
-    // (result=0; iterate maElements[0..count); ++result on each match).
-    u32 CountInstancesOf(const T& lrElement) const
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        u32 luMatches = 0;
-        const u32 luCount = static_cast<u32>(miCount);
-        for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
-        {
-            if (maElements[luIndex] == lrElement)
-            {
-                ++luMatches;
-            }
-        }
-        return luMatches;
-    }
 
-    // Checked element accessor (the X360 build's Array<>::Ge); same checked body as
-    // operator[] (constructed-assert + bounds-check), routed through it so the bounds
-    // logic lives in one place.
-    T&       Ge(u32 luIndex)       { return (*this)[luIndex]; }
-    const T& Ge(u32 luIndex) const { return (*this)[luIndex]; }
 
-    // Push one element onto the inline buffer (X360 Array<T,N>::Append, generic template body
-    // shared by every instantiation). Asserts the array was Construct/Clear'd and has room; the
-    // X360 streamed the dynamic "Array container out of space, Length/Capacity" message, kept
-    // here as a static CGS_ASSERT string. Unsigned count compare keeps the -1 sentinel failing.
-    void Append(const T& lrElement)
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
-        maElements[miCount] = lrElement;
-        ++miCount;
-    }
 
-    // Reserve the next free slot and return a pointer to it WITHOUT writing a value (the caller
-    // fills the returned element in place). X360 Array<T,N>::AddNew (generic body; e.g. the
-    // Array<CarScoreData::ChainableMultiplierInfo,8> instantiation @ 0x823177E8). Same two
-    // guards as Append; returns &maElements[miCount] then post-increments the count.
-    T* AddNew()
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
-        T* lpNewElement = &maElements[miCount];
-        ++miCount;
-        return lpNewElement;
-    }
 
-    // Grow - the DWARF (CgsArray.h:279) spells the reserve-next-free-slot accessor Grow(); same
-    // body as AddNew (constructed-assert + out-of-space-assert, return &maElements[miCount] then
-    // post-increment). The X360 emitted it out-of-line for the Array<RaceCarCrash,8>
-    // instantiation (Grow @ 0x827B52F8: asserts constructed + count < 8, returns 24*count + base,
-    // count++). Additive alias over AddNew; no layout/sizeof change.
-    T* Grow()
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
-        T* lpNewElement = &maElements[miCount];
-        ++miCount;
-        return lpNewElement;
-    }
 
-    // Remove the element at luIndex, shifting the tail down one slot (order-preserving).
-    void Erase(u32 luIndex)
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Trying to erase an unused element");
-        --miCount;
-        for (u32 luShift = luIndex; luShift < static_cast<u32>(miCount); ++luShift)
-        {
-            maElements[luShift] = maElements[luShift + 1];
-        }
-    }
 
-    // Insert lrElement so it sits at luIndex, shifting the tail [luIndex..count) up one slot
-    // (order-preserving). X360 Array<T,N>::InsertBefore (generic template body shared by every
-    // instantiation; e.g. Array<int,20>::InsertBefore @ 0x822111B0, CgsArray.h:312/313/314/336).
-    // Asserts the array was Construct/Clear'd, that luIndex is a valid insert position (<= count),
-    // and that there is room (count < N) before sliding the tail up and writing the new element.
-    void InsertBefore(u32 luIndex, const T& lrElement)
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        CGS_ASSERT(luIndex <= static_cast<u32>(miCount), "trying to insert before an invalid index");
-        CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
-        for (u32 luShift = static_cast<u32>(miCount); luShift > luIndex; --luShift)
-        {
-            maElements[luShift] = maElements[luShift - 1];
-        }
-        ++miCount;
-        maElements[luIndex] = lrElement;
-    }
 
-    // Erase every live element equal to lrElement, compacting the array (order-preserving). X360
-    // Array<T,N>::EraseInstancesOf (generic template body shared by every instantiation; e.g.
-    // Array<int,20>::EraseInstancesOf @ 0x821FBEA0, CgsArray.h:426). Asserts the array was
-    // Construct/Clear'd, then for each slot whose value matches it repeatedly Erase()s at that
-    // index until the value no longer matches, before advancing.
-    void EraseInstancesOf(const T& lrElement)
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        u32 luIndex = 0;
-        while (luIndex < static_cast<u32>(miCount))
-        {
-            if (maElements[luIndex] == lrElement)
-            {
-                while (luIndex < static_cast<u32>(miCount) && maElements[luIndex] == lrElement)
-                {
-                    Erase(luIndex);
-                }
-            }
-            ++luIndex;
-        }
-    }
 
-    // Unordered erase: overwrite luIndex with the current last live element, then drop the count
-    // (self-copy when luIndex is already last is intentional/harmless, matching the X360).
-    void EraseFast(u32 luIndex)
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Trying to erase an unused element");
-        maElements[luIndex] = maElements[miCount - 1];
-        --miCount;
-    }
 
-    // Append every live element of another (same-instantiation) Array onto this one. X360
-    // Array<T,N>::AppendArray<N> (generic template body shared by every instantiation; e.g.
-    // Array<BrnGui::OverheadSignScore,32>::AppendArray<32> @ 0x822E5348 and
-    // Array<unsigned short,32>::AppendArray<32> @ 0x82374258, CgsArray.h:245/246). Asserts both
-    // arrays were Construct/Clear'd (this @ line 245, source GetLength @ line 336) and that the
-    // combined live count fits N (line 246, "Array container out of space appending an array"),
-    // then Appends source[0..GetLength()-1] in order. Used by ResourceRegistrar::Clear-
-    // UnreferancedFiles (0x826E2080) to push the un-GC'd removal candidates back into the map.
-    void AppendArray(const Array<T, N>& lrSource)
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        CGS_ASSERT(lrSource.miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        CGS_ASSERT((lrSource.GetLength() + static_cast<u32>(miCount)) <= N,
-                   "Array container out of space appending an array");
-        const u32 luSourceCount = lrSource.GetLength();
-        for (u32 luIndex = 0; luIndex < luSourceCount; ++luIndex)
-        {
-            Append(lrSource[luIndex]);
-        }
-    }
 
-    // ARTIST8271B5A8 (u16,72), DecFIGS CgsArray.h:258. Preserve set encounter
-    // order and append to existing entries; the destination remains an Array.
-    template <u32 M>
-    void AppendSet(const Set<T, M>& lSet)
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        CGS_ASSERT(lSet.GetLength() + static_cast<u32>(miCount) <= N,
-                   "Array container out of space appending a set");
-        for (u32 luIndex = 0; luIndex < lSet.GetLength(); ++luIndex)
-            Append(lSet.GetItem(luIndex));
-    }
 
-    // In-place sort of the live elements via a caller-supplied C-style comparator (X360 used the
-    // C library qsort). Returns the buffer base (the X360 void return is the this-register artifact).
-    T* QSort(int (*lpfComparator)(const void* lpA, const void* lpB))
-    {
-        CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-        const u32 luCount = static_cast<u32>(miCount);
-        if (luCount > 1)
-        {
-            std::qsort(maElements, luCount, sizeof(T), lpfComparator);
-        }
-        return maElements;
-    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 private:
-    T   maElements[N];
-    s32 miCount;                 // live-element count; -1 == not yet Constructed/Cleared
+    T   maElements[N];  // DWARF h:171
+    s32 miCount;        // DWARF h:172 muLength (uint32_t); -1 == not yet Constructed/Cleared
 };
+
+// Construct / Clear: ARTIST does this to each embedded Array<> in its owner's Construct with a
+// single `stw 0` into the count word, e.g. GameModeParams::Construct @0x8231C370
+// (maStartLocations +0x250, maCheckpointDataArray +0x520). Construct() and Clear() are the two
+// names the assert text attests; the inline element buffer needs no per-element work.
+
+
+
+
+
+template <typename T, u32 N>
+inline void
+Array<T, N>::Construct()
+{
+    miCount = 0;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline void
+Array<T, N>::Append(const T& lrElement)
+{
+    // Push one element (out-of-line copies include Array<int,20>::Append @0x821FBCD0 and
+    // Array<float,10>::Append @0x821FDAD0). ARTIST streams the capacity message
+    // ("Array container out of space, Length: " << count << ", Capacity: " << N); it is a
+    // plain string here. The unsigned compare keeps the -1 sentinel failing.
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
+    maElements[miCount] = lrElement;
+    ++miCount;
+}
+
+
+
+template <typename T, u32 N>
+inline void
+Array<T, N>::AppendArray(const Array<T, N>& lrSource)
+{
+    // Append every live element of lrSource (ARTIST
+    // Array<OverheadSignScore,32>::AppendArray<32> @0x822E5348, @0x82374258).
+    //
+    u32 luIndex;    // DWARF h:240
+    // ResourceRegistrar::ClearUnreferancedFiles (0x826E2080) uses it to push the removal
+    // candidates back into the map. lrSource's own constructed check is the GetLength inside
+    // the capacity assert (336); the loop re-reads GetLength on every pass.
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT((lrSource.GetLength() + static_cast<u32>(miCount)) <= N, "Array container out of space appending an array");
+    for (luIndex = 0; luIndex < lrSource.GetLength(); ++luIndex)
+    {
+        Append(lrSource.GetItem(luIndex));
+    }
+}
+
+
+
+template <typename T, u32 N>
+template <u32 M>
+inline void
+Array<T, N>::AppendSet(const Set<T, M>& lSet)
+{
+    // Append a set's elements in its encounter order; the destination stays an Array
+    // (ARTIST Array<u16,72>::AppendSet<72> @0x8271B5A8, outside the export set).
+    //
+    u32 luIndex;    // DWARF h:263
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT(lSet.GetLength() + static_cast<u32>(miCount) <= N, "Array container out of space appending a set");
+    for (luIndex = 0; luIndex < lSet.GetLength(); ++luIndex)
+    {
+        Append(lSet.GetItem(luIndex));
+    }
+}
+
+
+template <typename T, u32 N>
+inline T*
+Array<T, N>::Grow()
+{
+    // Reserve the next free slot and return it unwritten; the caller fills it in place
+    // (ARTIST Array<OverheadSignScore,32>::Grow @0x822ABF70 and the
+    // Array<ChainableMultiplierInfo,8> copy @0x823177E8). ARTIST streams the capacity
+    // message exactly as Append does; it is a plain string here.
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
+    T* lpNewElement = &maElements[miCount];
+    ++miCount;
+    return lpNewElement;
+}
+
+
+
+
+
+template <typename T, u32 N>
+inline void
+Array<T, N>::InsertBefore(u32 luIndex, const T& lrElement)
+{
+    // Insert so the element sits at luIndex, shifting the tail up one slot (ARTIST
+    // Array<int,20>::InsertBefore @0x822111B0, ICEMoviePlaylist::InsertMovieBefore). The
+    // index check reads GetLength() (its 336 fires first); ARTIST streams "trying to insert
+    // before an invalid index: " << luIndex, a plain string here.
+    //
+    //
+    //
+    //
+    CGS_ASSERT(luIndex <= GetLength(), "trying to insert before an invalid index");
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
+    for (u32 luShift = GetLength(); luShift > luIndex; --luShift)
+    {
+        maElements[luShift] = maElements[luShift - 1];
+    }
+    ++miCount;
+    maElements[luIndex] = lrElement;
+}
+
+
+template <typename T, u32 N>
+inline u32
+Array<T, N>::GetLength() const
+{
+    // The checked live count. Inlined into hundreds of ARTIST callers with this assert on
+    // line 336 (li r5,0x150), e.g. BrnGui::GuiCache::GetScoringTrafficCount @0x824497C0;
+    // out of line in Array<DriveThruInfo,46>::GetLength @0x823AC200.
+    //
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    return static_cast<u32>(miCount);
+}
+template <typename T, u32 N>
+inline u32
+Array<T, N>::GetCapacity() const
+{
+    // Attested by the assert text baked into BrnDirector::MomentSelector::AddMoment
+    // @0x82209F80: "mMomentDescriptionArray.GetLength() < mMomentDescriptionArray.GetCapacity()".
+    return N;
+}
+
+
+
+
+
+
+template <typename T, u32 N>
+inline void
+Array<T, N>::Clear()
+{
+    miCount = 0;
+}
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline void
+Array<T, N>::Erase(u32 luIndex)
+{
+    // Remove the element at luIndex, shifting the tail down one slot (order-preserving;
+    // ARTIST Array<int,20>::Erase @0x821FBDF0).
+    //
+    //
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Trying to erase an unused element");
+    --miCount;
+    for (; luIndex < static_cast<u32>(miCount); ++luIndex)
+    {
+        maElements[luIndex] = maElements[luIndex + 1];
+    }
+}
+
+
+
+
+
+template <typename T, u32 N>
+inline void
+Array<T, N>::EraseFast(u32 luIndex)
+{
+    // Unordered erase: the last live element overwrites luIndex, then the count drops (a
+    // self-copy when luIndex is already last, as on the console; ARTIST
+    // Array<BankingScore,6>::EraseFast @0x82449018).
+    //
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Trying to erase an unused element");
+    maElements[luIndex] = maElements[miCount - 1];
+    --miCount;
+}
+
+
+
+
+template <typename T, u32 N>
+inline void
+Array<T, N>::EraseInstancesOf(const T& lrElement)
+{
+    // Erase every live element equal to lrElement, compacting the array in order (ARTIST
+    // Array<int,20>::EraseInstancesOf @0x821FBEA0): each slot is erased while it still
+    // matches -- the match test first, then the index test -- before the index advances.
+    //
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    for (u32 luIndex = 0; luIndex < static_cast<u32>(miCount); ++luIndex)
+    {
+        while ((lrElement == maElements[luIndex]) && (luIndex < static_cast<u32>(miCount)))
+        {
+            Erase(luIndex);
+        }
+    }
+}
+
+
+
+
+
+
+template <typename T, u32 N>
+inline u32
+Array<T, N>::CountInstancesOf(const T& lrElement) const
+{
+    // Count the live elements equal to lrElement (ARTIST
+    // Array<BehaviourHelperIndex,28>::CountInstancesOf @0x821FCC40).
+    //
+    //
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    u32 luMatches = 0;
+    for (u32 luIndex = 0; luIndex < static_cast<u32>(miCount); ++luIndex)
+    {
+        if (lrElement == maElements[luIndex])
+        {
+            ++luMatches;
+        }
+    }
+    return luMatches;
+}
+
+
+
+
+template <typename T, u32 N>
+inline s32
+Array<T, N>::FindFirstInstanceOf(const T& lrElement) const
+{
+    // The index of the first element equal to lrElement, else -1 (ARTIST
+    // Array<int,8>::FindFirstInstanceOf @0x823184F8 returns -1 literally; the DWARF spells
+    // the return uint32_t with KU_INVALID 0xFFFFFFFF, the same bits).
+    //
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    for (u32 luIndex = 0; luIndex < static_cast<u32>(miCount); ++luIndex)
+    {
+        if (lrElement == maElements[luIndex])
+        {
+            return static_cast<s32>(luIndex);
+        }
+    }
+    return KI_UNCONSTRUCTED;
+}
+
+
+
+
+template <typename T, u32 N>
+inline bool
+Array<T, N>::Contains(const T& lrElement) const
+{
+    // Whether lrElement is present (ARTIST Array<u64,80>::Contains @0x82325470): its own
+    // constructed assert, then FindFirstInstanceOf with its own.
+    //
+    //
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    return (FindFirstInstanceOf(lrElement) != KI_UNCONSTRUCTED);
+}
+
+template <typename T, u32 N>
+inline bool
+Array<T, N>::IsFull() const
+{
+    // ARTIST Array<u64,80>::IsFull @0x823254F0: GetLength's 336 assert, then the compare.
+    return (GetLength() == GetCapacity());
+}
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline const T&
+Array<T, N>::GetItem(u32 luIndex) const
+{
+    // The checked accessor (const). ARTIST streams "Array index out of bounds. Index: "
+    // << luIndex << ", length: " << count into the assert buffer (a plain string here).
+    // Out-of-line const copies: Array<int,20>::GetItem const @0x821FF788, @0x8235B918
+    // (sizeof T 48), @0x82200140 (116).
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Array index out of bounds");
+    return maElements[luIndex];
+}
+
+
+template <typename T, u32 N>
+inline T&
+Array<T, N>::GetItem(u32 luIndex)
+{
+    // The checked accessor: the const overload's checks on its own lines (ARTIST
+    // Array<int,20>::GetItem @0x821FF680, @0x823AFEC8 (sizeof T 24), @0x82200248 (116),
+    // @0x8241D4F8 (44)).
+    //
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Array index out of bounds");
+    return maElements[luIndex];
+}
+
+template <typename T, u32 N>
+inline const T&
+Array<T, N>::operator[](u32 luIndex) const
+{
+    return GetItem(luIndex);
+}
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline T&
+Array<T, N>::operator[](u32 luIndex)
+{
+    return GetItem(luIndex);
+}
+
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline T*
+Array<T, N>::Begin()
+{
+    // The first element (ARTIST inlines it as the first std::sort argument in
+    // CollisionStateManager::UpdateParams @0x82704420).
+    //
+    //
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    return &maElements[0];
+}
+
+
+template <typename T, u32 N>
+inline T*
+Array<T, N>::End()
+{
+    // One past the last live element (ARTIST inlines it as the second std::sort argument
+    // in CollisionStateManager::UpdateParams @0x82704420).
+    //
+    //
+    //
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    return &maElements[miCount];
+}
+
+template <typename T, u32 N>
+inline T*
+Array<T, N>::QSort(int (*lpfComparator)(const void* lpA, const void* lpB))
+{
+    // In-place sort of the live elements through the C library qsort (ARTIST
+    // Array<ChainableMultiplierInfo,8>::QSort @0x82317950). ARTIST streams the constructed
+    // message; it is a plain string here. The console returns void; the buffer base returned
+    // here is what the explicit instantiation in Array_ChainableMultiplierInfo_8.cpp
+    // declares.
+    //
+    //
+    //
+    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    const u32 luCount = static_cast<u32>(miCount);
+    if (luCount > 1)
+    {
+        std::qsort(maElements, luCount, sizeof(T), lpfComparator);
+    }
+    return maElements;
+}
 
 // The Array<int,20> GetItem overloads have independently emitted X360 bodies with streamed
 // bounds-assert messages. Their explicit specializations live in CgsArrayInt20.cpp; the generic
@@ -337,3 +650,5 @@ template <> s32&       Array<s32, 20>::GetItem(u32 luIndex);
 template <> const s32& Array<s32, 20>::GetItem(u32 luIndex) const;
 template <> s32&       Array<s32, 20>::operator[](u32 luIndex);
 template <> const s32& Array<s32, 20>::operator[](u32 luIndex) const;
+
+} // namespace CgsContainers

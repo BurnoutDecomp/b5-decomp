@@ -1855,8 +1855,8 @@ namespace BrnGui
         // LANDED 2026-09-10 -- see E_EVENT_EVENT_STATE_REQUEST for the whole chain.
         case 556:
         {
-            const Array<BrnProgression::ProfileEvent, 175>* lpEvents =
-                reinterpret_cast<const Array<BrnProgression::ProfileEvent, 175>*>(lpEvent);
+            const CgsContainers::Array<BrnProgression::ProfileEvent, 175>* lpEvents =
+                reinterpret_cast<const CgsContainers::Array<BrnProgression::ProfileEvent, 175>*>(lpEvent);
             CGS_STATIC_ASSERT((sizeof(*lpEvents) == 1404), "the event-state payload is 1404 bytes");
             CGS_STATIC_ASSERT((sizeof(mProfileEventStateStorage) == 1400), "175 x 8-byte ProfileEvent");
             std::memcpy(mProfileEventStateStorage, lpEvents, sizeof(mProfileEventStateStorage));

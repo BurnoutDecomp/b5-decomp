@@ -28,4 +28,4 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"
 
-template class Array<BrnDirector::Camera::BehaviourHelperIndex, 28>;
+template class CgsContainers::Array<BrnDirector::Camera::BehaviourHelperIndex, 28>;

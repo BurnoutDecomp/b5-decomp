@@ -28,4 +28,4 @@
 #include "GameSource/Effects/Particles/Native/BrnSimpleParticleBatch.h"
 
 template BrnParticle::Native::SimpleParticleBatch&
-Array<BrnParticle::Native::SimpleParticleBatch, 13>::operator[](u32);
+CgsContainers::Array<BrnParticle::Native::SimpleParticleBatch, 13>::operator[](u32);

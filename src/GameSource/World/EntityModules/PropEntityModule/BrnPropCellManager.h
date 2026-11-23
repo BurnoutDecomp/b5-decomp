@@ -131,7 +131,7 @@ namespace BrnWorld
         typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface InSceneUpdateInterface;
         // BrnPropCellManager.h:39 (DWARF typedef; the DWARF spells the template
         // CgsContainers::Set, the committed container lives at global scope).
-        typedef ::Set<PropEntityID, 32u>                    RecentlyBrokenPropsArray;
+        typedef CgsContainers::Set<PropEntityID, 32u>                    RecentlyBrokenPropsArray;
 
         // ---- asm-pinned capacities / tuning constants --------------------------------
         static const s32 KI_MAX_CELLS        = 150;   // AddCells assert `< 0x96`

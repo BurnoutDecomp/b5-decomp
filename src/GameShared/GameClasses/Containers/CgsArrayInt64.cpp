@@ -27,4 +27,4 @@
 // disposition as CgsArrayInt50.cpp).
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<s32, 64>;
+template class CgsContainers::Array<s32, 64>;

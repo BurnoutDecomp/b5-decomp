@@ -24,4 +24,4 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N>::operator[] (inline generic)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficPhysicalVehicleInfo.h" // PhysicalVehicleInfo (48-byte element, canonical home)
 
-template BrnTraffic::PhysicalVehicleInfo& Array<BrnTraffic::PhysicalVehicleInfo, 33>::operator[](u32);
+template BrnTraffic::PhysicalVehicleInfo& CgsContainers::Array<BrnTraffic::PhysicalVehicleInfo, 33>::operator[](u32);

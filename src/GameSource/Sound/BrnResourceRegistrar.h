@@ -270,7 +270,7 @@ namespace Logic
         //   this is an Array<LinkedListNode<RequestedResource>*, 124>, NOT a LinearHashTable (the X360
         //   uses Contains/Append/operator[]/GetLength/EraseFast and a single count word at +0x1F0).
         //   (Array<T,N> is the global-namespace fixed array from CgsArray.h.)
-        ::Array<RequestedNode*, 124> mapRemovalCandidates;
+        CgsContainers::Array<RequestedNode*, 124> mapRemovalCandidates;
 
         // @+0x3174 mLoadedResourceList -- resolved/in-use (loaded) resources (free@+0x9914 /
         //   live@+0x9920, stride 316). N=124: pool base byte 12664 (a1+3166), free head byte 51848

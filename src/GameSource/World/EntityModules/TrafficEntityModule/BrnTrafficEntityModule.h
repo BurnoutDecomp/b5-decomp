@@ -502,7 +502,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // @0x827D2810); the callee forwards (position, direction) to both corona producers and
         // (position, scattering, colour) to RenderTrafficCar. Camera is a reference, per DWARF.
         void GenerateDispatchLists( const BrnTrafficIO::InputBuffer_Dispatch* lpInput,
-                                    const ::Array<VehicleRenderInfo, 64u>& laTrafficRenderInfos,
+                                    const CgsContainers::Array<VehicleRenderInfo, 64u>& laTrafficRenderInfos,
                                     Vector4 lFogScattering,
                                     Vector4 lFogColourPlusWhiteLevel,
                                     Vector3 lCameraPosition,
@@ -970,7 +970,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // The active-hull set the spawn ladder passes around. X360-attested as Set<u16,72>:
         // SpawnNewTraffic @0x82748A40 reads the length word at +0x90 == 144 == 72 * sizeof(u16),
         // and RecalculateActiveHulls @0x8274C870 memcpy's 148 bytes of it.
-        typedef ::Set<u16, KU_MAX_ACTIVE_HULLS> ActiveHullSet;
+        typedef CgsContainers::Set<u16, KU_MAX_ACTIVE_HULLS> ActiveHullSet;
 
         // ---- module lifecycle / state machine ----
         void Reset();                    // @ 0x8272CDA0
@@ -1411,7 +1411,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
                                            const Hull* lpHull,
                                            u32 luSectionIndex,
                                            const Section* lpSection,
-                                           const ::Array<PhysicalVehicleInfo,
+                                           const CgsContainers::Array<PhysicalVehicleInfo,
                                                          KU_MAX_PHYSICAL_VEHICLES_TO_CACHE>* lpaPhysicalVehicles); // @0x82738468
         // UpdateParam_CheckIfNeedToSlow's start-grid replacement for its race-car cone scan: the nearest
         // grid slot ahead of the param stands in for a race car. The five outputs are left untouched
@@ -1445,13 +1445,13 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
 
         // crash surface -- GATED, declared so the two consumers above link.
         void UpdateParams_BuildListOfCrashingThings(
-                ::Array<CrashingThingData, 168u>* lpaOut,
+                CgsContainers::Array<CrashingThingData, 168u>* lpaOut,
                 const BrnTrafficIO::InputBuffer_PostPhysics* lpInput,
                 const CgsContainers::FastBitArray<KU_PARAM_MAX_PARAMS>& lrAvoidSet); // @0x82737270
         void UpdateParams_TryAvoidCrashing(u32 luParam,
-                                           const ::Array<CrashingThingData, 168u>* lpaCrashingThings); // @0x82716948
+                                           const CgsContainers::Array<CrashingThingData, 168u>* lpaCrashingThings); // @0x82716948
         void UpdateParams_TryStartSympatheticCrashing(u32 luParam,
-                                                      const ::Array<CrashingThingData, 168u>* lpaCrashingThings); // @0x827165D8
+                                                      const CgsContainers::Array<CrashingThingData, 168u>* lpaCrashingThings); // @0x827165D8
 
         // vehicle creation + the kinematic move
         u32 TryAllocateTrailerId(); // @0x827234B0
@@ -1574,20 +1574,20 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         ParamListNode         maParamListNodes[KU_MAX_PARAMS];   // :639
         ParamTransform        maParamTransforms[KU_MAX_PARAMS];  // :640
         ParamSoaData          mParamSoaData;                     // :641
-        ::Array<u16, 1u>      mParamsToReinsert;                 // :642
+        CgsContainers::Array<u16, 1u>      mParamsToReinsert;                 // :642
 
-        ::Array<PurgatoryInfo, KU_MAX_PARAMS>  maPurgatoryList;  // :644
+        CgsContainers::Array<PurgatoryInfo, KU_MAX_PARAMS>  maPurgatoryList;  // :644
         CgsContainers::Stack<u16, KU_MAX_PARAMS> mFreeParams;    // :645
 
         StaticTrafficParam    maStaticTrafficParams[KU_MAX_STATIC_TRAFFIC];     // :648
-        ::Array<PurgatoryInfo, KU_MAX_STATIC_TRAFFIC> mStaticParamPurgatoryList;// :649
+        CgsContainers::Array<PurgatoryInfo, KU_MAX_STATIC_TRAFFIC> mStaticParamPurgatoryList;// :649
         CgsContainers::Stack<u8, KU_MAX_STATIC_TRAFFIC> mFreeStaticParamStack;  // :650
 
-        ::Array<PurgatoryInfo, KU_MAX_TRAILER_TRAFFIC> mTrailerPurgatoryList;   // :653
+        CgsContainers::Array<PurgatoryInfo, KU_MAX_TRAILER_TRAFFIC> mTrailerPurgatoryList;   // :653
         CgsContainers::Stack<u16, KU_MAX_TRAILER_TRAFFIC> mFreeTrailerStack;    // :654
 
-        ::Set<u16, KU_MAX_ACTIVE_HULLS> mActiveHulls;                // :656
-        ::Set<u16, KU_MAX_ACTIVE_HULLS> mActiveHullsForLocalPlayer;  // :657
+        CgsContainers::Set<u16, KU_MAX_ACTIVE_HULLS> mActiveHulls;                // :656
+        CgsContainers::Set<u16, KU_MAX_ACTIVE_HULLS> mActiveHullsForLocalPlayer;  // :657
         u8                    mauHullRuntimeDataIndices[KU_MAX_HULLS]; // :658
         // X360 attestation for this run: GetHullRuntimeSafe @0x8271DA70 and GetHullRuntime
         // @0x8271D9D0 both read mauHullRuntimeDataIndices[luHull] at +256816 and index the
@@ -1599,11 +1599,11 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         CgsContainers::BitArray<KU_MAX_ACTIVE_HULLS> mUsedHullRuntimeData; // :660
         TrafficLightManager   mTrafficLightManager;                 // :661  (X360 +0x53790)
 
-        ::Array<u16, KU_MAX_ACTIVE_HULLS> mHullsToAddTriggersFor;    // :663
-        ::Array<u16, KU_MAX_ACTIVE_HULLS> mHullsToRemoveTriggersFor; // :664
+        CgsContainers::Array<u16, KU_MAX_ACTIVE_HULLS> mHullsToAddTriggersFor;    // :663
+        CgsContainers::Array<u16, KU_MAX_ACTIVE_HULLS> mHullsToRemoveTriggersFor; // :664
 
-        ::Array<HullChangeInfo, KU_MAX_HULL_CHANGES> maPredictedHullChanges; // :666
-        ::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>
+        CgsContainers::Array<HullChangeInfo, KU_MAX_HULL_CHANGES> maPredictedHullChanges; // :666
+        CgsContainers::Array<u16, KU_MAX_ACTIVE_HULLS_PER_RACECAR>
                               maaRaceCarHulls[E_ACTIVE_RACE_CAR_INDEX_COUNT];      // :667
         u16                   mau16HullsToActivateAfterReset[E_ACTIVE_RACE_CAR_INDEX_COUNT]; // :668
         u16                   muCurrentlyPredictedHull;             // :669
@@ -1620,12 +1620,12 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // a literal, not KU_MAX_NEW_CRASHED_VEHICLES / KU_MAX_NEW_REMOVED_VEHICLES (both 25),
         // which are the per-frame budgets the producers check, not the array extents.
         // PARKED: nothing names the constant that spells 160. Find it, do not invent one.
-        ::Array<TrafficCrashInfo, 160u> maNewCrashedVehicles;        // :678
-        ::Array<TrafficCrashInfo, 160u> maEmergencyCrashingVehicles; // :679
-        ::Array<u16, 160u> maNewCrashedNetworkVehicles;              // :680
-        ::Array<u16, 160u> maRecentlyRemovedVehicles;                // :681
-        ::Array<u16, 160u> maNewRemovedVehicles;                     // :682
-        ::Array<u16, 160u> maRecentlyRecoveredSlammedTraffic;        // :683
+        CgsContainers::Array<TrafficCrashInfo, 160u> maNewCrashedVehicles;        // :678
+        CgsContainers::Array<TrafficCrashInfo, 160u> maEmergencyCrashingVehicles; // :679
+        CgsContainers::Array<u16, 160u> maNewCrashedNetworkVehicles;              // :680
+        CgsContainers::Array<u16, 160u> maRecentlyRemovedVehicles;                // :681
+        CgsContainers::Array<u16, 160u> maNewRemovedVehicles;                     // :682
+        CgsContainers::Array<u16, 160u> maRecentlyRecoveredSlammedTraffic;        // :683
 
         TrafficPhysicsInfo    maTrafficPhysicsInfoList[KU_MAX_PHYSICAL_TRAFFIC_VEHICLES]; // :685
         CgsContainers::BitArray<KU_MAX_PHYSICAL_TRAFFIC_VEHICLES>
@@ -1715,7 +1715,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         bool                  mbInReplay;                           // :757
         bool                  mbAllowTrafficDeformationSkinning;    // :758
 
-        ::Array<CollidableVehicleInfo4, KU_MAX_COLLIDABLE_CACHED_TRAFFIC_ARRAY>
+        CgsContainers::Array<CollidableVehicleInfo4, KU_MAX_COLLIDABLE_CACHED_TRAFFIC_ARRAY>
                               mCachedCollidableList;                // :760
         Vector2               maFeelerCosSin[KI_TRAFFIC_AVOIDANCE_FEELERS_CALC_COUNT]; // :761
 
@@ -1800,7 +1800,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         bool                  mbDEBUGEnableKillzones;               // :850
         s32                   miDEBUGFlowtypeOverride;              // :851
 
-        ::Array<FiredKillZoneInfo, 8u> mDEBUGRecentlyFiredKillZones; // :853
+        CgsContainers::Array<FiredKillZoneInfo, 8u> mDEBUGRecentlyFiredKillZones; // :853
 
         // This four-bool run is pinned by the fuzzy-logic allocation either side of it: Prepare
         // @0x8274A578 stores the 2560-byte block to +469100 and 0 to +469104, so the

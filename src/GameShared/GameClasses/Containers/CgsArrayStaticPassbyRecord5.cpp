@@ -28,6 +28,6 @@ typedef BrnSound::Vehicles::Environment::StaticPassbyControl::PassbyRecord
     PassbyRecord;
 }
 
-template void          Array<PassbyRecord, 5>::Append(const PassbyRecord&);
-template void          Array<PassbyRecord, 5>::Erase(u32);
-template PassbyRecord& Array<PassbyRecord, 5>::GetItem(u32);
+template void          CgsContainers::Array<PassbyRecord, 5>::Append(const PassbyRecord&);
+template void          CgsContainers::Array<PassbyRecord, 5>::Erase(u32);
+template PassbyRecord& CgsContainers::Array<PassbyRecord, 5>::GetItem(u32);

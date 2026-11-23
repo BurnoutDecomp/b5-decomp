@@ -790,7 +790,7 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID
     CGS_ASSERT(leMugshotType != 5, "leMugshotType != GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");  // X360 BrnProfile.cpp:758
 
     CgsContainers::BitArray<20u>& lrFileIds = maAvailableMugshotFileIDs[leMugshotType];
-    Array<MugshotInfo, 20u>&      lrGallery = maaMugshotInfo[leMugshotType];
+    CgsContainers::Array<MugshotInfo, 20u>&      lrGallery = maaMugshotInfo[leMugshotType];
 
     MugshotInfo lRecord;
 
@@ -841,7 +841,7 @@ MugshotInfo* Profile::GetMugshotInfo(s32 leMugshotType, s32 liImageIndex)
 {
     CGS_ASSERT(leMugshotType < 5, "leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");  // X360 BrnProfile.cpp:999
 
-    Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
+    CgsContainers::Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
     if (liImageIndex >= static_cast<s32>(lrGallery.GetLength()))    // X360 `cmpw ; bge -> li r3,0`
     {
         return 0;
@@ -860,7 +860,7 @@ bool Profile::LockOrUnlockMugshot(s32 leMugshotType, s32 liImageIndex)
 {
     CGS_ASSERT(leMugshotType < 5, "leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");  // X360 BrnProfile.cpp:926
 
-    Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
+    CgsContainers::Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
     if (liImageIndex >= static_cast<s32>(lrGallery.GetLength()))
     {
         return false;                                             // X360 `li r3, 0`
@@ -883,7 +883,7 @@ s32 Profile::DeleteMugshot(s32 leMugshotType, s32 liImageIndex)
 
     s32 liFileID = -1;                                             // X360 `li r27, -1`
 
-    Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
+    CgsContainers::Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
     if (liImageIndex < static_cast<s32>(lrGallery.GetLength()))
     {
         MugshotInfo& lrInfo = lrGallery.GetItem(static_cast<u32>(liImageIndex));
@@ -1299,7 +1299,7 @@ void Profile::AddStuntElement(BrnGameState::StuntElementType leStuntElementType,
     CGS_ASSERT(leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT,
                "leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT");
 
-    if (maStuntElements[leStuntElementType].Find(lId) == Set<CgsID, 512u>::KU_INVALID &&
+    if (maStuntElements[leStuntElementType].Find(lId) == CgsContainers::Set<CgsID, 512u>::KU_INVALID &&
         leCounty < BrnWorld::E_COUNTY_VALID_COUNT)
     {
         ++maaiStuntCountsByCounty[leStuntElementType][leCounty];
@@ -1314,7 +1314,7 @@ void Profile::AddStuntElement(BrnGameState::StuntElementType leStuntElementType,
 // ====================================================================================
 bool Profile::IsStuntElementDone(BrnGameState::StuntElementType leStuntElementType, CgsID lId) const
 {
-    return maStuntElements[leStuntElementType].Find(lId) != Set<CgsID, 512u>::KU_INVALID;
+    return maStuntElements[leStuntElementType].Find(lId) != CgsContainers::Set<CgsID, 512u>::KU_INVALID;
 }
 
 // ====================================================================================

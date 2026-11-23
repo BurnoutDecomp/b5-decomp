@@ -58,13 +58,13 @@ public:
     // DWARF BrnGameModeParams.h; the PS3 build emits it out of line (BrnWorldAIUnity.cpp). ARTIST
     // inlines it at its one reader, AIModule::OnModeStart: 0x82791F00 `addi r4, cp, 8` -- the
     // address of mauBlockSectionIds (+0x08). Bodied 2026-09-23 (crash parity G04-D1).
-    const Array<u32, 8u>* GetBlockSectionIds() const { return &mauBlockSectionIds; }
+    const CgsContainers::Array<u32, 8u>* GetBlockSectionIds() const { return &mauBlockSectionIds; }
 
 private:
     LandmarkIndex  muLandmarkIndex;     // 0x00 (s16) -- DWARF :92
     u16            muAISectionIndex;    // 0x02       -- DWARF :93
     s32            meDistrict;          // 0x04       -- DWARF :94 (real BrnWorld::EDistrict; raw s32 to avoid forking)
-    Array<u32, 8u> mauBlockSectionIds; // 0x08..0x2B -- DWARF :95 (u32[8]+count==36; count @ +40)
+    CgsContainers::Array<u32, 8u> mauBlockSectionIds; // 0x08..0x2B -- DWARF :95 (u32[8]+count==36; count @ +40)
 };
 }
 

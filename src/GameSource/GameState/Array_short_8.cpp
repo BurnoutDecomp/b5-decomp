@@ -27,8 +27,8 @@
 #include "GameShared/GameClasses/Containers/CgsStack.h"
 
 // --- Array<u16,8> (CgsArray.h defines Array as an UNQUALIFIED top-level class) ---
-template void Array<u16, 8>::Append(const u16&);
-template u16& Array<u16, 8>::GetItem(u32);
+template void CgsContainers::Array<u16, 8>::Append(const u16&);
+template u16& CgsContainers::Array<u16, 8>::GetItem(u32);
 
 // --- Stack<u16,8> (namespace CgsContainers) ---
 template bool        CgsContainers::Stack<u16, 8>::IsFull() const;

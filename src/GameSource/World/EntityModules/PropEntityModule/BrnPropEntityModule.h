@@ -212,11 +212,11 @@ namespace BrnWorld
         static const s8  KI_NUM_LODS                      = 3;
 
         // BrnPropEntityModule.h:41. The per-frame "zones we want loaded" working set.
-        typedef ::Set<u16, KI_ZONE_SET_SIZE>       PropZonesSet;
+        typedef CgsContainers::Set<u16, KI_ZONE_SET_SIZE>       PropZonesSet;
         // BrnPropCellManager.h:39/40/41 (DWARF names the typedefs there).
-        typedef ::Set<PropEntityID, 32u>           RecentlyBrokenPropsArray;
-        typedef ::Array<PropEntityID, 15u>         RecentlyRecycledPropsArray;
-        typedef ::Array<PropEntityID, 30u>         RecentlyRecycledPartsArray;
+        typedef CgsContainers::Set<PropEntityID, 32u>           RecentlyBrokenPropsArray;
+        typedef CgsContainers::Array<PropEntityID, 15u>         RecentlyRecycledPropsArray;
+        typedef CgsContainers::Array<PropEntityID, 30u>         RecentlyRecycledPartsArray;
         // The DWARF's InputBuffer_PreScene::PropInstancesNeededForZoneQueue
         // (BrnPropEntityModuleIO.h:81), spelled as the instantiation it is -- see the
         // RESOLVED note above the class.
@@ -324,7 +324,7 @@ namespace BrnWorld
         // distinguishes the two passes, which is why the 9-arg form could not have worked.
         // Mirrored in BrnWorldModule.cpp.
         void GenerateDispatchLists( PropEntityIO::InputBuffer_Dispatch* lpInput,
-                                    const Array<CgsSceneManager::EntityId, 5400u>& lrVisibleEntities,
+                                    const CgsContainers::Array<CgsSceneManager::EntityId, 5400u>& lrVisibleEntities,
                                     Matrix44::InParam lCameraViewProjection,
                                     Vector3::InParam lCameraPosition,
                                     f32 lfMainCameraZoomFactor,
@@ -738,7 +738,7 @@ namespace BrnWorld
         //   exactly where miFramesUntilUpdateVisibleSigns sits. Every byte is accounted for;
         //   the old "1052" was the span from the pre-padding address and had 12 bytes spare.
         // Console offsets stay PROVENANCE ONLY -- the host lays this out itself.
-        ::Array<BrnGui::OverheadSignScore, 32> mVisibleOverheadSigns;  // :216 console +0xD1DB0
+        CgsContainers::Array<BrnGui::OverheadSignScore, 32> mVisibleOverheadSigns;  // :216 console +0xD1DB0
 
         s32                 miFramesUntilUpdateVisibleSigns;     // :217 console +0xD21C0
         PropGraphicsManager mPropGraphicsManager;                // :218 console +0xD21C4

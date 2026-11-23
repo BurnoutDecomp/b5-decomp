@@ -13,4 +13,4 @@
 // s64 == int64_t (types.hpp); a primitive element needs no element_home include.
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<s64, 32>;
+template class CgsContainers::Array<s64, 32>;

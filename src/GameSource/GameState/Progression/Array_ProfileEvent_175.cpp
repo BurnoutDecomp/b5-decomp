@@ -15,7 +15,7 @@
 // string the bounds assert reports (the streamed numerics are not byte-reproducible from the
 // dossier).
 template<>
-BrnProgression::ProfileEvent& Array<BrnProgression::ProfileEvent, 175>::GetItem(u32 luIndex)
+BrnProgression::ProfileEvent& CgsContainers::Array<BrnProgression::ProfileEvent, 175>::GetItem(u32 luIndex)
 {
     // X360: *(a1 + 1400) == -1
     CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
@@ -32,4 +32,4 @@ BrnProgression::ProfileEvent& Array<BrnProgression::ProfileEvent, 175>::GetItem(
 // v13 = &maElements[miCount] via the 8-byte stride) and `++miCount`. Emitted as an explicit
 // instantiation of that generic body. The element-buffer count word miCount lives at +1400
 // (175 * 8B stride). Called by BrnGameState::GameStateModule::ProcessGameEvents.
-template void Array<BrnProgression::ProfileEvent, 175>::Append(const BrnProgression::ProfileEvent&);
+template void CgsContainers::Array<BrnProgression::ProfileEvent, 175>::Append(const BrnProgression::ProfileEvent&);

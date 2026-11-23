@@ -673,7 +673,7 @@ public:
     // its reader): GameStateModule::OnProfileLoaded @0x82397508..0x82397514 takes its address
     // (`addis r11, r31, 3 ; addi r11, r11, -0x6E78` == gsm+0x29188 == profile+120040) and posts it as
     // action 19's payload.
-    const Array<BrnNetwork::LocalEventScoreUploadData, 49>* GetEventScoresToUpload() const
+    const CgsContainers::Array<BrnNetwork::LocalEventScoreUploadData, 49>* GetEventScoresToUpload() const
     { return &maEventScoresToUpload; }
 
     // ------------------------------------------------------------------------
@@ -1072,7 +1072,7 @@ private:
     LiveryData   maLiveryChoices[512];                       // +0x3280 (12928)
     RivalData    maRivals[64];                               // +0x6280 (25216)
     ProfileEvent maEvents[175];                              // +0x7080 (28800)
-    Set<CgsID, 512u> maStuntElements[3];                     // +30200
+    CgsContainers::Set<CgsID, 512u> maStuntElements[3];                     // +30200
     u32   muMedalCountFromTheStart;                          // +42512
     // ⭐⭐ ORDER IS THE X360's, NOT THE DWARF's -- see the accessor pair above. DecFIGS declares
     // mbGoldCarsUnlocked first (BrnProfile.h:1228/:1229); CheckForSpecialCarUnlocks @0x82396058
@@ -1080,12 +1080,12 @@ private:
     // +42517 as AreGoldCarsUnlocked() and gates it on 100% completion.
     bool  mbSilverCarsUnlocked;                              // +42516  (rank-gated)
     bool  mbGoldCarsUnlocked;                                // +42517  (100%-completion-gated)
-    Set<CgsID, 5u>  mJunkYardsDriveThruSet;                  // +42520 (len word +42560)
-    Set<CgsID, 11u> mBodyShopsDriveThruSet;                  // +42568 (len word +42656)
-    Set<CgsID, 5u>  mPaintShopsDriveThruSet;                 // +42664 (len word +42704)
-    Set<CgsID, 14u> mGasStationsDriveThruSet;                // +42712 (len word +42824)
-    Set<CgsID, 11u> mCarParksDriveThruSet;                   // +42832 (len word +42920)
-    Array<CgsID, 2000u> maFreeBurnChallengeData;             // +42928
+    CgsContainers::Set<CgsID, 5u>  mJunkYardsDriveThruSet;                  // +42520 (len word +42560)
+    CgsContainers::Set<CgsID, 11u> mBodyShopsDriveThruSet;                  // +42568 (len word +42656)
+    CgsContainers::Set<CgsID, 5u>  mPaintShopsDriveThruSet;                 // +42664 (len word +42704)
+    CgsContainers::Set<CgsID, 14u> mGasStationsDriveThruSet;                // +42712 (len word +42824)
+    CgsContainers::Set<CgsID, 11u> mCarParksDriveThruSet;                   // +42832 (len word +42920)
+    CgsContainers::Array<CgsID, 2000u> maFreeBurnChallengeData;             // +42928
     CgsContainers::BitArray<300000u>   mabHitPropBitArray;   // +58936 (37504 bytes)
     s16   maaiStuntCountsByCounty[3][5];                     // +96440
     BrnStreetData::ChallengeHighScoreEntry   maNetworkChallengeData[64];  // +96472 (56B each)
@@ -1094,7 +1094,7 @@ private:
     CgsNetwork::NetworkTexture mPlayerLicencePicture;        // +102620 (28 bytes)
     char  macPlayerLicenceTextureData[9600];                 // +102648
     bool  mbPlayerLicencePictureIsValid;                     // +112248
-    Array<MugshotInfo, 20u> maaMugshotInfo[5];               // +112256 (1128B each)
+    CgsContainers::Array<MugshotInfo, 20u> maaMugshotInfo[5];               // +112256 (1128B each)
     // ⭐ [progression wave 2026-09-06, lane profile] 20u, NOT the DWARF's 30u. The X360 pins
     // NUMBITS at 20 twice: AddMugshot's SetBit-side guard fires "luIndex < NUMBITS"
     // (CgsBitArray.h:241) on `cmplwi r31, 0x14`, and DeleteMugshot's streams "Index: <n>, Number
@@ -1147,8 +1147,8 @@ private:
     // so any embedded pointer-bearing member (e.g. CgsNetwork::NetworkTexture, the Array<>/Set<>
     // count words, BitArray storage) is naturally wider here. Every function reaches its members BY
     // NAME, so behaviour is identical regardless of the exact byte offset on the PC target.
-    Array<BrnGameState::GameStateModuleIO::TargetEventScore, 49> maTargetEventScores;   // X360 +118072 (count @ +120032 == +0x7A8 into the array)
-    Array<BrnNetwork::LocalEventScoreUploadData, 49>             maEventScoresToUpload; // X360 +120040 (count @ +120824 == +0x310 into the array)
+    CgsContainers::Array<BrnGameState::GameStateModuleIO::TargetEventScore, 49> maTargetEventScores;   // X360 +118072 (count @ +120032 == +0x7A8 into the array)
+    CgsContainers::Array<BrnNetwork::LocalEventScoreUploadData, 49>             maEventScoresToUpload; // X360 +120040 (count @ +120824 == +0x310 into the array)
     CgsContainers::FastBitArray<15u>                             mDeveloperChallengesCompleted; // X360 +120832 (one u64 field; 15 == GsmIO::E_DEVELOPER_CHALLENGE_COUNT)
     // X360 end: +120840 == sizeof(Profile)
 

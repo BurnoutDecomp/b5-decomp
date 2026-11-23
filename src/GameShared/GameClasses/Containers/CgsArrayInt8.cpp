@@ -21,4 +21,4 @@
 // already faithful (no per-instantiation specialization required).
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<s32, 8>;
+template class CgsContainers::Array<s32, 8>;

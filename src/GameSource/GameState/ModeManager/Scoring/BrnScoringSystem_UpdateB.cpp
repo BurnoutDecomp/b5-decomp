@@ -692,7 +692,7 @@ namespace BrnGameState
     void ScoringSystem::UpdateOnlineStuntModeScorePreWorld(s32 liCurrentTimeMs,
                                                            CgsModule::VariableEventQueue<13312, 16>* lpOutputActionQueue)
     {
-        Array<GameStateModuleIO::CarScoreData::ChainableMultiplierInfo, 8> laChainableMultipliers;
+        CgsContainers::Array<GameStateModuleIO::CarScoreData::ChainableMultiplierInfo, 8> laChainableMultipliers;
         laChainableMultipliers.Clear();
 
         for (s32 liSlot = 0; liSlot < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liSlot)

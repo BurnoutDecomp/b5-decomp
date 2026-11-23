@@ -19,5 +19,5 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N>::Erase / operator[] (inline generic)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h" // TrafficCrashInfo (16-byte element)
 
-template void Array<BrnTraffic::TrafficCrashInfo, 160>::Erase(u32);
-template const BrnTraffic::TrafficCrashInfo& Array<BrnTraffic::TrafficCrashInfo, 160>::operator[](u32) const;
+template void CgsContainers::Array<BrnTraffic::TrafficCrashInfo, 160>::Erase(u32);
+template const BrnTraffic::TrafficCrashInfo& CgsContainers::Array<BrnTraffic::TrafficCrashInfo, 160>::operator[](u32) const;

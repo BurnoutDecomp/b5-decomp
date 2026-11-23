@@ -75,11 +75,11 @@ namespace Native
     //   GetPreLionCount  ParticleModule::RenderQuarterResParticles 0x82294AC4 -- `lwzx` of +0x25CD4
     //                    (the array at +0x25C00, +0xD4), the split both Dispatch calls take.
     // +0xD4 == 13 * 16 + 4: the word directly behind Array's count, as the DWARF orders it.
-    struct SimpleParticleBatchArray : public Array<SimpleParticleBatch, 13>
+    struct SimpleParticleBatchArray : public CgsContainers::Array<SimpleParticleBatch, 13>
     {
         void Clear()
         {
-            Array<SimpleParticleBatch, 13>::Clear();
+            CgsContainers::Array<SimpleParticleBatch, 13>::Clear();
             muPreLionCount = 0;
         }
         void SetPreLionCount() { muPreLionCount = GetLength(); }

@@ -23,4 +23,4 @@
 // whose built-in operator== satisfies the equality-based generic Contains/FindFirstInstanceOf.
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<u16, 72>;
+template class CgsContainers::Array<u16, 72>;

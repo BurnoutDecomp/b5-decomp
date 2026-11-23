@@ -139,7 +139,7 @@ namespace BrnNetwork
         // per-mode scoreboard tables. Static helper (no `this` in the ASM).
         static s32 GetScoreboardIndexForEvent( u64 lu64EventID, s32 leGameMode );
 
-        Array<LocalEventScoreUploadData, 49> maPendingUploads;   // +0x000 (count word @ +0x310)
+        CgsContainers::Array<LocalEventScoreUploadData, 49> maPendingUploads;   // +0x000 (count word @ +0x310)
         CgsSystem::Time       mUploadRetryTimer;                  // +0x318
         s32                   miUploadCount;                      // +0x320
         s32                   meState;                            // +0x324

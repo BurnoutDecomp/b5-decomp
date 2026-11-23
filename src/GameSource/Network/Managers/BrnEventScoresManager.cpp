@@ -86,7 +86,7 @@ namespace BrnNetwork
         // the payload's first field is a pointer to the saved pending-uploads array.
         struct NonUploadedScoresEvent
         {
-            const Array<LocalEventScoreUploadData, 49>* mpPendingUploads;   // +0x00
+            const CgsContainers::Array<LocalEventScoreUploadData, 49>* mpPendingUploads;   // +0x00
         };
 
         // The "uploaded scores" event the callback re-queues (type 0x4A, 128-byte payload). The X360

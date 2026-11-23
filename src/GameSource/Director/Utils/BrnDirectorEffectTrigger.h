@@ -170,7 +170,7 @@ namespace BrnDirector
         u32  GetNullEffectId() const    { return 507590u; }   // 0x7BEC6
 
     private:
-        Array<HookNameStringWrapper, 100> maHookNames;             // +0x000 (count at +0xCE4)
+        CgsContainers::Array<HookNameStringWrapper, 100> maHookNames;             // +0x000 (count at +0xCE4)
         u32                   muRequestedPostFxId;                  // +0xCE8
         f32                   mfCurrentEffectBlendAmount;           // +0xCEC
         f32                   mfCurrentBackgroundEffectBlendAmount; // +0xCF0

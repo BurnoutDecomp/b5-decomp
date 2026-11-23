@@ -1783,7 +1783,7 @@ WorldEntityModule::RenderInstance(
 void
 WorldEntityModule::GenerateDispatchLists(
     const WorldEntityIO::InputBuffer_GenerateDispatchLists* lpInputBuffer,
-    const Array<CgsSceneManager::EntityId, 4500u>& lrVisibleEntities,
+    const CgsContainers::Array<CgsSceneManager::EntityId, 4500u>& lrVisibleEntities,
     Matrix44::InParam lCameraViewProjection,
     Vector3::InParam lCameraPosition,
     Vector3::InParam lCameraDirection,
@@ -1906,7 +1906,7 @@ WorldEntityModule::GenerateDispatchLists(
 void
 WorldEntityModule::GenerateDispatchListsForEnvironmentMap(
     const WorldEntityIO::InputBuffer_GenerateDispatchLists* lpInputBuffer,
-    const Array<CgsSceneManager::EntityId, 4500u>& lrVisibleEntities,
+    const CgsContainers::Array<CgsSceneManager::EntityId, 4500u>& lrVisibleEntities,
     Matrix44::InParam lCameraViewProjection,
     Vector3::InParam lCameraPosition,
     const ShaderLodInfo* lpShaderLodInfo,

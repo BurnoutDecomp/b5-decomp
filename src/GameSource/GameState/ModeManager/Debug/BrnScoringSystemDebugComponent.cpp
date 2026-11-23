@@ -146,7 +146,7 @@ namespace BrnGameState
 
         // Gather this car's chainable-multiplier table for the current band, then test the band's bit.
         const CarScoreData* lpScoreData = lpCarData->GetScoreData();
-        Array<ChainableMultiplierInfo, 8> laMultiplierInfo;
+        CgsContainers::Array<ChainableMultiplierInfo, 8> laMultiplierInfo;
         lpScoreData->GetChainableStuntMultipliers(liMaxMultiplier, -1, &laMultiplierInfo);
 
         if (laMultiplierInfo.GetCount() == 0)

@@ -29,4 +29,4 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/World/CrashModule/BrnRaceCarCrash.h"
 
-template class Array<BrnWorld::RaceCarCrash, 8>;
+template class CgsContainers::Array<BrnWorld::RaceCarCrash, 8>;

@@ -25,7 +25,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N>::operator[] const (inline generic)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h" // CollidableVehicleInfo4 (128-byte element)
 
-template const BrnTraffic::CollidableVehicleInfo4& Array<BrnTraffic::CollidableVehicleInfo4, 16>::operator[](u32) const;
+template const BrnTraffic::CollidableVehicleInfo4& CgsContainers::Array<BrnTraffic::CollidableVehicleInfo4, 16>::operator[](u32) const;
 
 // Array<BrnTraffic::CollidableVehicleInfo4, 16>::Append @ 0x8270B420
 //   (BrnTraffic::TrafficEntityModule::UpdateCollidableVehicles -- pushes one cached packet)
@@ -37,4 +37,4 @@ template const BrnTraffic::CollidableVehicleInfo4& Array<BrnTraffic::CollidableV
 // CgsArray.h:226; capacity literal li r4,0x10 == N==16), then copies the whole 128-byte packet
 // to &maElements[count] via a single 128-byte memcpy (`slwi r11,r11,7` == 128*index), and
 // increments the count word. The +0x800 count offset == 16*128 reconfirms sizeof == 128.
-template void Array<BrnTraffic::CollidableVehicleInfo4, 16>::Append(const BrnTraffic::CollidableVehicleInfo4&);
+template void CgsContainers::Array<BrnTraffic::CollidableVehicleInfo4, 16>::Append(const BrnTraffic::CollidableVehicleInfo4&);

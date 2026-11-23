@@ -56,7 +56,7 @@ namespace BrnNetwork
         static const s32 KI_VERSION_NUMBER      = 6;
 
         s32 miVersionNumber;                                            // +0x00
-        Array<LiveRevengeRelationship, KI_MAX_REVENGE_HISTORY>
+        CgsContainers::Array<LiveRevengeRelationship, KI_MAX_REVENGE_HISTORY>
             maRelationshipTable;                                        // +0x08  (250 * 120 + count; 8-aligned)
 
         // Header inline: Prepare and Release emit the version store and the table reset in place.

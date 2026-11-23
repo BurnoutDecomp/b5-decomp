@@ -76,7 +76,7 @@ private:
 
     // DWARF: Array<int32_t,50u>[3] maaShotTimes -- per-group per-shot "time last
     // used" stamps, indexed [group][shot index].
-    Array<s32, KU_SHOT_LIST_SIZE>  maaShotTimes[KU_NUM_SHOT_LISTS];   // +0x000 / +0x0CC / +0x198
+    CgsContainers::Array<s32, KU_SHOT_LIST_SIZE>  maaShotTimes[KU_NUM_SHOT_LISTS];   // +0x000 / +0x0CC / +0x198
     s32                            miCurrentTimeID;                    // +0x264
     const DirectorResourceManager* mpResourceManager;                  // +0x268
 };

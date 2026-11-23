@@ -665,7 +665,7 @@ void CrashModule::HandleNetworkCrashingTraffic( const CrashIO::InputBuffer_PreSc
     CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );           // :1057
     CGS_ASSERT( mbIsOnlineGameMode, "IsOnlineGameMode()" );    // :1058
 
-    Set<u16, 160> lCrashingTrafficForPlayer;
+    CgsContainers::Set<u16, 160> lCrashingTrafficForPlayer;
 
     for( EActiveRaceCarIndex leActiveRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_0;
          leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT;
@@ -731,8 +731,8 @@ void CrashModule::HandleNetworkCrashingTraffic( const CrashIO::InputBuffer_PreSc
             }
         }
 
-        Set<u16, 160> lNewCrashingTraffic;
-        Set<u16, 160> lClearedUpTraffic;
+        CgsContainers::Set<u16, 160> lNewCrashingTraffic;
+        CgsContainers::Set<u16, 160> lClearedUpTraffic;
         lNewCrashingTraffic.SetDifference( lCrashingTrafficForPlayer,
                                            maCrashingTrafficForPlayers[leActiveRaceCarIndex] );
         lClearedUpTraffic.SetDifference( maCrashingTrafficForPlayers[leActiveRaceCarIndex],

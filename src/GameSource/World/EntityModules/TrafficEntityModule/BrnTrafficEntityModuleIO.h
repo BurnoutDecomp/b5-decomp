@@ -746,7 +746,7 @@ namespace BrnTrafficIO
         // The two de-inlined writers WorldModule::GenerateDispatchLists fills the buffer through
         // (@0x827D1CE8 writes both members inline between Construct() and its LockForRead()).
         // There is no write lock around them, so neither asserts one.
-        void SetVisibleEntities( const Array<CgsSceneManager::EntityId, 650u>& lrEntities );
+        void SetVisibleEntities( const CgsContainers::Array<CgsSceneManager::EntityId, 650u>& lrEntities );
         void SetCameraPosition( Vector3 lvCameraPosition );
 
         static void _AssertLayout();
@@ -754,7 +754,7 @@ namespace BrnTrafficIO
         // PUBLIC, per the DWARF -- the traffic module reads them directly.
         u8                                     maStatusPadTo16[16 - 1];   // +1..+15 (force the Vector3 to +16)
         Vector3                                mCameraPosition;           // console +16    :444
-        Array<CgsSceneManager::EntityId, 650u> maTrafficEntityIds;        // console +32    :445
+        CgsContainers::Array<CgsSceneManager::EntityId, 650u> maTrafficEntityIds;        // console +32    :445
     };
 
     class OutputBuffer_PreDispatch : public CgsModule::IOBuffer
@@ -771,7 +771,7 @@ namespace BrnTrafficIO
         // PUBLIC, per the DWARF. Producer: TrafficEntityModule::PreDispatchUpdate @0x8274D900.
         // Consumers: WorldModule::CalculateVehicleLODs (writes VehicleRenderInfo::mLOD) and
         // TrafficEntityModule::GenerateDispatchLists @0x8273B280.
-        Array<BrnTraffic::VehicleRenderInfo, 64u> maTrafficRenderInfos;   // console +4     :457
+        CgsContainers::Array<BrnTraffic::VehicleRenderInfo, 64u> maTrafficRenderInfos;   // console +4     :457
     };
     // OutputBuffer_Prepare  (DWARF :2/:115, prepare/boot output buffer)
     // ============================================================================

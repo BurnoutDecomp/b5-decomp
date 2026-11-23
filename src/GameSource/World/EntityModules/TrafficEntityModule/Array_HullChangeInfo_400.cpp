@@ -26,6 +26,6 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N>::Append / ::EraseFast / ::operator[] (inline generic)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.h" // HullChangeInfo (8-byte element)
 
-template void Array<BrnTraffic::HullChangeInfo, 400>::Append(const BrnTraffic::HullChangeInfo&);
-template void Array<BrnTraffic::HullChangeInfo, 400>::EraseFast(u32);
-template BrnTraffic::HullChangeInfo& Array<BrnTraffic::HullChangeInfo, 400>::GetItem(u32);
+template void CgsContainers::Array<BrnTraffic::HullChangeInfo, 400>::Append(const BrnTraffic::HullChangeInfo&);
+template void CgsContainers::Array<BrnTraffic::HullChangeInfo, 400>::EraseFast(u32);
+template BrnTraffic::HullChangeInfo& CgsContainers::Array<BrnTraffic::HullChangeInfo, 400>::GetItem(u32);

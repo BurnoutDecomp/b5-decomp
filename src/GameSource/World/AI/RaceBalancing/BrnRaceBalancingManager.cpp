@@ -50,7 +50,7 @@ void RaceBalancingManager::Construct(AIModule* lpAIModule)
 //     else 5s -- the X360 chooses this from the r6 argument);
 //   - zeroes the race clock, stores the checkpoint count, and raises mbInRace/mbOnStartLine.
 // ===========================================================================================
-void RaceBalancingManager::OnRaceStart(const Array<RaceBalancingGraph, 7u>* lpRaceBalancingGraphArray,
+void RaceBalancingManager::OnRaceStart(const CgsContainers::Array<RaceBalancingGraph, 7u>* lpRaceBalancingGraphArray,
                                        s32 liCheckpointCount, bool lbHighTakenDownPenalty)
 {
     CGS_ASSERT(lpRaceBalancingGraphArray != NULL, "lpRaceBalancingGraphArray != NULL");

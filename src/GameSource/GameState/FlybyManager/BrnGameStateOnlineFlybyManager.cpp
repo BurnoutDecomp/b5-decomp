@@ -797,7 +797,7 @@ void OnlineFlybyManager::AddNewRivalryMessage(FlybyManager::RivalRating* lpRatin
     ENewRivalryCompare leStatType = E_NEW_RIVALRY_START;
     if (lpRelationship->IsCurrentRelationshipEqual())
     {
-        Array<ENewRivalryCompare, E_NEW_RIVALRY_COUNT> laAvaiableMessageIndex;
+        CgsContainers::Array<ENewRivalryCompare, E_NEW_RIVALRY_COUNT> laAvaiableMessageIndex;
         laAvaiableMessageIndex.Construct();
         for (ENewRivalryCompare leStat = E_NEW_RIVALRY_START; leStat < E_NEW_RIVALRY_COUNT; leStat++)
         {
@@ -854,7 +854,7 @@ void OnlineFlybyManager::AddNewRivalryMessage(FlybyManager::RivalRating* lpRatin
 // ---------------------------------------------------------------------------
 void OnlineFlybyManager::AddOngoingRivalryMessage(FlybyManager::RivalRating* lpRating)
 {
-    Array<EOngoingRivalryCompare, E_ONGOING_RIVALRY_COUNT> laAvaiableMessageIndex;
+    CgsContainers::Array<EOngoingRivalryCompare, E_ONGOING_RIVALRY_COUNT> laAvaiableMessageIndex;
     laAvaiableMessageIndex.Construct();
     for (EOngoingRivalryCompare leStat = E_ONGOING_RIVALRY_START; leStat < E_ONGOING_RIVALRY_COUNT; leStat++)
     {

@@ -104,7 +104,7 @@ ShotSelector::Construct(const DirectorResourceManager* lpResourceManager)
 
     for (u32 luList = 0; luList < KU_NUM_SHOT_LISTS; ++luList)
     {
-        Array<s32, KU_SHOT_LIST_SIZE>& lrList = maaShotTimes[luList];
+        CgsContainers::Array<s32, KU_SHOT_LIST_SIZE>& lrList = maaShotTimes[luList];
         lrList.SetFullCount();                       // stw 50, 0xC8(base)  -> miCount = 50
         for (u32 luSlot = 0; luSlot < KU_SHOT_LIST_SIZE; ++luSlot)
         {

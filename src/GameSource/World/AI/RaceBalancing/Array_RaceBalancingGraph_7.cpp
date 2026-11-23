@@ -27,6 +27,6 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingGraph.h"
 
-template void                             Array<BrnAI::RaceBalancingGraph, 7>::Append(const BrnAI::RaceBalancingGraph&);
-template BrnAI::RaceBalancingGraph&       Array<BrnAI::RaceBalancingGraph, 7>::GetItem(u32);
-template const BrnAI::RaceBalancingGraph& Array<BrnAI::RaceBalancingGraph, 7>::GetItem(u32) const;
+template void                             CgsContainers::Array<BrnAI::RaceBalancingGraph, 7>::Append(const BrnAI::RaceBalancingGraph&);
+template BrnAI::RaceBalancingGraph&       CgsContainers::Array<BrnAI::RaceBalancingGraph, 7>::GetItem(u32);
+template const BrnAI::RaceBalancingGraph& CgsContainers::Array<BrnAI::RaceBalancingGraph, 7>::GetItem(u32) const;

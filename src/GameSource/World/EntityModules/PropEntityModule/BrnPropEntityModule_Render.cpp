@@ -521,7 +521,7 @@ PropEntityModule::RenderPropAndCoronas(
 void
 PropEntityModule::GenerateDispatchLists(
     PropEntityIO::InputBuffer_Dispatch*                    lpInput,
-    const Array<CgsSceneManager::EntityId, 5400u>&         lrVisibleEntities,
+    const CgsContainers::Array<CgsSceneManager::EntityId, 5400u>&         lrVisibleEntities,
     Matrix44::InParam                                      lCameraViewProjection,
     Vector3::InParam                                       lCameraPosition,
     f32                                                    lfMainCameraZoomFactor,

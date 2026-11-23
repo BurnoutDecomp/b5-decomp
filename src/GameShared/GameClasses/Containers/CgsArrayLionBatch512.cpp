@@ -27,4 +27,4 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRender/LionBatch.h"
 
-template LionBatch& Array<LionBatch, 512>::GetItem(u32);
+template LionBatch& CgsContainers::Array<LionBatch, 512>::GetItem(u32);

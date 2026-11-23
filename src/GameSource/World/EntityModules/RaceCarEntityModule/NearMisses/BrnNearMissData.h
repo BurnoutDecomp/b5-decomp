@@ -327,14 +327,14 @@ namespace BrnWorld
 
     private:
         // Head: section-index working list (count @ +0x10) and its backup (count @ +0x24).
-        Array<s32, A>             maNearSections;        // +0x00
-        Array<s32, A>             maNearSectionsBackup;  // +0x14
+        CgsContainers::Array<s32, A>             maNearSections;        // +0x00
+        CgsContainers::Array<s32, A>             maNearSectionsBackup;  // +0x14
         // Remembered-vehicle record lists.
-        Array<VehicleTimePair, A> maNearMiss;            // +0x28
-        Array<VehicleTimePair, A> maContacted;           // +0x4C
-        Array<VehicleTimePair, B> maCrashed;             // +0x70
-        Array<VehicleTimePair, B> maTakenDown;           // +0xAC (<4,7>) / +0xB4 (<4,8>)
-        Array<VehicleTimePair, B> maChecked;             // +0xE8 (<4,7>) / +0xF8 (<4,8>)
+        CgsContainers::Array<VehicleTimePair, A> maNearMiss;            // +0x28
+        CgsContainers::Array<VehicleTimePair, A> maContacted;           // +0x4C
+        CgsContainers::Array<VehicleTimePair, B> maCrashed;             // +0x70
+        CgsContainers::Array<VehicleTimePair, B> maTakenDown;           // +0xAC (<4,7>) / +0xB4 (<4,8>)
+        CgsContainers::Array<VehicleTimePair, B> maChecked;             // +0xE8 (<4,7>) / +0xF8 (<4,8>)
     };
     template <u32 A, u32 B>
     const f32 NearMissData<A, B>::KF_NEAR_MISS_REMEMBER_TIME = 0.5f;

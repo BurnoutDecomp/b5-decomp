@@ -137,8 +137,8 @@ namespace FineIntersectionTestIO
     // ---- the per-pass output buffer (:176) ----------------------------------------------
     struct OutputBuffer : public CgsModule::IOBuffer
     {
-        typedef Array<LineTestIntersection, 256u> LineTestIntersectionArray;  // :164
-        typedef Array<u16, 16384u>                EntityBuffer;               // :165
+        typedef CgsContainers::Array<LineTestIntersection, 256u> LineTestIntersectionArray;  // :164
+        typedef CgsContainers::Array<u16, 16384u>                EntityBuffer;               // :165
 
         // :181 -- inlined into CreateIOBuffer<OutputBuffer> @0x828C56B8: the status byte and the
         // two Array counts (`*(p+16400) = 0 ; *(p+49184) = 0`), i.e. the two Array::Constructs.

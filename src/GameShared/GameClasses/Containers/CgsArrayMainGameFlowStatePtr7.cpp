@@ -16,4 +16,4 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameSource/GameFlowController/TopLevel/BrnGameMainFlowStates.h"
 
-template class Array<MainGameFlowState*, 7u>;
+template class CgsContainers::Array<MainGameFlowState*, 7u>;

@@ -20,4 +20,4 @@
 // in this thin TU.
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 
-template class Array<s32, 28>;
+template class CgsContainers::Array<s32, 28>;

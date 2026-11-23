@@ -83,15 +83,15 @@ namespace BrnTrafficIO
         void                   UpdateRivalInTrafficSystem(Vector3 lTargetPosition, Vector3 lTargetDirection,
                                                           f32 lfSpeed, EGlobalRaceCarIndex leRaceCarIndex); // :168
         const CgsModule::EventQueue<RivalInTrafficUpdateEvent, 34>* GetUpdateRivalQueue() const; // :172
-        const Array<EGlobalRaceCarIndex, 34>* GetAddedRivals() const;                // :173
-        const Array<EGlobalRaceCarIndex, 34>* GetRemovedRivals() const;              // :174
+        const CgsContainers::Array<EGlobalRaceCarIndex, 34>* GetAddedRivals() const;                // :173
+        const CgsContainers::Array<EGlobalRaceCarIndex, 34>* GetRemovedRivals() const;              // :174
 
     private:
         u16             mu16EntityCount;                                  // :179 (offset 0)
         TrafficAIEntity maActiveEntityList[256];                          // :180 (offset 16)
         CgsModule::EventQueue<RivalInTrafficUpdateEvent, 34> mUpdateRivalQueue; // :182
-        Array<EGlobalRaceCarIndex, 34> mAddedRivals;                      // :184
-        Array<EGlobalRaceCarIndex, 34> mRemovedRivals;                    // :185
+        CgsContainers::Array<EGlobalRaceCarIndex, 34> mAddedRivals;                      // :184
+        CgsContainers::Array<EGlobalRaceCarIndex, 34> mRemovedRivals;                    // :185
     };
 }
 }

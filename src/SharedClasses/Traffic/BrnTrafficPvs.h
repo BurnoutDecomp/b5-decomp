@@ -60,7 +60,7 @@ namespace BrnTraffic
         // BrnTrafficPvs.h:75 -- the visible-hull set for a cell index.
         // X360 @ 0x82705FB0. asm: assert(luIndex < muNumCells);
         //   return mpaHullPvs[luIndex];   (20-byte stride)
-        const Set<u16, 8>& GetHullPvs(u32 luIndex) const;
+        const CgsContainers::Set<u16, 8>& GetHullPvs(u32 luIndex) const;
 
         // BrnTrafficPvs.h:85 / :90. X360 @0x827623E8 / @0x827624A0. Relocates exactly
         // one pointer slot (mpaHullPvs), plus the `this` 16-byte alignment guard (assert
@@ -78,6 +78,6 @@ namespace BrnTraffic
         u32            muNumCells_X;    // :107  +0x30
         u32            muNumCells_Z;    // :108  +0x34
         u32            muNumCells;      // :109  +0x38
-        Set<u16, 8>*   mpaHullPvs;      // :111  +0x3C
+        CgsContainers::Set<u16, 8>*   mpaHullPvs;      // :111  +0x3C
     };
 }

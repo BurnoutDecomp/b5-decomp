@@ -794,7 +794,7 @@ namespace Logic
     // AppendArray the un-GC'd remainder back into the candidate map.
     void ResourceRegistrar::ClearUnreferancedFiles()
     {
-        ::Array<RequestedNode*, 124> lRemainder;
+        CgsContainers::Array<RequestedNode*, 124> lRemainder;
         lRemainder.Clear();
 
         const u32 luCount = mapRemovalCandidates.GetLength();

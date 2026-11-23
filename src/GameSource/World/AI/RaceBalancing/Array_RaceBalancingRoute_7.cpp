@@ -25,6 +25,6 @@
 #include "GameSource/World/AI/RaceBalancing/BrnRaceBalancingRoute.h"
 
 template BrnAI::RaceBalancingRoute&
-Array<BrnAI::RaceBalancingRoute, 7>::GetItem(u32);
+CgsContainers::Array<BrnAI::RaceBalancingRoute, 7>::GetItem(u32);
 template const BrnAI::RaceBalancingRoute&
-Array<BrnAI::RaceBalancingRoute, 7>::GetItem(u32) const;
+CgsContainers::Array<BrnAI::RaceBalancingRoute, 7>::GetItem(u32) const;

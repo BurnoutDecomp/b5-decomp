@@ -7,6 +7,6 @@
 // pattern.
 //   X360 0x82488B40 = Array<CreateMatchOption,75u>::Append  (8-byte stride; count @ +0x258; CgsArray.h:225/226)
 //   X360 0x82488DC8 = Array<CreateMatchOption,75u>::GetItem (returns &maElements[i]; CgsArray.h:556/557)
-template void                          Array<BrnGui::CreateMatchOption, 75>::Append(const BrnGui::CreateMatchOption&);
-template BrnGui::CreateMatchOption&       Array<BrnGui::CreateMatchOption, 75>::GetItem(u32);
-template const BrnGui::CreateMatchOption& Array<BrnGui::CreateMatchOption, 75>::GetItem(u32) const;
+template void                          CgsContainers::Array<BrnGui::CreateMatchOption, 75>::Append(const BrnGui::CreateMatchOption&);
+template BrnGui::CreateMatchOption&       CgsContainers::Array<BrnGui::CreateMatchOption, 75>::GetItem(u32);
+template const BrnGui::CreateMatchOption& CgsContainers::Array<BrnGui::CreateMatchOption, 75>::GetItem(u32) const;

@@ -115,7 +115,7 @@ u32 Pvs::GetHullIndexForIndices(s32 liX, s32 liZ) const
 
 // X360 @ 0x82705FB0. Bounds-asserts the cell index against muNumCells, then returns
 // &mpaHullPvs[luIndex] (20-byte stride == sizeof(Set<uint16_t,8u>)).
-const Set<u16, 8>& Pvs::GetHullPvs(u32 luIndex) const
+const CgsContainers::Set<u16, 8>& Pvs::GetHullPvs(u32 luIndex) const
 {
     CGS_ASSERT(luIndex < muNumCells,
         CgsDev::Assert::MessageAt(
@@ -137,13 +137,13 @@ void Pvs::FixUp(const void* lpBaseData)
 {
     CGS_ASSERT((reinterpret_cast<uintptr_t>(this) & 0xFu) == 0u, "Pvs is not 16-byte aligned");
 
-    mpaHullPvs = reinterpret_cast<Set<u16, 8>*>(
+    mpaHullPvs = reinterpret_cast<CgsContainers::Set<u16, 8>*>(
         reinterpret_cast<uintptr_t>(mpaHullPvs) + reinterpret_cast<uintptr_t>(lpBaseData));
 
     for (u32 luCell = 0; luCell < muNumCells; ++luCell)
     {
         // Local typedef because `Set<u16, 8>` inside a macro argument splits on its comma.
-        typedef Set<u16, 8> HullPvsSet;
+        typedef CgsContainers::Set<u16, 8> HullPvsSet;
         CGS_ASSERT(mpaHullPvs[luCell].GetLength() != HullPvsSet::KU_INVALID,
                    "Set used before Construct/Clear was called");
     }
@@ -154,12 +154,12 @@ void Pvs::FixDown(const void* lpBaseData)
     for (u32 luCell = 0; luCell < muNumCells; ++luCell)
     {
         // Local typedef because `Set<u16, 8>` inside a macro argument splits on its comma.
-        typedef Set<u16, 8> HullPvsSet;
+        typedef CgsContainers::Set<u16, 8> HullPvsSet;
         CGS_ASSERT(mpaHullPvs[luCell].GetLength() != HullPvsSet::KU_INVALID,
                    "Set used before Construct/Clear was called");
     }
 
-    mpaHullPvs = reinterpret_cast<Set<u16, 8>*>(
+    mpaHullPvs = reinterpret_cast<CgsContainers::Set<u16, 8>*>(
         reinterpret_cast<uintptr_t>(mpaHullPvs) - reinterpret_cast<uintptr_t>(lpBaseData));
 }
 

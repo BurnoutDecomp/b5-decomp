@@ -192,15 +192,15 @@ namespace BrnWorld
         EPrepareStage mePrepareStage;                                     // :257
         EReleaseStage meReleaseStage;                                     // :258
 
-        Array<RaceCarCrash, 8>   mRaceCarCrashes;                         // :260  (@ +0x230)
-        Array<TrafficCrash, 160> mTrafficCrashes;                         // :261  (@ +0x2F8)
+        CgsContainers::Array<RaceCarCrash, 8>   mRaceCarCrashes;                         // :260  (@ +0x230)
+        CgsContainers::Array<TrafficCrash, 160> mTrafficCrashes;                         // :261  (@ +0x2F8)
 
         CgsContainers::FastBitArray<8>   mCrashingRaceCars;               // :263
         CgsContainers::FastBitArray<601> mCrashingTraffic;                // :264
         CgsContainers::FastBitArray<601> mCrashingNetworkTraffic;         // :265
         s8                               maiSlammedTrafficOwners[601];    // :266
 
-        Set<u16, 160>                    maCrashingTrafficForPlayers[8];  // :268
+        CgsContainers::Set<u16, 160>                    maCrashingTrafficForPlayers[8];  // :268
 
         EActiveRaceCarIndex meLocalActiveRaceCarIndex;                    // :270
         f32                 mfPlayerCrashTime;                            // :271

@@ -122,7 +122,7 @@ void OnlineCarSelectManager::EnterOnlineCarSelect(GameStateModuleIO::GameActionQ
                                                   const Vector3 lPlayerDirection,
                                                   s32 liVehicleClassLimit, bool lbHostChoiceAndNotHost)
 {
-    Array<CgsID, 128> lCars;
+    CgsContainers::Array<CgsID, 128> lCars;
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
     {

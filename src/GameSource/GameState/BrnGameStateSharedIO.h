@@ -394,7 +394,7 @@ namespace BrnGameState
             }
 
         private:
-            Array<Event, KU_MAX_EVENTS> maEvents; // +0x00 (Event stride 44; miCount @ +0x1E14 == 175*44)
+            CgsContainers::Array<Event, KU_MAX_EVENTS> maEvents; // +0x00 (Event stride 44; miCount @ +0x1E14 == 175*44)
         };
 
         // DWARF/X360 BrnGameStateSharedIO.h:1700-1728. The per-mode "set up all event starts"
@@ -505,7 +505,7 @@ namespace BrnGameState
             // 48-byte record into the next slot and bumps the count. Returns the newly added record.
             EventStart* AppendEventStart(const EventStart& lrEventStart);
 
-            Array<EventStart, KU_MAX_EVENT_STARTS> maEventStarts; // +0x00 (EventStart stride 48; miCount @ +0x20D0 == 175*48)
+            CgsContainers::Array<EventStart, KU_MAX_EVENT_STARTS> maEventStarts; // +0x00 (EventStart stride 48; miCount @ +0x20D0 == 175*48)
         };
 
         // DWARF BrnGameStateSharedIO.h:936. The "every player" freeburn completion-status block:
@@ -705,7 +705,7 @@ namespace BrnGameState
             CarScoreData& operator=(const CarScoreData& lOther);  // 0x821F4740 (ledger "op")
             void CopyFromNativeRecord(const u8* lpRecord);
             void GetChainableStuntMultipliers(s32 liMaxMultiplier, s32 liSuppliedValue,
-                                              Array<ChainableMultiplierInfo, 8>* lpaMultiplierInfo) const; // 0x8231C170
+                                              CgsContainers::Array<ChainableMultiplierInfo, 8>* lpaMultiplierInfo) const; // 0x8231C170
 
             // ===== Online-mode scoring accessors (grown for the online-mode scorers) =====
             //

@@ -157,7 +157,7 @@ namespace BrnTrafficIO
     // copy: every reader inlines it as the interface + 0x10 (the array's seat after the u16 head),
     // e.g. MainDirector::PreSceneQueryUpdate 0x8225BC4C `addi r30, r30, 0x10` and
     // UpdateOutputBuffer::SetTrafficDirectorOutputInterface 0x827A8B54 `addi r4, r28, 0x10`.
-    const Array<TrafficDirectorEntity, 32u>& TrafficDirectorOutputInterface::GetTrafficDirectorEntityArray() const
+    const CgsContainers::Array<TrafficDirectorEntity, 32u>& TrafficDirectorOutputInterface::GetTrafficDirectorEntityArray() const
     {
         return maActiveEntityArray;
     }
@@ -951,7 +951,7 @@ namespace BrnTrafficIO
         // survive to x64 and can be pinned as facts about the types, not as X360 byte offsets.
         CGS_STATIC_ASSERT((sizeof(CgsSceneManager::EntityId) == 4),
                       "EntityId is one packed 32-bit handle on both platforms");
-        CGS_STATIC_ASSERT((sizeof(Array<CgsSceneManager::EntityId, 650u>) == 650 * 4 + 4),
+        CGS_STATIC_ASSERT((sizeof(CgsContainers::Array<CgsSceneManager::EntityId, 650u>) == 650 * 4 + 4),
                       "Array<EntityId,650> is 650 elements plus the trailing live-count word -- "
                       "the console's Construct @0x8275CEE8 zeroes that word at +2632, i.e. 2600 "
                       "bytes past the +32 the elements start at");
@@ -992,7 +992,7 @@ namespace BrnTrafficIO
     // other setter in this file neither takes or asserts a write lock. None is held at that
     // point, and adding an assert here would fire on the first frame.
     void InputBuffer_PreDispatch::SetVisibleEntities(
-        const Array<CgsSceneManager::EntityId, 650u>& lrEntities)
+        const CgsContainers::Array<CgsSceneManager::EntityId, 650u>& lrEntities)
     {
         maTrafficEntityIds = lrEntities;
     }
@@ -1008,7 +1008,7 @@ namespace BrnTrafficIO
         CGS_STATIC_ASSERT((sizeof(BrnTraffic::VehicleRenderInfo) == 12),
                       "VehicleRenderInfo is 12 bytes (Array<VehicleRenderInfo,64>::Append "
                       "@0x8270A148 copies three dwords at a 12-byte stride)");
-        CGS_STATIC_ASSERT((sizeof(Array<BrnTraffic::VehicleRenderInfo, 64u>) == 64 * 12 + 4),
+        CGS_STATIC_ASSERT((sizeof(CgsContainers::Array<BrnTraffic::VehicleRenderInfo, 64u>) == 64 * 12 + 4),
                       "the whole array is 772 bytes -- which is exactly why the console's "
                       "Construct @0x8275CF28 zeroes the live-count word at +772 and "
                       "CreateIOBuffer @0x827B7320 allocates 0x308 == 776 for a buffer whose "

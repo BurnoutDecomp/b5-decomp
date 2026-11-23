@@ -135,7 +135,7 @@ namespace BrnGameState
     // SmoothStep::Vector3 are namespace-merge artifacts of that template).
 
     // DWARF BrnGameStateStreetManager.h:179
-    struct NewHighScoreBuffer : public ::Array<BufferedNewHighScore, 5u>
+    struct NewHighScoreBuffer : public CgsContainers::Array<BufferedNewHighScore, 5u>
     {
         // DWARF :186. Removes every buffered entry matching (road id, score type).
         // Body lands with the StreetManager TU (X360 inlines it into its callers).

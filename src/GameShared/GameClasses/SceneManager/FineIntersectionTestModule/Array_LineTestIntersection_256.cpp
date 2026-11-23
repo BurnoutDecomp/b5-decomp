@@ -29,5 +29,5 @@ CGS_STATIC_ASSERT((sizeof(CgsSceneManager::LineTestIntersection) == 64),
 // == Array<T,N>::Append: the two constructed/space asserts, maElements[miCount] = lrElement,
 //    ++miCount. (The X360 streamed the dynamic Length/Capacity assert message via StrStream;
 //    CgsArray.h collapses it to a static CGS_ASSERT string -- assert-machinery parity only.)
-template void Array<CgsSceneManager::LineTestIntersection, 256>::Append(
+template void CgsContainers::Array<CgsSceneManager::LineTestIntersection, 256>::Append(
     const CgsSceneManager::LineTestIntersection&);

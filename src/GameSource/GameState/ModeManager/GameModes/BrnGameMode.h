@@ -380,7 +380,7 @@ protected:
     // this as a CgsArray<GameModeState*,8>; the reconstructed Array<T,N> wrapper models the
     // eight pointer slots. Construct points each slot at the matching contained state object;
     // SetCurrentState/PreWorldUpdate dispatch through it.
-    Array<GameModeState*, 8> maGameModeStates;
+    CgsContainers::Array<GameModeState*, 8> maGameModeStates;
 
     s32       meCurrentState;           // console +40; GameMode::Construct `*(a1+40) = -1`
 

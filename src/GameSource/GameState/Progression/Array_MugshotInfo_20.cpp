@@ -18,9 +18,9 @@
 // carry the exact X360 asserts (unconstructed + bounds), with the X360 dynamic StrStream
 // "Length:/Capacity:" message collapsed to the static CGS_ASSERT expression string per
 // project convention.
-template void Array<BrnProgression::MugshotInfo, 20>::Append(const BrnProgression::MugshotInfo&);
-template void Array<BrnProgression::MugshotInfo, 20>::Erase(u32);
-template bool Array<BrnProgression::MugshotInfo, 20>::IsFull() const;
+template void CgsContainers::Array<BrnProgression::MugshotInfo, 20>::Append(const BrnProgression::MugshotInfo&);
+template void CgsContainers::Array<BrnProgression::MugshotInfo, 20>::Erase(u32);
+template bool CgsContainers::Array<BrnProgression::MugshotInfo, 20>::IsFull() const;
 
 // GetItem needs a FULL MEMBER SPECIALIZATION (mirroring Array_ProfileEvent_175.cpp): the
 // committed generic GetItem is a plain no-assert inline, but the X360 Array<MugshotInfo,20>
@@ -29,7 +29,7 @@ template bool Array<BrnProgression::MugshotInfo, 20>::IsFull() const;
 // "Array index out of bounds. Index: <n>, length: <len>" StrStream message is collapsed to
 // the static expression string the bounds assert reports.
 template<>
-BrnProgression::MugshotInfo& Array<BrnProgression::MugshotInfo, 20>::GetItem(u32 luIndex)
+BrnProgression::MugshotInfo& CgsContainers::Array<BrnProgression::MugshotInfo, 20>::GetItem(u32 luIndex)
 {
     // X360: *(a1 + 1120) == -1
     CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");

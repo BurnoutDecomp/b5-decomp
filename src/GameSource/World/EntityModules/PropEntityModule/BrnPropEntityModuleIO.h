@@ -224,7 +224,7 @@ namespace PropEntityIO
         // `Array<OverheadSignScore,32>::AppendArray<32>` (X360 @0x822E5348) to append to.
         // The previous shape's facts all survive: the element run is still 32 * 0x20 bytes and
         // the count word Construct/Clear zero is still ::Array's miCount immediately after it.
-        typedef ::Array<BrnGui::OverheadSignScore, 32> VisibleOverheadSignArrayStorage;
+        typedef CgsContainers::Array<BrnGui::OverheadSignScore, 32> VisibleOverheadSignArrayStorage;
 
         // X360 0x827A1A18 (:640, THIS batch): read-lock handle, returns this + 4 (mResourceRequestInterface).
         const ResourceRequestInterfaceStorage* GetResourceRequestInterface() const;

@@ -937,7 +937,7 @@ namespace BrnGameState
         bool mbPlayerElimated;                       // +0x5D21
         bool mbEliminationRequired;                  // +0x5D22
 
-        Array<EActiveRaceCarIndex, 7u> maEliminatedActiveRaceCarIndexs; // :1275
+        CgsContainers::Array<EActiveRaceCarIndex, 7u> maEliminatedActiveRaceCarIndexs; // :1275
 
         s32  miUpdateRacePositionsPM;                // :1279
     };

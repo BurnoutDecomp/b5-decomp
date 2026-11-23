@@ -19,7 +19,7 @@
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameShared/GameClasses/Containers/CgsStack.h"
 
-template class Array<u16, 1>;
+template class CgsContainers::Array<u16, 1>;
 
 // Stack<u16,1> carries a declared-only Contains() (its body links from other call sites), so
 // force just the four members this TU attests rather than the whole class.

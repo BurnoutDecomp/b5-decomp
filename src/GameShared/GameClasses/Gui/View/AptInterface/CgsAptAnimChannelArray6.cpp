@@ -24,4 +24,4 @@
 // widen; this is a semantic-parity reconstruction, not a byte-match, and the member offsets
 // above (not the host sizeof) are the layout authority.
 
-template CgsGui::AnimChannel& Array<CgsGui::AnimChannel, 6>::GetItem(u32);
+template CgsGui::AnimChannel& CgsContainers::Array<CgsGui::AnimChannel, 6>::GetItem(u32);

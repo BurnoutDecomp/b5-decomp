@@ -60,7 +60,7 @@ namespace BrnGui
         // DWARF h:107 / h:108 (X360: counts zeroed by Construct at +0x250 / +0x284,
         // matching Array<AnimData,2> after the 0xF0 base and Array<AnimChannelData,2>
         // right behind it).
-        Array<CgsGui::AnimData, ANIMATOR_LIBRARY_SIZE>        mAnimationLibrary;
-        Array<CgsGui::AnimChannelData, ANIMATOR_LIBRARY_SIZE> mChannelAnimationLibrary;
+        CgsContainers::Array<CgsGui::AnimData, ANIMATOR_LIBRARY_SIZE>        mAnimationLibrary;
+        CgsContainers::Array<CgsGui::AnimChannelData, ANIMATOR_LIBRARY_SIZE> mChannelAnimationLibrary;
     };
 }
