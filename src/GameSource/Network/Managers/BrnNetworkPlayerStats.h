@@ -26,7 +26,7 @@
 #include "BrnCommonTypes.h"                                   // s32 / f32
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"   // BrnNetwork::NetworkPlayerID
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"      // CgsSystem::Time
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT (operator++ range check)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT + ARTIST location (operator++ range check)
 
 namespace BrnNetwork
 {
@@ -154,8 +154,11 @@ namespace BrnNetwork
     {
         const NetworkPlayerStats::EStatsValue leOldEnumIndex = leEnumIndex;
         leEnumIndex = static_cast<NetworkPlayerStats::EStatsValue>(static_cast<s32>(leEnumIndex) + 1);
-        CGS_ASSERT(leEnumIndex <= NetworkPlayerStats::E_STATS_VALUE_COUNT,
-                   "leEnumIndex <= NetworkPlayerStats::E_STATS_VALUE_COUNT");
+        // ARTIST (inlined in Clear, 0x825466F4) reports line 218 of this header, path at
+        // 0x8207CAD4.
+        CGS_ASSERT(leEnumIndex <= NetworkPlayerStats::E_STATS_VALUE_COUNT, CgsDev::Assert::MessageAt(
+                   "leEnumIndex <= NetworkPlayerStats::E_STATS_VALUE_COUNT",
+                   "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStats.h", 218));
         return leOldEnumIndex;
     }
 }

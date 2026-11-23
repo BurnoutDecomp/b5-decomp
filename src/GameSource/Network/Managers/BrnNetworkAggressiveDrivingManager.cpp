@@ -237,8 +237,11 @@ namespace BrnNetwork
             if (maAggressiveDrivingData[liIndex].mPlayerID != -1)
             {
                 RemovePlayer(maAggressiveDrivingData[liIndex].mPlayerID);
-                CGS_ASSERT(maAggressiveDrivingData[liIndex].mPlayerID == -1,
-                           "maAggressiveDrivingData[liIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID");
+                // ARTIST 0x8254F75C reports line 1152; the path is a literal (as __FILE__ is): a
+                // named path array reorders the loop-hoisted message/file registers.
+                CGS_ASSERT(maAggressiveDrivingData[liIndex].mPlayerID == -1, CgsDev::Assert::MessageAt(
+                    "maAggressiveDrivingData[liIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
+                    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkAggressiveDrivingManager.cpp", 1152));
             }
         }
     }

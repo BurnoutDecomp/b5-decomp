@@ -77,7 +77,8 @@ namespace BrnNetwork
     NetworkRoadRulesManager::RoadRulesData* NetworkRoadRulesManager::GetRoadRulesDataEntry(
         NetworkPlayerID lPlayerID )
     {
-        CGS_ASSERT( lPlayerID != CgsNetwork::KI_INVALID_PLAYER_ID, "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID" );
+        CGS_ASSERT( lPlayerID != CgsNetwork::KI_INVALID_PLAYER_ID,
+            CgsDev::Assert::MessageAt("lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", KAC_ARTIST_ASSERT_FILE, 1277 /* ARTIST 0x82549EFC */) );
 
         for ( s32 liIndex = 0; liIndex < KI_NUMBER_OF_PLAYER_DATA_SLOTS; ++liIndex )
         {

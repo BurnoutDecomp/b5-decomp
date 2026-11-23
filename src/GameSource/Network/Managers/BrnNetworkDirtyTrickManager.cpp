@@ -56,7 +56,8 @@ namespace BrnNetwork
             }
         }
 
-        CGS_ASSERT(lpEntry != 0, "lpEntry");
+        CGS_ASSERT(lpEntry != 0,
+            CgsDev::Assert::MessageAt("lpEntry", KAC_ARTIST_ASSERT_FILE, 370 /* ARTIST 0x825486FC */));
         return lpEntry;
     }
 
@@ -158,8 +159,11 @@ namespace BrnNetwork
             if (maDirtyTrickData[liIndex].mPlayerID != -1)
             {
                 RemovePlayer(maDirtyTrickData[liIndex].mPlayerID);
-                CGS_ASSERT(maDirtyTrickData[liIndex].mPlayerID == -1,
-                           "maDirtyTrickData[liIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID");
+                // ARTIST 0x82553774 reports line 395; the path is a literal (as __FILE__ is): a
+                // named path array reorders the loop-hoisted message/file registers.
+                CGS_ASSERT(maDirtyTrickData[liIndex].mPlayerID == -1, CgsDev::Assert::MessageAt(
+                    "maDirtyTrickData[liIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
+                    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkDirtyTrickManager.cpp", 395));
             }
         }
     }

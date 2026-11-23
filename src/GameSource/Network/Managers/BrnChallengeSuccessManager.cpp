@@ -341,8 +341,11 @@ namespace BrnNetwork
             if (maChallengeSuccessData[liIndex].mPlayerID != CgsNetwork::KI_INVALID_PLAYER_ID)
             {
                 RemovePlayer(maChallengeSuccessData[liIndex].mPlayerID);
-                CGS_ASSERT(maChallengeSuccessData[liIndex].mPlayerID == CgsNetwork::KI_INVALID_PLAYER_ID,
-                           "maChallengeSuccessData[liIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID");
+                // ARTIST 0x8255DF74 reports line 695; the path is a literal (as __FILE__ is): a
+                // named path array reorders the loop-hoisted message/file registers.
+                CGS_ASSERT(maChallengeSuccessData[liIndex].mPlayerID == CgsNetwork::KI_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+                    "maChallengeSuccessData[liIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
+                    "..\\..\\..\\GameSource\\Network/Managers/BrnChallengeSuccessManager.cpp", 695));
             }
         }
 
