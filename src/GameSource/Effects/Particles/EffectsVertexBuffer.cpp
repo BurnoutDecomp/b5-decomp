@@ -30,18 +30,24 @@ EffectsVertexBufferLocked& EffectsVertexBuffer::Lock()
 // Opens a write batch: computes the aligned start vertex from the current write
 // offset, seeds the vertex iterator (start/current/top/stride) over the remaining
 // locked region, initialises the batch record, and flags KX_FLAG_IN_BATCH.
-EffectsVertexBufferLocked& EffectsVertexBufferLocked::BeginBatch(
+void EffectsVertexBufferLocked::BeginBatch(
         EffectsVertexBufferIterator& lOutVertexIterator,
         EffectsVertexBufferBatch&    lOutBatch,
         u32                          luVertexStride)
 {
     CGS_ASSERT((mxFlags & (KX_FLAG_LOCKED | KX_FLAG_IN_BATCH)) == KX_FLAG_LOCKED,
-               "( mxFlags & ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH ) ) == KX_FLAG_LOCKED");
+        CgsDev::Assert::MessageAt(
+            "( mxFlags & ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH ) ) == KX_FLAG_LOCKED",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 149));
 
     // Bytes already consumed within the locked region (current - base).
     const u32 luCurrentOffset =
         static_cast<u32>(mpLockedBufferCurrentAddress - mpLockedBufferBaseAddress);
-    CGS_ASSERT((luCurrentOffset & 15) == 0, "( luCurrentOffset & 15 ) == 0");
+    CGS_ASSERT((luCurrentOffset & 15) == 0, CgsDev::Assert::MessageAt(
+            "( luCurrentOffset & 15 ) == 0",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 153));
 
     // Round the current offset up to a whole number of vertices (ceil divide).
     // twllei on X360 traps if luVertexStride == 0.
@@ -50,15 +56,15 @@ EffectsVertexBufferLocked& EffectsVertexBufferLocked::BeginBatch(
 
     lOutVertexIterator.SetBaseAddress(lpAlignedAddress);
     lOutVertexIterator.SetCurrentAddress(lpAlignedAddress - 4);
-    lOutVertexIterator.SetStride(luVertexStride);
+    // Top before stride: ARTIST reads mpLockedBufferTopAddress (0x82279A00) before it stores the
+    // stride (0x82279A04), which the store could alias were the stride set first.
     lOutVertexIterator.SetTopAddress(mpLockedBufferTopAddress);
+    lOutVertexIterator.SetStride(luVertexStride);
 
     lOutBatch.muStartVertex = luVertexOffset;
     lOutBatch.muVertexCount = 0;
 
     mxFlags |= KX_FLAG_IN_BATCH;
-
-    return *this;
 }
 
 // EffectsVertexBufferLocked::EndBatch  X360 0x82279A28
@@ -66,15 +72,21 @@ EffectsVertexBufferLocked& EffectsVertexBufferLocked::BeginBatch(
 // advanced (current - start + stride-slack of 4), asserts a whole number of
 // vertices was written, folds that count into the batch record, resets the
 // iterator cursor, and advances the buffer's write pointer.
-EffectsVertexBufferLocked& EffectsVertexBufferLocked::EndBatch(
+void EffectsVertexBufferLocked::EndBatch(
         EffectsVertexBufferIterator& lInOutVertexIterator,
         EffectsVertexBufferBatch&    lInOutBatch,
         u32                          luVertexStride)
 {
     CGS_ASSERT((mxFlags & (KX_FLAG_LOCKED | KX_FLAG_IN_BATCH)) == (KX_FLAG_LOCKED | KX_FLAG_IN_BATCH),
-               "( mxFlags & ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH ) ) == ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH )");
+        CgsDev::Assert::MessageAt(
+            "( mxFlags & ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH ) ) == ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 205));
     CGS_ASSERT(luVertexStride == lInOutVertexIterator.GetStride(),
-               "luVertexStride == lInOutVertexIterator.GetStride()");
+        CgsDev::Assert::MessageAt(
+            "luVertexStride == lInOutVertexIterator.GetStride()",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 206));
 
     // twllei on X360 traps if luVertexStride == 0.
     mxFlags &= static_cast<u8>(~KX_FLAG_IN_BATCH);
@@ -86,43 +98,56 @@ EffectsVertexBufferLocked& EffectsVertexBufferLocked::EndBatch(
 
     const u32 luVerticesWritten = luBytesWritten / luVertexStride;
     CGS_ASSERT((luVerticesWritten * luVertexStride) == luBytesWritten,
-               "( luVerticesWritten * luVertexStride ) == luBytesWritten");
+        CgsDev::Assert::MessageAt(
+            "( luVerticesWritten * luVertexStride ) == luBytesWritten",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 215));
 
     lInOutBatch.muVertexCount += luVerticesWritten;
     lInOutVertexIterator.SetCurrentAddress(reinterpret_cast<u8*>(-4));
     mpLockedBufferCurrentAddress += luBytesWritten;
-
-    return *this;
 }
 
 // ---------------------------------------------------------------------------------------------
-// EffectsVertexBuffer::Construct(void*, u32) / ::UnLock
+// EffectsVertexBuffer::Construct(void*, u32) / ::Destruct / ::UnLock
 //
-// No X360 export -- both are inlined into EffectsVertexBufferManager (Construct @0x822807D0
-// captures each buffer's locked GPU write address and hands it here; Lock @0x82279B18 /
-// UnLock @0x82279BA8 open and close the write window). Construct seats the write cursor at
-// the base of the mapped range and records its extent; UnLock closes the window by clearing
-// the cursor, which is what makes the manager's `!mbLocked` assert (EffectsVertexBufferManager.h)
-// meaningful. Both are spelled against this type's own members -- see its header for the
-// per-member attestation.
+// No X360 export: all three exist only inlined into EffectsVertexBufferManager (same unity TU).
+// Their bodies are read off those copies:
+//   Construct -- Manager::Lock @0x82279B58..0x82279B8C: current = NULL, flags = 0,
+//                base = address, top = address + size (the cursor is seated by Lock()).
+//   UnLock    -- Manager::UnLock @0x82279BE4..0x82279C2C: assert the LOCKED bit
+//                (EffectsVertexBuffer.cpp:122), clear it, current = NULL.
+//   Destruct  -- Manager::UnLock @0x82279C30..0x82279C60: assert mxFlags == 0
+//                (EffectsVertexBuffer.cpp:78), then base = top = current = NULL.
 // ---------------------------------------------------------------------------------------------
 void EffectsVertexBuffer::Construct(void* lpBuffer, u32 luBufferSize)
 {
     u8* const lpBase = static_cast<u8*>(lpBuffer);
-    mpLockedBufferBaseAddress    = lpBase;
-    mpLockedBufferCurrentAddress = lpBase;
-    mpLockedBufferTopAddress     = lpBase + luBufferSize;
+    mpLockedBufferCurrentAddress = 0;
     mxFlags                      = 0;   // neither locked nor in a batch
+    mpLockedBufferBaseAddress    = lpBase;
+    mpLockedBufferTopAddress     = lpBase + luBufferSize;
 }
 
 void EffectsVertexBuffer::Destruct()
 {
-    // Nothing owned: the locked span is the manager's vertex-buffer memory, borrowed.
+    CGS_ASSERT(mxFlags == 0,
+        CgsDev::Assert::MessageAt(
+            "mxFlags == 0",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 78));
+    mpLockedBufferBaseAddress    = 0;
+    mpLockedBufferTopAddress     = 0;
+    mpLockedBufferCurrentAddress = 0;
 }
 
 void EffectsVertexBuffer::UnLock()
 {
-    CGS_ASSERT((mxFlags & (KX_FLAG_LOCKED | KX_FLAG_IN_BATCH)) == KX_FLAG_LOCKED,
-               "( mxFlags & ( KX_FLAG_LOCKED | KX_FLAG_IN_BATCH ) ) == KX_FLAG_LOCKED");
+    CGS_ASSERT((mxFlags & KX_FLAG_LOCKED) != 0,
+        CgsDev::Assert::MessageAt(
+            "( mxFlags & KX_FLAG_LOCKED ) != 0",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Effects/Particles/EffectsVertexBuffer.cpp", 122));
     mxFlags = static_cast<u8>(mxFlags & ~KX_FLAG_LOCKED);
+    mpLockedBufferCurrentAddress = 0;
 }

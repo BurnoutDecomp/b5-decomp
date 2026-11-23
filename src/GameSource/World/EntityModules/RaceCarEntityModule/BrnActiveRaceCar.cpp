@@ -495,12 +495,13 @@ void ActiveRaceCar::Detach( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicl
 // ----------------------------------------------------------------------------
 void ActiveRaceCar::RemoveHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface )
 {
-    CGS_ASSERT(IsActive(), "IsActive()");                              // X360 :1186
-    CGS_ASSERT(lpVehicleInterface != 0, "lpVehicleInterface != NULL"); // :1187
-    if (lpVehicleInterface == 0)
-    {
-        return;
-    }
+    // Both asserts are non-gating on the console: 0x822D40DC follows the second straight on.
+    CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.cpp", 1186 /* ARTIST 0x822D40A4 */));
+    CGS_ASSERT(lpVehicleInterface != 0, CgsDev::Assert::MessageAt("lpVehicleInterface != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.cpp", 1187 /* ARTIST 0x822D40C8 */));
 
     lpVehicleInterface->RemoveRaceCar(mHandlingBodyVolumeId);
 }
@@ -2311,30 +2312,38 @@ namespace
 // the car left the system at -- so "which section did I come from" is only ever answered from a
 // contiguous run inside the system. Reproduced verbatim.
 // -------------------------------------------------------------------------------------------------
-void ActiveRaceCar::SetAISection( u16 lu16AISectionIndex )
+void ActiveRaceCar::SetAISection( u32 luSection )
 {
-    CGS_ASSERT( IsActive(), "IsActive()" );   // BrnActiveRaceCar.cpp:1911
+    CGS_ASSERT( IsActive(), CgsDev::Assert::MessageAt("IsActive()",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.cpp", 1911 /* ARTIST 0x822A5224 */) );
 
-    if( lu16AISectionIndex == BrnWorld::KI_INVALID_SECTION_INDEX )
+    // Shape as LegacySrc BrnActiveRaceCar.h's SetAISection (one if/else; the two inner arms share
+    // their curr/prev store tail at 0x822A5284).
+    if( luSection == BrnWorld::KI_INVALID_SECTION_INDEX )
     {
-        muPrevAISection         = muCurrAISection;
         mbInsideAISectionSystem = false;
+        muPrevAISection         = muCurrAISection;
         muCurrAISection         = BrnWorld::KI_INVALID_SECTION_INDEX;
-        return;
     }
-
-    if( !mbInsideAISectionSystem )
+    else
     {
-        muCurrAISection = lu16AISectionIndex;
-        muPrevAISection = BrnWorld::KI_INVALID_SECTION_INDEX;
-    }
-    else if( lu16AISectionIndex != muCurrAISection )
-    {
-        muPrevAISection = muCurrAISection;
-        muCurrAISection = lu16AISectionIndex;
-    }
+        if( !mbInsideAISectionSystem )
+        {
+            muPrevAISection = BrnWorld::KI_INVALID_SECTION_INDEX;
+            muCurrAISection = luSection;
+        }
+        else
+        {
+            if( luSection != muCurrAISection )
+            {
+                muPrevAISection = muCurrAISection;
+                muCurrAISection = luSection;
+            }
+        }
 
-    mbInsideAISectionSystem = true;
+        mbInsideAISectionSystem = true;
+    }
 }
 
 // -------------------------------------------------------------------------------------------------
@@ -3179,18 +3188,19 @@ void ActiveRaceCar::SendSceneUpdatesPostPhysics(
         BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
         f32 lfTimeStep )
 {
-    CGS_ASSERT(lpSceneInterface != 0, "lpSceneInterface != NULL");   // X360 :1091
-    CGS_ASSERT(IsActive(), "IsActive()");                            // X360 :1092
-    if (lpSceneInterface == 0)   // PC-safety guard, as in AddToScene above
-    {
-        return;
-    }
+    // Both asserts are non-gating tripwires on the console (0x822EB724 carries straight on).
+    CGS_ASSERT(lpSceneInterface != 0, CgsDev::Assert::MessageAt("lpSceneInterface != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.cpp", 1091 /* ARTIST 0x822EB6E0 */));
+    CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.cpp", 1092 /* ARTIST 0x822EB710 */));
 
     (void)lfTimeStep;   // arrives in f1; no instruction in the console body reads it
 
     UpdateCullingGroup(lpSceneInterface);
 
-    if (mbUncrashedThisFrame)                                        // 0x77A
+    if (mbUncrashedThisFrame == true)                                // 0x77A: cmplwi 1 ; bne
     {
         if (!mbAddedForCollision)                                    // 0x78B
         {

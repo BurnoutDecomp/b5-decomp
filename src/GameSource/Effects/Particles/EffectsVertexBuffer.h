@@ -110,12 +110,13 @@ protected:
 struct EffectsVertexBufferLocked : protected EffectsVertexBuffer
 {
 public:
-    EffectsVertexBufferLocked& BeginBatch(EffectsVertexBufferIterator& lOutVertexIterator,
-                                          EffectsVertexBufferBatch&    lOutBatch,
-                                          u32                          luVertexStride);
-    EffectsVertexBufferLocked& EndBatch(EffectsVertexBufferIterator& lInOutVertexIterator,
-                                        EffectsVertexBufferBatch&    lInOutBatch,
-                                        u32                          luVertexStride);
+    // DWARF EffectsVertexBuffer.h:106/109 declare both void (ARTIST never sets r3 on the way out).
+    void BeginBatch(EffectsVertexBufferIterator& lOutVertexIterator,
+                    EffectsVertexBufferBatch&    lOutBatch,
+                    u32                          luVertexStride);
+    void EndBatch(EffectsVertexBufferIterator& lInOutVertexIterator,
+                  EffectsVertexBufferBatch&    lInOutBatch,
+                  u32                          luVertexStride);
 
     u32 GetBytesUsed() const
     { return static_cast<u32>(mpLockedBufferCurrentAddress - mpLockedBufferBaseAddress); }

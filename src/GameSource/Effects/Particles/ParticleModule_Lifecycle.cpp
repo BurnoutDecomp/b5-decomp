@@ -158,11 +158,10 @@ namespace
 
 }
 
-// The two process-wide particle CPU-monitor sets Construct registers and
-// RenderFullResParticles selects between (`unk_82FAB598` / `unk_82FAB5D8`; the
+// DWARF ParticleModule.cpp:220 -- the process-wide particle CPU-monitor sets Construct registers
+// and the render paths select between ([0] "Race" 0x82FAB598, [1] "Crash" 0x82FAB5D8; the
 // reduced-frame-rate render-data flag picks the "Crash" set).
-ParticleCpuMonitors gRaceCpuMonitors;
-ParticleCpuMonitors gCrashCpuMonitors;
+ParticleCpuMonitors gaCpuMonitors[2];
 
 // The Lion runtime's process-wide current-time cell (`dword_82FAD274`). Construct
 // zeroes it once behind a guard byte and hands the module its address.
@@ -268,8 +267,8 @@ void ParticleModule::Construct()
     // LionPerfMon::Construct(&dword_82FAB638, ...) -- the Lion perf-monitor set. Its class
     // is TU-local to LionPerfMon.cpp (no header), so it is not reachable from here.
 
-    gRaceCpuMonitors.Construct("Race");
-    gCrashCpuMonitors.Construct("Crash");
+    gaCpuMonitors[0].Construct("Race");
+    gaCpuMonitors[1].Construct("Crash");
 }
 
 // =========================================================================================

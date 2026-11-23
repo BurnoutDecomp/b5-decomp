@@ -41,7 +41,7 @@
 #include "GameSource/Effects/Particles/ParticleModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"// StartMonitor / StopMonitor
-#include "GameSource/Effects/Particles/ParticleCpuMonitors.h"            // gRaceCpuMonitors / gCrashCpuMonitors
+#include "GameSource/Effects/Particles/ParticleCpuMonitors.h"            // gaCpuMonitors
 #include "GameSource/Effects/BrnEffectsUtils.h"                          // Vector3Randomiser
 #include "GameSource/Effects/BrnEffectsDebrisColourRandomiser.h"         // Utils::DebrisColourRandomiser (the burst's colours)
 
@@ -471,7 +471,7 @@ namespace BrnParticle
                     // iteration); +8 in ParticleCpuMonitors is miSpawnSpark.
                     const ParticleCpuMonitors& lrMonitors =
                         ((lrRenderData.muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0)
-                            ? gCrashCpuMonitors : gRaceCpuMonitors;
+                            ? gaCpuMonitors[1] : gaCpuMonitors[0];
                     const s32 liMonitor = lrMonitors.miSpawnSpark;
 
                     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
@@ -637,7 +637,7 @@ namespace BrnParticle
 
             const ParticleCpuMonitors& lrMonitors =
                 ((lrRenderData.muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate) != 0)
-                    ? gCrashCpuMonitors : gRaceCpuMonitors;
+                    ? gaCpuMonitors[1] : gaCpuMonitors[0];
             const s32 liMonitor = lrMonitors.miSpawnSpark;
             CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 

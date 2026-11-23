@@ -90,13 +90,15 @@ EffectsVertexBufferLocked& EffectsVertexBufferManager::Lock()
 }
 
 // EffectsVertexBufferManager::UnLock  X360 0x82279BA8
-// Close the write window on the current slot (EffectsVertexBuffer::UnLock inlined by
-// the X360 image -- its own asserts at EffectsVertexBuffer.cpp:122/78 live inside that
-// call), then clear the manager's locked flag.
+// Close the write window on the current slot and release it: the X360 image inlines
+// EffectsVertexBuffer::UnLock (its assert at EffectsVertexBuffer.cpp:122, 0x82279C08) and then
+// EffectsVertexBuffer::Destruct (EffectsVertexBuffer.cpp:78, 0x82279C44, and the three NULL
+// stores), then clears the manager's locked flag.
 void EffectsVertexBufferManager::UnLock()
 {
     CGS_ASSERT(mbLocked, "mbLocked");
 
     mCurrentBuffer.UnLock();
+    mCurrentBuffer.Destruct();
     mbLocked = false;
 }

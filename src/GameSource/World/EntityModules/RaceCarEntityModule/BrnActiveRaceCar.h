@@ -595,11 +595,12 @@ public:
 
         // --- cracked-glass shader params (8 panes) --------------------------
         // X360 0x822A1E30 / 0x822A1D30.
-        f32             GetCrackedGlassFractureAmountN(u32 n) const;
-        void            SetCrackedGlassFractureAmountN(u32 n, f32 lfValue);
+        // DWARF h:281..293 spell the index `int` (the asserts compare it signed: cmpwi 0 / cmpwi 8).
+        f32             GetCrackedGlassFractureAmountN(s32 n) const;
+        void            SetCrackedGlassFractureAmountN(s32 n, f32 lfValue);
         // X360 0x822A1EA0 / 0x822A1DB0.
-        f32             GetCrackedGlassEqualisationFactorN(u32 n) const;
-        void            SetCrackedGlassEqualisationFactorN(u32 n, f32 lfValue);
+        f32             GetCrackedGlassEqualisationFactorN(s32 n) const;
+        void            SetCrackedGlassEqualisationFactorN(s32 n, f32 lfValue);
         // X360 0x822B8410 / 0x822B83A0. Storage is a packed 2-float pair (8-byte
         // stride, asm-proven); the getter returns the FPU pair by value.
         rw::math::fpu::Vector2Template<float> GetCrackedGlassScaleFactorsN(s32 n) const;
@@ -1097,7 +1098,7 @@ public:
     // X360 0x822A51F0. Store the AI section index the collision tagging just read out from
     // under the car (0x7FFF == "no section": remember the previous one and leave the system).
     // Asserts IsActive() (BrnActiveRaceCar.cpp:1911).
-    void SetAISection(u16 lu16AISectionIndex);
+    void SetAISection(u32 luSection);   // DWARF h:688 `SetAISection(uint32_t)`
 
     // mbInsideAISectionSystem @+0x771 -- SetAISection's own latch, exposed for diagnostics.
     bool IsInsideAISectionSystem() const              { return mbInsideAISectionSystem; }     // +0x771

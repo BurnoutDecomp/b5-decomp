@@ -197,30 +197,30 @@ void ActiveRaceCar::RenderParams::MakeAllPartsVisible()
 // ----------------------------------------------------------------------------
 
 // X360 0x822A1E30: 4*(n+1286)+this == byte 5144 + 4n == &mafCrackedGlassFractureAmount[n].
-f32 ActiveRaceCar::RenderParams::GetCrackedGlassFractureAmountN(u32 n) const
+f32 ActiveRaceCar::RenderParams::GetCrackedGlassFractureAmountN(s32 n) const
 {
-    CGS_ASSERT(n < 8, "( 0 <= n ) && ( 8 > n )");
+    CGS_ASSERT(n >= 0 && n < 8, CgsDev::Assert::MessageAt("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )", BRN_ACTIVERACECAR_H_ASSERT_FILE, 379));
     return mafCrackedGlassFractureAmount[n];
 }
 
 // X360 0x822A1D30: store at 4*(n+1286)+this.
-void ActiveRaceCar::RenderParams::SetCrackedGlassFractureAmountN(u32 n, f32 lfValue)
+void ActiveRaceCar::RenderParams::SetCrackedGlassFractureAmountN(s32 n, f32 lfValue)
 {
-    CGS_ASSERT(n < 8, "( 0 <= n ) && ( 8 > n )");
+    CGS_ASSERT(n >= 0 && n < 8, CgsDev::Assert::MessageAt("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )", BRN_ACTIVERACECAR_H_ASSERT_FILE, 358));
     mafCrackedGlassFractureAmount[n] = lfValue;
 }
 
 // X360 0x822A1EA0: 4*(n+1294)+this == byte 5176 + 4n == &mafCrackedGlassEqualisationFactor[n].
-f32 ActiveRaceCar::RenderParams::GetCrackedGlassEqualisationFactorN(u32 n) const
+f32 ActiveRaceCar::RenderParams::GetCrackedGlassEqualisationFactorN(s32 n) const
 {
-    CGS_ASSERT(n < 8, "( 0 <= n ) && ( 8 > n )");
+    CGS_ASSERT(n >= 0 && n < 8, CgsDev::Assert::MessageAt("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )", BRN_ACTIVERACECAR_H_ASSERT_FILE, 386));
     return mafCrackedGlassEqualisationFactor[n];
 }
 
 // X360 0x822A1DB0: store at 4*(n+1294)+this.
-void ActiveRaceCar::RenderParams::SetCrackedGlassEqualisationFactorN(u32 n, f32 lfValue)
+void ActiveRaceCar::RenderParams::SetCrackedGlassEqualisationFactorN(s32 n, f32 lfValue)
 {
-    CGS_ASSERT(n < 8, "( 0 <= n ) && ( 8 > n )");
+    CGS_ASSERT(n >= 0 && n < 8, CgsDev::Assert::MessageAt("( 0 <= n ) && ( KI_MAX_ACTIVE_RACE_CARS > n )", BRN_ACTIVERACECAR_H_ASSERT_FILE, 365));
     mafCrackedGlassEqualisationFactor[n] = lfValue;
 }
 

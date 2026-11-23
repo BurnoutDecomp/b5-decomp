@@ -24,13 +24,6 @@ namespace BrnParticle
 {
     struct ParticleCpuMonitors;
 
-    // The two process-wide sets ParticleModule::Construct @0x82294220 registers
-    // (`unk_82FAB598` "Race" / `unk_82FAB5D8` "Crash") and RenderFullResParticles
-    // @0x8229AFD0 selects between on the render data's reduced-frame-rate flag.
-    // Defined in ParticleModule_Lifecycle.cpp.
-    extern ParticleCpuMonitors gRaceCpuMonitors;
-    extern ParticleCpuMonitors gCrashCpuMonitors;
-
     struct ParticleCpuMonitors
     {
         // 16 monitor handles, in the order Construct registers them
@@ -64,6 +57,14 @@ namespace BrnParticle
         // the X360 ARTIST build.
         s32 AddMonitor(const char* lpcName, const char* lpcPrefix);
     };
+
+    // DWARF ParticleModule.cpp:220: ONE array, gaCpuMonitors[2] -- [0] the "Race" set
+    // (0x82FAB598), [1] the "Crash" set (0x82FAB5D8, 0x40 further on) that ParticleModule::Construct
+    // @0x82294220 registers and the render paths select on the render data's reduced-frame-rate
+    // flag. ARTIST addresses both off the one array base (e.g. WaitOnParticleRenderJob
+    // @0x8227A344: `lis/addi gaCpuMonitors ; addi r31, r11, 0x40` for the crash set).
+    // Defined in ParticleModule_Lifecycle.cpp (folded from ParticleModule.cpp).
+    extern ParticleCpuMonitors gaCpuMonitors[2];
 }
 
 #endif // GAMESOURCE_EFFECTS_PARTICLES_PARTICLECPUMONITORS_H

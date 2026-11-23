@@ -267,7 +267,8 @@ void BrnRendererMemory::CreateBackBuffer(rw::IResourceAllocator* lpAllocator, u3
 
 CgsRenderTarget* BrnRendererMemory::GetShadowMapBuffer(s32 liIndex)
 {
-    if (static_cast<u32>(liIndex) >= 4)
+    // ARTIST 0x823F492C/0x823F4934 test both bounds signed (cmpwi 0 ; cmpwi 4), the assert text.
+    if (!(liIndex >= 0 && liIndex < 4))
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::Assert::FireAssert("liIndex >=0 && liIndex<4",
@@ -351,18 +352,16 @@ void BrnRendererMemory::CreateWorkBuffer(rw::IResourceAllocator* lpAllocator)
 
     lpWorkBuffer->ClearColourTargetInUse();
 
+    // Same store order as CreateBloomBuffer (ARTIST @0x823F71A4 / @0x823F725C).
+    lpWorkBuffer->SetUseDepthStencilAsTexture(false);
     lpWorkBuffer->SetDimensions(KU_WORK_BUFFER_WIDTH, KU_WORK_BUFFER_HEIGHT);
     lpWorkBuffer->SetNumMipMaps(1);
-    lpWorkBuffer->SetMultisampleFormat(0);
-    lpWorkBuffer->SetUseDepthStencilAsTexture(false);
-
     lpWorkBuffer->SetColourTargetInUse(0, true);
-
+    lpWorkBuffer->SetDepthTargetInUse(false);
+    lpWorkBuffer->SetMultisampleFormat(0);
+    lpWorkBuffer->SetColourTargetBaseEDRAM(0, 0);
     lpWorkBuffer->SetColourTargetBufferFormat(0, KU_COLOUR_SURFACE_BUFFER_FORMAT);
     lpWorkBuffer->SetColourTargetTextureFormat(0, KU_COLOUR_SURFACE_BUFFER_FORMAT);
-    lpWorkBuffer->SetColourTargetBaseEDRAM(0, 0);
-
-    lpWorkBuffer->SetDepthTargetInUse(false);
 
     lpWorkBuffer->Construct(lpAllocator);
 
@@ -402,17 +401,18 @@ void BrnRendererMemory::CreateBloomBuffer(rw::IResourceAllocator* lpAllocator)
 
     lpBloom->ClearColourTargetInUse();
 
+    // Statement order follows ARTIST's store order (identical in CreateBloomBuffer @0x823F70EC,
+    // CreateWorkBuffer @0x823F71A4 and CreateDepthOfFieldBuffer @0x823F725C): +0x15, the
+    // dimensions and mip count, the colour section, +0xDC, +0x10, then the EDRAM base and formats.
+    lpBloom->SetUseDepthStencilAsTexture(false);
     lpBloom->SetDimensions(KU_BLOOM_BUFFER_WIDTH, KU_BLOOM_BUFFER_HEIGHT);
     lpBloom->SetNumMipMaps(1);
-    lpBloom->SetMultisampleFormat(0);
-    lpBloom->SetUseDepthStencilAsTexture(false);
-
     lpBloom->SetColourTargetInUse(0, true);
+    lpBloom->SetDepthTargetInUse(false);
+    lpBloom->SetMultisampleFormat(0);
+    lpBloom->SetColourTargetBaseEDRAM(0, 0);
     lpBloom->SetColourTargetBufferFormat(0, KU_COLOUR_SURFACE_BUFFER_FORMAT);
     lpBloom->SetColourTargetTextureFormat(0, KU_COLOUR_SURFACE_BUFFER_FORMAT);
-    lpBloom->SetColourTargetBaseEDRAM(0, 0);
-
-    lpBloom->SetDepthTargetInUse(false);
 
     lpBloom->Construct(lpAllocator);
 
@@ -425,17 +425,16 @@ void BrnRendererMemory::CreateDepthOfFieldBuffer(rw::IResourceAllocator* lpAlloc
 
     lpDepthOfField->ClearColourTargetInUse();
 
+    // Same store order as CreateBloomBuffer (ARTIST @0x823F71A4 / @0x823F725C).
+    lpDepthOfField->SetUseDepthStencilAsTexture(false);
     lpDepthOfField->SetDimensions(KU_DEPTH_OF_FIELD_BUFFER_WIDTH, KU_DEPTH_OF_FIELD_BUFFER_HEIGHT);
     lpDepthOfField->SetNumMipMaps(1);
-    lpDepthOfField->SetMultisampleFormat(0);
-    lpDepthOfField->SetUseDepthStencilAsTexture(false);
-
     lpDepthOfField->SetColourTargetInUse(0, true);
+    lpDepthOfField->SetDepthTargetInUse(false);
+    lpDepthOfField->SetMultisampleFormat(0);
+    lpDepthOfField->SetColourTargetBaseEDRAM(0, 0);
     lpDepthOfField->SetColourTargetBufferFormat(0, KU_COLOUR_SURFACE_BUFFER_FORMAT);
     lpDepthOfField->SetColourTargetTextureFormat(0, KU_COLOUR_SURFACE_BUFFER_FORMAT);
-    lpDepthOfField->SetColourTargetBaseEDRAM(0, 0);
-
-    lpDepthOfField->SetDepthTargetInUse(false);
 
     lpDepthOfField->Construct(lpAllocator);
 
@@ -482,17 +481,17 @@ void BrnRendererMemory::CreateSunCoronaBuffer(rw::IResourceAllocator* lpAllocato
 
     lpSunCorona->ClearColourTargetInUse();
 
+    // Statement order follows ARTIST's store order (0x823F7424..0x823F7458): +0x15, the
+    // dimensions and mip count, the colour section, +0xDC, +0x10, the formats, then the EDRAM base.
+    lpSunCorona->SetUseDepthStencilAsTexture(false);
     lpSunCorona->SetDimensions(KU_SUN_CORONA_BUFFER_EXTENT, KU_SUN_CORONA_BUFFER_EXTENT);
     lpSunCorona->SetNumMipMaps(1);
-    lpSunCorona->SetMultisampleFormat(0);
-    lpSunCorona->SetUseDepthStencilAsTexture(false);
-
     lpSunCorona->SetColourTargetInUse(0, true);
+    lpSunCorona->SetDepthTargetInUse(false);
+    lpSunCorona->SetMultisampleFormat(0);
     lpSunCorona->SetColourTargetBufferFormat(0, KU_COLOUR_SURFACE_BUFFER_FORMAT);
     lpSunCorona->SetColourTargetTextureFormat(0, KU_COLOUR_SURFACE_BUFFER_FORMAT);
     lpSunCorona->SetColourTargetBaseEDRAM(0, 0);
-
-    lpSunCorona->SetDepthTargetInUse(false);
 
     lpSunCorona->Construct(lpAllocator);
 

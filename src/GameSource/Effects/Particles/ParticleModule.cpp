@@ -852,7 +852,7 @@ namespace BrnParticle
     void ParticleModule::BeginParticleRenderJob(const ParticleRenderData& data)
     {
         ParticleCpuMonitors& monitors = (data.muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate)
-            ? gCrashCpuMonitors : gRaceCpuMonitors;
+            ? gaCpuMonitors[1] : gaCpuMonitors[0];
         CgsDev::PerfMonCpu::StartMonitor(monitors.miBeginParticleRenderJob);
         static u32 lastFrame = 0xFFFFFFFFu; // ARTIST 82CDB404 initial image
         const bool changed = data.muCurrentFrame != lastFrame;
@@ -915,7 +915,7 @@ namespace BrnParticle
     void ParticleModule::WaitOnParticleRenderJob(const ParticleRenderData& data)
     {
         ParticleCpuMonitors& monitors = (data.muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate)
-            ? gCrashCpuMonitors : gRaceCpuMonitors;
+            ? gaCpuMonitors[1] : gaCpuMonitors[0];
         CgsDev::PerfMonCpu::StartMonitor(monitors.miWaitOnParticleRenderJob);
         mParticleRenderJobSparks.WaitOn(0, 0, -1);
         mParticleRenderJobParticles.WaitOn(0, 0, -1);
@@ -1271,7 +1271,7 @@ namespace BrnParticle
     void ParticleModule::RenderQuarterResParticles(const ParticleRenderData& data, CgsRenderTarget* target)
     {
         ParticleCpuMonitors& monitors = (data.muFlags & ParticleRenderData::eRenderDataFlagReducedFrameRate)
-            ? gCrashCpuMonitors : gRaceCpuMonitors;
+            ? gaCpuMonitors[1] : gaCpuMonitors[0];
         CgsDev::PerfMonCpu::StartMonitor(monitors.miRenderQuarterResParticles);
         renderengine::VertexBuffer* const vertexBuffer = mVertexBufferManagerParticles.GetVertexBuffer();
         const u32 preLion = mParticleRenderJobDataParticles.mSimpleParticleBatchArray.GetPreLionCount();
