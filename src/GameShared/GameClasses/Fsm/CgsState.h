@@ -9,7 +9,9 @@ namespace CgsFsm
 {
     struct State
     {
-        State();
+        // No user-declared constructor: DecFIGS puts the implicit State() on the class line (h:45),
+        // and ARTIST has no CgsFsm::State::State function -- derived constructors (e.g. CrashNavMap
+        // @0x825114B8) store only their own vptr.
 
         virtual void OnEnter();
         virtual void OnLeave();

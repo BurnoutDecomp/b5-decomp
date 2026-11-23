@@ -15,7 +15,9 @@ namespace CgsFsm
 
     struct ScriptedState : public State
     {
-        ScriptedState();
+        // No user-declared constructor: DecFIGS puts the implicit State() on the class line (h:48),
+        // and ARTIST has no ScriptedState::ScriptedState function -- derived constructors (e.g. CrashNavMap
+        // @0x825114B8) store only their own vptr.
 
         virtual void Construct(CgsID liId, ScriptedFsm* lpFsm);
 

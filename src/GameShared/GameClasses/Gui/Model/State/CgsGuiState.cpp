@@ -39,16 +39,6 @@ namespace CgsGui
                       "GuiEventStateChange must match the ARTIST 28-byte wire record");
     }
 
-    State::State()
-        : mpInGuiEventQueue(0)
-        , mpStateInterface(0)
-        , mbStateChangePending(false)
-        , mbIsSaveLoadState(false)
-        , mbIsVideoState(false)
-    {
-        macEvent[0] = 0;
-    }
-
     void State::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
     {
         CgsFsm::ScriptedState::Construct(liId, lpFsm);   // ARTIST 0x82848508: bl CgsFsm::ScriptedState::Construct (sets mId/mpFsm)

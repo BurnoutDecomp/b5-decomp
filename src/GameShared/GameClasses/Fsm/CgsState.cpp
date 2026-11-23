@@ -6,19 +6,12 @@
 
 namespace CgsFsm
 {
-    State::State() {}
     void State::OnEnter()    {}
     void State::OnLeave()    {}
     void State::Update()     {}
     void State::PreUpdate()  {}
     void State::PostUpdate() {}
     void State::Render()     {}
-
-    ScriptedState::ScriptedState()
-        : mId()
-        , mpFsm(0)
-    {
-    }
 
     // NOTE: ScriptedState::Construct is bodied (authoritatively, asm-verified @0x82835FF0) in
     // CgsScriptedState.cpp -- not duplicated here. (It once lived here too, but the duplicate was
