@@ -1,17 +1,15 @@
 // =====================================================================================
 // rw::physics::PairSet -- definition home for the RenderWare physics pair-set pool.
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC); the asm is authoritative. No
-// LegacySrc reference source and no DecFIGS DWARF exist for this TU.
+// Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC). DecFIGS pairset.h
+// supplies the original link and index types.
 //
-// This TU's 7 ledger functions are all self-contained (they touch only the pair-set block:
-// its header pointers, the Link array, and the per-part head array), so all are
-// reconstructed faithfully here. The only external callee is ClearAll (its own TU),
-// tail-called by Initialize.
+// The pool owns a link array and a per-part bucket table. Initialize lays out
+// both arrays and tail-calls ClearAll to reset them.
 //
 // A "pair" = two adjacent Link nodes; pair p owns link indices 2*p and 2*p+1. Each link is
 // filed into the intrusive doubly-linked bucket list of ONE part (mpHeads[part]); the
 // sibling link (index ^ 1) records the OTHER part. Free pairs are threaded through
-// link0.miNext from miFreeList.
+// link0.next from muFreeList.
 // =====================================================================================
 
 #include "rw/physics/pairset.h"
@@ -58,7 +56,7 @@ rw::BaseResourceDescriptors<5>* PairSet::GetResourceDescriptor(
     const u32 luSize =
         static_cast<u32>(sizeof(PairSet))
         + 2u * static_cast<u32>(sizeof(Link)) * static_cast<u32>(liMaxPairs)
-        + static_cast<u32>(sizeof(s32)) * static_cast<u32>(liNumParts);
+        + static_cast<u32>(sizeof(u32)) * static_cast<u32>(liNumParts);
 
     // entry[0] = { m_size = size, m_alignment = 4 }
     // ⚠️ The console's 4 is the alignment of its widest member (an s32/4-byte pointer). Two of
@@ -80,48 +78,33 @@ rw::BaseResourceDescriptors<5>* PairSet::GetResourceDescriptor(
 //
 // Two independent loops:
 //   * the pair pool -- walk link0 of every pair (`v2 += 32`, i.e. two 16-byte Links per step),
-//     stamping miPart = -1 (the "unfiled" marker) and threading miNext to the NEXT pair index.
-//     The last pair's miNext is then overwritten with -1 to terminate the chain
-//     (`32*miMaxPairs + mpLinks - 24` == the last pair's link0.miNext, since 32 - 8 == 24).
-//     miFreeList becomes 0, or -1 when the pool has no pairs at all.
+//     stamping the invalid part index and threading each next free pair.
+//     The final next index marks the end of the free list.
 //   * the bucket heads -- mpHeads[i] = -1 for every part.
 //
 // ⚠️ THE FREE LIST IS THREADED IN PAIR UNITS, NOT LINK UNITS. `v3[2] = v1` writes the
-// POST-incremented counter, so pair p points at p+1 -- an index into the pair pool, which is
-// what miFreeList and LinkParts consume. Reading it as a link index would halve the pool.
+// POST-incremented counter, so pair p points at p+1 in the pair pool.
 // -------------------------------------------------------------------------------------
 PairSet* PairSet::ClearAll()
 {
-    s32* lpFreeThreadTail = 0;
-
     if (miMaxPairs != 0u)
     {
-        miFreeList = 0;                                     // stw r11(=0), 0x10(r3)
-
-        u32 luPair = 0u;
-        do
+        muFreeList = 0u;
+        for (u32 luPair = 0u; luPair < miMaxPairs; ++luPair)
         {
-            Link* lpLink0 = &mpLinks[2u * luPair];
-            ++luPair;
-            lpLink0->miPart = -1;                           // stw r11(=-1), 0(r8)
-            lpLink0->miNext = static_cast<s32>(luPair);     // stw r10, 8(r8)  -- POST-increment
-            lpFreeThreadTail = &lpLink0->miNext;
+            Link& lrFirst = mpLinks[2u * luPair];
+            lrFirst.partIndex = KU_INVALID_INDEX;
+            lrFirst.next = luPair + 1u;
         }
-        while (luPair < miMaxPairs);
-
-        // `stw r11(=-1), -0x18(r10)` off the end of the link array -- the last pair's miNext.
-        *lpFreeThreadTail = -1;
+        mpLinks[2u * (miMaxPairs - 1u)].next = KU_INVALID_INDEX;
     }
     else
     {
-        miFreeList = -1;                                    // the pool is empty
+        muFreeList = KU_INVALID_INDEX;
     }
 
     for (u32 luPart = 0u; luPart < miNumParts; ++luPart)
-    {
-        mpHeads[luPart] = -1;                               // stwx r11(=-1), r8, r10
-    }
-
+        mpHeads[luPart] = KU_INVALID_INDEX;
     return this;
 }
 
@@ -146,7 +129,7 @@ PairSet* PairSet::Initialize(void** lpMemory, int liNumParts, int liMaxPairs)
     lpSet->miMaxPairs = static_cast<u32>(liMaxPairs);
     lpSet->miNumParts = static_cast<u32>(liNumParts);
     lpSet->mpLinks    = reinterpret_cast<Link*>(lpBlock + sizeof(PairSet));
-    lpSet->mpHeads    = reinterpret_cast<s32*>(
+    lpSet->mpHeads    = reinterpret_cast<u32*>(
         lpBlock + sizeof(PairSet) + 2 * sizeof(Link) * static_cast<u32>(liMaxPairs));
 
     return lpSet->ClearAll();
@@ -155,103 +138,98 @@ PairSet* PairSet::Initialize(void** lpMemory, int liNumParts, int liMaxPairs)
 // -------------------------------------------------------------------------------------
 // PairSet::InitializeLink @ 0x82BC6E60
 //
-// File link `liLinkIndex` (payload part `liPart`) at the front of part `liPart`'s bucket.
+// File the link at the front of the part's bucket.
 // -------------------------------------------------------------------------------------
-PairSet* PairSet::InitializeLink(int liLinkIndex, int liPart)
+void PairSet::InitializeLink(u32 luLinkIndex, u32 luPart)
 {
-    Link* lpLink = &mpLinks[liLinkIndex];
-    lpLink->miPart = liPart;
-    lpLink->miData = 0;
-    lpLink->miPrev = -1;
+    Link* lpLink = &mpLinks[luLinkIndex];
+    lpLink->partIndex = luPart;
+    lpLink->flags = 0u;
+    lpLink->prev = KU_INVALID_INDEX;
 
-    s32 liHead = mpHeads[liPart];
-    lpLink->miNext = liHead;
-    if (liHead != -1)
-        mpLinks[liHead].miPrev = liLinkIndex;
-    mpHeads[liPart] = liLinkIndex;
-    return this;
+    const u32 luHead = mpHeads[luPart];
+    lpLink->next = luHead;
+    if (luHead != KU_INVALID_INDEX)
+        mpLinks[luHead].prev = luLinkIndex;
+    mpHeads[luPart] = luLinkIndex;
 }
 
 // -------------------------------------------------------------------------------------
 // PairSet::ReleaseLink @ 0x82BC6EB8
 //
-// Splice link `liLinkIndex` out of its bucket's doubly-linked list.
+// Splice the link out of its bucket's doubly-linked list.
 // -------------------------------------------------------------------------------------
-PairSet* PairSet::ReleaseLink(int liLinkIndex)
+void PairSet::ReleaseLink(u32 luLinkIndex)
 {
-    Link* lpLink = &mpLinks[liLinkIndex];
-    s32   liPrev = lpLink->miPrev;
-    s32   liNext = lpLink->miNext;
+    Link* lpLink = &mpLinks[luLinkIndex];
+    const u32 luPrev = lpLink->prev;
+    const u32 luNext = lpLink->next;
 
-    if (liPrev == -1)
-        mpHeads[lpLink->miPart] = liNext;   // was the bucket head
+    if (luPrev == KU_INVALID_INDEX)
+        mpHeads[lpLink->partIndex] = luNext;
     else
-        mpLinks[liPrev].miNext = liNext;
+        mpLinks[luPrev].next = luNext;
 
-    if (lpLink->miNext != -1)
-        mpLinks[lpLink->miNext].miPrev = lpLink->miPrev;
-    return this;
+    if (lpLink->next != KU_INVALID_INDEX)
+        mpLinks[lpLink->next].prev = lpLink->prev;
 }
 
 // -------------------------------------------------------------------------------------
 // PairSet::LinkParts @ 0x82BC6F18
 //
-// Pop a free pair, file its two links into parts `liPartA` and `liPartB`, tag link0 with
-// `liData`, and return the pair index (-1 when the pool is exhausted).
+// Pop a free pair, file its two links into their part buckets and store the pair flags.
 // -------------------------------------------------------------------------------------
-int PairSet::LinkParts(int liPartA, int liPartB, int liData)
+u32 PairSet::LinkParts(u32 luPartA, u32 luPartB, u32 luFlags)
 {
-    s32 liPair = miFreeList;
-    if (liPair == -1)
-        return -1;
+    const u32 luPair = muFreeList;
+    if (luPair == KU_INVALID_INDEX)
+        return KU_INVALID_INDEX;
 
-    // Pop the free list, threaded through link0.miNext of the free pair.
-    miFreeList = mpLinks[2 * liPair].miNext;
+    const u32 luFirstLink = 2u * luPair;
+    muFreeList = mpLinks[luFirstLink].next;
 
-    InitializeLink(2 * liPair,     liPartA);
-    InitializeLink(2 * liPair + 1, liPartB);
-    mpLinks[2 * liPair].miData = liData;
-    return liPair;
+    InitializeLink(luFirstLink, luPartA);
+    InitializeLink(luFirstLink + 1u, luPartB);
+    mpLinks[luFirstLink].flags = luFlags;
+    return luPair;
 }
 
 // -------------------------------------------------------------------------------------
 // PairSet::UnlinkPair @ 0x82BC6F98
 //
-// Release both links of pair `liPairIndex` and push it back onto the free list.
+// Release both links and push the pair back onto the free list.
 // -------------------------------------------------------------------------------------
-PairSet* PairSet::UnlinkPair(int liPairIndex)
+void PairSet::UnlinkPair(u32 luPairIndex)
 {
-    ReleaseLink(2 * liPairIndex);
-    ReleaseLink(2 * liPairIndex + 1);
+    const u32 luFirstLink = 2u * luPairIndex;
+    ReleaseLink(luFirstLink);
+    ReleaseLink(luFirstLink + 1u);
 
-    mpLinks[2 * liPairIndex].miNext = miFreeList;   // thread onto the free list
-    mpLinks[2 * liPairIndex].miPart = -1;
-    miFreeList = liPairIndex;
-    return this;
+    mpLinks[luFirstLink].next = muFreeList;
+    mpLinks[luFirstLink].partIndex = KU_INVALID_INDEX;
+    muFreeList = luPairIndex;
 }
 
 // -------------------------------------------------------------------------------------
 // PairSet::UnlinkParts @ 0x82BC6FF0
 //
-// Find the pair joining part `liPartA` to part `liPartB` -- walk liPartA's bucket for the
-// link whose SIBLING (index ^ 1) is filed under liPartB -- then release that pair.
+// Find the link in the first part's bucket whose sibling is filed under the second part.
 // -------------------------------------------------------------------------------------
-PairSet* PairSet::UnlinkParts(int liPartA, int liPartB)
+void PairSet::UnlinkParts(u32 luPartA, u32 luPartB)
 {
-    s32 liLink = mpHeads[liPartA];
-    if (liLink != -1)
+    u32 luLink = mpHeads[luPartA];
+    if (luLink != KU_INVALID_INDEX)
     {
         do
         {
-            if (mpLinks[liLink ^ 1].miPart == liPartB)
+            if (mpLinks[luLink ^ 1u].partIndex == luPartB)
                 break;
-            liLink = mpLinks[liLink].miNext;
+            luLink = mpLinks[luLink].next;
         }
-        while (liLink != -1);
+        while (luLink != KU_INVALID_INDEX);
     }
 
-    // Pair index = link index >> 1 (logical shift, matching the X360 srwi).
-    return UnlinkPair(static_cast<int>(static_cast<u32>(liLink) >> 1));
+    UnlinkPair(luLink >> 1);
 }
 
 } // namespace physics

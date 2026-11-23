@@ -9,28 +9,15 @@
 // is authoritative. Shares the rw::physics vocabulary with the sibling Simulation /
 // SimulationWorkspace TUs.
 //
-// ⚠️⚠️ CORRECTION 2026-08-04 -- THE SENTENCE THAT USED TO STAND HERE SAID
-//      "No LegacySrc reference source and no DecFIGS DWARF exist for this TU."
-//      **THAT WAS FALSE.** references/DecFIGS/dwarfdump/SDKs/EATech/include/cmn/rw/physics/
-//      carries twenty real headers including pairset.h, and the identical false claim in the
-//      sibling rw/physics/simulation.h cost three waves of the physics campaign. The DWARF
-//      names for this type are:
-//          Link  { partIndex, flags, next, prev }        (pairset.h:121..125)
-//          PairSet { m_links, m_linkLists, m_maxPairs, m_maxParts, m_freePair }  (:135..140)
-//      plus a nested LinkIterator { m_pairSet, m_cur } (:153..185) and the public method set
-//      SetPairFlags / GetPairFlags / UnlinkPart / ClearAll / PartLinksBegin / PartLinksEnd /
-//      PairIsValid, none of which this reconstruction declares.
-//      ⭐ The recovered LAYOUT below is confirmed by that DWARF member-for-member -- the
-//      structural reconstruction was right. Only the NAMES differ (miData is `flags`,
-//      miFreeList is `m_freePair`, ...). The rename is deliberately NOT done in this pass:
-//      this is a serialised resource block with live users, and the rw physics landing that
-//      wrote this note had no reason to touch it. Do it as its own change, with a boot.
+// DecFIGS pairset.h declares unsigned link, part and pair indices, including the
+// free-list head and bucket cursor. ARTIST compares part indices unsigned at 0x82BC7014
+// and uses the all-ones index as the end marker at 0x82BC6FFC and 0x82BC7028.
 //
 // LAYOUT (recovered from the union of this TU's offset accesses; the X360 asm is
 // authoritative for placement). The whole object is a single RW resource block, sized by
 // GetResourceDescriptor and laid out by Initialize as:
 //
-//     [ 5-word header | Link mpLinks[2 * miMaxPairs] | s32 mpHeads[miNumParts] ]
+//     [ 5-word header | Link mpLinks[2 * miMaxPairs] | u32 mpHeads[miNumParts] ]
 //
 // mpLinks / mpHeads are stored back-pointers INTO this same block; the +0x14 header stride
 // and the trailing arrays are X360 (4-byte-word) block geometry fixed by the resource
@@ -39,8 +26,8 @@
 //
 // A "pair" is two Link nodes (link index = 2*pairIndex and 2*pairIndex+1). Each link is
 // filed into the doubly-linked bucket list of one part (mpHeads[part]); its sibling link
-// records the OTHER part of the pair. Free pairs are threaded on link0.miNext through
-// miFreeList.
+// records the other part of the pair. Free pairs are threaded on link0.next through
+// muFreeList.
 // =====================================================================================
 
 #include "types.hpp"                 // s32 / u32
@@ -53,14 +40,16 @@ namespace physics
 
 class PairSet
 {
+    static const u32 KU_INVALID_INDEX = 0xFFFFFFFFu;
+
 public:
     // One half of a pair: a node in a part's intrusive doubly-linked bucket list. 16 bytes.
     struct Link
     {
-        s32 miPart;   // +0x00  the part id this link is filed under (mpHeads bucket)
-        s32 miData;   // +0x04  pair payload (contact/joint/drive id); carried on link0 only
-        s32 miNext;   // +0x08  next link index in the bucket (-1 = end); free-list thread on link0
-        s32 miPrev;   // +0x0C  prev link index in the bucket (-1 = list head)
+        u32 partIndex; // +0x00  bucket indexed by part
+        u32 flags;     // +0x04  pair flags on the first link
+        u32 next;      // +0x08  next bucket link or next free pair
+        u32 prev;      // +0x0C  previous bucket link
     };
 
     // -------------------------------------------------------------------------------------
@@ -77,28 +66,18 @@ public:
     // (r3 = the memory slot holding the block pointer) and thread the free list via ClearAll.
     static PairSet* Initialize(void** lpMemory, int liNumParts, int liMaxPairs);
 
-    // ClearAll -- resets the buckets and rebuilds the free list. Defined by its own TU;
-    // declared here because Initialize tail-calls it. (Not one of this TU's ledger funcs.)
+    // ClearAll @ 0x82BC6DC0 -- resets the buckets and rebuilds the free list.
     PairSet* ClearAll();
 
-    // InitializeLink @ 0x82BC6E60 -- file link `liLinkIndex` into part `liPart`'s bucket
-    // (push front). Returns this.
-    PairSet* InitializeLink(int liLinkIndex, int liPart);
+    // LinkParts @ 0x82BC6F18 -- join two parts with a free pair and store its flags.
+    // Returns the pair index or KU_INVALID_INDEX if the pool is full.
+    u32 LinkParts(u32 luPartA, u32 luPartB, u32 luFlags);
 
-    // ReleaseLink @ 0x82BC6EB8 -- unlink `liLinkIndex` from its bucket list. Returns this.
-    PairSet* ReleaseLink(int liLinkIndex);
+    // UnlinkPair @ 0x82BC6F98 -- release both links and return the pair to the free list.
+    void UnlinkPair(u32 luPairIndex);
 
-    // LinkParts @ 0x82BC6F18 -- allocate a free pair joining part `liPartA` and part
-    // `liPartB`, tagging it with `liData`. Returns the pair index, or -1 if the pool is full.
-    int LinkParts(int liPartA, int liPartB, int liData);
-
-    // UnlinkPair @ 0x82BC6F98 -- release both links of pair `liPairIndex` and return it to
-    // the free list. Returns this.
-    PairSet* UnlinkPair(int liPairIndex);
-
-    // UnlinkParts @ 0x82BC6FF0 -- find the pair joining part `liPartA` to part `liPartB`
-    // (walk liPartA's bucket for the link whose sibling is liPartB) and release it.
-    PairSet* UnlinkParts(int liPartA, int liPartB);
+    // UnlinkParts @ 0x82BC6FF0 -- find the pair joining two parts and release it.
+    void UnlinkParts(u32 luPartA, u32 luPartB);
 
     // -------------------------------------------------------------------------------------
     // ⭐ ADDITIVE GROW 2026-08-06 (the game-side closure wave): the DWARF's bucket-walk API
@@ -116,49 +95,47 @@ public:
     //     then `stw 0, 4(links + that)` == m_links[2 * GetPairIndex()].flags = 0 ==
     //     SetPairFlags(GetPairIndex(), 0) -- the LINK0 slot, proving the >>1 in
     //     GetPairIndex and the *2 in SetPairFlags.
-    // Method NAMES and shapes are the DWARF's; member spellings stay this header's
-    // (the DWARF-name mapping is the banner above: miData == `flags`, mpHeads ==
-    // `m_linkLists`, ... -- the standing no-rename rule).
-    // ⚠️ Cursor width: the DWARF types m_cur uint32_t with (u32)-1 as the end sentinel; the
-    // console's compare is `cmpwi cur, -1`. s32 here, matching this header's miNext/-1
-    // convention -- value-identical.
+    // The all-ones cursor marks the end of a bucket.
     // -------------------------------------------------------------------------------------
     struct LinkIterator
     {
-        LinkIterator(PairSet* lpPairSet, s32 liCur) : mpPairSet(lpPairSet), miCur(liCur) {}
+        LinkIterator(PairSet* lpPairSet, u32 luCur) : mpPairSet(lpPairSet), muCur(luCur) {}
 
         // DWARF :166 -- the pair this link belongs to (link indices are 2*pair / 2*pair+1).
-        s32 GetPairIndex() const { return miCur >> 1; }
+        u32 GetPairIndex() const { return muCur >> 1; }
 
         // DWARF :167 -- the OTHER part of the pair: the sibling link's filing bucket.
-        s32 GetOtherPartIndex() const { return mpPairSet->mpLinks[miCur ^ 1].miPart; }
+        u32 GetOtherPartIndex() const { return mpPairSet->mpLinks[muCur ^ 1u].partIndex; }
 
         // DWARF :171 -- chase the bucket's `next` thread.
-        LinkIterator& operator++() { miCur = mpPairSet->mpLinks[miCur].miNext; return *this; }
+        LinkIterator& operator++() { muCur = mpPairSet->mpLinks[muCur].next; return *this; }
 
         // DWARF :172 -- the console compares BOTH fields (see the banner).
         bool operator!=(const LinkIterator& lrOther) const
-        { return mpPairSet != lrOther.mpPairSet || miCur != lrOther.miCur; }
+        { return mpPairSet != lrOther.mpPairSet || muCur != lrOther.muCur; }
 
     private:
         PairSet* mpPairSet;   // DWARF :184 m_pairSet
-        s32      miCur;       // DWARF :185 m_cur (link index; -1 = end)
+        u32      muCur;       // DWARF :185 m_cur (link index)
     };
 
     // DWARF :103 / :104. Begin = the part's bucket head; end = {this, -1}.
-    LinkIterator PartLinksBegin(s32 liPart) { return LinkIterator(this, mpHeads[liPart]); }
-    LinkIterator PartLinksEnd()             { return LinkIterator(this, -1); }
+    LinkIterator PartLinksBegin(u32 luPart) { return LinkIterator(this, mpHeads[luPart]); }
+    LinkIterator PartLinksEnd()            { return LinkIterator(this, KU_INVALID_INDEX); }
 
     // DWARF :92 -- write the pair's payload/flags word (carried on link0; see the Link
     // banner). The closure's only use stores 0.
-    void SetPairFlags(s32 liPairIndex, u32 luFlags) { mpLinks[2 * liPairIndex].miData = static_cast<s32>(luFlags); }
+    void SetPairFlags(u32 luPairIndex, u32 luFlags) { mpLinks[2u * luPairIndex].flags = luFlags; }
 
 private:
+    void InitializeLink(u32 luLinkIndex, u32 luPart); // @ 0x82BC6E60
+    void ReleaseLink(u32 luLinkIndex);                // @ 0x82BC6EB8
+
     Link* mpLinks;      // +0x00  base of the 2*miMaxPairs link array (points into this block)
-    s32*  mpHeads;      // +0x04  base of the per-part bucket-head index array (-1 = empty)
+    u32*  mpHeads;      // +0x04  base of the per-part bucket-head index array
     u32   miMaxPairs;   // +0x08  pair pool capacity
     u32   miNumParts;   // +0x0C  number of parts (mpHeads length)
-    s32   miFreeList;   // +0x10  free pair-list head index (-1 = pool full)
+    u32   muFreeList;   // +0x10  free pair-list head index
 };
 
 } // namespace physics
