@@ -100,18 +100,18 @@ void ReOrderRwAudioCoreToWave(f32 *pDst, void *pSampleBuffer, s32 numChannels,
 // are memset to zero; centre-channel folds scale the gain by 0.707 (flt_82011C14 ==
 // 0.70700002f). All (r3 dst array, r4 src array, [f1 gain,] r5 dead, r6 count).
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite1x4(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6ACA0
-void ReChannelGainWrite1x6(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6AD10
-void ReChannelGainWrite2x4(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6ADA8
-void ReChannelGainWrite2x6(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6AE08
+void ReChannelGainWrite1x4(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6ACA0
+void ReChannelGainWrite1x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6AD10
+void ReChannelGainWrite2x4(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6ADA8
+void ReChannelGainWrite2x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6AE08
 void ReChannelGainWrite4x1(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6AE88
 void ReChannelGainWrite4x2(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6AEE8
-void ReChannelGainWrite4x4(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6AF50
-void ReChannelGainWrite4x6(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6AFB0
+void ReChannelGainWrite4x4(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6AF50
+void ReChannelGainWrite4x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6AFB0
 void ReChannelGainWrite6x1(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6B030
 void ReChannelGainWrite6x2(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6B0A0
 void ReChannelGainWrite6x4(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6B148
-void ReChannelGainWrite6x6(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6B1E8
+void ReChannelGainWrite6x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6B1E8
 
 // -------------------------------------------------------------------------------------
 // ReChannelGainWrite @0x82B6B268 -- the channel-remap dispatcher. Routes every

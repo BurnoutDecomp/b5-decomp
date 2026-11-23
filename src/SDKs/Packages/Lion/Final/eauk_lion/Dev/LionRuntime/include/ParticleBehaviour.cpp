@@ -230,28 +230,30 @@ void cParticleBehaviour::CompileBaseVariance()
 {
     sParticleBehaviourBaseVariancePack* lpPack = mBVCompiled.aData;
 
-    // Unconditional leading run (10 pairs): mass/life, pos, vel, acc.
-    lpPack[0].base     = mLifeBase;            // *(this+688)
-    lpPack[0].variance = mLifeVariance;        // *(this+692)
-    lpPack[1].base     = mPosBase.x;           // *(this+256)
-    lpPack[1].variance = mPosVariance.x;       // *(this+272)
-    lpPack[2].base     = mPosBase.y;           // *(this+260)
-    lpPack[2].variance = mPosVariance.y;       // *(this+276)
-    lpPack[3].base     = mPosBase.z;           // *(this+264)
-    lpPack[3].variance = mPosVariance.z;       // *(this+280)
-    lpPack[4].base     = mVelBase.x;           // *(this+400)
-    lpPack[4].variance = mVelVariance.x;       // *(this+416)
-    lpPack[5].base     = mVelBase.y;           // *(this+404)
-    lpPack[5].variance = mVelVariance.y;       // *(this+420)
-    lpPack[6].base     = mVelBase.z;           // *(this+408)
-    lpPack[6].variance = mVelVariance.z;       // *(this+424)
-    lpPack[7].base     = mAccBase.x;           // *(this+0)
-    lpPack[7].variance = mAccVariance.x;       // *(this+16)
-    lpPack[8].base     = mAccBase.y;           // *(this+4)
-    lpPack[8].variance = mAccVariance.y;       // *(this+20)
-    lpPack[9].base     = mAccBase.z;           // *(this+8)
-    lpPack[9].variance = mAccVariance.z;       // *(this+24)
-    lpPack += 10;
+    // Pack the lifetime pair before the three vector groups.
+    lpPack->base     = mLifeBase;            // *(this+688)
+    lpPack->variance = mLifeVariance;        // *(this+692)
+    ++lpPack;
+
+    lpPack[0].base     = mPosBase.x;           // *(this+256)
+    lpPack[0].variance = mPosVariance.x;       // *(this+272)
+    lpPack[1].base     = mPosBase.y;           // *(this+260)
+    lpPack[1].variance = mPosVariance.y;       // *(this+276)
+    lpPack[2].base     = mPosBase.z;           // *(this+264)
+    lpPack[2].variance = mPosVariance.z;       // *(this+280)
+    lpPack[3].base     = mVelBase.x;           // *(this+400)
+    lpPack[3].variance = mVelVariance.x;       // *(this+416)
+    lpPack[4].base     = mVelBase.y;           // *(this+404)
+    lpPack[4].variance = mVelVariance.y;       // *(this+420)
+    lpPack[5].base     = mVelBase.z;           // *(this+408)
+    lpPack[5].variance = mVelVariance.z;       // *(this+424)
+    lpPack[6].base     = mAccBase.x;           // *(this+0)
+    lpPack[6].variance = mAccVariance.x;       // *(this+16)
+    lpPack[7].base     = mAccBase.y;           // *(this+4)
+    lpPack[7].variance = mAccVariance.y;       // *(this+20)
+    lpPack[8].base     = mAccBase.z;           // *(this+8)
+    lpPack[8].variance = mAccVariance.z;       // *(this+24)
+    lpPack += 9;
 
     // E_BV_AXIS (0x10): three fixed (-1, 2) pairs.
     if ((mFlags & E_BV_AXIS) != 0)

@@ -19,11 +19,6 @@
 // EndianTwiddle steps the token array by sizeof(sLionMemberToken); members are
 // accessed by name, never by raw offset.
 //
-// NOTE: a minimal earlier stand-in for cLionTokenTable (with a nested TokenEntry
-// and only BuildHashes) lives in eauk_common/Common/ElfHash.h, owned by another
-// group. This header is the proper DWARF-backed home for the full type. The two
-// are never included into the same TU today, so there is no ODR clash. Flagged
-// for consolidation -- see dep_flags.
 // ============================================================================
 
 #include "types.hpp"
@@ -78,6 +73,8 @@ struct sLionMemberToken
 // LionTokeniser.h:138
 struct cLionTokenTable
 {
+    void BuildHashes();
+
     // void EndianTwiddle(void* apStruct) const: walk every token and byte-swap each
     // member of the struct image based at apStruct. Nested struct members (mType
     // E_LION_MEMBER_STRUCT) that re-appear at the same offset later in the table are

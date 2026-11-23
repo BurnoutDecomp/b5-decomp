@@ -181,20 +181,16 @@ namespace
     // then reconstruct the value through IntQuantiser::UnPack.
     void SmartBitStream::GetQuantisedInt(s32* lpiValue, s32 liMin, s32 liMax)
     {
-        // Inlined GetNumBits(liMin, liMax): bit_width(liMax - liMin), 0 when equal.
-        u32 luSpan    = static_cast<u32>(liMax) - static_cast<u32>(liMin);
-        s32 liNumBits = 0;
-        if (liMax != liMin)
-        {
-            do
-            {
-                luSpan >>= 1;
-                ++liNumBits;
-            }
-            while (luSpan);
-        }
-
-        u32 luPackedValue = static_cast<u32>(GetBits(liNumBits));
+        const u32 luPackedValue = static_cast<u32>(GetBits(IntQuantiser::GetNumBits(liMin, liMax)));
         IntQuantiser::UnPack(lpiValue, liMin, liMax, luPackedValue);
+    }
+
+    // ARTIST 0x828800F0. Return the quantised value directly for a Message field.
+    s32 SmartBitStream::GetQuantisedInt(s32 liMin, s32 liMax)
+    {
+        const u32 luPackedValue = static_cast<u32>(GetBits(IntQuantiser::GetNumBits(liMin, liMax)));
+        s32 liValue;
+        IntQuantiser::UnPack(&liValue, liMin, liMax, luPackedValue);
+        return liValue;
     }
 }

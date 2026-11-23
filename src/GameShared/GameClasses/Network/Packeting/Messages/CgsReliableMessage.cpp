@@ -38,13 +38,4 @@ namespace CgsNetwork
         return true;
     }
 
-    // Zero the reliable id (the inherited frame word) and chain MessageWithPlayerIDs,
-    // which zeroes both player ids and sizes the message through the base. The console
-    // folds this body with TestConnectionMessage::GetPackedMessageSize (one copy: three
-    // zero stores, then a tail call of Message::GetPackedMessageSize).
-    s32 ReliableMessage::GetPackedMessageSize()
-    {
-        mu16Frame = 0;
-        return MessageWithPlayerIDs::GetPackedMessageSize();
-    }
 }

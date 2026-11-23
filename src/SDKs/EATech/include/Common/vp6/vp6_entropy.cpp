@@ -1,5 +1,4 @@
-// On2 VP6 decoder: per-frame probability updates, coefficient scan order, block contexts and the
-// macroblock mode trees.
+// On2 VP6 decoder: per-frame probability updates, block contexts and macroblock mode trees.
 
 #include "SDKs/EATech/include/Common/vp6/vp6_decoder.h"
 
@@ -21,31 +20,6 @@ namespace
 
 extern "C"
 {
-
-// Scan order from the band of each coefficient (bands in order, raster order within a band), and
-// the end-of-block position each scan position implies.
-void BuildScanOrder(PB_INSTANCE* pbi, const unsigned char* ScanBands)
-{
-    pbi->ModifiedScanOrder[0] = 0;
-
-    unsigned int luScanPosition = 1;
-    for (unsigned int luBand = 0; luBand < 16; ++luBand)
-    {
-        for (unsigned int luCoeff = 1; luCoeff < 64; ++luCoeff)
-        {
-            if (ScanBands[luCoeff] == luBand)
-                pbi->ModifiedScanOrder[luScanPosition++] = static_cast<unsigned char>(luCoeff);
-        }
-    }
-
-    unsigned int luHighest = 0;
-    for (int liScanPosition = 0; liScanPosition < 64; ++liScanPosition)
-    {
-        if (pbi->ModifiedScanOrder[liScanPosition] > luHighest)
-            luHighest = pbi->ModifiedScanOrder[liScanPosition];
-        pbi->EobOffsetTable[liScanPosition] = static_cast<unsigned char>(luHighest + 1);
-    }
-}
 
 // Read the frame's coefficient probability updates. On a key frame a probability that is not
 // updated takes the last value read for the same node.

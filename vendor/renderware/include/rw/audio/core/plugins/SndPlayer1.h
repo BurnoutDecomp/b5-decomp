@@ -122,10 +122,6 @@ public:
         REQUESTSTATE_COMPLETE     = 4
     };
     // FREE and COMPLETE are dead; the three in between are live.
-    static bool IsRequestActive(u8 au8State)
-    {
-        return au8State != REQUESTSTATE_FREE && au8State != REQUESTSTATE_COMPLETE;
-    }
 
     enum FeedState
     {
@@ -240,7 +236,6 @@ public:
                           bool discontinuity);                         // @0x82BA0568
 
     int  Declick(AudioProcessContext *ctx);                            // @0x82B9C1C0
-    void AdvanceCurrentRequest();                                      // @0x82B9C2E8
 
     // The per-frame timer client the constructor registers.
     static void RwacTimerClient(void *apContext, f32 afTimeToNextCall); // @0x82BA6980
@@ -341,6 +336,13 @@ public:
     u8  mbTimerAdded;                                  // +0x1D0
 
 private:
+    void AdvanceCurrentRequest();                                      // @0x82B9C2E8
+    bool IsRequestActive(u8 au8State)
+    {
+        // The request record stores the state in one byte.
+        const RequestState leState = static_cast<RequestState>(au8State);
+        return leState != REQUESTSTATE_COMPLETE && leState != REQUESTSTATE_FREE;
+    }
     static int StopHandler(Command *apCommand);
     static int PlayHandler(Command *apCommand);
     static int ModifyStartTimeHandler(Command *apCommand);

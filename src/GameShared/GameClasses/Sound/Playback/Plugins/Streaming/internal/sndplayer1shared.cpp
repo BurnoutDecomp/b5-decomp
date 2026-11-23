@@ -51,36 +51,23 @@ namespace rw { namespace audio { namespace core {
     // seeds "SOUND\\STREAMS\\".
     const char* SndPlayer1_CgsStreamMod::spPathPrefix = 0;
 
-    SndPlayer1_CgsStreamMod* SndPlayer1_CgsStreamMod::AdvanceCurrentRequest()
+    void SndPlayer1_CgsStreamMod::AdvanceCurrentRequest()
     {
-        // Bump + wrap the current-request cursor.
-        u8 lu8Current = static_cast<u8>(mCurrentRequest + 1);
-        mCurrentRequest = lu8Current;
-        if (lu8Current == mMaxRequests)
-        {
-            lu8Current = 0;
+        ++mCurrentRequest;
+        if (mCurrentRequest == mMaxRequests)
             mCurrentRequest = 0;
-        }
 
+        const RequestInternal *lpRequest = &Request(mCurrentRequest);
         mCurrentRequestSamplesPlayed = 0;
-        mCurrentRequestNumSamples    = 0;
+        mCurrentRequestNumSamples = 0;
 
-        // The RequestInternal ring lives in the object's tail allocation at the
-        // runtime-seeded byte offset mRequestInternalOffset (console stride 32 ==
-        // sizeof(RequestInternal) there; host stride is the host sizeof).
-        const RequestInternal* lpEntry = reinterpret_cast<const RequestInternal*>(
-            reinterpret_cast<char*>(this) + mRequestInternalOffset
-            + lu8Current * sizeof(RequestInternal));
-
-        if (lpEntry->state != E_REQUESTSTATE_COMPLETE &&
-            lpEntry->state != E_REQUESTSTATE_FREE)
+        if (IsRequestActive(lpRequest->state))
         {
             mCurrentRequestSamplesPlayed = 0;
-            mCurrentRequestHandle        = lpEntry->requestHandle;   // lfs/stfs (float)
-            mCurrentRequestSampleRate    = lpEntry->sampleRate;      // lfs/stfs (float)
-            mCurrentRequestNumSamples    = lpEntry->numSamples;
+            mCurrentRequestHandle = lpRequest->requestHandle;
+            mCurrentRequestSampleRate = lpRequest->sampleRate;
+            mCurrentRequestNumSamples = lpRequest->numSamples;
         }
-        return this;
     }
 
 }}}
@@ -674,10 +661,9 @@ s32 SndPlayer1_CgsStreamMod::ModifyStartTimeHandler(Command * apCommand)
     {
         RequestInternal& request = self->Request(i);
         if (request.requestHandle == command->requestHandle &&
-            IsRequestActive(request.state))
+            self->IsRequestActive(request.state))
         {
-            if (!(request.startTime <=
-                  self->mpSystemUseGetSystemAccessor->mfSystemTime))
+            if (request.startTime > self->mpSystemUseGetSystemAccessor->mfSystemTime)
                 request.startTime = command->startTime;
             break;
         }
@@ -960,7 +946,7 @@ int SndPlayer1_CgsStreamMod::Process(
 
     RequestInternal* request = &self->Request(self->mCurrentRequest);
     self->mpLoadedDecoder = 0;
-    while (IsRequestActive(request->state) && request->numSamples == 0)
+    while (self->IsRequestActive(request->state) && request->numSamples == 0)
     {
         request->state = E_REQUESTSTATE_COMPLETE;
         self->AdvanceCurrentRequest();
@@ -974,7 +960,7 @@ int SndPlayer1_CgsStreamMod::Process(
     StackAllocator* stack = static_cast<StackAllocator*>(
         self->mpSystemUseGetSystemAccessor->mpObjectTable);
 
-    if (!IsRequestActive(request->state))
+    if (!self->IsRequestActive(request->state))
         goto finish;
     if (request->sampleRate != self->mPreviousSampleRate ||
         request->numChannels != self->mOutputChannels)
@@ -1068,7 +1054,7 @@ int SndPlayer1_CgsStreamMod::Process(
             carved = false;
             self->AdvanceCurrentRequest();
             request = &self->Request(self->mCurrentRequest);
-            if (IsRequestActive(request->state) && request->pDecoder)
+            if (self->IsRequestActive(request->state) && request->pDecoder)
             {
                 savedTop = stack->mpTop;
                 stack->mpTop -= AlignUp128(request->decoderInstanceSize);
@@ -1134,7 +1120,7 @@ void SndPlayer1_CgsStreamMod::RwacTimerClient(
     self->RequestCleanup();
     u8 index = self->mCurrentRequest;
     RequestInternal* request = &self->Request(index);
-    if (!IsRequestActive(request->state))
+    if (!self->IsRequestActive(request->state))
     {
         self->mAttribute[1].f64 = 0.0;
         self->mAttribute[2].f64 = 0.0;
@@ -1147,12 +1133,12 @@ void SndPlayer1_CgsStreamMod::RwacTimerClient(
     self->mAttribute[1].f64 =
         static_cast<f64>(self->mCurrentRequestSamplesPlayed) / self->mCurrentRequestSampleRate;
 
-    while (IsRequestActive(request->state) && request->numSamples == 0)
+    while (self->IsRequestActive(request->state) && request->numSamples == 0)
     {
         index = AdvanceRequestEquality(index, self->mMaxRequests);
         request = &self->Request(index);
     }
-    if (!IsRequestActive(request->state))
+    if (!self->IsRequestActive(request->state))
         return;
 
     RequestExternal* external = &self->mpRequestExternal[index];
@@ -1232,7 +1218,7 @@ void SndPlayer1_CgsStreamMod::RwacTimerClient(
 
     for (;;)
     {
-        if (!IsRequestActive(request->state) ||
+        if (!self->IsRequestActive(request->state) ||
             self->mFeedDesc[self->mNextFeedSlotToFill].feedState != 0)
             return;
         external = &self->mpRequestExternal[index];

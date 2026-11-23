@@ -198,7 +198,8 @@ namespace Thread
     // vendor eathread/eathread_futex.h (that header transitively defines a different
     // EA::Thread::MutexParameters than the X360-faithful one above, a C2011 collision).
     // The native CRITICAL_SECTION occupies the 32-byte EAThread platform span;
-    // lock bodies and XDK calls live out-of-line in BrnEAThreadX360.cpp.
+    // EAThread's Microsoft Futex path defines its hot lock methods inline.
+    // ARTIST FileHandle::Read calls the XDK primitives directly at 0x8264AF0C and 0x8264AF30.
     class Futex
     {
     public:
@@ -232,6 +233,21 @@ namespace Thread
         Futex(const Futex&);
         Futex& operator=(const Futex&);
     };
+
+    inline bool Futex::TryLock()
+    {
+        return TryEnterCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(mCRITICAL_SECTION)) != 0;
+    }
+
+    inline void Futex::Lock()
+    {
+        EnterCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(mCRITICAL_SECTION));
+    }
+
+    inline void Futex::Unlock()
+    {
+        LeaveCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(mCRITICAL_SECTION));
+    }
 
     CGS_STATIC_ASSERT((sizeof(Futex) == 32), "ARTIST Futex platform span");
     CGS_STATIC_ASSERT((__alignof(Futex) == 8), "ARTIST Futex native alignment");

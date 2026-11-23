@@ -133,7 +133,7 @@ void ICEAuthor::SaveTake(ICETakeData* lpTakeData)
     rw::core::stdc::Snprintf(lacGuid, 32, "%d", liGuid);
 
     // Emit the opening tag, the take body, then flush/close the text sink.
-    mpFileHandler->FilePrintf("<TAKE name=\"%s\" guid=\"%s\">", lpTakeData->GetName(), lacGuid);
+    mpFileHandler->FileOpen(lpTakeData->GetName(), lacGuid);
     lpTakeData->SaveData(mpFileHandler, 0);
     mpFileHandler->FileClose();
 }

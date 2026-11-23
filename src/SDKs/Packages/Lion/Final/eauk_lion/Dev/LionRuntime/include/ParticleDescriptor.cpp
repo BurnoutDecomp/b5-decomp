@@ -76,15 +76,16 @@ cParticleDescriptor::BucketType cParticleDescriptor::GetRequiredBucketType() con
 // ----------------------------------------------------------------------------
 namespace
 {
-    inline void SwapSerialisedWord(void* apField)
+    template <class Word>
+    inline void SwapSerialisedWord(Word* apField)
     {
-        u8* lp = static_cast<u8*>(apField);
+        const u8* lp = reinterpret_cast<const u8*>(apField);
         const u8 lb0 = lp[0];
         const u8 lb1 = lp[1];
         const u8 lb2 = lp[2];
         const u8 lb3 = lp[3];
         const u32 luSwapped = (((((static_cast<u32>(lb0) << 8) | lb1) << 8) | lb2) << 8) | lb3;
-        *reinterpret_cast<u32*>(lp) = luSwapped;
+        *apField = static_cast<Word>(luSwapped);
     }
 }
 

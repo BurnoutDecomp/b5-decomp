@@ -15,11 +15,6 @@
 
 #include "SDKs/EATech/eathread/BrnEAThreadX360.h"
 
-// The X360 dynamic-thread-handle table is the already-recovered sibling type.
-// IDA labels it EA::Thread::DynamicThreadArray, but the recovered home placed it
-// at top-level ::DynamicThreadArray with the single-base (this) access the
-// binary uses. We drive a single static instance, matching the binary's fixed
-// global &unk_8324FF10.
 #include "SDKs/EATech/eathread/eathread_pc_dynamicthreadarray.h"
 
 namespace
@@ -29,7 +24,7 @@ namespace
     DWORD gdwThreadHandleTls = TLS_OUT_OF_INDEXES;
 
     // X360: &unk_8324FF10 -- the one DynamicThreadArray instance the facade uses.
-    DynamicThreadArray gThreadHandleTable;
+    EA::Thread::DynamicThreadArray gThreadHandleTable;
 
     // ARTIST 0x82C73A00/0x82C75A40: initialise the global handle table and
     // its critical section before threads start, then close live handles at exit.
@@ -342,21 +337,6 @@ namespace Thread
     Futex::~Futex()
     {
         DeleteCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(mCRITICAL_SECTION));
-    }
-
-    bool Futex::TryLock()
-    {
-        return TryEnterCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(mCRITICAL_SECTION)) != 0;
-    }
-
-    void Futex::Lock()
-    {
-        EnterCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(mCRITICAL_SECTION));
-    }
-
-    void Futex::Unlock()
-    {
-        LeaveCriticalSection(reinterpret_cast<CRITICAL_SECTION*>(mCRITICAL_SECTION));
     }
 
     // ---- EA::Thread::Thread (this TU) --------------------------------------

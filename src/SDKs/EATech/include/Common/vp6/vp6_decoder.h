@@ -511,8 +511,10 @@ inline unsigned int Vp6Slw(unsigned int luValue, unsigned int luShift)
 // Big-endian 32-bit load from the bitstream.
 inline unsigned int Vp6ReadBigEndian32(const unsigned char* lpBytes)
 {
-    return (static_cast<unsigned int>(lpBytes[0]) << 24) | (static_cast<unsigned int>(lpBytes[1]) << 16) |
-           (static_cast<unsigned int>(lpBytes[2]) << 8) | static_cast<unsigned int>(lpBytes[3]);
+    unsigned int luValue = lpBytes[0];
+    luValue = (luValue << 8) + lpBytes[1];
+    luValue = (luValue << 8) + lpBytes[2];
+    return (luValue << 8) + lpBytes[3];
 }
 
 #endif // VP6_DECODER_H

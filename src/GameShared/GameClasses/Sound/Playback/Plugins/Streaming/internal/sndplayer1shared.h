@@ -130,10 +130,6 @@ public:
         E_REQUESTSTATE_FEEDCOMPLETE = 3,
         E_REQUESTSTATE_COMPLETE     = 4
     };
-    static bool IsRequestActive(u8 au8State)
-    {
-        return au8State != E_REQUESTSTATE_FREE && au8State != E_REQUESTSTATE_COMPLETE;
-    }
 
     // DWARF StreamState -- the streaming read machine in RwacTimerClient.
     enum EStreamState
@@ -193,10 +189,6 @@ public:
     static int Process(SndPlayer1_CgsStreamMod *apSelf, Mixer *apMixer,
                        bool abDiscontinuity);
     static void RwacTimerClient(void *apContext, f32 afTimeToNextCall);
-
-    // @ 0x8268CD20. Advance the current-request cursor around the ring and cache
-    // the new current request's parameters (if it is still active).
-    SndPlayer1_CgsStreamMod* AdvanceCurrentRequest();
 
     // @ 0x8268FE88. Return the plugin timer's tick counter (`*(this+0x50)` ==
     // mTimerHandle.mCpuTicks by name).
@@ -298,6 +290,15 @@ public:
     u8               mTimerAdded;                            // +0x187
 
 private:
+    // @ 0x8268CD20. Advance the current-request cursor around the ring and cache
+    // the new current request's parameters (if it is still active).
+    void AdvanceCurrentRequest();
+    bool IsRequestActive(u8 au8State)
+    {
+        // The request record stores the state in one byte.
+        const ERequestState leState = static_cast<ERequestState>(au8State);
+        return leState != E_REQUESTSTATE_COMPLETE && leState != E_REQUESTSTATE_FREE;
+    }
     bool WaitForStartTime(Mixer *ctx, f64 adStartTime, u32 *apuSilence); // @0x8268CAF8
     bool GetFeedSlot(s32 *apiSlot);                                      // @0x826A4348
     void UnpackHeader(u32 auRequestIndex, void *apPacked);                // @0x8268C990

@@ -188,40 +188,12 @@ namespace CgsNetwork
         lpMatrix->zAxis.mV.z = lfCosYaw * lfCosPitch;
     }
 
-    // ---- sub_828800F0 (quantised-int unpack helper) ----------------------------
-    // Read one quantised int in [liMin, liMax] back out of the bitstream: derive
-    // the field's bit width as bit_width(liMax - liMin) -- the GetNumBits formula
-    // the X360 inlines here (no call: it shifts (max-min) right to zero
-    // and counts the shifts) -- read that many bits via BitStream::GetBits, then
-    // hand the packed offset to IntQuantiser::UnPack to fold it back onto liMin and
-    // clamp. Returns the reconstructed value.
-    static s32 UnPackQuantisedInt(BitStream* lpStream, s32 liMin, s32 liMax)
-    {
-        // Inlined GetNumBits(liMin, liMax): count the right-shifts of (max-min).
-        u32 luSpan   = static_cast<u32>(liMax) - static_cast<u32>(liMin);
-        s32 liNumBits = 0;
-        if (liMax != liMin)
-        {
-            do
-            {
-                luSpan >>= 1;
-                ++liNumBits;
-            }
-            while (luSpan);
-        }
-
-        const u32 luPacked = static_cast<u32>(lpStream->GetBits(liNumBits));
-        s32 liValue = 0;
-        IntQuantiser::UnPack(&liValue, liMin, liMax, luPacked);
-        return liValue;
-    }
-
     // ---- quantised-integer field primitives --------------------------------------
     // Every integer PackOrUnpack overload has the same shape: the lifecycle word picks
     // the direction. Packing (0) quantises the widened field into [liMin, liMax] with
     // IntQuantiser::Pack and appends the reported number of bits (a full stream reports
     // KX_PACK_FAILED_NO_SPACE); unpacking (1) reads the value back through the
-    // quantised-int reader above and narrows it into the field; any other state fires
+    // SmartBitStream quantised-int reader and narrows it into the field; any other state fires
     // the "called without telling it which it is doing" assert and reports success.
     // The overloads differ only in the field width and the widening (sign- or
     // zero-extension) of the value handed to the quantiser.
@@ -240,7 +212,7 @@ namespace CgsNetwork
 
         if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)
         {
-            *lpi8Field = static_cast<s8>(UnPackQuantisedInt(&mBitstream, liMin, liMax));
+            *lpi8Field = static_cast<s8>(mBitstream.GetQuantisedInt(liMin, liMax));
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
@@ -264,7 +236,7 @@ namespace CgsNetwork
 
         if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)
         {
-            *lpu8Field = static_cast<u8>(UnPackQuantisedInt(&mBitstream, liMin, liMax));
+            *lpu8Field = static_cast<u8>(mBitstream.GetQuantisedInt(liMin, liMax));
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
@@ -289,7 +261,7 @@ namespace CgsNetwork
 
         if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
         {
-            *lps16Field = static_cast<s16>(UnPackQuantisedInt(&lpMessage->mBitstream, liMin, liMax));
+            *lps16Field = static_cast<s16>(lpMessage->mBitstream.GetQuantisedInt(liMin, liMax));
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
@@ -311,7 +283,7 @@ namespace CgsNetwork
 
         if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
         {
-            *lpu16Field = static_cast<u16>(UnPackQuantisedInt(&lpMessage->mBitstream, liMin, liMax));
+            *lpu16Field = static_cast<u16>(lpMessage->mBitstream.GetQuantisedInt(liMin, liMax));
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
@@ -335,7 +307,7 @@ namespace CgsNetwork
 
         if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)
         {
-            *lpiField = UnPackQuantisedInt(&mBitstream, liMin, liMax);
+            *lpiField = mBitstream.GetQuantisedInt(liMin, liMax);
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
@@ -365,7 +337,7 @@ namespace CgsNetwork
 
         if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
         {
-            *lpu32Field = static_cast<u32>(UnPackQuantisedInt(&lpMessage->mBitstream, liMin, liMax));
+            *lpu32Field = static_cast<u32>(lpMessage->mBitstream.GetQuantisedInt(liMin, liMax));
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
@@ -429,8 +401,8 @@ namespace CgsNetwork
 
         if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)
         {
-            const s32 liLow  = UnPackQuantisedInt(&mBitstream, KI_MIN_INT32, KI_MAX_INT32);
-            const s32 liHigh = UnPackQuantisedInt(&mBitstream, KI_MIN_INT32, KI_MAX_INT32);
+            const s32 liLow  = mBitstream.GetQuantisedInt(KI_MIN_INT32, KI_MAX_INT32);
+            const s32 liHigh = mBitstream.GetQuantisedInt(KI_MIN_INT32, KI_MAX_INT32);
             *lpu64Field = (static_cast<u64>(static_cast<u32>(liHigh)) << 32) | static_cast<u32>(liLow);
             CgsIDConvertToString(*lpu64Field, lacIDString);
             return KX_PACK_OR_UNPACK_SUCCESS;
@@ -609,13 +581,13 @@ namespace CgsNetwork
 
         if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
         {
-            BitStream* lpStream = &lpMessage->mBitstream;
-            const s32 liSecond = UnPackQuantisedInt(lpStream, 0, KI_MAX_SECOND);
-            const s32 liMinute = UnPackQuantisedInt(lpStream, 0, KI_MAX_MINUTE);
-            const s32 liHour   = UnPackQuantisedInt(lpStream, 0, KI_MAX_HOUR);
-            const s32 liDay    = UnPackQuantisedInt(lpStream, KI_MIN_DAY, KI_MAX_DAY);
-            const s32 liMonth  = UnPackQuantisedInt(lpStream, KI_MIN_MONTH, KI_MAX_MONTH);
-            const s32 liYear   = UnPackQuantisedInt(lpStream, 0, KI_MAX_YEAR);
+            SmartBitStream& lrStream = lpMessage->mBitstream;
+            const s32 liSecond = lrStream.GetQuantisedInt(0, KI_MAX_SECOND);
+            const s32 liMinute = lrStream.GetQuantisedInt(0, KI_MAX_MINUTE);
+            const s32 liHour   = lrStream.GetQuantisedInt(0, KI_MAX_HOUR);
+            const s32 liDay    = lrStream.GetQuantisedInt(KI_MIN_DAY, KI_MAX_DAY);
+            const s32 liMonth  = lrStream.GetQuantisedInt(KI_MIN_MONTH, KI_MAX_MONTH);
+            const s32 liYear   = lrStream.GetQuantisedInt(0, KI_MAX_YEAR);
 
             lpDateAndTime->SetSecond(liSecond);
             lpDateAndTime->SetMinute(liMinute);

@@ -1,3 +1,8 @@
+// XDK size optimization matches the compact loop and tests at ARTIST 0x82B42328.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include <xtl.h>
 #include "SDKs/EATech/eathread/eathread_pc_dynamicthreadarray.h"
 #include "eathread/eathread.h"
@@ -8,7 +13,7 @@
 //
 // X360 NOTE: unlike the modern upstream copy, this build does NOT call
 // Initialize() first -- it assumes the critical section is already constructed.
-void DynamicThreadArray::CheckDynamicThreadArray(bool bCloseAll)
+void EA::Thread::DynamicThreadArray::CheckDynamicThreadArray(bool bCloseAll)
 {
     EnterCriticalSection(&mCriticalSection);
 
@@ -38,7 +43,7 @@ void DynamicThreadArray::CheckDynamicThreadArray(bool bCloseAll)
 // Guarded by mCriticalSection. A null hThread is a no-op.
 //
 // X360 NOTE: this build does NOT call Initialize() first (see class comment).
-void DynamicThreadArray::AddDynamicThreadHandle(HANDLE hThread, bool bAdd)
+void EA::Thread::DynamicThreadArray::AddDynamicThreadHandle(HANDLE hThread, bool bAdd)
 {
     if (hThread)
     {

@@ -79,7 +79,7 @@ void FilterBlock1dBil_8(unsigned char* SrcPtr, unsigned char* OutputPtr, unsigne
                         unsigned int PixelStep, unsigned int OutputHeight,
                         unsigned int OutputWidth, const int* VpFilter)
 {
-    for (; OutputHeight != 0; --OutputHeight)
+    for (unsigned int luRow = 0; luRow < OutputHeight; ++luRow)
     {
         for (unsigned int luColumn = 0; luColumn < OutputWidth; ++luColumn)
         {
@@ -115,7 +115,8 @@ void FilterBlock2dBil_SecondPass_8(int* SrcPtr, unsigned char* OutputPtr, unsign
 void FilterBlock2dBil_8(unsigned char* SrcPtr, unsigned char* OutputPtr, unsigned int SrcPixelsPerLine,
                         const int* HFilter, const int* VFilter)
 {
-    int laIntermediate[9 * 8];
+    // The vendor PDB describes the intermediate as an 88-element int array.
+    int laIntermediate[11 * 8];
 
     FilterBlock2dBil_FirstPass(SrcPtr, laIntermediate, SrcPixelsPerLine, 1, 9, 8, HFilter);
     FilterBlock2dBil_SecondPass_8(laIntermediate, OutputPtr, 8, 8, 8, 8, VFilter);
@@ -126,31 +127,32 @@ void FilterBlock2dBil_8(unsigned char* SrcPtr, unsigned char* OutputPtr, unsigne
 void FilterBlockBil_8_C(unsigned char* ReconPtr1, unsigned char* ReconPtr2, unsigned char* ReconRefPtr,
                         unsigned int PixelsPerLine, int ModX, int ModY)
 {
-    unsigned char* lpSrc = ReconPtr1;
     ptrdiff_t liDiff = ReconPtr2 - ReconPtr1;
     if (liDiff < 0)
     {
-        lpSrc = ReconPtr2;
-        liDiff = ReconPtr1 - ReconPtr2;
+        unsigned char* lpOriginalFirst = ReconPtr1;
+        ReconPtr1 = ReconPtr2;
+        ReconPtr2 = lpOriginalFirst;
+        liDiff = ReconPtr2 - ReconPtr1;
     }
 
     const ptrdiff_t liStride = static_cast<int>(PixelsPerLine);
 
     if (liDiff == 1)
     {
-        FilterBlock1dBil_8(lpSrc, ReconRefPtr, PixelsPerLine, 1, 8, 8, VP6_BilinearFilters[ModX]);
+        FilterBlock1dBil_8(ReconPtr1, ReconRefPtr, PixelsPerLine, 1, 8, 8, VP6_BilinearFilters[ModX]);
     }
     else if (liDiff == liStride)
     {
-        FilterBlock1dBil_8(lpSrc, ReconRefPtr, PixelsPerLine, PixelsPerLine, 8, 8, VP6_BilinearFilters[ModY]);
+        FilterBlock1dBil_8(ReconPtr1, ReconRefPtr, PixelsPerLine, PixelsPerLine, 8, 8, VP6_BilinearFilters[ModY]);
     }
     else if (liDiff == liStride - 1)
     {
-        FilterBlock2dBil_8(lpSrc - 1, ReconRefPtr, PixelsPerLine, VP6_BilinearFilters[ModX], VP6_BilinearFilters[ModY]);
+        FilterBlock2dBil_8(ReconPtr1 - 1, ReconRefPtr, PixelsPerLine, VP6_BilinearFilters[ModX], VP6_BilinearFilters[ModY]);
     }
     else if (liDiff == liStride + 1)
     {
-        FilterBlock2dBil_8(lpSrc, ReconRefPtr, PixelsPerLine, VP6_BilinearFilters[ModX], VP6_BilinearFilters[ModY]);
+        FilterBlock2dBil_8(ReconPtr1, ReconRefPtr, PixelsPerLine, VP6_BilinearFilters[ModX], VP6_BilinearFilters[ModY]);
     }
 }
 

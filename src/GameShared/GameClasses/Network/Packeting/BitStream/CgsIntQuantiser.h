@@ -26,7 +26,18 @@ namespace CgsNetwork
                          u32* lpuPackedValue, s32* lpiNumBitsUsed);
         static void UnPack(s32* lpiValue, s32 liMinValue, s32 liMaxValue,
                            u32 luPackedValue);
-        static s32  GetNumBits(s32 liMinValue, s32 liMaxValue);
+        // ARTIST 0x82880114 treats an unsigned span below one as exhausted.
+        static s32 GetNumBits(s32 liMinValue, s32 liMaxValue)
+        {
+            u32 luSpan = static_cast<u32>(liMaxValue) - static_cast<u32>(liMinValue);
+            s32 liNumBits = 0;
+            while (luSpan >= 1)
+            {
+                luSpan >>= 1;
+                ++liNumBits;
+            }
+            return liNumBits;
+        }
         static s32  PackAndUnPackTest(s32 liValue, s32 liMinValue, s32 liMaxValue);
     };
 }

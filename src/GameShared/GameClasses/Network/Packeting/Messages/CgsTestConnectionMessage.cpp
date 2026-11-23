@@ -3,19 +3,11 @@
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsTestConnectionMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
-// CgsNetwork::TestConnectionMessage: GetPackedMessageSize, PrepareForSend,
-// PackOrUnpack.
+// CgsNetwork::TestConnectionMessage: PrepareForSend and PackOrUnpack.
 // (GetName is inline in the header.)
 
 namespace CgsNetwork
 {
-    // The console folds this with ReliableMessage::GetPackedMessageSize: the same three
-    // zero stores (frame, sending id, receiving id) and a tail call of the base size.
-    s32 TestConnectionMessage::GetPackedMessageSize()
-    {
-        return ReliableMessage::GetPackedMessageSize();
-    }
-
     // Stamp a reliable test-connection message (message type 4) for lu16Frame. The
     // console first writes "Preparing TestConnectionMessage\n" to the global debug-print
     // stream; that stream has no home in the tree, so the log line is dropped.

@@ -18,16 +18,16 @@ void VP6_StartDecode(BOOL_CODER* br, const unsigned char* source)
     br->lowvalue = 0;
     br->range = 255;
     br->count = 8;
-    br->pos = 4;
     br->value = Vp6ReadBigEndian32(source);
+    br->pos = 4;
 }
 
 void InitHeaderBuffer(HEADER_BUFFER* Header, const unsigned char* Buffer)
 {
     Header->buffer = Buffer;
+    Header->value = Vp6ReadBigEndian32(Buffer);
     Header->bits_available = 32;
     Header->pos = 4;
-    Header->value = Vp6ReadBigEndian32(Buffer);
 }
 
 // Read BitsToRead (up to 32) bits, most significant first.

@@ -1,7 +1,7 @@
 // ============================================================================
 // SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionTokeniser.cpp
 //
-// sLionMemberToken / cLionTokenTable EndianTwiddle implementation.
+// Lion token hashing and byte-order conversion.
 // Reconstructed from the DecFIGS DWARF hints + the X360 asm (asm is authority for
 // the per-type swap widths and the struct-token dedup logic). Members are
 // accessed by name; byte-swaps are written as clean reads/writes, not the X360's
@@ -9,6 +9,7 @@
 // ============================================================================
 
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionTokeniser.h"
+#include "SDKs/Packages/Lion/Final/eauk_common/Common/ElfHash.h"
 
 namespace
 {
@@ -129,5 +130,17 @@ void cLionTokenTable::EndianTwiddle(void* apStruct) const
         {
             lpToken->EndianTwiddle(apStruct);
         }
+    }
+}
+
+// cLionTokenTable::BuildHashes @ 0x82908D98
+void cLionTokenTable::BuildHashes()
+{
+    for (sLionMemberToken* lpToken = mpTokens; lpToken->mType != E_LION_MEMBER_NONE; ++lpToken)
+    {
+        if (lpToken->mpString)
+            lpToken->mHash = ELFHASH::BuildHash(lpToken->mpString, 0);
+        else
+            lpToken->mHash = 0;
     }
 }

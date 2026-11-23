@@ -12,8 +12,6 @@
 //      the count of right-shifts it takes to drive (max - min) to zero, i.e.
 //      bit_width(max - min); 0 when max == min. The X360 inlines this
 //      into the quantised-int unpack helper @0x828800F0
-//        v8 = max - min; v7 = 0; if (max != min) { do { v8 >>= 1; ++v7; } while (v8); }
-//      so the loop here matches that inlined arithmetic exactly.
 //   CgsNetwork::IntQuantiser::Pack -- the asm-confirmed inverse of UnPack: clamp
 //      value into [min,max], emit the unsigned offset (clamp(value) - min) and the
 //      bit width GetNumBits(min,max) reports. The clamp is the Min/Max pair the
@@ -21,26 +19,6 @@
 
 namespace CgsNetwork
 {
-    // ---- GetNumBits ------------------------------------------------------------
-    // Number of bits needed to hold the range span: shift (max - min) right until
-    // it reaches zero and count the shifts. Inlined @0x828800F0 (the quantised-int
-    // unpack helper) as the bit count fed to BitStream::GetBits.
-    s32 IntQuantiser::GetNumBits(s32 liMinValue, s32 liMaxValue)
-    {
-        u32 luSpan   = static_cast<u32>(liMaxValue) - static_cast<u32>(liMinValue);
-        s32 liNumBits = 0;
-        if (liMaxValue != liMinValue)
-        {
-            do
-            {
-                luSpan >>= 1;
-                ++liNumBits;
-            }
-            while (luSpan);
-        }
-        return liNumBits;
-    }
-
     // ---- Pack @ 0x82871568 -----------------------------------------------------
     // Inverse of UnPack: clamp the value into [min,max], store the unsigned offset
     // (clamped - min) as the packed value, and report GetNumBits(min,max) bits.

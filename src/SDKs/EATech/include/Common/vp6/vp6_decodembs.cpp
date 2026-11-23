@@ -85,10 +85,34 @@ extern "C"
 {
 
 #if defined(_XBOX) && defined(_MSC_VER)
-// The original VP6 macroblock unit keeps these converters separate from the
-// Huffman tree builders. XDK size mode reproduces the 0x82B59DD0 call boundaries.
+// The VP6 macroblock unit owns the scan order and probability converters.
+// XDK size mode preserves the scan loop and converter calls at 0x82B59AE0 and 0x82B59DD0.
 #pragma optimize("s", on)
 #endif
+
+// Scan order from the band of each coefficient (bands in order, raster order within a band), and
+// the end-of-block position each scan position implies.
+void BuildScanOrder(PB_INSTANCE* pbi, const unsigned char* ScanBands)
+{
+    unsigned int luScanPosition = 1;
+    pbi->ModifiedScanOrder[0] = 0;
+    for (unsigned int luBand = 0; luBand < 16; ++luBand)
+    {
+        for (unsigned int luCoeff = 1; luCoeff < 64; ++luCoeff)
+        {
+            if (ScanBands[luCoeff] == luBand)
+                pbi->ModifiedScanOrder[luScanPosition++] = static_cast<unsigned char>(luCoeff);
+        }
+    }
+
+    unsigned int luHighest = 0;
+    for (int liScanPosition = 0; liScanPosition < 64; ++liScanPosition)
+    {
+        if (pbi->ModifiedScanOrder[liScanPosition] > luHighest)
+            luHighest = pbi->ModifiedScanOrder[liScanPosition];
+        pbi->EobOffsetTable[liScanPosition] = static_cast<unsigned char>(luHighest + 1);
+    }
+}
 
 // Token frequencies (in 1/256) of the DCT token tree from its eleven node probabilities.
 void BoolTreeToHuffCodes(const unsigned char* BoolTreeProbs, unsigned int* HuffProbs)

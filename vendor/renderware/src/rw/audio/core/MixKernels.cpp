@@ -5,7 +5,7 @@
 // is authoritative for every store/coefficient. The LegacySrc reference carries only the
 // package's public headers (rwaudiocore 2.11.00) -- these kernels live in the library's
 // private channel TU, so each body below is grounded in the disassembly.
-//   CopyWithGain              @0x82B67200 -- VMX block kernel, lowered scalar
+//   CopyWithGain              @0x82B67200 -- VMX block kernel with scalar fallback
 //   CopyWithGainRamp          @0x82B67400 -- VMX ramp kernel, lowered scalar
 //   MixWithGain               @0x82B6A3F8 -- VMX block kernel, lowered scalar
 //   MixWithGainRamp           @0x82B6A568 -- VMX ramp kernel, lowered scalar
@@ -24,13 +24,14 @@
 // VMX lowering note (the committed Fir64::MultiplyAccumulate idiom): the X360 gives the
 // five block kernels a 128-byte-alignment test ((dst|src) & 0x7F, count & 0x3F) that
 // selects between a 32-float lvx128/vmulfp128-vmaddfp/stvx128 block loop and a scalar
-// fallback. Both paths compute the IDENTICAL per-sample product/accumulate (the vector
-// lanes replicate the scalar gain; the ramp kernels' lane vectors are gain + step*i,
-// derived below), so each is lowered to one faithful scalar loop -- the split selects
-// the block width, never the values.
+// fallback. CopyWithGain uses the native block operations. The other block kernels
+// still use scalar arithmetic.
 // =====================================================================================
 
 #include "rw/audio/core/MixKernels.h"
+
+#include <xtl.h>
+#include <vectorintrinsics.h>
 
 #include <cmath>   // std::sin / std::sqrt (the X360 CRT sin / fsqrts)
 #include <cstring> // std::memset / std::memcpy (the X360 XMemSet / XMemCpy)
@@ -119,15 +120,44 @@ const u8 gReChannelGainPairTable[48] = {                       // unk_8214B020
 // -------------------------------------------------------------------------------------
 // CopyWithGain @0x82B67200 -- pDst[i] = pSrc[i] * gain.
 //
-// X360: if ((dst|src) & 0x7F) or (count & 0x3F) take the scalar loop (lfsx/fmuls/stfs
-// over count samples); otherwise a dcbt/dcbz128-prefetched 32-float VMX block loop over
-// the same count (the branch guarantees count % 64 == 0 there). Both paths store
-// src[i] * gain to dst[i] for every i in [0, count) -- lowered to the one scalar loop.
+// The scalar path handles unaligned buffers or counts that are not multiples of 64.
+// The aligned path loads and multiplies a full 128-byte line before clearing and
+// storing the destination line.
 // -------------------------------------------------------------------------------------
 void CopyWithGain(f32 *pDst, const f32 *pSrc, f32 gain, s32 numSamples)
 {
-    for (s32 i = 0; i < numSamples; ++i)
-        pDst[i] = pSrc[i] * gain; // fmuls f0,f0,f1 / vmulfp128
+    if (numSamples <= 0)
+        return;
+
+    const uintptr_t buffers = reinterpret_cast<uintptr_t>(pDst)
+                            | reinterpret_cast<uintptr_t>(pSrc);
+    if ((buffers & 127u) != 0 || (numSamples & 63) != 0)
+    {
+        for (s32 i = 0; i < numSamples; ++i)
+            pDst[i] = pSrc[i] * gain;
+        return;
+    }
+
+    const __declspec(align(16)) f32 gains[4] = {gain, gain, gain, gain};
+    const __vector4 gainVector = __lvx(gains, 0);
+    const f32 *const end = pSrc + numSamples;
+    __dcbt(0, pSrc);
+    do
+    {
+        __vector4 samples[8] = {
+            __lvx(pSrc, 0x00), __lvx(pSrc, 0x10), __lvx(pSrc, 0x20), __lvx(pSrc, 0x30),
+            __lvx(pSrc, 0x40), __lvx(pSrc, 0x50), __lvx(pSrc, 0x60), __lvx(pSrc, 0x70)
+        };
+        pSrc += 32;
+        if (pSrc != end)
+            __dcbt(0, pSrc);
+        for (s32 i = 0; i < 8; ++i)
+            samples[i] = __vmulfp(gainVector, samples[i]);
+        __dcbz128(0, pDst);
+        for (s32 i = 0; i < 8; ++i)
+            __stvx(samples[i], pDst, 16 * i);
+        pDst += 32;
+    } while (pSrc != end);
 }
 
 // -------------------------------------------------------------------------------------
@@ -303,56 +333,56 @@ void ReOrderRwAudioCoreToWave(f32 *pDst, void *pSampleBuffer, s32 numChannels,
 // (both at gain * 0.707; the second CopyWithGain reuses f1, which the first call
 // preserves), rears zeroed.
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite1x4(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
+void ReChannelGainWrite1x4(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 {
     const f32 scaled = gain * KF_CHANNEL_FOLD; // fmuls f1, f1, flt_82011C14
     CopyWithGain(ppDst[0], ppSrc[0], scaled, numSamples);
     CopyWithGain(ppDst[1], ppSrc[0], scaled, numSamples); // f1 unchanged across the call
     const u32 bytes = static_cast<u32>(numSamples) << 2;
-    XMemSet(ppDst[2], 0, bytes);
-    XMemSet(ppDst[3], 0, bytes);
+    ::XMemSet(ppDst[2], 0, bytes);
+    ::XMemSet(ppDst[3], 0, bytes);
 }
 
 // -------------------------------------------------------------------------------------
 // ReChannelGainWrite1x6 @0x82B6AD10 -- mono -> 5.1: straight into the centre channel
 // (ch1, no fold gain), all other channels zeroed.
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite1x6(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
+void ReChannelGainWrite1x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 {
     CopyWithGain(ppDst[1], ppSrc[0], gain, numSamples);
     const u32 bytes = static_cast<u32>(numSamples) << 2;
-    XMemSet(ppDst[0], 0, bytes);
-    XMemSet(ppDst[2], 0, bytes);
-    XMemSet(ppDst[3], 0, bytes);
-    XMemSet(ppDst[4], 0, bytes);
-    XMemSet(ppDst[5], 0, bytes);
+    ::XMemSet(ppDst[0], 0, bytes);
+    ::XMemSet(ppDst[2], 0, bytes);
+    ::XMemSet(ppDst[3], 0, bytes);
+    ::XMemSet(ppDst[4], 0, bytes);
+    ::XMemSet(ppDst[5], 0, bytes);
 }
 
 // -------------------------------------------------------------------------------------
 // ReChannelGainWrite2x4 @0x82B6ADA8 -- stereo -> quad: L/R into fronts, rears zeroed.
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite2x4(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
+void ReChannelGainWrite2x4(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 {
     CopyWithGain(ppDst[0], ppSrc[0], gain, numSamples);
     CopyWithGain(ppDst[1], ppSrc[1], gain, numSamples);
     const u32 bytes = static_cast<u32>(numSamples) << 2;
-    XMemSet(ppDst[2], 0, bytes);
-    XMemSet(ppDst[3], 0, bytes);
+    ::XMemSet(ppDst[2], 0, bytes);
+    ::XMemSet(ppDst[3], 0, bytes);
 }
 
 // -------------------------------------------------------------------------------------
 // ReChannelGainWrite2x6 @0x82B6AE08 -- stereo -> 5.1: L -> FL (ch0), R -> FR (ch2);
 // centre/rears/LFE zeroed.
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite2x6(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
+void ReChannelGainWrite2x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 {
     CopyWithGain(ppDst[0], ppSrc[0], gain, numSamples);
     CopyWithGain(ppDst[2], ppSrc[1], gain, numSamples);
     const u32 bytes = static_cast<u32>(numSamples) << 2;
-    XMemSet(ppDst[1], 0, bytes);
-    XMemSet(ppDst[3], 0, bytes);
-    XMemSet(ppDst[4], 0, bytes);
-    XMemSet(ppDst[5], 0, bytes);
+    ::XMemSet(ppDst[1], 0, bytes);
+    ::XMemSet(ppDst[3], 0, bytes);
+    ::XMemSet(ppDst[4], 0, bytes);
+    ::XMemSet(ppDst[5], 0, bytes);
 }
 
 // -------------------------------------------------------------------------------------
@@ -383,7 +413,7 @@ void ReChannelGainWrite4x2(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
 // -------------------------------------------------------------------------------------
 // ReChannelGainWrite4x4 @0x82B6AF50 -- quad -> quad: four straight copies.
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite4x4(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
+void ReChannelGainWrite4x4(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 {
     CopyWithGain(ppDst[0], ppSrc[0], gain, numSamples);
     CopyWithGain(ppDst[1], ppSrc[1], gain, numSamples);
@@ -395,15 +425,15 @@ void ReChannelGainWrite4x4(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
 // ReChannelGainWrite4x6 @0x82B6AFB0 -- quad -> 5.1: FL -> ch0, FR -> ch2, BL -> ch3,
 // BR -> ch4; centre (ch1) and LFE (ch5) zeroed.
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite4x6(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
+void ReChannelGainWrite4x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 {
     CopyWithGain(ppDst[0], ppSrc[0], gain, numSamples);
     CopyWithGain(ppDst[2], ppSrc[1], gain, numSamples);
     CopyWithGain(ppDst[3], ppSrc[2], gain, numSamples);
     CopyWithGain(ppDst[4], ppSrc[3], gain, numSamples);
     const u32 bytes = static_cast<u32>(numSamples) << 2;
-    XMemSet(ppDst[1], 0, bytes);
-    XMemSet(ppDst[5], 0, bytes);
+    ::XMemSet(ppDst[1], 0, bytes);
+    ::XMemSet(ppDst[5], 0, bytes);
 }
 
 // -------------------------------------------------------------------------------------
@@ -442,7 +472,7 @@ void ReChannelGainWrite6x4(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
 // ReChannelGainWrite6x6 @0x82B6B1E8 -- 5.1 -> 5.1: six straight copies (channel 1
 // first, exactly as the asm orders them).
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite6x6(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
+void ReChannelGainWrite6x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 {
     CopyWithGain(ppDst[1], ppSrc[1], gain, numSamples);
     CopyWithGain(ppDst[0], ppSrc[0], gain, numSamples);

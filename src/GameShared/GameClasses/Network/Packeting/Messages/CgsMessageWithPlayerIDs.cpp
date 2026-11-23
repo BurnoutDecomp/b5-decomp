@@ -1,4 +1,6 @@
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessageWithPlayerIDs.h"
+#include "GameShared/GameClasses/Network/Packeting/Messages/CgsReliableMessage.h"
+#include "GameShared/GameClasses/Network/Packeting/Messages/CgsTestConnectionMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint
 
@@ -41,6 +43,19 @@ s32 MessageWithPlayerIDs::GetPackedMessageSize()
     mSendingPlayerID = 0;
     mRecvingPlayerID = 0;
     return Message::GetPackedMessageSize();
+}
+
+// The three size overrides share the CgsNetworkUnity compilation scope in
+// DecFIGS. The two derived bodies fold at ARTIST 0x828821F8.
+s32 ReliableMessage::GetPackedMessageSize()
+{
+    mu16Frame = 0;
+    return MessageWithPlayerIDs::GetPackedMessageSize();
+}
+
+s32 TestConnectionMessage::GetPackedMessageSize()
+{
+    return ReliableMessage::GetPackedMessageSize();
 }
 
 }

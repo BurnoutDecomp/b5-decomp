@@ -3,6 +3,8 @@
 
 #include "types.hpp"
 
+#include <cstdio>
+
 // ============================================================================
 // SDKs/Packages/ICE/ICEFile.hpp
 //
@@ -21,8 +23,7 @@
 //   private char macWriteBuffer[KI_WRITEBUFFER_SIZE]  (32768)
 //   Construct / Destruct / FileOpen / FileClose / FilePrintf / FilePrintfAtEnd
 //
-// This TU (ICEFile.cpp) reconstructs FileClose + FilePrintf; the remaining
-// methods are declaration-only here (their bodies are out of this TU's scope).
+// ICEFile.cpp owns FileClose and FilePrintf.
 // ============================================================================
 
 namespace ICE
@@ -44,7 +45,12 @@ namespace ICE
         void Construct();
         void Destruct();
 
-        ICEFileHandler* FileOpen(const char* lpcFilename, const char* lpcGuid);
+        // Start a fresh take in the write buffer. ARTIST inlines this at 0x82533BE0.
+        ICEFileHandler* FileOpen(const char* lpcFilename, const char* lpcGuid)
+        {
+            std::sprintf(macWriteBuffer, "<TAKE name=\"%s\" guid=\"%s\">", lpcFilename, lpcGuid);
+            return this;
+        }
 
         // Flush: append the closing </TAKE> tag and ship the accumulated buffer to
         // the GameExplorer tool over EA::GameTalk. Does NOT close any OS handle.

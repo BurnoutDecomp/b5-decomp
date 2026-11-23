@@ -455,27 +455,31 @@ int SndPlayer1::Declick(AudioProcessContext *ctx)
 // The two COUNT caches are cleared unconditionally; the handle and sample rate are
 // refreshed ONLY for an active slot and are deliberately left STALE otherwise.
 // -------------------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+// The ARTIST request stride and final boolean test use mulli and clrlwi. at 0x82B9C318 and 0x82B9C348.
+#pragma optimize("s", on)
+#endif
 void SndPlayer1::AdvanceCurrentRequest()
 {
-    // The increment is truncated to a byte BEFORE the wrap test, and the test is `==`,
-    // never `>=`.
-    mCurrentRequest = static_cast<u8>(mCurrentRequest + 1);
+    ++mCurrentRequest;
     if (mCurrentRequest == mMaxRequests)
         mCurrentRequest = 0;
 
-    RequestInternal *lpRequest = GetRequestInternal(mCurrentRequest);
-
+    const RequestInternal *lpRequest = GetRequestInternal(mCurrentRequest);
     mCurrentRequestSamplesPlayed = 0;
     mCurrentRequestNumSamples = 0;
 
-    if (!IsRequestActive(lpRequest->state))
-        return;   // the handle and sample-rate caches stay STALE
-
-    mCurrentRequestSamplesPlayed = 0;   // the binary stores it a second time
-    mCurrentRequestHandle     = lpRequest->requestHandle;
-    mCurrentRequestSampleRate = lpRequest->sampleRate;
-    mCurrentRequestNumSamples = lpRequest->numSamples;
+    if (IsRequestActive(lpRequest->state))
+    {
+        mCurrentRequestSamplesPlayed = 0;
+        mCurrentRequestHandle = lpRequest->requestHandle;
+        mCurrentRequestSampleRate = lpRequest->sampleRate;
+        mCurrentRequestNumSamples = lpRequest->numSamples;
+    }
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // -------------------------------------------------------------------------------------
 // GetFeedSlot @0x82BA0380 -- claim the next feed slot, if it is free.
@@ -884,6 +888,10 @@ int SndPlayer1::StopHandler(Command *rawCommand)
 #pragma optimize("", on)
 #endif
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// ARTIST tests the materialized state predicate with clrlwi. at 0x82BA041C.
+#pragma optimize("s", on)
+#endif
 int SndPlayer1::ModifyStartTimeHandler(Command *rawCommand)
 {
     const SndPlayer1ModifyStartTimeCommand *command =
@@ -894,14 +902,17 @@ int SndPlayer1::ModifyStartTimeHandler(Command *rawCommand)
     {
         RequestInternal *request = self->GetRequestInternal(index);
         if (request->requestHandle != command->requestHandle ||
-            !IsRequestActive(request->state))
+            !self->IsRequestActive(request->state))
             continue;
-        if (!(request->startTime <= self->mpSystemUseGetSystemAccessor->mfSystemTime))
+        if (request->startTime > self->mpSystemUseGetSystemAccessor->mfSystemTime)
             request->startTime = command->startTime;
         break;
     }
     return static_cast<int>(sizeof(SndPlayer1ModifyStartTimeCommand));
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 void SndPlayer1::RemoveRequest(u32 index)
 {
@@ -1369,7 +1380,7 @@ int SndPlayer1::Process(SndPlayer1 *self, AudioProcessContext *ctx, bool /*abUnu
     u8 *lpCarveNew = 0;    // doubles as the console's "a carve is outstanding" flag (r21)
     u8 *lpCarveSaved = 0;  // the saved scratch top (r22)
 
-    if (IsRequestActive(lpRequest->state))
+    if (self->IsRequestActive(lpRequest->state))
     {
         // === 3. ZERO-LENGTH RETIRE SCAN (0x82BA05C8..0x82BA0660) ===
         // Zero-length requests are RETIRED, not played. Termination is guaranteed: the ring
@@ -1379,7 +1390,7 @@ int SndPlayer1::Process(SndPlayer1 *self, AudioProcessContext *ctx, bool /*abUnu
             lpRequest->state = REQUESTSTATE_COMPLETE;
             self->AdvanceCurrentRequest();
             lpRequest = self->GetRequestInternal(self->mCurrentRequest);  // recomputed
-            if (!IsRequestActive(lpRequest->state))
+            if (!self->IsRequestActive(lpRequest->state))
                 goto epilogue;
         }
 
@@ -1522,7 +1533,7 @@ int SndPlayer1::Process(SndPlayer1 *self, AudioProcessContext *ctx, bool /*abUnu
                 self->AdvanceCurrentRequest();
                 RequestInternal *lpNext = self->GetRequestInternal(self->mCurrentRequest);
                 // The RE-CARVE is guarded where the first carve was not.
-                if (IsRequestActive(lpNext->state) && lpNext->pDecoder != 0)
+                if (self->IsRequestActive(lpNext->state) && lpNext->pDecoder != 0)
                 {
                     StackAllocator *lpStack = static_cast<StackAllocator *>(
                         self->mpSystemUseGetSystemAccessor->mpObjectTable);
@@ -1608,7 +1619,7 @@ void SndPlayer1::RwacTimerClient(void *apContext, f32 /*afTimeToNextCall*/)
     u8 index = self->mCurrentRequest;
     RequestInternal *request = self->GetRequestInternal(index);
     self->mAttribute[ATTRIBUTE_GETCURRENTREQUEST].f32 = self->mCurrentRequestHandle;
-    if (!IsRequestActive(request->state))
+    if (!self->IsRequestActive(request->state))
     {
         self->SetSampleLengthAttribute(0.0);
         self->SetSamplePositionAttribute(0.0);
@@ -1628,7 +1639,7 @@ void SndPlayer1::RwacTimerClient(void *apContext, f32 /*afTimeToNextCall*/)
         {
             index = AdvanceRequestIndex(index, zeroScanMaxRequests);
             request = self->GetRequestInternal(index);
-            if (!IsRequestActive(request->state))
+            if (!self->IsRequestActive(request->state))
                 return;
         }
         while (request->numSamples == 0);
@@ -1636,7 +1647,7 @@ void SndPlayer1::RwacTimerClient(void *apContext, f32 /*afTimeToNextCall*/)
 
     for (;;)
     {
-        if (!IsRequestActive(request->state))
+        if (!self->IsRequestActive(request->state))
             return;
         if (self->mFeedDesc[self->mNextFeedSlotToFill].feedState != FEEDSTATE_FREE)
             return;
