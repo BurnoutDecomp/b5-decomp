@@ -269,7 +269,7 @@ void ActiveRaceCarData::ExtractTags(ParticleEffectHelper& lHelper,
 void ActiveRaceCarData::Tick(CarState& lCarState, const BrnPhysics::Vehicle::RaceCarState& lRaceCarState,
                              RaceCarParticleEffectHelper& lHelper, bool lbEventIntroActive, bool lbIsPlayer)
 {
-    if ((mFlags & eARDFlagIsCrashing) != 0)
+    if (IsCrashing())
         mFlags = static_cast<u16>((mFlags & ~eARDFlagWasCrashing) | eARDFlagWasCrashing);
     else
         mFlags = static_cast<u16>(mFlags & ~eARDFlagWasCrashing);

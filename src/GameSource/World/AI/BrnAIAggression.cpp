@@ -653,8 +653,16 @@ Vector3 AIAggression::GetPositionNextToTarget(const AICar* lpTargetCar, const AI
 // is the same value with the zero case handled implicitly.
 f32 AIAggression::GetSeparation(const AICar* lpThisCar, const AICar* lpOtherCar)
 {
-    CGS_ASSERT(lpThisCar != NULL, "lpThisCar != NULL");
-    CGS_ASSERT(lpOtherCar != NULL, "lpOtherCar != NULL");
+    CGS_ASSERT(lpThisCar != NULL,
+        CgsDev::Assert::MessageAt(
+            "lpThisCar != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/AI/BrnAIAggression.cpp", 1660 /* ARTIST 0x82770F5C */));
+    CGS_ASSERT(lpOtherCar != NULL,
+        CgsDev::Assert::MessageAt(
+            "lpOtherCar != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/AI/BrnAIAggression.cpp", 1661 /* ARTIST 0x82770F80 */));
 
     const Vector3 lvDelta = lpOtherCar->GetPosition() - lpThisCar->GetPosition();
     return rw::math::vpu::Magnitude(lvDelta);

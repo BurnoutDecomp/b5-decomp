@@ -16,6 +16,7 @@
 //   flt_820147FC = 0x3F000000 = 0.5f
 // ============================================================================
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostStrategy.h"
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h"   // CgsCore::KF_MPH_TO_MPS (KF_ONCOMING_MINSPEED)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"   // EGameModeType
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleIOQueues.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
@@ -36,7 +37,10 @@ namespace BrnWorld
     const f32 KF_MIN_BOOST_TIME              = 1.25f;
 
     const f32 BoostStrategy::KF_ON_SHORTCUT = 30.0f;
-    const f32 BoostStrategy::KF_ONCOMING_MINSPEED = 0.0f;
+    // 33.5 mph. A dynamic initialiser in ARTIST (0x82C4C108: CgsCore::KF_MPH_TO_MPS at 0x82F31928
+    // times 33.5f at 0x82020A8C, stored to 0x82FAD618), so SetOncomingState reads it from storage.
+    // The slot is .bss in the image, which is why it was once read as 0.0f.
+    const f32 BoostStrategy::KF_ONCOMING_MINSPEED = CgsCore::KF_MPH_TO_MPS * 33.5f;
 
     namespace
     {
@@ -127,7 +131,8 @@ void BoostStrategy::UpdateChainExploits(Vector3 lCurrentPosition)
     }
 
     mbBoostingLastUpdate = mbBoosting;
-    if (mbBoosting)
+    // ARTIST tests the flag against true (`cmplwi r11, 1` / bnelr at 0x822A5D54).
+    if (mbBoosting == true)
         mfTotalDistanceTraveled =
             rw::math::vpu::Magnitude(mStartPosition - lCurrentPosition);
 }
@@ -254,8 +259,11 @@ void BoostStrategy::OnModeStart(BrnGameState::GameStateModuleIO::EGameModeType l
 
 void BoostStrategy::SetBoostRequested(bool lbBoostRequested) // 0x822A6090
 {
-    const bool lbAllowed = AreWeAllowedToBoost();
-    mbBoostRequested = lbAllowed && (lbBoostRequested || mbForceBoost);
+    // ARTIST 0x822A60C4: the || is materialised inside the allowed arm; the other arm stores false.
+    if (AreWeAllowedToBoost())
+        mbBoostRequested = lbBoostRequested || mbForceBoost;
+    else
+        mbBoostRequested = false;
 }
 
 void BoostStrategy::SetTailgating(bool lbTailgating,

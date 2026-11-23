@@ -836,8 +836,7 @@ namespace BrnTrafficIO
     {
         CgsModule::IOBuffer::Construct();      // stb 1, 0(this)
         mSceneInputInterface.Construct();      // +0x10
-        mResourceRequestInterface.Construct(); // +0xC7E60 (818784)
-        mResourceRequestInterface.Clear();     // the console's paired Clear
+        mResourceRequestInterface.Construct(); // +0xC7E60 (818784); the inline is the queue's Construct+Clear pair
     }
 
     // X360 0x8279F988: read-lock; return &mSceneInputInterface (this + 16).

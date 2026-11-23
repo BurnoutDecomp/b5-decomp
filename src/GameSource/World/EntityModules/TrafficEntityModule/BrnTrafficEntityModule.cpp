@@ -7973,7 +7973,8 @@ void TrafficEntityModule::UpdateParams_UpdateNeighbours(Param* lpParam,
                                                         const Section* lpSection,
                                                         const Hull* lpHull)
 {
-    CGS_ASSERT(lpParam != 0, "lpParam");
+    CGS_ASSERT(lpParam != 0,
+        CgsDev::Assert::MessageAt("lpParam", KAC_ARTIST_ASSERT_SOURCE, 10336 /* ARTIST 0x82708AF0 */));
 
     const u32 luRung = lpParam->muCurrentSegment;
 

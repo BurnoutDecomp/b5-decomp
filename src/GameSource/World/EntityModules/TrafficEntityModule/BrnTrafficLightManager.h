@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"  // the baked h:209 / h:217 tripwire lines
 #include "BrnCommonTypes.h"                          // Vector3, VecFloat (the corona renderers, L3 2026-09-27)
 #include "GameSource/Graphics/BrnCoronaManager.h"   // BrnCoronaManager::BrnSubmissionInterface (the same)
 
@@ -49,6 +50,12 @@ namespace BrnTraffic
 
     // The flat instance-index bound asserted by GetLightState (X360: cmplwi ..., 0x258).
     static const u32 KU_MAX_TRAFFIC_LIGHT_INSTANCES = 0x258;  // 600
+
+    // The header path both GetLightState tripwires cite (ARTIST string at 0x820C13E0). ARTIST bakes
+    // this header's line 209 into the non-const body and line 217 into the const one; this tree's
+    // header layout differs, so the two asserts carry those lines explicitly.
+    static const char KAC_TRAFFIC_LIGHT_MANAGER_H_FILE[] =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficLightManager.h";
 
     // Native light state: ARTIST uses 600 records of 8 bytes; DecFIGS names the type.
     struct TrafficLightRuntimeState
@@ -178,7 +185,9 @@ namespace BrnTraffic
         // at 0x8275DCF0 / 0x8275DDAC / 0x8275DF14), then this + 8 * luInstance.
         const TrafficLightRuntimeState* GetLightState(u32 luInstance) const
         {
-            CGS_ASSERT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES, "luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES");
+            CGS_ASSERT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES,
+                CgsDev::Assert::MessageAt("luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES",
+                    KAC_TRAFFIC_LIGHT_MANAGER_H_FILE, 217 /* ARTIST li r5,0xD9 at 0x8275DF20 */));
             return &maLightStates[luInstance];
         }
     };

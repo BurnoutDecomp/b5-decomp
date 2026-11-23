@@ -17,7 +17,8 @@
 //   add  r3, r11, this                            ; this + 8*instance
 //   return r3
 //
-// Reproduced with CGS_ASSERT (the baked d:\p4 path + line 209 are dropped per project policy).
+// The tripwire cites the header's line 209 (li r5,0xD1 at 0x8274F9CC): ARTIST compiled this body
+// from BrnTrafficLightManager.h inside the traffic unity TU, so the line is carried with MessageAt.
 // The pointer arithmetic is expressed through the named array member so there are no raw
 // offset casts: &maLightStates[instance] == (u8*)this + 8*instance (8 == sizeof record).
 
@@ -31,7 +32,8 @@ namespace BrnTraffic
 TrafficLightRuntimeState* TrafficLightManager::GetLightState(u32 luInstance)
 {
     CGS_ASSERT(luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES,
-               "luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES");
+        CgsDev::Assert::MessageAt("luInstance < KU_MAX_TRAFFIC_LIGHT_INSTANCES",
+            KAC_TRAFFIC_LIGHT_MANAGER_H_FILE, 209 /* ARTIST li r5,0xD1 at 0x8274F9CC */));
 
     return &maLightStates[luInstance];
 }
@@ -340,19 +342,12 @@ void TrafficLightManager::RenderLightsForHull(const Hull* lpHull, const TrafficL
     }
 }
 
-// -- RenderAllLightsToBeInStateForHull @ 0x8275DE50 -- DWARF .cpp:353 ---------------------------------------------
+// -- RenderAllLightsToBeInStateForHull @ 0x8275DE50 -- DWARF .cpp:353; the asserts sit on their ARTIST lines ---
 //   r4 lpHull (r26) ; r5 lpTrafficLightData (r24) ; r6 luActiveStates (r23) ; r7 lpCoronaSubmissionInterface (r22) ;
-//   v1 / v2 / v3 as above
-//   cmplwi lpHull ; bne              else the .cpp:359 (0x167) tripwire "lpHull"             0x8275DE98..0x8275DEBC
-//   cmplwi lpTrafficLightData ; bne  else the .cpp:360 (0x168) tripwire "lpTrafficLightData" 0x8275DEC0..0x8275DEE0
-//   luInstance from lhz +0xA while < lhz +0xC (re-read every pass):
-//     GetLightState(luInstance), the const inline (h:217, the 0xD9 tripwire)                0x8275DF14..0x8275DF30
-//     cmplwi lpLightState ; bne  else the .cpp:366 (0x16E) tripwire "lpLightState"          0x8275DF34..0x8275DF50
-//     IsSmashed() ; bne -> next light                                                       0x8275DF54..0x8275DF60
-//     RenderCoronasForInstance(luInstance, luActiveStates, lpCoronaSubmissionInterface, v1, v2, v3)
-//                                                                                            (bl 0x827571B8 at 0x8275DF80)
-// RenderTrafficLightCoronas passes 1 << E_TRAFFICLIGHTSTATE_GREEN (li r6, 4 at 0x8271F244): the lights of every
-// hull the player's simulation does not run show GREEN.
+//   v1 / v2 / v3 as above. Tripwires: .cpp:359 (0x167) "lpHull", .cpp:360 (0x168) "lpTrafficLightData",
+//   the const GetLightState inline (h:217, 0xD9) and .cpp:366 (0x16E) "lpLightState". luInstance runs from lhz +0xA
+//   while < lhz +0xC (re-read every pass); IsSmashed() skips; RenderCoronasForInstance at 0x8275DF80.
+// RenderTrafficLightCoronas passes 1 << E_TRAFFICLIGHTSTATE_GREEN (li r6, 4 at 0x8271F244): other hulls show GREEN.
 void TrafficLightManager::RenderAllLightsToBeInStateForHull(const Hull* lpHull,
                                                             const TrafficLightCollection* lpTrafficLightData,
                                                             u32 luActiveStates,

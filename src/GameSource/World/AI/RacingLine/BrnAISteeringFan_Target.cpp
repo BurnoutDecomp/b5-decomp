@@ -134,15 +134,16 @@ SteeringFan* SteeringFan::AccumulateWeightings()
     // 0x82779130, 0x82779144, 0x82779148 (the 8-wide block, run twice) and 0x82779194 (the 17th);
     // two of them spell the product bias * weight, which fmaf's exact product does not tell apart.
     // The PC spelling rounded each product before the add, so near-equal rays could swap places in
-    // GetBestIndex's max.
+    // GetBestIndex's max. The DWARF scope (BrnAISteeringFan.cpp:393-398) has no bias local: the
+    // row's bias is read straight from kfBias in both the test and the fold, which gives ARTIST's
+    // operand order. Remaining difference: ARTIST bumps the bias pointer (`addi r5,r5,4` at
+    // 0x827791AC) before the row pointer; the XDK schedules it one slot later.
     for (s32 liContributor = 0; liContributor < E_FAN_CONTRIBUTORS_COUNT; ++liContributor)
     {
-        const f32 lfBias = kfBias[meBiasMode][liContributor];
-        if (lfBias != 0.0f)
+        if (kfBias[meBiasMode][liContributor] != 0.0f)
         {
             for (s32 liStep = 0; liStep < KI_FAN_STEPS; ++liStep)
-                lafAccumulated[liStep] =
-                    mfWeighting[liContributor][liStep] * lfBias + lafAccumulated[liStep];
+                lafAccumulated[liStep] += mfWeighting[liContributor][liStep] * kfBias[meBiasMode][liContributor];
         }
     }
 

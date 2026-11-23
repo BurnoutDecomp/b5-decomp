@@ -1,3 +1,4 @@
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToScene.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT
@@ -101,8 +102,14 @@ void BridgeTrafficModuleToSceneModule_Prepare(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpSceneInputBuffer != 0, "lpSceneInputBuffer != NULL");                       // :40
-    CGS_ASSERT(lpTrafficOutputBuffer_Prepare != 0, "lpTrafficOutputBuffer_Prepare != NULL"); // :41
+    CGS_ASSERT(lpSceneInputBuffer != 0,
+        CgsDev::Assert::MessageAt("lpSceneInputBuffer != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/Bridges/WorldBridgeEntityModulesToScene.cpp", 40 /* ARTIST 0x827AB32C */));
+    CGS_ASSERT(lpTrafficOutputBuffer_Prepare != 0,
+        CgsDev::Assert::MessageAt("lpTrafficOutputBuffer_Prepare != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/Bridges/WorldBridgeEntityModulesToScene.cpp", 41 /* ARTIST 0x827AB350 */));
 
     // asm order: fetch the traffic output's scene-input interface first, then the scene manager's
     // in-scene-update aggregate, then merge source into destination.

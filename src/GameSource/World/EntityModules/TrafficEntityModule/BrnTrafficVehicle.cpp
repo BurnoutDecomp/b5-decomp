@@ -865,8 +865,9 @@ bool Vehicle::IsIndicatingRight() const
 
 bool Vehicle::IsFlashingHeadlights() const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    return (mxEffectState >> 7) != 0;
+    CGS_ASSERT(IsAlive(),
+        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1757 /* ARTIST 0x8274F394 */));
+    return ((mxEffectState >> 7) & 1) != 0;
 }
 
 bool Vehicle::AreHeadlightsFlashed() const
@@ -964,56 +965,65 @@ bool Vehicle::IsSympatheticallyCrashing() const
 
 bool Vehicle::IsCrashing() const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    if (muCrashTrafficType != 0)
+    CGS_ASSERT(IsAlive(),
+        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1183 /* ARTIST 0x82704AA8 */));
+    if (muCrashTrafficType == 0)
     {
-        return false;
+        CGS_ASSERT(IsPhysical(),
+            CgsDev::Assert::MessageAt("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1186 /* ARTIST 0x82704AE0 */));
+        return true;
     }
-    CGS_ASSERT(IsPhysical(), "IsPhysical()");
-    return true;
+    return false;
 }
 
 bool Vehicle::IsRecoveringFromSlam() const
 {
-    if (muCrashTrafficType != 3)
+    if (muCrashTrafficType == 3)
     {
-        return false;
+        CGS_ASSERT(IsPhysical(),
+            CgsDev::Assert::MessageAt("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1243 /* ARTIST 0x82704CC4 */));
+        return true;
     }
-    CGS_ASSERT(IsPhysical(), "IsPhysical()");
-    return true;
+    return false;
 }
 
 bool Vehicle::IsExtremeSwerving() const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    if (miPhysicalReason != 4)
+    CGS_ASSERT(IsAlive(),
+        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1222 /* ARTIST 0x82704C20 */));
+    if (miPhysicalReason == 4)
     {
-        return false;
+        CGS_ASSERT(IsPhysical(),
+            CgsDev::Assert::MessageAt("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1225 /* ARTIST 0x82704C58 */));
+        return true;
     }
-    CGS_ASSERT(IsPhysical(), "IsPhysical()");
-    return true;
+    return false;
 }
 
 bool Vehicle::IsBeingChecked() const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    if (muCrashTrafficType != 1)
+    CGS_ASSERT(IsAlive(),
+        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1258 /* ARTIST 0x82704D38 */));
+    if (muCrashTrafficType == 1)
     {
-        return false;
+        CGS_ASSERT(IsPhysical(),
+            CgsDev::Assert::MessageAt("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1261 /* ARTIST 0x82704D70 */));
+        return true;
     }
-    CGS_ASSERT(IsPhysical(), "IsPhysical()");
-    return true;
+    return false;
 }
 
 bool Vehicle::IsNormalPhysical() const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    if (miPhysicalReason != 5)
+    CGS_ASSERT(IsAlive(),
+        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1288 /* ARTIST 0x82704DE0 */));
+    if (miPhysicalReason == 5)
     {
-        return false;
+        CGS_ASSERT(IsPhysical(),
+            CgsDev::Assert::MessageAt("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1291 /* ARTIST 0x82704E18 */));
+        return true;
     }
-    CGS_ASSERT(IsPhysical(), "IsPhysical()");
-    return true;
+    return false;
 }
 
 s32 Vehicle::GetCurrentManoeuvrePhase() const

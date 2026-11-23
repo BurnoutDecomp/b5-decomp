@@ -691,7 +691,7 @@ bool InternalBaseStreamer::IsStreamComplete() const
         }
 
         const s32 liCurrent = FindInCurrentList( lrTarget.mResourceId, lrTarget.muUserId );
-        if ( liCurrent < 0 )
+        if ( liCurrent == -1 )
         {
             return false;
         }

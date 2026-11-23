@@ -11,6 +11,11 @@
 // __FILE__/__LINE__. Offsets are layout-derived (member-by-name), not hardcoded.
 #include "GameSource/World/BrnWorldModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+// The header path and lines ARTIST bakes into the setters' tripwires: ARTIST compiled their bodies
+// from BrnWorldModuleIO.h (e.g. SetRaceCarColourIndex: li r5,0x2A5 == h:677 at 0x823A8370).
+static const char KAC_WORLD_MODULE_IO_H_FILE[] = "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h";
 
 #include <cstring>   // memcpy
 
@@ -154,8 +159,10 @@ void UpdateInputBuffer::Construct()
 // X360 0x823A8340 (:203) -- store colour index + mark valid.
 void UpdateInputBuffer::SetRaceCarColourIndex(EActiveRaceCarIndex leActiveRaceCarIndex, u16 lu16ColourIndex)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= 0,                            "leActiveRaceCarIndex >= 0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_WORLD_MODULE_IO_H_FILE, 677 /* ARTIST 0x823A8370 */));
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_WORLD_MODULE_IO_H_FILE, 678 /* ARTIST 0x823A8394 */));
     mau16RaceCarColourIndex[leActiveRaceCarIndex]    = lu16ColourIndex;
     mabRaceCarColourIndexValid[leActiveRaceCarIndex] = true;
 }
@@ -163,8 +170,10 @@ void UpdateInputBuffer::SetRaceCarColourIndex(EActiveRaceCarIndex leActiveRaceCa
 // X360 0x823A83C8 (:216) -- store paint-finish index + mark valid.
 void UpdateInputBuffer::SetRaceCarPaintFinishIndex(EActiveRaceCarIndex leActiveRaceCarIndex, u16 lu16PaintIndex)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= 0,                            "leActiveRaceCarIndex >= 0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_WORLD_MODULE_IO_H_FILE, 733 /* ARTIST 0x823A83F8 */));
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_WORLD_MODULE_IO_H_FILE, 734 /* ARTIST 0x823A841C */));
     mau16RaceCarPaintFinishIndex[leActiveRaceCarIndex]    = lu16PaintIndex;
     mabRaceCarPaintFinishIndexValid[leActiveRaceCarIndex] = true;
 }
@@ -172,16 +181,18 @@ void UpdateInputBuffer::SetRaceCarPaintFinishIndex(EActiveRaceCarIndex leActiveR
 // X360 0x823A8450 (:228) -- flag lost-contact for this active race car.
 void UpdateInputBuffer::SetLostContact(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
-    CGS_ASSERT((leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT) && (leActiveRaceCarIndex >= 0),
-               "( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( leActiveRaceCarIndex >= 0 )");
+    CGS_ASSERT((leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT) && (leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID),
+        CgsDev::Assert::MessageAt("( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )",
+            KAC_WORLD_MODULE_IO_H_FILE, 782 /* ARTIST 0x823A8484 */));
     mabLostContactThisFrame[leActiveRaceCarIndex] = true;
 }
 
 // X360 0x823A84C0 (:236) -- flag regained-contact for this active race car.
 void UpdateInputBuffer::SetRegainedContact(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
-    CGS_ASSERT((leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT) && (leActiveRaceCarIndex >= 0),
-               "( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( leActiveRaceCarIndex >= 0 )");
+    CGS_ASSERT((leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT) && (leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID),
+        CgsDev::Assert::MessageAt("( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT ) && ( leActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )",
+            KAC_WORLD_MODULE_IO_H_FILE, 800 /* ARTIST 0x823A84F4 */));
     mabRegainedContactThisFrame[leActiveRaceCarIndex] = true;
 }
 
@@ -191,8 +202,10 @@ void UpdateInputBuffer::SetRegainedContact(EActiveRaceCarIndex leActiveRaceCarIn
 // CGS_ASSERTs to match.
 void UpdateInputBuffer::SetCarSelectStatus(EActiveRaceCarIndex leActiveRaceCarIndex, bool lbStatus)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= 0,                            "leActiveRaceCarIndex >= 0");
-    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+        CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_WORLD_MODULE_IO_H_FILE, 818 /* ARTIST 0x823A856C */));
+    CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+        CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_WORLD_MODULE_IO_H_FILE, 819 /* ARTIST 0x823A8590 */));
     mabCarSelectStatus[leActiveRaceCarIndex]      = lbStatus;
     mabCarSelectStatusValid[leActiveRaceCarIndex] = true;
 }

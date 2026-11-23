@@ -50,6 +50,7 @@
 #include "GameSource/World/AI/BrnAIAggression.h"                     // AIAggression (native embedded member)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                // CgsNumeric::Random (Prepare draws one float)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT (NearbyVehicles::GetCount)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // its baked BrnAIDriver.cpp lines
 
 #ifndef BRN_AI_RACINGLINE_STACK_PRESENT
 #define BRN_AI_RACINGLINE_STACK_PRESENT 0
@@ -112,8 +113,14 @@ namespace BrnAI
         // (0x8277A910..0x8277A974). Restored 2026-09-23 (crash parity G07-D1).
         s32  GetCount() const
         {
-            CGS_ASSERT(miCount >= 0, "miCount >= 0");
-            CGS_ASSERT(miCount <= KI_MAX_NEARBY_VEHICLES, "miCount <= KI_MAX_NEARBY_TRAFFIC");
+            // ARTIST compiled this body from BrnAIDriver.cpp (unity TU), so the tripwires carry
+            // that file and its lines rather than this header's.
+            CGS_ASSERT(miCount >= 0,
+                CgsDev::Assert::MessageAt("miCount >= 0",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIDriver.cpp", 2912 /* ARTIST 0x8276677C */));
+            CGS_ASSERT(miCount <= KI_MAX_NEARBY_VEHICLES,
+                CgsDev::Assert::MessageAt("miCount <= KI_MAX_NEARBY_TRAFFIC",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIDriver.cpp", 2913 /* ARTIST 0x827667A4 */));
             return miCount;
         }
         void Reset()          { miCount = 0; }                          // :110 (inlined)

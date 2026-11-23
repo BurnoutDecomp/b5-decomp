@@ -688,7 +688,7 @@ namespace BrnAI
         if (!lbHasValidRoute)
             return true;
 
-        return muDefaultSectionIndex == luBest;
+        return luBest == muDefaultSectionIndex;
     }
 
     // ==================================================================================

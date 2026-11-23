@@ -470,22 +470,25 @@ void TriggerEntityModule::ProcessSceneQueryResults(const InputBuffer_PrePhysics*
         CgsDev::Assert::EndAssert();
     }
 
-    typedef CgsModule::VariableEventQueue<32768, 16> SceneResultQueue;
-    const SceneResultQueue* lpResultQueue = lpInput->GetSceneResultQueue();
+    // DWARF locals (BrnTriggerEntityModule.cpp:592-595): the queue, the type, the event and its
+    // size; neither out-parameter is pre-initialised (ARTIST stores nothing before GetFirstEvent).
+    const TriggerEntityModuleIO::SceneResultQueue* lpSceneResultQueue = lpInput->GetSceneResultQueue();
+    s32 liType;
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
 
-    const CgsSceneManager::SceneManagerIO::OutEventLineTestFineResult* lpResult = 0;
-    s32 liSize = 0;
-    s32 liType = lpResultQueue->GetFirstEvent(
-        reinterpret_cast<const CgsModule::Event**>(&lpResult), &liSize);
-
-    while (lpResult)
+    liType = lpSceneResultQueue->GetFirstEvent(&lpEvent, &liSize);
+    while (lpEvent)
     {
         // E_OUTEVENT_LINETESTFINERESULT == 1.
         if (liType == 1)
-            ProcessLineTestFineResult(lpResult, lpOutput);
+        {
+            const CgsSceneManager::SceneManagerIO::OutEventLineTestFineResult* lpLineTestFineResult =
+                reinterpret_cast<const CgsSceneManager::SceneManagerIO::OutEventLineTestFineResult*>(lpEvent);
+            ProcessLineTestFineResult(lpLineTestFineResult, lpOutput);
+        }
 
-        liType = lpResultQueue->GetNextEvent(reinterpret_cast<const CgsModule::Event*>(lpResult),
-                                             reinterpret_cast<const CgsModule::Event**>(&lpResult), &liSize);
+        liType = lpSceneResultQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
     }
 }
 

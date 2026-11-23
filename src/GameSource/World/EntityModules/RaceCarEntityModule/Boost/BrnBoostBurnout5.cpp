@@ -428,15 +428,19 @@ BoostBurnout5::GetIsChainNotifyPending(u32* lpOutNumChained)
 {
     // BrnBoostBurnout5.cpp:869 on the console (the assert's line immediate is
     // 0x365); reported, then execution continues into the store below.
-    CGS_ASSERT(lpOutNumChained != 0, "lpOutNumChained");
+    CGS_ASSERT(lpOutNumChained != 0,
+        CgsDev::Assert::MessageAt(
+            "lpOutNumChained",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/RaceCarEntityModule/Boost/BrnBoostBurnout5.cpp", 869 /* ARTIST 0x822A70EC */));
 
-    if (miChainSize > 0)
+    if (miChainSize <= 0)
     {
-        *lpOutNumChained = static_cast<u32>(miChainSize);
+        *lpOutNumChained = 0;
     }
     else
     {
-        *lpOutNumChained = 0;
+        *lpOutNumChained = static_cast<u32>(miChainSize);
     }
 
     const bool lbChainNotifyPending = mbChainNotifyPending;

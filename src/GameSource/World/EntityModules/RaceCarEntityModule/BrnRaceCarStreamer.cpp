@@ -643,20 +643,21 @@ void RaceCarStreamer::SetRequiredVehicleData( s32 liActiveRaceCar, CgsID lModelI
     CgsID lValidWheelId = lWheelId;
     HACKGetValidModelIds( lValidModelId, lValidWheelId );
 
+    // Two AddVehicleData calls, cross-jumped into one tail by the compiler: ARTIST loads r4 on each
+    // incoming path (0x822EC694 before the inactive branch, 0x822EC6D8 after RemoveVehicleData).
     if( IsRaceCarActive( liActiveRaceCar ) )
     {
         if( mGraphicsStreamer.GetDesiredAsset( liActiveRaceCar ) != lValidModelId
             || mWheelGraphicsStreamer.GetDesiredAsset( liActiveRaceCar ) != lValidWheelId )
         {
             RemoveVehicleData( liActiveRaceCar );
-        }
-        else
-        {
-            return;
+            AddVehicleData( liActiveRaceCar, lModelId, lWheelId, lbActive );
         }
     }
-
-    AddVehicleData( liActiveRaceCar, lModelId, lWheelId, lbActive );
+    else
+    {
+        AddVehicleData( liActiveRaceCar, lModelId, lWheelId, lbActive );
+    }
 }
 
 // @ 0x822A5468. Record a deferred "desired" car request for slot liSlotIndex at priority

@@ -14,6 +14,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "SharedClasses/Traffic/BrnTrafficSection.h"        // Section / LaneRung / Neighbour (real home)
 #include "SharedClasses/Traffic/BrnTrafficStaticTraffic.h"  // StaticTrafficVehicle (by value in the array)
 #include "SharedClasses/Traffic/BrnTrafficSectionFlow.h"    // SectionFlow (real pointee for mpaSectionFlows)
@@ -139,9 +140,15 @@ CGS_STATIC_ASSERT((offsetof(Hull, mpaLightTriggerJunctionLookup) == 0x3C), "Hull
 CGS_STATIC_ASSERT((offsetof(Hull, mauVehicleAssets)              == 0x40), "Hull::mauVehicleAssets");
 CGS_STATIC_ASSERT((sizeof(Hull) == 0x50), "X360 Hull stride");
 
+// The accessors below carry the header lines ARTIST bakes into their tripwires (string at
+// 0x820035D0): GetSection h:185, GetNeighbour h:247/248, GetStopLine h:280, GetStaticVehicle
+// h:297. This header's layout is not the original's, so the lines are given explicitly.
+
 inline const Section* Hull::GetSection(u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < muNumSections, "luIndex < muNumSections");
+    CGS_ASSERT(luIndex < muNumSections,
+        CgsDev::Assert::MessageAt("luIndex < muNumSections",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 185 /* ARTIST 0x821F5310 */));
     return &mpaSections[luIndex];
 }
 
@@ -159,8 +166,12 @@ inline const f32* Hull::GetRungLengthsForSection(const Section* lpSection) const
 
 inline const Neighbour* Hull::GetNeighbour(u32 luIndex) const
 {
-    CGS_ASSERT(mpaNeighbourData != 0, "mpaNeighbourData");
-    CGS_ASSERT(luIndex < muNumNeighbours, "luIndex < muNumNeighbours");
+    CGS_ASSERT(mpaNeighbourData != 0,
+        CgsDev::Assert::MessageAt("mpaNeighbourData",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 247 /* ARTIST 0x821F5388 */));
+    CGS_ASSERT(luIndex < muNumNeighbours,
+        CgsDev::Assert::MessageAt("luIndex < muNumNeighbours",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 248 /* ARTIST 0x821F53B0 */));
     return &mpaNeighbourData[luIndex];
 }
 
@@ -172,13 +183,17 @@ inline const Neighbour* Hull::GetNeighbours() const
 
 inline const StaticTrafficVehicle* Hull::GetStaticVehicle(u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < muNumStaticTraffic, "luIndex < muNumStaticTraffic");
+    CGS_ASSERT(luIndex < muNumStaticTraffic,
+        CgsDev::Assert::MessageAt("luIndex < muNumStaticTraffic",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 297 /* ARTIST 0x82705CC0 */));
     return &mpaStaticTrafficVehicles[luIndex];
 }
 
 inline const StopLine* Hull::GetStopLine(u32 luIndex) const
 {
-    CGS_ASSERT(luIndex < muNumStoplines, "luIndex < muNumStoplines");
+    CGS_ASSERT(luIndex < muNumStoplines,
+        CgsDev::Assert::MessageAt("luIndex < muNumStoplines",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 280 /* ARTIST 0x82705C50 */));
     return &mpaStopLines[luIndex];
 }
 
