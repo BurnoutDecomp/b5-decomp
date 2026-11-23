@@ -4,6 +4,24 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (range-guarded operator++)
 
+// SOURCE LINES. The two enums sit on their DWARF lines (EActiveRaceCarIndex h:26,
+// EGlobalRaceCarIndex h:43), and each one's post-increment is written on a single line
+// right after it (h:39, h:84): DecFIGS gives each operator and its leOldEnumIndex local
+// the one line of an enum-operator macro expansion (LegacySrc CgsGuiModule.h:260 shows the
+// same expansion on one line), so every inlined copy's range assert carries that line.
+// ARTIST: operator++(EActiveRaceCarIndex&,int) @0x821F1DB8 and its inlined copies fire
+// "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" with li r5,0x27 (39), e.g.
+// PlayerPositionTableComponent::FillOutInActiveRaceCarOrder @0x82421B54; the global one
+// fires with li r5,0x54 (84), e.g. ModeManager::ResetNextLandmarks @0x82328550. The guard
+// is non-fatal: the saved old value is returned even on a failed guard. Only the
+// X360-attested post-increments are written (the macro's pre-increment, decrement and
+// Start/EndEnumStage siblings have no X360 ledger row).
+
+
+
+
+
+
 // Slot index of an active race car (the local player + rivals), or INVALID.
 enum EActiveRaceCarIndex : s32
 {
@@ -18,10 +36,10 @@ enum EActiveRaceCarIndex : s32
     E_ACTIVE_RACE_CAR_INDEX_7       = 7,
     E_ACTIVE_RACE_CAR_INDEX_COUNT   = 8
 };
+inline EActiveRaceCarIndex operator++(EActiveRaceCarIndex& leEnumIndex, int) { const EActiveRaceCarIndex leOldEnumIndex = leEnumIndex; leEnumIndex = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leEnumIndex) + 1); CGS_ASSERT(leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT, "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT"); return leOldEnumIndex; }
 
 // Global slot index of a race car across all modes (the player + up to 34 rivals/traffic
-// racers tracked by the global output interface), or INVALID. DWARF BurnoutConstants.h:43
-// (enumerators 0..34, COUNT = 35). Grows out the prior EGlobalRaceCarIndex_Stub placeholder.
+// racers tracked by the global output interface), or INVALID. DWARF: 0..34, COUNT = 35.
 enum EGlobalRaceCarIndex : s32
 {
     E_GLOBAL_RACE_CAR_INDEX_INVALID = -1,
@@ -63,39 +81,7 @@ enum EGlobalRaceCarIndex : s32
     E_GLOBAL_RACE_CAR_INDEX_COUNT   = 35
 };
 
-// DWARF BurnoutConstants.h:84 -- post-increment used to walk the global race-car slots.
-// [stuntrace waveB fix round, 2026-08-26] THE RANGE GUARD WAS MISSING HERE while its
-// EActiveRaceCarIndex twin below carried it, even though this operator's own comment already cited
-// DWARF :84 for it. The X360 emits it: ModeManager::ResetNextLandmarks @0x82328460 loads the string
-// "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT" (`addi r25, r11, aLeenumindexEGl@l` @0x823284A4)
-// and fires it with `li r5, 0x54` == BurnoutConstants.h:84 @0x82328550 -- the exact DWARF line this
-// comment names. ModeManager::CheckForOutOfRangeCarsReachingFinish, RCEntityGlobalRaceCarOutput
-// Interface::GetGlobalRaceCarIndex and ~15 RaceCarEntityModule / AIModule loops emit the same one.
-// Non-fatal, same shape as the active twin: the old value is still returned on a failed guard.
-inline EGlobalRaceCarIndex operator++(EGlobalRaceCarIndex &leIndex, int)
-{
-    const EGlobalRaceCarIndex lePrev = leIndex;
-    leIndex = static_cast<EGlobalRaceCarIndex>(static_cast<s32>(leIndex) + 1);
-    CGS_ASSERT( leIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT,
-                "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT" );
-    return lePrev;
-}
-
-// Post-increment over the active-race-car slots. X360 @0x821F1DB8 (DWARF
-// BurnoutConstants.h:39): saves the old value, increments, then range-guards the new
-// value with the project CGS_ASSERT (X360 fires when the incremented index exceeds
-// E_ACTIVE_RACE_CAR_INDEX_COUNT, i.e. > 8). The guard is non-fatal -- the X360 returns
-// the saved old value even on a failed guard. The assert is included here (rather than
-// only at the .cpp anchor) so the macro is expanded exactly once where the operator is
-// defined; CgsAssert.h is pulled in below for the macro.
-inline EActiveRaceCarIndex operator++(EActiveRaceCarIndex &leEnumIndex, int)
-{
-    const EActiveRaceCarIndex leOldEnumIndex = leEnumIndex;
-    leEnumIndex = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leEnumIndex) + 1);
-    CGS_ASSERT( leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT" );
-    return leOldEnumIndex;
-}
+inline EGlobalRaceCarIndex operator++(EGlobalRaceCarIndex& leEnumIndex, int) { const EGlobalRaceCarIndex leOldEnumIndex = leEnumIndex; leEnumIndex = static_cast<EGlobalRaceCarIndex>(static_cast<s32>(leEnumIndex) + 1); CGS_ASSERT(leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT, "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT"); return leOldEnumIndex; }
 
 namespace BrnGameState
 {
