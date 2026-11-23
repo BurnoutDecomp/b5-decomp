@@ -60,13 +60,13 @@ namespace BrnGui
         CGS_ASSERT(lpStateInterface != 0, "Invalid state interface");   // cpp:60 (streamed)
 
         // X360: CgsGui::GuiComponent::Construct(this + 0x18, name, stateInterface, parent).
-        mGuiComponentBase.Construct(lpacName, lpStateInterface, lpacParentName);
+        CgsGui::GuiComponent::Construct(lpacName, lpStateInterface, lpacParentName);
 
         SetId(luAptId);   // std r19, 0x10(this)
         ClearFlags();     // stb 0,   0x0C(this)
 
         // Both children are parented on THIS row's own name buffer (X360 passes this + 0x1C).
-        const char* lpacChildParent = mGuiComponentBase.GetName();
+        const char* lpacChildParent = GetName();
 
         mItemText.Construct("ItemText", lpStateInterface, lpacChildParent,
                             static_cast<u64>(-1));
@@ -83,7 +83,7 @@ namespace BrnGui
     void MenuToggle::AppendExpectedAptComponent(GuiFlow leFlow, GuiCache* lpGuiCache,
                                                 bool lbWithTitle)
     {
-        lpGuiCache->AppendExpectedAptComponent(leFlow, mGuiComponentBase.GetName());
+        lpGuiCache->AppendExpectedAptComponent(leFlow, GetName());
         if (lbWithTitle)
         {
             lpGuiCache->AppendExpectedAptComponent(leFlow, mTitleText.GetName());
@@ -152,7 +152,7 @@ namespace BrnGui
         }
 
         // X360: CgsGui::GuiComponent::AddOutputAptViewState(this + 0x18, ...).
-        mGuiComponentBase.AddOutputAptViewState("apt_state", KAC_STATE_NAMES[leState], false);
+        AddOutputAptViewState("apt_state", KAC_STATE_NAMES[leState], false);
 
         mItemText.Update();
     }

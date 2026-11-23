@@ -40,7 +40,7 @@
 // Layout (X360 offsets are documentary -- the x64 gate widens every embedded pointer, so
 // every access below is BY NAME):
 //   +0x000 Selectable base (vptr / mpcSelectionText / mxFlags / mId)
-//   +0x018 CgsGui::GuiComponent mGuiComponentBase
+//   +0x018 CgsGui::GuiComponent         (second base, see the class comment)
 //   +0x0A8 TextSelection mItemText      ("ItemText",  sizeof == 0xCC0)
 //   +0xD68 TextField     mTitleText     ("TitleText")
 //   +0xE8E bool mbLoaded                (Construct stores 1)
@@ -48,7 +48,7 @@
 // ===================================================================================
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"    // CgsGui::GuiComponent (identity base, by value)
+#include "GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h"    // CgsGui::GuiComponent (second base)
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectable.h"       // BrnGui::Selectable (base)
 #include "GameSource/Gui/Flow/Shared/Components/BrnTextSelection.h"    // BrnGui::TextSelection (mItemText, by value)
 #include "GameSource/Gui/BrnGuiTextField.h"                            // BrnGui::TextField (mTitleText, by value)
@@ -62,7 +62,13 @@ namespace BrnGui
     // full header.
     class GuiCache;
 
-    struct MenuToggle : public Selectable
+    // CgsGui::GuiComponent is the SECOND BASE (as in SelectableGroup), not a member: the
+    // inlined MenuToggle ctor in ARTIST (OnlineGameRoomPlayerInfo ctor @0x82515078..0x825150A4)
+    // stores GuiComponent's vftable (0x82055B70) at +0x18, then MenuToggle's own vftable
+    // (0x8207306C) at +0x00 and a MenuToggle-specific one-slot vftable for the GuiComponent
+    // subobject (0x82073068 = {GuiComponent::Construct}) at +0x18 -- the vptr sequence of a
+    // polymorphic second base; a member would keep GuiComponent's own vftable.
+    struct MenuToggle : public Selectable, public CgsGui::GuiComponent
     {
         // The row's apt view states, indexed by the same ladder MenuItem / ColourMenuToggle
         // use (off_82F27460).
@@ -119,7 +125,7 @@ namespace BrnGui
         bool HighlightPrevious();
 
         // ---- layout (X360 offsets documentary) --------------------------------------
-        CgsGui::GuiComponent mGuiComponentBase;   // +0x018
+        // +0x018 CgsGui::GuiComponent (second base)
         TextSelection        mItemText;           // +0x0A8 ("ItemText")
         TextField            mTitleText;          // +0xD68 ("TitleText")
         bool                 mbLoaded;            // +0xE8E (Construct stores 1)
