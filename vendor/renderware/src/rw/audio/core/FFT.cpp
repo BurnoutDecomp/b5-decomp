@@ -16,15 +16,17 @@ namespace rw { namespace audio { namespace core
     };
 
     CGS_STATIC_ASSERT(sizeof(FFTState) == 0x18, "ARTIST FFT context header");
-    CGS_STATIC_ASSERT(sizeof(FFTAllocation) == 8, "ARTIST FFT allocation pair");
-    CGS_STATIC_ASSERT(offsetof(FFTAllocation, muBytes) == 4, "ARTIST FFT allocation size");
-    CGS_STATIC_ASSERT(offsetof(FastFirEngine, mFft) == 0x6C, "ARTIST FFT allocation owner");
+    CGS_STATIC_ASSERT(sizeof(DataDescriptor) == 8, "ARTIST FFT data descriptor");
+    CGS_STATIC_ASSERT(offsetof(DataDescriptor, pData) == 0, "ARTIST FFT data pointer");
+    CGS_STATIC_ASSERT(offsetof(DataDescriptor, size) == 4, "ARTIST FFT allocation size");
+    CGS_STATIC_ASSERT(sizeof(FastFirEngine) == 0x8C, "ARTIST FFT engine size");
+    CGS_STATIC_ASSERT(offsetof(FastFirEngine, mFFTInstance) == 0x6C, "ARTIST FFT allocation owner");
     CGS_STATIC_ASSERT(offsetof(FastFirEngine, miInputChannels) == 0x74, "ARTIST FFT allocation end");
 
     extern "C" System* off_83271928;
 
     // ARTIST 0x82B6D550
-    s32 FFT_Alloc(s32 sizeLog2, char flag, FFTAllocation* pAllocation)
+    s32 FFT_Alloc(s32 sizeLog2, bool flag, DataDescriptor* pAllocation)
     {
         const s32 log2 = flag ? sizeLog2 : sizeLog2 - 1;
         const s32 count = 1 << log2;
@@ -42,19 +44,20 @@ namespace rw { namespace audio { namespace core
             state->muCosOffset = sizeof(FFTState);
             state->muSinOffset = state->muCosOffset + tableBytes;
             state->muPermutationOffset = state->muSinOffset + tableBytes;
-            pAllocation->muBytes = bytes;
+            pAllocation->size = bytes;
         }
         else
         {
-            pAllocation->muBytes = 0;
+            pAllocation->size = 0;
         }
-        pAllocation->mpContext = state;
+        pAllocation->pData = state;
         return state ? 0 : -1;
     }
 
     // ARTIST 0x82B68888
-    s32 FFT_Init(FFTState* pState)
+    s32 FFT_Init(void* pContext)
     {
+        FFTState* pState = static_cast<FFTState*>(pContext);
         u8* bytes = reinterpret_cast<u8*>(pState);
         f32* cosine = reinterpret_cast<f32*>(bytes + pState->muCosOffset);
         f32* sine = reinterpret_cast<f32*>(bytes + pState->muSinOffset);
@@ -306,20 +309,21 @@ namespace rw { namespace audio { namespace core
     }
 
     // ARTIST 0x82B689C8 and 0x82B69098. Both take an interleaved complex buffer.
-    void FFT_ForwardComplex(FFTState* pState, f32* pBuffer)
+    void FFT_ForwardComplex(void* pContext, f32* pBuffer)
     {
-        TransformComplex<false>(pState, pBuffer);
+        TransformComplex<false>(static_cast<FFTState*>(pContext), pBuffer);
     }
 
-    void FFT_InverseComplex(FFTState* pState, f32* pBuffer)
+    void FFT_InverseComplex(void* pContext, f32* pBuffer)
     {
-        TransformComplex<true>(pState, pBuffer);
+        TransformComplex<true>(static_cast<FFTState*>(pContext), pBuffer);
     }
 
     // ARTIST 0x82B68F98. The packed real transform includes a complex endpoint
     // at float index 2 * count. Copy it before recombining inward through the center.
-    void FFT_ForwardReal(FFTState* pState, f32* pBuffer)
+    void FFT_ForwardReal(void* pContext, f32* pBuffer)
     {
+        FFTState* pState = static_cast<FFTState*>(pContext);
         const s32 count = 1 << pState->miSizeLog2;
         const f32* cosine = GetTwiddles(pState, pState->muCosOffset);
         const f32* sine = GetTwiddles(pState, pState->muSinOffset);
@@ -347,8 +351,9 @@ namespace rw { namespace audio { namespace core
 
     // ARTIST 0x82B69698. Recombine the same endpoint-inclusive spectrum before
     // the complex inverse. The complex first pass supplies the normalization.
-    void FFT_InverseReal(FFTState* pState, f32* pBuffer)
+    void FFT_InverseReal(void* pContext, f32* pBuffer)
     {
+        FFTState* pState = static_cast<FFTState*>(pContext);
         const s32 count = 1 << pState->miSizeLog2;
         const f32* cosine = GetTwiddles(pState, pState->muCosOffset);
         const f32* sine = GetTwiddles(pState, pState->muSinOffset);
@@ -373,11 +378,11 @@ namespace rw { namespace audio { namespace core
     }
 
     // ARTIST 0x82B6D618
-    s32 FFT_Free(FFTAllocation* pAllocation)
+    s32 FFT_Free(DataDescriptor* pAllocation)
     {
-        off_83271928->mpAllocator->Free(pAllocation->mpContext, 0);
-        pAllocation->mpContext = 0;
-        pAllocation->muBytes = 0;
+        off_83271928->mpAllocator->Free(pAllocation->pData, 0);
+        pAllocation->pData = 0;
+        pAllocation->size = 0;
         return 0;
     }
 } } }

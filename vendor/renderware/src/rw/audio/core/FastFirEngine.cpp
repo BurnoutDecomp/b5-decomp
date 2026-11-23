@@ -3,9 +3,8 @@
 // the impulse-response reverb plug-in (rw::audio::core::ReverbIR1).
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is
-// authoritative for every store/branch. No LegacySrc reference source, no DecFIGS DWARF, and no
-// ProStreet-08 rwaudio PDB entry exist for this type. See FastFirEngine.h for the byte-exact
-// layout and the per-function X360 addresses.
+// authoritative for every store and branch. The Xbox 360 RenderWare PDB corroborates
+// the FFT descriptor and the Reset signature. See FastFirEngine.h for the X360 layout.
 //
 // Members: the constructor and destructor, Reset, SetChannels, Configure, Filter (the
 // per-frame partition/FFT/MAC/IFFT driver), LoadDistributionCalc (the per-pass work
@@ -63,8 +62,8 @@ const s32 KI_MAC_BINS_PER_STEP = 16;
 // -------------------------------------------------------------------------------------
 FastFirEngine::FastFirEngine()
 {
-    mFft.mpContext = 0;
-    mFft.muBytes = 0;
+    mFFTInstance.pData = 0;
+    mFFTInstance.size = 0;
     mpBuffer = 0; // +0x00
     miCurPass = 0;      // +0x5C
     miWriteBlock = 0;   // +0x30
@@ -83,38 +82,36 @@ FastFirEngine::FastFirEngine()
 FastFirEngine::~FastFirEngine()
 {
     if (mpBuffer)
-        System::Free(off_83271928, mpBuffer, 0); // allocator->Free(buf, 0)
+        off_83271928->mpAllocator->Free(mpBuffer, 0);
 
-    if (mFft.mpContext)
-        FFT_Free(&mFft);
+    if (mFFTInstance.pData)
+        FFT_Free(&mFFTInstance);
 }
 
 // -------------------------------------------------------------------------------------
 // FastFirEngine::Reset @0x82B6E7C0 -- free + null the scratch block and the FFT context, then
 // zero the per-frame running state so the engine can be re-Configured or restarted cleanly.
 // -------------------------------------------------------------------------------------
-FastFirEngine *FastFirEngine::Reset(FastFirEngine *self)
+void FastFirEngine::Reset()
 {
-    if (self->mpBuffer)
+    if (mpBuffer)
     {
-        System::Free(off_83271928, self->mpBuffer, 0);
-        self->mpBuffer = 0;
+        off_83271928->mpAllocator->Free(mpBuffer, 0);
+        mpBuffer = 0;
     }
-    if (self->mFft.mpContext)
+    if (mFFTInstance.pData)
     {
-        FFT_Free(&self->mFft);
-        self->mFft.mpContext = 0;
+        FFT_Free(&mFFTInstance);
+        mFFTInstance.pData = 0;
     }
 
-    self->miCurPass = 0;    // +0x5C
-    self->miWriteBlock = 0; // +0x30
-    self->miPingA = 0;      // +0x64
-    self->miPingB = 0;      // +0x68
-    self->miFftDone = 0;    // +0x80
-    self->miMacDone = 0;    // +0x84
-    self->miIfftDone = 0;   // +0x88
-
-    return self;
+    miCurPass = 0;
+    miWriteBlock = 0;
+    miPingA = 0;
+    miPingB = 0;
+    miFftDone = 0;
+    miMacDone = 0;
+    miIfftDone = 0;
 }
 
 // -------------------------------------------------------------------------------------
@@ -142,7 +139,7 @@ int FastFirEngine::Configure(FastFirEngine *self, s32 channels, s32 blockSize, s
                              s32 a6, s32 impulseSamples, s16 *pImpulse, char primeHistory)
 {
     if (self->mpBuffer)
-        Reset(self);
+        self->Reset();
 
     // Partition the impulse response into blockSize-sample blocks; a partial tail becomes
     // its own (shorter) block.
@@ -222,10 +219,10 @@ int FastFirEngine::Configure(FastFirEngine *self, s32 channels, s32 blockSize, s
     for (s32 n = 2 * blockSize; n > 1; n /= 2)
         ++sizeLog2;
 
-    if (!self->mFft.mpContext)
+    if (!self->mFFTInstance.pData)
     {
-        FFT_Alloc(sizeLog2, 0, &self->mFft);
-        FFT_Init(self->mFft.mpContext);
+        FFT_Alloc(sizeLog2, false, &self->mFFTInstance);
+        FFT_Init(self->mFFTInstance.pData);
     }
 
     self->miField28 = a6;             // +0x28
@@ -283,7 +280,7 @@ void *FastFirEngine::Filter(FastFirEngine *self, ChannelNode *inNode, ChannelNod
     if (self->mpDist[self->miCurPass].miFftCount > 0)
     {
         s32 block = self->miFftDone;
-        FFTState* fft = self->mFft.mpContext;
+        void* fft = self->mFFTInstance.pData;
         const s32 inSel = (self->miPingB == 0) ? 1 : 0; // mpInput[!pingB]
         do
         {
@@ -351,7 +348,7 @@ void *FastFirEngine::Filter(FastFirEngine *self, ChannelNode *inNode, ChannelNod
     if (self->mpDist[self->miCurPass].miIfftCount > 0)
     {
         s32 block = self->miIfftDone;
-        FFTState* fft = self->mFft.mpContext;
+        void* fft = self->mFFTInstance.pData;
         for (; block < self->mpDist[self->miCurPass].miIfftCount + self->miIfftDone; ++block)
             FFT_InverseReal(fft, self->mpConv + self->miBlockFftLen * block);
         self->miIfftDone += self->mpDist[self->miCurPass].miIfftCount;

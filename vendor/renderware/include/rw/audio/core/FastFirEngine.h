@@ -10,13 +10,8 @@
 // double-buffers its input/output partitions between passes.
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC); the asm is
-// authoritative for every member store. No LegacySrc reference source and no DecFIGS DWARF exist
-// for this type, and it is absent from the ProStreet-08 rwaudio PDB, so every member below
-// is grounded directly in the disassembly of the bodied members (FastFirEngine.cpp). Member
-// NAMES are reconstructed to match observed semantics; the +0xNN annotations are the X360
-// (32-bit-pointer) offsets the asm uses and are documentary only -- members are declared
-// with x64 widths so only the ORDER is load-bearing and every access is by name (same rule
-// as PlugIn.h's System layout). The instance is 0x8C bytes on the X360 image.
+// authoritative for the X360 layout. The Xbox 360 RenderWare PDB corroborates the 0x8C-byte
+// instance, the FFT data descriptor at +0x6C and the void Reset member.
 //
 // Lowercase rw::audio:: namespaces match the third-party middleware API (per
 // CXX_NAMING_CONVENTIONS: lowercase namespaces are acceptable to match a third-party API).
@@ -41,19 +36,17 @@ namespace core
 //   FFT_ForwardReal(handle, buffer)
 //   FFT_InverseReal(handle, buffer)
 // -------------------------------------------------------------------------------------
-struct FFTState;
-
-struct FFTAllocation
+struct DataDescriptor
 {
-    FFTState* mpContext;
-    u32 muBytes;
+    void* pData;
+    s32 size;
 };
 
-s32 FFT_Alloc(s32 sizeLog2, char flag, FFTAllocation* pAllocation);
-s32 FFT_Init(FFTState* pState);
-s32 FFT_Free(FFTAllocation* pAllocation);
-void FFT_ForwardReal(FFTState* pState, f32* pBuffer);
-void FFT_InverseReal(FFTState* pState, f32* pBuffer);
+s32 FFT_Alloc(s32 sizeLog2, bool flag, DataDescriptor* pAllocation);
+s32 FFT_Init(void* pContext);
+s32 FFT_Free(DataDescriptor* pAllocation);
+void FFT_ForwardReal(void* pContext, f32* pBuffer);
+void FFT_InverseReal(void* pContext, f32* pBuffer);
 
 class FastFirEngine
 {
@@ -86,7 +79,7 @@ public:
     FastFirEngine();
     // Frees the scratch block and the FFT context (ReverbIR1's deleting destructor).
     ~FastFirEngine();
-    static FastFirEngine *Reset(FastFirEngine *self);              // @0x82B6E7C0
+    void Reset();                                                // @0x82B6E7C0
 
     // Record the input/output channel counts (@+0x74 / @+0x78); returns 1. @0x82B68150.
     static int SetChannels(FastFirEngine *self, s32 inputChannels, s32 outputChannels);
@@ -151,7 +144,7 @@ public:
     f32   mfField60;          // +0x60  ((blockSize-a4)/blockSize) * 100 (overlap %)
     s32   miPingA;            // +0x64  output double-buffer toggle
     s32   miPingB;            // +0x68  input double-buffer toggle
-    FFTAllocation mFft;      // +0x6C context, +0x70 allocation bytes
+    DataDescriptor mFFTInstance; // +0x6C context, +0x70 allocation bytes
     s32   miInputChannels;    // +0x74  SetChannels arg1
     s32   miOutputChannels;   // +0x78  SetChannels arg2
     LoadRecord *mpDist;       // +0x7C  per-pass work-distribution table (into mpBuffer)
