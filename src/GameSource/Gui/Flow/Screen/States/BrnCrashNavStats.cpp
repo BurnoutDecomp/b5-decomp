@@ -69,16 +69,16 @@ namespace BrnGui
     };
     const u32 CrashNavStats::muNumResourcesToLoad = 1;
 
-    // ---- file-local boundaries / helpers ------------------------------------------
-    // The apt-component watcher half of the cache the X360 reaches is not on the committed
-    // GuiCache public API; faithful default is a no-op (mirrors the committed
-    // OnlineMarkManCacheBoundary::ClearExpectedAptComponentList). GROW when it lands.
-    namespace CrashNavStatsCacheBoundary
-    {
-        void ClearExpectedAptComponentList(GuiCache* /*lpCache*/, GuiFlow /*leFlow*/)
-        {
-        }
-    }
+    // ---- file-local helpers ----------------------------------------------------------
+    // (A former no-op stand-in for GuiCache::ClearExpectedAptComponentList stood here;
+    // SetExpectedAptComponents now calls the real cache method, as ARTIST does at
+    // @0x824B644C. These lines keep the file's line count for its __LINE__ asserts.)
+    //
+    //
+    //
+    //
+    //
+    //
 
     // The state in-queue is an 18KB variable event queue (X360 VariableEventQueue<18432,16>),
     // reached through the base State's mpInGuiEventQueue (the committed BrnCredits idiom).
@@ -216,9 +216,9 @@ namespace BrnGui
     // ---- SetExpectedAptComponents @ 0x824B6408 ------------------------------------
     void CrashNavStats::SetExpectedAptComponents()
     {
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavStats.cpp", 628 /* ARTIST 0x824B643C */));
 
-        CrashNavStatsCacheBoundary::ClearExpectedAptComponentList(mpGuiCache, E_GUIFLOW_SCREEN);
+        mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
         for (u32 luField = 0; luField < KU_NUM_STAT_TEXTFIELDS; ++luField)
         {
@@ -277,7 +277,7 @@ namespace BrnGui
     // ---- UpdateInitialising @ 0x824B5C60 ------------------------------------------
     bool CrashNavStats::UpdateInitialising()
     {
-        CGS_ASSERT(mpGuiCache, "NULL != mpGuiCache");
+        CGS_ASSERT(mpGuiCache, CgsDev::Assert::MessageAt("NULL != mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavStats.cpp", 339 /* ARTIST 0x824B5C9C */));
 
         if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
             return false;

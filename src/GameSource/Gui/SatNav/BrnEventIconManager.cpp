@@ -110,7 +110,7 @@ namespace BrnGui
     void EventIconManager::ReleaseResources(CgsGui::StateInterface* lpStateInterface,
                                             f32 lfOptionalFadeDuration)
     {
-        CGS_ASSERT(lpStateInterface != NULL, "lpStateInterface");   // cpp:173
+        CGS_ASSERT(lpStateInterface != NULL, CgsDev::Assert::MessageAt("lpStateInterface", KAC_ARTIST_ASSERT_FILE, 173 /* ARTIST 0x825174FC */));   // cpp:173
 
         // `*(this + 2100) = 0` -- the count only; the console leaves the table itself alone.
         miNumEventIcons = 0;
@@ -142,7 +142,7 @@ namespace BrnGui
     // @ 0x824F59C8
     void EventIconManager::GetEventIconPositions(Vector2* lv2IconPositions, s32* lpiNumIcons)
     {
-        CGS_ASSERT(lpiNumIcons != NULL, "lpiNumIcons");
+        CGS_ASSERT(lpiNumIcons != NULL, CgsDev::Assert::MessageAt("lpiNumIcons", KAC_ARTIST_ASSERT_FILE, 122 /* ARTIST 0x824F5A00 */));
 
         // One 16-byte lane store per icon: {x, y, 0, 0} (the X360 zeroes the zw pair
         // before the lvx/stvx copy -- Vector2::Set semantics).

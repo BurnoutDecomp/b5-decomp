@@ -115,9 +115,9 @@ TextFieldRef* MovieClipRef::FindChildTextField(TextFieldRef* lpOutRef,
 bool MovieClipRef::TryFindChildComponentRecursively(const char* lpcName,
                                                     MovieClipRef* lpOutMovieClipRef) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
-    CGS_ASSERT(lpOutMovieClipRef != 0, "lpOutMovieClipRef");
-    CGS_ASSERT(lpcName != 0, "lpcName");
+    CGS_ASSERT(mpMovieClipInst != 0, CgsDev::Assert::MessageAt("mpMovieClipInst", KAC_ARTIST_ASSERT_FILE, 115 /* ARTIST 0x8246C9A8 */));
+    CGS_ASSERT(lpOutMovieClipRef != 0, CgsDev::Assert::MessageAt("lpOutMovieClipRef", KAC_ARTIST_ASSERT_FILE, 116 /* ARTIST 0x8246C9CC */));
+    CGS_ASSERT(lpcName != 0, CgsDev::Assert::MessageAt("lpcName", KAC_ARTIST_ASSERT_FILE, 117 /* ARTIST 0x8246C9F0 */));
 
     u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName),
                                                        FlaptNameLength(lpcName));
@@ -167,8 +167,8 @@ void MovieClipRef::GotoAndPlayLabel(const char* lpcLabel) const
 // (which receives both the hash and the original string).
 void MovieClipRef::GotoAndStopLabel(const char* lpcLabel) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, "mpMovieClipInst");
-    CGS_ASSERT(lpcLabel != 0, "lpcLabel");
+    CGS_ASSERT(mpMovieClipInst != 0, CgsDev::Assert::MessageAt("mpMovieClipInst", KAC_ARTIST_ASSERT_FILE, 182 /* ARTIST 0x8246F4D4 */));
+    CGS_ASSERT(lpcLabel != 0, CgsDev::Assert::MessageAt("lpcLabel", KAC_ARTIST_ASSERT_FILE, 183 /* ARTIST 0x8246F4F8 */));
 
     u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcLabel),
                                                        FlaptNameLength(lpcLabel));

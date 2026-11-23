@@ -381,8 +381,8 @@ namespace BrnGui
     // ------------------------------------------------------------------------------------
     void EffectsArbitrator::StopHook(const PFXHook* lpHook)
     {
-        CGS_ASSERT(lpHook != 0, "lpHook != NULL");                                  // :702
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache != NULL");                          // :703
+        CGS_ASSERT(lpHook != 0, CgsDev::Assert::MessageAt("lpHook != NULL", "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 702 /* ARTIST 0x824FB3D0 */));                                  // :702
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache != NULL", "..\\..\\..\\GameSource\\Gui/PFX/BrnGuiEffectsArbitrator.cpp", 703 /* ARTIST 0x824FB3F8 */));                          // :703
         if (mpCurrent->IsActive() && mpCurrent->GetHook() == lpHook)
         {
             mpCurrent->StartFadeOut(0.0f);

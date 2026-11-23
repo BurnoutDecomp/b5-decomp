@@ -287,7 +287,7 @@ namespace BrnGui
     InstantResultsState::EResultsActiveSubStates InstantResultsState::GetNextSubstate()
     {
         CGS_ASSERT(meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT,
-                   "meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT");
+                   CgsDev::Assert::MessageAt("meActiveSubState < E_ACTIVE_SUBSTATE_EVENT_COUNT", "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Offline/BrnOfflineInstantResults.h", 603 /* ARTIST 0x824B3858 */));
 
         for (s32 liNext = meActiveSubState + 1; liNext < E_ACTIVE_SUBSTATE_EVENT_COUNT; ++liNext)
         {

@@ -231,7 +231,7 @@ void BurnoutSkillsManager::SelectNextSkill()
 // ----------------------------------------------------------------------------
 void BurnoutSkillsManager::Update()
 {
-    CGS_ASSERT(mpCache, "mpCache");
+    CGS_ASSERT(mpCache, CgsDev::Assert::MessageAt("mpCache", "..\\..\\..\\GameSource\\Gui/BrnGuiBurnoutSkillsManager.cpp", 107 /* ARTIST 0x824F9E38 */));
 
     if (mpCache->GetCurrentGameModeType() == KI_SKILLS_ACTIVE_GAME_MODE_TYPE)
     {

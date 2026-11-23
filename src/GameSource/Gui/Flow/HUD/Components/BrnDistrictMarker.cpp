@@ -285,13 +285,13 @@ namespace BrnGui
     //   show  & currently HIDING   -> county container "transin",  state := SHOWING
     void DistrictMarkerComponent::SetHideCountyIcon(bool lbHide)
     {
-        if (lbHide && meCurrentCountyState != E_MARKERSTATE_HIDING)
+        if (lbHide == true && meCurrentCountyState != E_MARKERSTATE_HIDING)   // cmplwi 1 @0x824733D0
         {
             mCountyContainerMovie.SetState("transout");
             meCurrentCountyState = E_MARKERSTATE_HIDING;
-            return;
+            // (if / else-if: both arms share the state store @0x8247343C)
         }
-        if (!lbHide && meCurrentCountyState == E_MARKERSTATE_HIDING)
+        else if (lbHide == false && meCurrentCountyState == E_MARKERSTATE_HIDING)
         {
             mCountyContainerMovie.SetState("transin");
             meCurrentCountyState = E_MARKERSTATE_SHOWING;

@@ -667,8 +667,8 @@ namespace BrnGui
     // this is the call that was missing.
     void CrashNavOptions::ApplyAndSaveSettings()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");             // cpp:867
-        CGS_ASSERT(mpStateInterface != 0, "mpStateInterface"); // cpp:868
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavOptions.cpp", 867 /* ARTIST 0x824CDD38 */));             // cpp:867
+        CGS_ASSERT(mpStateInterface != 0, CgsDev::Assert::MessageAt("mpStateInterface", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavOptions.cpp", 868 /* ARTIST 0x824CDD60 */)); // cpp:868
 
         mOptionsData.SetToProfile(mpGuiCache->GetOptionsDataProfile());
         mOptionsData.OutputEvents(mpGuiCache->GetOptionsDataProfile(), mpStateInterface);
@@ -712,7 +712,7 @@ namespace BrnGui
     void CrashNavOptions::RestoreVoipSettings()
     {
         CGS_ASSERT((mpStateInterface != 0) && (mpGuiCache != 0),
-                   "( mpStateInterface ) && ( mpGuiCache )");   // cpp:906
+                   CgsDev::Assert::MessageAt("( mpStateInterface ) && ( mpGuiCache )", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavOptions.cpp", 906 /* ARTIST 0x824CDEAC */));   // cpp:906
 
         GuiEventCrashNavVoipVolume lEvent;
         lEvent.miVoipVolume =

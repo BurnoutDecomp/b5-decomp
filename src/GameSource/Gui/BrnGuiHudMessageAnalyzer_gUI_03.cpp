@@ -9,7 +9,7 @@
 #include "SharedClasses/DataLists/ChallengeList.h"      // BrnResource::ChallengeList::GetChallengeData
 #include "SharedClasses/DataLists/ChallengeListEntry.h" // BrnResource::ChallengeListEntry::GetTitleStringID
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsID.h"          // CgsID / CgsIDCompress
 #include "GameShared/GameClasses/Core/CgsStringUtils.h" // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // [gateui r3] gpDebugPrint / gxMessageFilterFlags (the drive-through + finisher dumps)
@@ -588,7 +588,7 @@ void HudMessageAnalyzer::HandleNetworkBattling(const GuiNetworkPlayerBattlingEve
 //       already branched on), so a full bar can never fall through to the lowering path.
 void HudMessageAnalyzer::HandleChainedBoost(const GuiEventBoostInfo* lpEvent)
 {
-    CGS_ASSERT(lpEvent != NULL, "lpEvent");   // cpp:4519
+    CGS_ASSERT(lpEvent != NULL, CgsDev::Assert::MessageAt("lpEvent", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.cpp", 4519 /* ARTIST 0x8251EA8C */));   // cpp:4519
 
     if (lpEvent->mbWasChainJustCompleted)
     {

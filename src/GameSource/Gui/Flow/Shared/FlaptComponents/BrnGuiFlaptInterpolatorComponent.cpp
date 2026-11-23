@@ -38,7 +38,7 @@ namespace BrnGui
                                                CgsGui::StateInterface* lpStateInterface,
                                                const void* /*lpcParentName*/)
     {
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
+        CGS_ASSERT(lpStateInterface != 0, CgsDev::Assert::MessageAt("lpStateInterface", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptComponent.h", 113 /* ARTIST 0x8241CFF4 */));
 
         // Base init (the X360 inlined BrnFlaptComponent::Construct + MovieClipRef
         // SetInvalid): bind the state channel and invalidate the base clip handle.
@@ -84,7 +84,7 @@ namespace BrnGui
                                                      Vector2 lv2StartScale,
                                                      Vector2 lv2EndScale)
     {
-        CGS_ASSERT(mAptRef.mpMovieClipInst != 0, "mMovieClipRef.IsValid()");
+        CGS_ASSERT(mAptRef.mpMovieClipInst != 0, CgsDev::Assert::MessageAt("mMovieClipRef.IsValid()", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptInterpolatorComponent.cpp", 99 /* ARTIST 0x8241D124 */));
 
         // Locate the named child under the base clip's parent and adopt it as the
         // controlled clip.

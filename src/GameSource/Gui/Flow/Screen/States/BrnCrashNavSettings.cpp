@@ -241,7 +241,7 @@ namespace BrnGui
     // it returns nothing, so a stale close cannot be read twice.
     char* CrashNavProductCodeKeyboardListener::FillString()
     {
-        CGS_ASSERT(mbKeyboardClosed, "mbKeyboardClosed");   // cpp:1202
+        CGS_ASSERT(mbKeyboardClosed, CgsDev::Assert::MessageAt("mbKeyboardClosed", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavSettings.cpp", 1202 /* ARTIST 0x824B7A60 */));   // cpp:1202
 
         const bool lbHadNewData = (mbNewData == 1);         // `lbz r10, 0x19` read BEFORE the clear
         mbKeyboardClosed = false;                           // `stb r11(0), 0x18`

@@ -34,18 +34,18 @@ namespace BrnFlapt
 {
 
 // ---- Construct @ 0x8246AFF0 ----------------------------------------------
-TextFieldRef* TextFieldRef::Construct(void* lpTextFieldInstance,
+void TextFieldRef::Construct(void* lpTextFieldInstance,
                                       void* lpParentMovie,
                                       void* lpTransform)
 {
-    CGS_ASSERT(lpTextFieldInstance != 0, "lpTextFieldInst");
-    CGS_ASSERT(lpParentMovie != 0, "lpParentMovie");
-    CGS_ASSERT(lpTransform != 0, "lpTransform");
+    CGS_ASSERT(lpTextFieldInstance != 0, CgsDev::Assert::MessageAt("lpTextFieldInst", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flapt\\BrnFlaptTextFieldRef.h", 210 /* ARTIST 0x8246B030 */));
+    CGS_ASSERT(lpParentMovie != 0, CgsDev::Assert::MessageAt("lpParentMovie", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flapt\\BrnFlaptTextFieldRef.h", 211 /* ARTIST 0x8246B054 */));
+    CGS_ASSERT(lpTransform != 0, CgsDev::Assert::MessageAt("lpTransform", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flapt\\BrnFlaptTextFieldRef.h", 212 /* ARTIST 0x8246B078 */));
 
     mpTextFieldInstance = lpTextFieldInstance;
     mpParentMovie       = lpParentMovie;
     mpTransform         = lpTransform;
-    return this;
+
 }
 
 // ---- SetText @ 0x8246CC48 -------------------------------------------------

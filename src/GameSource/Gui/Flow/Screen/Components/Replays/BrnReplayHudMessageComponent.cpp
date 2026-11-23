@@ -29,8 +29,8 @@ namespace BrnGui
 void ReplayHudMessageComponent::Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
                                           const char* lpacParentName)
 {
-    CgsGui::GuiComponent::Construct(lpacName, lpStateInterface, lpacParentName);
-
+    CgsGui::GuiComponent::Construct(lpacName, lpStateInterface, 0);
+    // (ARTIST passes a null parent: li r6, 0 @0x8241BE7C; lpacParentName is unused.)
     maTextFields[0].Construct("string_0", mpStateInterface, GetName());
     maTextFields[1].Construct("string_1", mpStateInterface, GetName());
     maTextFields[2].Construct("string_2", mpStateInterface, GetName());

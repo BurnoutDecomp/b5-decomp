@@ -655,7 +655,7 @@ namespace BrnGui
     // news) are always allowed; the join options need the multiplayer privilege.
     bool InGame::CheckPrivileges(EMainMenuOptions leMainMenuOption)
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1253
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnInGame.cpp", 1253 /* ARTIST 0x824B8F34 */));   // cpp:1253
 
         const bool lbMultiplayerAllowed = mpGuiCache->IsMultiplayerAllowed();
         switch (leMainMenuOption)
@@ -678,7 +678,7 @@ namespace BrnGui
             return true;
 
         default:
-            CGS_ASSERT(false, "Invalid menu option");   // cpp:1289
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid menu option", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnInGame.cpp", 1289 /* ARTIST 0x824B8FB8 */));   // cpp:1289
             return false;
         }
     }

@@ -629,7 +629,7 @@ namespace BrnGui
     // Show each option row the mode's mapping table places, hide the rest.
     void GuiNetworkRouteInfo::ShowAppropiateOptions(const s32* lpiMappingTable)
     {
-        CGS_ASSERT(lpiMappingTable != 0, "lpiMappingTable");
+        CGS_ASSERT(lpiMappingTable != 0, CgsDev::Assert::MessageAt("lpiMappingTable", "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnGuiNetworkRouteInfo.cpp", 829 /* ARTIST 0x8241744C */));
 
         for (s32 liComponent = 0; liComponent < E_OPTION_COMPONENT_COUNT; ++liComponent)
         {

@@ -238,7 +238,7 @@ namespace
     // &maeMessageState[idx]).
     void InGameMessagesComponent::SetInGameMessagesQueue(InGameMessagesQueue* lInGameInMessagesQueue)
     {
-        CGS_ASSERT(lInGameInMessagesQueue != 0, "lInGameInMessagesQueue != NULL");
+        CGS_ASSERT(lInGameInMessagesQueue != 0, CgsDev::Assert::MessageAt("lInGameInMessagesQueue != NULL", "..\\..\\..\\GameSource\\Gui/Flow/Hud/Components/BrnInGameMessagesComponent.h", 356 /* ARTIST 0x82475BBC */));
 
         mpInGameMessagesQueue = lInGameInMessagesQueue;
 
@@ -296,13 +296,13 @@ namespace
     // a VISIBLE one is ended once the current base time reaches its latched end-time.
     void InGameMessagesComponent::Update()
     {
-        CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
+        CGS_ASSERT(mpInGameMessagesQueue != NULL, CgsDev::Assert::MessageAt("mpInGameMessagesQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\hud\\components\\BrnInGameMessagesComponent.h", 397 /* ARTIST 0x8243DE1C */));
 
         const MessageState leState =
             mpInGameMessagesQueue->maeMessageState[mpInGameMessagesQueue->muCurrentMessageIndex];
         if (leState == E_MESSAGESTATE_WAITING)
         {
-            CGS_ASSERT(mpInGameMessagesQueue != NULL, "mpInGameMessagesQueue != NULL");
+            CGS_ASSERT(mpInGameMessagesQueue != NULL, CgsDev::Assert::MessageAt("mpInGameMessagesQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\hud\\components\\BrnInGameMessagesComponent.h", 397 /* ARTIST 0x8243DE88 */));
             StartMessage(&mpInGameMessagesQueue->maMessages[mpInGameMessagesQueue->muCurrentMessageIndex]);
         }
         else if (leState == E_MESSAGESTATE_VISIBLE)
@@ -583,7 +583,7 @@ namespace
     // KAPC_GAME_MODE_ICONS.
     void InGameMessagesComponent::SetIcon(const char* lacIconTypeName)
     {
-        CGS_ASSERT(lacIconTypeName != NULL, "NULL != lacIconTypeName");   // cpp:438
+        CGS_ASSERT(lacIconTypeName != NULL, CgsDev::Assert::MessageAt("NULL != lacIconTypeName", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnInGameMessagesComponent.cpp", 438 /* ARTIST 0x82410E68 */));   // cpp:438
 
         if (std::strcmp(lacIconTypeName, "EventSpecific") != 0)
         {
@@ -593,8 +593,8 @@ namespace
 
         CGS_ASSERT(static_cast<s32>(meCurrentGameMode) >= KI_GAME_MODE_NONE &&
                        static_cast<s32>(meCurrentGameMode) < KI_GAME_MODE_COUNT,
-                   "(GsmIO::E_MODE_NONE <= meCurrentGameMode) && "
-                   "(GsmIO::E_MODE_COUNT > meCurrentGameMode)");          // cpp:444
+                   CgsDev::Assert::MessageAt("(GsmIO::E_MODE_NONE <= meCurrentGameMode) && (GsmIO::E_MODE_COUNT > meCurrentGameMode)", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnInGameMessagesComponent.cpp", 444 /* ARTIST 0x82410ED0 */)
+);          // cpp:444
 
         mIconRef.GotoAndPlayLabel(
             KAPC_GAME_MODE_ICONS[static_cast<s32>(meCurrentGameMode) + KI_GAME_MODE_ICON_BIAS]);

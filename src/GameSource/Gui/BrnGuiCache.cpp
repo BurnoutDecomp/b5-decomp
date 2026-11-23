@@ -2821,7 +2821,7 @@ namespace BrnGui
     // @ 0x8240F450
     s32 GuiCache::GetOpponentsInEvent() const
     {
-        CGS_ASSERT(-1 < miOpponentsInEvent, "-1 < miOpponentsInEvent");
+        CGS_ASSERT(-1 < miOpponentsInEvent, CgsDev::Assert::MessageAt("-1 < miOpponentsInEvent", KAC_ARTIST_ASSERT_FILE, 3030 /* ARTIST 0x8240F490 */));
         return miOpponentsInEvent;
     }
 
@@ -4206,12 +4206,12 @@ namespace BrnGui
         CGS_ASSERT(
             (meGameModeType == 0) || (meGameModeType == 1) || (meGameModeType == 10)
                 || (meGameModeType == 6) || (meGameModeType == 8) || (meGameModeType == 5),
-            "( meGameModeType == GsmIO::E_MODE_OFFLINE_RACE ) || ( meGameModeType == "
-            "GsmIO::E_MODE_FACE_OFF ) || ( meGameModeType == GsmIO::E_MODE_ONLINE_RACE ) || "
-            "( meGameModeType == GsmIO::E_MODE_ELIMINATOR ) || ( meGameModeType == "
-            "GsmIO::E_MODE_MARKED_MAN ) || ( meGameModeType == GsmIO::E_MODE_BURNING_ROUTE )");
+            CgsDev::Assert::MessageAt("( meGameModeType == GsmIO::E_MODE_OFFLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_FACE_OFF ) || ( meGameModeType == GsmIO::E_MODE_ONLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_ELIMINATOR ) || ( meGameModeType == GsmIO::E_MODE_MARKED_MAN ) || ( meGameModeType == GsmIO::E_MODE_BURNING_ROUTE )", KAC_ARTIST_ASSERT_FILE, 4055 /* ARTIST 0x8240FAF4 */)
+
+
+);
         CGS_ASSERT(mEventDestinationLandmarkIndex != 0xFFFFu,
-                   "mEventDestinationLandmarkIndex != BrnGameState::K_INVALID_LANDMARK");
+                   CgsDev::Assert::MessageAt("mEventDestinationLandmarkIndex != BrnGameState::K_INVALID_LANDMARK", KAC_ARTIST_ASSERT_FILE, 4057 /* ARTIST 0x8240FB34 */));
         return BrnGameState::LandmarkIndex(mEventDestinationLandmarkIndex);
     }
 

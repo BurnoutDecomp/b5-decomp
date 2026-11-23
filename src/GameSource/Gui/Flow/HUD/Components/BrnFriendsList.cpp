@@ -202,7 +202,7 @@ void FriendsListComponent::SaveCurrentState()
 // @0x82414AA0 --------------------------------------------------------------------
 void FriendsListComponent::TransitionCompleteCallback(void* lpUserData)
 {
-    CGS_ASSERT(lpUserData != 0, "lpUserData");
+    CGS_ASSERT(lpUserData != 0, CgsDev::Assert::MessageAt("lpUserData", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.cpp", 3900 /* ARTIST 0x82414AD4 */));
     FriendsListComponent& lrSelf = *static_cast<FriendsListComponent*>(lpUserData);
     if (lrSelf.mePanelState == 1)
         lrSelf.mePanelState = 2;
@@ -1239,8 +1239,8 @@ void FriendsListComponent::HandleTableInteraction(s32 action)
 // ARTIST 0x82443280.
 void FriendsListComponent::HandleControllerInput(const s32* input)
 {
-    CGS_ASSERT(input != 0, "lpControllerInput");
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+    CGS_ASSERT(input != 0, CgsDev::Assert::MessageAt("lpControllerInput", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.cpp", 849 /* ARTIST 0x824432B8 */));
+    CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.cpp", 856 /* ARTIST 0x824432E0 */));
     // Host diagnostic: one record per GUI press, disabled in normal play.
     if (!mpGuiCache->GetGameplayHudReady() || (meListType == 1 && meDataState != 2)) return;
     if (mePanelState == 2 && meBranchState != 0) HandleBranchInteraction(input[1]);
@@ -1560,7 +1560,7 @@ void FriendsListComponent::SortFullList()
 // ARTIST 0x824430D0.
 void FriendsListComponent::ProcessNewEntryData(const void* data)
 {
-    CGS_ASSERT(data != 0, "lpFriendInfo");
+    CGS_ASSERT(data != 0, CgsDev::Assert::MessageAt("lpFriendInfo", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnFriendsList.cpp", 706 /* ARTIST 0x82443104 */));
     if (meListType != 1) return;
     const GuiEventOnlineReceiveFriendInfo& event = *static_cast<const GuiEventOnlineReceiveFriendInfo*>(data);
     if (!event.mbConnected) { HandleNotConnected(); meDataState = 2; return; }

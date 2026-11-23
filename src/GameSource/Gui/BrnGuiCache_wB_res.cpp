@@ -1,5 +1,5 @@
 #include "GameSource/Gui/BrnGuiCache.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/BrnGameStateTypes.h"   // BrnGameState::LandmarkIndex (returned BY VALUE)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The last residual GuiCache accessors: two
@@ -73,7 +73,7 @@ namespace BrnGui
     BrnGameState::LandmarkIndex GuiCache::GetEventFinishLandmark() const
     {
         const u8 lu8NumCheckpointsInEvent = GetCheckpointsInEvent();
-        CGS_ASSERT(lu8NumCheckpointsInEvent > 0, "lu8NumCheckpointsInEvent > 0");
+        CGS_ASSERT(lu8NumCheckpointsInEvent > 0, CgsDev::Assert::MessageAt("lu8NumCheckpointsInEvent > 0", "..\\..\\..\\GameSource\\Gui/BrnGuiCache.h", 4108 /* ARTIST 0x824EC650 */));
         return BrnGameState::LandmarkIndex(maCheckpointLandmarks[lu8NumCheckpointsInEvent - 1]);
     }
 

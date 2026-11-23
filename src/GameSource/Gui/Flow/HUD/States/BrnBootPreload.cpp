@@ -2,7 +2,7 @@
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // CgsGui::StateInterface
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::VariableEventQueue (the in-queue)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Gui/BrnGuiCache.h"                                   // GuiCache::EnsureResourcesAreLoaded (the stage gates)
 
 // BrnGui::BootPreload -- reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -159,10 +159,10 @@ namespace BrnGui
         // cache pointer. Trivial as a line of code, not trivial as a tripwire -- leaving
         // BF_PRELOAD without a cache means the whole preload ladder above ran against
         // nothing, and this is the one place that would say so.
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnBootPreload.cpp", 386 /* ARTIST 0x82473A98 */));
 
-        if (mpStateInterface != 0)
-            mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
+        // Unguarded, as ARTIST calls it (@0x82473AB0).
+        mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
     }
 
     // ⭐ CORRECTED 2026-08-16 (boot audit F-P8b-11). Every stage gated on `cache != 0` --

@@ -33,7 +33,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCrashNavColourCalibrate.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface (register / out-queue / PlayAptMovie)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / the state in-queue
@@ -681,7 +681,7 @@ namespace BrnGui
     // brightness but never contrast.
     void CrashNavColourCalibrate::GetSettingsFromProfile()
     {
-        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // cpp:688
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("NULL != mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavColourCalibrate.cpp", 688 /* ARTIST 0x824B83B0 */));   // cpp:688
 
         // X360 `addis r3, r11, 1 ; addi r3, r3, -0x4788` == cache + 0xB878 (47224) ==
         // GuiCache::GetOptionsDataProfile().

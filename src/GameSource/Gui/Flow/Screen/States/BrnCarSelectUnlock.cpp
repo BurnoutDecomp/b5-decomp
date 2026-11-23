@@ -24,7 +24,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnCarSelectUnlock.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDConvertToString
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
@@ -312,7 +312,7 @@ namespace BrnGui
     // pointer into mpGuiCache.
     void CarSelectUnlock::UpdateGetCache()
     {
-        CGS_ASSERT(mpGuiCache == NULL, "NULL == mpGuiCache");   // cpp:215
+        CGS_ASSERT(mpGuiCache == NULL, CgsDev::Assert::MessageAt("NULL == mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectUnlock.cpp", 215 /* ARTIST 0x824C15E0 */));   // cpp:215
 
         InGuiEventQueue* lpInQueue = reinterpret_cast<InGuiEventQueue*>(mpInGuiEventQueue);
 
@@ -333,12 +333,12 @@ namespace BrnGui
             {
                 // The cache event carries the GuiCache pointer in its leading word.
                 GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
-                CGS_ASSERT(lpCache != NULL, "NULL != lpCacheEvent->mpCachePointer");   // cpp:225
+                CGS_ASSERT(lpCache != NULL, CgsDev::Assert::MessageAt("NULL != lpCacheEvent->mpCachePointer", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectUnlock.cpp", 225 /* ARTIST 0x824C1650 */));   // cpp:225
                 mpGuiCache = lpCache;
             }
         }
 
-        CGS_ASSERT(mpGuiCache != NULL, "NULL != mpGuiCache");   // cpp:234
+        CGS_ASSERT(mpGuiCache != NULL, CgsDev::Assert::MessageAt("NULL != mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectUnlock.cpp", 234 /* ARTIST 0x824C1680 */));   // cpp:234
     }
 
     // ---- UpdateLoadResources @ 0x824D8268 -----------------------------------------

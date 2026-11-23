@@ -33,9 +33,9 @@ namespace BrnFlapt
     struct TextFieldRef
     {
         // Construct @ 0x8246AFF0 : assert all three pointers non-null, then store
-        // them. Returns the constructed TextFieldRef (the X360 returns `this`,
-        // here via the caller-provided storage).
-        TextFieldRef* Construct(void* lpTextFieldInstance,
+        // them. DecFIGS declares it void, and ARTIST leaves r3 untouched after the
+        // stores (no `mr r3, this` before the epilogue @0x8246B08C).
+        void Construct(void* lpTextFieldInstance,
                                 void* lpParentMovie,
                                 void* lpTransform);
 

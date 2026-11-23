@@ -417,7 +417,7 @@ namespace BrnGui
     //      running); the other two return with the marker placed.
     void CompassComponent::Update()
     {
-        CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != NULL, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnCompassComponent.cpp", 274 /* ARTIST 0x8242E1A0 */));
 
         f32 lfBearing = mpGuiCache->GetPlayerOrientation() * KF_RADIANS_TO_DEGREES
                       + KF_DEGREES_HALF_TURN;
@@ -445,11 +445,11 @@ namespace BrnGui
                 case GsmIO::E_MODE_ONLINE_ROAD_RAGE:
                 {
                     GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
-                    CGS_ASSERT(lpTracker != NULL, "lpTracker");
+                    CGS_ASSERT(lpTracker != NULL, CgsDev::Assert::MessageAt("lpTracker", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnCompassComponent.cpp", 317 /* ARTIST 0x8242E2CC */));
 
                     const BrnGameState::LandmarkIndex* lpLandmarks =
                         lpTracker->GetActivelyTrackedLandmarks();
-                    CGS_ASSERT(lpLandmarks != NULL, "lpLandmarks");
+                    CGS_ASSERT(lpLandmarks != NULL, CgsDev::Assert::MessageAt("lpLandmarks", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnCompassComponent.cpp", 320 /* ARTIST 0x8242E2FC */));
 
                     ShowLandmarkOnCompass(lpLandmarks[0], lfBearing);
 

@@ -83,11 +83,11 @@ void HudMessageAnalyzer::HandleBurningHomeRunCheckpointReached(
         const GuiBHRCheckpointReachedEvent* lpEvent)
 {
     // Non-gating tripwires (cpp:1829-1832, in the console's order).
-    CGS_ASSERT(lpEvent != NULL, "lpEvent");
-    CGS_ASSERT(lpEvent->meActiveRaceCarIndex >= 0, "lpEvent->meActiveRaceCarIndex >= 0");
+    CGS_ASSERT(lpEvent != NULL, CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 1829 /* ARTIST 0x8251B208 */));
+    CGS_ASSERT(lpEvent->meActiveRaceCarIndex >= 0, CgsDev::Assert::MessageAt("lpEvent->meActiveRaceCarIndex >= 0", KAC_ARTIST_ASSERT_FILE, 1830 /* ARTIST 0x8251B230 */));
     CGS_ASSERT(lpEvent->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "lpEvent->meActiveRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+               CgsDev::Assert::MessageAt("lpEvent->meActiveRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_FILE, 1831 /* ARTIST 0x8251B258 */));
+    CGS_ASSERT(mpGuiCache != NULL, CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 1832 /* ARTIST 0x8251B280 */));
 
     GuiHudMessage lMessage;
 

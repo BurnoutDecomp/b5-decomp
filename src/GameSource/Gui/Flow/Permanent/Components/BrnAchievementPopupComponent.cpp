@@ -30,7 +30,7 @@
 
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"             // BrnFlapt::FileRef (Prepare param)
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipRef.h"        // MovieClipRef lookups / GotoAndPlayLabel
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGui
 {
@@ -119,7 +119,7 @@ namespace BrnGui
     void AchievementPopupComponent::DisplayNewAchievementNotification(
             const AchievementsBitArray* lpAchievementsToShow)
     {
-        CGS_ASSERT(lpAchievementsToShow != 0, "lpAchievementsToShow");
+        CGS_ASSERT(lpAchievementsToShow != 0, CgsDev::Assert::MessageAt("lpAchievementsToShow", "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnAchievementPopupComponent.cpp", 223 /* ARTIST 0x8242C374 */));
 
         mAchievementsToShow.ORArrays(&mAchievementsToShow, lpAchievementsToShow);
     }

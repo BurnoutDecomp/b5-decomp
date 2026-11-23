@@ -124,7 +124,7 @@ namespace BrnGui
     // ---- HandleControllerInput @ 0x824D6D10 ----------------------------------------
     void CarSelectLivery::HandleControllerInput(const CgsModule::Event* lpEvent, s32 liEventKind)
     {
-        CGS_ASSERT(lpEvent != 0, "lpEvent");   // cpp:674
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::MessageAt("lpEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectLivery.cpp", 674 /* ARTIST 0x824D6D48 */));   // cpp:674
 
         CarSelectMain::HandleControllerInput(lpEvent, liEventKind);
 

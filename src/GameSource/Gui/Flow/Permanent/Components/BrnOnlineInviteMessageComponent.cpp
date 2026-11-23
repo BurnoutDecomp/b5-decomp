@@ -263,8 +263,8 @@ void OnlineInviteMessageComponent::RemoveMessage()
             "..\\..\\..\\GameSource\\Gui/Flow/Permanent/Components/BrnOnlineInviteMessageComponent.cpp", 586);
         CgsDev::Assert::EndAssert();
     }
-    mAptRef.GotoAndPlayLabel(KAE_TYPE_SIZE_CONVERSION[meShowingType] == E_ONLINE_NOTIFICATION_CHYRON_SIZE_SMALL
-        ? "smallTransout" : "largeTransout");
+    if (KAE_TYPE_SIZE_CONVERSION[meShowingType] == E_ONLINE_NOTIFICATION_CHYRON_SIZE_SMALL) mAptRef.GotoAndPlayLabel("smallTransout");
+    else mAptRef.GotoAndPlayLabel("largeTransout");   // two calls, tail-merged (ARTIST forms &mAptRef before the test @0x82416290)
     meShowingState = E_SHOWINGSTATE_TRANSITIONING_OUT;
 }
 

@@ -159,7 +159,7 @@ s32 ChallengeSelector::SetAvailableChallenges(s32 liNumPlayers)
 // select was requested, show the selector and select slot 0.
 void ChallengeSelector::SelectAvailableChallengeByID(CgsID lID, bool lbSelect)
 {
-    CGS_ASSERT(mpChallengeList, "mpChallengeList");   // line 166
+    CGS_ASSERT(mpChallengeList, CgsDev::Assert::MessageAt("mpChallengeList", "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnChallengeSelector.cpp", 166 /* ARTIST 0x82440178 */));   // line 166
 
     if (mpChallengeList->GetChallengeIndex(lID) < 0)
     {
@@ -193,7 +193,7 @@ void ChallengeSelector::SelectAvailableChallengeByID(CgsID lID, bool lbSelect)
         }
 
         CGS_ASSERT(liAvailableIndex < miAvailableChallenges,
-                   "liAvailableIndex < miAvailableChallenges");   // line 184
+                   CgsDev::Assert::MessageAt("liAvailableIndex < miAvailableChallenges", "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnChallengeSelector.cpp", 184 /* ARTIST 0x82440200 */));   // line 184
 
         SelectAvailableChallenge(liAvailableIndex, lbSelect);
     }

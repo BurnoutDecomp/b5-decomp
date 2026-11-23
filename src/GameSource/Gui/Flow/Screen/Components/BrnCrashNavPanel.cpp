@@ -264,9 +264,9 @@ namespace BrnGui
     // @ 0x82440378 -- the one-shot component set-up, run once the GuiCache has arrived.
     void CrashNavPanel::SetupComponent()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                                  // cpp:270
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnCrashNavPanel.cpp", 270 /* ARTIST 0x824403B0 */));                                  // cpp:270
         CGS_ASSERT(mePrepareStage == E_PREPARESTAGE_CONSTRUCTED,
-                   "mePrepareStage == E_PREPARESTAGE_CONSTRUCTED");                 // cpp:271
+                   CgsDev::Assert::MessageAt("mePrepareStage == E_PREPARESTAGE_CONSTRUCTED", "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnCrashNavPanel.cpp", 271 /* ARTIST 0x824403D8 */));                 // cpp:271
 
         // Row 0: the four top-level filters. Row 2: the empty in-event row, disabled
         // straight away (it is only switched on further down, in the in-event branch).

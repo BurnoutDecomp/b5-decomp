@@ -141,7 +141,7 @@ namespace BrnGui
                                          const BrnFlapt::FileRef& lFile,
                                          const char* lacParentName)
     {
-        CGS_ASSERT(lacName != 0, "lacName");
+        CGS_ASSERT(lacName != 0, CgsDev::Assert::MessageAt("lacName", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.cpp", 65 /* ARTIST 0x8241C5A8 */));
 
         BrnFlaptComponent::Prepare(lacName, lFile, lacParentName);
         muCurrentStateHash = 0;
@@ -152,7 +152,7 @@ namespace BrnGui
         BrnFlapt::MovieClipRef lParentClip;
         mAptRef.GetParent(&lParentClip);
 
-        CGS_ASSERT(lpTriggerParameters != 0, "NULL != lpTriggerParameters");
+        CGS_ASSERT(lpTriggerParameters != 0, CgsDev::Assert::MessageAt("NULL != lpTriggerParameters", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptIconComponent.cpp", 180 /* ARTIST 0x8241C604 */));
 
         int liCount = 0;
         do

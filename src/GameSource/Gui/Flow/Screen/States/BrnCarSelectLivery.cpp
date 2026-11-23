@@ -411,8 +411,8 @@ namespace BrnGui
     // site is the reason its FLAG can now record a second attested role.
     bool CarSelectLivery::CanCarBePainted(const BrnResource::VehicleListEntry* lpVehicleListEntry) const
     {
-        CGS_ASSERT(lpVehicleListEntry != 0, "lpVehicleListEntryGamePlayData");   // cpp:1225
-        CGS_ASSERT(mpGuiCache != 0, "lpGameParams");                             // cpp:1228
+        CGS_ASSERT(lpVehicleListEntry != 0, CgsDev::Assert::MessageAt("lpVehicleListEntryGamePlayData", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectLivery.cpp", 1225 /* ARTIST 0x824B5318 */));   // cpp:1225
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("lpGameParams", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCarSelectLivery.cpp", 1228 /* ARTIST 0x824B5348 */));                             // cpp:1228
 
         // ⚠️ ENTRY guard, not in the X360 body. The console dereferences the entry
         // unconditionally because the game state always publishes a live drop-in car id

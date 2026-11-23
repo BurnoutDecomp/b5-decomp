@@ -212,14 +212,14 @@ static const s32 KI_INVALID_PLAYER_ID = -1;
 void HudMessageAnalyzer::HandleOnlineStuntRunElimination(
         const GuiOnlineStuntRunEliminationEvent* lpEliminationEvent)
 {
-    CGS_ASSERT(lpEliminationEvent != NULL, "lpEliminationEvent != NULL");
+    CGS_ASSERT(lpEliminationEvent != NULL, CgsDev::Assert::MessageAt("lpEliminationEvent != NULL", KAC_ARTIST_ASSERT_FILE, 5299 /* ARTIST 0x8251FAC8 */));
 
     GuiHudMessage lMessage;
 
     if (lpEliminationEvent->mbIsLocalPlayer)
     {
         CGS_ASSERT(lpEliminationEvent->mPlayerId == KI_INVALID_PLAYER_ID,
-                   "lpEliminationEvent->mPlayerId == CgsNetwork::K_INVALID_PLAYER_ID");
+                   CgsDev::Assert::MessageAt("lpEliminationEvent->mPlayerId == CgsNetwork::K_INVALID_PLAYER_ID", KAC_ARTIST_ASSERT_FILE, 5305 /* ARTIST 0x8251FAFC */));
 
         if (lpEliminationEvent->mbIsTeammate)
             lMessage.Construct("OnlSrPtElim");
@@ -231,7 +231,7 @@ void HudMessageAnalyzer::HandleOnlineStuntRunElimination(
     }
 
     CGS_ASSERT(lpEliminationEvent->mPlayerId != KI_INVALID_PLAYER_ID,
-               "lpEliminationEvent->mPlayerId != CgsNetwork::K_INVALID_PLAYER_ID");
+               CgsDev::Assert::MessageAt("lpEliminationEvent->mPlayerId != CgsNetwork::K_INVALID_PLAYER_ID", KAC_ARTIST_ASSERT_FILE, 5320 /* ARTIST 0x8251FB70 */));
 
     if (lpEliminationEvent->mbIsLastPlayer)
     {
@@ -505,12 +505,12 @@ void HudMessageAnalyzer::Construct(HudMessageDirector* lpHudMessageDirector)
 bool HudMessageAnalyzer::AddGamerTagToMessage(GuiHudMessage* lpMessage, const char* lpcStringID,
                                               EActiveRaceCarIndex leActiveRaceCarIndex) const
 {
-    CGS_ASSERT(lpMessage != NULL, "lpMessage");
-    CGS_ASSERT(lpcStringID != NULL, "lpcStringID");
+    CGS_ASSERT(lpMessage != NULL, CgsDev::Assert::MessageAt("lpMessage", KAC_ARTIST_ASSERT_FILE, 5916 /* ARTIST 0x824F3540 */));
+    CGS_ASSERT(lpcStringID != NULL, CgsDev::Assert::MessageAt("lpcStringID", KAC_ARTIST_ASSERT_FILE, 5917 /* ARTIST 0x824F3564 */));
     CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-               "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+               CgsDev::Assert::MessageAt("leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 5919 /* ARTIST 0x824F3588 */));
     CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+               CgsDev::Assert::MessageAt("leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 5920 /* ARTIST 0x824F35AC */));
 
     bool lbNameValid = true;
     const char* lpcOnlineName = GetOnlineName(leActiveRaceCarIndex, &lbNameValid);
@@ -681,8 +681,8 @@ void HudMessageAnalyzer::ConstructTakedownMessage(GuiHudMessage* lpHudMessage,
                                                   const GuiTakedownEvent* lpTakedown)
 {
     // Non-gating tripwires (cpp:2576/2577).
-    CGS_ASSERT(lpHudMessage != NULL, "lpHudMessage");
-    CGS_ASSERT(lpTakedown != NULL, "lpTakedown");
+    CGS_ASSERT(lpHudMessage != NULL, CgsDev::Assert::MessageAt("lpHudMessage", KAC_ARTIST_ASSERT_FILE, 2576 /* ARTIST 0x824F9C60 */));
+    CGS_ASSERT(lpTakedown != NULL, CgsDev::Assert::MessageAt("lpTakedown", KAC_ARTIST_ASSERT_FILE, 2577 /* ARTIST 0x824F9C84 */));
 
     // Multi-takedowns get their own dedicated message elsewhere.
     if (lpTakedown->miMultipleTakedownCount <= 1)
@@ -696,7 +696,7 @@ void HudMessageAnalyzer::ConstructTakedownMessage(GuiHudMessage* lpHudMessage,
         {
             // cpp:2631 (streamed on the X360 @0x824F9CE8 -> folded static; a provably-dead
             // guard -- this lane is only reached when liChainCount >= 2).
-            CGS_ASSERT(liChainCount - 2 >= 0, "liChainIndex >= 0 && liChainIndex < liChainCount");
+            CGS_ASSERT(liChainCount - 2 >= 0, CgsDev::Assert::MessageAt("liChainIndex >= 0 && liChainIndex < liChainHudMessageCount", KAC_ARTIST_ASSERT_FILE, 2631 /* ARTIST 0x824F9CFC */));
             lpHudMessage->Construct(KAPC_TAKEDOWN_CHAIN[liChainCount - 2]);
         }
         else
@@ -1273,8 +1273,8 @@ void HudMessageAnalyzer::HandleRoadRuleFailed(const GuiEventRoadRuleFail* lpEven
 void HudMessageAnalyzer::HandleShowtimeModeSwitch(const GuiShowtimeModeSwitch* lpEvent)
 {
     // Non-gating tripwires (cpp:4923/4924; both streamed on the X360, folded static).
-    CGS_ASSERT(lpEvent != NULL, "lpEvent");
-    CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+    CGS_ASSERT(lpEvent != NULL, CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 4923 /* ARTIST 0x8251F278 */));
+    CGS_ASSERT(mpGuiCache != NULL, CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 4924 /* ARTIST 0x8251F2A0 */));
 
     if (lpEvent->meActiveRaceCarIndex !=
             static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex())
@@ -3070,7 +3070,7 @@ void HudMessageAnalyzer::HandleTraitorousTakedown(const GuiTraitorousTakedownEve
 //                 (meCrashEntryState == 0), then latch WRECK_HANDLED.
 void HudMessageAnalyzer::HandleWreckedEvent(const GuiEventPlayerWrecked* lpEvent)
 {
-    CGS_ASSERT(lpEvent != NULL, "lpWreckedEvent");
+    CGS_ASSERT(lpEvent != NULL, CgsDev::Assert::MessageAt("lpWreckedEvent", KAC_ARTIST_ASSERT_FILE, 2836 /* ARTIST 0x8251CAC4 */));
 
     switch (mePlayersCurrentlyWreckState)
     {
@@ -3087,7 +3087,7 @@ void HudMessageAnalyzer::HandleWreckedEvent(const GuiEventPlayerWrecked* lpEvent
             return;
 
         case E_WRECKED_STATE_WRECKING:
-            CGS_ASSERT(mpGuiCache != NULL, "mpGuiCache");
+            CGS_ASSERT(mpGuiCache != NULL, CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 2857 /* ARTIST 0x8251CB5C */));
             // @0x8251CB6C lfs f13, 0(mpGuiCache) -- the cache's LEADING frame-delta float
             // (GuiCache::mfTimeStep @ +0x0000, the GetTimeStep() slot); same inlined load
             // as Update's three timer sites (@0x8252777C/0x8252782C/0x82527900), which the

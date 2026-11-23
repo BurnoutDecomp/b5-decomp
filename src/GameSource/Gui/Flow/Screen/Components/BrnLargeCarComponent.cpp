@@ -111,9 +111,9 @@ namespace BrnGui
     // @ 0x8241B928
     bool LargeCarComponent::HandleAptLoadTriggers(const CgsGui::GuiEventAptTriggerPayload* lpAptTrigger)
     {
-        CGS_ASSERT(lpAptTrigger != 0, "lpAptTrigger");
+        CGS_ASSERT(lpAptTrigger != 0, CgsDev::Assert::MessageAt("lpAptTrigger", "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLargeCarComponent.cpp", 273 /* ARTIST 0x8241B960 */));
         CGS_ASSERT(CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD == lpAptTrigger->meEventType,
-                   "CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD == lpAptTrigger->meEventType");
+                   CgsDev::Assert::MessageAt("CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD == lpAptTrigger->meEventType", "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLargeCarComponent.cpp", 274 /* ARTIST 0x8241B988 */));
 
         bool lbHandled = false;
         if (strcmp(GetName(), lpAptTrigger->mpacComponentName) == 0)

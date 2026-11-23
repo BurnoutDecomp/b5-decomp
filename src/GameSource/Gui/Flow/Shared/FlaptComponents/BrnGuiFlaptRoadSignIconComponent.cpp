@@ -23,7 +23,7 @@
 #include "GameSource/Gui/Flapt/BrnFlaptFileRef.h"            // BrnFlapt::FileRef::FindComponent
 #include "GameSource/Gui/Flapt/BrnFlaptMovieClipInstance.h"  // MovieClipInstance::ResetTimeline
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::SPrintf
-#include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGui
 {
@@ -132,8 +132,8 @@ namespace BrnGui
     // make the sign clip visible the first time it is displayed.
     void FlaptRoadSignIconComponent::DisplayRoad(const char* lpcRoadName, bool lbVisible)
     {
-        CGS_ASSERT(lpcRoadName != 0, "NULL != lpcRoadName");
-        CGS_ASSERT(lpcRoadName[0] != '\0', "'\\0' != lpcRoadName[0]");
+        CGS_ASSERT(lpcRoadName != 0, CgsDev::Assert::MessageAt("NULL != lpcRoadName", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptRoadSignIconComponent.cpp", 198 /* ARTIST 0x82427E94 */));
+        CGS_ASSERT(lpcRoadName[0] != '\0', CgsDev::Assert::MessageAt("'\\0' != lpcRoadName[0]", "..\\..\\..\\GameSource\\Gui/Flow/Shared/FlaptComponents/BrnGuiFlaptRoadSignIconComponent.cpp", 199 /* ARTIST 0x82427EBC */));
 
         if (mAptRef.mpMovieClipInst != 0)
         {

@@ -972,7 +972,7 @@ namespace
 // ---------------------------------------------------------------------------
 void EventInfoComponent::Update(GuiCache* lpCache)
 {
-    CGS_ASSERT(lpCache != 0, "lpCache");   // BrnEventInfo.cpp:759 (non-gating)
+    CGS_ASSERT(lpCache != 0, CgsDev::Assert::MessageAt("lpCache", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnEventInfo.cpp", 759 /* ARTIST 0x8243546C */));   // BrnEventInfo.cpp:759 (non-gating)
 
     // `lwz r11, 0x3D4(r30)` then `lwzx r10, r31, 0x9E58` -- the cache's mode against the
     // latched one. GetGameMode() is the public accessor for the far member.

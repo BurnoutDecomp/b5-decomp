@@ -1081,7 +1081,7 @@ namespace BrnGui
                 break;
 
             default:
-                CGS_ASSERT(false, "lpcLabel");
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("lpcLabel", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnImageGallery.cpp", 1525 /* ARTIST 0x824964D0 */));
                 break;
         }
 

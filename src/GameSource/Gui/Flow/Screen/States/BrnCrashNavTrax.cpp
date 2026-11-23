@@ -527,7 +527,7 @@ namespace BrnGui
     // CrashNavOptionsData::OutputEvents ends with.
     void CrashNavTrax::ApplyAndSaveSettings()
     {
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");   // cpp:670
+        CGS_ASSERT(mpGuiCache, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavTrax.cpp", 670 /* ARTIST 0x824CF974 */));   // cpp:670
 
         OptionsDataProfile* lpProfile = mpGuiCache->GetOptionsDataProfile();
         lpProfile->SetTraxAvailableInFreeBurn(

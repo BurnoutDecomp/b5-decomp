@@ -397,8 +397,8 @@ const GuiEventUpdateSatNav::SatNavIconInfo* MapIconManager::GetRivalIconAtIndex(
 // unlike the icon-drawing passes, because these are snap targets.
 void MapIconManager::GetSatNavIconPositions(Vector2* lpav2Positions, s32* lpiNumIcons)
 {
-    CGS_ASSERT(lpiNumIcons != 0, "lpiNumIcons != NULL");   // :2484 (non-gating)
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");             // :2485 (non-gating)
+    CGS_ASSERT(lpiNumIcons != 0, CgsDev::Assert::MessageAt("lpiNumIcons != NULL", KAC_ARTIST_ASSERT_FILE, 2484 /* ARTIST 0x8250A744 */));   // :2484 (non-gating)
+    CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 2485 /* ARTIST 0x8250A774 */));             // :2485 (non-gating)
 
     *lpiNumIcons = 0;
 
@@ -487,7 +487,7 @@ void MapIconManager::GetSatNavIconPositions(Vector2* lpav2Positions, s32* lpiNum
 // controller/cache/zoom tail).
 void MapIconManager::Construct(GuiCache* lpGuiCache)
 {
-    CGS_ASSERT(lpGuiCache != 0, "lpGuiCache");   // BrnMapIconManager.cpp:144 (non-gating)
+    CGS_ASSERT(lpGuiCache != 0, CgsDev::Assert::MessageAt("lpGuiCache", KAC_ARTIST_ASSERT_FILE, 144 /* ARTIST 0x824FA124 */));   // BrnMapIconManager.cpp:144 (non-gating)
     mpGuiCache = lpGuiCache;
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -1128,18 +1128,18 @@ bool MapIconManager::IsStartIcon(const SatNavIconInfo* lpIcon)
 // ARTIST 0x824F4D00.
 bool MapIconManager::IsPendingRaceLandmark(const SatNavIconInfo* lpIcon) const
 {
-    CGS_ASSERT(lpIcon != 0, "lpSatNavIconInfo");
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+    CGS_ASSERT(lpIcon != 0, CgsDev::Assert::MessageAt("lpSatNavIconInfo", KAC_ARTIST_ASSERT_FILE, 2868 /* ARTIST 0x824F4D38 */));
+    CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 2869 /* ARTIST 0x824F4D68 */));
     const s32 liMode = mpGuiCache->GetGameMode();
     if (!mpGuiCache->GetInEventColouringGate() || liMode == 15 || liMode == 16)
         return false;
     GuiTracker* lpTracker = mpGuiCache->GetGuiTracker();
-    CGS_ASSERT(lpTracker != 0, "lpTracker");
+    CGS_ASSERT(lpTracker != 0, CgsDev::Assert::MessageAt("lpTracker", KAC_ARTIST_ASSERT_FILE, 2881 /* ARTIST 0x824F4DD0 */));
     const s32 liCurrent = lpTracker->GetCurrentlyTrackedIndex();
     if (liCurrent >= lpTracker->GetNumTracked() - 1)
         return false;
     const GuiTracker::TrackerInformation* lpInfo = lpTracker->GetTrackerInformation(liCurrent + 1);
-    CGS_ASSERT(lpInfo != 0, "lpTrackerInfo");
+    CGS_ASSERT(lpInfo != 0, CgsDev::Assert::MessageAt("lpTrackerInfo", KAC_ARTIST_ASSERT_FILE, 2889 /* ARTIST 0x824F4E20 */));
     return lpInfo->mTargetLandmarkIndex == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
 }
 

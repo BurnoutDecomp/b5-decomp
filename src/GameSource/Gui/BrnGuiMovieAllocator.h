@@ -12,7 +12,7 @@ namespace BrnGui
     {
     public:
         ~MovieAllocator() ;
-        void Construct();
+        void Construct() { mGraphicsAllocator.Construct(); }   // header-inline: no ARTIST copy (MovieManager::Construct @0x824F95F4 calls LinearMalloc::Construct)
         bool Prepare(rw::Resource lResource, rw::ResourceDescriptor lDescriptor);
         bool Release();
         void Destruct();

@@ -5,11 +5,11 @@ namespace BrnGui
 {
     MovieAllocator::~MovieAllocator() {}
 
-    void MovieAllocator::Construct()
-    {
-        // ARTIST 824F95F0..95F4: only the contained linear allocator is reset.
-        mGraphicsAllocator.Construct();
-    }
+    // MovieAllocator::Construct is header-inline (ARTIST has no out-of-line copy;
+    // MovieManager::Construct @0x824F95F0..95F4 resets the contained linear
+    // allocator directly). These lines keep this file's line count for the
+    // __LINE__ of its asserts.
+    //
 
     // ARTIST 824F9780, DWARF: both five-lane arguments are passed by value.
     bool MovieAllocator::Prepare(rw::Resource lResource, rw::ResourceDescriptor lDescriptor)
