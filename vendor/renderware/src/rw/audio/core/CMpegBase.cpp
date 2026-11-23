@@ -133,20 +133,18 @@ u32 CMpegBase::GetBits(s32 iNumBits)
 // -------------------------------------------------------------------------------------
 s32 CMpegBase::GetHeader()
 {
-    u32 uHeader;
-    if (mpBitPointer)
-    {
-        uHeader = (static_cast<u32>(mpBitPointer[0]) << 24)
-                | (static_cast<u32>(mpBitPointer[1]) << 16)
-                | (static_cast<u32>(mpBitPointer[2]) << 8)
-                |  static_cast<u32>(mpBitPointer[3]);
-    }
+    u32 luHeader;
+    if (mpBitPointer == 0)
+        luHeader = muHeaderWord;
     else
     {
-        uHeader = muHeaderWord;
+        luHeader = mpBitPointer[0];
+        luHeader = (luHeader << 8) | mpBitPointer[1];
+        luHeader = (luHeader << 8) | mpBitPointer[2];
+        luHeader = (luHeader << 8) | mpBitPointer[3];
     }
 
-    return (ProcessHeader(uHeader) == -1) ? -1 : 0;
+    return ProcessHeader(luHeader) == -1 ? -1 : 0;
 }
 
 // -------------------------------------------------------------------------------------
