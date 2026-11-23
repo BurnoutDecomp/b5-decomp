@@ -392,9 +392,9 @@ public:
     s32 GetPhysicalPartsIndex() const
     {
         CGS_ASSERT(IsPhysical(), CgsDev::Assert::MessageAt("IsPhysical()",
-            "..\..\..\GameSource\World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h", 1091));
+            "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h", 1091));
         CGS_ASSERT(miPhysicalPartsIndex >= 0, CgsDev::Assert::MessageAt("miPhysicalPartsIndex >= 0",
-            "..\..\..\GameSource\World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h", 1092));
+            "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h", 1092));
         return static_cast<u8>(miPhysicalPartsIndex);
     }
 
@@ -447,7 +447,7 @@ inline Vehicle::Species GetVehicleSpecies(u32 luIndex)
 {
     // BrnTrafficVehicle.h:578 -- the pool-wide bound (TrafficEntityModule::KU_MAX_TOTAL_TRAFFIC).
     CGS_ASSERT(luIndex < 0x258u, CgsDev::Assert::MessageAt("luIndex < KU_MAX_TOTAL_TRAFFIC",
-        "..\..\..\GameSource\World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h", 578));
+        "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h", 578));
 
     if (luIndex < 0x190u)        // < 400
         return Vehicle::E_SPECIES_STANDARD;

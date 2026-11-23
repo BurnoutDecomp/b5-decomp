@@ -64,6 +64,12 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // EActiveRaceCarEngineState
 #include "GameShared/GameClasses/Geometric/Primitives/CgsAxisAlignedBox.h" // CgsGeometric::AxisAlignedBox (mDeformedBBox, named 2026-08-24)
 #include "GameShared/GameClasses/RenderWare/Math/RwMathVectorTemplates.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // the inline accessors' ARTIST assert lines
+
+// The original header's __FILE__ as ARTIST bakes it into its inline accessors' asserts
+// (absolute, lower-case directories: 0x82015B58).
+#define BRN_ACTIVERACECAR_H_ASSERT_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnActiveRaceCar.h"
 
 namespace BrnPhysics { namespace Deformation { struct DeformationState; struct StreamedDeformationSpec; } }  // UpdateDeformationState's source
 
@@ -132,8 +138,14 @@ public:
     // X360: returns meActiveRaceCarIndex (this+0x748). DWARF BrnActiveRaceCar.h:736.
     EActiveRaceCarIndex GetActiveRaceCarIndex() const;
 
-    // X360: returns mpRaceCar (this+0x6F0). DWARF BrnActiveRaceCar.h:742.
-    RaceCar* GetGlobalRaceCar() const;
+    // X360: returns mpRaceCar (this+0x6F0). DWARF BrnActiveRaceCar.h:742. Header-inline in the
+    // original: ARTIST inlines it at every call site with its IsAttached() assert at h:1089
+    // (IsAttached itself stays a call), and emits the out-of-line copy 0x822B8480.
+    RaceCar* GetGlobalRaceCar() const
+    {
+        CGS_ASSERT(IsAttached(), CgsDev::Assert::MessageAt("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1089));
+        return mpRaceCar;
+    }
 
     // X360 0x822A1F10: mpRaceCar != NULL. DWARF BrnActiveRaceCar.h:763.
     bool IsAttached() const;
@@ -307,8 +319,13 @@ public:
     // (the per-body-part wobble the deformation renderer accumulates).
     void ResetVerletOffsets();
 
-    // X360 0x822A2150: assert IsAttached(), then return mPhysicsState.mbCrashing.
-    bool IsCrashing() const;
+    // X360 0x822A2150: assert IsAttached() (h:1418, baked into every inlined copy), then
+    // return mPhysicsState.mbCrashing.
+    bool IsCrashing() const
+    {
+        CGS_ASSERT(IsAttached(), CgsDev::Assert::MessageAt("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1418));
+        return mPhysicsState.mbCrashing;
+    }
 
     // DWARF BrnActiveRaceCar.h:781 -- a header inline (no out-of-line X360 symbol). Inlined in
     // PowerParkingManager::Update as `lfs f0, 0x4E0(car) ; fcmpu f0, 0.0 ; bgt` (0x822F8830..0x822F883C):
@@ -322,8 +339,13 @@ public:
     // The console body, branch for branch (see the .cpp for the offset->member map).
     bool IsWrecked() const;
 
-    // X360 0x822A2060: assert IsAttached(), then liState == meRaceStartState.
-    bool IsOnRaceStartState(s32 liState) const;
+    // X360 0x822A2060: assert IsAttached() (h:1355, also in its inlined copies), then
+    // liState == meRaceStartState.
+    bool IsOnRaceStartState(s32 liState) const
+    {
+        CGS_ASSERT(IsAttached(), CgsDev::Assert::MessageAt("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1355));
+        return meRaceStartState == liState;   // subf r11, state, liState @0x822A20B0
+    }
 
     // X360 0x822A20D8: meRaceStartState is one of the two race-start phases.
     bool IsInAnyRaceStartState() const;
@@ -908,9 +930,19 @@ public:
     s32 GetDefaultPaletteIndex() { return miDefaultColourPalette; }
 
 
-    // X360: RaceCarState* GetPhysicsState() -- &mPhysicsState.
-    BrnPhysics::Vehicle::RaceCarState*       GetPhysicsState()       { return &mPhysicsState; }
-    const BrnPhysics::Vehicle::RaceCarState* GetPhysicsState() const { return &mPhysicsState; }
+    // X360: RaceCarState* GetPhysicsState() -- &mPhysicsState, behind an IsAttached() assert
+    // at h:1096 (the out-of-line copy 0x822B84E0 and every inlined one). DWARF h:745 declares
+    // only the const overload; the mutable one serves this tree's writers.
+    BrnPhysics::Vehicle::RaceCarState* GetPhysicsState()
+    {
+        CGS_ASSERT(IsAttached(), CgsDev::Assert::MessageAt("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1096));
+        return &mPhysicsState;
+    }
+    const BrnPhysics::Vehicle::RaceCarState* GetPhysicsState() const
+    {
+        CGS_ASSERT(IsAttached(), CgsDev::Assert::MessageAt("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1096));
+        return &mPhysicsState;
+    }
 
     // ========================================================================
     // ADDITIVE named readers for the per-frame OUTPUT publish (2026-08-01).

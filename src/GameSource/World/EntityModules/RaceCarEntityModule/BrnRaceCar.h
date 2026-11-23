@@ -36,7 +36,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h" // BrnWorld::ERaceCarType
 
 // The original header's __FILE__ as ARTIST bakes it into these accessors' asserts.
-#define BRN_RACECAR_H_ASSERT_FILE "..\..\..\GameSource\World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
+#define BRN_RACECAR_H_ASSERT_FILE "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/BrnRaceCar.h"
 
 namespace CgsWorld { struct WorldMap2D; }
 

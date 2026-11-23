@@ -66,8 +66,6 @@
 // printing this number turns "the frame around the impact" from an ESTIMATE into a filename.
 // ⛔ A trace correlated against a dump of a DIFFERENT frame has already produced a false lead
 // in this tree (device.cpp:255) -- do not go back to inferring the frame from a call index.
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnActiveRaceCar.h";
 
 namespace renderengine { extern u32 guPresentCount; }
 
@@ -969,27 +967,27 @@ EActiveRaceCarIndex ActiveRaceCar::GetActiveRaceCarIndex() const
     return meActiveRaceCarIndex;
 }
 
-RaceCar* ActiveRaceCar::GetGlobalRaceCar() const
-{
-    CGS_ASSERT(IsAttached(), "IsAttached()");
-
-    return mpRaceCar;
-}
-
+// IsAttached @ 0x822A1F10 (BrnActiveRaceCar.h:1289/1290, never inlined): the attached test is
+// on muState, not on the pointer -- an attached car is any state but E_STATE_INACTIVE.
 bool ActiveRaceCar::IsAttached() const
 {
-    return mpRaceCar != 0;
+    CGS_ASSERT(muState < E_STATE_COUNT,
+        CgsDev::Assert::MessageAt("muState < E_STATE_COUNT", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1289 /* ARTIST 0x822A1F44 */));
+    CGS_ASSERT(muState == E_STATE_INACTIVE || mpRaceCar != 0,
+        CgsDev::Assert::MessageAt("Active ActiveRaceCar without a RaceCar", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1290 /* ARTIST 0x822A1F78 */));
+
+    return muState != E_STATE_INACTIVE;
 }
 
 // IsActive @ 0x822A1FB8. The two asserts are the X360's own, in asm order.
 bool ActiveRaceCar::IsActive() const
 {
     CGS_ASSERT(muState < E_STATE_COUNT,
-        CgsDev::Assert::MessageAt("muState < E_STATE_COUNT", KAC_ARTIST_ASSERT_FILE, 1316 /* ARTIST 0x822A1FEC */));
+        CgsDev::Assert::MessageAt("muState < E_STATE_COUNT", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1316 /* ARTIST 0x822A1FEC */));
     CGS_ASSERT(muState == E_STATE_INACTIVE || mpRaceCar != 0,
         CgsDev::Assert::MessageAt(
             "Active ActiveRaceCar without a RaceCar",
-            KAC_ARTIST_ASSERT_FILE, 1317 /* ARTIST 0x822A2020 */));
+            BRN_ACTIVERACECAR_H_ASSERT_FILE, 1317 /* ARTIST 0x822A2020 */));
 
     return muState == E_STATE_ACTIVE;
 }
@@ -1249,9 +1247,8 @@ void ActiveRaceCar::AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface
 // ----------------------------------------------------------------------------
 Matrix44Affine ActiveRaceCar::GetTransform() const
 {
-    CGS_ASSERT(IsAttached(), "IsAttached()");
-    CGS_ASSERT(GetGlobalRaceCar() != 0, "mpRaceCar != NULL");
-    CGS_ASSERT(IsAttached(), "IsAttached()");
+    CGS_ASSERT(IsAttached(), CgsDev::Assert::MessageAt("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1032));
+    CGS_ASSERT(mpRaceCar != 0, CgsDev::Assert::MessageAt("mpRaceCar != NULL", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1033));
 
     return GetGlobalRaceCar()->GetTransform();
 }
@@ -1262,9 +1259,8 @@ Matrix44Affine ActiveRaceCar::GetTransform() const
 // ----------------------------------------------------------------------------
 Vector3 ActiveRaceCar::GetPosition() const
 {
-    CGS_ASSERT(IsAttached(), "IsAttached()");
-    CGS_ASSERT(GetGlobalRaceCar() != 0, "mpRaceCar != NULL");
-    CGS_ASSERT(IsAttached(), "IsAttached()");
+    CGS_ASSERT(IsAttached(), CgsDev::Assert::MessageAt("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1054));
+    CGS_ASSERT(mpRaceCar != 0, CgsDev::Assert::MessageAt("mpRaceCar != NULL", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1055));
 
     return GetGlobalRaceCar()->GetPosition();
 }
@@ -1274,9 +1270,8 @@ Vector3 ActiveRaceCar::GetPosition() const
 // ----------------------------------------------------------------------------
 Vector3 ActiveRaceCar::GetDirection() const
 {
-    CGS_ASSERT(IsAttached(), "IsAttached()");
-    CGS_ASSERT(GetGlobalRaceCar() != 0, "mpRaceCar != NULL");
-    CGS_ASSERT(IsAttached(), "IsAttached()");
+    CGS_ASSERT(IsAttached(), CgsDev::Assert::MessageAt("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1062));
+    CGS_ASSERT(mpRaceCar != 0, CgsDev::Assert::MessageAt("mpRaceCar != NULL", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1063));
 
     return GetGlobalRaceCar()->GetDirection();
 }
@@ -1288,8 +1283,6 @@ Vector3 ActiveRaceCar::GetDirection() const
 // ----------------------------------------------------------------------------
 Vector3 ActiveRaceCar::GetVelocity() const
 {
-    CGS_ASSERT(IsAttached(), "IsAttached()");
-
     return GetGlobalRaceCar()->GetVelocity();
 }
 
@@ -1300,13 +1293,9 @@ Vector3 ActiveRaceCar::GetVelocity() const
 // ----------------------------------------------------------------------------
 bool ActiveRaceCar::IsPlayer() const
 {
-    CGS_ASSERT(GetGlobalRaceCar() != 0, "mpRaceCar != NULL");
-    CGS_ASSERT(IsAttached(), "IsAttached()");
+    CGS_ASSERT(mpRaceCar != 0, CgsDev::Assert::MessageAt("mpRaceCar != NULL", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1332));
 
-    RaceCar* lpGlobalRaceCar = GetGlobalRaceCar();
-    CGS_ASSERT(lpGlobalRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
-
-    return lpGlobalRaceCar->GetType() == E_RACE_CAR_TYPE_PLAYER;
+    return GetGlobalRaceCar()->IsPlayerDriven();
 }
 
 // ----------------------------------------------------------------------------
@@ -1314,23 +1303,13 @@ bool ActiveRaceCar::IsPlayer() const
 // flag (X360 this+0x52A == mPhysicsState @+224 + mbCrashing @+1098 -- the same byte
 // GenerateDispatchLists reads through GetPhysicsState() when it gates the coronas).
 // ----------------------------------------------------------------------------
-bool ActiveRaceCar::IsCrashing() const
-{
-    CGS_ASSERT(IsAttached(), "IsAttached()");
-
-    return mPhysicsState.mbCrashing;
-}
+// (IsCrashing @0x822A2150 is header-inline: BrnActiveRaceCar.h.)
 
 // ----------------------------------------------------------------------------
 // IsOnRaceStartState @ 0x822A2060. Assert IsAttached(), then test the current race-start
 // phase against the queried ordinal. (X360 computes the equality via subf/cntlzw/extrwi.)
 // ----------------------------------------------------------------------------
-bool ActiveRaceCar::IsOnRaceStartState(s32 liState) const
-{
-    CGS_ASSERT(IsAttached(), "IsAttached()");
-
-    return liState == meRaceStartState;
-}
+// (IsOnRaceStartState @0x822A2060 is header-inline: BrnActiveRaceCar.h.)
 
 // ----------------------------------------------------------------------------
 // IsInAnyRaceStartState @ 0x822A20D8. Assert IsAttached(), then report whether the race
@@ -1338,7 +1317,7 @@ bool ActiveRaceCar::IsOnRaceStartState(s32 liState) const
 // ----------------------------------------------------------------------------
 bool ActiveRaceCar::IsInAnyRaceStartState() const
 {
-    CGS_ASSERT(IsAttached(), "IsAttached()");
+    CGS_ASSERT(IsAttached(), CgsDev::Assert::MessageAt("IsAttached()", BRN_ACTIVERACECAR_H_ASSERT_FILE, 1364));
 
     return meRaceStartState == E_RACE_START_STATE_ON_START_LINE
         || meRaceStartState == E_RACE_START_STATE_ROLLING_START;
@@ -1707,8 +1686,7 @@ void ActiveRaceCar::UpdateEngineState(f32 lfTimeStep,
 // -------------------------------------------------------------------------------------------------
 void ActiveRaceCar::CalculateWheelAngularVelocities(f32 lfTimeStepMultiplier)
 {
-    CGS_ASSERT( IsAttached(), "IsAttached()" );          // BrnActiveRaceCar.h:1096
-
+    // The IsAttached() assert (BrnActiveRaceCar.h:1096) is GetPhysicsState()'s own.
     const BrnPhysics::Vehicle::WheelLite* lpaWheelArray = GetPhysicsState()->maWheels;
     RenderParams*                         lpRenderParams = GetRenderParams();
 
@@ -2733,8 +2711,14 @@ void ActiveRaceCar::OnHandlingModelAdded(
         BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
         f32 lfTimeStep )
 {
-    CGS_ASSERT(IsAttached(), "IsAttached()");   // X360 :925
-    CGS_ASSERT(IsActive(),   "IsActive()");     // X360 :926
+    CGS_ASSERT(IsAttached(),
+        CgsDev::Assert::MessageAt("IsAttached()",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.cpp", 925 /* ARTIST 0x822F7F38 */));
+    CGS_ASSERT(IsActive(),
+        CgsDev::Assert::MessageAt("IsActive()",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../World/EntityModules/RaceCarEntityModule/BrnActiveRaceCar.cpp", 926 /* ARTIST 0x822F7F68 */));
 
     AddToScene(lpSceneInterface, lpVehicleInterface, lfTimeStep);
 }

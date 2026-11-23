@@ -16,6 +16,11 @@
 #include "BrnCommonTypes.h"                                         // CgsID, Vector3, Vector4, EntityId
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"    // CgsModule::Event
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT (the header-inline accessors below)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // the inline accessors' ARTIST assert lines
+
+// The original header's __FILE__ as ARTIST bakes it into its inline accessors (0x82003360).
+#define BRN_RCEMOI_H_ASSERT_FILE \
+    "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameShared/GameClasses/Containers/CgsArray.h"             // Array<T,N>
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"          // CgsContainers::BitArray<N>
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h" // CgsResource::ResourceHandle
@@ -161,7 +166,16 @@ namespace RaceCarEntityModuleIO
         CgsID GetRivalId(EActiveRaceCarIndex) const;                                         // :232 (own TU)
         EGlobalRaceCarIndex GetGlobalRaceCarIndex(EActiveRaceCarIndex) const;                // :236 (own TU)
         CgsID GetCarModelId(EActiveRaceCarIndex) const;                                      // :240 (own TU)
-        bool IsRaceCarActive(EActiveRaceCarIndex) const;                                     // :244 (own TU)
+        // :244 -- header-inline in the original: ARTIST inlines it (20 sites carry its h:854/855
+        // asserts) and emits the out-of-line copy 0x82277B10. Bit 0 of the per-car flag halfword.
+        bool IsRaceCarActive(EActiveRaceCarIndex leActiveRaceCarIndex) const
+        {
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
+                CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", BRN_RCEMOI_H_ASSERT_FILE, 854));
+            CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 855));
+            return (maxRaceCarFlags[leActiveRaceCarIndex] & 1) != 0;
+        }
         // :248. Bit 4 (E_RACE_CAR_OUTPUT_FLAG_LOADED). No out-of-line export carries it; the
         // X360 inlines `(maxRaceCarFlags[idx] >> 4) & 1` at its readers (EffectsModule::
         // UpdateActiveRaceCars @0x8229DB30, twice). Inline here (additive, 2026-09-02).
@@ -180,8 +194,26 @@ namespace RaceCarEntityModuleIO
         bool IsCarInShowtime(EActiveRaceCarIndex) const;                                     // :276 (own TU)
         u32  GetActiveRaceCarColourIndex(EActiveRaceCarIndex) const;                         // :280 (own TU)
         s32  GetActiveRaceCarPaintFinishIndex(EActiveRaceCarIndex) const;                    // :284 (own TU)
-        bool IsPlayerCarActive() const;                                                      // :287 (bodied @0x8259B9xx family in BrnRCEntityActiveRaceCarOutputInterface.cpp)
-        EActiveRaceCarIndex GetPlayerActiveRaceCarIndex() const;                             // :290 (bodied @0x82277BF8 in BrnRCEntityActiveRaceCarOutputInterface.cpp)
+        // :287 -- header-inline in the original (49 inlined copies of its h:967 assert; the
+        // out-of-line copy is 0x82277B90). The -1 sentinel short-circuits mbIsPlayerCarActive.
+        bool IsPlayerCarActive() const
+        {
+            CGS_ASSERT(mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
+                CgsDev::Assert::MessageAt("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", BRN_RCEMOI_H_ASSERT_FILE, 967));
+            if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+            {
+                return false;
+            }
+            return mbIsPlayerCarActive;
+        }
+        // :290 -- header-inline in the original (55 inlined copies of its h:980 assert; the
+        // out-of-line copy is 0x82277BF8, `cmpwi -1` then FireAssert).
+        EActiveRaceCarIndex GetPlayerActiveRaceCarIndex() const
+        {
+            CGS_ASSERT(mePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
+                CgsDev::Assert::MessageAt("Player car index hasn't been set", BRN_RCEMOI_H_ASSERT_FILE, 980));
+            return mePlayerActiveRaceCarIndex;
+        }
         EntityId GetPlayerRaceCarEntityId() const;                                           // :293 (own TU)
         // X360 0x8259BB58 -- returns the player car's current speed (mfSpeedMPH @968 inside the
         // player's RaceCarState). Asserts the player index has been set, like GetPlayerRaceCarState.
