@@ -41,6 +41,17 @@ FLAGS = [
     "/EHs-c-", "/Gy", "/FAcs", "/D_XBOX", "/DD_PLATFORM_X360=1",
     "/DCGS_PLATFORM_X360=1", "/FItypes.hpp",
 ]
+# Extra flags for the libraries ARTIST compiled with their own settings, by source folder
+# prefix; they follow FLAGS on the command line (the work server's wine.py reads this table the
+# same way, without running this script, and holds it to the same compile-only flags).
+#   vendor/dirtysdk/: /GF- (no string pooling). ARTIST's DirtySDK keeps duplicate literals as
+#   separate copies, e.g. LobbyRankData loads four distinct "%d" strings, and a function reaches
+#   all its literals from one anchor (GameManagerControl 0x82B1F36C..0x82B1F3B8: lis r11,-0x7d08;
+#   addi r11,r11,-0x213c; addi r3,r11,-0x7c / -0x28), the layout of an unpooled build. /O2 implies
+#   /GF, which gives each literal its own COMDAT and address load instead.
+PATH_FLAGS = {
+    "vendor/dirtysdk/": ["/GF-"],
+}
 
 
 def main():
@@ -104,7 +115,7 @@ def main():
         env.pop(name, None)
     includes = [ROOT / name for name in INCLUDES if (ROOT / name).is_dir()]
     includes.append(sdk / "include/xbox")
-    flags = FLAGS + ["/I" + str(path) for path in includes] + args.compiler_arg
+    tail = ["/I" + str(path) for path in includes] + args.compiler_arg
     report = {"stage": "compile-only", "state": "running", "target": "xbox360-ppc-be",
               "sdk": str(sdk), "requested": len(sources), "results": []}
     report_path = output / "compile-results.json"
@@ -114,7 +125,9 @@ def main():
         obj, listing, log = (output / (key + ext) for ext in (".obj", ".asm", ".log"))
         obj.unlink(missing_ok=True)
         listing.unlink(missing_ok=True)
-        command = [str(compiler)] + flags + ["/Fo" + str(obj), "/Fa" + str(listing), str(source)]
+        extra = [flag for prefix, folder_flags in PATH_FLAGS.items()
+                 if source.as_posix().startswith(prefix) for flag in folder_flags]
+        command = [str(compiler)] + FLAGS + extra + tail + ["/Fo" + str(obj), "/Fa" + str(listing), str(source)]
         try:
             result = subprocess.run(command, cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
                                     capture_output=True, text=True, errors="replace",
