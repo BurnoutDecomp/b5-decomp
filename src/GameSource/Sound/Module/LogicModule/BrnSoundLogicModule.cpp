@@ -1407,14 +1407,15 @@ void SoundLogicModule::Update(f32 af32GameDt, f32 af32SimDt,
 // On success the console holds the music and submix volumes (message 15, true) for one
 // second, restarts the mixer (message 43) and returns true; Update releases the hold.
 // ===========================================================================================
-bool SoundLogicModule::PrepareStateManagersOnEnteringGameplay(s32 luPrepareMask)
+bool SoundLogicModule::PrepareStateManagersOnEnteringGameplay(s32 liIncludeBitfield)
 {
-    for (s32 liIndex = 0; liIndex < KI_NUM_STATE_MANAGERS; ++liIndex)
+    // BrnSoundLogicModule.cpp:776 (DWARF): the index is `uint32_t i` (ARTIST cmplwi).
+    for (u32 i = 0; i < KI_NUM_STATE_MANAGERS; ++i)
     {
-        const bool lbPrepareThisOne = (((1 << liIndex) & luPrepareMask) != 0);
-        if (lbPrepareThisOne && mapStateManagers[liIndex] != 0)
+        const bool lbPrepareThisOne = (((1 << i) & liIncludeBitfield) != 0);
+        if (lbPrepareThisOne && mapStateManagers[i] != 0)
         {
-            if (!mapStateManagers[liIndex]->Prepare())   // vtable +0x0C
+            if (!mapStateManagers[i]->Prepare())   // vtable +0x0C
             {
                 return false;   // still loading -> the caller retries next tick
             }
@@ -1464,20 +1465,23 @@ bool SoundLogicModule::PrepareStateManagersOnEnteringGameplay(s32 luPrepareMask)
 // state-type is in range, and the slot is free; those are the real registration guards.
 void SoundLogicModule::CreateStateManagers()
 {
-    for (s32 liIndex = 0; liIndex < KI_NUM_STATE_MANAGERS; ++liIndex)
+    // BrnSoundLogicModule.cpp:696/699 (DWARF): the `lEnvironment` reference is taken once
+    // before the loop (ARTIST keeps this+0x2950 in r26; AddStateManager is non-const) and
+    // the index is `uint32_t i` (ARTIST cmplwi).
+    CgsSound::Logic::Environment& lEnvironment = GetEnvironment();
+    for (u32 i = 0; i < KI_NUM_STATE_MANAGERS; ++i)
     {
-        mapStateManagers[liIndex] =
-            CgsSound::Logic::StateManager::CreateStateMan(static_cast<u32>(liIndex), this);
+        mapStateManagers[i] = CgsSound::Logic::StateManager::CreateStateMan(i, this);
 
-        if (mapStateManagers[liIndex] != 0)
+        if (mapStateManagers[i] != 0)
         {
-            // The X360 asserts this returns true (it always does); kept as the faithful
-            // registration call. AddStateManager itself fires the real registration asserts.
-            // (phase B5: the environment is the ENGINE base's, via GetEnvironment().)
-            bool lbRegistered = GetEnvironment().AddStateManager(mapStateManagers[liIndex]);
-            CGS_ASSERT(lbRegistered,
-                       "lEnvironment.AddStateManager( mapStateManagers[ i ] )");
-            (void)lbRegistered;
+            // The X360 asserts this returns true (it always does); AddStateManager itself
+            // fires the real registration asserts.
+            CGS_ASSERT(lEnvironment.AddStateManager(mapStateManagers[i]),
+                CgsDev::Assert::MessageAt(
+                    "lEnvironment.AddStateManager( mapStateManagers[ i ] )",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                    "../Sound/Module/LogicModule/BrnSoundLogicModule.cpp", 753 /* ARTIST 0x826AFF5C */));
         }
     }
 }
@@ -1506,14 +1510,15 @@ void SoundLogicModule::CreateStateManagers()
 //
 // NOTE (skip-mask sense): the X360 SKIPS Prepare when `((1<<i) & mask) != 0`; mask 4 ==
 // bit 2, so on boot slot 2's Prepare is skipped here (faithful to the boot call).
-bool SoundLogicModule::PrepareStateManagersOnBoot(s32 luSkipMask)
+bool SoundLogicModule::PrepareStateManagersOnBoot(s32 liSkipBitfield)
 {
-    for (s32 liIndex = 0; liIndex < KI_NUM_STATE_MANAGERS; ++liIndex)
+    // BrnSoundLogicModule.cpp:728 (DWARF): the index is `uint32_t i` (ARTIST cmplwi).
+    for (u32 i = 0; i < KI_NUM_STATE_MANAGERS; ++i)
     {
-        const bool lbSkip = (((1 << liIndex) & luSkipMask) != 0);
-        if (!lbSkip && mapStateManagers[liIndex] != 0)
+        const bool lbSkip = (((1 << i) & liSkipBitfield) != 0);
+        if (!lbSkip && mapStateManagers[i] != 0)
         {
-            if (!mapStateManagers[liIndex]->Prepare())   // vtable +0x0C
+            if (!mapStateManagers[i]->Prepare())   // vtable +0x0C
             {
                 return false;   // not ready yet -> the boot stage retries
             }
