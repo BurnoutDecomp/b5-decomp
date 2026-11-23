@@ -20,9 +20,11 @@ namespace Playback
 void SplicerFactory::SplicerAssertFunc(char* lpExpression)
 {
     CgsDev::Assert::BeginAssert();
-    CgsDev::StrStream lStream(CgsDev::Assert::gpcMessageBuffer,
-                              CgsDev::Assert::giMessageBufferSize);
-    lStream << (lpExpression ? lpExpression : "<NULLSTRING>");
+    // DWARF BrnSoundUnity.cpp: the assert at CgsSplicerFactory.cpp:140 streams the message into
+    // lStrStream; the null case is StrStreamBase::operator<<(const char*)'s own "<NULLSTRING>".
+    CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer,
+                                 CgsDev::Assert::giMessageBufferSize);
+    lStrStream << lpExpression;
     CgsDev::Assert::FireAssert(
         CgsDev::Assert::gpcMessageBuffer,
         "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Splicer/CgsSplicerFactory.cpp",

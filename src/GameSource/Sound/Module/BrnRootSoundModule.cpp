@@ -382,8 +382,8 @@ namespace Module
                 return false;
             }
 
-            mLogicModule.GetPlaybackModule().GetEnvironment()->GetRegistry()->Resolve(
-                *mLogicModule.GetPlaybackModule().GetEnvironment()->GetRegistry());
+            mLogicModule.GetPlaybackModule().GetEnvironment().GetRegistry()->Resolve(
+                *mLogicModule.GetPlaybackModule().GetEnvironment().GetRegistry());
             return true;
         default:
             CGS_ASSERT(false, "RootSoundModule::LoadLoopModelResouces in a weird state");

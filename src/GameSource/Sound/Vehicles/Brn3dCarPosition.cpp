@@ -67,7 +67,7 @@ bool Car3DControl::Prepare(CgsSound::Logic::State* apState)
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(GetLogicModule());
     CgsSound::Playback::Environment* lpEnvironment =
-        lpModule->GetPlaybackModule().GetEnvironment();
+        &lpModule->GetPlaybackModule().GetEnvironment();
     CGS_ASSERT(lpEnvironment != 0, "mpObject");
     mbIsStereo = lpEnvironment &&
         lpEnvironment->GetAudioMode() ==

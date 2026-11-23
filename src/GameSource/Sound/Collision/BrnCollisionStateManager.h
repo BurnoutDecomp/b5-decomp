@@ -20,7 +20,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
 
 namespace BrnDirector { namespace Camera { struct Camera; } }
-namespace BrnPhysics { namespace ContactSpy { struct BaseContact; struct PropContact; } }
+namespace BrnPhysics { namespace ContactSpy { struct BaseContact; class PropContact; } }
 namespace BrnSound { namespace Module { namespace Io { struct RootInputBuffer; } } }
 
 // =============================================================================

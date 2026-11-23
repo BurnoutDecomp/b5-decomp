@@ -12,7 +12,7 @@
 
 // The InputCollision constructors (DWARF BrnCollisionStateManager.h:405..466) take these by
 // reference only; their bodies live in BrnCollisionStateManager.cpp, which includes the full types.
-namespace BrnPhysics { namespace ContactSpy { struct BaseContact; struct PropContact; struct PhysicalCarPartContact; struct DiscardedContact; } }
+namespace BrnPhysics { namespace ContactSpy { struct BaseContact; class PropContact; class PhysicalCarPartContact; class DiscardedContact; } }
 namespace BrnPhysics { namespace Deformation {
     enum EBodyParts ;
     struct BrokenJointNotificationEvent;

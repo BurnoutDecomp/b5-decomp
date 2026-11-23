@@ -259,7 +259,7 @@ namespace Deformation
 }
 // Pointer-only forward declarations of the REAL records (class keys match their homes).
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct OutContactSpy; } }
-namespace BrnPhysics { namespace ContactSpy { struct PhysicalCarPartContact; } }
+namespace BrnPhysics { namespace ContactSpy { class PhysicalCarPartContact; } }
 namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; } }
 namespace CgsSceneManager { namespace CgsCollision { struct PrimitivePairListBuilder; } }
 

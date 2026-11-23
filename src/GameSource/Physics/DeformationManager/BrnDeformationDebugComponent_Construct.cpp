@@ -4,7 +4,7 @@
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformationSensor.h"        // DeformationSensor
 #include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"  // StreamedDeformationSpec
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"                                // CgsGeometric::Sphere
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                       // CGS_ASSERT + ARTIST location
 
 // ==================================================================================================
 // The DeformationDebugComponent::Construct chain -- SPLIT OUT of BrnDeformationDebugComponent.cpp.
@@ -44,8 +44,13 @@ namespace Deformation
     // =============================================================================================
     void DeformationDebugComponent::Construct(DeformationManager* lpDeformationManager)
     {
+        // ARTIST 0x8260649C: the base two-phase init, an empty body (PS3 DecFIGS
+        // CgsDev::DebugComponent::Construct is `;`) folded at 0x8284CB38.
+        CgsDev::DebugComponent::Construct();
 
-        CGS_ASSERT( lpDeformationManager != 0, "lpDeformationManager" );   // BrnDeformationDebugComponent.cpp:158
+        CGS_ASSERT(lpDeformationManager != 0, CgsDev::Assert::MessageAt("lpDeformationManager != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Physics/DeformationManager/BrnDeformationDebugComponent.cpp", 158 /* ARTIST 0x826064B0 */));
         mpDeformationManager = lpDeformationManager;
 
         mfCompressRightSide = 0.0f;

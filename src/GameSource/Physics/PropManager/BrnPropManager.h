@@ -13,7 +13,7 @@
 
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InAddPotentialContact; struct OutContactSpy; } }
 namespace CgsSceneManager { namespace SceneManagerIO { struct PotentialContact; } }
-namespace BrnPhysics { namespace ContactSpy { struct PropContact; } }
+namespace BrnPhysics { namespace ContactSpy { class PropContact; } }
 namespace CgsMemory { struct SimpleDataStreamProducer; }   // pointer-only member (mpPrimitiveWithTriangleStream)
 // ⭐ ADDED 2026-08-06 (big-five #2): SetupAndValidatePropContact collaborators, pointer use only.
 namespace CgsPhysics { namespace PhysicsSimulationIO { struct InputBuffer; } }  // class key struct, matching CgsPhysicsSimulationModuleIO.h:43
@@ -65,8 +65,9 @@ namespace Props
     // == 992 with zero slack, and both spans are pointer-free-identical on the host
     // (the queue header pads to 16 on both targets).
     // ======================================================================================
-    struct PropRaceCarContactBuffer : public CgsModule::IOBuffer
+    class PropRaceCarContactBuffer : public CgsModule::IOBuffer   // class key: ARTIST's decorated names (VPropRaceCarContactBuffer)
     {
+    public:
         typedef CgsModule::EventQueue<PropRaceCarContact, 30> PropRaceCarContactQueue;  // :62
 
         // :78 -- raise the buffer status, construct the queue (the X360 stack template's

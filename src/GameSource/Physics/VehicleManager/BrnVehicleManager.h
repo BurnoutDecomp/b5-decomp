@@ -124,7 +124,7 @@ namespace BrnPhysics { struct ContactGenList; }                            // Br
 namespace CgsSceneManager { namespace CgsCollision { struct CollisionGenerator; } }
 namespace BrnPhysics { namespace Deformation { class DeformationOutputInterface; } } // BrnDeformationOutputInterface.h
 // ReadUpdatedBodyProperties' queue element (CgsPhysicsSimulationIO_Events.h, class key `struct`).
-namespace CgsPhysics { namespace PhysicsSimulationIO { struct InChangeRigidBodyInertia; } }
+namespace CgsPhysics { namespace PhysicsSimulationIO { class InChangeRigidBodyInertia; } }
 namespace BrnGameState { namespace GameStateModuleIO { class GameEventQueue; } }
 // The game-action payloads the post-scene / pre-scene physics action arms hand over BY POINTER
 // (OnPrepareGameMode / OnStartGameMode / OnJunkYardDriveThru / ProcessNetworkCarDisconnect).

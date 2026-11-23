@@ -449,6 +449,9 @@ Environment::Environment(const EnvironmentSpec& lrSpec)
     lpTail += sizeof(Handle<Voice>) * mu32VoiceCount;
     mphContent = reinterpret_cast<Handle<Content>*>(lpTail);
     lpTail += sizeof(Handle<Content>) * mu32ContentCount;
+    // ARTIST 0x826BFC50: mpRegistry is pointed at the tail with the three tables, before the
+    // handle loops; the in-place construct at 0x826BFCFC reloads it and stores no result.
+    mpRegistry = reinterpret_cast<Registry*>(lpTail);
 
     for (u32 lu = 0; lu < mu32FactoryCount; ++lu)
         new (&mphFactory[lu]) Handle<Factory>();
@@ -459,7 +462,7 @@ Environment::Environment(const EnvironmentSpec& lrSpec)
 
     // The in-place Registry over the rest of the blob (its own ctor carves the
     // slot array / data / string-table pointers with host-safe arithmetic).
-    mpRegistry = new (lpTail) Registry(lrSpec.mRegistrySpec);
+    new (mpRegistry) Registry(lrSpec.mRegistrySpec);
 
     mCpuMonitors.miModule              = 0;
     mCpuMonitors.miProcessCommands     = 0;

@@ -31,7 +31,7 @@
 
 // ReadPropertiesFromChangeInertiaEvent's event arg (class key `struct`, matching
 // CgsPhysicsSimulationIO_Events.h; pointer-only use here -- the body's TU includes the home).
-namespace CgsPhysics { namespace PhysicsSimulationIO { struct InChangeRigidBodyInertia; } }
+namespace CgsPhysics { namespace PhysicsSimulationIO { class InChangeRigidBodyInertia; } }
 
 namespace BrnPhysics
 {

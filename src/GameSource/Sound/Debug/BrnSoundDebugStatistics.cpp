@@ -51,8 +51,8 @@ void Statistics::Update()
     mCsisAlloc.Set(static_cast<u32>(gCsisTestBedAlloc.GetBytesAllocated()));
     mPlaybackAlloc.Set(static_cast<u32>(gPlaybackTestBedAlloc.GetBytesAllocated()));
     mLogicAlloc.Set(static_cast<u32>(gLogicTestBedAlloc.GetBytesAllocated()));
-    mVoiceCount.Set(mpPlaybackModule->GetEnvironment()->GetNumberOfActiveVoices());
-    mContentCount.Set(mpPlaybackModule->GetEnvironment()->GetNumberOfActiveContent());
+    mVoiceCount.Set(mpPlaybackModule->GetEnvironment().GetNumberOfActiveVoices());
+    mContentCount.Set(mpPlaybackModule->GetEnvironment().GetNumberOfActiveContent());
 
     const bool lbReset = gbResetStatistics;
     for (u32 luType = 0; luType < CgsSound::Playback::Voice::E_VOICETYPE_COUNT; ++luType)
@@ -60,7 +60,7 @@ void Statistics::Update()
         CgsSound::Playback::VoiceProfilingData<16>& lrProfile = mVoiceProfiles[luType].mData;
         if (lbReset)
             lrProfile.Reset();
-        const f32 lfTicks = mpPlaybackModule->GetEnvironment()->GetVoiceTypeTickTotal(
+        const f32 lfTicks = mpPlaybackModule->GetEnvironment().GetVoiceTypeTickTotal(
             static_cast<CgsSound::Playback::Voice::EProfileVoiceType>(luType));
         lrProfile.SubmitNewTime(lfTicks, 0.000375f); // flt_820AE1F0
     }
@@ -85,7 +85,10 @@ void Statistics::RenderLine(CgsDev::Debug2DImmediateRender* lpRender, bool lbRed
     ::vsnprintf(lacBuffer, sizeof(lacBuffer), lpFormat, lList);
     va_end(lList);
 
-    const CgsDev::RGBA lColour = lbRedAlert ? 0xFF0000FFu : 0xFFFFFFFFu;
+    // ARTIST 0x82689574: white first, overwritten for a red alert (DWARF lColour, cpp:70).
+    CgsDev::RGBA lColour = 0xFFFFFFFFu;
+    if (lbRedAlert)
+        lColour = 0xFF0000FFu;
     lpRender->DrawTextWithBackground(lacBuffer, mfX, mfY, 20.0f,
                                      lColour, 0x80000000u, 0.0f);
     mfY += 16.0f;

@@ -90,7 +90,7 @@ namespace BrnPhysics { namespace Vehicle { struct TrafficRemovedEvent; } }
 // traffic record by pointer only (forward-declaration exception (b)); its home is
 // GameSource/Physics/ContactSpies/BrnContactSpyEvents.h (`struct TrafficContact : BaseContact`),
 // which the defining .cpp includes.
-namespace BrnPhysics { namespace ContactSpy { struct TrafficContact; } }
+namespace BrnPhysics { namespace ContactSpy { class TrafficContact; } }
 // Pointer-only uses in the render declarations (forward-declaration exception (b)):
 // including CgsDispatcher.h / BrnShadowMap.h here would pull the renderer and the
 // shadow-cascade tail into every includer, and BrnWorldModule.h includes this header.

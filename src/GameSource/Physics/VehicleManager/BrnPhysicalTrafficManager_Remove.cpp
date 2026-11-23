@@ -213,7 +213,7 @@ namespace Vehicle
 
         // The inlined IsTrafficVehicleCrashed (see the FLAG above).
         if (GetTrafficVehicle(static_cast<s32>(lu16TrafficCarIndex))->mePhysicalTrafficState
-                != static_cast<u32>(E_TRAFFIC_TYPE_CRASHING))
+                != E_TRAFFIC_TYPE_CRASHING)
         {
             return;
         }

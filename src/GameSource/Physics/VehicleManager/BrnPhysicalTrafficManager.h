@@ -467,7 +467,8 @@ struct PhysicalTrafficVehicle
     CgsID                   mCgsID;                      // +16 (u64; +12..15 padding)
     f32                     mfTimeSinceCheckNotify;      // +24
     SimpleVehiclePhysics*   mpVehicleBody;               // +28 (X360 4B ptr) -> GetVehiclePhysics
-    u32                     mePhysicalTrafficState;      // +32 (BrnPhysics::Vehicle::ETrafficType)
+    ETrafficType            mePhysicalTrafficState;      // +32 (DWARF BrnPhysicalTrafficVehicle.h: ETrafficType;
+                                                         //  ARTIST compares it signed, cmpwi at 0x825CAC88)
     EArticulatedVehicleType meArticulatedVehicleType;    // +36
     EArticulatedJointState  meArticulatedJointState;     // +40
     s32                     miJointIndex;                // +44

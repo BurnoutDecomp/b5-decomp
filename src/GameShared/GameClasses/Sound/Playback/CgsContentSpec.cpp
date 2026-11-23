@@ -38,37 +38,41 @@ const ContentType& ContentSpec::GetContentType() const
 // @ 0x826928C8. Copy the au32Zone'th '|'-separated zone of the full path into
 // apcPathOut (capacity auMaxLen, NUL-terminated). Returns true on success, false if
 // the requested zone doesn't exist or won't fit.
-bool ContentSpec::GetPathZone(u32 au32Zone, char* apcPathOut, size_t auMaxLen) const
+// The original body is a header inline in CgsDataStructures.h (asserts h:1883/h:1886); the
+// locals are the DWARF's (lpFullPath h:1885, luLen h:1888, lpNext h:1889, lu32I h:1891). Each
+// skipped zone steps lpNext past its separator before shortening luLen (0x8269295C..0x82692970).
+bool ContentSpec::GetPathZone(u32 lu32Zone, char* lpPathOut, size_t luMaxLen) const
 {
-    CGS_ASSERT(apcPathOut, "lpPathOut");
+    CGS_ASSERT(lpPathOut, CgsDev::Assert::MessageAt("lpPathOut", "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsDataStructures.h", 1883));
 
-    const char* lpcCursor = GetPath();
-    CGS_ASSERT(lpcCursor, "lpFullPath");
+    const char* lpFullPath = GetPath();
+    CGS_ASSERT(lpFullPath, CgsDev::Assert::MessageAt("lpFullPath", "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsDataStructures.h", 1886));
 
-    u32 lu32Remaining = mu16PathLength;
+    size_t luLen = mu16PathLength;
+    const char* lpNext;
 
-    // Skip past au32Zone leading zones, each terminated by SK_PATH_SEPERATOR ('|').
-    for (u32 lu32Zone = 0; lu32Zone < au32Zone; )
+    // Skip past lu32Zone leading zones, each terminated by SK_PATH_SEPERATOR ('|').
+    for (u32 lu32I = 0; lu32I < lu32Zone; ++lu32I)
     {
-        const char* lpcSep = strchr(lpcCursor, SK_PATH_SEPERATOR);
-        if (!lpcSep)
+        lpNext = strchr(lpFullPath, SK_PATH_SEPERATOR);
+        if (!lpNext)
             return false;
 
-        ++lu32Zone;
-        lu32Remaining -= static_cast<u32>((lpcSep + 1) - lpcCursor);
-        lpcCursor = lpcSep + 1;
+        ++lpNext;
+        luLen -= lpNext - lpFullPath;
+        lpFullPath = lpNext;
     }
 
     // The zone runs until the next separator (or the end of the path).
-    const char* lpcSep = strchr(lpcCursor, SK_PATH_SEPERATOR);
-    if (lpcSep)
-        lu32Remaining = static_cast<u32>(lpcSep - lpcCursor);
+    lpNext = strchr(lpFullPath, SK_PATH_SEPERATOR);
+    if (lpNext)
+        luLen = lpNext - lpFullPath;
 
-    if (lu32Remaining > auMaxLen - 1)
+    if (luLen > luMaxLen - 1)
         return false;
 
-    strncpy(apcPathOut, lpcCursor, lu32Remaining);
-    apcPathOut[lu32Remaining] = 0;
+    strncpy(lpPathOut, lpFullPath, luLen);
+    lpPathOut[luLen] = 0;
     return true;
 }
 

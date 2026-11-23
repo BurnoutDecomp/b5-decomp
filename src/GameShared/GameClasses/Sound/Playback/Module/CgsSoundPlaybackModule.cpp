@@ -376,7 +376,7 @@ bool Module::Release()
         while (mpStringTable)
         {
             StringTable* lpNext = mpStringTable->mpNext;
-            Environment* lpEnvironment = GetEnvironment();
+            Environment* lpEnvironment = &GetEnvironment();
             rw::Resource lResource;
             lResource.m_baseResources[0] = mpStringTable;
             for (u32 lu = 1; lu < rw::KU_RESOURCE_LANE_COUNT; ++lu)
@@ -396,7 +396,7 @@ bool Module::Release()
     case 3:
         // Snapshot the main allocator BEFORE dropping the environment handle (the
         // stream-buffer frees below need it once the environment is gone).
-        lpMainAllocator = GetEnvironment()->GetAllocator();
+        lpMainAllocator = GetEnvironment().GetAllocator();
         mhEnvironment = Handle<Environment>();
         meReleaseStage++;
         // fall through
@@ -450,10 +450,10 @@ void Module::Destruct()
 // Asserts the environment handle is non-null (CgsHandle.h:305 -> "mpObject") then
 // returns the owned Environment pointer.
 // ---------------------------------------------------------------------------
-Environment* Module::GetEnvironment()
+Environment& Module::GetEnvironment()
 {
-    CGS_ASSERT(mhEnvironment.GetObject(), "mpObject");
-    return mhEnvironment.GetObject();
+    // DWARF: Environment& GetEnvironment(); the assert is Handle::operator*'s (CgsHandle.h:305).
+    return *mhEnvironment;
 }
 
 // ---------------------------------------------------------------------------
@@ -550,7 +550,7 @@ void Module::AddRegistry(Registry& arRegistry, u32 au32RegistryId)
     {
     case 1:
     {
-        Registry* lpRegistry = GetEnvironment()->GetRegistry();
+        Registry* lpRegistry = GetEnvironment().GetRegistry();
         CGS_ASSERT(lpRegistry != 0, "mpRegistry");
         *lpRegistry += arRegistry;
         break;
@@ -847,7 +847,7 @@ namespace
 // ---------------------------------------------------------------------------
 void Module::Update(Io::InputBuffer* apInputBuffer, Io::OutputBuffer* apOutputBuffer)
 {
-    CgsDev::PerfMonCpu::StartMonitor(GetEnvironment()->GetCpuMonitors().miModule);
+    CgsDev::PerfMonCpu::StartMonitor(GetEnvironment().GetCpuMonitors().miModule);
 
     mpInputBuffer  = apInputBuffer;
     mpOutputBuffer = apOutputBuffer;
@@ -866,15 +866,15 @@ void Module::Update(Io::InputBuffer* apInputBuffer, Io::OutputBuffer* apOutputBu
 
     ProcessResourceReceiverQueue();
 
-    CgsDev::PerfMonCpu::StartMonitor(GetEnvironment()->GetCpuMonitors().miEnvironmentUpdate);
-    GetEnvironment()->Update(mf32TimeStep);
-    CgsDev::PerfMonCpu::StopMonitor(GetEnvironment()->GetCpuMonitors().miEnvironmentUpdate);
+    CgsDev::PerfMonCpu::StartMonitor(GetEnvironment().GetCpuMonitors().miEnvironmentUpdate);
+    GetEnvironment().Update(mf32TimeStep);
+    CgsDev::PerfMonCpu::StopMonitor(GetEnvironment().GetCpuMonitors().miEnvironmentUpdate);
 
     apOutputBuffer->UnlockForWrite();
     mpInputBuffer  = 0;
     mpOutputBuffer = 0;
 
-    CgsDev::PerfMonCpu::StopMonitor(GetEnvironment()->GetCpuMonitors().miModule);
+    CgsDev::PerfMonCpu::StopMonitor(GetEnvironment().GetCpuMonitors().miModule);
 }
 
 // ---------------------------------------------------------------------------
@@ -1113,7 +1113,7 @@ CgsFileSystem::ReadStream* Module::DoOpenStream(IStreamProvider::StreamSpec& lrS
 
     // Resolve the requesting plug-in's owning voice out of the environment.
     Handle<Voice> lhVoice =
-        GetEnvironment()->GetRwacVoiceByPlugin(lrSpec.mpPlugin);
+        GetEnvironment().GetRwacVoiceByPlugin(lrSpec.mpPlugin);
     CGS_ASSERT(lhVoice.GetObject() != 0, "lHandle");
 
     // Seed the record and hand the carve buffer back through the spec.

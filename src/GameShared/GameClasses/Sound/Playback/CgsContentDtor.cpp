@@ -56,13 +56,15 @@ namespace Playback
         CGS_ASSERT(mu32RefCount == 0, "0 == mu32RefCount");
     }
 
-    void Content::SetContentState(int liState)
+    // The original body is a header inline (its assert names CgsContent.h:462): the state is
+    // compared signed against GetContentState() (cmpw at 0x82680C98) and stored with the CHANGED
+    // bit inserted (rlwimi at 0x82680CA4).
+    void Content::SetContentState(EContentState leContentState)
     {
-        CGS_ASSERT((liState & E_CONTENT_STATE_CHANGED) == 0,
-                   "!(leContentState & E_CONTENT_STATE_CHANGED)");
-        if ((mu8ContentState & 0x7Fu) != liState)
-            mu8ContentState = static_cast<u8>((liState & 0x7F) |
-                                               E_CONTENT_STATE_CHANGED);
+        CGS_ASSERT(!(leContentState & E_CONTENT_STATE_CHANGED), CgsDev::Assert::MessageAt(
+                   "!(leContentState & E_CONTENT_STATE_CHANGED)", "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsContent.h", 462));
+        if (GetContentState() != leContentState)
+            mu8ContentState = static_cast<u8>(leContentState | E_CONTENT_STATE_CHANGED);
     }
 
     void Content::OnAttach(Voice& arVoice, Slot& arSlot)

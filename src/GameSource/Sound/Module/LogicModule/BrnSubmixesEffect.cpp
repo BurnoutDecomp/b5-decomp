@@ -233,7 +233,7 @@ bool SubmixesEffect::Attach()
 
     // 826D2DE0..826D2E28 -- GetEnvironment() performs the CgsHandle "mpObject" assert
     // itself, so this one call reproduces both the load and the assert the X360 inlines.
-    mbIsSurround = (GetLogicModule()->GetPlaybackModule().GetEnvironment()->GetAudioMode() ==
+    mbIsSurround = (GetLogicModule()->GetPlaybackModule().GetEnvironment().GetAudioMode() ==
                     CgsSound::Playback::Environment::E_AUDIO_MODE_SURROUND);
 
     mbHoldVolumes = false;                       // 826D2E3C (see the [FLAG] above)

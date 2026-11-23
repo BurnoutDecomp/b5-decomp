@@ -51,6 +51,7 @@
 
 #include "BrnCommonTypes.h"                                            // ::VecFloat (== Vector4)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"           // ARTIST assert locations
 #include "GameShared/GameClasses/Development/CgsStrStream.h"           // CgsDev::StrStream
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameSource/Physics/PropManager/BrnPropManager.h"
@@ -79,7 +80,12 @@ namespace Props
     // the same fold is analysed in full with all five refuting emissions.
     void PropDebugComponent::Construct(PropManager* lpPropManager)
     {
-        CGS_ASSERT(lpPropManager, "lpPropManager != NULL");            // baked line 52
+        // ARTIST 0x825BAD74: the empty base two-phase init (PS3 DecFIGS body `;`), folded at 0x8284CB38.
+        CgsDev::DebugComponent::Construct();
+
+        CGS_ASSERT(lpPropManager, CgsDev::Assert::MessageAt("lpPropManager != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Physics/PropManager/BrnPropDebugComponent.cpp", 52 /* ARTIST 0x825BAD88 */));
 
         mpPropManager = lpPropManager;
         mbRenderStats = true;

@@ -293,10 +293,10 @@ namespace Playback
         {
             // LOADED unless the request was cancelled/re-armed mid-flight (mu8IsCancelled set),
             // in which case restart into E_CONTENT_STATE_LOADED-then-reload (state 3 vs 1).
-            int liFinalState = 1;
+            EContentState leFinalState = E_CONTENT_STATE_UNLOADED;
             if (!mpLoadData->mu8IsCancelled)
-                liFinalState = 3;
-            arContent.SetContentState(liFinalState);
+                leFinalState = E_CONTENT_STATE_LOADED;
+            arContent.SetContentState(leFinalState);
             PurgeLoadData(arContent, arSpec);
             break;
         }

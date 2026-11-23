@@ -1,6 +1,11 @@
 #include "GameSource/Physics/ContactSpies/BrnContactSpyData.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT (IsEmpty run-list guards)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // ARTIST assert locations
+
+// IsEmpty is a header inline in the original: its asserts name BrnContactSpyData.h:247..250.
+#define KAC_CONTACT_SPY_DATA_HEADER \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\contactspies\\BrnContactSpyData.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"          // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 #include "GameSource/World/BrnEntityTypes.h"                        // BrnWorld::EEntityTypeID enumerators (Construct's per-queue tags)
 
@@ -92,7 +97,7 @@ void ContactSpyData::AddContact(const RaceCarContact& lrContact)
 // BeginAssert/FireAssert/EndAssert -> one CGS_ASSERT apiece).
 bool ContactSpyData::IsEmpty() const
 {
-    const bool lbIsEmpty =
+    bool lbIsEmpty =
         mRaceCarContactQueue.GetLength() == 0 &&
         mTrafficContactQueue.GetLength() == 0 &&
         mPhysicalCarPartContactQueue.GetLength() == 0 &&
@@ -101,14 +106,14 @@ bool ContactSpyData::IsEmpty() const
 
     if (lbIsEmpty)
     {
-        CGS_ASSERT(mRaceCarContactRunList.GetLength() == 0,
-                   "mRaceCarContactRunList.GetLength() == 0");
-        CGS_ASSERT(mTrafficContactRunList.GetLength() == 0,
-                   "mTrafficContactRunList.GetLength() == 0");
-        CGS_ASSERT(mPhysicalCarPartContactRunList.GetLength() == 0,
-                   "mPhysicalCarPartContactRunList.GetLength() == 0");
-        CGS_ASSERT(mPropContactRunList.GetLength() == 0,
-                   "mPropContactRunList.GetLength() == 0");
+        CGS_ASSERT(mRaceCarContactRunList.GetLength() == 0, CgsDev::Assert::MessageAt(
+                   "mRaceCarContactRunList.GetLength() == 0", KAC_CONTACT_SPY_DATA_HEADER, 247));
+        CGS_ASSERT(mTrafficContactRunList.GetLength() == 0, CgsDev::Assert::MessageAt(
+                   "mTrafficContactRunList.GetLength() == 0", KAC_CONTACT_SPY_DATA_HEADER, 248));
+        CGS_ASSERT(mPhysicalCarPartContactRunList.GetLength() == 0, CgsDev::Assert::MessageAt(
+                   "mPhysicalCarPartContactRunList.GetLength() == 0", KAC_CONTACT_SPY_DATA_HEADER, 249));
+        CGS_ASSERT(mPropContactRunList.GetLength() == 0, CgsDev::Assert::MessageAt(
+                   "mPropContactRunList.GetLength() == 0", KAC_CONTACT_SPY_DATA_HEADER, 250));
     }
 
     return lbIsEmpty;

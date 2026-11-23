@@ -89,10 +89,15 @@ namespace CgsModule
         {
             CGS_ASSERT(mpEvents != 0, CgsDev::Assert::MessageAt(
                 "mpEvents != NULL", KAC_BASE_EVENT_QUEUE_FILE, 331));
-            if (miLength >= miMaxLength) return false;
-            mpEvents[miLength] = lEvent;
-            ++miLength;
-            return true;
+            // ARTIST 0x825A338C / 0x82367A74: `bge` to the trailing `li r3,0` -- the append sits
+            // inside the room test and the false return follows it.
+            if (miLength < miMaxLength)
+            {
+                mpEvents[miLength] = lEvent;
+                ++miLength;
+                return true;
+            }
+            return false;
         }
 
         // ⭐ ADDED 2026-08-18 (wave Q round 2, shared-header owner). ADDITIVE GROW: a new

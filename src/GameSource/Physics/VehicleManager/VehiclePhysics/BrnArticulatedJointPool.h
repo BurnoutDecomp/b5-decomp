@@ -71,7 +71,7 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"     // CgsContainers::BitArray<N>
 #include "GameSource/Physics/VehicleManager/VehiclePhysics/BrnArticulatedJoint.h"  // the REAL ArticulatedJoint
 
-namespace CgsPhysics { class RigidBodyId; namespace PhysicsSimulationIO { struct InAddJoint; } }
+namespace CgsPhysics { class RigidBodyId; namespace PhysicsSimulationIO { class InAddJoint; } }
 
 namespace BrnPhysics
 {

@@ -51,10 +51,13 @@
 // member access is by name throughout, so the bodies are semantically faithful
 // regardless of host pointer width.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\physics\\CgsPhysicsSimulationModule.h";
-static const char KAC_ARTIST_ASSERT_SOURCE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Physics/CgsPhysicsSimulationModule.cpp";
+// ARTIST's __FILE__ strings, as literals (the original passed __FILE__): a named static array is
+// addressed and hoisted as a data symbol, not as the pooled string ARTIST loads (e.g. the file
+// string 0x820F13B0 hoisted after the expression string in ProcessSetRigidBodySpyQueue 0x828A49DC).
+#define KAC_ARTIST_ASSERT_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\physics\\CgsPhysicsSimulationModule.h"
+#define KAC_ARTIST_ASSERT_SOURCE \
+    "..\\..\\..\\GameShared\\GameClasses\\Physics/CgsPhysicsSimulationModule.cpp"
 
 namespace CgsPhysics
 {
@@ -162,8 +165,10 @@ namespace CgsPhysics
     // apart each, which is the arithmetic that identifies every one of them.
     JointId JointData::GetGameID(s32 liIndex)
     {
-        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");          // h:612 tripwire (blt skips)
-        CGS_ASSERT(mabUsedSlot[liIndex], "mabUsedSlot[liIndex]");   // h:613 tripwire (bne skips)
+        CGS_ASSERT(liIndex < KI_SIZE,
+            CgsDev::Assert::MessageAt("liIndex < knSize", KAC_ARTIST_ASSERT_FILE, 612));       // h:612 tripwire (blt skips)
+        CGS_ASSERT(mabUsedSlot[liIndex],
+            CgsDev::Assert::MessageAt("mabUsedSlot[liIndex]", KAC_ARTIST_ASSERT_FILE, 613));   // h:613 tripwire (bne skips)
         return maGameIDs[liIndex];
     }
 
@@ -478,8 +483,10 @@ namespace CgsPhysics
     // `ldx (liIndex+0x11)<<3` off maGameIDs. The JointData::GetGameID shape exactly.
     DriveId DriveData::GetGameID(s32 liIndex)
     {
-        CGS_ASSERT(liIndex < KI_SIZE, "liIndex < knSize");          // h:648 tripwire (blt skips)
-        CGS_ASSERT(mabUsedSlot[liIndex], "mabUsedSlot[liIndex]");   // h:649 tripwire (bne skips)
+        CGS_ASSERT(liIndex < KI_SIZE,
+            CgsDev::Assert::MessageAt("liIndex < knSize", KAC_ARTIST_ASSERT_FILE, 648 /* ARTIST 0x828A5D98 */));       // h:648 tripwire (blt skips)
+        CGS_ASSERT(mabUsedSlot[liIndex],
+            CgsDev::Assert::MessageAt("mabUsedSlot[liIndex]", KAC_ARTIST_ASSERT_FILE, 649 /* ARTIST 0x828A5DC0 */));   // h:649 tripwire (bne skips)
         return maGameIDs[liIndex];
     }
 
@@ -2152,40 +2159,24 @@ namespace CgsPhysics
 
             const s32 liBodyIndex = mBodyData.GetIndexFromGameID(RigidBodyId(lrEvent.mID));
 
-            // [DIAG] NOT IN THE X360 BINARY -- 2026-09-06 props lane (b5-decomp#2). Opt-in
-            // (BRN_PROP_DIAG), first-N, PROP-OWNER events only (owner byte 3 ==
-            // BrnWorld::E_ENTITYTYPE_PROP), so the vehicle/traffic traffic through this drain
-            // costs nothing. PropManager::ClampAcceleration @0x82627F00 re-posts a corrected
-            // velocity here every frame it clamps, and the measured flight of a hit prop says
-            // that correction is not reaching the body -- this line says whether the event
-            // arrives at all and whether GetIndexFromGameID resolves it.
-            // DELETE-WHEN b5-decomp#2 is closed.
-            {
-                static s32        siUpdRbLinesLeft = 400;
-                // The owner byte is the TOP byte of the ENTITY WORD, and the entity word is the
-                // HIGH dword of the packed RigidBodyId -- i.e. mID >> 56, not mID >> 32. The
-                // first cut of this line used >> 32, which is the entity word's LOW byte, so it
-                // selected "prop part index 3" instead of "owner == prop" and made the drain
-                // look like it was dropping almost every event. Recorded because the wrong
-                // reading is the plausible one.
-                const u32 luOwner = static_cast<u32>((lrEvent.mID >> 56) & 0xFFu);
-            }
-
             if (liBodyIndex == -1)
             {
                 continue;   // SILENT -- 0x828A3A78
             }
 
             rw_physics::RigidBody* const lpBody = mBodyData.GetRigidBody(liBodyIndex);   // called @0x8289D020
-            CGS_ASSERT(lpBody != NULL, "lpBody");   // .cpp:1356
+            CGS_ASSERT(lpBody != NULL,
+                CgsDev::Assert::MessageAt("lpBody", KAC_ARTIST_ASSERT_SOURCE, 1356 /* ARTIST 0x828A3A94 */));   // .cpp:1356
             CGS_ASSERT(lpBody->GetState() == lrEvent.mRigidBody.GetState(),
-                       "Can't change the state in an update RigidBody");   // .cpp:1358 (`lwz 0x8C` vs `lwz 0x9C(event)`)
+                CgsDev::Assert::MessageAt("Can't change the state in an update RigidBody",
+                    KAC_ARTIST_ASSERT_SOURCE, 1358 /* ARTIST 0x828A3ABC */));   // .cpp:1358 (`lwz 0x8C` vs `lwz 0x9C(event)`)
 
+            // ARTIST restores the left link first (stw 0x3C at 0x828A3AE8, then 0x2C at 0x828A3AF0).
             rw_physics::RigidBody* const lpSavedRight = lpBody->GetRight();   // `lwz 0x2C`
             rw_physics::RigidBody* const lpSavedLeft  = lpBody->GetLeft();    // `lwz 0x3C`
             *lpBody = lrEvent.mRigidBody;                                     // `bl 0x825E3410`
-            lpBody->SetRight(lpSavedRight);                                   // `stw 0x2C`
             lpBody->SetLeft(lpSavedLeft);                                     // `stw 0x3C`
+            lpBody->SetRight(lpSavedRight);                                   // `stw 0x2C`
 
             const s32 liState = lpBody->GetState();     // re-read AFTER the copy (`lwz 0x8C`, 0x828A3AE4)
             if ((liState & rw_physics::STATIC_BODY) == 0)

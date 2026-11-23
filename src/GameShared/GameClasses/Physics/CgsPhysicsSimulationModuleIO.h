@@ -3,6 +3,8 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (InputBuffer::AppendXxxQueue<N> template bodies)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // ARTIST assert locations
+#include "GameShared/GameClasses/Development/CgsStrStream.h"  // the streamed write-lock assert
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer (1-byte FlagSet status base)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                  // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h" // In/Out event payloads
@@ -264,12 +266,12 @@ namespace PhysicsSimulationIO
         //   AppendAddJointQueue<10>              @ 0x825A8598   AppendRemoveJointQueue<10>   @ 0x825A8678
         //   AppendRemoveRigidBodyQueue<50>       @ 0x825A83E0   AppendChangeRigidBodyInertiaQueue<200> @ 0x825AC2E8
         //   AppendUpdateExternalBodyQueue<60>    @ 0x825AC208
-        template <s32 N> bool AppendAddRigidBodyQueue(CgsModule::EventQueue<InAddRigidBody, N>* lpSourceQueue);
-        template <s32 N> bool AppendAddJointQueue(CgsModule::EventQueue<InAddJoint, N>* lpSourceQueue);
-        template <s32 N> bool AppendChangeRigidBodyInertiaQueue(CgsModule::EventQueue<InChangeRigidBodyInertia, N>* lpSourceQueue);
-        template <s32 N> bool AppendRemoveJointQueue(const CgsModule::EventQueue<InRemoveJoint, N>* lpSourceQueue);   // const src: console `PBV` mangling, see the body
-        template <s32 N> bool AppendRemoveRigidBodyQueue(CgsModule::EventQueue<InRemoveRigidBody, N>* lpSourceQueue);
-        template <s32 N> bool AppendUpdateExternalBodyQueue(CgsModule::EventQueue<InUpdateExternalBody, N>* lpSourceQueue);
+        template <s32 N> void AppendAddRigidBodyQueue(const CgsModule::EventQueue<InAddRigidBody, N>* lpSourceQueue);
+        template <s32 N> void AppendAddJointQueue(const CgsModule::EventQueue<InAddJoint, N>* lpSourceQueue);
+        template <s32 N> void AppendChangeRigidBodyInertiaQueue(const CgsModule::EventQueue<InChangeRigidBodyInertia, N>* lpSourceQueue);
+        template <s32 N> void AppendRemoveJointQueue(const CgsModule::EventQueue<InRemoveJoint, N>* lpSourceQueue);   // const src: console `PBV` mangling, see the body
+        template <s32 N> void AppendRemoveRigidBodyQueue(const CgsModule::EventQueue<InRemoveRigidBody, N>* lpSourceQueue);
+        template <s32 N> void AppendUpdateExternalBodyQueue(const CgsModule::EventQueue<InUpdateExternalBody, N>* lpSourceQueue);
 
         // Byte-offset pins (never called).
         static void _AssertLayout();
@@ -304,31 +306,54 @@ namespace PhysicsSimulationIO
     };
 
     // -------- InputBuffer::AppendXxxQueue<N> (generic bodies; per-N instances in the .cpp) --------
+    // DWARF: every instance is `void AppendXxxQueue<N>(const EventQueue<T,N>*)` (ARTIST's decorated
+    // names agree: ...QAAXPBV?$EventQueue@V...). The write-lock assert streams its message into the
+    // shared assert buffer (ARTIST 0x825A86AC..0x825A8700: StrStream over gpcMessageBuffer, the
+    // literal at 0x82006294) and names this header's line (li r5).
+#define KAC_PHYSICS_SIMULATION_IO_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\physics\\CgsPhysicsSimulationModuleIO.h"
+#define KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(liLine) \
+    do \
+    { \
+        if (!IsBufferLockedForWriting()) \
+        { \
+            CgsDev::Assert::BeginAssert(); \
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, \
+                                         CgsDev::Assert::giMessageBufferSize); \
+            lStrStream << "Not locked for writing\n"; \
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, \
+                                       KAC_PHYSICS_SIMULATION_IO_FILE, (liLine)); \
+            CgsDev::Assert::EndAssert(); \
+        } \
+    } while (0)
     // Every instance shares this shape (X360 asm): assert write-locked, assert the source queue is
     // non-null (a non-gating tripwire -- the append runs regardless, matching the binary), then
     // forward to the fixed destination member's BaseEventQueue<Elem>::Append (bulk memcpy-merge).
     template <s32 N>
-    bool InputBuffer::AppendAddRigidBodyQueue(CgsModule::EventQueue<InAddRigidBody, N>* lpSourceQueue)
+    void InputBuffer::AppendAddRigidBodyQueue(const CgsModule::EventQueue<InAddRigidBody, N>* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpSourceQueue != 0, "lpSourceQueue != NULL");
-        return mAddRigidBodyQueue.Append(*lpSourceQueue);
+        KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(1113);   // ARTIST: h:1113
+        CGS_ASSERT(lpSourceQueue != 0,
+            CgsDev::Assert::MessageAt("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1114));
+        mAddRigidBodyQueue.Append(*lpSourceQueue);
     }
 
     template <s32 N>
-    bool InputBuffer::AppendAddJointQueue(CgsModule::EventQueue<InAddJoint, N>* lpSourceQueue)
+    void InputBuffer::AppendAddJointQueue(const CgsModule::EventQueue<InAddJoint, N>* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpSourceQueue != 0, "lpSourceQueue != NULL");
-        return mAddJointQueue.Append(*lpSourceQueue);
+        KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(1184);   // ARTIST: h:1184
+        CGS_ASSERT(lpSourceQueue != 0,
+            CgsDev::Assert::MessageAt("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1185));
+        mAddJointQueue.Append(*lpSourceQueue);
     }
 
     template <s32 N>
-    bool InputBuffer::AppendChangeRigidBodyInertiaQueue(CgsModule::EventQueue<InChangeRigidBodyInertia, N>* lpSourceQueue)
+    void InputBuffer::AppendChangeRigidBodyInertiaQueue(const CgsModule::EventQueue<InChangeRigidBodyInertia, N>* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpSourceQueue != 0, "lpSourceQueue != NULL");
-        return mChangeRigidBodyInertiaQueue.Append(*lpSourceQueue);
+        KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(1143);   // ARTIST: h:1143
+        CGS_ASSERT(lpSourceQueue != 0,
+            CgsDev::Assert::MessageAt("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1144));
+        mChangeRigidBodyInertiaQueue.Append(*lpSourceQueue);
     }
 
     // ⭐ Source-queue param is CONST (retyped 2026-08-06): the console's own mangling proves it
@@ -338,27 +363,30 @@ namespace PhysicsSimulationIO
     // non-const spelling was an over-strict host invention. (Existing non-const callers still
     // convert implicitly.)
     template <s32 N>
-    bool InputBuffer::AppendRemoveJointQueue(const CgsModule::EventQueue<InRemoveJoint, N>* lpSourceQueue)
+    void InputBuffer::AppendRemoveJointQueue(const CgsModule::EventQueue<InRemoveJoint, N>* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpSourceQueue != 0, "lpSourceQueue != NULL");
-        return mRemoveJointQueue.Append(*lpSourceQueue);
+        KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(1194);   // ARTIST: h:1194
+        CGS_ASSERT(lpSourceQueue != 0,
+            CgsDev::Assert::MessageAt("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1195));
+        mRemoveJointQueue.Append(*lpSourceQueue);
     }
 
     template <s32 N>
-    bool InputBuffer::AppendRemoveRigidBodyQueue(CgsModule::EventQueue<InRemoveRigidBody, N>* lpSourceQueue)
+    void InputBuffer::AppendRemoveRigidBodyQueue(const CgsModule::EventQueue<InRemoveRigidBody, N>* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpSourceQueue != 0, "lpSourceQueue != NULL");
-        return mRemoveRigidBodyQueue.Append(*lpSourceQueue);
+        KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(1163);   // ARTIST: h:1163
+        CGS_ASSERT(lpSourceQueue != 0,
+            CgsDev::Assert::MessageAt("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1164));
+        mRemoveRigidBodyQueue.Append(*lpSourceQueue);
     }
 
     template <s32 N>
-    bool InputBuffer::AppendUpdateExternalBodyQueue(CgsModule::EventQueue<InUpdateExternalBody, N>* lpSourceQueue)
+    void InputBuffer::AppendUpdateExternalBodyQueue(const CgsModule::EventQueue<InUpdateExternalBody, N>* lpSourceQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-        CGS_ASSERT(lpSourceQueue != 0, "lpSourceQueue != NULL");
-        return mUpdateExternalBodyQueue.Append(*lpSourceQueue);
+        KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(1284);   // ARTIST: h:1284
+        CGS_ASSERT(lpSourceQueue != 0,
+            CgsDev::Assert::MessageAt("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1285));
+        mUpdateExternalBodyQueue.Append(*lpSourceQueue);
     }
 
     // The physics-simulation output buffer -- COMPLETE as of 2026-08-06 (the spy wave): all

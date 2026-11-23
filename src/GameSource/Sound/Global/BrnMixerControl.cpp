@@ -61,7 +61,7 @@ void MixerControl::SetupLoadData()
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
     CgsSound::Playback::Environment* lpPlaybackEnvironment =
-        lpModule->GetPlaybackModule().GetEnvironment();
+        &lpModule->GetPlaybackModule().GetEnvironment();
     CGS_ASSERT(lpPlaybackEnvironment != 0, "mpObject");
 
     if (lpPlaybackEnvironment->GetAudioMode() ==
@@ -154,7 +154,7 @@ void MixerControl::RestartMixer()
     BrnSound::Module::SoundLogicModule* lpModule =
         static_cast<BrnSound::Module::SoundLogicModule*>(mpLogicModule);
     CgsSound::Playback::Environment* lpPlaybackEnvironment =
-        lpModule->GetPlaybackModule().GetEnvironment();
+        &lpModule->GetPlaybackModule().GetEnvironment();
     if (mpMixerData)
         lpPlaybackEnvironment->Free(mpMixerData);
     mpMixerData = static_cast<u8*>(

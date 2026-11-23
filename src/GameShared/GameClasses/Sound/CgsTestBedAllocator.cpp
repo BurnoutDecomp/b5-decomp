@@ -21,10 +21,11 @@ namespace TestBed
     // History::Entry / History - the recent-events ring (zeroed at construction; the X360 inlines
     // this zeroing into the Allocator ctor's 500-slot loop).
     // -------------------------------------------------------------------------------------------
+    // ARTIST's ring loop in the Allocator ctor (0x826ADE84..0x826ADE9C) stores +0x0, +0x4 and +0xC of
+    // each 16-byte entry: mpEndMem (+0x8) is left as it is.
     Allocator::History::Entry::Entry()
         : mpcName(0)
         , mpStartMem(0)
-        , mpEndMem(0)
         , muSize(0)
     {
     }

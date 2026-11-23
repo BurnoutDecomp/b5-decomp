@@ -521,14 +521,16 @@ bool Splice::IsPlaying()
 // ============================================================================
 u32 Splice::GetCpuTicks()
 {
-    u32 luTotal = 0;
-    const int liCount = mpData->mucNumSampleRefs;
-    for ( int li = 0; li < liCount; ++li )
+    // DWARF SpliceObjects.cpp:207/208: uint32_t luSampleRefIndex, uint32_t luCpuTicks (the
+    // unsigned index gives ARTIST's cmplwi/beqlr at 0x826A3818).
+    u32 luCpuTicks = 0;
+    const u32 luCount = mpData->mucNumSampleRefs;
+    for ( u32 luSampleRefIndex = 0; luSampleRefIndex < luCount; ++luSampleRefIndex )
     {
-        if ( mSampleRefs[li] )
-            luTotal += mSampleRefs[li]->GetCpuTicks();
+        if ( mSampleRefs[luSampleRefIndex] )
+            luCpuTicks += mSampleRefs[luSampleRefIndex]->GetCpuTicks();
     }
-    return luTotal;
+    return luCpuTicks;
 }
 
 // ============================================================================

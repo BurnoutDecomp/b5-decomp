@@ -9,6 +9,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnMessageData.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // ARTIST assert locations
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameSource/AttribSys/Generated/classes/songlist.h"
 #include "GameSource/AttribSys/Generated/classes/song.h"
@@ -145,18 +146,22 @@ MusicEffect::EaTraxData::EaTraxData()
     mRemainingSongs.Construct();
 }
 
-// X360 0x82697538.
+// X360 0x82697538. The assert names BrnMusicEffect.h:720 (the original defines Prepare among the
+// header's inline bodies; ARTIST keeps an out-of-line copy, called by MusicEffect::Attach). It
+// clears the two enabled-song masks only (DWARF BrnSoundUnity: two FastBitArray<128>::UnSetAll),
+// leaves mRemainingSongs alone, and clears mbPendingChange last (0x826975AC).
 bool MusicEffect::EaTraxData::Prepare(Module::SoundLogicModule* apLogicModule)
 {
-    CGS_ASSERT(apLogicModule != 0, "lpLogicModule");
-    mEnabledSongs.Construct();
-    mEnabledSongsNoGameMode.Construct();
-    mRemainingSongs.Construct();
+    CGS_ASSERT(apLogicModule != 0, CgsDev::Assert::MessageAt("lpLogicModule",
+        "..\\..\\..\\GameSource\\Sound/Global/BrnMusicEffect.h", 720 /* ARTIST 0x82697564 */));
+    mEnabledSongs.UnSetAll();
+    mEnabledSongsNoGameMode.UnSetAll();
     miPreviewSong = -1;
     miPreviousPreviewSong = -1;
     miCurrentSong = -1;
     mpLogicModule = apLogicModule;
     mePlayOrder = E_PLAY_ORDER_SEQUENTIAL;
+    mbPendingChange = false;
     return true;
 }
 

@@ -622,9 +622,9 @@ void SoundLogicModule::ProcessGuiEvents(
                   // otherwise. The environment is the embedded PLAYBACK module's, not the
                   // logic Environment GetEnvironment() returns.
             if (*lpuPayload)
-                GetPlaybackModule().GetEnvironment()->StopDac();
+                GetPlaybackModule().GetEnvironment().StopDac();
             else
-                GetPlaybackModule().GetEnvironment()->StartDac();
+                GetPlaybackModule().GetEnvironment().StartDac();
             break;
 
         case 256:  // A GUI state whose +440 word is 15 asks for online VO 1.

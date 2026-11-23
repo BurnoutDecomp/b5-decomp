@@ -172,7 +172,7 @@ void VehicleManager::HandleTrafficCarTrafficCarPotentialContact(
             lpManagerOutputInterface, lpVehicleOutputInterface, lpDeformationInterface);
     }
     else if (mPhysicalTrafficManager.GetTrafficVehicle(static_cast<s32>(lu16TrafficAIndex))->mePhysicalTrafficState
-                 != static_cast<u32>(E_TRAFFIC_TYPE_PHYSICAL))                      // lwz 0x20 ; cmpwi 2
+                 != E_TRAFFIC_TYPE_PHYSICAL)                      // lwz 0x20 ; cmpwi 2
     {
         // v2 = (1 / massA) * (massB * closing): vrefp + two Newton steps on A's mass (+0xE0), B's
         // mass scaled by the closing speed, multiplied. v1 = the contact point ON A (arg_20).
@@ -194,7 +194,7 @@ void VehicleManager::HandleTrafficCarTrafficCarPotentialContact(
             lpManagerOutputInterface, lpVehicleOutputInterface, lpDeformationInterface);
     }
     else if (mPhysicalTrafficManager.GetTrafficVehicle(static_cast<s32>(lu16TrafficBIndex))->mePhysicalTrafficState
-                 != static_cast<u32>(E_TRAFFIC_TYPE_PHYSICAL))
+                 != E_TRAFFIC_TYPE_PHYSICAL)
     {
         // v2 = (1 / massB) * (massA * closing); v1 = the contact point ON B (arg_30).
         const f32 lfSlamMagnitude =
@@ -291,7 +291,7 @@ void VehicleManager::HandleTrafficCarWorldPotentialContact(
 
     // 0x8263F390..0x8263F3A4: already CRASHING -> nothing to do (lwz 0x20 ; cmpwi 1).
     if (mPhysicalTrafficManager.GetTrafficVehicle(static_cast<s32>(lu16TrafficIndex))->mePhysicalTrafficState
-            == static_cast<u32>(E_TRAFFIC_TYPE_CRASHING))
+            == E_TRAFFIC_TYPE_CRASHING)
         return;
 
     // ---- 0x8263F3A8..0x8263F438: THE DEAD CLASSIFICATION. Body +0x580 is

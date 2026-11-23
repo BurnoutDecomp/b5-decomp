@@ -37,6 +37,12 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+// ARTIST's __FILE__ for these bodies: they were defined in BrnPhysicalTrafficManager.cpp, compiled
+// through the BrnPhysicsUnity2 unity file (string read at 0x820945F0 by PhysicallyCrashTrafficCar).
+#define KAC_PHYSICAL_TRAFFIC_MANAGER_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnPhysicalTrafficManager.cpp"
 
 
 namespace BrnPhysics
@@ -128,12 +134,15 @@ void PhysicalTrafficManager::PhysicallyCrashTrafficCar(
     u16 lu16TrafficCarIndex,
     BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface)
 {
-    CGS_ASSERT(lpDeformationInterface != 0, "NULL != lpDeformationInterface");
-    CGS_ASSERT(lu16TrafficCarIndex < 20u, "lu16TrafficCarIndex < ku8TotalMaxNumPhysicalTraffic");
+    CGS_ASSERT(lpDeformationInterface != 0, CgsDev::Assert::MessageAt("NULL != lpDeformationInterface",
+        KAC_PHYSICAL_TRAFFIC_MANAGER_FILE, 2404 /* ARTIST 0x825CAC3C */));
+    CGS_ASSERT(lu16TrafficCarIndex < 20u, CgsDev::Assert::MessageAt(
+        "lu16TrafficCarIndex < ku8TotalMaxNumPhysicalTraffic",
+        KAC_PHYSICAL_TRAFFIC_MANAGER_FILE, 2405 /* ARTIST 0x825CAC64 */));
     (void)lpDeformationInterface;
 
     if (GetTrafficVehicle(static_cast<s32>(lu16TrafficCarIndex))->mePhysicalTrafficState
-            == static_cast<u32>(E_TRAFFIC_TYPE_CRASHING))
+            == E_TRAFFIC_TYPE_CRASHING)
     {
         CgsSceneManager::VolumeInstanceId lVolumeId;
         lVolumeId.muId = 0;
@@ -173,7 +182,7 @@ void PhysicalTrafficManager::SetTrafficVehicleCrashing(
     const u16 lu16TrafficIndex = EntityIndexOf(lTrafficEntityID);
 
     PhysicalTrafficVehicle* lpVehicle = GetTrafficVehicle(static_cast<s32>(lu16TrafficIndex));
-    if (lpVehicle->mePhysicalTrafficState == static_cast<u32>(E_TRAFFIC_TYPE_CRASHING))
+    if (lpVehicle->mePhysicalTrafficState == E_TRAFFIC_TYPE_CRASHING)
         return;
 
     const EntityId lGlobalTrafficID =
@@ -189,7 +198,7 @@ void PhysicalTrafficManager::SetTrafficVehicleCrashing(
 
     lpVehicle = GetTrafficVehicle(static_cast<s32>(lu16TrafficIndex));
     SimpleVehiclePhysics* const lpBody = lpVehicle->mpVehicleBody;
-    lpVehicle->mePhysicalTrafficState = static_cast<u32>(E_TRAFFIC_TYPE_CRASHING);
+    lpVehicle->mePhysicalTrafficState = E_TRAFFIC_TYPE_CRASHING;
     lpBody->SetCrashing();                                     // vtable +8
 
     CGS_ASSERT(lu16TrafficIndex < 20u, "luIndex < NUMBITS");   // CgsBitArray.h:241
@@ -277,7 +286,7 @@ void PhysicalTrafficManager::SetTrafficVehicleChecked(
     lpVehicle->OnChecked(static_cast<EActiveRaceCarIndex>(EntityIndexOf(lCrasherEntityID)),
                          lpRaceCarPhysics, lContactPointOnTraffic);
 
-    lpVehicle->mePhysicalTrafficState = static_cast<u32>(E_TRAFFIC_TYPE_PHYSICAL);
+    lpVehicle->mePhysicalTrafficState = E_TRAFFIC_TYPE_PHYSICAL;
 
     CGS_ASSERT(lu16TrafficIndex < 20u, "luIndex < NUMBITS");   // CgsBitArray.h:241
     mPotentialTrafficVehicles.UnSetBit(lu16TrafficIndex);
@@ -343,10 +352,10 @@ void PhysicalTrafficManager::SetTrafficVehicleSlammed(
     CGS_ASSERT(lu16TrafficIndex < 20u, "lu16TrafficIndex < ku8TotalMaxNumPhysicalTraffic");
 
     PhysicalTrafficVehicle* const lpVehicle = GetTrafficVehicle(static_cast<s32>(lu16TrafficIndex));
-    if (lpVehicle->mePhysicalTrafficState != static_cast<u32>(E_TRAFFIC_TYPE_POTENTIAL))
+    if (lpVehicle->mePhysicalTrafficState != E_TRAFFIC_TYPE_POTENTIAL)
         return;
 
-    lpVehicle->mePhysicalTrafficState = static_cast<u32>(E_TRAFFIC_TYPE_PHYSICAL);
+    lpVehicle->mePhysicalTrafficState = E_TRAFFIC_TYPE_PHYSICAL;
 
     CGS_ASSERT(lu16TrafficIndex < 20u, "luIndex < NUMBITS");   // CgsBitArray.h:241
     mPotentialTrafficVehicles.UnSetBit(lu16TrafficIndex);

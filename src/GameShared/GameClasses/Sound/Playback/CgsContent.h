@@ -143,7 +143,7 @@ namespace Playback
         // flag as required. FLAG (DEFER): declared-only -- bodied in its own Content TU
         // (X360 CgsSound::Playback::Content::SetContentState). Reached from
         // ContentLoader<>::UpdateResourceModuleLoading on the FINISHED transition.
-        void SetContentState(int liState);
+        void SetContentState(EContentState leContentState);   // DWARF CgsContent.h:135
 
         // @ 0x82680CC8. Enter the remove lifecycle and ask the concrete content
         // implementation to begin unloading.
@@ -158,7 +158,8 @@ namespace Playback
         // Slot::Update @0x82693B10 before committing a pending attachment.
         EContentState GetContentState() const
         {
-            return static_cast<EContentState>(mu8ContentState & 0x7Fu);
+            // ARTIST masks with ~E_CONTENT_STATE_CHANGED (rlwinm 0,25,23 at 0x82680C94).
+            return static_cast<EContentState>(mu8ContentState & ~E_CONTENT_STATE_CHANGED);
         }
 
         // DWARF CgsContent.h:445 / :452 -- the CHANGED-bit pair (test / clear of

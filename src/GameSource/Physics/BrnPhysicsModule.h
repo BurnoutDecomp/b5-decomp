@@ -125,7 +125,7 @@ namespace BrnWorld { class WorldModule; enum EEntityTypeID ; }   // fixed-underl
 namespace BrnPhysics
 {
 namespace PhysicsModuleIO { class InputBuffer; class OutputBuffer; struct PotentialContactInterface; }
-namespace Props           { struct PropRaceCarContactBuffer; }   // DWARF BrnPropManager.h:47 (class key struct; IOBuffer-derived, not yet homed)
+namespace Props           { class PropRaceCarContactBuffer; }    // DWARF BrnPropManager.h:47 (class key from ARTIST's decorated names, VPropRaceCarContactBuffer)
 namespace Vehicle         { struct VehicleManagerOutputBuffer; } // home BrnVehicleManagerIO.h (the "VehManager" stack buffer Update creates)
 
     // ==============================================================================================

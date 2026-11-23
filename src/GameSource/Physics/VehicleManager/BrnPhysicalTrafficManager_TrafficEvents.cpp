@@ -365,7 +365,7 @@ void PhysicalTrafficManager::SetTrafficVehicleNotCrashing(EntityId lTrafficPhysi
         static_cast<u16>((lTrafficPhysicsId.muValue >> 10) & 0x3FFFu);
 
     if (GetTrafficVehicle(static_cast<s32>(lu16TrafficIndex))->mePhysicalTrafficState
-            != static_cast<u32>(E_TRAFFIC_TYPE_CRASHING))
+            != E_TRAFFIC_TYPE_CRASHING)
     {
         return;
     }
@@ -381,7 +381,7 @@ void PhysicalTrafficManager::SetTrafficVehicleNotCrashing(EntityId lTrafficPhysi
                "lpTrafficVehicle->IsFullyPhysical()");               // :2196
 
     SimpleVehiclePhysics* const lpBody = lpVehicle->mpVehicleBody;
-    lpVehicle->mePhysicalTrafficState = static_cast<u32>(E_TRAFFIC_TYPE_PHYSICAL);
+    lpVehicle->mePhysicalTrafficState = E_TRAFFIC_TYPE_PHYSICAL;
     lpBody->ClearCrashing();                                          // vtable +4
 
 }

@@ -287,7 +287,7 @@ public:
 
     // Module::GetEnvironment @ 0x82694130. Returns the owned environment (asserts
     // the handle is non-null first -- fires CgsHandle.h:305).
-    Environment* GetEnvironment();
+    Environment& GetEnvironment();   // DWARF CgsSoundPlaybackModule.h:302 returns Environment&
 
     // The per-frame time pair (phase C2): the RootSoundModule::Update @0x826FB238
     // paired store at +0x2700/+0x2704 -- mf32TimeStep = dt (the dt this module's

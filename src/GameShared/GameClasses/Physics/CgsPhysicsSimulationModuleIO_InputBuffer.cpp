@@ -128,13 +128,13 @@ namespace PhysicsSimulationIO
     // -------- explicit instantiations: InputBuffer::AppendXxxQueue<N> --------
     // Force the out-of-line emission the X360 ARTIST build produced for each source-queue capacity
     // (generic bodies live in CgsPhysicsSimulationModuleIO.h). Templated on the SOURCE queue's N.
-    template bool InputBuffer::AppendAddJointQueue<10>(CgsModule::EventQueue<InAddJoint, 10>*);                          // @0x825A8598
-    template bool InputBuffer::AppendAddRigidBodyQueue<1>(CgsModule::EventQueue<InAddRigidBody, 1>*);                    // @0x825A8298
-    template bool InputBuffer::AppendAddRigidBodyQueue<50>(CgsModule::EventQueue<InAddRigidBody, 50>*);                  // @0x825A84C0
-    template bool InputBuffer::AppendChangeRigidBodyInertiaQueue<200>(CgsModule::EventQueue<InChangeRigidBodyInertia, 200>*); // @0x825AC2E8
-    template bool InputBuffer::AppendRemoveJointQueue<10>(const CgsModule::EventQueue<InRemoveJoint, 10>*);   // const src per the console `PBV` mangling                    // @0x825A8678
-    template bool InputBuffer::AppendRemoveRigidBodyQueue<50>(CgsModule::EventQueue<InRemoveRigidBody, 50>*);            // @0x825A83E0
-    template bool InputBuffer::AppendUpdateExternalBodyQueue<60>(CgsModule::EventQueue<InUpdateExternalBody, 60>*);      // @0x825AC208
+    template void InputBuffer::AppendAddJointQueue<10>(const CgsModule::EventQueue<InAddJoint, 10>*);                          // @0x825A8598
+    template void InputBuffer::AppendAddRigidBodyQueue<1>(const CgsModule::EventQueue<InAddRigidBody, 1>*);                    // @0x825A8298
+    template void InputBuffer::AppendAddRigidBodyQueue<50>(const CgsModule::EventQueue<InAddRigidBody, 50>*);                  // @0x825A84C0
+    template void InputBuffer::AppendChangeRigidBodyInertiaQueue<200>(const CgsModule::EventQueue<InChangeRigidBodyInertia, 200>*); // @0x825AC2E8
+    template void InputBuffer::AppendRemoveJointQueue<10>(const CgsModule::EventQueue<InRemoveJoint, 10>*);   // const src per the console `PBV` mangling                    // @0x825A8678
+    template void InputBuffer::AppendRemoveRigidBodyQueue<50>(const CgsModule::EventQueue<InRemoveRigidBody, 50>*);            // @0x825A83E0
+    template void InputBuffer::AppendUpdateExternalBodyQueue<60>(const CgsModule::EventQueue<InUpdateExternalBody, 60>*);      // @0x825AC208
 
     // X360 0x8289E338. Read-lock guard, then asserts muMaxIterations > 0 before returning it.
     int InputBuffer::GetMaxIterations() const

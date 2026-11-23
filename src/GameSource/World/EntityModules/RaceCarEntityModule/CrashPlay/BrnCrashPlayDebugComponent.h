@@ -12,7 +12,7 @@
 namespace BrnGameState { namespace GameStateModuleIO {
     struct JustBouncedAction; struct RoadRulesEnterRoadAction; struct SendJunctionPlayerIsAtAction;
 } }
-namespace BrnPhysics { namespace ContactSpy { struct RaceCarContact; } }
+namespace BrnPhysics { namespace ContactSpy { class RaceCarContact; } }
 
 namespace BrnWorld
 {

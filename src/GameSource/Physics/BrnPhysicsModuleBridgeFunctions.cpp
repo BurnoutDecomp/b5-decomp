@@ -2,6 +2,12 @@
 
 #include <cstdlib>                                                            // getenv (the [spy-owners] BRN_SHOWTIME_WATCH histogram)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                   // ARTIST assert locations
+
+// ARTIST's __FILE__ for this file, compiled through the BrnPhysicsUnity unity file (the string
+// ProcessContactSpies loads at 0x825B031C/0x825B0330); every `// :NNNN` below is ARTIST's li r5.
+#define KAC_BRIDGE_FUNCTIONS_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/BrnPhysicsModuleBridgeFunctions.cpp"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                    // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"      // sim IO buffers + OutContactSpy / InAddPotentialContact
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact (+SwapEntityOrder)
@@ -72,7 +78,10 @@ namespace BrnPhysics
 
         // Owner byte of an 8-byte packed id/handle word (the high byte of its high dword --
         // `srdi 32 ; srwi 24` everywhere in this TU).
-        inline u32 GetIdOwner(u64 lu64Id) { return static_cast<u32>(lu64Id >> 56); }
+        // The ids are DWARF CgsPhysics::RigidBodyId (kept u64 in the event records); the owner
+        // is RigidBodyId::GetEntityIDOwner, i.e. GetEntityId() (>> 32) then its owner byte
+        // (>> 24), as ValidateSimulationContacts 0x825A13EC..0x825A13F8 shows.
+        inline u32 GetIdOwner(u64 lu64Id) { return CgsPhysics::RigidBodyId(lu64Id).GetEntityIDOwner(); }
     }
 
     // =================================================================================================
@@ -89,8 +98,8 @@ namespace BrnPhysics
         const Props::PropRaceCarContactBuffer* lpPropRaceCarContactBuffer,
         VecFloat lvfTimeStep )
     {
-        CGS_ASSERT(lpRawContactSpies != 0, "lpRawContactSpies != NULL");                     // :1051
-        CGS_ASSERT(lpPotentialContactsInterface != 0, "lpPotentialContactsInterface != NULL"); // :1052
+        CGS_ASSERT(lpRawContactSpies != 0, CgsDev::Assert::MessageAt("lpRawContactSpies != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 1051));                     // :1051
+        CGS_ASSERT(lpPotentialContactsInterface != 0, CgsDev::Assert::MessageAt("lpPotentialContactsInterface != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 1052)); // :1052
 
         for (s32 liIndex = 0; liIndex < lpRawContactSpies->GetLength(); ++liIndex)
         {
@@ -125,7 +134,7 @@ namespace BrnPhysics
         const Props::PropRaceCarContactBuffer* lpPropRaceCarContactBuffer,
         VecFloat /*lvfTimeStep*/ )
     {
-        CGS_ASSERT(lpPotentialContactsInterface != 0, "lpPotentialContactsInterface != NULL");   // :1096
+        CGS_ASSERT(lpPotentialContactsInterface != 0, CgsDev::Assert::MessageAt("lpPotentialContactsInterface != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 1096));   // :1096
 
         const u32 luEntityTypeA = GetIdOwner(lContactSpy.mIDA);
         const u32 luEntityTypeB = GetIdOwner(lContactSpy.mIDB);
@@ -276,13 +285,11 @@ namespace BrnPhysics
         // Illegal-pair guards (negated conditions; X360 lines 0x454/0x458 == :1108/:1112).
         if (luEntityTypeA == static_cast<u32>(BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE))
         {
-            CGS_ASSERT(luEntityTypeB != static_cast<u32>(BrnWorld::E_ENTITYTYPE_RACECAR),
-                       "!( leEntityTypeA == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE && leEntityTypeB == BrnWorld::E_ENTITYTYPE_RACECAR )");           // :1108
+            CGS_ASSERT(luEntityTypeB != static_cast<u32>(BrnWorld::E_ENTITYTYPE_RACECAR), CgsDev::Assert::MessageAt("!( leEntityTypeA == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE && leEntityTypeB == BrnWorld::E_ENTITYTYPE_RACECAR )", KAC_BRIDGE_FUNCTIONS_FILE, 1108));           // :1108
         }
         else if (luEntityTypeA == static_cast<u32>(BrnWorld::E_ENTITYTYPE_WORLD))
         {
-            CGS_ASSERT(luEntityTypeB != static_cast<u32>(BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE),
-                       "!( leEntityTypeA == BrnWorld::E_ENTITYTYPE_WORLD && leEntityTypeB == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE )");             // :1112
+            CGS_ASSERT(luEntityTypeB != static_cast<u32>(BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE), CgsDev::Assert::MessageAt("!( leEntityTypeA == BrnWorld::E_ENTITYTYPE_WORLD && leEntityTypeB == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE )", KAC_BRIDGE_FUNCTIONS_FILE, 1112));             // :1112
         }
 
         // Fetch the potential-contact record this spy resolved from (the spy's muTag is a packed
@@ -395,8 +402,8 @@ namespace BrnPhysics
         const PotentialContact* lpPotentialContact,
         const Props::PropRaceCarContactBuffer* /*lpPropRaceCarContactBuffer*/ )
     {
-        CGS_ASSERT(lpRawContact != 0, "lpRawContact != NULL");               // :1208
-        CGS_ASSERT(lpPotentialContact != 0, "lpPotentialContact != NULL");   // :1209
+        CGS_ASSERT(lpRawContact != 0, CgsDev::Assert::MessageAt("lpRawContact != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 1208));               // :1208
+        CGS_ASSERT(lpPotentialContact != 0, CgsDev::Assert::MessageAt("lpPotentialContact != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 1209));   // :1209
 
         // ============================================================================================
         // [DIAG] NOT IN THE X360 BINARY -- the CONTACT-QUEUE FILL WITNESS. BRN_VFXFEED_PROBE=1.
@@ -540,7 +547,7 @@ namespace BrnPhysics
     void PhysicsModule::ValidateSimulationContacts(
         const CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpContactQueue )
     {
-        CGS_ASSERT(lpContactQueue != 0, "lpContactQueue != NULL");   // :608
+        CGS_ASSERT(lpContactQueue != 0, CgsDev::Assert::MessageAt("lpContactQueue != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 608));   // :608
 
         for (s32 liIndex = 0; liIndex < lpContactQueue->GetLength(); ++liIndex)
         {
@@ -652,11 +659,10 @@ namespace BrnPhysics
         CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
         const Vehicle::VehicleOutputRequestInterface* lpRequestInterface )
     {
-        CGS_ASSERT(lpSimModuleInputBuffer != 0, "lpSimModuleInputBuffer != NULL");   // :1315
-        CGS_ASSERT(lpRequestInterface != 0, "lpRequestInterface != NULL");           // :1316
+        CGS_ASSERT(lpSimModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpSimModuleInputBuffer != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 1315));   // :1315
+        CGS_ASSERT(lpRequestInterface != 0, CgsDev::Assert::MessageAt("lpRequestInterface != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 1316));           // :1316
 
-        CGS_ASSERT(lpRequestInterface->GetAddJointQueue()->GetLength() == 0,
-                   "lpRequestInterface->GetAddJointQueue()->GetLength() == 0");            // :1322
+        CGS_ASSERT(lpRequestInterface->GetAddJointQueue()->GetLength() == 0, CgsDev::Assert::MessageAt("lpRequestInterface->GetAddJointQueue()->GetLength() == 0", KAC_BRIDGE_FUNCTIONS_FILE, 1322));            // :1322
 
         // AppendRemoveJointQueue<10> @0x825A8678 (the header template instantiation).
         lpSimModuleInputBuffer->AppendRemoveJointQueue<10>(lpRequestInterface->GetRemoveJointQueue());
@@ -700,16 +706,14 @@ namespace BrnPhysics
             // has already fired; the host skips the out-of-bounds write instead -- diagnostics
             // only, nothing live changes).
             const u32 luOwnerA = GetIdOwner(lrContactEvent.mIDA);
-            CGS_ASSERT(luOwnerA < static_cast<u32>(KI_X360_ENTITYTYPE_HISTOGRAM_WIDTH),
-                       "lpContactEvent->mIDA.GetEntityIDOwner() < BrnWorld::E_ENTITYTYPE_COUNT");   // :570
+            CGS_ASSERT(luOwnerA < static_cast<u32>(KI_X360_ENTITYTYPE_HISTOGRAM_WIDTH), CgsDev::Assert::MessageAt("lpContactEvent->mIDA.GetEntityIDOwner() < BrnWorld::E_ENTITYTYPE_COUNT", KAC_BRIDGE_FUNCTIONS_FILE, 570));   // :570
             if (luOwnerA < static_cast<u32>(KI_X360_ENTITYTYPE_HISTOGRAM_WIDTH))
             {
                 ++laOwnerCounts[luOwnerA];
             }
 
             const u32 luOwnerB = GetIdOwner(lrContactEvent.mIDB);
-            CGS_ASSERT(luOwnerB < static_cast<u32>(KI_X360_ENTITYTYPE_HISTOGRAM_WIDTH),
-                       "lpContactEvent->mIDB.GetEntityIDOwner() < BrnWorld::E_ENTITYTYPE_COUNT");   // :573
+            CGS_ASSERT(luOwnerB < static_cast<u32>(KI_X360_ENTITYTYPE_HISTOGRAM_WIDTH), CgsDev::Assert::MessageAt("lpContactEvent->mIDB.GetEntityIDOwner() < BrnWorld::E_ENTITYTYPE_COUNT", KAC_BRIDGE_FUNCTIONS_FILE, 573));   // :573
             if (luOwnerB < static_cast<u32>(KI_X360_ENTITYTYPE_HISTOGRAM_WIDTH))
             {
                 ++laOwnerCounts[luOwnerB];
@@ -725,7 +729,7 @@ namespace BrnPhysics
             }
         }
 
-        CGS_ASSERT(false, "Contact Queue is full\n");   // :583
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Contact Queue is full\n", KAC_BRIDGE_FUNCTIONS_FILE, 583));   // :583
     }
 
     // =================================================================================================
@@ -743,14 +747,13 @@ namespace BrnPhysics
         const CgsPhysics::PhysicsSimulationIO::OutputBuffer* lpSimModuleOutputBuffer,
         VecFloat lvfTimeStep )
     {
-        CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");                             // :834
-        CGS_ASSERT(lpPotentialContactsInterface != 0, "lpPotentialContactsInterface != NULL"); // :835
-        CGS_ASSERT(lpSimModuleOutputBuffer != 0, "lpSimModuleOutputBuffer != NULL");           // :836
+        CGS_ASSERT(lpOutputBuffer != 0, CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 834));                             // :834
+        CGS_ASSERT(lpPotentialContactsInterface != 0, CgsDev::Assert::MessageAt("lpPotentialContactsInterface != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 835)); // :835
+        CGS_ASSERT(lpSimModuleOutputBuffer != 0, CgsDev::Assert::MessageAt("lpSimModuleOutputBuffer != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 836));           // :836
 
         // The output buffer's contact-spy interface must be empty (or unbound) before we
         // repopulate it (ContactSpyInterface::IsEmpty inlined at 0x825B04EC..0x825B0514).
-        CGS_ASSERT(lpOutputBuffer->GetContactSpyInterface()->IsEmpty(),
-                   "lpOutputBuffer->GetContactSpyInterface()->IsEmpty()");                           // :838
+        CGS_ASSERT(lpOutputBuffer->GetContactSpyInterface()->IsEmpty(), CgsDev::Assert::MessageAt("lpOutputBuffer->GetContactSpyInterface()->IsEmpty()", KAC_BRIDGE_FUNCTIONS_FILE, 838));                           // :838
 
         // Resolve all raw contact spies into the typed contact queues (const spy-queue accessor
         // @0x8259F078).
@@ -836,8 +839,8 @@ namespace BrnPhysics
     {
         typedef PhysicsModuleIO::PotentialContactInterface::CustomPotentialContactQueue Queue;
 
-        CGS_ASSERT(lpSimModuleInputBuffer != 0, "lpSimModuleInputBuffer != NULL");   // :49
-        CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");                     // :50
+        CGS_ASSERT(lpSimModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpSimModuleInputBuffer != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 49));   // :49
+        CGS_ASSERT(lpInputBuffer != 0, CgsDev::Assert::MessageAt("lpInputBuffer != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 50));                     // :50
 
         // Write-locked GetTimeStep (the accessor's own "Not locked for writing" +
         // "mfTimeStep > 0.0f" tripwires, CgsPhysicsSimulationModuleIO.h:848/:849).
@@ -896,25 +899,18 @@ namespace BrnPhysics
             }
 
             // Pair-legality tripwires (fire-and-continue diagnostics).
-            CGS_ASSERT(!(luOwnerA == 1u && luOwnerB == 1u),
-                       "!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR && "
-                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR)");           // :91
-            CGS_ASSERT(!(luOwnerA == 0u && luOwnerB == 2u),
-                       "!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_WORLD && "
-                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)");   // :94
-            CGS_ASSERT(!(luOwnerA == 2u && luOwnerB == 0u),
-                       "!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE && "
-                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_WORLD)");             // :97
-            CGS_ASSERT(!(luOwnerA == 1u && luOwnerB == 2u),
-                       "!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR && "
-                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)");   // :100
-            CGS_ASSERT(!(luOwnerA == 2u && luOwnerB == 2u),
-                       "!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE && "
-                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)");   // :103
-            CGS_ASSERT(luOwnerA != 8u,
-                       "lVolumeInstanceIDA.GetEntityIDOwner() != BrnWorld::E_ENTITYTYPE_RACECAR_WHEEL");      // :139
-            CGS_ASSERT(luOwnerB != 8u,
-                       "lVolumeInstanceIDB.GetEntityIDOwner() != BrnWorld::E_ENTITYTYPE_RACECAR_WHEEL");      // :140
+            CGS_ASSERT(!(luOwnerA == 1u && luOwnerB == 1u), CgsDev::Assert::MessageAt("!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR && "
+                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR)", KAC_BRIDGE_FUNCTIONS_FILE, 91));           // :91
+            CGS_ASSERT(!(luOwnerA == 0u && luOwnerB == 2u), CgsDev::Assert::MessageAt("!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_WORLD && "
+                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)", KAC_BRIDGE_FUNCTIONS_FILE, 94));   // :94
+            CGS_ASSERT(!(luOwnerA == 2u && luOwnerB == 0u), CgsDev::Assert::MessageAt("!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE && "
+                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_WORLD)", KAC_BRIDGE_FUNCTIONS_FILE, 97));             // :97
+            CGS_ASSERT(!(luOwnerA == 1u && luOwnerB == 2u), CgsDev::Assert::MessageAt("!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR && "
+                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)", KAC_BRIDGE_FUNCTIONS_FILE, 100));   // :100
+            CGS_ASSERT(!(luOwnerA == 2u && luOwnerB == 2u), CgsDev::Assert::MessageAt("!(lVolumeInstanceIDA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE && "
+                       "lVolumeInstanceIDB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE)", KAC_BRIDGE_FUNCTIONS_FILE, 103));   // :103
+            CGS_ASSERT(luOwnerA != 8u, CgsDev::Assert::MessageAt("lVolumeInstanceIDA.GetEntityIDOwner() != BrnWorld::E_ENTITYTYPE_RACECAR_WHEEL", KAC_BRIDGE_FUNCTIONS_FILE, 139));      // :139
+            CGS_ASSERT(luOwnerB != 8u, CgsDev::Assert::MessageAt("lVolumeInstanceIDB.GetEntityIDOwner() != BrnWorld::E_ENTITYTYPE_RACECAR_WHEEL", KAC_BRIDGE_FUNCTIONS_FILE, 140));      // :140
 
             InAddPotentialContact lAddContactEvent;
             lAddContactEvent.muTag            = static_cast<u32>(liEventIndex);
@@ -1025,16 +1021,11 @@ namespace BrnPhysics
             }
 
             // Validity tripwires (the console's vcmpeqfp self-compares).
-            CGS_ASSERT(IsValidLane(lAddContactEvent.mDynamicFriction),
-                       "rw::math::IsValid( lAddContactEvent.mDynamicFriction)");           // :274
-            CGS_ASSERT(IsValidLane(lAddContactEvent.mStaticFriction),
-                       "rw::math::IsValid( lAddContactEvent.mStaticFriction )");           // :275
-            CGS_ASSERT(IsValidVec3Lanes(lAddContactEvent.mNormal),
-                       "rw::math::IsValid( lAddContactEvent.mNormal)");                    // :276
-            CGS_ASSERT(IsValidVec3Lanes(lAddContactEvent.mPointOnA),
-                       "rw::math::IsValid( lAddContactEvent.mPointOnA)");                  // :277
-            CGS_ASSERT(IsValidVec3Lanes(lAddContactEvent.mPointOnB),
-                       "rw::math::IsValid( lAddContactEvent.mPointOnB)");                  // :278
+            CGS_ASSERT(IsValidLane(lAddContactEvent.mDynamicFriction), CgsDev::Assert::MessageAt("rw::math::IsValid( lAddContactEvent.mDynamicFriction)", KAC_BRIDGE_FUNCTIONS_FILE, 274));           // :274
+            CGS_ASSERT(IsValidLane(lAddContactEvent.mStaticFriction), CgsDev::Assert::MessageAt("rw::math::IsValid( lAddContactEvent.mStaticFriction )", KAC_BRIDGE_FUNCTIONS_FILE, 275));           // :275
+            CGS_ASSERT(IsValidVec3Lanes(lAddContactEvent.mNormal), CgsDev::Assert::MessageAt("rw::math::IsValid( lAddContactEvent.mNormal)", KAC_BRIDGE_FUNCTIONS_FILE, 276));                    // :276
+            CGS_ASSERT(IsValidVec3Lanes(lAddContactEvent.mPointOnA), CgsDev::Assert::MessageAt("rw::math::IsValid( lAddContactEvent.mPointOnA)", KAC_BRIDGE_FUNCTIONS_FILE, 277));                  // :277
+            CGS_ASSERT(IsValidVec3Lanes(lAddContactEvent.mPointOnB), CgsDev::Assert::MessageAt("rw::math::IsValid( lAddContactEvent.mPointOnB)", KAC_BRIDGE_FUNCTIONS_FILE, 278));                  // :278
 
             // Full-queue diagnostics, then the bounds-gated append (the console's separate
             // CheckContactQueueSize call + EventQueue<...,1024>::AddEventSafe @0x8259D308).
@@ -1068,10 +1059,8 @@ namespace BrnPhysics
             {
                 PotentialContact lContact = lrQueue.GetEvent(liIndex);   // stack copy
 
-                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdA.muId) == 2u,
-                           "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE"); // :334
-                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdB.muId) == 0u,
-                           "lContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_WORLD");           // :335
+                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdA.muId) == 2u, CgsDev::Assert::MessageAt("lContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", KAC_BRIDGE_FUNCTIONS_FILE, 334)); // :334
+                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdB.muId) == 0u, CgsDev::Assert::MessageAt("lContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_WORLD", KAC_BRIDGE_FUNCTIONS_FILE, 335));           // :335
                 CGS_ASSERT(liIndex >= 0 && liIndex < 65535,
                            "liEventIndex >= 0 && liEventIndex < 65535");                    // BrnContactId.h:122
 
@@ -1099,8 +1088,7 @@ namespace BrnPhysics
 
                 CGS_ASSERT(liIndex >= 0 && liIndex < 65535,
                            "liEventIndex >= 0 && liEventIndex < 65535");                    // BrnContactId.h:122
-                CGS_ASSERT(IsUnitLength(lContact.mNormal),
-                           "Un-normalised race car-race car contact: ");                    // :384
+                CGS_ASSERT(IsUnitLength(lContact.mNormal), CgsDev::Assert::MessageAt("Un-normalised race car-race car contact: ", KAC_BRIDGE_FUNCTIONS_FILE, 384));                    // :384
                 mDeformationManager.ReadPotentialContact(
                     lContact, ContactId(static_cast<u32>(liIndex) | 0x07000000u), lpSimModuleInputBuffer);
             }
@@ -1113,10 +1101,8 @@ namespace BrnPhysics
             {
                 PotentialContact lContact = lrQueue.GetEvent(liIndex);   // stack copy
 
-                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdA.muId) == 2u,
-                           "lTrafficTrafficContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE"); // :410
-                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdB.muId) == 2u,
-                           "lTrafficTrafficContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE"); // :411
+                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdA.muId) == 2u, CgsDev::Assert::MessageAt("lTrafficTrafficContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", KAC_BRIDGE_FUNCTIONS_FILE, 410)); // :410
+                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdB.muId) == 2u, CgsDev::Assert::MessageAt("lTrafficTrafficContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", KAC_BRIDGE_FUNCTIONS_FILE, 411)); // :411
 
                 // The traffic manager's global->physical rewrite of BOTH ids (127 == unmapped
                 // drops the contact); the manager mutates the copy in place.
@@ -1124,8 +1110,7 @@ namespace BrnPhysics
                 {
                     CGS_ASSERT(liIndex >= 0 && liIndex < 65535,
                                "liEventIndex >= 0 && liEventIndex < 65535");                // BrnContactId.h:122
-                    CGS_ASSERT(IsUnitLength(lContact.mNormal),
-                               "Un-normalised trafficr-traffic car contact: ");             // :422
+                    CGS_ASSERT(IsUnitLength(lContact.mNormal), CgsDev::Assert::MessageAt("Un-normalised trafficr-traffic car contact: ", KAC_BRIDGE_FUNCTIONS_FILE, 422));             // :422
                     mDeformationManager.ReadPotentialContact(
                         lContact, ContactId(static_cast<u32>(liIndex) | 0x0D000000u), lpSimModuleInputBuffer);
                 }
@@ -1139,10 +1124,8 @@ namespace BrnPhysics
             {
                 PotentialContact lContact = lrQueue.GetEvent(liIndex);   // stack copy
 
-                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdA.muId) == 1u,
-                           "lRaceCarTrafficContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR");         // :447
-                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdB.muId) == 2u,
-                           "lRaceCarTrafficContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE"); // :448
+                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdA.muId) == 1u, CgsDev::Assert::MessageAt("lRaceCarTrafficContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_RACECAR", KAC_BRIDGE_FUNCTIONS_FILE, 447));         // :447
+                CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdB.muId) == 2u, CgsDev::Assert::MessageAt("lRaceCarTrafficContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", KAC_BRIDGE_FUNCTIONS_FILE, 448)); // :448
 
                 // The traffic B id's entity word becomes its LOCAL PHYSICS id (the X360 inlines
                 // GetPhysicsEntityIDFromGlobalEntityID here; the splice is the same
@@ -1156,8 +1139,7 @@ namespace BrnPhysics
 
                 CGS_ASSERT(liIndex >= 0 && liIndex < 65535,
                            "liEventIndex >= 0 && liEventIndex < 65535");                    // BrnContactId.h:122
-                CGS_ASSERT(IsUnitLength(lContact.mNormal),
-                           "Un-normalised race car-traffic car contact: ");                 // :463
+                CGS_ASSERT(IsUnitLength(lContact.mNormal), CgsDev::Assert::MessageAt("Un-normalised race car-traffic car contact: ", KAC_BRIDGE_FUNCTIONS_FILE, 463));                 // :463
                 mDeformationManager.ReadPotentialContact(
                     lContact, ContactId(static_cast<u32>(liIndex) | 0x08000000u), lpSimModuleInputBuffer);
             }
@@ -1203,8 +1185,8 @@ namespace BrnPhysics
         CgsPhysics::PhysicsSimulationIO::InputBuffer::InAddContactQueue* lpSimContactQueue,
         const PhysicsModuleIO::PotentialContactInterface* lpPotentialContactsInterface )
     {
-        CGS_ASSERT(lpSimContactQueue != 0, "lpSimContactQueue != NULL");                       // :500
-        CGS_ASSERT(lpPotentialContactsInterface != 0, "lpPotentialContactsInterface != NULL"); // :501
+        CGS_ASSERT(lpSimContactQueue != 0, CgsDev::Assert::MessageAt("lpSimContactQueue != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 500));                       // :500
+        CGS_ASSERT(lpPotentialContactsInterface != 0, CgsDev::Assert::MessageAt("lpPotentialContactsInterface != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 501)); // :501
 
         const PhysicsModuleIO::PotentialContactInterface::CustomPotentialContactQueue& lrQueue =
             lpPotentialContactsInterface->GetSimpleTrafficWithWorldQueue();
@@ -1221,10 +1203,8 @@ namespace BrnPhysics
             const CgsSceneManager::EntityId lGlobalEntityIdA(
                 static_cast<u32>(lContact.muVolumeInstanceIdA.muId >> 32));
 
-            CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdA.muId) == 2u,
-                       "lContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE"); // :518
-            CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdB.muId) == 0u,
-                       "lContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_WORLD");           // :519
+            CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdA.muId) == 2u, CgsDev::Assert::MessageAt("lContact.muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", KAC_BRIDGE_FUNCTIONS_FILE, 518)); // :518
+            CGS_ASSERT(GetIdOwner(lContact.muVolumeInstanceIdB.muId) == 0u, CgsDev::Assert::MessageAt("lContact.muVolumeInstanceIdB.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_WORLD", KAC_BRIDGE_FUNCTIONS_FILE, 519));           // :519
 
             InAddPotentialContact lAddContactEvent;
             lAddContactEvent.mPointOnA = lContact.mPointOnA;
@@ -1243,8 +1223,7 @@ namespace BrnPhysics
             lAddContactEvent.muTag =
                 ContactId(static_cast<u32>(liEventIndex) | 0x0A000000u);
 
-            CGS_ASSERT(lpSimContactQueue->GetLength() + 1 < lpSimContactQueue->GetMaxLength(),
-                       "lpSimContactQueue->GetLength() + 1 < lpSimContactQueue->GetMaxLength()");     // :535
+            CGS_ASSERT(lpSimContactQueue->GetLength() + 1 < lpSimContactQueue->GetMaxLength(), CgsDev::Assert::MessageAt("lpSimContactQueue->GetLength() + 1 < lpSimContactQueue->GetMaxLength()", KAC_BRIDGE_FUNCTIONS_FILE, 535));     // :535
 
             lpSimContactQueue->AddEventSafe(lAddContactEvent);
         }
@@ -1263,8 +1242,8 @@ namespace BrnPhysics
         CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
         const PhysicsModuleIO::InputBuffer* lpInputBuffer )
     {
-        CGS_ASSERT(lpSimModuleInputBuffer != 0, "lpSimModuleInputBuffer != NULL");   // :795
-        CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");                     // :796
+        CGS_ASSERT(lpSimModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpSimModuleInputBuffer != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 795));   // :795
+        CGS_ASSERT(lpInputBuffer != 0, CgsDev::Assert::MessageAt("lpInputBuffer != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 796));                     // :796
 
         CgsModule::EventQueue<CgsPhysics::PhysicsSimulationIO::InUpdateExternalBody, 60>
             lUpdatedBodyQueue;
@@ -1289,8 +1268,8 @@ namespace BrnPhysics
         CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
         const Vehicle::VehicleManagerOutputBuffer* lpVehManagerOutputBuffer )
     {
-        CGS_ASSERT(lpSimModuleInputBuffer != 0, "lpSimModuleInputBuffer != NULL");   // :993
-        CGS_ASSERT(lpVehManagerOutputBuffer != 0, "lpVehManagerOutputBuffer != NULL"); // :994
+        CGS_ASSERT(lpSimModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpSimModuleInputBuffer != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 993));   // :993
+        CGS_ASSERT(lpVehManagerOutputBuffer != 0, CgsDev::Assert::MessageAt("lpVehManagerOutputBuffer != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 994)); // :994
 
         // FLAG (const seam, deliberate): the console reads the queues through the
         // READ-locked buffer's const request interface (accessor @0x825A0FB0), yet the three
@@ -1343,8 +1322,8 @@ namespace BrnPhysics
         CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimModuleInputBuffer,
         const Vehicle::VehicleManagerOutputBuffer* lpVehManagerOutputBuffer )
     {
-        CGS_ASSERT(lpSimModuleInputBuffer != 0, "lpSimModuleInputBuffer != NULL");       // :870
-        CGS_ASSERT(lpVehManagerOutputBuffer != 0, "lpVehManagerOutputBuffer != NULL");   // :871
+        CGS_ASSERT(lpSimModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpSimModuleInputBuffer != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 870));       // :870
+        CGS_ASSERT(lpVehManagerOutputBuffer != 0, CgsDev::Assert::MessageAt("lpVehManagerOutputBuffer != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 871));   // :871
 
         Vehicle::VehicleOutputRequestInterface* lpRequests =
             const_cast<Vehicle::VehicleOutputRequestInterface*>(
@@ -1367,8 +1346,8 @@ namespace BrnPhysics
         PhysicsModuleIO::OutputBuffer* lpOutputBuffer,
         const Vehicle::VehicleManagerOutputBuffer* lpVehManagerOutputBuffer )
     {
-        CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");                   // :1025
-        CGS_ASSERT(lpVehManagerOutputBuffer != 0, "lpVehManagerOutputBuffer != NULL"); // :1026
+        CGS_ASSERT(lpOutputBuffer != 0, CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 1025));                   // :1025
+        CGS_ASSERT(lpVehManagerOutputBuffer != 0, CgsDev::Assert::MessageAt("lpVehManagerOutputBuffer != NULL", KAC_BRIDGE_FUNCTIONS_FILE, 1026)); // :1026
 
         lpOutputBuffer->LockForWrite();
         lpVehManagerOutputBuffer->LockForRead();

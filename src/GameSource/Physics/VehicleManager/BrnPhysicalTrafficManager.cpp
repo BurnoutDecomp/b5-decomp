@@ -134,11 +134,9 @@ SimpleVehiclePhysics* PhysicalTrafficManager::GetVehiclePhysics(EntityId lPhysic
 // ---------------------------------------------------------------------------------------
 bool PhysicalTrafficManager::IsTrafficVehicleSimple(EntityId lPhysicsVehicleId) const
 {
+    // ARTIST inlines PhysicalTrafficVehicle::IsSimple here (its h:382 assert at 0x825B4AC4).
     const s32 liIndex = static_cast<s32>((lPhysicsVehicleId.muValue >> 10) & 0x3FFFu);
-    const u8 lu8Type = GetTrafficVehicle(liIndex)->mu8PhysicalType;   // X360 +0x32
-    CGS_ASSERT(lu8Type < PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_COUNT,
-               "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
-    return lu8Type == PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_SIMPLE;
+    return GetTrafficVehicle(liIndex)->IsSimple();
 }
 
 // ---------------------------------------------------------------------------------------
@@ -193,14 +191,19 @@ EntityId PhysicalTrafficManager::GetGlobalTrafficEntityId(u16 lu16TrafficCarInde
 void PhysicalTrafficManager::AllocateInternalBuffers(CgsModule::IOBufferStack* lpInputBufferStack,
                                                       CgsModule::IOBufferStack* lpOutputBufferStack)
 {
-    CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");
-    CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");
-    CGS_ASSERT(mpArticulatedJointCreateBuffer == 0, "mpArticulatedJointCreateBuffer == NULL");
+    // The original body is a header inline: its asserts name BrnPhysicalTrafficManager.h:849..856.
+    CGS_ASSERT(lpInputBufferStack != 0, CgsDev::Assert::MessageAt("lpInputBufferStack != NULL",
+        KAC_ARTIST_ASSERT_FILE, 849 /* ARTIST 0x82615988 */));
+    CGS_ASSERT(lpOutputBufferStack != 0, CgsDev::Assert::MessageAt("lpOutputBufferStack != NULL",
+        KAC_ARTIST_ASSERT_FILE, 850 /* ARTIST 0x826159AC */));
+    CGS_ASSERT(mpArticulatedJointCreateBuffer == 0, CgsDev::Assert::MessageAt("mpArticulatedJointCreateBuffer == NULL",
+        KAC_ARTIST_ASSERT_FILE, 851 /* ARTIST 0x826159DC */));
 
     lpInputBufferStack->CreateIOBuffer<ArticulatedJointCreateBuffer>(
         &mpArticulatedJointCreateBuffer, "ArticulatedJointBuffer");
 
-    CGS_ASSERT(mpArticulatedJointCreateBuffer != 0, "mpArticulatedJointCreateBuffer != NULL");
+    CGS_ASSERT(mpArticulatedJointCreateBuffer != 0, CgsDev::Assert::MessageAt("mpArticulatedJointCreateBuffer != NULL",
+        KAC_ARTIST_ASSERT_FILE, 856 /* ARTIST 0x82615A18 */));
 }
 
 // ---------------------------------------------------------------------------------------
@@ -538,11 +541,16 @@ void PhysicalTrafficManager::ProcessAddAirRamEvent(const CreateAirRamEvent* lpEv
 
 // PhysicalTrafficVehicle::IsSimple (const)   @0x825B33B8
 //   Assert mu8PhysicalType < COUNT; return leType == SIMPLE (the `cntlzw(leType-1)>>5` idiom).
+// The original body sits in BrnPhysicalTrafficVehicle.h (its assert names h:382); the u8 is read
+// once into the enum local leType (the assert text), so the range test is signed (cmpwi at
+// 0x825B33CC).
 bool PhysicalTrafficVehicle::IsSimple() const
 {
-    CGS_ASSERT(mu8PhysicalType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
-               "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
-    return mu8PhysicalType == E_PHYSICAL_TRAFFIC_TYPE_SIMPLE;
+    const EPhysicalTrafficType leType = static_cast<EPhysicalTrafficType>(mu8PhysicalType);
+    CGS_ASSERT(leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT,
+        CgsDev::Assert::MessageAt("leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT",
+            "..\\..\\..\\GameSource\\Physics/VehicleManager/BrnPhysicalTrafficVehicle.h", 382 /* ARTIST 0x825B33DC */));
+    return leType == E_PHYSICAL_TRAFFIC_TYPE_SIMPLE;
 }
 
 // PhysicalTrafficVehicle::HasNonBrokenJoint (const)   @0x825B3418
@@ -691,7 +699,7 @@ bool PhysicalTrafficVehicle::PreparePhysical(const CreatePhysicalTrafficEvent* l
     if (lpEvent->mbIsCab)                                        // event +0x84
         meArticulatedVehicleType = E_ARTICULATE_VEHICLE_CAB;
 
-    mePhysicalTrafficState = static_cast<u32>(lpEvent->meTrafficType);   // +0x20 (event +0x80)
+    mePhysicalTrafficState = lpEvent->meTrafficType;   // +0x20 (event +0x80)
     switch (lpEvent->meTrafficType)
     {
     case E_TRAFFIC_TYPE_POTENTIAL:   // 0 -- no body activation
@@ -1456,7 +1464,7 @@ namespace Vehicle
             // The console narrows the slot index here before the second accessor call.
             const u16 lu16Vehicle = static_cast<u16>(liVehicle);
             if (GetTrafficVehicle(static_cast<s32>(lu16Vehicle))->mePhysicalTrafficState
-                    != static_cast<u32>(E_TRAFFIC_TYPE_CRASHING))
+                    != E_TRAFFIC_TYPE_CRASHING)
             {
                 continue;
             }

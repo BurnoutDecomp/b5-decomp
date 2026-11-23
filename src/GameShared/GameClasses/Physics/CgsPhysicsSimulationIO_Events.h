@@ -194,8 +194,9 @@ namespace PhysicsSimulationIO
     //
     // ⚠️ The ids stay u64 rather than JointId/RigidBodyId for the same documented reason as
     // InAddDrive/InAddRigidBody -- a ~30-TU type change that wants its own build + boot test.
-    struct CGS_ALIGN(16) InAddJoint : public Event
+    class CGS_ALIGN(16) InAddJoint : public Event   // class key: ARTIST's decorated names (VInAddJoint)
     {
+    public:
         u64                       mu64Id;            // @+0x00  DWARF :256 "mId"           (a CgsPhysics::JointId handle)
         u64                       mu64ParentBodyId;  // @+0x08  DWARF :257 "mParentBodyId" (a CgsPhysics::RigidBodyId handle)
         u64                       mu64ChildBodyId;   // @+0x10  DWARF :258 "mChildBodyId"  (a CgsPhysics::RigidBodyId handle)
@@ -271,8 +272,9 @@ namespace PhysicsSimulationIO
     // (task #141) and that collision is gone. Promoting this field is now merely a ~30-TU type
     // change that wants its own build + boot test. It is one u64 in both readings, so the width
     // and the stores are identical meanwhile.
-    struct CGS_ALIGN(16) InAddRigidBody : public Event
+    class CGS_ALIGN(16) InAddRigidBody : public Event   // class key: ARTIST's decorated names (VInAddRigidBody)
     {
+    public:
         u64          mID;          // @+0x00  DWARF :69 (a CgsPhysics::RigidBodyId handle)
         NewRigidBody mRigidBody;   // @+0x10  DWARF :70 (NonConstructedClassContainer -- raw storage)
         rw::physics::BodyState meState;  // @+0xB0 (176) DWARF :71
@@ -328,8 +330,9 @@ namespace PhysicsSimulationIO
     // the Inertia by value runs its default ctor per queue slot on the PC. Behaviourally
     // invisible (AddEvent overwrites the slot before any GetEvent reads it) -- the same
     // accepted cost as InUpdateJointLimits' embedded JointLimits.
-    struct CGS_ALIGN(16) InChangeRigidBodyInertia : public Event
+    class CGS_ALIGN(16) InChangeRigidBodyInertia : public Event   // class key: ARTIST's decorated names (VInChangeRigidBodyInertia)
     {
+    public:
         u64                  mID;        // @+0x00  DWARF :118 (a CgsPhysics::RigidBodyId handle)
         u64                  mIDPad;     // @+0x08  pad to the payload's 16-byte slot
         rw::physics::Inertia mInertia;   // @+0x10  DWARF :119 -- 48B, the 6x ld/std fast path
@@ -378,8 +381,9 @@ namespace PhysicsSimulationIO
     // four `lvx128` rows from event+0x10..+0x40 into the body's basis/position (the inlined
     // RigidBody::SetTransform), `lvx128` from +0x50 into mVel(+0x20) and from +0x60 into
     // mOmega(+0x30). 0x60 + 16 == 112, the attested stride, nothing invented.
-    struct CGS_ALIGN(16) InUpdateExternalBody : public Event
+    class CGS_ALIGN(16) InUpdateExternalBody : public Event   // class key: ARTIST's decorated names (VInUpdateExternalBody)
     {
+    public:
         u64                           mID;          // @+0x00  DWARF :151 (a CgsPhysics::RigidBodyId handle)
         u64                           mIDPad;       // @+0x08  pad to the payload's 16-byte slot
         rw::math::vpu::Matrix44Affine mTransform;   // @+0x10  DWARF :152 -- 64B, the four SetTransform rows
@@ -582,8 +586,9 @@ namespace PhysicsSimulationIO
     // InAddJoint above. sizeof stays 8; alignof rises 1 -> 8, which changes nothing: on BOTH targets
     // the EventQueue<InRemoveJoint,N> element array already starts at +0x10 (the console because a
     // JointId is 8-aligned, the host because BaseEventQueue<T> is 8+4+4 == 16 bytes).
-    struct InRemoveJoint : public Event
+    class InRemoveJoint : public Event   // class key: ARTIST's decorated names (VInRemoveJoint)
     {
+    public:
         u64 mu64Id;  // @+0x00  "mId" -- stride 8B X360-attested (AddEvent @ 0x825E4208 stdx)
     };
 
@@ -602,8 +607,9 @@ namespace PhysicsSimulationIO
     // and ProcessRemoveRigidBodyQueue @0x828A2BD0 now pins both offsets: `ld 0(event)` feeds
     // RigidBodyData::GetIndexFromGameID and `lbz 8(event)` gates the "Couldn't find rigid body
     // with id" assert (the not-found-tolerant remove).
-    struct CGS_ALIGN(16) InRemoveRigidBody : public Event
+    class CGS_ALIGN(16) InRemoveRigidBody : public Event   // class key: ARTIST's decorated names (VInRemoveRigidBody)
     {
+    public:
         u64  mID;                       // @+0x00  DWARF :169 (a CgsPhysics::RigidBodyId handle)
         bool mbFailIfRigidBodyNotFound; // @+0x08  DWARF :170 -- `lbz 8(event)`
     };
