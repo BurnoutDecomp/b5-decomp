@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/Messages/BrnMarkedManMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -73,17 +74,25 @@ namespace BrnNetwork
 
     bool MarkedManMessage::Retrieve(NetworkPlayerID* lpMarkedMan, bool* lpbFinalAnswer)
     {
-        CGS_ASSERT(lpMarkedMan != 0, "lpMarkedMan");
-        CGS_ASSERT(lpbFinalAnswer != 0, "lpbIsFinalSelection");
+        CGS_ASSERT(lpMarkedMan != 0, CgsDev::Assert::MessageAt(
+            "lpMarkedMan",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnMarkedManMessage.cpp", 109 /* ARTIST 0x8257E96C */));
+        CGS_ASSERT(lpbFinalAnswer != 0, CgsDev::Assert::MessageAt(
+            "lpbIsFinalSelection",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnMarkedManMessage.cpp", 110 /* ARTIST 0x8257E990 */));
 
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
-
-        *lpMarkedMan    = mMarkedMan;
-        *lpbFinalAnswer = mbFinalAnswer;
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-                   "!CgsNetwork::ReliableMessage::IsMessageValid()");
-        return true;
+        // ARTIST 0x8257E9A4 branches to a trailing `return false` (0x8257E9F8): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpMarkedMan    = mMarkedMan;
+            *lpbFinalAnswer = mbFinalAnswer;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+                "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnMarkedManMessage.cpp", 121 /* ARTIST 0x8257E9E4 */));
+            return true;
+        }
+        return false;
     }
 } // namespace BrnNetwork

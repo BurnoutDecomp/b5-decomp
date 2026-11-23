@@ -227,7 +227,9 @@ namespace CgsNetwork
         {
             if (meState == E_STATE_PINGING)
             {
-                CGS_ASSERT(miPingRequest > -1, "miPingRequest > -1");
+                CGS_ASSERT(miPingRequest > -1, CgsDev::Assert::MessageAt(
+                    "miPingRequest > -1",
+                    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePingRegions.cpp", 476 /* ARTIST 0x8287CAC4 */));
                 PingManagerCancelServerRequest(mpPingManagerRefT, static_cast<u32>(miPingRequest));
                 miPingRequest = -1;
             }

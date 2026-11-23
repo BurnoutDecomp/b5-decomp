@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include <float.h> // FLT_MAX: the native 0x7F7FFFFF float bound
 
 #include "GameSource/Network/Messages/BrnFburnChallengeSuccessMessage.h"
@@ -126,20 +127,31 @@ namespace BrnNetwork
                                                 bool* lpaAccumulationsThisFrame,
                                                 f32* lpaActionScores)
     {
-        CGS_ASSERT(lpaSuccessfulActions, "lpaSuccessfulActions");
-        CGS_ASSERT(lpaAccumulationsThisFrame, "lpaAccumulationsThisFrame");
-        CGS_ASSERT(lpaActionScores, "lpaActionScores");
-        CGS_ASSERT(lpiFramesSinceStart, "lpiFramesSinceStart");
+        CGS_ASSERT(lpaSuccessfulActions, CgsDev::Assert::MessageAt(
+            "lpaSuccessfulActions",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnFburnChallengeSuccessMessage.cpp", 189 /* ARTIST 0x8257FBDC */));
+        CGS_ASSERT(lpaAccumulationsThisFrame, CgsDev::Assert::MessageAt(
+            "lpaAccumulationsThisFrame",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnFburnChallengeSuccessMessage.cpp", 190 /* ARTIST 0x8257FC00 */));
+        CGS_ASSERT(lpaActionScores, CgsDev::Assert::MessageAt(
+            "lpaActionScores",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnFburnChallengeSuccessMessage.cpp", 191 /* ARTIST 0x8257FC24 */));
+        CGS_ASSERT(lpiFramesSinceStart, CgsDev::Assert::MessageAt(
+            "lpiFramesSinceStart",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnFburnChallengeSuccessMessage.cpp", 192 /* ARTIST 0x8257FC48 */));
 
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
-
-        *lpiFramesSinceStart = miFramesSinceStart;
-        memcpy(lpaActionScores, mafActionScores, 8);
-        memcpy(lpaSuccessfulActions, mabSuccessfulActions, 2);
-        memcpy(lpaAccumulationsThisFrame, mabAccumulationThisFrame, 2);
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        return true;
+        // ARTIST 0x8257FC5C branches to a trailing `return false` (0x8257FCB0): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpiFramesSinceStart = miFramesSinceStart;
+            memcpy(lpaActionScores, mafActionScores, 8);
+            memcpy(lpaSuccessfulActions, mabSuccessfulActions, 2);
+            memcpy(lpaAccumulationsThisFrame, mabAccumulationThisFrame, 2);
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            return true;
+        }
+        return false;
     }
 
     // An older message is still accepted (slot 1 is the shared `return true` leaf).

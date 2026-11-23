@@ -618,11 +618,17 @@ namespace BrnNetwork
     void NetworkPlayerStatsManager::ProcessAfterSimulation(
         const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput)
     {
-        CGS_ASSERT(lpInput != 0, "lpInput");
-        CGS_ASSERT(lpInput->GetStatsInputInterface() != 0, "lpInput->GetStatsInputInterface()");
+        CGS_ASSERT(lpInput != 0, CgsDev::Assert::MessageAt(
+            "lpInput",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp", 873 /* ARTIST 0x8255F5F8 */));
+        CGS_ASSERT(lpInput->GetStatsInputInterface() != 0, CgsDev::Assert::MessageAt(
+            "lpInput->GetStatsInputInterface()",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp", 874 /* ARTIST 0x8255F624 */));
         CopyEvents(lpInput->GetStatsInputInterface()->GetStatsInputQueue());
 
-        CGS_ASSERT(lpInput->GetNetworkEventQueue() != 0, "lpInput->GetNetworkEventQueue()");
+        CGS_ASSERT(lpInput->GetNetworkEventQueue() != 0, CgsDev::Assert::MessageAt(
+            "lpInput->GetNetworkEventQueue()",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp", 884 /* ARTIST 0x8255F664 */));
 
         const CgsModule::Event* lpEvent = 0;
         s32 liEventSize = 0;
@@ -924,11 +930,18 @@ namespace BrnNetwork
     {
         PlayerInfoData lPlayerInfo;
 
-        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
-        CGS_ASSERT(mpServerInterface->GetGameComponent() != 0, "mpServerInterface->GetGameComponent()");
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, "mpNetworkManager->GetPlayerManager()");
-        CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-                   "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp", 833 /* ARTIST 0x8255F440 */));
+        CGS_ASSERT(mpServerInterface->GetGameComponent() != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface->GetGameComponent()",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp", 834 /* ARTIST 0x8255F46C */));
+        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager->GetPlayerManager()",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp", 835 /* ARTIST 0x8255F494 */));
+        CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+            "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp", 836 /* ARTIST 0x8255F4B8 */));
 
         if (mpServerInterface->GetGameComponent()->IsLocalPlayerInGame())
         {
@@ -936,15 +949,23 @@ namespace BrnNetwork
                 mpNetworkManager->GetPlayerManager()->GetMenuDataByID(lNetworkPlayerID);
             if (lpMenuData != 0)
             {
-                CGS_ASSERT(lpMenuData->macName[0] != '\0', "lpMenuData->macName[0] != '\\0'");
+                CGS_ASSERT(lpMenuData->macName[0] != '\0', CgsDev::Assert::MessageAt(
+                    "lpMenuData->macName[0] != '\\0'",
+                    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp", 846 /* ARTIST 0x8255F514 */));
                 return lpMenuData->macName;
             }
         }
 
-        CGS_ASSERT(lPlayerInfo.Prepare(), "lPlayerInfo.Prepare()");
-        CGS_ASSERT(mpServerInterfacePlayerInfo != 0, "mpServerInterfacePlayerInfo");
+        CGS_ASSERT(lPlayerInfo.Prepare(), CgsDev::Assert::MessageAt(
+            "lPlayerInfo.Prepare()",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp", 852 /* ARTIST 0x8255F550 */));
+        CGS_ASSERT(mpServerInterfacePlayerInfo != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterfacePlayerInfo",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp", 854 /* ARTIST 0x8255F578 */));
         mpServerInterfacePlayerInfo->GetLocalPlayerInfo(&lPlayerInfo);
-        CGS_ASSERT(lPlayerInfo.GetID() == lNetworkPlayerID, "lPlayerInfo.GetID() == lNetworkPlayerID");
+        CGS_ASSERT(lPlayerInfo.GetID() == lNetworkPlayerID, CgsDev::Assert::MessageAt(
+            "lPlayerInfo.GetID() == lNetworkPlayerID",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp", 857 /* ARTIST 0x8255F5AC */));
 
         // The console hands back the name inside this stack-local record.
         return lPlayerInfo.GetName();
@@ -965,7 +986,9 @@ namespace BrnNetwork
                                                        s32 liNumberOfRivals, s32 liNumberOfAchievements,
                                                        s32 liNumberOfTakedowns)
     {
-        CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+            "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsManager.cpp", 1236 /* ARTIST 0x82552A64 */));
 
         NetworkPlayerStats* lpPlayerStats = mPlayerStatsCache.GetPlayerStats(lPlayerID);
         if (lpPlayerStats != 0)

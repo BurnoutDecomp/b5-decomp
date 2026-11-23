@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsNewHostMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -30,20 +31,23 @@ namespace CgsNetwork
     // return true; otherwise return false and leave the outputs untouched.
     bool NewHostMessage::Retrieve(NetworkPlayerID* lpNewHostID, NetworkPlayerID* lpReceivedClientsIDs)
     {
-        if (!IsMessageValid())
+        // ARTIST 0x828824E0 branches to a trailing `return false` (0x82882578): the copy-out is the body
+        // of the valid test.
+        if (IsMessageValid())
         {
-            return false;
-        }
+            *lpNewHostID = mNewHostID;
+            for (s32 liIndex = 0; liIndex < KI_MAX_RECEIVED_CLIENTS; ++liIndex)
+            {
+                lpReceivedClientsIDs[liIndex] = maReceivedClientsIDs[liIndex];
+            }
 
-        *lpNewHostID = mNewHostID;
-        for (s32 liIndex = 0; liIndex < KI_MAX_RECEIVED_CLIENTS; ++liIndex)
-        {
-            lpReceivedClientsIDs[liIndex] = maReceivedClientsIDs[liIndex];
+            SetMessageInvalid();
+            CGS_ASSERT(!IsMessageValid(), CgsDev::Assert::MessageAt(
+                "!IsMessageValid()",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsNewHostMessage.cpp", 118 /* ARTIST 0x8288255C */));
+            return true;
         }
-
-        SetMessageInvalid();
-        CGS_ASSERT(!IsMessageValid(), "!IsMessageValid()");
-        return true;
+        return false;
     }
 
     // New host id, then every received-client id, each in [-1, 0x7FFFFFFF]; the

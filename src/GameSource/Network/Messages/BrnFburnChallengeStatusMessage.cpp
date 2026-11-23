@@ -83,11 +83,14 @@ namespace BrnNetwork
 
     bool FburnChallengeStatusMessage::Retrieve(FburnChallengeStatusPayload* lpCompletedChallenges)
     {
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
-
-        memcpy(lpCompletedChallenges, &mCompletedChallenges, 0x100);
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        return true;
+        // ARTIST 0x8257FA54 branches to a trailing `return false` (0x8257FA88): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            memcpy(lpCompletedChallenges, &mCompletedChallenges, 0x100);
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            return true;
+        }
+        return false;
     }
 } // namespace BrnNetwork

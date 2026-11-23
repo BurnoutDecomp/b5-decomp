@@ -295,7 +295,9 @@ namespace CgsNetwork
 
         miCgsNetworkServerInterfacePM1 =
             CgsDev::PerfMonCpu::AddMonitor("Int - DirtySock Update", CgsDev::E_PMP_9, false, 5.0f, true);
-        CGS_ASSERT(miCgsNetworkServerInterfacePM1 >= 0, "miCgsNetworkServerInterfacePM1 >= 0");
+        CGS_ASSERT(miCgsNetworkServerInterfacePM1 >= 0, CgsDev::Assert::MessageAt(
+            "miCgsNetworkServerInterfacePM1 >= 0",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\CgsServerInterfaceDirtySock.cpp", 311 /* ARTIST 0x828859C4 */));
     }
 
     bool ServerInterfaceDirtySock::Prepare(ServerInterfacePrepareParams* lpParams)
@@ -405,7 +407,9 @@ namespace CgsNetwork
 
     void ServerInterfaceDirtySock::Update()
     {
-        CGS_ASSERT(mpLobbyAPIRef != 0, "Prepare the server interface before calling update!");
+        CGS_ASSERT(mpLobbyAPIRef != 0, CgsDev::Assert::MessageAt(
+            "Prepare the server interface before calling update!",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\CgsServerInterfaceDirtySock.cpp", 454 /* ARTIST 0x82898210 */));
 
         CgsDev::PerfMonCpu::StartMonitor(miCgsNetworkServerInterfacePM1);
         LobbyApiUpdate(mpLobbyAPIRef);

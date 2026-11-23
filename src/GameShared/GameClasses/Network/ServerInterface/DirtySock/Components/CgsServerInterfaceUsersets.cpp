@@ -421,7 +421,9 @@ namespace CgsNetwork
 
     void ServerInterfaceUsersets::KickPlayerByID(s32 lPlayerID, EKickReason leReason)
     {
-        CGS_ASSERT(mpUsersInUsersetList != 0, "Trying to kick a player without a user list");
+        CGS_ASSERT(mpUsersInUsersetList != 0, CgsDev::Assert::MessageAt(
+            "Trying to kick a player without a user list",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceUsersets.cpp", 850 /* ARTIST 0x82889948 */));
 
         for (s32 liMember = 0; liMember < DispListCount(mpUsersInUsersetList); ++liMember)
         {
@@ -434,6 +436,8 @@ namespace CgsNetwork
         }
 
         const bool lbFoundPlayer = false;
-        CGS_ASSERT(lbFoundPlayer, "Failed to find player to kick");
+        CGS_ASSERT(lbFoundPlayer, CgsDev::Assert::MessageAt(
+            "Failed to find player to kick",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceUsersets.cpp", 863 /* ARTIST 0x828899A4 */));
     }
 }

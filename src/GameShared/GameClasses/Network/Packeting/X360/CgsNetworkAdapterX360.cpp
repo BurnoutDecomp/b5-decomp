@@ -1,4 +1,5 @@
 #include <xtl.h>
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   CgsNetwork::NetworkAdapterX360::Construct          @ 0x8287F4D8
 //   CgsNetwork::NetworkAdapterX360::Release            @ 0x8287F5B8
@@ -205,7 +206,9 @@ void NetworkAdapterX360::Update()
         const s32 liUserIndex = lpNetworkManager->GetLocalUserControllerPort();
         if (liUserIndex > -1 && XUserGetSigninState(liUserIndex) == KI_SIGNIN_STATE_LIVE)
         {
-            CGS_ASSERT(mpEnvironment != 0, "Environment to use not set up");
+            CGS_ASSERT(mpEnvironment != 0, CgsDev::Assert::MessageAt(
+                "Environment to use not set up",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\X360\\CgsNetworkAdapterX360.cpp", 168 /* ARTIST 0x8288BF4C */));
 
             const int liConnectResult = NetConnConnect(0, static_cast<const char*>(mpEnvironment));
             mbConnecting = (liConnectResult == 1);
@@ -228,9 +231,12 @@ void NetworkAdapterX360::Update()
             mbDuplicateLogin = (liStatus == KI_NETCONN_STATUS_DUPLICATE_LOGIN);
             NetConnDisconnect();
 
-            CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
-            CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0,
-                       "mpServerInterface->GetConnectionComponent()");
+            CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+                "mpServerInterface",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\X360\\CgsNetworkAdapterX360.cpp", 192 /* ARTIST 0x8288C000 */));
+            CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CgsDev::Assert::MessageAt(
+                "mpServerInterface->GetConnectionComponent()",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\X360\\CgsNetworkAdapterX360.cpp", 193 /* ARTIST 0x8288C02C */));
 
             // mpServerInterface->GetConnectionComponent()->GetServerInterface()->GetLobbyAPIRef()
             // (asm walks +0x04 -> +0x10 -> +0x78): the connection component's owning DirtySock

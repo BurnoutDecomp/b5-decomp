@@ -424,7 +424,9 @@ namespace BrnNetwork
 
     EActiveRaceCarIndex BrnNetworkManager::GetActiveRaceCarIndex(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule, CgsDev::Assert::MessageAt(
+            "mpNetworkModule",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp", 3311 /* ARTIST 0x825822E4 */));
         return mpNetworkModule->GetActiveRaceCarIndex(lPlayerID);
     }
 
@@ -493,18 +495,27 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------------
     void BrnNetworkManager::DxtDecodeCallback(void* lpPixels, void* lpUserData)
     {
-        CGS_ASSERT(lpPixels, "lpPixels");
-        CGS_ASSERT(lpUserData, "lpUserData");
+        CGS_ASSERT(lpPixels, CgsDev::Assert::MessageAt(
+            "lpPixels",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp", 3236 /* ARTIST 0x82593D10 */));
+        CGS_ASSERT(lpUserData, CgsDev::Assert::MessageAt(
+            "lpUserData",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp", 3237 /* ARTIST 0x82593D34 */));
         BrnNetworkManager* lpNetworkManager = static_cast<BrnNetworkManager*>(lpUserData);
-        CGS_ASSERT(lpNetworkManager, "lpNetworkManager");
+        CGS_ASSERT(lpNetworkManager, CgsDev::Assert::MessageAt(
+            "lpNetworkManager",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp", 3240 /* ARTIST 0x82593D50 */));
 
         BrnNetworkModuleIO::NetworkOutImageDxtDecodedEvent lNetworkOutImageDxtDecodedEvent;
         lNetworkOutImageDxtDecodedEvent.mpDecodedPixels = lpPixels;
         lNetworkOutImageDxtDecodedEvent.mPlayerName     = lpNetworkManager->mExportPlayerName;
 
-        CGS_ASSERT(lpNetworkManager->mpNetworkModule, "lpNetworkManager->mpNetworkModule");
-        CGS_ASSERT(lpNetworkManager->mpNetworkModule->GetNetworkEventQueue(),
-                   "lpNetworkManager->mpNetworkModule->GetNetworkEventQueue()");
+        CGS_ASSERT(lpNetworkManager->mpNetworkModule, CgsDev::Assert::MessageAt(
+            "lpNetworkManager->mpNetworkModule",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp", 3245 /* ARTIST 0x82593D98 */));
+        CGS_ASSERT(lpNetworkManager->mpNetworkModule->GetNetworkEventQueue(), CgsDev::Assert::MessageAt(
+            "lpNetworkManager->mpNetworkModule->GetNetworkEventQueue()",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp", 3246 /* ARTIST 0x82593DC4 */));
         lpNetworkManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lNetworkOutImageDxtDecodedEvent),
             lNetworkOutImageDxtDecodedEvent.GetEventType(), sizeof(lNetworkOutImageDxtDecodedEvent));

@@ -249,14 +249,15 @@ namespace BrnNetwork
     //
     // Convert + resize the downloaded compressed picture into the owning player's network texture.
     // =======================================================================
-    s32 GamerPictureManagerX360::CopyTexture(CgsNetwork::NetworkTexture* lpTexture)
+    void GamerPictureManagerX360::CopyTexture(CgsNetwork::NetworkTexture* lpTexture)
     {
-        CGS_ASSERT(lpTexture, "lpTexture");
+        CGS_ASSERT(lpTexture, CgsDev::Assert::MessageAt(
+            "lpTexture",
+            "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerPictureManagerX360.cpp", 165 /* ARTIST 0x8254C274 */));
 
         CgsNetwork::NetworkImageConverter lConverter;
         lConverter.ConvertAndResize(&mCompressedTexture, lpTexture,
                                     KI_COPY_START_COLUMN, KI_COPY_END_COLUMN);
-        return 0;
     }
 
     // =======================================================================
@@ -305,7 +306,9 @@ namespace BrnNetwork
     // =======================================================================
     u32 GamerPictureManagerX360::DownloadLocalGamerPicOnLiveConnect()
     {
-        CGS_ASSERT(mpNetworkManager, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerPictureManagerX360.cpp", 648 /* ARTIST 0x8254C670 */));
 
         u64 lLocalXuid = 0;
         u32 luResult = XUserGetXUID(mpNetworkManager->GetLocalUserControllerPort(), &lLocalXuid);

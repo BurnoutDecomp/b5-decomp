@@ -83,12 +83,15 @@ namespace BrnNetwork
 
     bool StuntMultiplierMessage::Retrieve(s32* lpiOut, s64* lpi64Out)
     {
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
-
-        memcpy(lpi64Out, &mMultiplierInfo, sizeof(mMultiplierInfo));
-        *lpiOut   = miFramesSinceStart;
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;   // clrrwi + stb: clear VALID bit
-        return true;
+        // ARTIST 0x82580030 branches to a trailing `return false` (0x82580064): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            memcpy(lpi64Out, &mMultiplierInfo, sizeof(mMultiplierInfo));
+            *lpiOut   = miFramesSinceStart;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;   // clrrwi + stb: clear VALID bit
+            return true;
+        }
+        return false;
     }
 } // namespace BrnNetwork

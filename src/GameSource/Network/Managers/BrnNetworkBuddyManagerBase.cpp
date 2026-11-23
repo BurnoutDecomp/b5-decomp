@@ -1,4 +1,5 @@
 #include "GameSource/Network/Managers/BrnNetworkBuddyManagerBase.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include <cstdlib>   // qsort
 #include <cstring>   // memcpy, memset
@@ -131,19 +132,24 @@ namespace BrnNetwork
     // =======================================================================
     void BuddyManagerBase::PopulateServerBuddyList(char* lpcServerData)
     {
+        // ARTIST 0x82549B4C advances the read location before the index: both step in the body.
         s32 liBuddyIndex = 0;
-        for (const char* lpcBuddyListReadLocation = lpcServerData; ;
-             lpcBuddyListReadLocation += CgsNetwork::PlayerName::KI_USERNAME_LENGTH)
+        const char* lpcBuddyListReadLocation = lpcServerData;
+        for (;;)
         {
-            CGS_ASSERT(static_cast<s32>(std::strlen(lpcBuddyListReadLocation)) < CgsNetwork::PlayerName::KI_USERNAME_LENGTH,
-                       "static_cast<int32_t>( strlen(lpcBuddyListReadLocation) ) < CgsNetwork::KI_BUDDIES_USERNAME_MAX_LENGTH");
+            CGS_ASSERT(static_cast<s32>(std::strlen(lpcBuddyListReadLocation)) < CgsNetwork::PlayerName::KI_USERNAME_LENGTH, CgsDev::Assert::MessageAt(
+                "static_cast<int32_t>( strlen(lpcBuddyListReadLocation) ) < CgsNetwork::KI_BUDDIES_USERNAME_MAX_LENGTH",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkBuddyManagerBase.cpp", 1072 /* ARTIST 0x82549B0C */));
             if (lpcBuddyListReadLocation[0] == '\0')
             {
                 break;
             }
 
-            CGS_ASSERT(liBuddyIndex < KI_MAX_BUDDIES, "liBuddyIndex < CgsNetwork::KI_MAX_BUDDIES");
+            CGS_ASSERT(liBuddyIndex < KI_MAX_BUDDIES, CgsDev::Assert::MessageAt(
+                "liBuddyIndex < CgsNetwork::KI_MAX_BUDDIES",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkBuddyManagerBase.cpp", 1085 /* ARTIST 0x82549B38 */));
             maServerBuddyList[liBuddyIndex].Construct(lpcBuddyListReadLocation);
+            lpcBuddyListReadLocation += CgsNetwork::PlayerName::KI_USERNAME_LENGTH;
             ++liBuddyIndex;
         }
         miNumServerBuddies = liBuddyIndex;
@@ -345,8 +351,12 @@ namespace BrnNetwork
             CgsNetwork::PlayerName lPlayerName1;
             CgsNetwork::PlayerName lPlayerName2;
 
-            CGS_ASSERT(GetBuddyName(liBuddyIndex, &lPlayerName1), "GetBuddyName( liBuddyIndex, &lPlayerName1)");
-            CGS_ASSERT(GetBuddyName(liBuddyIndex + 1, &lPlayerName2), "GetBuddyName( liBuddyIndex + 1, &lPlayerName2)");
+            CGS_ASSERT(GetBuddyName(liBuddyIndex, &lPlayerName1), CgsDev::Assert::MessageAt(
+                "GetBuddyName( liBuddyIndex, &lPlayerName1)",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkBuddyManagerBase.cpp", 1155 /* ARTIST 0x82549BD4 */));
+            CGS_ASSERT(GetBuddyName(liBuddyIndex + 1, &lPlayerName2), CgsDev::Assert::MessageAt(
+                "GetBuddyName( liBuddyIndex + 1, &lPlayerName2)",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkBuddyManagerBase.cpp", 1156 /* ARTIST 0x82549C0C */));
 
             if (LobbyNameCmp(lPlayerName1.macName, lPlayerName2.macName) >= 0)
             {
@@ -850,8 +860,9 @@ namespace BrnNetwork
             GetBuddyName(liBuddyIndex, &lBuddyName);
             if (IsFullBuddy(&lBuddyName))
             {
-                CGS_ASSERT(miCachedNumBuddiesAtLastChange < KI_MAX_BUDDIES,
-                           "miCachedNumBuddiesAtLastChange < CgsNetwork::KI_MAX_BUDDIES");
+                CGS_ASSERT(miCachedNumBuddiesAtLastChange < KI_MAX_BUDDIES, CgsDev::Assert::MessageAt(
+                    "miCachedNumBuddiesAtLastChange < CgsNetwork::KI_MAX_BUDDIES",
+                    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkBuddyManagerBase.cpp", 291 /* ARTIST 0x82563670 */));
                 maCachedBuddyListAtLastChange[miCachedNumBuddiesAtLastChange] = lBuddyName;
                 ++miCachedNumBuddiesAtLastChange;
             }
@@ -864,10 +875,14 @@ namespace BrnNetwork
     void BuddyManagerBase::_GetFriendsListFromServerComplete(void* lpData, void* lpResult, bool lbSuccess)
     {
         BuddyManagerBase* lpBuddyManager = reinterpret_cast<BuddyManagerBase*>(lpData);
-        CGS_ASSERT(lpBuddyManager, "lpBuddyManager");
+        CGS_ASSERT(lpBuddyManager, CgsDev::Assert::MessageAt(
+            "lpBuddyManager",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkBuddyManagerBase.cpp", 1186 /* ARTIST 0x82549C94 */));
 
         BrnServerInterface* lpServerInterface = AsBrnServerInterface(lpBuddyManager->mpServerInterface);
-        CGS_ASSERT(lpServerInterface, "lpServerInterface");
+        CGS_ASSERT(lpServerInterface, CgsDev::Assert::MessageAt(
+            "lpServerInterface",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkBuddyManagerBase.cpp", 1189 /* ARTIST 0x82549CBC */));
 
         if (lbSuccess)
         {
@@ -886,13 +901,15 @@ namespace BrnNetwork
         {
             lpBuddyManager->meState = E_BUDDY_MANAGER_STATE_FAILED;
 
-            CGS_ASSERT(lpServerInterface->GetDownloadableConfigComponent(),
-                       "lpServerInterface->GetDownloadableConfigComponent()");
+            CGS_ASSERT(lpServerInterface->GetDownloadableConfigComponent(), CgsDev::Assert::MessageAt(
+                "lpServerInterface->GetDownloadableConfigComponent()",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkBuddyManagerBase.cpp", 1217 /* ARTIST 0x82549D70 */));
             lpBuddyManager->mTimeUntilRetryAfterFailedBuddyUpload.SetFloatVal(
                 lpServerInterface->GetDownloadableConfigComponent()->TimeUntilRetryAfterFailedBuddyUpload());
 
-            CGS_ASSERT(lpServerInterface->GetCustomCommandsComponent(),
-                       "lpServerInterface->GetCustomCommandsComponent()");
+            CGS_ASSERT(lpServerInterface->GetCustomCommandsComponent(), CgsDev::Assert::MessageAt(
+                "lpServerInterface->GetCustomCommandsComponent()",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkBuddyManagerBase.cpp", 1222 /* ARTIST 0x82549DAC */));
             ServerInterfaceCustomCommands* lpCustomCommands = lpServerInterface->GetCustomCommandsComponent();
             if (lpCustomCommands->GetLastError() == CgsNetwork::E_BUDDY_ERROR_CODES_PENDING)
             {

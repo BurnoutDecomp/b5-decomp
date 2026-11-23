@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/Messages/BrnRestartTrafficMessage.h"
 #include "GameSource/Network/BrnNetworkManager.h"        // BrnNetworkManager::PackOrUnpack (player-id field helper)
@@ -100,7 +101,9 @@ namespace BrnNetwork
         // Consume the message: clear VALID, then assert it is no longer valid (the
         // X360 re-reads +0x19 and fires the IsMessageValid assert -- always passes here).
         mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        CGS_ASSERT(!IsMessageValid(), "!CgsNetwork::ReliableMessage::IsMessageValid()");
+        CGS_ASSERT(!IsMessageValid(), CgsDev::Assert::MessageAt(
+            "!CgsNetwork::ReliableMessage::IsMessageValid()",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnRestartTrafficMessage.cpp", 126 /* ARTIST 0x8257EC38 */));
         return true;
     }
 

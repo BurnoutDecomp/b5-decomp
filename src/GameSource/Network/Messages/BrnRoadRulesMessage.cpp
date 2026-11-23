@@ -1,10 +1,11 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/Messages/BrnRoadRulesMessage.h"
 #include "SharedClasses/StreetData/BrnChallengeData.h"                                    // BrnStreetData::ScoreList::KAI_MIN/MAX_SCORES, E_SCORE_TYPE_COUNT
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                             // CgsDev::StrStream (PrepareForSend asserts)
-#include <cstring>
+#include <xtl.h>     // XMemCpy (PrepareForSend, Retrieve 0x8257EA50)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::RoadRulesMessage::GetPackedMessageSize @ 0x8257B7C8
@@ -85,7 +86,7 @@ namespace BrnNetwork
         }
 
         miNumRoadRulesScores = liNumRoadRulesScores;
-        std::memcpy(maRoadRulesMessageData, lpRoadRulesMessageData,
+        XMemCpy(maRoadRulesMessageData, lpRoadRulesMessageData,
                     static_cast<u32>(liNumRoadRulesScores) * sizeof(RoadRulesMessageData));
         miStreetDataVersion = KI_EXPECTED_STREET_DATA_VERSION;
 
@@ -167,23 +168,24 @@ namespace BrnNetwork
     // slot by clearing the VALID flag.
     bool RoadRulesMessage::Retrieve(s32* lpiNumRoadRulesScores, RoadRulesMessageData* lpRoadRulesMessageData)
     {
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
+        // ARTIST 0x8257EA2C branches to a trailing `return false` (0x8257EAA4): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {
-            return false;
+            *lpiNumRoadRulesScores = miNumRoadRulesScores;   // *a2 = +0x118
+
+            // Copy out exactly the received records (count * 24 bytes; the X360 computes
+            // count*24 as (count + count*2) << 3).
+            XMemCpy(lpRoadRulesMessageData, maRoadRulesMessageData,
+                        static_cast<u32>(miNumRoadRulesScores) * sizeof(RoadRulesMessageData));
+
+            // Consume the slot: clear VALID, then assert it is now invalid.
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+                "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnRoadRulesMessage.cpp", 115 /* ARTIST 0x8257EA84 */));
+            return true;
         }
-
-        *lpiNumRoadRulesScores = miNumRoadRulesScores;   // *a2 = +0x118
-
-        // Copy out exactly the received records (count * 24 bytes; the X360 computes
-        // count*24 as (count + count*2) << 3).
-        std::memcpy(lpRoadRulesMessageData, maRoadRulesMessageData,
-                    static_cast<u32>(miNumRoadRulesScores) * sizeof(RoadRulesMessageData));
-
-        // Consume the slot: clear VALID, then assert it is now invalid.
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-                   "!CgsNetwork::ReliableMessage::IsMessageValid()");
-
-        return true;
+        return false;
     }
 } // namespace BrnNetwork

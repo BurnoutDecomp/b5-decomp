@@ -1,11 +1,12 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/Messages/BrnAggressiveDrivingMessage.h"
 #include "GameSource/Network/BrnNetworkManager.h"          // BrnNetworkManager::PackOrUnpack (NetworkPlayerID field primitive)
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h" // CgsNetwork::Message + field primitives
 #include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT
 
-#include <cstring>                                          // memcpy (the X360 XMemCpy payload copy)
+#include <xtl.h>                                            // XMemCpy (Retrieve 0x8257E478)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::AggressiveDrivingMessage::Construct            @ 0x82579CC8
@@ -172,22 +173,24 @@ namespace BrnNetwork
     bool AggressiveDrivingMessage::Retrieve(s32* lpiNumberOfAggressiveMoves, AggressiveMoveData* lpMoves)
     {
         // Nothing to hand back unless a received message is pending in this slot.
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
+        // ARTIST 0x8257E454 branches to a trailing `return false` (0x8257E4CC): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {
-            return false;
+            *lpiNumberOfAggressiveMoves = miNumberOfAggressiveMoves;   // *a2 = +0x20
+
+            // Copy out exactly the received records (count * 80 bytes; the X360 computes count*80
+            // as (count + count*4) << 4).
+            XMemCpy(lpMoves, maAggressiveMoveDataArray,
+                   static_cast<u32>(miNumberOfAggressiveMoves) * sizeof(AggressiveMoveData));
+
+            // Consume the slot: clear VALID, then assert it is now invalid.
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            CGS_ASSERT(!IsMessageValid(), CgsDev::Assert::MessageAt(
+                "!IsMessageValid()",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnAggressiveDrivingMessage.cpp", 222 /* ARTIST 0x8257E4AC */));
+            return true;
         }
-
-        *lpiNumberOfAggressiveMoves = miNumberOfAggressiveMoves;   // *a2 = +0x20
-
-        // Copy out exactly the received records (count * 80 bytes; the X360 computes count*80
-        // as (count + count*4) << 4).
-        memcpy(lpMoves, maAggressiveMoveDataArray,
-               static_cast<u32>(miNumberOfAggressiveMoves) * sizeof(AggressiveMoveData));
-
-        // Consume the slot: clear VALID, then assert it is now invalid.
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        CGS_ASSERT(!IsMessageValid(), "!IsMessageValid()");
-
-        return true;
+        return false;
     }
 } // namespace BrnNetwork

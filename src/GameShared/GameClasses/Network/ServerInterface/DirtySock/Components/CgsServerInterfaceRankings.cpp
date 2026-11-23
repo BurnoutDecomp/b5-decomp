@@ -284,8 +284,12 @@ namespace CgsNetwork
 
     void ServerInterfaceRankings::DownloadHeadings(const char* lpcView)
     {
-        CGS_ASSERT(mpLobbyRank != 0, "mpLobbyRank");
-        CGS_ASSERT(!IsBusy(), "!IsBusy()");
+        CGS_ASSERT(mpLobbyRank != 0, CgsDev::Assert::MessageAt(
+            "mpLobbyRank",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceRankings.cpp", 391 /* ARTIST 0x8289184C */));
+        CGS_ASSERT(!IsBusy(), CgsDev::Assert::MessageAt(
+            "!IsBusy()",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceRankings.cpp", 392 /* ARTIST 0x82891874 */));
 
         meCurrentAction = E_ACTION_DOWNLOADING_HEADINGS;
         StartActionCore(KAPC_ACTION_NAMES[E_ACTION_DOWNLOADING_HEADINGS]);
@@ -300,12 +304,18 @@ namespace CgsNetwork
 
     void ServerInterfaceRankings::DownloadScoreboardData(const char** lapcUserNames, s32 liNumUsers)
     {
-        CGS_ASSERT(!IsBusy(), "!IsBusy()");
-        CGS_ASSERT(mpLobbyRank != 0, "mpLobbyRank");
+        CGS_ASSERT(!IsBusy(), CgsDev::Assert::MessageAt(
+            "!IsBusy()",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceRankings.cpp", 482 /* ARTIST 0x82891948 */));
+        CGS_ASSERT(mpLobbyRank != 0, CgsDev::Assert::MessageAt(
+            "mpLobbyRank",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceRankings.cpp", 483 /* ARTIST 0x82891970 */));
 
         for (s32 liPlayerIndex = 0; liPlayerIndex < liNumUsers; ++liPlayerIndex)
         {
-            CGS_ASSERT(lapcUserNames[liPlayerIndex] != 0, "lppcUserListNames[ liPlayerIndex ] != NULL");
+            CGS_ASSERT(lapcUserNames[liPlayerIndex] != 0, CgsDev::Assert::MessageAt(
+                "lppcUserListNames[ liPlayerIndex ] != NULL",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceRankings.cpp", 491 /* ARTIST 0x828919AC */));
         }
 
         LobbyRankFlush(mpLobbyRank, 0);

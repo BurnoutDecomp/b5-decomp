@@ -70,17 +70,21 @@ namespace BrnNetwork
 
     bool LiveRevengeManager::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc)
     {
-        CGS_ASSERT(lpHeapMalloc, "lpHeapMalloc");
+        CGS_ASSERT(lpHeapMalloc, CgsDev::Assert::MessageAt(
+            "lpHeapMalloc",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLiveRevengeManager.cpp", 100 /* ARTIST 0x8255A8F0 */));
         mpAllocator = lpHeapMalloc;
 
-        CGS_ASSERT(lpHeapMalloc->GetAllocator()->ValidateHeap(
-                       EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
-                   "lpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)");
+        CGS_ASSERT(lpHeapMalloc->GetAllocator()->ValidateHeap( EA::Allocator::GeneralAllocator::kHeapValidationLevelFull), CgsDev::Assert::MessageAt(
+            "lpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLiveRevengeManager.cpp", 102 /* ARTIST 0x8255A930 */));
         mpLiveRevengeProfile = static_cast<LiveRevengeProfile*>(lpHeapMalloc->Malloc(sizeof(LiveRevengeProfile), 4));
-        CGS_ASSERT(lpHeapMalloc->GetAllocator()->ValidateHeap(
-                       EA::Allocator::GeneralAllocator::kHeapValidationLevelFull),
-                   "lpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)");
-        CGS_ASSERT(mpLiveRevengeProfile, "mpLiveRevengeProfile");
+        CGS_ASSERT(lpHeapMalloc->GetAllocator()->ValidateHeap( EA::Allocator::GeneralAllocator::kHeapValidationLevelFull), CgsDev::Assert::MessageAt(
+            "lpHeapMalloc->GetAllocator()->ValidateHeap(rw::core::GeneralAllocator::kHeapValidationLevelFull)",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLiveRevengeManager.cpp", 104 /* ARTIST 0x8255A978 */));
+        CGS_ASSERT(mpLiveRevengeProfile, CgsDev::Assert::MessageAt(
+            "mpLiveRevengeProfile",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLiveRevengeManager.cpp", 105 /* ARTIST 0x8255A9A0 */));
 
         mpLiveRevengeProfile->Clear();
         ResetRevengeTableMappings();
@@ -748,7 +752,9 @@ namespace BrnNetwork
 
     EActiveRaceCarIndex LiveRevengeManager::NetworkPlayerIDToActiveRaceCarIndex(NetworkPlayerID lNetworkPlayerID)
     {
-        CGS_ASSERT(mpNetworkManager, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLiveRevengeManager.cpp", 1111 /* ARTIST 0x825477B8 */));
         return mpNetworkModule->GetActiveRaceCarIndex(lNetworkPlayerID);
     }
 

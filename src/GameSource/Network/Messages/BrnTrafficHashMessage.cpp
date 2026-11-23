@@ -66,14 +66,17 @@ namespace BrnNetwork
                                       u16* lpu16Update10HzFrame,
                                       u16* lpu16TrafficHash)
     {
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
-
-        *lpu16SyncedFrameSinceStart = mu16SyncedFrameSinceStart;
-        *lpu16Update10HzFrame       = mu16Update10HzFrame;
-        *lpu16TrafficHash           = mu16TrafficHash;
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        return true;
+        // ARTIST 0x8257DF68 branches to a trailing `return false` (0x8257DFD0): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpu16SyncedFrameSinceStart = mu16SyncedFrameSinceStart;
+            *lpu16Update10HzFrame       = mu16Update10HzFrame;
+            *lpu16TrafficHash           = mu16TrafficHash;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            return true;
+        }
+        return false;
     }
 
     // An older message is still accepted (slot 1 is the shared `return true` leaf).

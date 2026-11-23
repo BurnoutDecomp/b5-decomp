@@ -133,19 +133,27 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     bool SelectedRoutesMessage::Retrieve(s32* lpiRoundNumber, Event* lpEvent)
     {
-        CGS_ASSERT(lpiRoundNumber != 0, "lpiRoundNumber");
-        CGS_ASSERT(lpEvent != 0, "lpEvent");
+        CGS_ASSERT(lpiRoundNumber != 0, CgsDev::Assert::MessageAt(
+            "lpiRoundNumber",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnSelectedRoutesMessage.cpp", 123 /* ARTIST 0x8257E7AC */));
+        CGS_ASSERT(lpEvent != 0, CgsDev::Assert::MessageAt(
+            "lpEvent",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnSelectedRoutesMessage.cpp", 124 /* ARTIST 0x8257E7D0 */));
 
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
+        // ARTIST 0x8257E7E4 branches to a trailing `return false` (0x8257E840): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpiRoundNumber = miRoundNumber;        // lwz +0x54 -> *(a2)
+            *lpEvent        = mEvent;               // 44-byte payload copy out (memcpy +0x28, 0x2C)
 
-        *lpiRoundNumber = miRoundNumber;        // lwz +0x54 -> *(a2)
-        *lpEvent        = mEvent;               // 44-byte payload copy out (memcpy +0x28, 0x2C)
-
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-                   "!CgsNetwork::ReliableMessage::IsMessageValid()");
-        return true;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+                "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnSelectedRoutesMessage.cpp", 135 /* ARTIST 0x8257E82C */));
+            return true;
+        }
+        return false;
     }
 
     // ---------------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/VoIP/DirtySock/CgsVoIPManagerDirtySock.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Network/CgsNetworkManager.h"
@@ -111,7 +112,9 @@ namespace CgsNetwork
         if (mpVoiceRef)
         {
             u32 lu32ConnectionMask = GetConnectionMask();
-            CGS_ASSERT(mpVoiceRef, "mpVoiceRef");
+            CGS_ASSERT(mpVoiceRef, CgsDev::Assert::MessageAt(
+                "mpVoiceRef",
+                "..\\..\\..\\GameShared\\GameClasses\\Network/VoIP/DirtySock/CgsVoIPManagerDirtySock.cpp", 1041 /* ARTIST 0x828938DC */));
 
             VoipSpeaker(mpVoiceRef, lu32ConnectionMask);
 

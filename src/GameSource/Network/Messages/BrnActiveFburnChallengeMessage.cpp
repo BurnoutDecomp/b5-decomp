@@ -108,23 +108,36 @@ namespace BrnNetwork
                                                NetworkPlayerID* lpaNetworkPlayerIDs,
                                                s32* lpiNumPlayersInChallenge)
     {
-        CGS_ASSERT(lpChallengeID, "lpChallengeID");
-        CGS_ASSERT(lpaNetworkPlayerIDs, "lpaNetworkPlayerIDs");
-        CGS_ASSERT(lpiNumPlayersInChallenge, "lpiNumPlayersInChallenge");
+        CGS_ASSERT(lpChallengeID, CgsDev::Assert::MessageAt(
+            "lpChallengeID",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnActiveFburnChallengeMessage.cpp", 176 /* ARTIST 0x8257FD00 */));
+        CGS_ASSERT(lpaNetworkPlayerIDs, CgsDev::Assert::MessageAt(
+            "lpaNetworkPlayerIDs",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnActiveFburnChallengeMessage.cpp", 177 /* ARTIST 0x8257FD24 */));
+        CGS_ASSERT(lpiNumPlayersInChallenge, CgsDev::Assert::MessageAt(
+            "lpiNumPlayersInChallenge",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnActiveFburnChallengeMessage.cpp", 178 /* ARTIST 0x8257FD48 */));
 
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
+        // ARTIST 0x8257FD5C branches to a trailing `return false` (0x8257FE10): the copy-out
+        // is the body of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpChallengeID            = mChallengeID;
+            *lpiNumPlayersInChallenge = miNumPlayersInChallenge;
 
-        *lpChallengeID            = mChallengeID;
-        *lpiNumPlayersInChallenge = miNumPlayersInChallenge;
+            CGS_ASSERT(miNumPlayersInChallenge > 0, CgsDev::Assert::MessageAt(
+                "miNumPlayersInChallenge > 0",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnActiveFburnChallengeMessage.cpp", 187 /* ARTIST 0x8257FD90 */));
+            CGS_ASSERT(miNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS, CgsDev::Assert::MessageAt(
+                "miNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnActiveFburnChallengeMessage.cpp", 188 /* ARTIST 0x8257FDB8 */));
 
-        CGS_ASSERT(miNumPlayersInChallenge > 0, "miNumPlayersInChallenge > 0");
-        CGS_ASSERT(miNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS, "miNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS");
+            for (s32 liPlayer = 0; liPlayer < miNumPlayersInChallenge; ++liPlayer)
+                lpaNetworkPlayerIDs[liPlayer] = maPlayersInChallengeIDs[liPlayer];
 
-        for (s32 liPlayer = 0; liPlayer < miNumPlayersInChallenge; ++liPlayer)
-            lpaNetworkPlayerIDs[liPlayer] = maPlayersInChallengeIDs[liPlayer];
-
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        return true;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            return true;
+        }
+        return false;
     }
 }

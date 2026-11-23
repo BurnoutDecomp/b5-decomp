@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/Messages/BrnCameraRequestResponseMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -46,17 +47,23 @@ namespace BrnNetwork
 
     bool CameraRequestResponseMessage::Retrieve(EResponse* lpeCameraRequestResponse)
     {
-        CGS_ASSERT(lpeCameraRequestResponse, "lpeCameraRequestResponse");
+        CGS_ASSERT(lpeCameraRequestResponse, CgsDev::Assert::MessageAt(
+            "lpeCameraRequestResponse",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnCameraRequestResponseMessage.cpp", 103 /* ARTIST 0x8257E700 */));
 
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
+        // ARTIST 0x8257E714 branches to a trailing `return false` (0x8257E760): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpeCameraRequestResponse = meCameraRequestResponse;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
 
-        *lpeCameraRequestResponse = meCameraRequestResponse;
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, "!CgsNetwork::ReliableMessage::IsMessageValid()");
-
-        return true;
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+                "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnCameraRequestResponseMessage.cpp", 113 /* ARTIST 0x8257E74C */));
+            return true;
+        }
+        return false;
     }
 
     // Zero the response word, then size through the reliable base (the console body is one

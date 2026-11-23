@@ -57,11 +57,14 @@ namespace BrnNetwork
 
     bool ShowtimeUpdateMessage::Retrieve(s32* lpiShowtimeScore)
     {
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
-
-        *lpiShowtimeScore = miShowtimeScore;
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        return true;
+        // ARTIST 0x8257F8B8 branches to a trailing `return false` (0x8257F8D8): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpiShowtimeScore = miShowtimeScore;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            return true;
+        }
+        return false;
     }
 }

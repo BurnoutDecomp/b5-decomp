@@ -160,9 +160,12 @@ namespace BrnNetwork
 
         for (s32 liActionIndex = 0; liActionIndex < E_ACTION_COUNT; ++liActionIndex)
         {
-            CGS_ASSERT(maActionFunctions[liActionIndex] != 0, "No function supplied for this action");
-            CGS_ASSERT(maeComponentToUse[liActionIndex] != CgsNetwork::E_COMPONENTS_COUNT,
-                       "No component to use supplied for this action");
+            CGS_ASSERT(maActionFunctions[liActionIndex] != 0, CgsDev::Assert::MessageAt(
+                "No function supplied for this action",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMatchMakingManager.cpp", 152 /* ARTIST 0x82571338 */));
+            CGS_ASSERT(maeComponentToUse[liActionIndex] != CgsNetwork::E_COMPONENTS_COUNT, CgsDev::Assert::MessageAt(
+                "No component to use supplied for this action",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMatchMakingManager.cpp", 153 /* ARTIST 0x8257135C */));
         }
 
         for (s32 liProcessIndex = 0; liProcessIndex < E_PROCESS_COUNT; ++liProcessIndex)
@@ -188,8 +191,9 @@ namespace BrnNetwork
 
         for (s32 liProcessIndex = 0; liProcessIndex < E_PROCESS_COUNT; ++liProcessIndex)
         {
-            CGS_ASSERT(maProcessActions[liProcessIndex].maeAction[0] != E_ACTION_COUNT,
-                       "No actions supplied for this process");
+            CGS_ASSERT(maProcessActions[liProcessIndex].maeAction[0] != E_ACTION_COUNT, CgsDev::Assert::MessageAt(
+                "No actions supplied for this process",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMatchMakingManager.cpp", 200 /* ARTIST 0x825713FC */));
         }
     }
 
@@ -360,7 +364,9 @@ namespace BrnNetwork
         }
 
         default:
-            CGS_ASSERT(false, "Invalid state returned by mpNetworkManager->GetServerInterface()->GetStatus() in MatchMakingManager::ServerInterfaceIdle");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "Invalid state returned by mpNetworkManager->GetServerInterface()->GetStatus() in MatchMakingManager::ServerInterfaceIdle",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMatchMakingManager.cpp", 739 /* ARTIST 0x82544990 */));
             break;
         }
 

@@ -29,11 +29,16 @@ namespace CgsNetwork
     // message manager at +0x0 and the player manager at +0x4 (`*this = a3; this[1] = a2`).
     void SyncTimeHost::Construct(PlayerManager* lpPlayerManager, SyncTimeMessageManager* lpMessageManager)
     {
-        CGS_ASSERT(lpPlayerManager != 0, "lpPlayerManager");
-        CGS_ASSERT(lpMessageManager != 0, "lpMessageManager");
+        CGS_ASSERT(lpPlayerManager != 0, CgsDev::Assert::MessageAt(
+            "lpPlayerManager",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeHost.cpp", 49 /* ARTIST 0x8287D3BC */));
+        CGS_ASSERT(lpMessageManager != 0, CgsDev::Assert::MessageAt(
+            "lpMessageManager",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeHost.cpp", 50 /* ARTIST 0x8287D3E0 */));
 
-        mpSyncTimeMessageManager = lpMessageManager;
+        // ARTIST 0x8287D3E8 stores the player manager (+4) before the message manager (+0).
         mpPlayerManager          = lpPlayerManager;
+        mpSyncTimeMessageManager = lpMessageManager;
     }
 
     // -------------------------------------------------------------------------------

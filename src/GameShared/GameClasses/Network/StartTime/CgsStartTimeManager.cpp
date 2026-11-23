@@ -304,7 +304,9 @@ void StartTimeManager::AddPlayer(NetworkPlayerID lPlayerID)
 // A player left: tell the clock, and drop the player's handshake messages.
 void StartTimeManager::RemovePlayer(NetworkPlayerID lPlayerID)
 {
-    CGS_ASSERT(mpTimeManager, "mpTimeManager");
+    CGS_ASSERT(mpTimeManager, CgsDev::Assert::MessageAt(
+        "mpTimeManager",
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsStartTimeManager.cpp", 877 /* ARTIST 0x82898E90 */));
 
     mpTimeManager->RemovePlayer(lPlayerID);
 

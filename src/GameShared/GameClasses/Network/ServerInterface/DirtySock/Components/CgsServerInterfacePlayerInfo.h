@@ -170,23 +170,12 @@ namespace CgsNetwork
         LobbyFindUserT*                    mpFindUser;               // +0x1C
         LobbyStatbookT*                    mpStatbook;               // +0x20
         s32                                miEventCallback;          // +0x24
-        // The single 4-byte X360 slot at +0x28 holds BOTH the four account-settings flag bytes
-        // (Construct/Destruct/Prepare/Release zero them with one word) AND, on the XUID-lookup
-        // path, the u64* destination pointer (GetPlayerXUIDByName stores it here @0x82888984; the
-        // callback reads/writes *mpXUID). The two paths never coexist, so a union is
-        // behaviour-preserving. No members follow, so pointer-widening on the 64-bit host cannot
-        // corrupt a later offset.
-        union                                                          // +0x28 (4 bytes on X360)
-        {
-            struct
-            {
-                bool mbUseCachedAccountSettings;   // +0x28
-                bool mbAgreeToShareInfoEA;         // +0x29
-                bool mbAgreeToShareInfoPartners;   // +0x2A
-                bool mbTelemetryEnable;            // +0x2B
-            };
-            u64* mpXUID;                            // +0x28 (XUID lookup out-ptr)
-        };
+        // X360 +0x28 is one pointer: GetPlayerXUIDByName stores the u64 destination here
+        // (stw @0x82888984), _GetPlayerXUIDCallback reads/writes *mpXUID, and Construct/Destruct/
+        // Prepare/Release clear it with one word store (e.g. 0x828884B0). The PS3 DWARF's four
+        // account-settings bools (CgsServerInterfacePlayerInfo.h:232-235) are never accessed as
+        // bytes anywhere in ARTIST, so they are not part of the X360 class.
+        u64* mpXUID;                                                   // +0x28
     };
 }
 

@@ -193,7 +193,7 @@ namespace BrnNetwork
 
         // X360 0x8254C238 -- convert + resize the downloaded compressed picture into the owning
         // player's network texture (the X360 column range [20, 140)).
-        s32 CopyTexture(CgsNetwork::NetworkTexture* lpTexture);
+        void CopyTexture(CgsNetwork::NetworkTexture* lpTexture);   // ARTIST 0x8254C238 sets no r3
 
         // -- the picture table -----------------------------------------------------------------
         GamerPictureData            maGamerPictureData[KI_MAX_GAMER_PICTURES]; // +0x000

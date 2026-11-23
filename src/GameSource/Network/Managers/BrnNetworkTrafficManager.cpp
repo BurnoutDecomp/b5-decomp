@@ -12,6 +12,7 @@
 // ============================================================================
 
 #include "GameSource/Network/Managers/BrnNetworkTrafficManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include <cstring>                                                                        // std::memcpy / std::memset
 #include <xtl.h>                                                                          // XMemSet
@@ -280,7 +281,9 @@ namespace BrnNetwork
     // =========================================================================
     void TrafficManager::AddPlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, CgsDev::Assert::MessageAt(
+            "mpPlayerManager",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTrafficManager.cpp", 362 /* ARTIST 0x82561B98 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
         if (lpNetworkPlayer == 0)
@@ -297,7 +300,9 @@ namespace BrnNetwork
                 break;
             }
         }
-        CGS_ASSERT(lpDataEntry != 0, "lpDataEntry");
+        CGS_ASSERT(lpDataEntry != 0, CgsDev::Assert::MessageAt(
+            "lpDataEntry",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTrafficManager.cpp", 376 /* ARTIST 0x82561C10 */));
 
         lpDataEntry->mPlayerID = lPlayerID;
         lpDataEntry->mBufferedHullActivates.Clear();
@@ -312,7 +317,9 @@ namespace BrnNetwork
     // =========================================================================
     void TrafficManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, CgsDev::Assert::MessageAt(
+            "mpPlayerManager",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTrafficManager.cpp", 403 /* ARTIST 0x82550E78 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
         if (lpNetworkPlayer == 0)
@@ -801,7 +808,9 @@ namespace BrnNetwork
     void TrafficManager::HandleHullSyncMessage(EActiveRaceCarIndex /*leActiveRaceCarIndex*/,
                                                u16 lu16TrafficUpdateToActivate, s32 liHull)
     {
-        CGS_ASSERT(mpPlayerManager != 0, "mpPlayerManager");
+        CGS_ASSERT(mpPlayerManager != 0, CgsDev::Assert::MessageAt(
+            "mpPlayerManager",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTrafficManager.cpp", 804 /* ARTIST 0x825511D8 */));
 
         for (s32 liIndex = 0; liIndex < ::KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
@@ -813,7 +822,9 @@ namespace BrnNetwork
             }
 
             HullToActivateInfo* lpBufferedMessage = lrData.mBufferedHullActivates.Grow();
-            CGS_ASSERT(lpBufferedMessage != 0, "lpBufferedMessage");
+            CGS_ASSERT(lpBufferedMessage != 0, CgsDev::Assert::MessageAt(
+                "lpBufferedMessage",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTrafficManager.cpp", 817 /* ARTIST 0x82551240 */));
             lpBufferedMessage->muHull                 = static_cast<u16>(liHull);
             lpBufferedMessage->muTrafUpdateToActivate = lu16TrafficUpdateToActivate;
             lpBufferedMessage->muFramesSinceStart     = mpTimeManager->GetU16FrameCountSinceStart();
@@ -993,7 +1004,9 @@ namespace BrnNetwork
     // =========================================================================
     void TrafficManager::RemoveBufferedMessage(BufferedMessage* lpBufferedMessage)
     {
-        CGS_ASSERT(miNumMessagesBuffered > 0, "miNumMessagesBuffered > 0");
+        CGS_ASSERT(miNumMessagesBuffered > 0, CgsDev::Assert::MessageAt(
+            "miNumMessagesBuffered > 0",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTrafficManager.cpp", 1906 /* ARTIST 0x82559880 */));
 
         *lpBufferedMessage = maBufferedCrashingTrafficMessages[miNumMessagesBuffered - 1];
 
@@ -1260,7 +1273,9 @@ namespace BrnNetwork
 
         if (IsTrafficRestartRequired(lRestartEvent.mau16ActveHulls, &lu16RestartFrame))
         {
-            CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+            CGS_ASSERT(mpNetworkModule, CgsDev::Assert::MessageAt(
+                "mpNetworkModule",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTrafficManager.cpp", 1101 /* ARTIST 0x82561CAC */));
 
             if (!mbSuppressTrafficRestart)
             {
@@ -1336,7 +1351,9 @@ namespace BrnNetwork
     // =========================================================================
     void TrafficManager::UpdateHullSync()
     {
-        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+        CGS_ASSERT(mpNetworkModule, CgsDev::Assert::MessageAt(
+            "mpNetworkModule",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTrafficManager.cpp", 765 /* ARTIST 0x8255EDC0 */));
 
         if (mbSuppressingHullSyncsUntilReset)
         {
@@ -1355,12 +1372,15 @@ namespace BrnNetwork
         {
             const BrnTraffic::BrnTrafficIO::ActivateHullEvent lActivateHullEvent = lActivateHullQueue.GetEvent(liIndex);
 
-            CGS_ASSERT(lActivateHullEvent.muNewActiveHull <= KU16_MAX_HULL_NUMBER,
-                       "lActivateHullEvent.muNewActiveHull <= BrnNetwork::KU16_MAX_HULL_NUMBER");
-            CGS_ASSERT(lActivateHullEvent.meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                       "lActivateHullEvent.meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-            CGS_ASSERT(lActivateHullEvent.meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       "lActivateHullEvent.meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CGS_ASSERT(lActivateHullEvent.muNewActiveHull <= KU16_MAX_HULL_NUMBER, CgsDev::Assert::MessageAt(
+                "lActivateHullEvent.muNewActiveHull <= BrnNetwork::KU16_MAX_HULL_NUMBER",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTrafficManager.cpp", 777 /* ARTIST 0x8255EE60 */));
+            CGS_ASSERT(lActivateHullEvent.meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, CgsDev::Assert::MessageAt(
+                "lActivateHullEvent.meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTrafficManager.cpp", 778 /* ARTIST 0x8255EE80 */));
+            CGS_ASSERT(lActivateHullEvent.meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, CgsDev::Assert::MessageAt(
+                "lActivateHullEvent.meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTrafficManager.cpp", 779 /* ARTIST 0x8255EEA0 */));
 
             HandleHullSyncMessage(lActivateHullEvent.meActiveRaceCarIndex,
                                   static_cast<u16>(lActivateHullEvent.muUpdateFrame),

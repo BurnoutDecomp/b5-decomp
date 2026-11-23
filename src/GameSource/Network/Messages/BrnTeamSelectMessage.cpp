@@ -1,12 +1,13 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/Messages/BrnTeamSelectMessage.h"
 #include "GameSource/Network/BrnNetworkManager.h"             // BrnNetwork::BrnNetworkManager::PackOrUnpack (NetworkPlayerID field primitive)
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
 
 #include <cstddef>                                            // offsetof (uncalled layout assert)
-#include <cstring>                                            // memcpy (the X360 64-byte payload moves)
-#include <xtl.h>                                              // XMemSet
+// (the 64-byte payload moves are XMemCpy calls, ARTIST 0x82580274)
+#include <xtl.h>                                              // XMemSet, XMemCpy
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::TeamSelectMessage::Construct             @ 0x8257D438
@@ -81,7 +82,7 @@ namespace BrnNetwork
         CGS_ASSERT(static_cast<s32>(8 * liNumPlayers) <= static_cast<s32>(sizeof(maPlayerTeamInfo)),
                    "sizeof( maPlayerTeamInfo) >= liNumPlayers * sizeof( PlayerTeamInfo )");
 
-        std::memcpy(maPlayerTeamInfo, lpaPlayerTeamInfo, sizeof(maPlayerTeamInfo));   // XMemCpy(+0x28, src, 0x40)
+        XMemCpy(maPlayerTeamInfo, lpaPlayerTeamInfo, sizeof(maPlayerTeamInfo));   // +0x28, src, 0x40
         miNumPlayers     = liNumPlayers;        // stw, +0x68
         miNumTeams       = liNumTeams;          // stw, +0x6C
         mbAutobalance    = lbAutobalance;       // stb, +0x70
@@ -100,25 +101,39 @@ namespace BrnNetwork
     bool TeamSelectMessage::Retrieve(PlayerTeamInfo* lpaPlayerTeamInfo, s32* lpiNumPlayers,
                                      s32* lpiNumTeams, bool* lpbAutobalance, bool* lpbFinalSelection)
     {
-        CGS_ASSERT(lpaPlayerTeamInfo != 0, "lpaPlayerTeamInfo");
-        CGS_ASSERT(lpiNumPlayers != 0, "lpiNumPlayers");
-        CGS_ASSERT(lpiNumTeams != 0, "lpiNumTeams");
-        CGS_ASSERT(lpbAutobalance != 0, "lpbAutobalance");
-        CGS_ASSERT(lpbFinalSelection != 0, "lpbFinalSelection");
+        CGS_ASSERT(lpaPlayerTeamInfo != 0, CgsDev::Assert::MessageAt(
+            "lpaPlayerTeamInfo",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnTeamSelectMessage.cpp", 129 /* ARTIST 0x825801C0 */));
+        CGS_ASSERT(lpiNumPlayers != 0, CgsDev::Assert::MessageAt(
+            "lpiNumPlayers",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnTeamSelectMessage.cpp", 130 /* ARTIST 0x825801E4 */));
+        CGS_ASSERT(lpiNumTeams != 0, CgsDev::Assert::MessageAt(
+            "lpiNumTeams",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnTeamSelectMessage.cpp", 131 /* ARTIST 0x82580208 */));
+        CGS_ASSERT(lpbAutobalance != 0, CgsDev::Assert::MessageAt(
+            "lpbAutobalance",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnTeamSelectMessage.cpp", 132 /* ARTIST 0x8258022C */));
+        CGS_ASSERT(lpbFinalSelection != 0, CgsDev::Assert::MessageAt(
+            "lpbFinalSelection",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnTeamSelectMessage.cpp", 133 /* ARTIST 0x82580250 */));
 
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
+        // ARTIST 0x82580264 branches to a trailing `return false` (0x825802D8): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            XMemCpy(lpaPlayerTeamInfo, maPlayerTeamInfo, sizeof(maPlayerTeamInfo));   // dst, +0x28, 0x40
+            *lpiNumPlayers     = miNumPlayers;        // lwz +0x68
+            *lpiNumTeams       = miNumTeams;          // lwz +0x6C
+            *lpbAutobalance    = mbAutobalance;       // lbz +0x70
+            *lpbFinalSelection = mbFinalSelection;    // lbz +0x71
 
-        std::memcpy(lpaPlayerTeamInfo, maPlayerTeamInfo, sizeof(maPlayerTeamInfo));   // XMemCpy(dst, +0x28, 0x40)
-        *lpiNumPlayers     = miNumPlayers;        // lwz +0x68
-        *lpiNumTeams       = miNumTeams;          // lwz +0x6C
-        *lpbAutobalance    = mbAutobalance;       // lbz +0x70
-        *lpbFinalSelection = mbFinalSelection;    // lbz +0x71
-
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-                   "!CgsNetwork::ReliableMessage::IsMessageValid()");
-        return true;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+                "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnTeamSelectMessage.cpp", 147 /* ARTIST 0x825802C4 */));
+            return true;
+        }
+        return false;
     }
 
     // ---------------------------------------------------------------------------------

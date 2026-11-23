@@ -230,8 +230,12 @@ bool PlayerManager::Release()
         ReleasePlayer(0);
     }
 
-    CGS_ASSERT(miNumActivePlayers == 0, "miNumActivePlayers == 0");
-    CGS_ASSERT(miNumInactivePlayers == KI_MAX_PLAYERS, "miNumInactivePlayers == KI_MAX_PLAYERS");
+    CGS_ASSERT(miNumActivePlayers == 0, CgsDev::Assert::MessageAt(
+        "miNumActivePlayers == 0",
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsPlayerManager.cpp", 342 /* ARTIST 0x82895B5C */));
+    CGS_ASSERT(miNumInactivePlayers == KI_MAX_PLAYERS, CgsDev::Assert::MessageAt(
+        "miNumInactivePlayers == KI_MAX_PLAYERS",
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsPlayerManager.cpp", 343 /* ARTIST 0x82895B84 */));
 
     meLocalConsoleFrameRate = CgsSystem::E_FRAMERATE_UNKNOWN;
     mLocalPlayerID          = K_INVALID_PLAYER_ID;

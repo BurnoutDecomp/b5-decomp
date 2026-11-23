@@ -199,7 +199,9 @@ void PlayerManager::ConnectionFinalisedCallback(bool lbSuccess, NetworkPlayerID 
 // the freed last slot.
 void PlayerManager::ReleasePlayer(s32 liPlayerIndex)
 {
-    CGS_ASSERT(liPlayerIndex < miNumActivePlayers, "liPlayerIndex < miNumActivePlayers");
+    CGS_ASSERT(liPlayerIndex < miNumActivePlayers, CgsDev::Assert::MessageAt(
+        "liPlayerIndex < miNumActivePlayers",
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsPlayerManager.cpp", 1370 /* ARTIST 0x828739DC */));
 
     NetworkPlayer* lpNetworkPlayer = maActivePlayers[liPlayerIndex].GetNetworkPlayer();
     if (lpNetworkPlayer != 0)
@@ -212,7 +214,9 @@ void PlayerManager::ReleasePlayer(s32 liPlayerIndex)
 
     for (; liPlayerIndex < miNumActivePlayers - 1; ++liPlayerIndex)
     {
-        CGS_ASSERT((liPlayerIndex + 1) < KI_MAX_PLAYERS, "(liPlayerIndex + 1) < KI_MAX_PLAYERS");
+        CGS_ASSERT((liPlayerIndex + 1) < KI_MAX_PLAYERS, CgsDev::Assert::MessageAt(
+            "(liPlayerIndex + 1) < KI_MAX_PLAYERS",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsPlayerManager.cpp", 1384 /* ARTIST 0x82873A90 */));
         maActivePlayers[liPlayerIndex] = maActivePlayers[liPlayerIndex + 1];
         maActivePlayers[liPlayerIndex].GetMenuData()->miConnectionIndex = liPlayerIndex;
     }

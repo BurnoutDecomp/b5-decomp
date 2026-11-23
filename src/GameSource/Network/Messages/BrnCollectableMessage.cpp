@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameSource/Network/Messages/BrnCollectableMessage.h"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -92,19 +93,27 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     bool CollectableMessage::Retrieve(CgsID* lpCollectableID, ECollectableType* lpeType)
     {
-        CGS_ASSERT(lpCollectableID, "lpCollectableID");
-        CGS_ASSERT(lpeType, "lpeType");
+        CGS_ASSERT(lpCollectableID, CgsDev::Assert::MessageAt(
+            "lpCollectableID",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnCollectableMessage.cpp", 97 /* ARTIST 0x8257ECA4 */));
+        CGS_ASSERT(lpeType, CgsDev::Assert::MessageAt(
+            "lpeType",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnCollectableMessage.cpp", 98 /* ARTIST 0x8257ECC8 */));
 
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
+        // ARTIST 0x8257ECDC branches to a trailing `return false` (0x8257ED30): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpCollectableID = mCollectableID;                       // ld  +0x28
+            *lpeType         = static_cast<ECollectableType>(meType); // lwz +0x30
 
-        *lpCollectableID = mCollectableID;                       // ld  +0x28
-        *lpeType         = static_cast<ECollectableType>(meType); // lwz +0x30
-
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-                   "!CgsNetwork::ReliableMessage::IsMessageValid()");
-        return true;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+                "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnCollectableMessage.cpp", 109 /* ARTIST 0x8257ED1C */));
+            return true;
+        }
+        return false;
     }
 
     // An older message is still accepted (slot 1 is the shared `return true` leaf).

@@ -103,26 +103,42 @@ namespace BrnNetwork
                                     u16* lpu16CarColourIndex, u16* lpu16CarPaintFinishIndex,
                                     f32* lpfBaseDeformationAmount, bool* lpbFinalSelection)
     {
-        CGS_ASSERT(lpCarId, "lpCarId");
-        CGS_ASSERT(lpWheelId, "lpWheelId");
-        CGS_ASSERT(lpbFinalSelection, "lpbFinalSelection");
-        CGS_ASSERT(lpu16CarColourIndex, "lpu16CarColourIndex");
-        CGS_ASSERT(lpu16CarPaintFinishIndex, "lpu16CarPaintFinishIndex");
-        CGS_ASSERT(lpfBaseDeformationAmount, "lpfBaseDeformationAmount");
+        CGS_ASSERT(lpCarId, CgsDev::Assert::MessageAt(
+            "lpCarId",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 134 /* ARTIST 0x8257E034 */));
+        CGS_ASSERT(lpWheelId, CgsDev::Assert::MessageAt(
+            "lpWheelId",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 135 /* ARTIST 0x8257E058 */));
+        CGS_ASSERT(lpbFinalSelection, CgsDev::Assert::MessageAt(
+            "lpbFinalSelection",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 136 /* ARTIST 0x8257E07C */));
+        CGS_ASSERT(lpu16CarColourIndex, CgsDev::Assert::MessageAt(
+            "lpu16CarColourIndex",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 137 /* ARTIST 0x8257E0A0 */));
+        CGS_ASSERT(lpu16CarPaintFinishIndex, CgsDev::Assert::MessageAt(
+            "lpu16CarPaintFinishIndex",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 138 /* ARTIST 0x8257E0C4 */));
+        CGS_ASSERT(lpfBaseDeformationAmount, CgsDev::Assert::MessageAt(
+            "lpfBaseDeformationAmount",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 139 /* ARTIST 0x8257E0E8 */));
 
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
+        // ARTIST 0x8257E0FC branches to a trailing `return false` (0x8257E170): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpCarId                   = mCarId;                    // ld  +0x28
+            *lpWheelId                 = mWheelId;                  // ld  +0x30
+            *lpbFinalSelection         = mbFinalSelection;          // lbz +0x40
+            *lpu16CarColourIndex       = mu16ColourIndex;           // lhz +0x3C
+            *lpu16CarPaintFinishIndex  = mu16PaintFinishIndex;      // lhz +0x3E
+            *lpfBaseDeformationAmount  = mfBaseDeformationAmount;   // lfs +0x38
 
-        *lpCarId                   = mCarId;                    // ld  +0x28
-        *lpWheelId                 = mWheelId;                  // ld  +0x30
-        *lpbFinalSelection         = mbFinalSelection;          // lbz +0x40
-        *lpu16CarColourIndex       = mu16ColourIndex;           // lhz +0x3C
-        *lpu16CarPaintFinishIndex  = mu16PaintFinishIndex;      // lhz +0x3E
-        *lpfBaseDeformationAmount  = mfBaseDeformationAmount;   // lfs +0x38
-
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-                   "!CgsNetwork::ReliableMessage::IsMessageValid()");
-        return true;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+                "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnCarSelectMessage.cpp", 154 /* ARTIST 0x8257E15C */));
+            return true;
+        }
+        return false;
     }
 } // namespace BrnNetwork

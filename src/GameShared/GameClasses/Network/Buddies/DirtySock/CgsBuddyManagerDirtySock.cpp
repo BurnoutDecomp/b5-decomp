@@ -281,7 +281,9 @@ namespace CgsNetwork
     // =========================================================================
     s32 BuddyManagerBase::GetAllBuddyNames(const char** lpaNames)
     {
-        CGS_ASSERT(mpBuddies, "mpBuddies");
+        CGS_ASSERT(mpBuddies, CgsDev::Assert::MessageAt(
+            "mpBuddies",
+            "..\\..\\..\\GameShared\\GameClasses\\Network/Buddies/DirtySock/CgsBuddyManagerDirtySock.cpp", 1350 /* ARTIST 0x8287DDA4 */));
 
         s32          liCount = 0;
         const char** lpWrite = lpaNames;
@@ -297,7 +299,9 @@ namespace CgsNetwork
             if (lpBuddy && HLBBudIsRealBuddy(lpBuddy) == 1)
             {
                 const char* lpcBuddyName = HLBBudGetName(lpBuddy);
-                CGS_ASSERT(lpcBuddyName, "lpcBuddyName");
+                CGS_ASSERT(lpcBuddyName, CgsDev::Assert::MessageAt(
+                    "lpcBuddyName",
+                    "..\\..\\..\\GameShared\\GameClasses\\Network/Buddies/DirtySock/CgsBuddyManagerDirtySock.cpp", 1366 /* ARTIST 0x8287DE20 */));
 
                 *lpWrite = lpcBuddyName;
                 ++liCount;
@@ -339,7 +343,9 @@ namespace CgsNetwork
     // =========================================================================
     void BuddyManagerBase::RevokeAllInvites()
     {
-        CGS_ASSERT(mpBuddies, "mpBuddies");
+        CGS_ASSERT(mpBuddies, CgsDev::Assert::MessageAt(
+            "mpBuddies",
+            "..\\..\\..\\GameShared\\GameClasses\\Network/Buddies/DirtySock/CgsBuddyManagerDirtySock.cpp", 1250 /* ARTIST 0x8287DC38 */));
         HLBListSendChatMsg(mpBuddies, 0, 0, 0, 0);
     }
 

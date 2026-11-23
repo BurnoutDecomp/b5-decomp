@@ -115,8 +115,12 @@ namespace BrnNetwork
             static_cast<const BrnNetworkPlayerConstructParams*>(lpConstructParams);
         mpTimeManager   = lpParams->mpTimeManager;
         mpNetworkModule = lpParams->mpNetworkModule;
-        CGS_ASSERT(mpTimeManager, "mpTimeManager");
-        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
+        CGS_ASSERT(mpTimeManager, CgsDev::Assert::MessageAt(
+            "mpTimeManager",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkPlayer.cpp", 271 /* ARTIST 0x8258E4C0 */));
+        CGS_ASSERT(mpNetworkModule, CgsDev::Assert::MessageAt(
+            "mpNetworkModule",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkPlayer.cpp", 272 /* ARTIST 0x8258E4E8 */));
 
         mfTimeBeforeSelectedChallengeSend         = KF_NO_SELECTED_CHALLENGE_SEND;
         mSelectedChallengeID                      = 0;
@@ -727,13 +731,18 @@ namespace BrnNetwork
     {
         BrnNetworkPlayer*   lpNetPlayer           = static_cast<BrnNetworkPlayer*>(lpUserData);
         CollectableMessage* lpCollectabledMessage = static_cast<CollectableMessage*>(lpMessage);
-        CGS_ASSERT(lpNetPlayer != 0, "lpNetPlayer");
-        CGS_ASSERT(lpCollectabledMessage != 0, "lpCollectabledMessage");
+        CGS_ASSERT(lpNetPlayer != 0, CgsDev::Assert::MessageAt(
+            "lpNetPlayer",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkPlayer.cpp", 2163 /* ARTIST 0x82594034 */));
+        CGS_ASSERT(lpCollectabledMessage != 0, CgsDev::Assert::MessageAt(
+            "lpCollectabledMessage",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkPlayer.cpp", 2164 /* ARTIST 0x82594058 */));
 
         BrnNetworkModuleIO::NetworkOutNetworkPlayerCollectableEvent lNetworkPlayerCollectableEvent;
         CollectableMessage::ECollectableType leCollectableType;
-        CGS_ASSERT(lpCollectabledMessage->Retrieve(&lNetworkPlayerCollectableEvent.mID, &leCollectableType),
-                   "lpCollectabledMessage->Retrieve( &lNetworkPlayerCollectableEvent.mID, &leCollectableType )");
+        CGS_ASSERT(lpCollectabledMessage->Retrieve(&lNetworkPlayerCollectableEvent.mID, &leCollectableType), CgsDev::Assert::MessageAt(
+            "lpCollectabledMessage->Retrieve( &lNetworkPlayerCollectableEvent.mID, &leCollectableType )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkPlayer.cpp", 2168 /* ARTIST 0x82594090 */));
 
         lNetworkPlayerCollectableEvent.mNetworkPlayerID = lNetworkPlayerID;
         switch (leCollectableType)
@@ -748,7 +757,9 @@ namespace BrnNetwork
                 lNetworkPlayerCollectableEvent.meType = BrnGameState::E_STUNT_ELEMENT_TYPE_BILLBOARD;
                 break;
             default:
-                CGS_ASSERT(false, "Unknown stunt element type\n");
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                    "Unknown stunt element type",
+                    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkPlayer.cpp", 2194 /* ARTIST 0x825940C8 */));
                 break;
         }
 
@@ -766,13 +777,18 @@ namespace BrnNetwork
         BrnNetworkPlayer* lpNetPlayer = static_cast<BrnNetworkPlayer*>(lpUserData);
         BurningHomeRunSwitchRunnerMessage* lpSwitchRunnerMessage =
             static_cast<BurningHomeRunSwitchRunnerMessage*>(lpMessage);
-        CGS_ASSERT(lpNetPlayer != 0, "lpNetPlayer");
-        CGS_ASSERT(lpSwitchRunnerMessage != 0, "lpSwitchRunnerMessage");
+        CGS_ASSERT(lpNetPlayer != 0, CgsDev::Assert::MessageAt(
+            "lpNetPlayer",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkPlayer.cpp", 2241 /* ARTIST 0x82594148 */));
+        CGS_ASSERT(lpSwitchRunnerMessage != 0, CgsDev::Assert::MessageAt(
+            "lpSwitchRunnerMessage",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkPlayer.cpp", 2244 /* ARTIST 0x8259416C */));
 
         BrnNetworkModuleIO::NetworkOutSwitchBurningHomeRunRunner lSwitchRunnerEvent;
         lpSwitchRunnerMessage->Retrieve(&lSwitchRunnerEvent.mNewRunnerID);
-        CGS_ASSERT(lSwitchRunnerEvent.mNewRunnerID != CgsNetwork::K_INVALID_PLAYER_ID,
-                   "lSwitchRunnerEvent.mNewRunnerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CGS_ASSERT(lSwitchRunnerEvent.mNewRunnerID != CgsNetwork::K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+            "lSwitchRunnerEvent.mNewRunnerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkPlayer.cpp", 2248 /* ARTIST 0x825941A0 */));
 
         lpNetPlayer->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lSwitchRunnerEvent),

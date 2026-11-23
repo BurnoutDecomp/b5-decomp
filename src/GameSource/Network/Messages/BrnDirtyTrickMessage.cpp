@@ -119,21 +119,33 @@ namespace BrnNetwork
     bool DirtyTrickMessage::Retrieve(NetworkPlayerID* lpAggressorPlayerID, NetworkPlayerID* lpVictimPlayerID,
                                      u8* lpu8DirtyTrickType, u8* lpu8DirtyTrickStatus)
     {
-        CGS_ASSERT(lpAggressorPlayerID != 0, "lpAggressorNetworkPlayerID");
-        CGS_ASSERT(lpVictimPlayerID    != 0, "lpVictimNetworkPlayerID");
-        CGS_ASSERT(lpu8DirtyTrickType  != 0, "lpu8DirtyTrickType");
-        CGS_ASSERT(lpu8DirtyTrickStatus != 0, "lpu8DirtyTrickStatus");
+        CGS_ASSERT(lpAggressorPlayerID != 0, CgsDev::Assert::MessageAt(
+            "lpAggressorNetworkPlayerID",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnDirtyTrickMessage.cpp", 131 /* ARTIST 0x8257E52C */));
+        CGS_ASSERT(lpVictimPlayerID    != 0, CgsDev::Assert::MessageAt(
+            "lpVictimNetworkPlayerID",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnDirtyTrickMessage.cpp", 132 /* ARTIST 0x8257E550 */));
+        CGS_ASSERT(lpu8DirtyTrickType  != 0, CgsDev::Assert::MessageAt(
+            "lpu8DirtyTrickType",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnDirtyTrickMessage.cpp", 133 /* ARTIST 0x8257E574 */));
+        CGS_ASSERT(lpu8DirtyTrickStatus != 0, CgsDev::Assert::MessageAt(
+            "lpu8DirtyTrickStatus",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnDirtyTrickMessage.cpp", 134 /* ARTIST 0x8257E598 */));
 
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
-
-        *lpAggressorPlayerID  = mAggressorNetworkPlayerID;
-        *lpVictimPlayerID     = mVictimNetworkPlayerID;
-        *lpu8DirtyTrickType   = mu8DirtyTrickType;
-        *lpu8DirtyTrickStatus = mu8DirtyTrickStatus;
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-                   "!CgsNetwork::ReliableMessage::IsMessageValid()");
-        return true;
+        // ARTIST 0x8257E5AC branches to a trailing `return false` (0x8257E610): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpAggressorPlayerID  = mAggressorNetworkPlayerID;
+            *lpVictimPlayerID     = mVictimNetworkPlayerID;
+            *lpu8DirtyTrickType   = mu8DirtyTrickType;
+            *lpu8DirtyTrickStatus = mu8DirtyTrickStatus;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+                "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnDirtyTrickMessage.cpp", 146 /* ARTIST 0x8257E5FC */));
+            return true;
+        }
+        return false;
     }
 } // namespace BrnNetwork

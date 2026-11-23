@@ -699,8 +699,12 @@ namespace BrnNetwork
         {
             ScoreboardManager* lpScoreboardManager =
                 reinterpret_cast<ScoreboardManager*>(static_cast<uintptr_t>(static_cast<u32>(liUserData)));
-            CGS_ASSERT(lpScoreboardManager != 0, "lpScoreboardManager");
-            CGS_ASSERT(lqRequestedXuid != 0, "lRequestedXuid != 0");
+            CGS_ASSERT(lpScoreboardManager != 0, CgsDev::Assert::MessageAt(
+                "lpScoreboardManager",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboardManager.cpp", 1284 /* ARTIST 0x82562E94 */));
+            CGS_ASSERT(lqRequestedXuid != 0, CgsDev::Assert::MessageAt(
+                "lRequestedXuid != 0",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboardManager.cpp", 1287 /* ARTIST 0x82562EB8 */));
 
             // Re-build the pending id from its own (already-copied) name, now carrying the XUID.
             lpScoreboardManager->mScoreTargetPlayerID.Construct(
@@ -712,10 +716,12 @@ namespace BrnNetwork
             lChallengeEvent.miValue         = lpScoreboardManager->miScoreTargetValue;
             lChallengeEvent.muChallengeType = 0;
 
-            CGS_ASSERT(lpScoreboardManager->mpNetworkModule != 0,
-                       "lpScoreboardManager->mpNetworkModule");
-            CGS_ASSERT(lpScoreboardManager->mpNetworkModule->GetNetworkEventQueue() != 0,
-                       "lpScoreboardManager->mpNetworkModule->GetNetworkEventQueue()");
+            CGS_ASSERT(lpScoreboardManager->mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+                "lpScoreboardManager->mpNetworkModule",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboardManager.cpp", 1298 /* ARTIST 0x82562F28 */));
+            CGS_ASSERT(lpScoreboardManager->mpNetworkModule->GetNetworkEventQueue() != 0, CgsDev::Assert::MessageAt(
+                "lpScoreboardManager->mpNetworkModule->GetNetworkEventQueue()",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboardManager.cpp", 1299 /* ARTIST 0x82562F54 */));
             liResult = AsConcreteQueue(
                 lpScoreboardManager->mpNetworkModule->GetNetworkEventQueue())->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lChallengeEvent),

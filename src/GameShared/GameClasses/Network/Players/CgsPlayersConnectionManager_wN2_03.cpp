@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayersConnectionManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"                  // registry lookups / AddPlayer / RemovePlayer
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"                  // SetConnectionData / GetName
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"
@@ -18,7 +19,9 @@ namespace CgsNetwork
 NetworkPlayerID PlayersConnectionManager::GetIDOfPlayerToKick(NetworkPlayerID lPlayerID1,
                                                               NetworkPlayerID lPlayerID2) const
 {
-    CGS_ASSERT(lPlayerID1 != lPlayerID2, "Don't call with the same Player IDs");
+    CGS_ASSERT(lPlayerID1 != lPlayerID2, CgsDev::Assert::MessageAt(
+        "Don't call with the same Player IDs",
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsPlayersConnectionManager.cpp", 865 /* ARTIST 0x82890638 */));
 
     const NetworkPlayerID lHostPlayerID = mpPlayerManager->GetHostPlayerID();
     if (lPlayerID1 == lHostPlayerID)

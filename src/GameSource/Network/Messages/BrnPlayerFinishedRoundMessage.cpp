@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/Messages/BrnPlayerFinishedRoundMessage.h"
 #include "GameSource/Network/BrnNetworkManager.h"                                       // BrnNetworkManager::PackOrUnpack (NetworkPlayerID field primitive)
@@ -197,20 +198,24 @@ namespace BrnNetwork
                                               s32* lpiEliminations, bool* lpbTimedOut,
                                               bool* lpbWonRound)
     {
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
+        // ARTIST 0x8257DB90 branches to a trailing `return false` (0x8257DC20): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpu8RoundNumber            = mu8RoundNumber;              // +0x3C -> r4
+            *lpEliminatorNetworkPlayerID = mEliminatorNetworkPlayerID; // +0x30 -> r7
+            *lpFinishTime               = mFinishTime;                 // +0x28/+0x2C -> r5
+            *lpfDistanceFromFinish      = mfDistanceFromFinish;        // +0x38 -> r6
+            *lpbTimedOut                = mbTimedOut;                  // +0x3D -> r9
+            *lpiEliminations            = miEliminations;              // +0x34 -> r8
+            *lpbWonRound                = mbWonRound;                  // +0x3E -> r10
 
-        *lpu8RoundNumber            = mu8RoundNumber;              // +0x3C -> r4
-        *lpEliminatorNetworkPlayerID = mEliminatorNetworkPlayerID; // +0x30 -> r7
-        *lpFinishTime               = mFinishTime;                 // +0x28/+0x2C -> r5
-        *lpfDistanceFromFinish      = mfDistanceFromFinish;        // +0x38 -> r6
-        *lpbTimedOut                = mbTimedOut;                  // +0x3D -> r9
-        *lpiEliminations            = miEliminations;              // +0x34 -> r8
-        *lpbWonRound                = mbWonRound;                  // +0x3E -> r10
-
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-                   "!CgsNetwork::ReliableMessage::IsMessageValid()");
-        return true;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+                "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnPlayerFinishedRoundMessage.cpp", 170 /* ARTIST 0x8257DC04 */));
+            return true;
+        }
+        return false;
     }
 } // namespace BrnNetwork

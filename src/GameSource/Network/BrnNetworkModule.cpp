@@ -10,6 +10,7 @@
 // then returns the address of its embedded member.
 
 #include "GameSource/Network/BrnNetworkModule.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"                         // CgsDev::PerfMonCpu::AddMonitor
@@ -162,9 +163,15 @@ namespace BrnNetwork
             mePrepareStage = E_PREPARESTAGE_DONE;
             meReleaseStage = E_RELEASESTAGE_START;
 
-            CGS_ASSERT(mInputGuiEventQueue.Prepare(),  "mInputGuiEventQueue.Prepare()");
-            CGS_ASSERT(mOutputGuiEventQueue.Prepare(), "mOutputGuiEventQueue.Prepare()");
-            CGS_ASSERT(mNetworkEventQueue.Prepare(),   "mNetworkEventQueue.Prepare()");
+            CGS_ASSERT(mInputGuiEventQueue.Prepare(), CgsDev::Assert::MessageAt(
+                "mInputGuiEventQueue.Prepare()",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp", 198 /* ARTIST 0x8259B448 */));
+            CGS_ASSERT(mOutputGuiEventQueue.Prepare(), CgsDev::Assert::MessageAt(
+                "mOutputGuiEventQueue.Prepare()",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp", 199 /* ARTIST 0x8259B47C */));
+            CGS_ASSERT(mNetworkEventQueue.Prepare(), CgsDev::Assert::MessageAt(
+                "mNetworkEventQueue.Prepare()",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp", 200 /* ARTIST 0x8259B4B0 */));
 
             CgsDev::DebugInterface lDebugInterface;
             mbOutputSendUpdateMessages = false;
@@ -178,7 +185,9 @@ namespace BrnNetwork
             return true;
         }
         default:
-            CGS_ASSERT(false, "unknown prepare stage");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "unknown prepare stage",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp", 221 /* ARTIST 0x8259B55C */));
             break;
         }
 
@@ -202,7 +211,9 @@ namespace BrnNetwork
             CgsDev::DebugInterface lDebugInterface;
             lDebugInterface.UnregisterVariable(&mbOutputSendUpdateMessages);
             lDebugInterface.UnregisterVariable(&mbOutputRecvUpdateMessages);
-            CGS_ASSERT(mNetworkEventQueue.Release(), "mNetworkEventQueue.Release()");
+            CGS_ASSERT(mNetworkEventQueue.Release(), CgsDev::Assert::MessageAt(
+                "mNetworkEventQueue.Release()",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp", 257 /* ARTIST 0x82592E8C */));
         }
             // fall through
         case E_RELEASESTAGE_NETWORK_MANAGER:
@@ -227,7 +238,9 @@ namespace BrnNetwork
             mbPadIdle      = true;
             return true;
         default:
-            CGS_ASSERT(false, "unknown release stage");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "unknown release stage",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp", 300 /* ARTIST 0x82592F30 */));
             break;
         }
 

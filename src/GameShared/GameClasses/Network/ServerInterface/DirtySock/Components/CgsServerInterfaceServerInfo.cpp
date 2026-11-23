@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceServerInfo.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"   // full ServerInterfaceDirtySock (GetLobbyAPIRef)
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
@@ -105,8 +106,9 @@ void ServerInterfaceServerInfo::Resume()
 
 void ServerInterfaceServerInfo::FindUrl(const char* lpcUrlKey, char* lpcOut, s32 liOutLen)
 {
-    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0,
-               "NULL != mpServerInterface->GetLobbyAPIRef()");
+    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0, CgsDev::Assert::MessageAt(
+        "NULL != mpServerInterface->GetLobbyAPIRef()",
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceServerInfo.cpp", 363 /* ARTIST 0x8287A5EC */));
 
     // Pull the 'self' status record and the 'conf' info record, then read the named
     // URL template out of the config record (defaulting to the empty error string).

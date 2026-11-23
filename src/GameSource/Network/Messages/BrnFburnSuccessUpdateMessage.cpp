@@ -85,13 +85,16 @@ namespace BrnNetwork
                                              s32* lpiActionIndex,
                                              FburnSuccessUpdatePayload* lpSuccessBitArray)
     {
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
-
-        *lpSuccessBitArray   = mSuccessBitArray;   // 64-bit copy
-        *lpiFramesSinceStart = miFramesSinceStart;
-        *lpiActionIndex      = miActionIndex;
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        return true;
+        // ARTIST 0x8257FB60 branches to a trailing `return false` (0x8257FB90): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpSuccessBitArray   = mSuccessBitArray;   // 64-bit copy
+            *lpiFramesSinceStart = miFramesSinceStart;
+            *lpiActionIndex      = miActionIndex;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            return true;
+        }
+        return false;
     }
 } // namespace BrnNetwork

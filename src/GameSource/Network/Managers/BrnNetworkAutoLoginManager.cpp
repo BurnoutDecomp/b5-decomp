@@ -18,6 +18,7 @@
 // ===================================================================================
 
 #include "GameSource/Network/Managers/BrnNetworkAutoLoginManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameSource/Network/BrnNetworkModule.h"      // BrnNetworkModule::GetNetworkManager / GetGameStateToNetworkInterface
@@ -56,8 +57,12 @@ namespace BrnNetwork
         mpNetworkModule   = lpNetworkModule;
         mpServerInterface = lpServerInterface;
 
-        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
-        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+        CGS_ASSERT(mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkModule",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkAutoLoginManager.cpp", 61 /* ARTIST 0x8255E18C */));
+        CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkAutoLoginManager.cpp", 62 /* ARTIST 0x8255E1B4 */));
 
         mTimer.SetFloatVal(0.0f);
         mProcessesComplete.UnSetAll();

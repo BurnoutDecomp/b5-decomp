@@ -348,9 +348,12 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     s32 NetworkRoadRulesManager::AttemptToUploadNewRoadRulesScores()
     {
-        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
-        CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
-                    "mpServerInterface->GetGameComponent()" );
+        CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 763 /* ARTIST 0x82554B18 */));
+        CGS_ASSERT(mpServerInterface->GetGameComponent() != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface->GetGameComponent()",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 764 /* ARTIST 0x82554B44 */));
 
         const bool lbInStartedGame =
             mpServerInterface->GetGameComponent()->IsLocalPlayerInGame()
@@ -358,8 +361,9 @@ namespace BrnNetwork
 
         if ( !lbInStartedGame )
         {
-            CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
-                        "mpServerInterface->GetConnectionComponent()" );
+            CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CgsDev::Assert::MessageAt(
+                "mpServerInterface->GetConnectionComponent()",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 770 /* ARTIST 0x82554BA0 */));
 
             if ( mpServerInterface->GetConnectionComponent()->IsLoggedIn() )
             {
@@ -508,7 +512,9 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     void NetworkRoadRulesManager::HandleDownloadingLocalRoadRulesScores()
     {
-        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
+        CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1144 /* ARTIST 0x825613B0 */));
 
         if ( mpServerInterface->GetStatus( CgsNetwork::E_COMPONENTS_CUSTOM_COMMANDS )
              != CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE )
@@ -521,16 +527,18 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
-                    "mpServerInterface->GetConnectionComponent()" );
-        CGS_ASSERT( mpServerInterface->GetGameComponent() != 0,
-                    "mpServerInterface->GetGameComponent()" );
-        CGS_ASSERT( mpServerInterface->GetConnectionComponent()->IsLoggedIn(),
-                    "mpServerInterface->GetConnectionComponent()->IsLoggedIn()" );
-        CGS_ASSERT( !( mpServerInterface->GetGameComponent()->IsLocalPlayerInGame()
-                       && mpServerInterface->GetGameComponent()->IsGameStarted() ),
-                    "( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() ) || "
-                    "( !mpServerInterface->GetGameComponent()->IsGameStarted() )" );
+        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface->GetConnectionComponent()",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1154 /* ARTIST 0x82561420 */));
+        CGS_ASSERT(mpServerInterface->GetGameComponent() != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface->GetGameComponent()",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1155 /* ARTIST 0x8256144C */));
+        CGS_ASSERT(mpServerInterface->GetConnectionComponent()->IsLoggedIn(), CgsDev::Assert::MessageAt(
+            "mpServerInterface->GetConnectionComponent()->IsLoggedIn()",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1156 /* ARTIST 0x82561480 */));
+        CGS_ASSERT(!( mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() && mpServerInterface->GetGameComponent()->IsGameStarted() ), CgsDev::Assert::MessageAt(
+            "( !mpServerInterface->GetGameComponent()->IsLocalPlayerInGame() ) || " "( !mpServerInterface->GetGameComponent()->IsGameStarted() )",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkRoadRulesManager.cpp", 1158 /* ARTIST 0x825614CC */));
 
         s32 liNumToDownload = KI_NUMBER_OF_LOCAL_CHALLENGE_SLOTS - mIndexOfNextLocalChallengeToDownload;
         if ( liNumToDownload > KI_NUM_SCORES_TO_DOWNLOAD_IN_A_BATCH )

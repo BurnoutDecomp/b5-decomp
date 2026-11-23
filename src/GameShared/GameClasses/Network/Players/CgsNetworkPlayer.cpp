@@ -439,7 +439,9 @@ void NetworkPlayer::CheckForPlayerDisconnectTimeout(const CgsSystem::TimerStatus
         return;
 
     const CgsSystem::Time lTimeGap = lpTimerStatus->GetTime() - mTimeLastPacketReceived;
-    CGS_ASSERT(lTimeGap.GetFloatVal() >= 0.0f, "lTimeGap.GetFloatVal() >= 0.0f");
+    CGS_ASSERT(lTimeGap.GetFloatVal() >= 0.0f, CgsDev::Assert::MessageAt(
+        "lTimeGap.GetFloatVal() >= 0.0f",
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\Players\\CgsNetworkPlayer.cpp", 1324 /* ARTIST 0x828731B4 */));
 
     // mbHasConnectionFailed = lTimeGap > K_NETWORK_PLAYER_TIMEOUT. The X360 inlines the
     // CgsSystem::Time::operator> compare (seconds first, then fraction) against the two

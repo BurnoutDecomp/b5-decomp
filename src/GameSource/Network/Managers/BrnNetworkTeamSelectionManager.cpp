@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/Managers/BrnNetworkTeamSelectionManager.h"
 #include "GameSource/Network/BrnNetworkManager.h"          // BrnNetwork::BrnNetworkManager (GetPlayerManager/GetServerInterface/GetActiveRaceCarIndex/GetCurrentFrame)
@@ -199,8 +200,12 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     bool TeamSelectionManager::AddPlayer( NetworkPlayerID lPlayerID )
     {
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, "mpNetworkManager->GetPlayerManager()");
+        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 502 /* ARTIST 0x82556F3C */));
+        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager->GetPlayerManager()",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 503 /* ARTIST 0x82556F64 */));
 
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
@@ -216,7 +221,9 @@ namespace BrnNetwork
                     break;
                 }
             }
-            CGS_ASSERT(lpDataEntry != 0, "lpDataEntry");
+            CGS_ASSERT(lpDataEntry != 0, CgsDev::Assert::MessageAt(
+                "lpDataEntry",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 514 /* ARTIST 0x82556FD8 */));
 
             lpNetworkPlayer->RegisterMessageType(
                 KI_TEAM_SELECT_MESSAGE_TYPE,
@@ -249,8 +256,12 @@ namespace BrnNetwork
             lpEntry->mMessageRecv.Construct();
         }
 
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, "mpNetworkManager->GetPlayerManager()");
+        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 554 /* ARTIST 0x825570A4 */));
+        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager->GetPlayerManager()",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 555 /* ARTIST 0x825570CC */));
 
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
@@ -311,8 +322,12 @@ namespace BrnNetwork
         {
             case KI_LAUNCH_TYPE_AUTOBALANCE: // 12
             {
-                CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
-                CGS_ASSERT(mpNetworkManager->GetServerInterface() != 0, "mpNetworkManager->GetServerInterface()");
+                CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+                    "mpNetworkManager",
+                    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 610 /* ARTIST 0x8254BBE0 */));
+                CGS_ASSERT(mpNetworkManager->GetServerInterface() != 0, CgsDev::Assert::MessageAt(
+                    "mpNetworkManager->GetServerInterface()",
+                    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTeamSelectionManager.cpp", 611 /* ARTIST 0x8254BC08 */));
 
                 const bool lbIsLocalPlayerHost =
                     mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerHost();

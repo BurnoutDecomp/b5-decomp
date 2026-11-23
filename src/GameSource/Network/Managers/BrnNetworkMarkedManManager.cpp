@@ -281,10 +281,14 @@ namespace BrnNetwork
         BrnNetwork::PlayerMenuData* lpMenuData = static_cast<BrnNetwork::PlayerMenuData*>(
             lpMarkedManManager->mpNetworkManager->GetPlayerManager()->GetMenuDataByID(
                 lSendingPlayerID));
-        CGS_ASSERT(lpMenuData != 0, "lpMenuData");
+        CGS_ASSERT(lpMenuData != 0, CgsDev::Assert::MessageAt(
+            "lpMenuData",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMarkedManManager.cpp", 337 /* ARTIST 0x82548E50 */));
 
         MarkedManMessage* lpMarkedManMessage = static_cast<MarkedManMessage*>(lpMessage);
-        CGS_ASSERT(lpMarkedManMessage != 0, "lpMarkedManMessage");
+        CGS_ASSERT(lpMarkedManMessage != 0, CgsDev::Assert::MessageAt(
+            "lpMarkedManMessage",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMarkedManManager.cpp", 339 /* ARTIST 0x82548E74 */));
 
         NetworkPlayerID lMarkedManPlayerID = KI_INVALID_PLAYER_ID;
         bool            lbIsFinal          = false;

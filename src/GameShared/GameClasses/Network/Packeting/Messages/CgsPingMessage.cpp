@@ -72,13 +72,18 @@ namespace CgsNetwork
     // asserts the message is now invalid.
     bool PingMessage::Retrieve(f32* lpfPingTime)
     {
-        if ((mx8Flags & KX8_FLAGS_VALID) == 0)
-            return false;
-
-        *lpfPingTime = mfPingTime;                 // lfs +0x20 -> stfs 0(lpfPingTime)
-        mx8Flags &= ~KX8_FLAGS_VALID;              // clrrwi bit0, stb +0x19
-        CGS_ASSERT(!IsMessageValid(), "!IsMessageValid()");
-        return true;
+        // ARTIST 0x8288EB80 branches to a trailing `return false` (0x8288EBD8): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & KX8_FLAGS_VALID) != 0)
+        {
+            *lpfPingTime = mfPingTime;                 // lfs +0x20 -> stfs 0(lpfPingTime)
+            mx8Flags &= ~KX8_FLAGS_VALID;              // clrrwi bit0, stb +0x19
+            CGS_ASSERT(!IsMessageValid(), CgsDev::Assert::MessageAt(
+                "!IsMessageValid()",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsPingMessage.cpp", 116 /* ARTIST 0x8288EBBC */));
+            return true;
+        }
+        return false;
     }
 
     // The ping time travels as a quantised float; the console body is the same code as
@@ -125,12 +130,17 @@ namespace CgsNetwork
     // +0x20 ping-time field.
     bool PingReplyMessage::Retrieve(f32* lpfPingTime)
     {
-        if ((mx8Flags & KX8_FLAGS_VALID) == 0)
-            return false;
-
-        *lpfPingTime = mfPingTime;                 // lfs +0x20 -> stfs 0(lpfPingTime)
-        mx8Flags &= ~KX8_FLAGS_VALID;              // clrrwi bit0, stb +0x19
-        CGS_ASSERT(!IsMessageValid(), "!IsMessageValid()");
-        return true;
+        // ARTIST 0x8288EC28 branches to a trailing `return false` (0x8288EC80): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & KX8_FLAGS_VALID) != 0)
+        {
+            *lpfPingTime = mfPingTime;                 // lfs +0x20 -> stfs 0(lpfPingTime)
+            mx8Flags &= ~KX8_FLAGS_VALID;              // clrrwi bit0, stb +0x19
+            CGS_ASSERT(!IsMessageValid(), CgsDev::Assert::MessageAt(
+                "!IsMessageValid()",
+                "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsPingMessage.cpp", 281 /* ARTIST 0x8288EC64 */));
+            return true;
+        }
+        return false;
     }
 } // namespace CgsNetwork

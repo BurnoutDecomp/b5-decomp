@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/Messages/BrnFreeburnChallengeMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -108,18 +109,27 @@ namespace BrnNetwork
                                             BrnGameState::EChallengeStatus* lpeChallengeStatus,
                                             s32* lpiActionIndex)
     {
-        CGS_ASSERT(lpChallengeID, "lpChallengeID");
-        CGS_ASSERT(lpeEventType, "lpeEventType");
-        CGS_ASSERT(lpeChallengeStatus, "lpeChallengeStatus");
+        CGS_ASSERT(lpChallengeID, CgsDev::Assert::MessageAt(
+            "lpChallengeID",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnFreeburnChallengeMessage.cpp", 178 /* ARTIST 0x8257F964 */));
+        CGS_ASSERT(lpeEventType, CgsDev::Assert::MessageAt(
+            "lpeEventType",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnFreeburnChallengeMessage.cpp", 179 /* ARTIST 0x8257F988 */));
+        CGS_ASSERT(lpeChallengeStatus, CgsDev::Assert::MessageAt(
+            "lpeChallengeStatus",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnFreeburnChallengeMessage.cpp", 180 /* ARTIST 0x8257F9AC */));
 
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
-
-        *lpChallengeID       = mChallengeID;
-        *lpeEventType        = meEventType;
-        *lpeChallengeStatus  = meChallengeStatus;
-        *lpiActionIndex      = miActionIndex;
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        return true;
+        // ARTIST 0x8257F9C0 branches to a trailing `return false` (0x8257F9FC): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpChallengeID       = mChallengeID;
+            *lpeEventType        = meEventType;
+            *lpeChallengeStatus  = meChallengeStatus;
+            *lpiActionIndex      = miActionIndex;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            return true;
+        }
+        return false;
     }
 }

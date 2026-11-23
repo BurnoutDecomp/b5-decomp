@@ -1,6 +1,7 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
-#include <cstring>   // std::memcpy (models the Xbox XMemCpy block-copy intrinsic)
+#include <xtl.h>     // XMemCpy: ARTIST Retrieve copies the photo through it (0x8257F228)
 
 #include "GameSource/Network/Messages/BrnImageMessage.h"
 #include "GameSource/Network/BrnNetworkManager.h"                                       // BrnNetworkManager::PackOrUnpack (NetworkPlayerID field primitive)
@@ -159,7 +160,7 @@ namespace BrnNetwork
 
         if (lpvPhotoData != 0)
         {
-            std::memcpy(macPhotoBuffer, lpvPhotoData, lu16NumberOfBytes);
+            XMemCpy(macPhotoBuffer, lpvPhotoData, lu16NumberOfBytes);
         }
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_IMAGE_MESSAGE_TYPE, lu16Frame);
@@ -195,8 +196,9 @@ namespace BrnNetwork
         lxResult |= CgsNetwork::PackOrUnpackU16(this, &mu16NumberOfBytesOfPhotoData, 0, KI_PHOTO_SEGMENT_SIZE);
         lxResult |= CgsNetwork::Message::PackOrUnpack(&mBeatenRoadID);
 
-        CGS_ASSERT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE,
-                   "mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE");
+        CGS_ASSERT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE, CgsDev::Assert::MessageAt(
+            "mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 259 /* ARTIST 0x8257C208 */));
 
         lxResult |= CgsNetwork::Message::PackOrUnpackBuffer(reinterpret_cast<char*>(macPhotoBuffer),
                                                    mu16NumberOfBytesOfPhotoData);
@@ -210,13 +212,27 @@ namespace BrnNetwork
                                 u16* lpu16TotalPacketCount, u16* lpu16NumberOfBytes,
                                 void* lpvPhotoData)
     {
-        CGS_ASSERT(lpSenderPlayerID, "lpImageSenderPlayerID");
-        CGS_ASSERT(lpReceiverPlayerID, "lpImageReceiverPlayerID");
-        CGS_ASSERT(lpu16PacketNumber, "lpu16PhotoPacketNumber");
-        CGS_ASSERT(lpu16TotalPacketCount, "lpu16TotalPhotoPacketCount");
-        CGS_ASSERT(lpu16NumberOfBytes, "lpu16NumberOfBytesOfPhotoData");
-        CGS_ASSERT(lpvPhotoData, "lpPhotoData");
-        CGS_ASSERT(lpBeatenRoadID, "lpBeatenRoadID");
+        CGS_ASSERT(lpSenderPlayerID, CgsDev::Assert::MessageAt(
+            "lpImageSenderPlayerID",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 173 /* ARTIST 0x8257F0C8 */));
+        CGS_ASSERT(lpReceiverPlayerID, CgsDev::Assert::MessageAt(
+            "lpImageReceiverPlayerID",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 174 /* ARTIST 0x8257F0EC */));
+        CGS_ASSERT(lpu16PacketNumber, CgsDev::Assert::MessageAt(
+            "lpu16PhotoPacketNumber",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 175 /* ARTIST 0x8257F110 */));
+        CGS_ASSERT(lpu16TotalPacketCount, CgsDev::Assert::MessageAt(
+            "lpu16TotalPhotoPacketCount",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 176 /* ARTIST 0x8257F134 */));
+        CGS_ASSERT(lpu16NumberOfBytes, CgsDev::Assert::MessageAt(
+            "lpu16NumberOfBytesOfPhotoData",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 177 /* ARTIST 0x8257F158 */));
+        CGS_ASSERT(lpvPhotoData, CgsDev::Assert::MessageAt(
+            "lpPhotoData",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 178 /* ARTIST 0x8257F180 */));
+        CGS_ASSERT(lpBeatenRoadID, CgsDev::Assert::MessageAt(
+            "lpBeatenRoadID",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 179 /* ARTIST 0x8257F1A4 */));
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {
@@ -228,14 +244,16 @@ namespace BrnNetwork
             *lpu16TotalPacketCount = mu16TotalPhotoPacketCount;
             *lpu16NumberOfBytes  = mu16NumberOfBytesOfPhotoData;
 
-            CGS_ASSERT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE,
-                       "mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE");
+            CGS_ASSERT(mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE, CgsDev::Assert::MessageAt(
+                "mu16NumberOfBytesOfPhotoData <= KI_PHOTO_SEGMENT_SIZE",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 193 /* ARTIST 0x8257F214 */));
 
-            std::memcpy(lpvPhotoData, macPhotoBuffer, mu16NumberOfBytesOfPhotoData);
+            XMemCpy(lpvPhotoData, macPhotoBuffer, mu16NumberOfBytesOfPhotoData);
 
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-                       "!CgsNetwork::ReliableMessage::IsMessageValid()");
+            CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+                "!CgsNetwork::ReliableMessage::IsMessageValid()",
+                "..\\..\\..\\GameSource\\Network/Messages/BrnImageMessage.cpp", 200 /* ARTIST 0x8257F258 */));
             return true;
         }
 

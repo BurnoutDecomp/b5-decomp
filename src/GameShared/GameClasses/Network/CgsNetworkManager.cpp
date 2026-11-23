@@ -28,9 +28,12 @@ namespace CgsNetwork
     // staged state machines and register the per-sub-manager CPU monitors.
     void NetworkManager::Construct(NetworkManagerConstructParams* lpConstructParams)
     {
-        CGS_ASSERT(lpConstructParams, "lpConstructParams");
-        CGS_ASSERT(lpConstructParams->GetPlayerManagerConstructParams(),
-                   "lpConstructParams->GetPlayerManagerConstructParams()");
+        CGS_ASSERT(lpConstructParams, CgsDev::Assert::MessageAt(
+            "lpConstructParams",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\CgsNetworkManager.cpp", 47 /* ARTIST 0x8289B37C */));
+        CGS_ASSERT(lpConstructParams->GetPlayerManagerConstructParams(), CgsDev::Assert::MessageAt(
+            "lpConstructParams->GetPlayerManagerConstructParams()",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\CgsNetworkManager.cpp", 48 /* ARTIST 0x8289B3A4 */));
 
         // FLAG: the adapter's declared parameter is not a console argument (the call passes
         // none); 0 is inert until that declaration drops it.

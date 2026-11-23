@@ -14,6 +14,7 @@
 // ===================================================================================
 
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeClient.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeBase.h"      // SyncTimeMessageManager
 #include "GameShared/GameClasses/Network/Time/CgsSyncTimeMessage.h"   // SyncTimeMessage
@@ -38,11 +39,16 @@ namespace CgsNetwork
     void
     SyncTimeClient::Construct(PlayerManager* lpPlayerManager, SyncTimeMessageManager* lpMessageManager)
     {
-        CGS_ASSERT(lpPlayerManager != 0, "lpPlayerManager");
-        CGS_ASSERT(lpMessageManager != 0, "lpMessageManager");
+        CGS_ASSERT(lpPlayerManager != 0, CgsDev::Assert::MessageAt(
+            "lpPlayerManager",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeClient.cpp", 70 /* ARTIST 0x8287D1FC */));
+        CGS_ASSERT(lpMessageManager != 0, CgsDev::Assert::MessageAt(
+            "lpMessageManager",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeClient.cpp", 71 /* ARTIST 0x8287D220 */));
 
-        mpSyncTimeMessageManager = lpMessageManager;   // *v4    = a3
-        mpPlayerManager          = lpPlayerManager;     // v4[1]  = a2
+        // ARTIST 0x8287D22C stores the player manager (+4) before the message manager (+0).
+        mpPlayerManager          = lpPlayerManager;     // +4
+        mpSyncTimeMessageManager = lpMessageManager;   // +0
         mHostPlayerID            = KI_INVALID_PLAYER_ID; // v4[2] = -1
     }
 

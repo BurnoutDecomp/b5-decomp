@@ -71,20 +71,30 @@ void NetworkAdapterBase::Construct()
 // one-packet receive buffer.
 NetworkAdapterBase::ENetworkStatus NetworkAdapterBase::Prepare(NetworkAdapterPrepareParams* lpPrepareParams)
 {
-    CGS_ASSERT(lpPrepareParams, "lpPrepareParams");
+    CGS_ASSERT(lpPrepareParams, CgsDev::Assert::MessageAt(
+        "lpPrepareParams",
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp", 84 /* ARTIST 0x82870F10 */));
 
     meServerType      = static_cast<EServerType>(lpPrepareParams->meServerType);
     mpNetworkManager  = lpPrepareParams->mpNetworkManager;
     mbDuplicateLogin  = false;
     mpServerInterface = lpPrepareParams->mpServerInterface;
     mpHeapMalloc      = static_cast<CgsMemory::HeapMalloc*>(lpPrepareParams->mpHeapMalloc);
-    CGS_ASSERT(mpHeapMalloc, "mpHeapMalloc");
+    CGS_ASSERT(mpHeapMalloc, CgsDev::Assert::MessageAt(
+        "mpHeapMalloc",
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp", 92 /* ARTIST 0x82870F5C */));
 
     mpRecvBuffer = static_cast<u8*>(mpHeapMalloc->Malloc(static_cast<s32>(sizeof(NetGamePacketT)), 4));
 
-    CGS_ASSERT(mpNetworkManager, "mpNetworkManager");
-    CGS_ASSERT(mpServerInterface, "mpServerInterface");
-    CGS_ASSERT(mpRecvBuffer, "mpRecvBuffer");
+    CGS_ASSERT(mpNetworkManager, CgsDev::Assert::MessageAt(
+        "mpNetworkManager",
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp", 96 /* ARTIST 0x82870F98 */));
+    CGS_ASSERT(mpServerInterface, CgsDev::Assert::MessageAt(
+        "mpServerInterface",
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp", 97 /* ARTIST 0x82870FC0 */));
+    CGS_ASSERT(mpRecvBuffer, CgsDev::Assert::MessageAt(
+        "mpRecvBuffer",
+        "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp", 98 /* ARTIST 0x82870FE8 */));
     return E_NET_STATUS_READY;
 }
 
@@ -97,7 +107,9 @@ bool NetworkAdapterBase::Release()
 
     if (mpRecvBuffer != 0)
     {
-        CGS_ASSERT(mpHeapMalloc, "mpHeapMalloc");
+        CGS_ASSERT(mpHeapMalloc, CgsDev::Assert::MessageAt(
+            "mpHeapMalloc",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp", 135 /* ARTIST 0x8287105C */));
         mpHeapMalloc->Free(mpRecvBuffer);
         mpRecvBuffer = 0;
     }

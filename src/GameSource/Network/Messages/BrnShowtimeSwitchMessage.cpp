@@ -65,13 +65,16 @@ namespace BrnNetwork
 
     bool ShowtimeSwitchMessage::Retrieve(s32* lpiFinalShowtimeScore, bool* lpbEnteringShowtime)
     {
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
-
-        *lpiFinalShowtimeScore = miFinalShowtimeScore;
-        *lpbEnteringShowtime   = mbEnteringShowtime;
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        return true;
+        // ARTIST 0x8257F8F0 branches to a trailing `return false` (0x8257F918): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpiFinalShowtimeScore = miFinalShowtimeScore;
+            *lpbEnteringShowtime   = mbEnteringShowtime;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            return true;
+        }
+        return false;
     }
 
     // An older message is still accepted (slot 1 is the shared `return true` leaf).

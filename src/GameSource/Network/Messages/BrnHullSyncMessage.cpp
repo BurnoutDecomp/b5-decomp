@@ -99,17 +99,20 @@ namespace BrnNetwork
 
     bool HullSyncMessage::Retrieve(BufferedHullsToActivate* laBufferedHullActivates)
     {
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
+        // ARTIST 0x8257DD74 branches to a trailing `return false` (0x8257DE5C): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *laBufferedHullActivates = mBufferedHullActivates;      // 48-byte memcpy out
+            CGS_ASSERT(mBufferedHullActivates.GetLength() > 0,
+                       "maBufferedHullActivates.GetLength() > 0");
 
-        *laBufferedHullActivates = mBufferedHullActivates;      // 48-byte memcpy out
-        CGS_ASSERT(mBufferedHullActivates.GetLength() > 0,
-                   "maBufferedHullActivates.GetLength() > 0");
-
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        mBufferedHullActivates.Clear();                          // live-count -> 0 (+0x54)
-        CGS_ASSERT(mBufferedHullActivates.GetLength() == 0,
-                   "maBufferedHullActivates.GetLength() == 0");
-        return true;
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            mBufferedHullActivates.Clear();                          // live-count -> 0 (+0x54)
+            CGS_ASSERT(mBufferedHullActivates.GetLength() == 0,
+                       "maBufferedHullActivates.GetLength() == 0");
+            return true;
+        }
+        return false;
     }
 }

@@ -141,10 +141,7 @@ namespace CgsNetwork
         mpFindUser        = 0;                        // +0x1C
         mpStatbook        = 0;                        // +0x20
         miEventCallback   = -1;                       // +0x24
-        mbUseCachedAccountSettings = false;           // +0x28: asm zeroes all four flag bytes (one stw)
-        mbAgreeToShareInfoEA       = false;
-        mbAgreeToShareInfoPartners = false;
-        mbTelemetryEnable          = false;
+        mpXUID = 0;                                   // +0x28 (one stw)
     }
 
     // -----------------------------------------------------------------------------------
@@ -158,11 +155,8 @@ namespace CgsNetwork
         mpPlayerInfo      = 0;                         // +0x18
         mpFindUser        = 0;                         // +0x1C
         mpStatbook        = 0;                         // +0x20
+        mpXUID            = 0;                         // +0x28 (ARTIST 0x82878BE0 stores it before +0x24)
         miEventCallback   = -1;                        // +0x24
-        mbUseCachedAccountSettings = false;            // +0x28: asm zeroes all four flag bytes (one stw)
-        mbAgreeToShareInfoEA       = false;
-        mbAgreeToShareInfoPartners = false;
-        mbTelemetryEnable          = false;
     }
 
     // -----------------------------------------------------------------------------------
@@ -172,23 +166,30 @@ namespace CgsNetwork
     // -----------------------------------------------------------------------------------
     bool ServerInterfacePlayerInfo::Prepare(ServerInterfaceDirtySock* lpServerInterface)
     {
-        CGS_ASSERT(miEventCallback == -1, "miEventCallback == -1");
-        CGS_ASSERT(!mpFindUser, "!mpFindUser");
-        CGS_ASSERT(!mpStatbook, "!mpStatbook");
+        CGS_ASSERT(miEventCallback == -1, CgsDev::Assert::MessageAt(
+            "miEventCallback == -1",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerInfo.cpp", 265 /* ARTIST 0x82888444 */));
+        CGS_ASSERT(!mpFindUser, CgsDev::Assert::MessageAt(
+            "!mpFindUser",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerInfo.cpp", 266 /* ARTIST 0x8288846C */));
+        CGS_ASSERT(!mpStatbook, CgsDev::Assert::MessageAt(
+            "!mpStatbook",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerInfo.cpp", 267 /* ARTIST 0x82888494 */));
 
         mpServerInterface = lpServerInterface;
         mpPlayerInfo      = 0;
         meCurrentAction   = E_ACTION_COUNT;
-        mbUseCachedAccountSettings = false;   // +0x28: asm zeroes all four flag bytes (one stw)
-        mbAgreeToShareInfoEA       = false;
-        mbAgreeToShareInfoPartners = false;
-        mbTelemetryEnable          = false;
+        mpXUID = 0;                                   // +0x28 (one stw)
 
         mpFindUser = LobbyFindUserCreate(mpServerInterface->GetLobbyAPIRef());
-        CGS_ASSERT(mpFindUser, "mpFindUser");
+        CGS_ASSERT(mpFindUser, CgsDev::Assert::MessageAt(
+            "mpFindUser",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerInfo.cpp", 277 /* ARTIST 0x828884DC */));
 
         mpStatbook = LobbyStatbookCreate(mpServerInterface->GetLobbyAPIRef(), 1);
-        CGS_ASSERT(mpStatbook, "mpStatbook");
+        CGS_ASSERT(mpStatbook, CgsDev::Assert::MessageAt(
+            "mpStatbook",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfacePlayerInfo.cpp", 280 /* ARTIST 0x82888514 */));
 
         miEventCallback = LobbyApiSetCallback(mpServerInterface->GetLobbyAPIRef(), 4,
                                               &ServerInterfacePlayerInfo::EventStatusCallback,
@@ -223,10 +224,7 @@ namespace CgsNetwork
 
         mpServerInterface = 0;
         mpPlayerInfo      = 0;
-        mbUseCachedAccountSettings = false;   // +0x28: asm zeroes all four flag bytes (one stw)
-        mbAgreeToShareInfoEA       = false;
-        mbAgreeToShareInfoPartners = false;
-        mbTelemetryEnable          = false;
+        mpXUID = 0;                                   // +0x28 (one stw)
         meCurrentAction   = E_ACTION_COUNT;
         return true;
     }

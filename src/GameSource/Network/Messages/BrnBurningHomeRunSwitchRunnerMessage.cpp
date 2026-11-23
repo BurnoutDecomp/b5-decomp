@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/Messages/BrnBurningHomeRunSwitchRunnerMessage.h"
 #include "GameSource/Network/BrnNetworkManager.h"
@@ -73,13 +74,18 @@ namespace BrnNetwork
     // flag is set, then clears it. Returns whether anything was retrieved.
     bool BurningHomeRunSwitchRunnerMessage::Retrieve(NetworkPlayerID* lpNewRunnerID)
     {
-        CGS_ASSERT(lpNewRunnerID != 0, "lpNewRunnerID");
+        CGS_ASSERT(lpNewRunnerID != 0, CgsDev::Assert::MessageAt(
+            "lpNewRunnerID",
+            "..\\..\\..\\GameSource\\Network/Messages/BrnBurningHomeRunSwitchRunnerMessage.cpp", 98 /* ARTIST 0x8257F2E4 */));
 
-        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
-            return false;
-
-        *lpNewRunnerID = mNewRunnerID;   // *a2 = *(+0x28)
-        mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
-        return true;
+        // ARTIST 0x8257F2F8 branches to a trailing `return false` (0x8257F318): the copy-out is the body
+        // of the valid test.
+        if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
+        {
+            *lpNewRunnerID = mNewRunnerID;   // *a2 = *(+0x28)
+            mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
+            return true;
+        }
+        return false;
     }
 }

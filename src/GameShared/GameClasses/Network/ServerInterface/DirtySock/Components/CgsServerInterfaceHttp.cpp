@@ -207,7 +207,9 @@ namespace CgsNetwork
 
     void ServerInterfaceHttp::EndAction(s32 liError)
     {
-        CGS_ASSERT(meCurrentAction != E_ACTION_COUNT, "Trying to end an action when not doing anything\n");
+        CGS_ASSERT(meCurrentAction != E_ACTION_COUNT, CgsDev::Assert::MessageAt(
+            "Trying to end an action when not doing anything",
+            "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceHttp.cpp", 414 /* ARTIST 0x8287AB10 */));
 
         const DSErrorToServerInterfaceErrorTable& lrTable = KA_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
         ServerInterfaceComponent::EndActionCore(

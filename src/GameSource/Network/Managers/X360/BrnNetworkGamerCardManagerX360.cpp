@@ -14,6 +14,7 @@
 // ===================================================================================
 
 #include "GameSource/Network/Managers/X360/BrnNetworkGamerCardManagerX360.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/BrnServerInterface.h"  // BrnServerInterface::GetPlayerInfoComponent / GetGameComponent
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfo.h" // ServerInterfacePlayerInfo (GetStatus / GetLastError / ClearLastError)
@@ -293,9 +294,12 @@ namespace BrnNetwork
     // wait-for-sign-in sub-state.
     s32 NetworkGamerCardManagerX360::ActionShowGamercardUI()
     {
-        CGS_ASSERT(muRequestingControllerPort != KU_NUMBER_OF_PADS,
-                   "muRequestingControllerPort != CgsInput::KU_NUMBER_OF_PADS");
-        CGS_ASSERT(mRequestedGamerCardXUID != 0, "mRequestedGamerCardXUID != 0");
+        CGS_ASSERT(muRequestingControllerPort != KU_NUMBER_OF_PADS, CgsDev::Assert::MessageAt(
+            "muRequestingControllerPort != CgsInput::KU_NUMBER_OF_PADS",
+            "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerCardManagerX360.cpp", 499 /* ARTIST 0x8254CE68 */));
+        CGS_ASSERT(mRequestedGamerCardXUID != 0, CgsDev::Assert::MessageAt(
+            "mRequestedGamerCardXUID != 0",
+            "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerCardManagerX360.cpp", 500 /* ARTIST 0x8254CE90 */));
 
         // The X360 sets up only two arg registers: r3 = the controller/user-index member
         // (lwz r3, 0x80(r30)) and r4 = the full 64-bit requested XUID (ld r4, 0x78(r30)).

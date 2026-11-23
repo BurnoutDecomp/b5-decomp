@@ -477,7 +477,9 @@ namespace BrnNetwork
                                                        static_cast<s32>(sizeof(lEvent)));
 
         mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lPlayerID);
-        CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+            "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStateManager.cpp", 4481 /* ARTIST 0x82569F88 */));
 
         if (mpNetworkManager->GetPlayerManager()->GetHostPlayerID() == lPlayerID)
         {
@@ -513,7 +515,9 @@ namespace BrnNetwork
             {
                 PlayerMenuData* lpMenuData =
                     static_cast<PlayerMenuData*>(mpNetworkManager->GetPlayerManager()->GetMenuDataByID(lPlayerID));
-                CGS_ASSERT(lpMenuData, "lpMenuData");
+                CGS_ASSERT(lpMenuData, CgsDev::Assert::MessageAt(
+                    "lpMenuData",
+                    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStateManager.cpp", 3730 /* ARTIST 0x8256ECC8 */));
 
                 lpMenuData->mCarId               = 0;
                 lpMenuData->mWheelId             = 0;
@@ -532,9 +536,12 @@ namespace BrnNetwork
                 SuspendToLeaveGame(E_LEFT_GAME_REASON_LEFT, CgsNetwork::E_KICKREASON_COUNT);
             }
 
-            CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
-            CGS_ASSERT(mpNetworkModule->GetGameStateToNetworkInterface(),
-                       "mpNetworkModule->GetGameStateToNetworkInterface()");
+            CGS_ASSERT(mpNetworkModule, CgsDev::Assert::MessageAt(
+                "mpNetworkModule",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStateManager.cpp", 3755 /* ARTIST 0x8256ED74 */));
+            CGS_ASSERT(mpNetworkModule->GetGameStateToNetworkInterface(), CgsDev::Assert::MessageAt(
+                "mpNetworkModule->GetGameStateToNetworkInterface()",
+                "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStateManager.cpp", 3756 /* ARTIST 0x8256EDA0 */));
 
             if (!GsmIO::IsOnlineFreeBurnLobby(mpNetworkModule->GetGameStateToNetworkInterface()->GetCurrentGameMode()))
             {
