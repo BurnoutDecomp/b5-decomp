@@ -2,8 +2,8 @@
 // rw::audio::core::Pan2D bodies -- the surround spatial panner plug-in.
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is
-// authoritative for every store/branch. No LegacySrc reference source, no DecFIGS DWARF, and no
-// ProStreet08 PDB entry exist for this type -- see Pan2D.h for the byte-exact layout and
+// authoritative for every store/branch. The Xbox 360 audio PDB and MAP corroborate the
+// private speaker setup declarations. See Pan2D.h for the layout and
 // the per-function ARTIST addresses. Every body is a branch-for-branch / store-for-store
 // equivalent of the disassembly; the compiler register-save/restore thunks
 // (_savefpr_2x / _savegprlr_2x / _restfpr_2x / _restgprlr_2x) are pure prologue/epilogue
@@ -92,50 +92,50 @@ char **Pan2D::GetPlugInDescRunTime()
 //   det = 1 / (cos(angleB)*sin(angleA) - sin(angleB)*cos(angleA))
 //   m[0] =  det*cos(angleB);  m[1] = -det*sin(angleB)
 //   m[2] = -det*cos(angleA);  m[3] =  det*sin(angleA)
-// (sin/cos are double library calls narrowed to single per store, matching the frsp asm.)
+// The XDK float sin/cos overloads call the double CRT routines and round the results
+// to single precision, as at 0x82B98528..0x82B98560.
 // -------------------------------------------------------------------------------------
-void Pan2D::ComputeTransform(Pan2D *self, int sector, f64 angleA, f64 angleB)
+void Pan2D::ComputeTransform(int sector, f32 angleA, f32 angleB)
 {
-    const f32 sinA = static_cast<f32>(sin(angleA));
-    const f32 cosA = static_cast<f32>(cos(angleA));
-    const f32 sinB = static_cast<f32>(sin(angleB));
-    const f32 cosB = static_cast<f32>(cos(angleB));
+    const f32 sinA = std::sin(angleA);
+    const f32 cosA = std::cos(angleA);
+    const f32 sinB = std::sin(angleB);
+    const f32 cosB = std::cos(angleB);
 
     const f32 det = 1.0f / ((cosB * sinA) - (sinB * cosA));
 
-    self->mfSectorMatrix[sector][0] =  det * cosB; // +0x7C
-    self->mfSectorMatrix[sector][1] = -(det * sinB); // +0x80
-    self->mfSectorMatrix[sector][2] = -(det * cosA); // +0x84
-    self->mfSectorMatrix[sector][3] =  det * sinA; // +0x88
+    mfSectorMatrix[sector][0] =  det * cosB; // +0x7C
+    mfSectorMatrix[sector][1] = -(det * sinB); // +0x80
+    mfSectorMatrix[sector][2] = -(det * cosA); // +0x84
+    mfSectorMatrix[sector][3] =  det * sinA; // +0x88
 }
 
 // -------------------------------------------------------------------------------------
 // SpeakerConfig @0x82B985D0 -- derive the speaker geometry from the (configured or default)
 // front/rear half-angles, then build the four per-sector rotation matrices.
 // -------------------------------------------------------------------------------------
-int Pan2D::SpeakerConfig(Pan2D *self)
+void Pan2D::SpeakerConfig()
 {
     f32 spreadRad;
-    if (self->mbHasConfig)
+    if (mbHasConfig)
     {
-        self->mfSpeakerAngle = self->mfConfigAzimuth * KF_DEG2RAD; // +0x6C
-        spreadRad            = self->mfConfigSpread * KF_DEG2RAD;
+        mfSpeakerAngle = mfConfigAzimuth * KF_DEG2RAD; // +0x6C
+        spreadRad      = mfConfigSpread * KF_DEG2RAD;
     }
     else
     {
-        self->mfSpeakerAngle = KF_PAN2D_DEFAULT_AZIMUTH * KF_DEG2RAD;
-        spreadRad            = KF_PAN2D_DEFAULT_SPREAD * KF_DEG2RAD;
+        mfSpeakerAngle = KF_PAN2D_DEFAULT_AZIMUTH * KF_DEG2RAD;
+        spreadRad      = KF_PAN2D_DEFAULT_SPREAD * KF_DEG2RAD;
     }
-    self->mfSpeakerAngle2 = spreadRad; // +0x70
+    mfSpeakerAngle2 = spreadRad; // +0x70
 
-    self->mfFrontWidth = static_cast<f32>(cos(self->mfSpeakerAngle)) * 2.0f;              // +0x74
-    self->mfRearWidth  = static_cast<f32>(cos(KF_PI - self->mfSpeakerAngle2)) * 2.0f;     // +0x78
+    mfFrontWidth = static_cast<f32>(cos(mfSpeakerAngle)) * 2.0f;              // +0x74
+    mfRearWidth  = static_cast<f32>(cos(KF_PI - mfSpeakerAngle2)) * 2.0f;     // +0x78
 
-    ComputeTransform(self, 0, -self->mfSpeakerAngle,  self->mfSpeakerAngle);
-    ComputeTransform(self, 1,  self->mfSpeakerAngle,  self->mfSpeakerAngle2);
-    ComputeTransform(self, 2,  self->mfSpeakerAngle2, -self->mfSpeakerAngle2);
-    ComputeTransform(self, 3, -self->mfSpeakerAngle2, -self->mfSpeakerAngle);
-    return 1; // (dead: the X360 tail-returns the last ComputeTransform; the sole caller ignores it)
+    ComputeTransform(0, -mfSpeakerAngle,  mfSpeakerAngle);
+    ComputeTransform(1,  mfSpeakerAngle,  mfSpeakerAngle2);
+    ComputeTransform(2,  mfSpeakerAngle2, -mfSpeakerAngle2);
+    ComputeTransform(3, -mfSpeakerAngle2, -mfSpeakerAngle);
 }
 
 // -------------------------------------------------------------------------------------
@@ -143,24 +143,21 @@ int Pan2D::SpeakerConfig(Pan2D *self)
 // level set: front L/R share one gain, rear L/R share one gain, and (6-ch only) the centre
 // carries the spread level; all normalised to unit power.
 // -------------------------------------------------------------------------------------
-Pan2D *Pan2D::ComputeZeroRadiusLevels(Pan2D *self)
+void Pan2D::ComputeZeroRadiusLevels()
 {
     f32 centre = 0.0f;
-    if (self->mBase.mbChannelCount == 6)
-        centre = self->mfSpread; // +0x38
+    if (mBase.mbChannelCount == 6)
+        centre = mfSpread; // +0x38
 
-    const f32 rear  = 1.0f / self->mfRearWidth;                 // +0x78
-    const f32 front = (1.0f - centre) / self->mfFrontWidth;     // +0x74
+    const f32 front = (1.0f - centre) / mfFrontWidth;     // +0x74
+    const f32 rear  = 1.0f / mfRearWidth;                 // +0x78
 
-    const f32 norm = 1.0f /
-        sqrtf((centre * centre) + (((rear * rear) * 2.0f) + ((front * front) * 2.0f)));
+    const f32 pairPower = ((front * front) * 2.0f) + ((rear * rear) * 2.0f);
+    const f32 norm = 1.0f / sqrtf(pairPower + (centre * centre));
 
-    self->mfZeroRadiusLevel[0] = norm * front; // +0xBC
-    self->mfZeroRadiusLevel[1] = norm * front; // +0xC0
-    self->mfZeroRadiusLevel[2] = norm * rear;  // +0xC4
-    self->mfZeroRadiusLevel[3] = norm * rear;  // +0xC8
-    self->mfZeroRadiusLevel[4] = norm * centre; // +0xCC
-    return self;
+    mfZeroRadiusLevel[0] = mfZeroRadiusLevel[1] = norm * front;
+    mfZeroRadiusLevel[2] = mfZeroRadiusLevel[3] = norm * rear;
+    mfZeroRadiusLevel[4] = norm * centre;
 }
 
 // -------------------------------------------------------------------------------------
@@ -333,7 +330,7 @@ int Pan2D::Process(Pan2D *self, AudioProcessContext *ctx, char recompute)
 {
     if (recompute)
     {
-        ComputeZeroRadiusLevels(self);
+        self->ComputeZeroRadiusLevels();
         ComputeLevels(self);
     }
 
@@ -380,7 +377,7 @@ int Pan2D::Process(Pan2D *self, AudioProcessContext *ctx, char recompute)
     {
         // Slow path: an input changed -- recompute and de-click-ramp from the old levels.
         if (spread != self->mfLastSpread)
-            ComputeZeroRadiusLevels(self);
+            self->ComputeZeroRadiusLevels();
 
         f32 oldLevel[6];
         if (channels)
@@ -439,7 +436,7 @@ int Pan2D::CreateInstance(Pan2D *self, const f32 *pConfig)
     self->mfLastGain       = 1.0f; // +0x5C
     self->mfGain           = 1.0f; // +0x40
 
-    SpeakerConfig(self);
+    self->SpeakerConfig();
     return 1;
 }
 

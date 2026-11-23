@@ -10,9 +10,8 @@
 // the simpler Pan2D1 stereo panner in this same directory.
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC); the asm is
-// authoritative for every member offset. There is NO LegacySrc reference source, NO DecFIGS DWARF,
-// and NO ProStreet08 rwaudio PDB entry for this TU, so each offset below is grounded directly
-// in the disassembly of the bodied member functions:
+// authoritative for member offsets. The Xbox 360 audio PDB and MAP corroborate the
+// layout and the private speaker setup methods:
 //   GetSize                 @0x82B982C0 -> 240 (0xF0)
 //   GetPlugInDescRunTime    @0x82B984E8 -> the registered "Pan2D" descriptor
 //   ComputeTransform        @0x82B984F8
@@ -33,7 +32,7 @@
 // per-channel bound) lives in mBase.mbChannelCount (+0x21).
 // =====================================================================================
 
-#include "types.hpp" // f32, f64, u8, u16, s32
+#include "types.hpp" // f32, u8, u16, s32
 #include "rw/audio/core/Iir2Filters.h" // PlugInBaseView / AudioProcessContext / AudioChannelBuffer
 
 namespace rw
@@ -61,10 +60,6 @@ public:
     static int    GetSize();                                                 // @0x82B982C0 -> 240
     static char **GetPlugInDescRunTime();                                    // @0x82B984E8
     static int    CreateInstance(Pan2D *self, const f32 *pConfig);           // @0x82BA34A0
-    static int    SpeakerConfig(Pan2D *self);                                // @0x82B985D0
-    static void   ComputeTransform(Pan2D *self, int sector,
-                                   f64 angleA, f64 angleB);                  // @0x82B984F8
-    static Pan2D *ComputeZeroRadiusLevels(Pan2D *self);                      // @0x82B99930
     static void   ComputeLevels(Pan2D *self);                               // @0x82B999B0
     static int    RampPanOutput(Pan2D *self, AudioChannelBuffer *dstBuffer,
                                 AudioChannelBuffer *srcBuffer,
@@ -101,13 +96,17 @@ public:
     f32        mfRearWidth;                  // +0x78 -- 2*cos(PI - mfSpeakerAngle2)
     // ---- four 2x2 per-sector rotation matrices (ComputeTransform) ----
     f32        mfSectorMatrix[4][4];         // +0x7C .. +0xBB
-    // ---- omnidirectional per-channel levels (ComputeZeroRadiusLevels; 5 spatial) ----
-    f32        mfZeroRadiusLevel[5];         // +0xBC .. +0xCF
-    char       mPadD0[0xD4 - 0xD0];          // +0xD0 (unused slot)
+    // The audio PDB declares six levels at +0xBC. ARTIST 0x82B99930 sets the five spatial levels.
+    f32        mfZeroRadiusLevel[6];         // +0xBC .. +0xD3
     // ---- final per-output-channel levels (ComputeLevels; [0..4] spatial, [5] LFE) ----
     f32        mfLevel[6];                    // +0xD4 .. +0xEB
     u8         mbHasConfig;                   // +0xEC -- an explicit speaker config was supplied
     char       mPadED[0xF0 - 0xED];           // +0xED (X360 sizeof 0xF0 == 240; GetSize is hard-coded)
+
+private:
+    void SpeakerConfig();                                // @0x82B985D0
+    void ComputeTransform(int sector, f32 angleA, f32 angleB); // @0x82B984F8
+    void ComputeZeroRadiusLevels();                       // @0x82B99930
 };
 
 // NB: the +0xNN annotations above are the X360 (32-bit-pointer) offsets from the ARTIST asm
