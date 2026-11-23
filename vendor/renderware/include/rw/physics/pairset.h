@@ -67,7 +67,7 @@ public:
     static PairSet* Initialize(void** lpMemory, int liNumParts, int liMaxPairs);
 
     // ClearAll @ 0x82BC6DC0 -- resets the buckets and rebuilds the free list.
-    PairSet* ClearAll();
+    void ClearAll();
 
     // LinkParts @ 0x82BC6F18 -- join two parts with a free pair and store its flags.
     // Returns the pair index or KU_INVALID_INDEX if the pool is full.

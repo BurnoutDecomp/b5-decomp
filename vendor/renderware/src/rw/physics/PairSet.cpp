@@ -85,7 +85,7 @@ rw::BaseResourceDescriptors<5>* PairSet::GetResourceDescriptor(
 // ⚠️ THE FREE LIST IS THREADED IN PAIR UNITS, NOT LINK UNITS. `v3[2] = v1` writes the
 // POST-incremented counter, so pair p points at p+1 in the pair pool.
 // -------------------------------------------------------------------------------------
-PairSet* PairSet::ClearAll()
+void PairSet::ClearAll()
 {
     if (miMaxPairs != 0u)
     {
@@ -105,7 +105,6 @@ PairSet* PairSet::ClearAll()
 
     for (u32 luPart = 0u; luPart < miNumParts; ++luPart)
         mpHeads[luPart] = KU_INVALID_INDEX;
-    return this;
 }
 
 // -------------------------------------------------------------------------------------
@@ -132,7 +131,8 @@ PairSet* PairSet::Initialize(void** lpMemory, int liNumParts, int liMaxPairs)
     lpSet->mpHeads    = reinterpret_cast<u32*>(
         lpBlock + sizeof(PairSet) + 2 * sizeof(Link) * static_cast<u32>(liMaxPairs));
 
-    return lpSet->ClearAll();
+    lpSet->ClearAll();
+    return lpSet;
 }
 
 // -------------------------------------------------------------------------------------
