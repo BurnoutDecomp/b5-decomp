@@ -95,9 +95,10 @@ ResourceRegistrar& BrnEffectControl::GetResourceRegistrar()
 // ---------------------------------------------------------------------------
 bool BrnEffectControl::Detach()
 {
+    // UnloadData (inlined, BrnResourceRegistrar.h), then the base detach, which clears
+    // mbHasLoadedData itself: ARTIST stores +0x2D once.
     if (mbHasLoadedData)
-        GetResourceRegistrar().RemoveRequests(static_cast<IResourceRequester*>(this));
-    mbHasLoadedData = false;
+        UnloadData();
     // meDetachState = E_DETACH_STATE_FINISHED; meAttachState = E_ATTACH_STATE_NONE --
     // the console's two stores, which is exactly what the shared base does. Same expression
     // as the sibling BrnEffectObject::Detach, whose X360 body is identical.

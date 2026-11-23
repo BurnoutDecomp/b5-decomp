@@ -323,6 +323,16 @@ namespace Logic
         // bundle-less resources such as PRP_PHYSICS_.
         CgsResource::ResourceHandle GetAsset(const char* lpcFilename,
                                              const char* lpcResourceName);
+
+        // DWARF: declared with its body at BrnResourceRegistrar.cpp:1116 (PS3: the
+        // registrar's RemoveRequests for this requester). It shares the console's sound unity
+        // unit with its callers; ARTIST keeps no out-of-line copy and inlines it into
+        // BrnEffectObject::Detach (0x826EBFAC: the requester pointer, its vtable, slot 1), so
+        // the body is here where those units can see it.
+        void UnloadData()
+        {
+            GetResourceRegistrar().RemoveRequests(this);
+        }
     };
 }
 }

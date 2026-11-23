@@ -4,7 +4,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Sound/Logic/CgsClassTypeInfo.h"  // ClassTypeInfo<T> (canonical)
 #include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Sound/BrnResourceRegistrar.h"   // BrnSound::Logic::IResourceRequester + ResourceRegistrar (canonical home)
 
 // =============================================================================
@@ -63,7 +63,9 @@ struct BrnEffectObject : public IResourceRequester,
         //   stw 2, +0x24   (meAttachState = E_ATTACH_STATE_PREPARING)
         mbHasLoadedData = true;
         CGS_ASSERT(GetAttachState() == CgsSound::Logic::EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA,
-                   "GetAttachState() == E_ATTACH_STATE_WAITING_FOR_DATA");
+            CgsDev::Assert::MessageAt("GetAttachState() == E_ATTACH_STATE_WAITING_FOR_DATA",
+                "..\\..\\..\\GameSource\\Sound/Module/LogicModule/BrnEffectObject.h",
+                142 /* ARTIST 0x826967A8 */));
         meAttachState = CgsSound::Logic::EffectBase::E_ATTACH_STATE_PREPARING;
     }
 
@@ -78,9 +80,10 @@ struct BrnEffectObject : public IResourceRequester,
     // called directly through IResourceRequester (boost/crumple do this).
     virtual bool Detach()
     {
+        // PS3 BrnEffectObject::Detach: UnloadData, then the base detach, which clears
+        // mbHasLoadedData itself (ARTIST stores +0x2D once).
         if (mbHasLoadedData)
-            GetResourceRegistrar().RemoveRequests(static_cast<IResourceRequester*>(this));
-        mbHasLoadedData = false;
+            UnloadData();
         return CgsSound::Logic::EffectBase::Detach();
     }
 
