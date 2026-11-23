@@ -548,7 +548,7 @@ namespace BrnGame
                         CgsGui::GuiEventControllerInputPressed lEvent;
                         lEvent.miPadId = 0;
                         lEvent.miButtonId = liActionId;
-                        CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+                        mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
                         lbAccepted = true;
                         break;
                     }
@@ -563,7 +563,7 @@ namespace BrnGame
         {
             CgsGui::GuiEventActiveUserIndex lEvent;
             lEvent.miActiveUserIndex = (lpPad->meControllerState != 0) ? liActiveUserIndex : -1;
-            CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
         }
 
         // Toggle-change-car message: 53 GUI_OPTION2 *pressed* while 55 GUI_RSHOULDER is *held*
@@ -580,7 +580,7 @@ namespace BrnGame
             // uninitialised -- the record must not carry stack garbage into the queue.
             BrnGui::GuiEventToggleChangeCarMessage lEvent;
             lEvent.maData[0] = 0;
-            CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
         }
 
         // ---- Front-end menu-accept early-out: THREE arms, in this order --------------------------
@@ -605,7 +605,7 @@ namespace BrnGame
                 CgsGui::GuiEventControllerInputPressed lEvent;
                 lEvent.miPadId = 0;
                 lEvent.miButtonId = KI_GUI_ACTION_START;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
                 return;
             }
             if ((luStatus45 & 1) != 0)
@@ -621,7 +621,7 @@ namespace BrnGame
                     CgsGui::GuiEventControllerInputPressed lEvent;
                     lEvent.miPadId = 0;
                     lEvent.miButtonId = KI_GUI_ACTION_RSHOULDER;
-                    CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+                    mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
                 }
                 return;
             }
@@ -634,7 +634,7 @@ namespace BrnGame
                 CgsGui::GuiEventControllerInputPressed lEvent;
                 lEvent.miPadId = 0;
                 lEvent.miButtonId = KI_GUI_ACTION_LSHOULDER;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
                 return;
             }
             if ((luStatus54 & 1) != 0)
@@ -649,7 +649,7 @@ namespace BrnGame
             lEvent.miAxis = 2;
             lEvent.mfXAxis = lpPad->mfAxis10;
             lEvent.mfYAxis = lpPad->mfAxis14;
-            CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
         }
         else
         {
@@ -657,13 +657,13 @@ namespace BrnGame
             lAxis0.miAxis = 0;
             lAxis0.mfXAxis = lpPad->mfStickLX;
             lAxis0.mfYAxis = lpPad->mfStickLY;
-            CgsGui::GuiModule::AddGuiEvent(lAxis0, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(lAxis0, lpGuiInputBuffer);
 
             CgsGui::GuiEventControllerAxis lAxis1;
             lAxis1.miAxis = 1;
             lAxis1.mfXAxis = lpPad->mfStickRX;
             lAxis1.mfYAxis = lpPad->mfStickRY;
-            CgsGui::GuiModule::AddGuiEvent(lAxis1, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(lAxis1, lpGuiInputBuffer);
         }
 
         // Per-action down / pressed / released events over the action-index table.
@@ -683,19 +683,19 @@ namespace BrnGame
             if ((lpAction->muStatus & 1) != 0)
             {
                 CgsGui::GuiEventControllerInputDown lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
                 lbWasDown = true;
             }
             if (((lpAction->muStatus >> 1) & 1) != 0)
             {
                 CgsGui::GuiEventControllerInputPressed lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
                 lbWasDown = true;
             }
             else if (((lpAction->muStatus >> 2) & 1) != 0)
             {
                 CgsGui::GuiEventControllerInputReleased lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
                 lbWasDown = true;
             }
             if (lbWasDown && lbIsMenuAxisId)
@@ -716,25 +716,25 @@ namespace BrnGame
             if ((lpAction->muStatus & 1) != 0)
             {
                 CgsGui::GuiEventControllerInputDown lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
             }
             if (((lpAction->muStatus >> 1) & 1) != 0)
             {
                 CgsGui::GuiEventControllerInputPressed lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
                 safMenuRepeatNextTime[i] = static_cast<f32>(lfNow + 0.80000001);
             }
             else if (((lpAction->muStatus >> 2) & 1) != 0)
             {
                 CgsGui::GuiEventControllerInputReleased lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
                 safMenuRepeatNextTime[i] = 0.0f;
             }
             if ((lpAction->muStatus & 1) != 0 && lfNow >= safMenuRepeatNextTime[i])
             {
                 safMenuRepeatNextTime[i] += 0.1f;
                 CgsGui::GuiEventControllerInputPressed lEvent; lEvent.miPadId = 0; lEvent.miButtonId = liActionId;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
             }
         }
 
@@ -749,7 +749,7 @@ namespace BrnGame
             CgsGui::GuiControllerDisconnected lEvent;
             lEvent.miPlayer = lrEvent.miPlayer;
             lEvent.miPort   = lrEvent.miPort;
-            CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
         }
 
         // Language cycle: when the change-language combo is held and the debounce has elapsed, emit a
@@ -781,7 +781,7 @@ namespace BrnGame
         {
             CgsGui::GuiEventSetLanguage lEvent;
             lEvent.meLanguage = static_cast<CgsLanguage::ELanguage>(gaiLanguageCycleIds[liIndex]);
-            CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
             sfLanguageCycleLastTime = static_cast<f32>(lfNow);
             sbLanguageCyclePending = 0;
         }

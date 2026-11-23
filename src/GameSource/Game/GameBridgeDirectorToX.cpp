@@ -81,13 +81,13 @@ namespace BrnGame
         lBlackBars.lfSingleBarSize = lpCamera->mState.IsFlagSet(
             BrnDirector::Camera::CameraState::E_FLAG_VALID)
                 ? lrEffects.mfBlackBarAmount : 1.0f;
-        CgsGui::GuiModule::AddGuiEvent(lBlackBars, lpGuiInputBuffer);
+        mGuiModule.AddGuiEvent(lBlackBars, lpGuiInputBuffer);
 
         // pseudocode 151..152: the enumeration request -> 500.
         if (lpDirectorOutputBuffer->GetRequestHookEnumeration())
         {
             CgsGui::GuiEvent<500> lRequest;
-            CgsGui::GuiModule::AddGuiEvent(lRequest, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(lRequest, lpGuiInputBuffer);
             static bool sbSaid500 = false;
         }
 
@@ -99,7 +99,7 @@ namespace BrnGame
             std::memset(&lStop, 0, sizeof(lStop));
             lStop.muGuid = 0;
             CopyHookName(lStop.macName, lrEffects.GetStopHookNameString().mHookNameString);
-            mGuiModule.AddGuiEvent(&lStop, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(lStop, lpGuiInputBuffer);
         }
 
         // pseudocode 171..209: a start request -> 495, every per-type maximum = the blend.
@@ -116,7 +116,7 @@ namespace BrnGame
             lStart.mfMaximum2DTintWeight       = lfBlend;
             lStart.mfMaximum3DTintWeight       = lfBlend;
             CopyHookName(lStart.macName, lrEffects.GetStartHookNameString().mHookNameString);
-            mGuiModule.AddGuiEvent(&lStart, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(lStart, lpGuiInputBuffer);
         }
 
         // pseudocode 210..230: the background request -> 498 (start pending, no stop) /
@@ -129,7 +129,7 @@ namespace BrnGame
             lStartBackground.muGuid          = 0;
             lStartBackground.mfMaximumWeight = lrBackground.GetBackgroundStartRequestBlendAmount();
             CopyHookName(lStartBackground.macName, lrBackground.mHookName.mHookNameString);
-            mGuiModule.AddGuiEvent(&lStartBackground, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(lStartBackground, lpGuiInputBuffer);
         }
         if (lrBackground.mbStartRequested && lrBackground.mbStopRequest)
         {
@@ -137,7 +137,7 @@ namespace BrnGame
             std::memset(&lStopBackground, 0, sizeof(lStopBackground));
             lStopBackground.muGuid = 0;
             CopyHookName(lStopBackground.macName, lrBackground.mHookName.mHookNameString);
-            mGuiModule.AddGuiEvent(&lStopBackground, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(lStopBackground, lpGuiInputBuffer);
         }
 
         // pseudocode 231..243: a post-FX id request -> 495 by GUID, maxima 1.0, empty name.
@@ -153,7 +153,7 @@ namespace BrnGame
             lById.mfMaximum2DTintWeight       = 1.0f;
             lById.mfMaximum3DTintWeight       = 1.0f;
             lById.macName[0]                  = 0;
-            mGuiModule.AddGuiEvent(&lById, lpGuiInputBuffer);
+            mGuiModule.AddGuiEvent(lById, lpGuiInputBuffer);
         }
 
         // [FLAG] pseudocode 244..249: out+0x751 -> GuiEventDirectorSettings (GetDir()), then

@@ -31,8 +31,9 @@ namespace BrnGui
 {
     typedef char HookNameString[KI_MAX_PFX_ID_LENGTH + 1];   // BrnGuiPFXHooks.h:37 -- 33 bytes
 
-    struct GuiPFXHookEvent : public CgsModule::Event
+    class GuiPFXHookEvent : public CgsModule::Event
     {
+    public:
         s32 GetEventType() const { return 495; }
         u32            muGuid;                        // :5966  +0x00
         f32            mfMaximumBloomWeight;          // :5968  +0x04
@@ -45,8 +46,9 @@ namespace BrnGui
         u8             maPad3D[3];
     };
 
-    struct GuiPFXHookStopEvent : public CgsModule::Event
+    class GuiPFXHookStopEvent : public CgsModule::Event
     {
+    public:
         s32 GetEventType() const { return 496; }
         u32            muGuid;                        // :6012  +0x00
         HookNameString macName;                       // :6013  +0x04
@@ -55,8 +57,9 @@ namespace BrnGui
 
     struct GuiPFXStopMenuHookEvent : public CgsGui::GuiEvent<497> {};
 
-    struct GuiPFXStartBackgroundHookEvent : public CgsModule::Event
+    class GuiPFXStartBackgroundHookEvent : public CgsModule::Event
     {
+    public:
         s32 GetEventType() const { return 498; }
         u32            muGuid;                        // :5989  +0x00
         HookNameString macName;                       // :5990  +0x04
@@ -64,8 +67,9 @@ namespace BrnGui
         f32            mfMaximumWeight;               // :5991  +0x28
     };
 
-    struct GuiPFXStopBackgroundHookEvent : public CgsModule::Event
+    class GuiPFXStopBackgroundHookEvent : public CgsModule::Event
     {
+    public:
         s32 GetEventType() const { return 499; }
         u32            muGuid;                        // :5997  +0x00
         HookNameString macName;                       // :5998  +0x04

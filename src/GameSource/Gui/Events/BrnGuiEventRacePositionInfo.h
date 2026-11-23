@@ -2,8 +2,9 @@
 #include "types.hpp"
 namespace BrnGui {
 // ARTIST0x823EDCE0..0x823EDD1C, raw payload consumed by GuiCache event238.
-struct GuiEventRacePositionInfo
+class GuiEventRacePositionInfo
 {
+public:
     s8 maiPositions[8];
     bool mabFinished[8];
     bool mabValid[8];

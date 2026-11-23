@@ -40,8 +40,9 @@
 
 namespace BrnGui
 {
-    struct GuiEventOnlinePostEvent
+    class GuiEventOnlinePostEvent
     {
+    public:
         // Number of per-result records (X360 Clear loop = 8 reps, stride 0x38).
         static const s32 KI_NUM_RECORDS = 8;
         // Number of awards (maOnlineAwards[6]; Clear's second loop = 6 reps, stride 0x0C).

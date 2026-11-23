@@ -36,8 +36,9 @@
 
 namespace BrnGui
 {
-    struct GuiEventNetworkGameParams
+    class GuiEventNetworkGameParams
     {
+    public:
         // One Event per online round (== GuiCache's 10-round options mirror).
         static const s32 KI_NUM_EVENTS = 10;
 

@@ -727,7 +727,7 @@ void BrnGameModule::BridgeWorldToGui(
     }
     // ARTIST823DA230: the pointer overload preserves the explicit input-pointer
     // assertion and posts the complete four-byte event493 record.
-    mGuiModule.AddGuiEvent(&lEvent, lpGuiInputBuffer);
+    mGuiModule.AddGuiEvent(lEvent, lpGuiInputBuffer);
 }
 
 // ============================================================================

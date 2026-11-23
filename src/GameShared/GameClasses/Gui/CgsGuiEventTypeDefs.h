@@ -72,44 +72,50 @@ namespace CgsGui
 
     // --- controller-input events (DWARF :77/:85/:92/:99/:106/:123) ------------------
     // Identifier event for the active controller user (-1 == none). DWARF :77.
-    struct GuiEventActiveUserIndex : public GuiEvent<4>
+    class GuiEventActiveUserIndex : public GuiEvent<4>
     {
+    public:
         static const s32 KI_INVALID_ACTIVE_USER_INDEX = -1; // DWARF :80 (stored as 0xFFFFFFFF)
         s32 miActiveUserIndex;                              // DWARF :81
     };
 
     // A controller action transitioned to / is in the "down" state. DWARF :85.
-    struct GuiEventControllerInputDown : public GuiEvent<5>
+    class GuiEventControllerInputDown : public GuiEvent<5>
     {
+    public:
         s32 miPadId;     // DWARF :87
         s32 miButtonId;  // DWARF :88
     };
 
     // A controller action was just pressed (rising edge). DWARF :99.
-    struct GuiEventControllerInputPressed : public GuiEvent<6>
+    class GuiEventControllerInputPressed : public GuiEvent<6>
     {
+    public:
         s32 miPadId;     // DWARF :101
         s32 miButtonId;  // DWARF :102
     };
 
     // A controller action was just released (falling edge). DWARF :92.
-    struct GuiEventControllerInputReleased : public GuiEvent<7>
+    class GuiEventControllerInputReleased : public GuiEvent<7>
     {
+    public:
         s32 miPadId;     // DWARF :94
         s32 miButtonId;  // DWARF :95
     };
 
     // A controller analogue axis sample. DWARF :106.
-    struct GuiEventControllerAxis : public GuiEvent<8>
+    class GuiEventControllerAxis : public GuiEvent<8>
     {
+    public:
         s32 miAxis;      // DWARF :117
         f32 mfXAxis;     // DWARF :118
         f32 mfYAxis;     // DWARF :119
     };
 
     // A controller was disconnected. DWARF :123.
-    struct GuiControllerDisconnected : public GuiEvent<9>
+    class GuiControllerDisconnected : public GuiEvent<9>
     {
+    public:
         s32 miPlayer;    // DWARF :125
         s32 miPort;      // DWARF :126
     };
@@ -124,8 +130,9 @@ namespace CgsGui
     };
 
     // Language set request from the controller/front-end. DWARF :274.
-    struct GuiEventSetLanguage : public GuiEvent<28>
+    class GuiEventSetLanguage : public GuiEvent<28>
     {
+    public:
         CgsLanguage::ELanguage meLanguage; // DWARF :276
     };
 
@@ -158,8 +165,9 @@ namespace CgsGui
     // the inner field breakdown is not recovered). A sibling of the other CgsGui network GUI
     // events (Connected 43 / Disconnected 44 / InGame 50 / Launched 58) which are OutputGuiEvent
     // instances homed by their own task.
-    struct GuiEventNetworkLaunching
+    class GuiEventNetworkLaunching
     {
+    public:
         u8  maData[8];
         s32 GetEventType() const { return 57; }
     };

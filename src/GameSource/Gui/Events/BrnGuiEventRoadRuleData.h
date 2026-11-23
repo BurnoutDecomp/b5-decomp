@@ -3,8 +3,9 @@
 #include "GameSource/GameState/BrnCgsPlayerName.h"
 namespace BrnGui {
 // ARTIST 0x82504A08 and AddGuiEvent<GuiEventRoadRuleData>: raw 88-byte payload.
-struct GuiEventRoadRuleData
+class GuiEventRoadRuleData
 {
+public:
     struct RoadRuleType
     {
         s32 maiScores[3];

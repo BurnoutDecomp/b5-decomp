@@ -377,7 +377,7 @@ namespace
             case BrnGameState::GameStateModuleIO::E_ACTION_WAIT_FOR_STREAMING:
             {
                 CgsGui::GuiEvent<134> lEvent;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInput);
                 break;
             }
             case BrnGameState::GameStateModuleIO::E_ACTION_SET_LOADING_STATE:
@@ -385,12 +385,12 @@ namespace
                 if (*reinterpret_cast<const u8*>(lpAction) != 0)
                 {
                     CgsGui::GuiEvent<136> lEvent;
-                    CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                    mGuiModule.AddGuiEvent(lEvent, lpGuiInput);
                 }
                 else
                 {
                     CgsGui::GuiEvent<137> lEvent;
-                    CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                    mGuiModule.AddGuiEvent(lEvent, lpGuiInput);
                 }
                 break;
             }
@@ -473,7 +473,7 @@ namespace
             case 22:
             {
                 CgsGui::GuiEvent<91> lEvent;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInput);
                 break;
             }
 
@@ -1021,7 +1021,7 @@ namespace
             case 211:
             {
                 CgsGui::GuiEvent<178> lEvent;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInput);
                 break;
             }
 
@@ -1029,7 +1029,7 @@ namespace
             case 212:
             {
                 CgsGui::GuiEvent<180> lEvent;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInput);
                 break;
             }
 
@@ -1140,7 +1140,7 @@ namespace
             case 216:
             {
                 CgsGui::GuiEvent<183> lEvent;
-                CgsGui::GuiModule::AddGuiEvent(lEvent, lpGuiInput);
+                mGuiModule.AddGuiEvent(lEvent, lpGuiInput);
                 break;
             }
 

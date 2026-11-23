@@ -10,8 +10,9 @@ namespace CgsGui
 {
     // ARTIST823D08E8 queues the 24-byte payload; its first word is the road ID.
     template <>
-    struct GuiEvent<325> : public CgsModule::Event
+    class GuiEvent<325> : public CgsModule::Event
     {
+    public:
         s32 GetEventType() const { return 325; }
     };
 }
@@ -21,8 +22,9 @@ namespace BrnGui
     // ARTIST82474B20/82474D10/82475CD0 and the game/network producers agree on
     // these fields. Names follow the producer roles; the final three bytes are
     // natural tail padding and remain unwritten.
-    struct GuiMugshotControlEvent : public CgsGui::GuiEvent<325>
+    class GuiMugshotControlEvent : public CgsGui::GuiEvent<325>
     {
+    public:
         CgsID mRoadId;
         BrnGameState::GameStateModuleIO::EMugshotResponse meResponse;
         BrnGameState::GameStateModuleIO::EImageType meImageType;

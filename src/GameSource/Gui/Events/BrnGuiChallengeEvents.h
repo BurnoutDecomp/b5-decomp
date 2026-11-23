@@ -35,8 +35,9 @@ namespace BrnGui
     //                        whose argument is a CgsID, proving an 8-byte id at +0x00)
     //   `lbz r10, 8(r30)` -> a one-byte local-host flag (stored into the manager's
     //                        mbIsLocalHost at +0x18)
-    struct GuiChallengeStartEvent : public CgsModule::Event
+    class GuiChallengeStartEvent : public CgsModule::Event
     {
+    public:
         CgsID mChallengeID;     // @+0x00  (ld; 8-byte id)
         bool  mbIsLocalHost;    // @+0x08  (lbz; one-byte host flag)
 
@@ -51,8 +52,9 @@ namespace BrnGui
     // GuiChallengeStartEvent: `ld r28, 0(r30)` (challenge id) + `lbz r11, 8(r30)`
     // (local-host flag). Modelled as its own type (distinct DWARF symbol) with the same
     // recovered layout.
-    struct GuiChallengeTriggerResponse : public CgsModule::Event
+    class GuiChallengeTriggerResponse : public CgsModule::Event
     {
+    public:
         CgsID mChallengeID;     // @+0x00  (ld; 8-byte id)
         bool  mbIsLocalHost;    // @+0x08  (lbz; one-byte host flag)
 
@@ -72,8 +74,9 @@ namespace BrnGui
     // remaining, 4-byte completion enum). KI_MAX_TARGETS/KI_MAX_ARCI mirror the manager's
     // maafIndividualTargetContributions[2][8] / maaeComplete[2][8] so the source blocks
     // are exactly the size of the destination copies.
-    struct GuiChallengeUpdateEvent : public CgsModule::Event
+    class GuiChallengeUpdateEvent : public CgsModule::Event
     {
+    public:
         static const s32 KI_MAX_TARGETS = 2;   // == FreeburnChallengeManager::KI_MAX_TARGETS
         static const s32 KI_MAX_ARCI    = 8;   // == FreeburnChallengeManager::KI_MAX_ARCI
 

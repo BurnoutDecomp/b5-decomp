@@ -9,8 +9,9 @@ namespace BrnGui
 // ARTIST AddMessage823A6D40/AddStringToMessage823A7090 and AddGuiEvent
 // specialization pin a header-free1744-byte payload. DecFIGS supplies names;
 // ARTIST reordered MessageInfo and shortened each parameter from20 to16bytes.
-struct GuiEventPreRaceMessages
+class GuiEventPreRaceMessages
 {
+public:
     enum ERelationshipTypes
     {
         E_RELATIONSHIP_GOOD=0, E_RELATIONSHIP_BAD=1,

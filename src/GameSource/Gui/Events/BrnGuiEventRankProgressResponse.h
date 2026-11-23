@@ -53,8 +53,9 @@ namespace BrnGui
     // The rank-progress query response GUI event. Member names/order and the private-ness of
     // miCurrentRank are the DecFIGS DWARF's (BrnGuiEventTypeDefs.h:5089..5104); the byte offsets
     // are Construct's and GetPlayerRank's, and they agree.
-    struct GuiEventRankProgressResponse : public CgsModule::Event
+    class GuiEventRankProgressResponse : public CgsModule::Event
     {
+    public:
         // @ 0x824F62F8 -- repack the game action into this event (see the banner). The X360
         // returns `this`; the return value is dropped, per the project convention for
         // Construct-style helpers whose result no call site reads (its ONE caller,

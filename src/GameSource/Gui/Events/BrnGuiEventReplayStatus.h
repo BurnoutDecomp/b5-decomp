@@ -17,8 +17,9 @@
 
 namespace BrnGui
 {
-    struct GuiReplayStatusEvent
+    class GuiReplayStatusEvent
     {
+    public:
         BrnReplays::ReplayIO::StatusInterface mInterface;   // +0x00
 
         s32 GetEventType() const { return 524; }

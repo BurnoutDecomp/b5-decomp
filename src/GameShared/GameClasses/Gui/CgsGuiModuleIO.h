@@ -42,8 +42,10 @@ namespace CgsGuiModuleIO
     typedef CgsGui::ImRendererSet ImRendererSet;
     typedef CgsGraphics::Camera CgsGraphicsCameraStorage;
 
-    struct OutputBuffer : public CgsModule::IOBuffer
+    // A class: ARTIST decorated names spell VOutputBuffer@CgsGuiModuleIO (3 exports).
+    class OutputBuffer : public CgsModule::IOBuffer
     {
+    public:
         // The out-event queue published to consumers: VariableEventQueue<18432,16>.
         // GuiEventQueueSmall == VariableEventQueue<4096,16> is the source bulk-appended in.
         typedef CgsModule::VariableEventQueue<18432, 16> GuiEventQueue;
@@ -160,8 +162,10 @@ namespace CgsGuiModuleIO
     // this+0x8040 on the console; host pointer widening moves that interior camera.
     // mInputQueue is GuiEventQueueBase<32768,16> per the X360 InputBuffer::Construct
     // (CgsGuiModuleIO.cpp) which Construct()s a VariableEventQueue<32768,16>.
-    struct InputBuffer : public CgsModule::IOBuffer
+    // A class: ARTIST decorates it VInputBuffer@CgsGuiModuleIO (e.g. every AddGuiEvent<T> instance).
+    class InputBuffer : public CgsModule::IOBuffer
     {
+    public:
         typedef CgsGui::GuiEventQueueBase<32768, 16> GuiEventInputQueue;
 
         void Construct();   // CgsGuiModuleIO.cpp:49

@@ -51,8 +51,9 @@ namespace BrnGui
     // The game-stats response GUI event. Member NAMES and ORDER are the DecFIGS DWARF's
     // (BrnGuiEventTypeDefs.h:4950..:5056); the three CgsIDs' POSITION and every byte offset are
     // the X360 producer's and consumer's, and they agree (see the banner).
-    struct GuiEventStatsResponse : public CgsModule::Event
+    class GuiEventStatsResponse : public CgsModule::Event
     {
+    public:
         // AddGuiEvent<GuiEventStatsResponse> @0x823D71D8 -> AddEvent(&event, 436, 432).
         s32 GetEventType() const { return 436; }
 
