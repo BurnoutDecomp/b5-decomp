@@ -64,12 +64,12 @@ namespace CgsModule
         // Do NOT blanket-memset base-only types: with the zero-fill removed (2026-08-15) a
         // gratuitous memset is exactly the ~18-20 MB/frame the removal was for.
         //
-        // NOTE the `T` with NO parentheses: DEFAULT-initialisation, matching the console
-        // (`*lpOutBuffer = new (Alloc(sizeof(T), lpcDebugName)) T;`, LegacySrc
-        // GameShared/GameClasses/Module/CgsIOBufferStack.h:146). `T()` would VALUE-initialise,
-        // which for these POD-ish buffers (no user-provided default ctor) zero-fills the whole
-        // object -- that is what put ~18-20 MB/frame of memset into WorldModule::Update and
-        // PhysicsModule::Update. No X360 instantiation zeroes the buffer.
+        // NO constructor runs: the buffer is the raw allocation, brought up by T::Construct alone.
+        // PS3 DecFIGS 0x346B78 (CreateIOBuffer<GameStateModuleIO::OutputBuffer>) is Alloc ->
+        // store -> Construct, and ARTIST 0x823AC898 (CreateIOBuffer<CgsGuiModuleIO::InputBuffer>)
+        // has no store between Alloc and Construct although the buffer embeds a queue whose
+        // BaseVariableEventQueue() constructor (DecFIGS CgsVariableEventQueue.h:51) clears its
+        // flag: the original does not placement-new T.
         template <typename T>
         bool CreateIOBuffer(T** lpOutBuffer, const char* lpcDebugName)
         {
@@ -81,7 +81,6 @@ namespace CgsModule
             *lpOutBuffer = lpBuffer;
             if (lpBuffer != 0)
             {
-                new (lpBuffer) T;
                 lpBuffer->Construct();
                 return true;
             }

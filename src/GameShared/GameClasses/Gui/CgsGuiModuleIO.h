@@ -155,7 +155,9 @@ namespace CgsGuiModuleIO
     //                                              CgsGraphics::Camera, forcing the 12-byte pad
     //                                              after mInputQueue's 32784-byte image so it
     //                                              lands on the next 16-byte boundary == 0x8020)
-    //   +...     void*              mpSnapShotBuffer (DWARF :123)
+    //   (DWARF :123 also lists void* mpSnapShotBuffer after the set; ARTIST does not have it:
+    //    CreateIOBuffer<InputBuffer> @0x823AC898 allocates and DestroyIOBuffer @0x823AD028 frees
+    //    0x81B0 == 0x8020 + sizeof(ImRendererSet), with no room for a trailing pointer.)
     // The X360 accessors pin: GetImRenderers @0x8284E3D8 returns this+0x8020 (== &mRendererSet);
     // SetCamera @0x823C5318 assigns into this+0x8040 (== &mRendererSet.mCamera, +0x20 into the set);
     // SetImRenderers @0x823C86C0 copies the 5-dword head into this+0x8020 then the camera into
@@ -195,7 +197,6 @@ namespace CgsGuiModuleIO
         u8                 maStatusPad[3]; // +1..+3 (force +4 placement)
         GuiEventInputQueue mInputQueue;    // +0x0004 (DWARF :118)
         ImRendererSet      mRendererSet;   // +0x8020 (DWARF :120; 16-aligned)
-        void*              mpSnapShotBuffer; // (DWARF :123)
     };
 }
 }
