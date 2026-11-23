@@ -183,8 +183,10 @@ namespace RaceCarEntityModuleIO
     };
 
     // ---- Resource-request interface (OutputBuffer_Prepare :131 / PostPhysics :595) --------
-    // = BrnResource::GameDataIO::RequestInterface<8192>. The inline request ring is SIMD-aligned
-    // on X360 -> alignas(16).
+    // = BrnResource::GameDataIO::RequestInterface<8192>, with the queue's own (word) alignment:
+    // ARTIST constructs the ring at +4 in both owners, right after the IOBuffer status byte
+    // (OutputBuffer_Prepare::Construct `addi r31, r3, 4` at 0x822EA394; OutputBuffer_PostPhysics
+    // ::Construct at 0x822EA8F8), so no 16-byte alignment applies.
     //
     // REAL as of the race-car global-resource wave: the sized-blob stand-in is retired.
     // RaceCarEntityModule::LoadGlobalResources @0x82300730 calls
@@ -195,7 +197,7 @@ namespace RaceCarEntityModuleIO
     // like SceneResultQueue above; RequestInterface<8192> holds its RequestQueue<8192> at
     // offset 0, so WorldModule::BridgeRaceCarResourceRequestsToOutput_Prepare's
     // reinterpret_cast to VariableEventQueue<8192,16> keeps working unchanged.
-    struct CGS_ALIGN(16) ResourceRequestInterface
+    struct ResourceRequestInterface
         : public BrnResource::GameDataIO::RequestInterface<8192>
     {
     };
