@@ -21,15 +21,20 @@ void* RwMallocMemStub(std::size_t lnSize);
 void* RwReallocMemStub(void* lpMemory, std::size_t lnSize);
 void RwFreeMemStub(void* lpMemory);
 
-// ARTIST's separate aligned callback slots82F91A04/08/0C. The unaligned
-// rwMemoryFunctions object at82F91A10 remains its original three-slot table.
+// ARTIST's aligned callbacks share the table at 0x82F91A04.
+// The unaligned callback table starts at 0x82F91A10.
 typedef void* (*RwMallocAlignedFunc)(std::size_t, std::size_t);
 typedef void* (*RwReallocAlignedFunc)(void*, std::size_t, std::size_t);
 typedef void (*RwFreeAlignedFunc)(void*);
 
-extern RwMallocAlignedFunc RwMallocMemAligned;
-extern RwReallocAlignedFunc RwReallocMemAligned;
-extern RwFreeAlignedFunc RwFreeMemAligned;
+struct RwAlignedMemoryFunctions
+{
+    RwMallocAlignedFunc rwmalloc;
+    RwReallocAlignedFunc rwrealloc;
+    RwFreeAlignedFunc rwfree;
+};
+
+extern RwAlignedMemoryFunctions rwAlignedMemoryFunctions;
 
 void* RwMallocMemAlignedStub(std::size_t lnSize, std::size_t lnAlignment);
 void* RwReallocMemAlignedStub(void* lpMemory, std::size_t lnSize, std::size_t lnAlignment);

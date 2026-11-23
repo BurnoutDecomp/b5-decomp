@@ -22,9 +22,7 @@
 // The X360 maps `sub_82C08C00` to operator new[] (it is the same `new T[n]`
 // helper the shader-constant / texture-scope TUs use). The per-slot
 // DispatchFrame objects come from the RenderWare aligned allocator
-// (RwMallocMemAligned, indirect off_82F91A04) and are freed through
-// RwFreeMemAligned (indirect off_82F91A0C); both are global engine memory
-// thunks whose bodies are homed by the RenderWare-memory follow-on.
+// at 0x82F91A04 and are freed through its free slot at 0x82F91A0C.
 // =============================================================================
 
 static const char KAC_ARTIST_ASSERT_FILE[] =
@@ -51,7 +49,7 @@ void BufferedDispatchFrame::Construct(u32 luFramesPerList, u32 luBinSizeQwords, 
 
     for (u32 luFrame = 0; luFrame < muNumDispatchFrames; ++luFrame)
     {
-        void* lpStorage = RwMallocMemAligned(sizeof(DispatchFrame), 16u);
+        void* lpStorage = rwAlignedMemoryFunctions.rwmalloc(sizeof(DispatchFrame), 16u);
         mapDispatchFrame[luFrame] = new(lpStorage) DispatchFrame;
         mapDispatchFrame[luFrame]->Construct(luFramesPerList, luBinSizeQwords, lpAllocator);
     }
@@ -86,7 +84,7 @@ void BufferedDispatchFrame::Destruct()
     {
         mapDispatchFrame[luFrame]->Release();
         mapDispatchFrame[luFrame]->~DispatchFrame();
-        RwFreeMemAligned(mapDispatchFrame[luFrame]);
+        rwAlignedMemoryFunctions.rwfree(mapDispatchFrame[luFrame]);
     }
 
     delete[] mapDispatchFrame;

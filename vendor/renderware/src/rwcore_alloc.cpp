@@ -12,34 +12,34 @@ RwMemoryFunctions rwMemoryFunctions = {
     RwMallocMemStub, RwReallocMemStub, RwFreeMemStub
 };
 
-RwMallocAlignedFunc RwMallocMemAligned = RwMallocMemAlignedStub;
-RwReallocAlignedFunc RwReallocMemAligned = RwReallocMemAlignedStub;
-RwFreeAlignedFunc RwFreeMemAligned = RwFreeMemAlignedStub;
+RwAlignedMemoryFunctions rwAlignedMemoryFunctions = {
+    RwMallocMemAlignedStub, RwReallocMemAlignedStub, RwFreeMemAlignedStub
+};
 
 // ARTIST82BBC680/6B8/6F0: each entry lazily installs all three genuine
 // native CRT functions, then forwards its original arguments unchanged.
 void* RwMallocMemAlignedStub(std::size_t lnSize, std::size_t lnAlignment)
 {
-    RwMallocMemAligned = _aligned_malloc;
-    RwReallocMemAligned = _aligned_realloc;
-    RwFreeMemAligned = _aligned_free;
-    return RwMallocMemAligned(lnSize, lnAlignment);
+    rwAlignedMemoryFunctions.rwmalloc = _aligned_malloc;
+    rwAlignedMemoryFunctions.rwrealloc = _aligned_realloc;
+    rwAlignedMemoryFunctions.rwfree = _aligned_free;
+    return rwAlignedMemoryFunctions.rwmalloc(lnSize, lnAlignment);
 }
 
 void* RwReallocMemAlignedStub(void* lpMemory, std::size_t lnSize, std::size_t lnAlignment)
 {
-    RwMallocMemAligned = _aligned_malloc;
-    RwReallocMemAligned = _aligned_realloc;
-    RwFreeMemAligned = _aligned_free;
-    return RwReallocMemAligned(lpMemory, lnSize, lnAlignment);
+    rwAlignedMemoryFunctions.rwmalloc = _aligned_malloc;
+    rwAlignedMemoryFunctions.rwrealloc = _aligned_realloc;
+    rwAlignedMemoryFunctions.rwfree = _aligned_free;
+    return rwAlignedMemoryFunctions.rwrealloc(lpMemory, lnSize, lnAlignment);
 }
 
 void RwFreeMemAlignedStub(void* lpMemory)
 {
-    RwMallocMemAligned = _aligned_malloc;
-    RwReallocMemAligned = _aligned_realloc;
-    RwFreeMemAligned = _aligned_free;
-    RwFreeMemAligned(lpMemory);
+    rwAlignedMemoryFunctions.rwmalloc = _aligned_malloc;
+    rwAlignedMemoryFunctions.rwrealloc = _aligned_realloc;
+    rwAlignedMemoryFunctions.rwfree = _aligned_free;
+    rwAlignedMemoryFunctions.rwfree(lpMemory);
 }
 
 // ARTIST 0x82BBC728. Every lazy entry installs the complete three-slot CRT table.
@@ -75,16 +75,8 @@ namespace rw
 {
     namespace
     {
-        uint32_t CountLeadingZeros(uint32_t luValue)
-        {
-            uint32_t luCount = 0;
-            for (uint32_t luMask = 0x80000000u; luMask != 0 && (luValue & luMask) == 0;
-                 luMask >>= 1)
-                ++luCount;
-            return luCount;
-        }
-
-        const uint8_t KAU_XMEM_ALIGNMENT_ATTRIBUTES[32] = {
+        // ARTIST 0x82181088: 32 word-sized XMem alignment attributes.
+        const uint32_t KAU_XMEM_ALIGNMENT_ATTRIBUTES[32] = {
             15, 15, 15, 15, 15, 15, 15, 15,
             15, 15, 15, 15, 15, 15, 15, 15,
             15, 14, 13, 12, 11, 10, 9, 8,
@@ -165,13 +157,13 @@ namespace rw
                 if (luLane == 2)
                 {
                     const uint32_t luAlignmentAttribute =
-                        KAU_XMEM_ALIGNMENT_ATTRIBUTES[CountLeadingZeros(luAlignment)];
+                        KAU_XMEM_ALIGNMENT_ATTRIBUTES[_CountLeadingZeros(static_cast<long>(luAlignment))];
                     const uint32_t luAttributes =
                         0x80C00000u | ((luAlignmentAttribute << 24) & 0x7F000000u);
                     lResult.m_baseResources[luLane] = XMemAlloc(lrLane.m_size, luAttributes);
                 }
                 else
-                lResult.m_baseResources[luLane] = _aligned_malloc(lrLane.m_size, luAlignment);
+                    lResult.m_baseResources[luLane] = rwAlignedMemoryFunctions.rwmalloc(lrLane.m_size, luAlignment);
             }
         }
         return lResult;
@@ -187,7 +179,7 @@ namespace rw
                     XMemFree(lrResource.m_baseResources[luLane], 0x80C00002u);
             }
             else
-                _aligned_free(lrResource.m_baseResources[luLane]);
+                rwAlignedMemoryFunctions.rwfree(lrResource.m_baseResources[luLane]);
         }
     }
 
