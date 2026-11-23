@@ -7,6 +7,9 @@
 
 namespace
 {
+    const int KI_DCT_TOKENS = 12;        // ZERO, ONE .. CATEGORY6, end-of-block
+    const int KI_ZERO_RUN_TOKENS = 9;
+
     // Macroblock coding modes.
     const int KI_CODE_INTER_NO_MV = 0;
     const int KI_CODE_INTRA = 1;
@@ -80,6 +83,144 @@ namespace
 
 extern "C"
 {
+
+#if defined(_XBOX) && defined(_MSC_VER)
+// The original VP6 macroblock unit keeps these converters separate from the
+// Huffman tree builders. XDK size mode reproduces the 0x82B59DD0 call boundaries.
+#pragma optimize("s", on)
+#endif
+
+// Token frequencies (in 1/256) of the DCT token tree from its eleven node probabilities.
+void BoolTreeToHuffCodes(const unsigned char* BoolTreeProbs, unsigned int* HuffProbs)
+{
+    const unsigned char* p = BoolTreeProbs;
+
+    HuffProbs[11] = (p[0] * p[1]) >> 8;
+    HuffProbs[0] = ((255 - p[1]) * p[0]) >> 8;
+    HuffProbs[1] = (p[2] * (255 - p[0])) >> 8;
+
+    const unsigned int luNode2 = ((255 - p[2]) * (255 - p[0])) >> 8;
+    const unsigned int luNode3 = (p[3] * luNode2) >> 8;
+    HuffProbs[2] = (p[4] * luNode3) >> 8;
+
+    const unsigned int luNode4 = ((255 - p[4]) * luNode3) >> 8;
+    HuffProbs[3] = (p[5] * luNode4) >> 8;
+    HuffProbs[4] = ((255 - p[5]) * luNode4) >> 8;
+
+    const unsigned int luNode5 = ((255 - p[3]) * luNode2) >> 8;
+    const unsigned int luNode6 = (p[6] * luNode5) >> 8;
+    HuffProbs[5] = (p[7] * luNode6) >> 8;
+    HuffProbs[6] = ((255 - p[7]) * luNode6) >> 8;
+
+    const unsigned int luNode7 = ((255 - p[6]) * luNode5) >> 8;
+    const unsigned int luNode8 = (p[8] * luNode7) >> 8;
+    HuffProbs[7] = (p[9] * luNode8) >> 8;
+    HuffProbs[8] = ((255 - p[9]) * luNode8) >> 8;
+
+    const unsigned int luNode9 = ((255 - p[8]) * luNode7) >> 8;
+    HuffProbs[9] = (p[10] * luNode9) >> 8;
+    HuffProbs[10] = ((255 - p[10]) * luNode9) >> 8;
+}
+
+// Run frequencies (in 1/256) of the zero-run tree from its node probabilities.
+void ZerosBoolTreeToHuffCodes(const unsigned char* BoolTreeProbs, unsigned int* HuffProbs)
+{
+    const unsigned char* p = BoolTreeProbs;
+
+    const unsigned int luRoot = p[0];
+    const unsigned int luNode1 = (luRoot * p[1]) >> 8;
+    HuffProbs[0] = (p[2] * luNode1) >> 8;
+    HuffProbs[1] = ((255u - p[2]) * luNode1) >> 8;
+
+    const unsigned int luNode3 = ((255u - p[1]) * p[0]) >> 8;
+    HuffProbs[2] = (p[3] * luNode3) >> 8;
+    HuffProbs[3] = ((255u - p[3]) * luNode3) >> 8;
+
+    const unsigned int luNode5 = ((((255u - p[0]) * p[4]) >> 8) * p[5]) >> 8;
+    HuffProbs[4] = (p[6] * luNode5) >> 8;
+    HuffProbs[5] = ((255u - p[6]) * luNode5) >> 8;
+
+    const unsigned int luNode7 = ((((255u - p[0]) * p[4]) >> 8) * (255u - p[5])) >> 8;
+    HuffProbs[6] = (p[7] * luNode7) >> 8;
+    HuffProbs[7] = ((255u - p[7]) * luNode7) >> 8;
+
+    HuffProbs[8] = ((255u - p[0]) * (255u - p[4])) >> 8;
+}
+
+// Rebuild every Huffman tree and look-up table from the current probabilities.
+void ConvertBoolTrees(PB_INSTANCE* pbi)
+{
+    if (pbi->CreateCodeArrays)
+    {
+        for (int liPlane = 0; liPlane < 2; ++liPlane)
+        {
+            BoolTreeToHuffCodes(pbi->DcProbs[liPlane], pbi->DcHuffProbs[liPlane]);
+            VP6_BuildHuffTree(pbi->DcHuffTree[liPlane], pbi->DcHuffProbs[liPlane], KI_DCT_TOKENS);
+            VP6_BuildHuffLookupTable(pbi->DcHuffTree[liPlane], pbi->DcHuffLUT[liPlane]);
+            VP6_BuildDCUnpackLookupTable(pbi->DcHuffTree[liPlane], pbi->DcTokenLUT[liPlane]);
+            VP6_CreateCodeArray(pbi->DcHuffTree[liPlane], 0, pbi->DcHuffCode[liPlane], pbi->DcHuffLength[liPlane], 0, 0);
+        }
+
+        for (int liPlane = 0; liPlane < 2; ++liPlane)
+        {
+            ZerosBoolTreeToHuffCodes(pbi->ZeroRunProbs[liPlane], pbi->ZeroHuffProbs[liPlane]);
+            VP6_BuildHuffTree(pbi->ZeroHuffTree[liPlane], pbi->ZeroHuffProbs[liPlane], KI_ZERO_RUN_TOKENS);
+            VP6_BuildHuffLookupTable(pbi->ZeroHuffTree[liPlane], pbi->ZeroHuffLUT[liPlane]);
+            VP6_CreateCodeArray(pbi->ZeroHuffTree[liPlane], 0, pbi->ZeroHuffCode[liPlane], pbi->ZeroHuffLength[liPlane], 0, 0);
+        }
+
+        for (int liPrec = 0; liPrec < 3; ++liPrec)
+        {
+            for (int liPlane = 0; liPlane < 2; ++liPlane)
+            {
+                for (int liBand = 0; liBand < 6; ++liBand)
+                {
+                    BoolTreeToHuffCodes(pbi->AcProbs[liPlane][liPrec][liBand], pbi->AcHuffProbs[liPrec][liPlane][liBand]);
+                    VP6_BuildHuffTree(pbi->AcHuffTree[liPrec][liPlane][liBand], pbi->AcHuffProbs[liPrec][liPlane][liBand],
+                                      KI_DCT_TOKENS);
+                    VP6_BuildHuffLookupTable(pbi->AcHuffTree[liPrec][liPlane][liBand], pbi->AcHuffLUT[liPrec][liPlane][liBand]);
+                    VP6_CreateCodeArray(pbi->AcHuffTree[liPrec][liPlane][liBand], 0, pbi->AcHuffCode[liPrec][liPlane][liBand],
+                                        pbi->AcHuffLength[liPrec][liPlane][liBand], 0, 0);
+                }
+            }
+        }
+    }
+    else
+    {
+        for (int liPlane = 0; liPlane < 2; ++liPlane)
+        {
+            BoolTreeToHuffCodes(pbi->DcProbs[liPlane], pbi->DcHuffProbs[liPlane]);
+            VP6_BuildHuffTree(pbi->DcHuffTree[liPlane], pbi->DcHuffProbs[liPlane], KI_DCT_TOKENS);
+            VP6_BuildHuffLookupTable(pbi->DcHuffTree[liPlane], pbi->DcHuffLUT[liPlane]);
+            VP6_BuildDCUnpackLookupTable(pbi->DcHuffTree[liPlane], pbi->DcTokenLUT[liPlane]);
+        }
+
+        for (int liPlane = 0; liPlane < 2; ++liPlane)
+        {
+            ZerosBoolTreeToHuffCodes(pbi->ZeroRunProbs[liPlane], pbi->ZeroHuffProbs[liPlane]);
+            VP6_BuildHuffTree(pbi->ZeroHuffTree[liPlane], pbi->ZeroHuffProbs[liPlane], KI_ZERO_RUN_TOKENS);
+            VP6_BuildHuffLookupTable(pbi->ZeroHuffTree[liPlane], pbi->ZeroHuffLUT[liPlane]);
+        }
+
+        for (int liPrec = 0; liPrec < 3; ++liPrec)
+        {
+            for (int liPlane = 0; liPlane < 2; ++liPlane)
+            {
+                for (int liBand = 0; liBand < 6; ++liBand)
+                {
+                    BoolTreeToHuffCodes(pbi->AcProbs[liPlane][liPrec][liBand], pbi->AcHuffProbs[liPrec][liPlane][liBand]);
+                    VP6_BuildHuffTree(pbi->AcHuffTree[liPrec][liPlane][liBand], pbi->AcHuffProbs[liPrec][liPlane][liBand],
+                                      KI_DCT_TOKENS);
+                    VP6_BuildHuffLookupTable(pbi->AcHuffTree[liPrec][liPlane][liBand], pbi->AcHuffLUT[liPrec][liPlane][liBand]);
+                }
+            }
+        }
+    }
+}
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // Points at the macroblock row being decoded, for the debugger.
 unsigned int* VP6_DecodeMbRow;
