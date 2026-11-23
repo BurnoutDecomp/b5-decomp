@@ -23,22 +23,22 @@ namespace core
 // ---------------------------------------------------------------------------
 // BitGetter::GetBits @ 0x82680460
 // ---------------------------------------------------------------------------
-u32 BitGetter::GetBits(BitGetter* self, u32 count)
+u32 BitGetter::GetBits(u32 count)
 {
     u32 result = 0;
     if (count)
     {
-        const u8* base = self->mpBitBuffer;
+        const u8* base = mpBitBuffer;
         do
         {
-            u32 bitPos = self->mBitPosition;
+            u32 bitPos = mBitPosition;
             u32 inByteBit = bitPos & 7;          // bit offset within the current byte
             u32 take = 8u - inByteBit;           // bits available in the current byte
             if (take > count)
                 take = count;                    // clamp to what's still requested
             u32 byteVal = base[bitPos >> 3];     // single-byte fetch (lbzx)
             count -= take;
-            self->mBitPosition = bitPos + take;
+            mBitPosition = bitPos + take;
             result = ((byteVal >> (8u - take - inByteBit)) & ((1u << take) - 1u))
                      | (result << take);
         } while (count);

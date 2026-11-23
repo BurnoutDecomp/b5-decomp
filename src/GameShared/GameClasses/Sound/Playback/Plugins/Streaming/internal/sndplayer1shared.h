@@ -207,7 +207,6 @@ public:
     static int PreProcess(SndPlayer1_CgsStreamMod *self, Mixer *ctx,
                           bool discontinuity, int outputSamplesRequested); // @0x8268CD10
     int  Declick(Mixer *ctx);                                            // @0x8268CB78
-    void UnpackHeader(u32 auRequestIndex, void *apPacked);               // @0x8268C990
 
     static s32 PlayHandler(Command *apCommand);
     static s32 StopHandler(Command *apCommand);
@@ -301,6 +300,7 @@ public:
 private:
     bool WaitForStartTime(Mixer *ctx, f64 adStartTime, u32 *apuSilence); // @0x8268CAF8
     bool GetFeedSlot(s32 *apiSlot);                                      // @0x826A4348
+    void UnpackHeader(u32 auRequestIndex, void *apPacked);                // @0x8268C990
 };
 
 #if defined(D_PLATFORM_X360)

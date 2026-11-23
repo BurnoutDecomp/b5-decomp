@@ -206,7 +206,7 @@ namespace
         f64 startTime;
         f64 streamFileOffset;
         u32 streamPoolGuid;
-        const void* pRamData;
+        void* pRamData;
         u16 recordBytes;
         u8 expelMode;
         u8 pad;
@@ -343,46 +343,39 @@ bool SndPlayer1_CgsStreamMod::GetFeedSlot(s32 *apiSlot)
 // 2 play type, 1 loop flag, 29 sample count, then the optional 32-bit loop/resident words.
 // The payload begins at the next whole byte past the packed header.
 // -------------------------------------------------------------------------------------
-void SndPlayer1_CgsStreamMod::UnpackHeader(u32 auRequestIndex, void* apPacked)
+void SndPlayer1_CgsStreamMod::UnpackHeader(u32 auRequestIndex, void *apPacked)
 {
-    BitGetter lBits;
-    lBits.mpBitBuffer = static_cast<const u8*>(apPacked);
-    lBits.mBitPosition = 0;
+    BitGetter bits;
+    bits.SetBitBuffer(apPacked);
+    RequestInternal &request = Request(auRequestIndex);
+    RequestExternal &external = mpRequestExternal[auRequestIndex];
 
-    RequestInternal& lrRequest = Request(auRequestIndex);
-    RequestExternal& lrExternal = mpRequestExternal[auRequestIndex];
+    bits.GetBits(4); // version
+    external.codec = static_cast<u8>(bits.GetBits(4));
+    request.numChannels = static_cast<u8>(bits.GetBits(6) + 1);
+    request.sampleRate = static_cast<f32>(bits.GetBits(18));
+    external.playType = static_cast<u8>(bits.GetBits(2));
+    // ARTIST narrows the loop bit to a byte at 0x8268CA54.
+    const u8 luLoop = static_cast<u8>(bits.GetBits(1));
+    request.numSamples = static_cast<s32>(bits.GetBits(29));
+    if (luLoop)
+        request.loopStart = static_cast<s32>(bits.GetBits(32));
+    else
+        request.loopStart = -1;
 
-    (void)BitGetter::GetBits(&lBits, 4);                                   // version
-    lrExternal.codec = static_cast<u8>(BitGetter::GetBits(&lBits, 4));
-    lrRequest.numChannels = static_cast<u8>(BitGetter::GetBits(&lBits, 6) + 1);
-    lrRequest.sampleRate = static_cast<f32>(BitGetter::GetBits(&lBits, 18));
-    lrExternal.playType = static_cast<u8>(BitGetter::GetBits(&lBits, 2));
-    const bool lbLoop = BitGetter::GetBits(&lBits, 1) != 0;
-    lrRequest.numSamples = static_cast<s32>(BitGetter::GetBits(&lBits, 29));
-    lrRequest.loopStart = lbLoop ? static_cast<s32>(BitGetter::GetBits(&lBits, 32)) : -1;
+    const u32 luPlayType = external.playType;
+    if (luPlayType == 2)
+        external.gigaSamplesInRam = static_cast<s32>(bits.GetBits(32));
 
-    if (lrExternal.playType == 2)
-        lrExternal.gigaSamplesInRam = static_cast<s32>(BitGetter::GetBits(&lBits, 32));
-
-    if (lbLoop)
+    if (luLoop)
     {
-        // A loop point only carries a stream offset when the loop actually lives in the
-        // STREAMED part of the asset (always for playType 1; for the hybrid playType 2
-        // only when the loop starts past the resident prefix).
-        if (lrExternal.playType == 1
-            || (lrExternal.playType == 2
-                && lrRequest.loopStart >= lrExternal.gigaSamplesInRam))
-        {
-            lrExternal.loopStartStreamOffset =
-                static_cast<s32>(BitGetter::GetBits(&lBits, 32));
-        }
+        if (luPlayType == 1 || (luPlayType == 2 && request.loopStart >= external.gigaSamplesInRam))
+            external.loopStartStreamOffset = static_cast<s32>(bits.GetBits(32));
         else
-        {
-            lrExternal.loopStartStreamOffset = 0;
-        }
+            external.loopStartStreamOffset = 0;
     }
 
-    lrExternal.pSampleData = static_cast<u8*>(apPacked) + (lBits.mBitPosition >> 3);
+    external.pSampleData = static_cast<u8 *>(apPacked) + (bits.GetBitPosition() >> 3);
 }
 
 }}}
@@ -633,7 +626,7 @@ s32 SndPlayer1_CgsStreamMod::PlayHandler(Command * apCommand)
     external.gigaSamplesInRam = 0;
     external.pStreamLoopFileName = 0;
     self->mLastRequestHandleSuccessfullyProcessed = command->requestHandle;
-    self->UnpackHeader(index, const_cast<void*>(command->pRamData));
+    self->UnpackHeader(index, command->pRamData);
     if (external.playType == 1 || external.playType == 2)
     {
         CgsSound::Playback::IStreamProvider::StreamSpec spec;

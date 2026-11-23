@@ -87,7 +87,7 @@ namespace
         f64 streamFileOffset;
         f64 seekTime;
         const char *pStreamFilePath;
-        const void *pRamData;
+        void *pRamData;
         const void *pSeekData;
         u32 streamPoolGuid;
         f32 expelMode;
@@ -107,7 +107,7 @@ namespace
         f64 streamFileOffset;
         f64 seekTime;
         u32 streamPoolGuid;
-        const void *pRamData;
+        void *pRamData;
         const void *pSeekData;
         u16 recordSize;
         u8 expelMode;
@@ -547,14 +547,13 @@ SndPlayer1::~SndPlayer1()
 void SndPlayer1::GetFileInfo(void* apData, FileInfo* apInfo)
 {
     BitGetter lBits;
-    lBits.mpBitBuffer = static_cast<const u8*>(apData);
-    lBits.mBitPosition = 0;
-    BitGetter::GetBits(&lBits, 4); // version
-    BitGetter::GetBits(&lBits, 4); // codec
-    apInfo->numChannels = static_cast<u8>(BitGetter::GetBits(&lBits, 6) + 1u);
-    apInfo->sampleRate = BitGetter::GetBits(&lBits, 18);
-    BitGetter::GetBits(&lBits, 3); // play type + loop flag
-    apInfo->numSamples = BitGetter::GetBits(&lBits, 29);
+    lBits.SetBitBuffer(apData);
+    lBits.GetBits(4); // version
+    lBits.GetBits(4); // codec
+    apInfo->numChannels = static_cast<u8>(lBits.GetBits(6) + 1u);
+    apInfo->sampleRate = lBits.GetBits(18);
+    lBits.GetBits(3); // play type + loop flag
+    apInfo->numSamples = lBits.GetBits(29);
 }
 
 f64 SndPlayer1::GetSamplePositionAttribute() const
@@ -769,8 +768,7 @@ int SndPlayer1::PlayHandler(Command *rawCommand)
     external.streamerRequestId = 0;
     external.pStreamLoopFileName = 0;
 
-    UnpackHeader(self, self->mNextFreeRequest,
-                 static_cast<const u8 *>(command->pRamData));
+    self->UnpackHeader(self->mNextFreeRequest, command->pRamData);
 
     s32 skipSamples = PpcFctiwz(
         static_cast<f64>(request->sampleRate) * command->seekTime);
@@ -1030,47 +1028,47 @@ s32 SndPlayer1::ChunkParsed(u8 *buffer, u32 available, u32 /*requestId*/,
     return 1;
 }
 
-void SndPlayer1::UnpackHeader(SndPlayer1 *self, u32 index, const u8 *header)
+#if defined(_XBOX) && defined(_MSC_VER)
+// ARTIST uses the compact request strides and record-form loop-byte test at 0x82B9BF18 and 0x82B9BFD0.
+#pragma optimize("s", on)
+#endif
+void SndPlayer1::UnpackHeader(u32 auRequestIndex, void *apPacked)
 {
-    RequestInternal *request = self->GetRequestInternal(index);
-    RequestExternal &external = self->mpRequestExternal[index];
     BitGetter bits;
-    bits.mpBitBuffer = header;
-    bits.mBitPosition = 0;
+    bits.SetBitBuffer(apPacked);
+    RequestInternal &request = *GetRequestInternal(auRequestIndex);
+    RequestExternal &external = mpRequestExternal[auRequestIndex];
 
-    (void)BitGetter::GetBits(&bits, 4);
-    external.codec = static_cast<u8>(BitGetter::GetBits(&bits, 4));
-    request->numChannels = static_cast<u8>(BitGetter::GetBits(&bits, 6) + 1u);
-    request->sampleRate = static_cast<f32>(
-        static_cast<f64>(static_cast<u64>(BitGetter::GetBits(&bits, 18))));
-    external.playType = static_cast<u8>(BitGetter::GetBits(&bits, 2));
-    const u32 loopFlag = BitGetter::GetBits(&bits, 1);
-    request->numSamples = static_cast<s32>(BitGetter::GetBits(&bits, 29));
-
-    if (static_cast<u8>(loopFlag) != 0)
-        request->loopStart = static_cast<s32>(BitGetter::GetBits(&bits, 32));
+    bits.GetBits(4); // version
+    external.codec = static_cast<u8>(bits.GetBits(4));
+    request.numChannels = static_cast<u8>(bits.GetBits(6) + 1);
+    request.sampleRate = static_cast<f32>(bits.GetBits(18));
+    external.playType = static_cast<u8>(bits.GetBits(2));
+    // ARTIST narrows the loop bit to a byte at 0x82B9BFD0.
+    const u8 luLoop = static_cast<u8>(bits.GetBits(1));
+    request.numSamples = static_cast<s32>(bits.GetBits(29));
+    if (luLoop)
+        request.loopStart = static_cast<s32>(bits.GetBits(32));
     else
-        request->loopStart = -1;
+        request.loopStart = -1;
 
-    if (external.playType == 2)
-        external.gigaSamplesInRam = static_cast<s32>(BitGetter::GetBits(&bits, 32));
+    const u32 luPlayType = external.playType;
+    if (luPlayType == 2)
+        external.gigaSamplesInRam = static_cast<s32>(bits.GetBits(32));
 
-    if (loopFlag != 0)
+    if (luLoop)
     {
-        if (external.playType == 1 ||
-            (external.playType == 2 && request->loopStart >= external.gigaSamplesInRam))
-        {
-            external.loopStartStreamOffset =
-                static_cast<s32>(BitGetter::GetBits(&bits, 32));
-        }
+        if (luPlayType == 1 || (luPlayType == 2 && request.loopStart >= external.gigaSamplesInRam))
+            external.loopStartStreamOffset = static_cast<s32>(bits.GetBits(32));
         else
-        {
             external.loopStartStreamOffset = 0;
-        }
     }
-    external.pSampleData = const_cast<char *>(
-        reinterpret_cast<const char *>(header + (bits.mBitPosition >> 3)));
+
+    external.pSampleData = static_cast<char *>(apPacked) + (bits.GetBitPosition() >> 3);
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 void SndPlayer1::SetSeekData(SndPlayer1 *self, u32 index,
                              const u8 *seekTable, s32 targetSample)

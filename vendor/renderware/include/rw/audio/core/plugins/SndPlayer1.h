@@ -88,7 +88,7 @@ public:
         f64 startTime;
         f64 streamFileOffset;
         const char* pStreamFilePath;
-        const void* pRamData;
+        void* pRamData;
         u32 streamPoolGuid;
         f32 expelMode;
         f32 requestHandle;
@@ -253,7 +253,6 @@ public:
                                 u8 isNewFeedChunk, u8 seekActive);
     static u8   HandleLoopStart(SndPlayer1 *self, u32 index);
     static u8   HandleSampleEnd(SndPlayer1 *self, u32 index, u8 *finished);
-    static void UnpackHeader(SndPlayer1 *self, u32 index, const u8 *header);
     static void SetSeekData(SndPlayer1 *self, u32 index,
                             const u8 *seekTable, s32 targetSample);
     static s32  ChunkParsed(u8 *buffer, u32 available, u32 requestId,
@@ -351,6 +350,7 @@ private:
     static void StreamLostCallback(void *apContext);
     void RemoveRequest(u32 index);
     void RequestCleanup();
+    void UnpackHeader(u32 auRequestIndex, void *apPacked);
 
 };
 
