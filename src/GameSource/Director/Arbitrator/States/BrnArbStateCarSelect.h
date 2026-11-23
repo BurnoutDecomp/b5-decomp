@@ -106,7 +106,7 @@ namespace BrnDirector
         // tripwire + the manager IsBehaviourWaitingToPrepare()==0 tail).
         bool IsReady() const
         {
-            CGS_ASSERT(IsPrepared(), "IsPrepared()");   // :62 (non-gating)
+            CGS_ASSERT(IsPrepared(), CgsDev::Assert::MessageAt("IsPrepared()", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCarSelect.h", 62));   // :62 (non-gating)
             return mInterpolater.IsReadyToPrepare();
         }
 
@@ -116,8 +116,8 @@ namespace BrnDirector
         // GetBehaviour() cache is that same pointee by Prepare's definition).
         bool HasFinished() const
         {
-            CGS_ASSERT(IsPrepared(), "IsPrepared()");            // :65 (non-gating)
-            CGS_ASSERT(mInterpolater.IsAllocated(), "IsAllocated()");   // BrnBehaviourManager.h:600 (non-gating)
+            CGS_ASSERT(IsPrepared(), CgsDev::Assert::MessageAt("IsPrepared()", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCarSelect.h", 65));            // :65 (non-gating)
+            CGS_ASSERT(mInterpolater.IsAllocated(), CgsDev::Assert::MessageAt("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 600));   // BrnBehaviourManager.h:600 (non-gating)
             return mInterpolater.GetBehaviour()->HasFinished();
         }
 

@@ -176,6 +176,8 @@ namespace
     // Byte +0x17 and the text buffer are intentionally left untouched, as in ARTIST.
     void GameStateDebugComponent::Construct(GameStateModule* lpGameStateModule)
     {
+        DebugComponent::Construct();   // ARTIST 0x823574BC (folded at 0x8284CB38)
+
         CGS_ASSERT(lpGameStateModule != 0, CgsDev::Assert::MessageAt("lpGameStateModule != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateDebugComponent.cpp", 205));
 
         mpGameStateModule = lpGameStateModule;

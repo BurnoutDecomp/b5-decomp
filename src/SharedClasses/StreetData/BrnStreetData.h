@@ -25,6 +25,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                              // CgsID (u64)
 #include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "SharedClasses/StreetData/BrnChallengeData.h"   // BrnStreetData::ChallengeData / ChallengeParScoresEntry (shared home; GetChallengeParScore row type)
 
 namespace CgsMemory { class LinearMalloc; }
@@ -245,28 +246,30 @@ namespace BrnStreetData
 
     // ====================================================================
     // Inline accessor bodies (X360 emitted these out-of-line; the bounds
-    // asserts use the project CGS_ASSERT macro -- the X360-baked file/line
-    // are discarded per project convention).
+    // asserts carry ARTIST's own file/line through MessageAt: GetRoad 621,
+    // GetStreet 651, GetChallengeParScore 718).
     // ====================================================================
 
     inline const Road*
     StreetData::GetRoad( RoadIndex liIndex ) const
     {
-        CGS_ASSERT( liIndex < miRoadCount && liIndex >= 0, "liIndex < miRoadCount && liIndex >= 0" );
+        CGS_ASSERT( liIndex < miRoadCount && liIndex >= 0,
+                    CgsDev::Assert::MessageAt( "liIndex < miRoadCount && liIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\../../SharedClasses/StreetData/BrnStreetData.h", 621 ) );
         return &mpaRoads[ liIndex ];
     }
 
     inline const Street*
     StreetData::GetStreet( SpanIndex liIndex )
     {
-        CGS_ASSERT( IsStreet( liIndex ), "IsStreet( liIndex )" );
+        CGS_ASSERT( IsStreet( liIndex ), CgsDev::Assert::MessageAt( "IsStreet( liIndex )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\../../SharedClasses/StreetData/BrnStreetData.h", 651 ) );
         return &mpaStreets[ liIndex ];
     }
 
     inline const ChallengeParScoresEntry*
     StreetData::GetChallengeParScore( ChallengeIndex liIndex ) const
     {
-        CGS_ASSERT( liIndex < miRoadCount && liIndex >= 0, "liIndex < miRoadCount && liIndex >= 0" );
+        CGS_ASSERT( liIndex < miRoadCount && liIndex >= 0,
+                    CgsDev::Assert::MessageAt( "liIndex < miRoadCount && liIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\../../SharedClasses/StreetData/BrnStreetData.h", 718 ) );
         return &mpaChallengeParScores[ liIndex ];
     }
 

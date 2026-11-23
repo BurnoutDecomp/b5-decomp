@@ -50,7 +50,7 @@ using namespace detail;
 void MomentHitTraffic::Construct()
 {
     Moment::Construct();       // inlined in the console build (meState/meType/mbIsInhibited/mCamera)
-    mHeliCamHandle.Clear();    // the console build zeroes the five handle fields inline
+    mHeliCamHandle.Construct();    // the console build zeroes the five handle fields inline
     mpParameters = 0;
 }
 

@@ -96,8 +96,8 @@ namespace BrnDirector
 
         // Both behaviour handles start unallocated (+0x180 / +0x194 blocks zeroed: mbAllocated,
         // muAllocationKey, the helper-pool pointer, mpManager, mpBehaviour).
-        mIceCam.Clear();
-        mLookAroundCarCam.Clear();
+        mIceCam.Construct();
+        mLookAroundCarCam.Construct();
     }
 
     // ------------------------------------------------------------------------

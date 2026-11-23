@@ -153,8 +153,8 @@ using namespace detail;
 void MomentHardStop::Construct()
 {
     Moment::Construct();         // inlined in the console build (state/type/inhibit/camera)
-    mRigCameraHandleA.Clear();   // the console build zeroes the five handle fields inline
-    mRigCameraHandleB.Clear();
+    mRigCameraHandleA.Construct();   // the console build zeroes the five handle fields inline
+    mRigCameraHandleB.Construct();
     mShotASelectionInfo.miType = -1;
     mShotASelectionInfo.miId   = -1;
     mShotBSelectionInfo.miType = -1;

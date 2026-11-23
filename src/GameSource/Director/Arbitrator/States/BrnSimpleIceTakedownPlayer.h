@@ -80,7 +80,7 @@ namespace BrnDirector
         void Construct()
         {
             meState = E_STATE_INACTIVE;   // stw r5(=0), 0x20(this+0x244)
-            mIceCam.Clear();              // stb 0, +0x04 / stw 0, +0x08..+0x14
+            mIceCam.Construct();              // stb 0, +0x04 / stw 0, +0x08..+0x14
         }
 
         // Prepare @0x8226CF38 -- allocate + configure the ICE-anim behaviour (once) with the

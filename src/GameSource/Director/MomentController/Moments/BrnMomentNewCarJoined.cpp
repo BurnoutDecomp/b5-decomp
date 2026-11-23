@@ -360,9 +360,9 @@ void MomentNewCarJoined::Construct()
     // (mbIsInhibited = false); and Camera::Camera::Construct on +0x10 (mCamera).
     Moment::Construct();
 
-    mInterpolaterA.Clear();     // zeroes +0x184 and +0x188/0x18C/0x190/0x194
-    mInterpolaterB.Clear();     // zeroes +0x198 and +0x19C/0x1A0/0x1A4/0x1A8
-    mLooseAttachment.Clear();   // zeroes +0x1AC and +0x1B0/0x1B4/0x1B8/0x1BC
+    mInterpolaterA.Construct();     // zeroes +0x184 and +0x188/0x18C/0x190/0x194
+    mInterpolaterB.Construct();     // zeroes +0x198 and +0x19C/0x1A0/0x1A4/0x1A8
+    mLooseAttachment.Construct();   // zeroes +0x1AC and +0x1B0/0x1B4/0x1B8/0x1BC
 
     // The committed Parameters::Construct inline: 0 -> +0x1C4 (debug name),
     // 8 -> +0x1C0 (mType), 1 -> +0x1CC (mapping = SINUSOIDAL),
@@ -382,7 +382,7 @@ void MomentNewCarJoined::Construct()
     // The console emits the loose-attachment handle clear a SECOND time
     // (byte-for-byte the same five stores as above).
     // Redundant, but faithful -- kept.
-    mLooseAttachment.Clear();
+    mLooseAttachment.Construct();
 
     // Called on this + 0x1D0 (== &mLooseAttachmentParameters).
     mLooseAttachmentParameters.Construct();

@@ -26,7 +26,7 @@ namespace BrnDirector
         GetNonConstCamera().Construct();
         ResetBaseCameraFlags();
         meState = E_STATE_INACTIVE;
-        mCam.Clear();
+        mCam.Construct();
     }
 
     // ------------------------------------------------------------------------

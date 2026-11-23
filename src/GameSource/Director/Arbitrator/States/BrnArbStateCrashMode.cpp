@@ -114,7 +114,7 @@ namespace BrnDirector
 
         meState = E_STATE_INACTIVE;        // +0x194 = 0
 
-        mAftertouch.Clear();               // +0x180 block zeroed
+        mAftertouch.Construct();               // +0x180 block zeroed
 
         mbLinearBlurRamp = true;           // +0x1B4 = 1
         mbBlurShake      = false;          // +0x1B5 = 0

@@ -45,7 +45,7 @@ using namespace detail;
 void MomentPassengerSeesAction::Construct()
 {
     Moment::Construct();      // inlined in the console build (state/type/inhibit/camera)
-    mPassengerCam.Clear();    // the console build zeroes the five handle fields inline
+    mPassengerCam.Construct();    // the console build zeroes the five handle fields inline
     mWitness.mbSet  = 0;
     mIncident.mbSet = 0;
     mpParameters    = 0;

@@ -55,7 +55,7 @@ namespace
 void MomentTakedownLookback::Construct()
 {
     Moment::Construct();
-    mRigCameraHandle.Clear();
+    mRigCameraHandle.Construct();
     mLookbackRigParams.Construct();
     mVictim.mbSet = false;
     mpParameters  = 0;

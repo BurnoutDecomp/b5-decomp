@@ -33,7 +33,7 @@ namespace
 void MomentStaticCamImpact::Construct()
 {
     Moment::Construct();    // inlined in the console build (meState/meType/mbIsInhibited/mCamera)
-    mFixedCam.Clear();      // the console build zeroes the five handle fields inline
+    mFixedCam.Construct();      // the console build zeroes the five handle fields inline
     mpParameters = 0;
 }
 

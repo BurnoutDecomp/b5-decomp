@@ -95,7 +95,7 @@ namespace BrnDirector
         muRivalMovieOffset = 0;                  // +0x21C = 0
 
         // The interpolator handle starts unallocated (+0x180 block zeroed).
-        mInterpolator.Clear();
+        mInterpolator.Construct();
 
         // The interpolator parameter block seed (+0x194: {+0x00:0, +0x04:8, +0x08:0, +0x0C:2}).
         mInterpolatorParams           = InterpolatorParameters();
@@ -106,10 +106,10 @@ namespace BrnDirector
         // mPlayer @+0x1E0, mLights @+0x1F4 blocks zeroed).
         for (u32 luRival = 0; luRival < KU_NUM_RIVAL_BEHAVIOURS; ++luRival)
         {
-            maRivalBehaviourHandle[luRival].Clear();
+            maRivalBehaviourHandle[luRival].Construct();
         }
-        mPlayerBehaviourHandle.Clear();
-        mLightsBehaviourHandle.Clear();
+        mPlayerBehaviourHandle.Construct();
+        mLightsBehaviourHandle.Construct();
     }
 
     // ------------------------------------------------------------------------

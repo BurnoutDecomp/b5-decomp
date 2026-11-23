@@ -35,6 +35,7 @@ namespace BrnDirector
 // ----------------------------------------------------------------------------
 void DebugComponent::Construct(DirectorModule* lpDirectorModule)
 {
+    CgsDev::DebugComponent::Construct();   // ARTIST 0x821F6FF4 (folded at 0x8284CB38)
 
     CGS_ASSERT(lpDirectorModule != 0, CgsDev::Assert::MessageAt("lpCameraModule != NULL", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleDebugCompononent.cpp", 57));
 

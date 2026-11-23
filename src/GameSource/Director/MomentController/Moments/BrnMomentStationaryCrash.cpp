@@ -70,7 +70,7 @@ using namespace detail;
 void MomentStationaryCrash::Construct()
 {
     Moment::Construct();        // inlined in the console build (state/type/inhibit/camera)
-    mIceCameraHandle.Clear();   // the console build zeroes the five handle fields inline
+    mIceCameraHandle.Construct();   // the console build zeroes the five handle fields inline
     muTake            = 0;
     mfRotationAngle   = 0.0f;
     mbIsTumblingCrash = false;

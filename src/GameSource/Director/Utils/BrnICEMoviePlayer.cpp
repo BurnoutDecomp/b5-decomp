@@ -504,13 +504,13 @@ void ICEMoviePlayer::Stop()
     if (mInInterpolator.IsAllocated())
     {
         mInInterpolator.GetManager()->ReleaseBehaviour(mInInterpolator);
-        mInInterpolator.Clear();
+        mInInterpolator.Construct();
     }
 
     if (mOutInterpolator.IsAllocated())
     {
         mOutInterpolator.GetManager()->ReleaseBehaviour(mOutInterpolator);
-        mOutInterpolator.Clear();
+        mOutInterpolator.Construct();
     }
 }
 

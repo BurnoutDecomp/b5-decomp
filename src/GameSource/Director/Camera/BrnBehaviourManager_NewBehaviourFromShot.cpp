@@ -219,11 +219,11 @@ namespace Camera
         // dependency stays visible, exactly as the templated sibling does.
         lrHandle.Prepare(lHelperID, &mBehaviourHelperPool, this);
 
-        CGS_ASSERT(lrHandle.IsAllocated(), "IsAllocated()");                              // .h:654
+        CGS_ASSERT(lrHandle.IsAllocated(), CgsDev::Assert::MessageAt("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 654));                              // .h:654
         lrHandle.GetHelper().SetDebugArbitratorStateOwner(
             static_cast<const ArbitratorState*>(lpOwningState));
 
-        CGS_ASSERT(lrHandle.IsAllocated(), "IsAllocated()");                              // .h:665
+        CGS_ASSERT(lrHandle.IsAllocated(), CgsDev::Assert::MessageAt("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 665));                              // .h:665
         lrHandle.GetHelper().SetMomentOwner(static_cast<const Moment*>(lpOwner));
     }
 

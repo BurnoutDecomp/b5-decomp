@@ -168,8 +168,8 @@ namespace BrnDirector
 
         // The behaviour handles start unallocated (+0x840 / +0x864 blocks zeroed: a byte store
         // for mbAllocated then four word stores for the rest of the five-word handle).
-        mInterpolater.Clear();
-        mRoadRunnerCam.Clear();
+        mInterpolater.Construct();
+        mRoadRunnerCam.Construct();
 
         // ⭐ THE INTERPOLATION PARAMS ARE NO LONGER FOUR OPAQUE WORDS (2026-08-29).
         // The X360 store sequence at 0x82266048..0x82266078 writes +0x854..+0x860 TWICE over,

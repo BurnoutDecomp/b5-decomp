@@ -82,13 +82,13 @@ void SmoothMover::Update(f32 lfTimestep, f32 lfForceAppliedMinusOneToOne,
 // cpp:80 -- the whole X360 body is the assert (cpp:82; inlined into Update @0x82223854).
 void SmoothMover::UpdateNoLimitsWithCentering(f32, f32, const Parameters&)
 {
-    CGS_ASSERT(false, "Not implemented yet");
+    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Not implemented yet", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraSmoothMover.cpp", 82));
 }
 
 // cpp:91 -- the whole X360 body is the assert (cpp:93; inlined into Update @0x82223860).
 void SmoothMover::UpdateNoLimitsNoCentering(f32, f32, const Parameters&)
 {
-    CGS_ASSERT(false, "Not implemented yet");
+    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Not implemented yet", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraSmoothMover.cpp", 93));
 }
 
 // @ 0x8220D820

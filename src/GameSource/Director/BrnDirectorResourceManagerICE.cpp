@@ -77,18 +77,17 @@ ICE::ICETakeData* DirectorResourceManager::GetKeyAnim(CgsResource::ID lKeyAnimID
     ICE::ICETakeData* lpTakeData = const_cast<ICE::ICETakeData*>(
         mpICEDictionaryList->GetICETakeData(
             static_cast<CgsContainers::DictEntry::DictionaryKey>(lKeyAnimID.GetHash())));
-    if (lpTakeData == 0)
+    if (lpTakeData != 0)
     {
-        return lpTakeData;
+        // An edit made in the in-game ICE editor wins over the shipped take.
+        ICE::ICETakeData* lpEditedTakeData =
+            mpICEWrapper->GetAuthor().FindEditedTakeFromGuid(lpTakeData->GetGuid());
+        if (lpEditedTakeData != 0)
+        {
+            return lpEditedTakeData;
+        }
     }
-
-    ICE::ICETakeData* lpEditedTakeData =
-        mpICEWrapper->GetAuthor().FindEditedTakeFromGuid(lpTakeData->GetGuid());
-    if (lpEditedTakeData == 0)
-    {
-        return lpTakeData;
-    }
-    return lpEditedTakeData;
+    return lpTakeData;
 }
 
 }

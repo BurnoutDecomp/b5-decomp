@@ -53,7 +53,7 @@ using namespace detail;
 void MomentBystanderSeesAction::Construct()
 {
     Moment::Construct();   // inlined in the console build (state/type/inhibit/camera)
-    mBystander.Clear();    // the console build zeroes the five handle fields inline
+    mBystander.Construct();    // the console build zeroes the five handle fields inline
     mpParameters = 0;
 }
 

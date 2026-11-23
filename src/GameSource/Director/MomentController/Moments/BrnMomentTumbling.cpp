@@ -85,7 +85,7 @@ using namespace detail;
 void MomentTumbling::Construct()
 {
     Moment::Construct();   // inlined in the console build (state/type/inhibit/camera)
-    mGyroCam.Clear();      // the console build zeroes the five handle fields inline
+    mGyroCam.Construct();      // the console build zeroes the five handle fields inline
     mbUseLeftForThisCrash  = false;
     mbUseRightForThisCrash = false;
     mbFirstTryThisCrash    = true;

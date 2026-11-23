@@ -187,7 +187,7 @@ void MomentPlayerJumping::Construct()
     mBystanderCollection.Construct(0, this);
     mDroppedRigCollection.Construct(0, this);
     mIceCollection.Construct(0, this);
-    mInterpolater.Clear();
+    mInterpolater.Construct();
     mInterpolaterParams.Construct();
     mInterpolaterParams.meInterpolationMethod =
         Camera::BehaviourInterpolate::E_METHOD_ROTATE_ABOUT_PLAYER_CAR;

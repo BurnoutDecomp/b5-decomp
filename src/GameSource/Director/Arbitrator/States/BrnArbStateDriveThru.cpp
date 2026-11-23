@@ -127,8 +127,8 @@ namespace BrnDirector
 
         // The two behaviour handles start unallocated (five-word blocks zeroed):
         // X360 stb 0,+0x180 / stw 0,+0x184..+0x190 and stb 0,+0x194 / stw 0,+0x198..+0x1A4.
-        mDriveThruBehaviourHandle.Clear();
-        mInterpolater.Clear();
+        mDriveThruBehaviourHandle.Construct();
+        mInterpolater.Construct();
 
         // mInterpolaterParams (+0x1A8): X360 stw 8,+0x1A8 / 0,+0x1AC / 0,+0x1B0 / 1,+0x1B4 --
         // BehaviourInterpolate::Parameters::Construct() inlined (type tag 8, no debug name,

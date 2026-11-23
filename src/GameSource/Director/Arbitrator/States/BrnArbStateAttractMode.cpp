@@ -43,7 +43,7 @@ namespace BrnDirector
         meState = E_STATE_INACTIVE;        // +0x194 = 0
 
         // The road-runner handle starts unallocated (+0x180 block zeroed).
-        mRoadRunnerCam.Clear();
+        mRoadRunnerCam.Construct();
     }
 
     // ------------------------------------------------------------------------

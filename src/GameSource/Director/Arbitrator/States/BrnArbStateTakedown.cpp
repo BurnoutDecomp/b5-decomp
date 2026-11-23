@@ -172,9 +172,9 @@ namespace BrnDirector
     {
         meState = E_STATE_INACTIVE;   // stw 0, 0x54(this)
 
-        mInterpolaterA.Clear();       // +0x18 block
-        mInterpolaterB.Clear();       // +0x2C block
-        mGyroCam.Clear();             // +0x04 block
+        mInterpolaterA.Construct();       // +0x18 block
+        mInterpolaterB.Construct();       // +0x2C block
+        mGyroCam.Construct();             // +0x04 block
 
         mInterpolateParams.Construct();                                            // +0x40 {8,0,0,1}
         mInterpolateParams.meInterpolationMapping =
@@ -210,10 +210,10 @@ namespace BrnDirector
     {
         meState = E_STATE_INACTIVE;   // stw 0, 0x68(this)
 
-        mInterpolaterA.Clear();       // +0x2C block
-        mInterpolaterB.Clear();       // +0x40 block
-        mGyroCamA.Clear();            // +0x04 block
-        mGyroCamB.Clear();            // +0x18 block
+        mInterpolaterA.Construct();       // +0x2C block
+        mInterpolaterB.Construct();       // +0x40 block
+        mGyroCamA.Construct();            // +0x04 block
+        mGyroCamB.Construct();            // +0x18 block
 
         mInterpolateParams.Construct();                                            // +0x54 {8,0,0,1}
         mInterpolateParams.meInterpolationMethod  =
@@ -248,8 +248,8 @@ namespace BrnDirector
     {
         meState = E_STATE_INACTIVE;   // stw 0, 0x30(this)
 
-        mGyroCamDriveByL.Clear();     // +0x04 block
-        mGyroCamDriveByR.Clear();     // +0x18 block
+        mGyroCamDriveByL.Construct();     // +0x04 block
+        mGyroCamDriveByR.Construct();     // +0x18 block
     }
 
     // ------------------------------------------------------------------------
@@ -285,14 +285,14 @@ namespace BrnDirector
     {
         meState = E_STATE_INACTIVE;   // stw 0, 0x128(this)
 
-        mInterpolaterA.Clear();       // +0x18 block
+        mInterpolaterA.Construct();       // +0x18 block
         mInterpolateParamsA.Construct();                                           // +0x90 {8,0,0,1}
         mInterpolateParamsA.meInterpolationMapping =
             Camera::BehaviourInterpolate::E_MAPPING_SINUSOIDAL;                    // stw 1, 0x9C
         mInterpolateParamsA.meInterpolationMethod  =
             Camera::BehaviourInterpolate::E_METHOD_ROTATE_ABOUT_PLAYER_CAR;        // stw 1, 0x98
 
-        mInterpolaterB.Clear();       // +0x2C block
+        mInterpolaterB.Construct();       // +0x2C block
         mInterpolateParamsB.Construct();                                           // +0xA0 {8,0,0,1}
         mInterpolateParamsB.meInterpolationMapping =
             Camera::BehaviourInterpolate::E_MAPPING_EXPONENTIAL_OUT_X_CUBED;       // stw 3, 0xAC
@@ -305,17 +305,17 @@ namespace BrnDirector
         mInterpolateParamsC.meInterpolationMethod  =
             Camera::BehaviourInterpolate::E_METHOD_SLERP;                          // stw 0, 0xB8
 
-        mLooseAttachment.Clear();     // +0x40 block
+        mLooseAttachment.Construct();     // +0x40 block
 
         mLooseAttachmentParameters.Construct();                        // bl Parameters::Construct(this+0xC0)
         mLooseAttachmentParameters.mfHeight   = KF_SHUTDOWN_ZOOM_HEIGHT;    // stfs 0x10C (params +0x4C)
         mLooseAttachmentParameters.mfField54  = KF_SHUTDOWN_ZOOM_FOV;       // stfs 0x114 (params +0x54, declaration reference mfFOV)
         mLooseAttachmentParameters.mfDistance = KF_SHUTDOWN_ZOOM_DISTANCE;  // stfs 0x110 (params +0x50)
 
-        mGyroCam.Clear();             // +0x04 block
-        mZoom1.Clear();               // +0x54 block
-        mZoom2.Clear();               // +0x68 block
-        mZoom3.Clear();               // +0x7C block
+        mGyroCam.Construct();             // +0x04 block
+        mZoom1.Construct();               // +0x54 block
+        mZoom2.Construct();               // +0x68 block
+        mZoom3.Construct();               // +0x7C block
     }
 
     // ------------------------------------------------------------------------
@@ -375,9 +375,9 @@ namespace BrnDirector
         mDriveByTakedown.Construct();           // this+0x398 store block
         mClassicTakedown.Construct();           // this+0x180 store block
 
-        mTakedownDebugCam.Clear();         // +0x3E0 block
-        mGyroCam.Clear();                  // +0x3F4 block
-        mInterpolator.Clear();             // +0x408 block
+        mTakedownDebugCam.Construct();         // +0x3E0 block
+        mGyroCam.Construct();                  // +0x3F4 block
+        mInterpolator.Construct();             // +0x408 block
 
         mInterpolatorParams.Construct();                                           // +0x41C {8,0,0,1}
         mInterpolatorParams.meInterpolationMapping =

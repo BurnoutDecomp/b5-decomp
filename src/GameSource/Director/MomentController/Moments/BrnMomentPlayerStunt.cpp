@@ -129,7 +129,7 @@ void MomentPlayerStunt::Construct()
 {
     Moment::Construct();   // inlined in the console build (state/type/inhibit/camera)
     mpParameters = 0;
-    mIceCam.Clear();       // the console build zeroes the five handle fields inline
+    mIceCam.Construct();       // the console build zeroes the five handle fields inline
     mfLandTime = 0.0f;
 }
 
