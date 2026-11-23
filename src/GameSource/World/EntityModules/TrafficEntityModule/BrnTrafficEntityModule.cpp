@@ -119,8 +119,6 @@
 #include "SharedClasses/Traffic/BrnTrafficSharedConstants.h"                       // KU_MAX_HULLS (ManageTriggers)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h" // BrnWorld::CheckVehicleForPowerPark (GenerateNearbyParkedTrafficOutput)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModule.h";
 static const char KAC_ARTIST_ASSERT_SOURCE[] =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
     "../World/EntityModules/TrafficEntityModule/BrnTrafficEntityModule.cpp";
@@ -155,32 +153,11 @@ namespace BrnTraffic
     // addressed with three base element indices at a 128-byte stride: 85 / 485 / 684, which
     // differ by exactly 400 and 199. See BrnTrafficConstants.h for the derivation.
 
-    // The flat vehicle index space [0, KU_MAX_TOTAL_TRAFFIC).
-    Vehicle* TrafficEntityModule::GetVehicle(u32 luIndex)
-    {
-        CGS_ASSERT(luIndex < KU_MAX_TOTAL_TRAFFIC,
-            CgsDev::Assert::MessageAt(
-                "luIndex < KU_MAX_TOTAL_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2459 /* ARTIST 0x82707B84 */));
-        return &maVehicles[luIndex];
-    }
+    // (GetVehicle(u32 luIndex) is header-inline: BrnTrafficEntityModule.h.)
 
-    // @ 0x82707A38 -- `((luIndex + 85) << 7) + this` == &maVehicles[luIndex].
-    Vehicle* TrafficEntityModule::GetStandardVehicle(u32 luIndex)
-    {
-        CGS_ASSERT(luIndex < KU_MAX_STANDARD_TRAFFIC,
-            CgsDev::Assert::MessageAt(
-                "luIndex < KU_MAX_STANDARD_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2434 /* ARTIST 0x82707A64 */));
-        return &maVehicles[luIndex];
-    }
+    // (GetStandardVehicle(u32 luIndex) is header-inline: BrnTrafficEntityModule.h.)
 
-    // @ 0x827079D0 -- `((luIndex + 485) << 7) + this`; 485 == 85 + KU_MAX_STANDARD_TRAFFIC.
-    Vehicle* TrafficEntityModule::GetStaticVehicle(u32 luIndex)
-    {
-        CGS_ASSERT(luIndex < KU_MAX_STATIC_TRAFFIC,
-            CgsDev::Assert::MessageAt(
-                "luIndex < KU_MAX_STATIC_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2426 /* ARTIST 0x827079FC */));
-        return &maVehicles[KU_STATIC_TRAFFIC_OFFSET + luIndex];
-    }
+    // (GetStaticVehicle(u32 luIndex) is header-inline: BrnTrafficEntityModule.h.)
 
     // @ 0x82707AA0 -- `((liIndex + 684) << 7) + this`; 684 == 485 + KU_MAX_STATIC_TRAFFIC.
     // The asm asserts the index in range via the streamed "Out of range trailer vehicle"
@@ -192,119 +169,27 @@ namespace BrnTraffic
         return &maVehicles[KU_TRAILER_TRAFFIC_OFFSET + static_cast<u32>(liIndex)];
     }
 
-    // @ 0x82707C28 -- `((luIndex + 1370) << 6) + this`; 1370*64 == 684*128 + 128, i.e. the
-    // axle array starts immediately after the last (trailer) vehicle slot.
-    VehicleAxles* TrafficEntityModule::GetVehicleAxles(u32 luIndex)
-    {
-        CGS_ASSERT(luIndex < KU_MAX_TOTAL_TRAFFIC,
-            CgsDev::Assert::MessageAt(
-                "luIndex < KU_MAX_TOTAL_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2475 /* ARTIST 0x82707C54 */));
-        return &maVehicleAxles[luIndex];
-    }
+    // (GetVehicleAxles(u32 luIndex) is header-inline: BrnTrafficEntityModule.h.)
 
-    // @ 0x82707858 -- `6 * (luIndex + 42384) + this`; stride 6 == sizeof(StaticTrafficParam).
-    StaticTrafficParam* TrafficEntityModule::GetStaticTrafficParam(u32 luIndex)
-    {
-        CGS_ASSERT(luIndex < KU_MAX_STATIC_TRAFFIC,
-            CgsDev::Assert::MessageAt(
-                "luIndex < KU_MAX_STATIC_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2402 /* ARTIST 0x82707884 */));
-        return &maStaticTrafficParams[luIndex];
-    }
+    // (GetStaticTrafficParam(u32 luIndex) is header-inline: BrnTrafficEntityModule.h.)
 
-    // @ 0x82707950 -- `6 * (luIndex + 41984) + this`. Same array, indexed from the FULL vehicle
-    // index space: 42384 - 41984 == 400 == KU_STATIC_TRAFFIC_OFFSET, so the console is spelling
-    // maStaticTrafficParams[luIndex - KU_STATIC_TRAFFIC_OFFSET].
-    StaticTrafficParam* TrafficEntityModule::GetStaticTrafficParamFro(u32 luIndex)
-    {
-        CGS_ASSERT(luIndex >= KU_STATIC_TRAFFIC_OFFSET && luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC,
-            CgsDev::Assert::MessageAt(
-                "( luIndex >= KU_STATIC_TRAFFIC_OFFSET ) && ( luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC )",
-                KAC_ARTIST_ASSERT_FILE, 2418 /* ARTIST 0x82707984 */));
-        return &maStaticTrafficParams[luIndex - KU_STATIC_TRAFFIC_OFFSET];
-    }
+    // (GetStaticTrafficParamFro(u32 luIndex) is header-inline: BrnTrafficEntityModule.h.)
 
-    // @ 0x827078D0 -- identical arithmetic to GetStaticTrafficParamFro (the X360 emitted both
-    // out-of-line copies of the same inline; the two truncated ledger names are the
-    // console's own symbol truncation, not two different functions).
-    StaticTrafficParam* TrafficEntityModule::GetStaticTrafficParamFromFullV(u32 luIndex)
-    {
-        CGS_ASSERT(luIndex >= KU_STATIC_TRAFFIC_OFFSET && luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC,
-            CgsDev::Assert::MessageAt(
-                "( luIndex >= KU_STATIC_TRAFFIC_OFFSET ) && ( luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC )",
-                KAC_ARTIST_ASSERT_FILE, 2410 /* ARTIST 0x82707904 */));
-        return &maStaticTrafficParams[luIndex - KU_STATIC_TRAFFIC_OFFSET];
-    }
+    // (GetStaticTrafficParamFromFullV(u32 luIndex) is header-inline: BrnTrafficEntityModule.h.)
 
-    // @ 0x82707D18 -- map a static-vehicle index into the full vehicle index space (+400).
-    u32 TrafficEntityModule::GetVehicleIndexFromStaticIndex(u32 luStaticVehicle)
-    {
-        CGS_ASSERT(luStaticVehicle < KU_MAX_STATIC_TRAFFIC,
-            CgsDev::Assert::MessageAt(
-                "luStaticVehicle < KU_MAX_STATIC_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2545 /* ARTIST 0x82707D3C */));
-        return luStaticVehicle + KU_STATIC_TRAFFIC_OFFSET;
-    }
+    // (GetVehicleIndexFromStaticIndex(u32 luStaticVehicle) is header-inline: BrnTrafficEntityModule.h.)
 
-    Param* TrafficEntityModule::GetParam(u32 luParam)
-    {
-        CGS_ASSERT(luParam < KU_MAX_PARAMS,
-            CgsDev::Assert::MessageAt(
-                "luParam < KU_MAX_PARAMS", KAC_ARTIST_ASSERT_FILE, 2350 /* ARTIST 0x8270765C */));
-        return &maParams[luParam];
-    }
+    // (GetParam(u32 luParam) is header-inline: BrnTrafficEntityModule.h.)
 
-    // @ 0x82707D70 -- `6 * luPlan + (luParam << 7) + 165256 + this`, with the alive-flag byte
-    // read at `(luParam << 7) + 165312`. Param stride 128; 165312 - 165256 == 56 and maPlans is
-    // at +0x08 inside a Param while mxFlags is at +0x40 (BrnTrafficParam.h) -- 0x40 - 0x08 == 56.
-    // So the console is spelling &maParams[luParam].maPlans[luPlan], guarded by IsAlive().
-    ParamPlan* TrafficEntityModule::GetParamPlan(u32 luParam, u32 luPlan)
-    {
-        CGS_ASSERT(luParam < KU_MAX_PARAMS,
-            CgsDev::Assert::MessageAt(
-                "luParam < KU_MAX_PARAMS",
-                KAC_ARTIST_ASSERT_FILE, 2584 /* ARTIST 0x82707DA0 */));
-        CGS_ASSERT(luPlan < KU_PARAM_NUM_PLANS,
-            CgsDev::Assert::MessageAt(
-                "luPlan < KU_PARAM_NUM_PLANS",
-                KAC_ARTIST_ASSERT_FILE, 2585 /* ARTIST 0x82707DC4 */));
-        CGS_ASSERT((maParams[luParam].mxFlags & Param::E_FLAG_ALIVE) != 0,
-            CgsDev::Assert::MessageAt(
-                "maParams[luParam].IsAlive()",
-                KAC_ARTIST_ASSERT_FILE, 2586 /* ARTIST 0x82707E00 */));
-        return &maParams[luParam].maPlans[luPlan];
-    }
+    // (GetParamPlan(u32 luParam, u32 luPlan) is header-inline: BrnTrafficEntityModule.h.)
 
-    const ParamPlan* TrafficEntityModule::GetParamPlan(u32 luParam, u32 luPlan) const
-    {
-        return const_cast<TrafficEntityModule*>(this)->GetParamPlan(luParam, luPlan);
-    }
+    // (GetParamPlan(u32 luParam, u32 luPlan) const is header-inline: BrnTrafficEntityModule.h.)
 
-    // @ 0x827077D0 -- `16 * (luParam + 13528) + this`. Both console asserts kept: the second
-    // one is the pool-warm-up guard (muLastParamCalculated is seeded past KU_MAX_PARAMS).
-    ParamNeedToSlowData* TrafficEntityModule::GetParamNeedToSlowData(u32 luParam)
-    {
-        CGS_ASSERT(luParam < KU_MAX_PARAMS,
-            CgsDev::Assert::MessageAt(
-                "luParam < KU_MAX_PARAMS", KAC_ARTIST_ASSERT_FILE, 2394 /* ARTIST 0x827077FC */));
-        CGS_ASSERT(muLastParamCalculated >= KU_MAX_PARAMS,
-            CgsDev::Assert::MessageAt(
-                "muLastParamCalculated >= KU_MAX_PARAMS", KAC_ARTIST_ASSERT_FILE, 2395 /* ARTIST 0x8270782C */));
-        return &maParamNeedToSlowData[luParam];
-    }
+    // (GetParamNeedToSlowData(u32 luParam) is header-inline: BrnTrafficEntityModule.h.)
 
-    // @ 0x82707700 (EXPORT HOLE). Shape mirrors GetParam @0x82707630: bounds assert then the
-    // element. Console stride 64 from base +226048 == &maParamTransforms[0].
-    ParamTransform* TrafficEntityModule::GetParamTransform(u32 luParam)
-    {
-        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
-        return &maParamTransforms[luParam];
-    }
+    // (GetParamTransform(u32 luParam) is header-inline: BrnTrafficEntityModule.h.)
 
-    // ARTIST 0x82707768: assert index < 400, then this + (index + 0xDCC) * 64.
-    const ParamTransform* TrafficEntityModule::GetParamTransform(u32 luParam) const
-    {
-        CGS_ASSERT(luParam < KU_MAX_PARAMS, "luParam < KU_MAX_PARAMS");
-        return &maParamTransforms[luParam];
-    }
+    // (GetParamTransform(u32 luParam) const is header-inline: BrnTrafficEntityModule.h.)
 
     // DWARF BrnTrafficUnity.cpp:15022. No standalone ARTIST symbol: every caller inlines the
     // bounds assert plus the `8 * (luParam + 27856) + this` index (== &maParamListNodes[luParam]).
@@ -322,13 +207,7 @@ namespace BrnTraffic
         return maParamListNodes[luParam].muPrevParam;
     }
 
-    // @ 0x82707C90 (EXPORT HOLE). DWARF :2558 returns Matrix44Affine BY VALUE; every call site
-    // passes an sret buffer. SetVehicleTransform @0x827142B8 is the writer.
-    Matrix44Affine TrafficEntityModule::GetVehicleTransform(u32 luIndex) const
-    {
-        CGS_ASSERT(luIndex < KU_MAX_TOTAL_TRAFFIC, "luIndex < KU_MAX_TOTAL_TRAFFIC");
-        return maVehicleTransforms[luIndex];
-    }
+    // (GetVehicleTransform(u32 luIndex) const is header-inline: BrnTrafficEntityModule.h.)
 
     // The per-vehicle-type runtime record (bbox, axle offsets, paint colours).
     // X360-attested: Prepare @0x8274A578 stage 3 walks the array from
@@ -352,7 +231,7 @@ namespace BrnTraffic
     {
         CGS_ASSERT(meState == E_STATE_RUNNING,
             CgsDev::Assert::MessageAt(
-                "meState == E_STATE_RUNNING", KAC_ARTIST_ASSERT_FILE, 2132 /* ARTIST 0x82707588 */));
+                "meState == E_STATE_RUNNING", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2132 /* ARTIST 0x82707588 */));
         return meRunningState == E_RUNNINGSTATE_PAUSED;
     }
 
@@ -11456,12 +11335,7 @@ void TrafficEntityModule::UpdateParams_TryStartSympatheticCrashing(
 
 namespace BrnTraffic
 {
-    // DWARF BrnTrafficEntityModule.h:1230. The console ICF-folds it onto the non-const
-    // GetVehicle (identical body); reproduced as a delegation.
-    const Vehicle* TrafficEntityModule::GetVehicle(u32 luIndex) const
-    {
-        return const_cast<TrafficEntityModule*>(this)->GetVehicle(luIndex);
-    }
+    // (GetVehicle(u32 luIndex) const is header-inline: BrnTrafficEntityModule.h.)
 
     // @0x82714500 (153). DWARF :1242 `TrafficPhysicsInfo* GetTrafficPhysicsInfoForVehicle(u32)`
     // -- the ledger/X360 symbol truncates the name, which is the spelling kept here.

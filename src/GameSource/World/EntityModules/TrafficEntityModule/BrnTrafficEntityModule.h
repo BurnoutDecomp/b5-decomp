@@ -19,6 +19,11 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"        // u8/u16/u32/s8/s32/u64/f32
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT (UpdateVehicleStuckSideTime inline)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"  // the inline pool accessors' ARTIST lines
+
+// The original header's __FILE__ as ARTIST bakes it into the inline accessors (0x820BB3A0).
+#define BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModule.h"
 #include "BrnCommonTypes.h" // EntityId, Vector2/3/4, Vector3Plus, VecFloat, Matrix44Affine
 #include "SharedClasses/BrnSharedConstants.h"   // BrnUpdateSet
 #include "GameSource/BurnoutConstants.h"        // EActiveRaceCarIndex
@@ -586,6 +591,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         StaticTrafficParam* GetStaticTrafficParamFromFullV(u32 luIndex); // @ 0x827078D0
         u32   GetVehicleIndexFromStaticIndex(u32 luStaticVehicle);   // @ 0x82707D18
         Param* GetParam(u32 luParam);
+        const Param* GetParam(u32 luParam) const;                   // DWARF :2440
         ParamPlan* GetParamPlan(u32 luParam, u32 luPlan);            // @ 0x82707D70
         // const overload -- DoesParamNeedToStopForStopline @0x827249F8 is a const method and
         // calls it (sub_82707E38 in its listing).
@@ -1891,4 +1897,136 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         StoredAITrafficData   maStoredAITrafficData[E_ACTIVE_RACE_CAR_INDEX_COUNT];       // :944
 
     };
+
+    // ---- The pool accessors, header-inline as in the original. ARTIST inlines them at their
+    //      call sites and also emits out-of-line copies; every copy carries the header line of
+    //      its assert (the DecFIGS DWARF definition lines sit 75-79 lines later in the PS3 header:
+    //      GetParam :2425 -> ARTIST h:2350, GetVehicle :2534 -> h:2459, ...).
+    inline Param* TrafficEntityModule::GetParam(u32 luParam)                         // @0x82707630
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, CgsDev::Assert::MessageAt("luParam < KU_MAX_PARAMS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2350));
+        return &maParams[luParam];
+    }
+
+    inline const Param* TrafficEntityModule::GetParam(u32 luParam) const             // sub_82707698
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, CgsDev::Assert::MessageAt("luParam < KU_MAX_PARAMS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2365));
+        return &maParams[luParam];
+    }
+
+    inline ParamTransform* TrafficEntityModule::GetParamTransform(u32 luParam)       // @0x82707700
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, CgsDev::Assert::MessageAt("luParam < KU_MAX_PARAMS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2380));
+        return &maParamTransforms[luParam];
+    }
+
+    inline const ParamTransform* TrafficEntityModule::GetParamTransform(u32 luParam) const   // sub_82707768
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, CgsDev::Assert::MessageAt("luParam < KU_MAX_PARAMS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2387));
+        return &maParamTransforms[luParam];
+    }
+
+    // @0x827077D0. The second assert is the pool-warm-up guard (muLastParamCalculated is seeded
+    // past KU_MAX_PARAMS).
+    inline ParamNeedToSlowData* TrafficEntityModule::GetParamNeedToSlowData(u32 luParam)
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, CgsDev::Assert::MessageAt("luParam < KU_MAX_PARAMS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2394));
+        CGS_ASSERT(muLastParamCalculated >= KU_MAX_PARAMS, CgsDev::Assert::MessageAt("muLastParamCalculated >= KU_MAX_PARAMS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2395));
+        return &maParamNeedToSlowData[luParam];
+    }
+
+    // @0x82707858 -- `6 * (luIndex + 42384) + this`; stride 6 == sizeof(StaticTrafficParam).
+    inline StaticTrafficParam* TrafficEntityModule::GetStaticTrafficParam(u32 luIndex)
+    {
+        CGS_ASSERT(luIndex < KU_MAX_STATIC_TRAFFIC, CgsDev::Assert::MessageAt("luIndex < KU_MAX_STATIC_TRAFFIC", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2402));
+        return &maStaticTrafficParams[luIndex];
+    }
+
+    // @0x827078D0 / @0x82707950 -- the same inline indexed from the FULL vehicle index space
+    // (42384 - 41984 == 400 == KU_STATIC_TRAFFIC_OFFSET); the two truncated ledger names are two
+    // out-of-line copies at h:2410 and h:2418.
+    inline StaticTrafficParam* TrafficEntityModule::GetStaticTrafficParamFromFullV(u32 luIndex)
+    {
+        CGS_ASSERT(luIndex >= KU_STATIC_TRAFFIC_OFFSET && luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC,
+                   CgsDev::Assert::MessageAt("( luIndex >= KU_STATIC_TRAFFIC_OFFSET ) && ( luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC )", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2410));
+        return &maStaticTrafficParams[luIndex - KU_STATIC_TRAFFIC_OFFSET];
+    }
+
+    inline StaticTrafficParam* TrafficEntityModule::GetStaticTrafficParamFro(u32 luIndex)
+    {
+        CGS_ASSERT(luIndex >= KU_STATIC_TRAFFIC_OFFSET && luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC,
+                   CgsDev::Assert::MessageAt("( luIndex >= KU_STATIC_TRAFFIC_OFFSET ) && ( luIndex < KU_STATIC_TRAFFIC_OFFSET + KU_MAX_STATIC_TRAFFIC )", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2418));
+        return &maStaticTrafficParams[luIndex - KU_STATIC_TRAFFIC_OFFSET];
+    }
+
+    // @0x827079D0 -- `((luIndex + 485) << 7) + this`; 485 == 85 + KU_MAX_STANDARD_TRAFFIC.
+    inline Vehicle* TrafficEntityModule::GetStaticVehicle(u32 luIndex)
+    {
+        CGS_ASSERT(luIndex < KU_MAX_STATIC_TRAFFIC, CgsDev::Assert::MessageAt("luIndex < KU_MAX_STATIC_TRAFFIC", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2426));
+        return &maVehicles[KU_STATIC_TRAFFIC_OFFSET + luIndex];
+    }
+
+    // @0x82707A38 -- `((luIndex + 85) << 7) + this` == &maVehicles[luIndex].
+    inline Vehicle* TrafficEntityModule::GetStandardVehicle(u32 luIndex)
+    {
+        CGS_ASSERT(luIndex < KU_MAX_STANDARD_TRAFFIC, CgsDev::Assert::MessageAt("luIndex < KU_MAX_STANDARD_TRAFFIC", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2434));
+        return &maVehicles[luIndex];
+    }
+
+    // @0x82707B58. The flat vehicle index space [0, KU_MAX_TOTAL_TRAFFIC).
+    inline Vehicle* TrafficEntityModule::GetVehicle(u32 luIndex)
+    {
+        CGS_ASSERT(luIndex < KU_MAX_TOTAL_TRAFFIC, CgsDev::Assert::MessageAt("luIndex < KU_MAX_TOTAL_TRAFFIC", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2459));
+        return &maVehicles[luIndex];
+    }
+
+    // sub_82707BC0 -- the const twin, with its own assert (DWARF :2542).
+    inline const Vehicle* TrafficEntityModule::GetVehicle(u32 luIndex) const
+    {
+        CGS_ASSERT(luIndex < KU_MAX_TOTAL_TRAFFIC, CgsDev::Assert::MessageAt("luIndex < KU_MAX_TOTAL_TRAFFIC", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2467));
+        return &maVehicles[luIndex];
+    }
+
+    // @0x82707C28 -- `((luIndex + 1370) << 6) + this`; the axle array follows the trailer slot.
+    inline VehicleAxles* TrafficEntityModule::GetVehicleAxles(u32 luIndex)
+    {
+        CGS_ASSERT(luIndex < KU_MAX_TOTAL_TRAFFIC, CgsDev::Assert::MessageAt("luIndex < KU_MAX_TOTAL_TRAFFIC", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2475));
+        return &maVehicleAxles[luIndex];
+    }
+
+    // @0x82707C90 (export hole; DWARF :2558 returns Matrix44Affine by value). Inlined at eight
+    // call sites with its h:2483 assert (e.g. DrawAxles @0x827612C8). SetVehicleTransform
+    // @0x827142B8 is the writer.
+    inline Matrix44Affine TrafficEntityModule::GetVehicleTransform(u32 luIndex) const
+    {
+        CGS_ASSERT(luIndex < KU_MAX_TOTAL_TRAFFIC, CgsDev::Assert::MessageAt("luIndex < KU_MAX_TOTAL_TRAFFIC", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2483));
+        return maVehicleTransforms[luIndex];
+    }
+
+    // @0x82707D18 -- map a static-vehicle index into the full vehicle index space (+400).
+    inline u32 TrafficEntityModule::GetVehicleIndexFromStaticIndex(u32 luStaticVehicle)
+    {
+        CGS_ASSERT(luStaticVehicle < KU_MAX_STATIC_TRAFFIC, CgsDev::Assert::MessageAt("luStaticVehicle < KU_MAX_STATIC_TRAFFIC", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2545));
+        return luStaticVehicle + KU_STATIC_TRAFFIC_OFFSET;
+    }
+
+    // @0x82707D70 -- &maParams[luParam].maPlans[luPlan], guarded by IsAlive() (the flag byte at
+    // Param +0x40).
+    inline ParamPlan* TrafficEntityModule::GetParamPlan(u32 luParam, u32 luPlan)
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, CgsDev::Assert::MessageAt("luParam < KU_MAX_PARAMS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2584));
+        CGS_ASSERT(luPlan < KU_PARAM_NUM_PLANS, CgsDev::Assert::MessageAt("luPlan < KU_PARAM_NUM_PLANS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2585));
+        CGS_ASSERT((maParams[luParam].mxFlags & Param::E_FLAG_ALIVE) != 0, CgsDev::Assert::MessageAt("maParams[luParam].IsAlive()", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2586));
+        return &maParams[luParam].maPlans[luPlan];
+    }
+
+    // sub_82707E38 -- the const twin with its own asserts (DWARF :2681; DoesParamNeedToStopForStopline
+    // @0x827249F8 calls it).
+    inline const ParamPlan* TrafficEntityModule::GetParamPlan(u32 luParam, u32 luPlan) const
+    {
+        CGS_ASSERT(luParam < KU_MAX_PARAMS, CgsDev::Assert::MessageAt("luParam < KU_MAX_PARAMS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2602));
+        CGS_ASSERT(luPlan < KU_PARAM_NUM_PLANS, CgsDev::Assert::MessageAt("luPlan < KU_PARAM_NUM_PLANS", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2603));
+        CGS_ASSERT((maParams[luParam].mxFlags & Param::E_FLAG_ALIVE) != 0, CgsDev::Assert::MessageAt("maParams[luParam].IsAlive()", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2604));
+        return &maParams[luParam].maPlans[luPlan];
+    }
 }
