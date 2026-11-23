@@ -216,22 +216,48 @@ namespace CgsGui
         }
     };
 
+    // GuiEventQueueBase adds no storage and no behaviour over VariableEventQueue<N,A>:
+    // every member is a header-inline forwarder (DecFIGS CgsGuiEvent.h:281..434). ARTIST
+    // has no GuiEventQueueBase function at all; its callers call the VariableEventQueue
+    // body directly (e.g. StateLoadingHelper::Construct @0x824FD9D0 ->
+    // VariableEventQueue<4096,16>::Construct, CustomRendererManager::Construct).
     template <s32 BUFSIZE, s32 ALIGN>
     class GuiEventQueueBase : public CgsModule::VariableEventQueue<BUFSIZE, ALIGN>
     {
     public:
-        void Construct();
-        bool Prepare();
-        bool Release();
-        void Destruct();
-        void Clear();
+        void Construct()
+        {
+            CgsModule::VariableEventQueue<BUFSIZE, ALIGN>::Construct();
+        }
+        bool Prepare()
+        {
+            return CgsModule::VariableEventQueue<BUFSIZE, ALIGN>::Prepare();
+        }
+        bool Release()
+        {
+            return CgsModule::VariableEventQueue<BUFSIZE, ALIGN>::Release();
+        }
+        void Destruct()
+        {
+            CgsModule::VariableEventQueue<BUFSIZE, ALIGN>::Destruct();
+        }
+        void Clear()
+        {
+            CgsModule::VariableEventQueue<BUFSIZE, ALIGN>::Clear();
+        }
         s32 GetLength() const
         {
             return CgsModule::VariableEventQueue<BUFSIZE, ALIGN>::GetLength();
         }
         void AddGuiEvent(const CgsModule::Event* lpEvent, s32 liType, s32 liSize);
-        s32  GetFirstEvent(const CgsModule::Event** lppEvent, s32* lpiSize) const;
-        s32  GetNextEvent(const CgsModule::Event* lpEvent, const CgsModule::Event** lppNextEvent, s32* lpiSize) const;
+        s32 GetFirstEvent(const CgsModule::Event** lppEvent, s32* lpiSize) const
+        {
+            return CgsModule::VariableEventQueue<BUFSIZE, ALIGN>::GetFirstEvent(lppEvent, lpiSize);
+        }
+        s32 GetNextEvent(const CgsModule::Event* lpEvent, const CgsModule::Event** lppNextEvent, s32* lpiSize) const
+        {
+            return CgsModule::VariableEventQueue<BUFSIZE, ALIGN>::GetNextEvent(lpEvent, lppNextEvent, lpiSize);
+        }
     };
 
     // Named GUI event-queue sizes (bytes), from the X360 queue-size constants.
