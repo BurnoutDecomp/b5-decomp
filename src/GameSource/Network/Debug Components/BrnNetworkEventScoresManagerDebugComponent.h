@@ -24,6 +24,7 @@ namespace BrnNetwork
     {
     public:
         void Construct( EventScoresManager* lpEventScoresManager );   // @ 0x82586530
+        void Destruct();                                              // @ 0x82586578
 
     protected:
         const char* GetName() const ;   // @ 0x82586588 -> "Event Scores"

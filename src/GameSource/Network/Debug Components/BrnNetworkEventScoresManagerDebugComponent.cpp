@@ -24,8 +24,19 @@ namespace BrnNetwork
 {
     void EventScoresManagerDebugComponent::Construct( EventScoresManager* lpEventScoresManager )
     {
+        // ARTIST 0x8258654C: the base Construct first (PS3 derived Construct bodies call
+        // CgsDev::DebugComponent::Construct the same way; on X360 it is folded onto 0x8284CB38).
+        DebugComponent::Construct();
         mpEventScoresManager = lpEventScoresManager;
         Register();
+    }
+
+    // ARTIST 0x82586578: clear the back-pointer, then tail-call the base Destruct
+    // (EventScoresManager::Destruct calls this at 0x82556B9C).
+    void EventScoresManagerDebugComponent::Destruct()
+    {
+        mpEventScoresManager = 0;
+        DebugComponent::Destruct();
     }
 
     const char* EventScoresManagerDebugComponent::GetName() const

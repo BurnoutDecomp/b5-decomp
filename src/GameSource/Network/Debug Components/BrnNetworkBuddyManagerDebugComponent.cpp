@@ -70,7 +70,9 @@ namespace BrnNetwork
     // invite-buddy / queue members, then register this component with the debug menu.
     void BuddyManagerDebugComponent::Construct(BuddyManagerBase* lpBuddyManager)
     {
-        DebugComponent::Destruct();   // X360: base reset (COMDAT-folded onto an empty Destruct thunk).
+        // ARTIST 0x82585664 calls the folded empty 0x8284CB38: the base Construct, as every
+        // PS3 derived Construct does (CgsDev::DebugComponent::Construct is a bare blr there).
+        DebugComponent::Construct();
 
         mpBuddyManager  = lpBuddyManager;
         miBuddyIndex    = 0;

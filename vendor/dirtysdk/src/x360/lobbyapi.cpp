@@ -1270,9 +1270,11 @@ extern "C" void LobbyApiResume(LobbyApiRefT* pLobbyApi)
     pLobbyApi->bSuspended = 0;
 }
 
-static LobbyApiRefT* _LobbyApiCreate2(const char* pTagField, void* pDebugRef,
-                                     void (*pDebugFnc)(void*, const char*),
-                                     u32 (*pDebugFilter)(void*), s32 iRefMemGroup)
+// ARTIST 0x82B1C608 exports this as the public LobbyApiCreate2; LobbyApiCreate (0x82B1D190)
+// tail-calls it with no debug filter.
+extern "C" LobbyApiRefT* LobbyApiCreate2(const char* pTagField, void* pDebugRef,
+                                         void (*pDebugFnc)(void*, const char*),
+                                         u32 (*pDebugFilter)(void*), s32 iRefMemGroup)
 {
     const s32 iMemGroup = DirtyMemGroupQuery();
     if ((TagFieldFind(pTagField, "SKU") == NULL) ||
@@ -1357,7 +1359,7 @@ extern "C" LobbyApiRefT* LobbyApiCreate(const char* pTagField, void* pDebugRef,
                                           void (*pDebugFnc)(void*, const char*),
                                           s32 iRefMemGroup)
 {
-    return _LobbyApiCreate2(pTagField, pDebugRef, pDebugFnc, NULL, iRefMemGroup);
+    return LobbyApiCreate2(pTagField, pDebugRef, pDebugFnc, NULL, iRefMemGroup);
 }
 
 extern "C" void LobbyApiDestroy(LobbyApiRefT* pLobbyApi)
