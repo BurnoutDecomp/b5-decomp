@@ -146,7 +146,7 @@ ICETakeData* ICEAuthor::CreateNewTake(const char* lpcName, s32 liGuid)
     // Link the new take at the tail of the edited-takes list (bNode sentinel:
     // [0]=Head/Next, [1]=Tail/Prev -- same AddTail splice as CommitCurrentTake).
     bNode* lpSentinel = reinterpret_cast<bNode*>(&mEditedTakeList[0]);
-    bNode* lpNode     = reinterpret_cast<bNode*>(lpNew);
+    bNode* lpNode     = lpNew;
     bNode* lpOldTail  = reinterpret_cast<bNode*>(mEditedTakeList[1]);
 
     lpOldTail->Next    = lpNode;
@@ -204,7 +204,7 @@ ICETakeData* ICEAuthor::FindEditedTakeFromGuid(s32 liGuid)
         CGS_ASSERT(lIterator._Ptr != 0 && lIterator._Lst != 0 && lIterator._Ptr != lpEnd,
             "_Ptr && _Lst && _Ptr!=_Lst->EndOfList()");
 
-        ICETakeData* lpNode = reinterpret_cast<ICETakeData*>(lIterator._Ptr);
+        ICETakeData* lpNode = static_cast<ICETakeData*>(lIterator._Ptr);
         if (lpNode->miGuid == liGuid)
         {
             return lpNode;

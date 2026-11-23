@@ -2,6 +2,7 @@
 #define SDKS_PACKAGES_ICE_ICEDATA_HPP
 
 #include "types.hpp"
+#include "SDKs/Packages/ICE/ICEMemory.hpp"  // bTNode
 #include "SDKs/Packages/ICE/ICEDataEnums.hpp"   // ICE::ICEValue, ICEChannel, ICEParameter, enums
 #include "SDKs/Packages/ICE/ICEPoint.hpp"        // ICE::Cubic1D (ICETake embeds Cubic1D[28])
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"  // CgsResource::ID (IResourceManager::GetTakeData(ID))
@@ -97,10 +98,8 @@ int Precision(f32 lfValue);
 
 // ---------------------------------------------------------------------------
 // ICETakeData (ICEData.hpp:93, DWARF). One serialised camera-take record. In the
-// DWARF this derives from bTNode<ICETakeData> (intrusive tree node); that base has
-// no reconstructed home yet, so it is modeled here as an explicit 8-byte padding
-// buffer (a placeholder for the not-yet-reconstructed base, to be replaced when the
-// bNode/bTNode TU lands -- NOT an offset hack).
+// DWARF this derives from bTNode<ICETakeData>, whose Next and Prev links occupy
+// the first two words in ARTIST.
 //
 // FIELDS kept EXACTLY as committed (DWARF field-for-field; miGuid @+0x8 is
 // additionally X360-attested via BrnResource::ICEList's guid lookup). The fields
@@ -111,10 +110,9 @@ int Precision(f32 lfValue);
 // accessors carry bodies; everything substantial is declaration-only (bodies in
 // ICEData.cpp).
 // ---------------------------------------------------------------------------
-struct ICETakeData
+struct ICETakeData : public bTNode<ICETakeData>
 {
     // ---- fields (kept exactly as committed) ----
-    u8              mPadNodeBase[8];                    // @0x00  bNode/bTNode tree base (8 bytes)
     s32             miGuid;                             // @0x08  GameDB id (read by ICEList)
     char            macTakeName[KI_MAX_TAKENAME_LENGTH];// @0x0C  take name
     f32             mfLength;                           // @0x2C  take length (seconds)

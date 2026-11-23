@@ -204,9 +204,7 @@ public:
     static s32 StopHandler(Command *apCommand);
     static s32 ModifyStartTimeHandler(Command *apCommand);
     static void StreamLostCallback(void *apContext);
-    void RemoveRequest(u32 auIndex);
     void RequestCleanup();
-    void FeedCleanup();
     u8 *SubmitChunk(u8 *apChunk, u32 auRequestIndex, bool abResetDecoder);
     bool StreamNextChunk(u32 auIndex, bool abResetDecoder);
     bool HandleLoopStart(u32 auIndex);
@@ -217,18 +215,6 @@ public:
     // Both live past the fixed object, at byte offsets recorded in the 16-bit fields the
     // console keeps for exactly this purpose -- so the walk stays self-consistent at host
     // widths without any console literal appearing in the arithmetic.
-    RequestInternal &Request(u32 auIndex)
-    {
-        return *reinterpret_cast<RequestInternal *>(
-            reinterpret_cast<u8 *>(this) + mRequestInternalOffset
-            + sizeof(RequestInternal) * auIndex);
-    }
-    const RequestInternal &Request(u32 auIndex) const
-    {
-        return *reinterpret_cast<const RequestInternal *>(
-            reinterpret_cast<const u8 *>(this) + mRequestInternalOffset
-            + sizeof(RequestInternal) * auIndex);
-    }
     f32 *DeclickBuffer()
     {
         return reinterpret_cast<f32 *>(reinterpret_cast<u8 *>(this) + mDeclickBufferOffset);
@@ -290,6 +276,14 @@ public:
     u8               mTimerAdded;                            // +0x187
 
 private:
+    void FeedCleanup();
+    void RemoveRequest(u32 auIndex);
+    RequestInternal *GetRequestInternal(u32 auIndex)
+    {
+        return reinterpret_cast<RequestInternal *>(
+            reinterpret_cast<u8 *>(this) + mRequestInternalOffset
+            + sizeof(RequestInternal) * auIndex);
+    }
     // @ 0x8268CD20. Advance the current-request cursor around the ring and cache
     // the new current request's parameters (if it is still active).
     void AdvanceCurrentRequest();

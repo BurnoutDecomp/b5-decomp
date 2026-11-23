@@ -129,8 +129,13 @@ struct bNode
     bNode* Next;   // @+0
     bNode* Prev;   // @+4
 
-    // --- DECLARE-ONLY (bodies in the ICEMemory body phase) ---
-    void   Construct();
+    void   Construct()
+    {
+        Next = 0;
+        Prev = 0;
+    }
+
+    // Remaining node operations.
     void   Destruct();
     bNode* GetNext();
     bNode* GetPrev();
@@ -197,8 +202,7 @@ private:
 template< class Type >
 struct bTNode : public bNode
 {
-    // --- DECLARE-ONLY (bodies in the ICEMemory body phase) ---
-    void  Construct();
+    void  Construct() { bNode::Construct(); }
     void  Destruct();
     Type* GetNext();
     Type* GetPrev();

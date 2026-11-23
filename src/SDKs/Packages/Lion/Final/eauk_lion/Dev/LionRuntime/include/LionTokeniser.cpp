@@ -111,25 +111,27 @@ void cLionTokenTable::EndianTwiddle(void* apStruct) const
         return;
     }
 
-    for (sLionMemberToken* lpToken = mpTokens; lpToken->mType != E_LION_MEMBER_NONE; ++lpToken)
+    for (const sLionMemberToken* lpToken = mpTokens; lpToken->mType != E_LION_MEMBER_NONE; ++lpToken)
     {
-        bool lbSkip = false;
-
         if (lpToken->mType == E_LION_MEMBER_STRUCT)
         {
-            for (sLionMemberToken* lpScan = lpToken + 1; lpScan->mType != E_LION_MEMBER_NONE; ++lpScan)
+            const sLionMemberToken* lpScan = lpToken + 1;
+            u32 luDuplicate = 0;
+            for (; lpScan->mType != E_LION_MEMBER_NONE; ++lpScan)
             {
                 if (lpScan->mType == E_LION_MEMBER_STRUCT && lpToken->mOffset == lpScan->mOffset)
                 {
-                    lbSkip = true;
+                    luDuplicate = 1;
                 }
+            }
+
+            if (luDuplicate != 0)
+            {
+                continue;
             }
         }
 
-        if (!lbSkip)
-        {
-            lpToken->EndianTwiddle(apStruct);
-        }
+        lpToken->EndianTwiddle(apStruct);
     }
 }
 

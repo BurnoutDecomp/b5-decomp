@@ -236,23 +236,6 @@ DecoderRequest *Decoder::GetCurrentRequestDesc()
 }
 
 // -------------------------------------------------------------------------------------
-// GetSamplesRemaining @0x826914D0
-// Samples still owed by request `ucIndex`. Empty slot -> 0. For the slot currently being
-// decoded the live decode cursor is used as the start; otherwise the slot's own start.
-// -------------------------------------------------------------------------------------
-s32 Decoder::GetSamplesRemaining(u8 ucIndex)
-{
-    const DecoderRequest& request = RequestQueue()[ucIndex];
-    const s32 iEnd = request.miEndSample;
-    if (iEnd == 0)
-        return 0;
-
-    if (ucIndex == mucRequestDecodeIndex)
-        return iEnd - miCurrentSampleOffset;
-    return iEnd - request.miStartSample;
-}
-
-// -------------------------------------------------------------------------------------
 // Release @0x82691528
 // Run the codec teardown callback (if any), free the codec's owned block (if any), then
 // free the Decoder instance itself -- all through the shared System allocator.

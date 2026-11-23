@@ -90,7 +90,7 @@ void ICEAuthor::CommitCurrentTake()
         // [1]=Tail/Prev. AddTail: old-tail->Next = new node; tail = new node; new
         // node->Next = head sentinel; new node->Prev = old tail.
         bNode* lpSentinel = reinterpret_cast<bNode*>(&mEditedTakeList[0]);
-        bNode* lpNode     = reinterpret_cast<bNode*>(lpEdited);
+        bNode* lpNode     = lpEdited;
         bNode* lpOldTail  = reinterpret_cast<bNode*>(mEditedTakeList[1]);
 
         lpOldTail->Next    = lpNode;

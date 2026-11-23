@@ -105,6 +105,8 @@ namespace CgsNetwork
         // pack, clears it once an unreliable message is sent, and re-sets it when re-queuing a
         // reliable message for resend.
         void SetGameID(u8 lu8GameID)        { mu8GameID = lu8GameID; }
+        // DecFIGS CgsMessage.h:663. ARTIST stores this field at +0x1C.
+        void SetU16Frame(u16 lu16Frame)     { mu16Frame = lu16Frame; }
         s8   GetType() const                { return mi8Type; }
         bool IsMessageValid() const         { return (mx8Flags & KX8_FLAGS_VALID) != 0; }
         void SetMessageValid()              { mx8Flags |=  KX8_FLAGS_VALID; }

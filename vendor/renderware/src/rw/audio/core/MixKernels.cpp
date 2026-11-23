@@ -7,7 +7,7 @@
 // private channel TU, so each body below is grounded in the disassembly.
 //   CopyWithGain              @0x82B67200 -- VMX block kernel with scalar fallback
 //   CopyWithGainRamp          @0x82B67400 -- VMX ramp kernel, lowered scalar
-//   MixWithGain               @0x82B6A3F8 -- VMX block kernel, lowered scalar
+//   MixWithGain               @0x82B6A3F8 -- VMX block kernel with scalar fallback
 //   MixWithGainRamp           @0x82B6A568 -- VMX ramp kernel, lowered scalar
 //   ScaleSamples              @0x82B6B708 -- VMX block kernel, lowered scalar
 //   DeClick                   @0x82B676F8 -- store-for-store
@@ -24,14 +24,16 @@
 // VMX lowering note (the committed Fir64::MultiplyAccumulate idiom): the X360 gives the
 // five block kernels a 128-byte-alignment test ((dst|src) & 0x7F, count & 0x3F) that
 // selects between a 32-float lvx128/vmulfp128-vmaddfp/stvx128 block loop and a scalar
-// fallback. CopyWithGain uses the native block operations. The other block kernels
-// still use scalar arithmetic.
+// fallback. CopyWithGain and MixWithGain use the native block operations.
 // =====================================================================================
 
 #include "rw/audio/core/MixKernels.h"
 
 #include <xtl.h>
 #include <vectorintrinsics.h>
+
+// The native channel routing helpers use the size-optimized XDK build.
+#pragma optimize("s", on)
 
 #include <cmath>   // std::sin / std::sqrt (the X360 CRT sin / fsqrts)
 #include <cstring> // std::memset / std::memcpy (the X360 XMemSet / XMemCpy)
@@ -194,8 +196,40 @@ void CopyWithGainRamp(f32 *lpDst, f32 *lpSrc, float lfGain, float lfStep, int li
 // -------------------------------------------------------------------------------------
 void MixWithGain(f32 *pDst, const f32 *pSrc, f32 gain, s32 numSamples)
 {
-    for (s32 i = 0; i < numSamples; ++i)
-        pDst[i] = pSrc[i] * gain + pDst[i]; // fmadds f0,f13,f1,f0 / vmaddfp
+    if (numSamples <= 0)
+        return;
+
+    const uintptr_t buffers = reinterpret_cast<uintptr_t>(pDst)
+                            | reinterpret_cast<uintptr_t>(pSrc);
+    if ((buffers & 127u) != 0 || (numSamples & 63) != 0)
+    {
+        for (s32 i = 0; i < numSamples; ++i)
+            pDst[i] = pSrc[i] * gain + pDst[i];
+        return;
+    }
+
+    const __declspec(align(16)) f32 gains[4] = {gain, gain, gain, gain};
+    const __vector4 gainVector = __lvx(gains, 0);
+    const f32 *const end = pSrc + numSamples;
+    __dcbt(0, pSrc);
+    do
+    {
+        __dcbt(0, pDst);
+        __vector4 samples[8] = {
+            __lvx(pSrc, 0x00), __lvx(pSrc, 0x10), __lvx(pSrc, 0x20), __lvx(pSrc, 0x30),
+            __lvx(pSrc, 0x40), __lvx(pSrc, 0x50), __lvx(pSrc, 0x60), __lvx(pSrc, 0x70)
+        };
+        pSrc += 32;
+        if (pSrc != end)
+            __dcbt(0, pSrc);
+
+        for (s32 i = 0; i < 8; ++i)
+        {
+            const __vector4 accumulated = __vmaddfp(gainVector, samples[i], __lvx(pDst, 16 * i));
+            __stvx(accumulated, pDst, 16 * i);
+        }
+        pDst += 32;
+    } while (pSrc != end);
 }
 
 // -------------------------------------------------------------------------------------
@@ -388,7 +422,7 @@ void ReChannelGainWrite2x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 // -------------------------------------------------------------------------------------
 // ReChannelGainWrite4x1 @0x82B6AE88 -- quad -> mono: sum all four into dst channel 0.
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite4x1(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
+void ReChannelGainWrite4x1(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 {
     f32 *dst0 = ppDst[0]; // lwz r29, 0(r3)
     CopyWithGain(dst0, ppSrc[0], gain, numSamples);
@@ -400,7 +434,7 @@ void ReChannelGainWrite4x1(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
 // -------------------------------------------------------------------------------------
 // ReChannelGainWrite4x2 @0x82B6AEE8 -- quad -> stereo: L = FL + BL, R = FR + BR.
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite4x2(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
+void ReChannelGainWrite4x2(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 {
     f32 *dst0 = ppDst[0];
     CopyWithGain(dst0, ppSrc[0], gain, numSamples);
@@ -440,7 +474,7 @@ void ReChannelGainWrite4x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 // ReChannelGainWrite6x2 @0x82B6B0A0 -- 5.1 -> stereo fold-down:
 //   L = 0.707*C + FL + BL,  R = 0.707*C + FR + BR  (LFE dropped).
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite6x2(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
+void ReChannelGainWrite6x2(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 {
     const f32 foldGain = gain * KF_CHANNEL_FOLD; // fmuls f11, f12, flt_82011C14
     f32 *dst0 = ppDst[0];
@@ -457,7 +491,7 @@ void ReChannelGainWrite6x2(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
 // ReChannelGainWrite6x4 @0x82B6B148 -- 5.1 -> quad fold-down:
 //   FL' = 0.707*C + FL, FR' = 0.707*C + FR, BL' = BL, BR' = BR (LFE dropped).
 // -------------------------------------------------------------------------------------
-void ReChannelGainWrite6x4(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples)
+void ReChannelGainWrite6x4(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 {
     const f32 foldGain = gain * KF_CHANNEL_FOLD;
     CopyWithGain(ppDst[0], ppSrc[1], foldGain, numSamples);
@@ -867,7 +901,7 @@ void GainVectorSine(f32 *pGainVector, s32 numSamples, f32 startGain,
 // the LFE channel is deliberately omitted.
 // ---------------------------------------------------------------------------
 namespace rw { namespace audio { namespace core {
-void ReChannelGainWrite6x1(f32 **ppDst, f32 **ppSrc, f32 gain, int numSamples)
+void ReChannelGainWrite6x1(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 {
     f32 *dst0 = ppDst[0];
     CopyWithGain(dst0, ppSrc[1], gain, numSamples);

@@ -40,8 +40,8 @@ MessageWithPlayerIDs::NetworkPlayerID MessageWithPlayerIDs::GetRecvingPlayerID()
 // the ReliableMessage / TestConnectionMessage::GetPackedMessageSize fold.
 s32 MessageWithPlayerIDs::GetPackedMessageSize()
 {
-    mSendingPlayerID = 0;
-    mRecvingPlayerID = 0;
+    SetSendingPlayerID(0);
+    SetRecvingPlayerID(0);
     return Message::GetPackedMessageSize();
 }
 
@@ -49,7 +49,7 @@ s32 MessageWithPlayerIDs::GetPackedMessageSize()
 // DecFIGS. The two derived bodies fold at ARTIST 0x828821F8.
 s32 ReliableMessage::GetPackedMessageSize()
 {
-    mu16Frame = 0;
+    SetU16Frame(0);
     return MessageWithPlayerIDs::GetPackedMessageSize();
 }
 

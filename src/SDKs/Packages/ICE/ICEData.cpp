@@ -728,8 +728,6 @@ void ICEElementDescription::SetRawInt(u8* lpElementData, s32 liIndex, u32 luValu
 // ---------------------------------------------------------------------------
 ICEValue ICEElementDescription::GetValue(u8* lpElementData, s32 liIndex) const
 {
-    ICEValue lValue;
-
     switch (mDataType)
     {
         case eICE_INT:
@@ -738,39 +736,33 @@ ICEValue ICEElementDescription::GetValue(u8* lpElementData, s32 liIndex) const
             // arithmetic-shift back down.
             s32 liShift = 32 - miDataBits;
             s32 liRaw   = ((s32)GetRawInt(lpElementData, liIndex) << liShift) >> liShift;
-            lValue.Set(liRaw);
-            break;
+            return ICEValue(liRaw);
         }
 
         case eICE_UINT:
         case eICE_HASH:
         {
-            lValue.Set((s32)GetRawInt(lpElementData, liIndex));
-            break;
+            return ICEValue(GetRawInt(lpElementData, liIndex));
         }
 
         case eICE_FIXED:
         {
             u32 luRaw = GetRawInt(lpElementData, liIndex);
-            lValue.Set(Decode(luRaw));
-            break;
+            return ICEValue(Decode(luRaw));
         }
 
         case eICE_FLOAT:
         {
             // Native-endian 32-bit IEEE float (docs: eICE_FLOAT is native endian).
-            lValue.Set(((const f32*)lpElementData)[liIndex]);
-            break;
+            const f32* lpFloatData = reinterpret_cast<const f32*>(lpElementData);
+            return ICEValue(lpFloatData[liIndex]);
         }
 
         default:
         {
-            lValue.Set(mDefault.GetSignedInt());
-            break;
+            return mDefault;
         }
     }
-
-    return lValue;
 }
 
 // ---------------------------------------------------------------------------
@@ -1318,9 +1310,7 @@ u32 ICETakeData::ComputeEditSize()
 // ---------------------------------------------------------------------------
 void ICETakeData::Construct()
 {
-    // bTNode base (Next/Prev) + miGuid.
-    mPadNodeBase[0] = 0; mPadNodeBase[1] = 0; mPadNodeBase[2] = 0; mPadNodeBase[3] = 0;
-    mPadNodeBase[4] = 0; mPadNodeBase[5] = 0; mPadNodeBase[6] = 0; mPadNodeBase[7] = 0;
+    bTNode<ICETakeData>::Construct();
     miGuid = 0;
 
     // Clear the 32-byte take name.
@@ -1331,8 +1321,8 @@ void ICETakeData::Construct()
 
     for ( s32 liChannel = 0; liChannel < 12; ++liChannel )
     {
-        mElementCounts[liChannel].mu16Intervals = 0;
         mElementCounts[liChannel].mu16Keys      = 0;
+        mElementCounts[liChannel].mu16Intervals = 0;
     }
 
     // Zero the variable-data / edit region beyond the fixed 100-byte header.
@@ -1386,13 +1376,7 @@ ICETakeData& ICETakeData::operator=(const ICETakeData& lrOther)
 // ---------------------------------------------------------------------------
 void ICETakeData::FixUp(const CgsResource::Resource&)
 {
-    // The resource argument is unread by ARTIST; its forward declaration suffices.
-
-    // bNode::Next @0x00 / bNode::Prev @0x04 -- mPadNodeBase is the committed placeholder
-    // for the not-yet-reconstructed bTNode/bNode base, so clearing its two words IS the
-    // console's two stores (NOT an offset hack).
-    *(u32*)&mPadNodeBase[0] = 0;   // bNode::Next
-    *(u32*)&mPadNodeBase[4] = 0;   // bNode::Prev
+    bTNode<ICETakeData>::Construct();
 }
 
 // ---------------------------------------------------------------------------
@@ -1413,30 +1397,9 @@ void ICETakeData::FixUp(const CgsResource::Resource&)
 // ---------------------------------------------------------------------------
 void ICETakeData::FixDown(const CgsResource::Resource&)
 {
-    // The ARTIST body does not read the resource argument.
+    bTNode<ICETakeData>::Construct();
 
-    // Null the intrusive-tree links (bNode::Next @0x00, bNode::Prev @0x04) before
-    // serialization -- they are rebuilt on load. mPadNodeBase is the placeholder for
-    // the not-yet-reconstructed bTNode/bNode base; clearing its 8 bytes zeroes both
-    // link words (NOT an offset hack -- it is the documented base placeholder).
-    *(u32*)&mPadNodeBase[0] = 0;   // bNode::Next
-    *(u32*)&mPadNodeBase[4] = 0;   // bNode::Prev
-
-    // A scratch ICETake drives the pointer rebind: the ICETake ctor runs on a stack
-    // buffer (ICE::ICETake::ICETake) then SetDataPointers.
-    //
-    // WIRING NOTE (not an algorithm change): the frozen ICETake header declares no
-    // default constructor, and its mCubics[28] member type Cubic1D declares only
-    // Cubic1D(s16,f32), so ICETake is not default-constructible here. The scratch
-    // take is used ONLY as a `this` for the two SetDataPointers calls, which write
-    // (never read uninitialised) every member they subsequently consult. So a raw,
-    // suitably-aligned stack buffer reinterpreted as ICETake is the faithful
-    // stand-in for a stack ICETake -- no constructor runs, matching that
-    // the rebind is self-contained. FLAG: replace with a real `ICETake lTake;` once
-    // the ICETake default ctor (and Cubic1D's) are reconstructed into the headers.
-    CGS_STATIC_ASSERT((__alignof(ICETake) == 4), "native ICETake scratch alignment");
-    CGS_ALIGN(4) u8 laTakeStorage[sizeof(ICETake)];
-    ICETake& lTake = *reinterpret_cast<ICETake*>(laTakeStorage);
+    ICETake lTake;
     lTake.SetDataPointers(this, false);    // bind live pointers over this take's data
 
     for ( s32 liElement = 0; liElement < eICE_NUM_ELEMENTS; ++liElement )
@@ -2497,18 +2460,7 @@ int Precision(f32 lfValue)
 
 void ICETakeData::SaveData(ICEFileHandler* lpHandler, s32 liTakeNumber)
 {
-    // ---- Scratch ICETake bound over THIS take's data (read-only walk) ----
-    // WIRING NOTE (same as ICETakeData::FixDown): the frozen ICETake header declares
-    // no default constructor (its Cubic1D[28] member type declares only Cubic1D(s16,f32)),
-    // so ICETake is not default-constructible here. The ICETake ctor runs on a stack
-    // buffer then SetDataPointers; the take is used ONLY as a `this` for the
-    // SetDataPointers + value-query calls, which write before they read. A raw aligned
-    // stack buffer reinterpreted as ICETake is the faithful stand-in.
-    // FLAG: replace with a real `ICETake lTake;` once the ICETake (and Cubic1D) default
-    // ctors are reconstructed into the headers.
-    CGS_STATIC_ASSERT((__alignof(ICETake) == 4), "native ICETake scratch alignment");
-    CGS_ALIGN(4) u8 laTakeStorage[sizeof(ICETake)];
-    ICETake& lTake = *reinterpret_cast<ICETake*>(laTakeStorage);
+    ICETake lTake;
     lTake.SetDataPointers(this, false);   // bind live pointers over this take's data
 
     // ---- Header tags ----

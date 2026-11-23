@@ -914,6 +914,10 @@ int SndPlayer1::ModifyStartTimeHandler(Command *rawCommand)
 #pragma optimize("", on)
 #endif
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// ARTIST uses the compact chunk strides and record-form feed countdown at 0x82BA0478 and 0x82BA04FC.
+#pragma optimize("s", on)
+#endif
 void SndPlayer1::RemoveRequest(u32 index)
 {
     System *system = mpSystemUseGetSystemAccessor;
@@ -931,14 +935,12 @@ void SndPlayer1::RemoveRequest(u32 index)
         SndPlayer1FeedDesc &feed = mFeedDesc[slot];
         if (feed.requestIndex != index)
             continue;
-        rw::core::filesys::Chunk *chunk = feed.pChunkInfo;
         feed.feedState = FEEDSTATE_FREE;
-        if (chunk != 0)
+        if (feed.pChunkInfo != 0)
         {
-            external.numBytesFed = static_cast<s32>(
-                static_cast<u32>(external.numBytesFed) - chunk->muSize);
+            external.numBytesFed -= feed.pChunkInfo->muSize;
             if (external.streamHandle != 0)
-                external.pRwCoreStream->ReleaseChunk(chunk);
+                external.pRwCoreStream->ReleaseChunk(feed.pChunkInfo);
             feed.pChunkInfo = 0;
         }
     }
@@ -955,6 +957,9 @@ void SndPlayer1::RemoveRequest(u32 index)
     if (external.expelMode == 1)
         Voice::ExpelAfterDecay(mpVoice);
 }
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 #if defined(_XBOX) && defined(_MSC_VER)
 // Size optimization matches the ARTIST cleanup loops at 0x82BA4080 and 0x82BA4100.

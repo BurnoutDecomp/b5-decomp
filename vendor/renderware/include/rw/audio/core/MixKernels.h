@@ -104,13 +104,13 @@ void ReChannelGainWrite1x4(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples)
 void ReChannelGainWrite1x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6AD10
 void ReChannelGainWrite2x4(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6ADA8
 void ReChannelGainWrite2x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6AE08
-void ReChannelGainWrite4x1(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6AE88
-void ReChannelGainWrite4x2(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6AEE8
+void ReChannelGainWrite4x1(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6AE88
+void ReChannelGainWrite4x2(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6AEE8
 void ReChannelGainWrite4x4(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6AF50
 void ReChannelGainWrite4x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6AFB0
-void ReChannelGainWrite6x1(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6B030
-void ReChannelGainWrite6x2(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6B0A0
-void ReChannelGainWrite6x4(f32 **ppDst, f32 **ppSrc, f32 gain, s32 numSamples); // @0x82B6B148
+void ReChannelGainWrite6x1(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6B030
+void ReChannelGainWrite6x2(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6B0A0
+void ReChannelGainWrite6x4(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6B148
 void ReChannelGainWrite6x6(f32 *ppDst[], f32 *ppSrc[], f32 gain, u32 numSamples); // @0x82B6B1E8
 
 // -------------------------------------------------------------------------------------

@@ -164,8 +164,19 @@ public:
     // that slot is empty.
     DecoderRequest *GetCurrentRequestDesc();
 
-    // @0x826914D0 -- samples still owed by request `ucIndex`, or 0 if that slot is empty.
-    s32 GetSamplesRemaining(u8 ucIndex);
+    // Inline in the ARTIST FeedCleanup callers and the X360 audio PDB.
+    // The out-of-line copy at 0x826914D0 is used by CgsStreamMod::Process.
+    s32 GetSamplesRemaining(u8 ucIndex)
+    {
+        const DecoderRequest& request = RequestQueue()[ucIndex];
+        const s32 iEnd = request.miEndSample;
+        if (iEnd == 0)
+            return 0;
+
+        if (ucIndex == mucRequestDecodeIndex)
+            return iEnd - miCurrentSampleOffset;
+        return iEnd - request.miStartSample;
+    }
 
     // @0x82B67920 -- hand the decoder one more chunk to decode. Fills the request slot at
     // the WRITE cursor, notifies the codec through FeedEvent, advances the cursor, and

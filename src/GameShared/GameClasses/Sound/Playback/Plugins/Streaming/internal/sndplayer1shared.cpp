@@ -57,7 +57,7 @@ namespace rw { namespace audio { namespace core {
         if (mCurrentRequest == mMaxRequests)
             mCurrentRequest = 0;
 
-        const RequestInternal *lpRequest = &Request(mCurrentRequest);
+        const RequestInternal *lpRequest = GetRequestInternal(mCurrentRequest);
         mCurrentRequestSamplesPlayed = 0;
         mCurrentRequestNumSamples = 0;
 
@@ -334,7 +334,7 @@ void SndPlayer1_CgsStreamMod::UnpackHeader(u32 auRequestIndex, void *apPacked)
 {
     BitGetter bits;
     bits.SetBitBuffer(apPacked);
-    RequestInternal &request = Request(auRequestIndex);
+    RequestInternal &request = *GetRequestInternal(auRequestIndex);
     RequestExternal &external = mpRequestExternal[auRequestIndex];
 
     bits.GetBits(4); // version
@@ -394,7 +394,7 @@ int SndPlayer1_CgsStreamMod::CreateInstance(PlugIn* apBase, void* apContext)
     self->mMaxRequests = static_cast<u8>(count);
     for (s32 i = 0; i < count; ++i)
     {
-        self->Request(i).state = E_REQUESTSTATE_FREE;
+        self->GetRequestInternal(i)->state = E_REQUESTSTATE_FREE;
         RequestExternal& external = self->mpRequestExternal[i];
         external.pReadStream = 0;
         external.streamState = E_STREAMSTATE_READ_HEADER;
@@ -553,7 +553,7 @@ int SndPlayer1_CgsStreamMod::Event(int aiEventId, void* apParameter)
         params.isFullyBuffered = 0.0f;
         for (u32 i = 0; i < mMaxRequests; ++i)
         {
-            RequestInternal& request = Request(i);
+            RequestInternal& request = *GetRequestInternal(i);
             if (request.requestHandle != params.requestHandle ||
                 !IsRequestActive(request.state))
                 continue;
@@ -597,7 +597,7 @@ s32 SndPlayer1_CgsStreamMod::PlayHandler(Command * apCommand)
     SndPlayer1_CgsStreamMod* self = static_cast<SndPlayer1_CgsStreamMod*>(command->pObject);
     const u32 index = self->mNextFreeRequest;
     self->mLastRequestHandleProcessed = command->requestHandle;
-    RequestInternal& request = self->Request(index);
+    RequestInternal& request = *self->GetRequestInternal(index);
     if (request.state != E_REQUESTSTATE_FREE)
         return command->recordBytes;
 
@@ -659,7 +659,7 @@ s32 SndPlayer1_CgsStreamMod::ModifyStartTimeHandler(Command * apCommand)
     SndPlayer1_CgsStreamMod* self = static_cast<SndPlayer1_CgsStreamMod*>(command->pObject);
     for (u32 i = 0; i < self->mMaxRequests; ++i)
     {
-        RequestInternal& request = self->Request(i);
+        RequestInternal& request = *self->GetRequestInternal(i);
         if (request.requestHandle == command->requestHandle &&
             self->IsRequestActive(request.state))
         {
@@ -673,30 +673,31 @@ s32 SndPlayer1_CgsStreamMod::ModifyStartTimeHandler(Command * apCommand)
 
 void SndPlayer1_CgsStreamMod::RemoveRequest(u32 auIndex)
 {
-    RequestInternal& request = Request(auIndex);
-    RequestExternal& external = mpRequestExternal[auIndex];
-    if (request.pDecoder)
+    // ARTIST captures the owning system before either release callback can run.
+    System *lpSystem = mpSystemUseGetSystemAccessor;
+    RequestInternal *lpRequest = GetRequestInternal(auIndex);
+    RequestExternal *lpExternal = &mpRequestExternal[auIndex];
+    if (lpRequest->pDecoder)
     {
-        request.pDecoder->Release();
-        request.pDecoder = 0;
+        lpRequest->pDecoder->Release();
+        lpRequest->pDecoder = 0;
     }
-    for (u32 i = 0; i < KU_MAX_DECODERFEEDS; ++i)
+    for (s32 liIndex = 0; liIndex < KU_MAX_DECODERFEEDS; ++liIndex)
     {
-        if (mFeedDesc[i].requestIndex == auIndex)
-            mFeedDesc[i].feedState = 0;
+        if (mFeedDesc[liIndex].requestIndex == auIndex)
+            mFeedDesc[liIndex].feedState = 0;
     }
-    off_82FFBA0C->DoCloseStream(external.pReadStream);
-    if (external.pStreamLoopFileName)
-        mpSystemUseGetSystemAccessor->Free(
-                     external.pStreamLoopFileName, 0);
-    request.state = E_REQUESTSTATE_FREE;
-    if (external.expelMode == 1)
+    off_82FFBA0C->DoCloseStream(lpExternal->pReadStream);
+    if (lpExternal->pStreamLoopFileName)
+        lpSystem->Free(lpExternal->pStreamLoopFileName, 0);
+    lpRequest->state = E_REQUESTSTATE_FREE;
+    if (lpExternal->expelMode == 1)
         Voice::ExpelAfterDecay(mpVoice);
 }
 
 void SndPlayer1_CgsStreamMod::RequestCleanup()
 {
-    while (Request(mNextRequestToFree).state == E_REQUESTSTATE_COMPLETE)
+    while (GetRequestInternal(mNextRequestToFree)->state == E_REQUESTSTATE_COMPLETE)
     {
         RemoveRequest(mNextRequestToFree);
         mNextRequestToFree =
@@ -710,7 +711,7 @@ void SndPlayer1_CgsStreamMod::StreamLostCallback(void* apContext)
         static_cast<SndPlayer1_CgsStreamMod*>(apContext);
     for (u32 i = 0; i < self->mMaxRequests; ++i)
     {
-        if (self->Request(i).state != E_REQUESTSTATE_FREE)
+        if (self->GetRequestInternal(i)->state != E_REQUESTSTATE_FREE)
             self->RemoveRequest(i);
     }
     self->mCurrentRequest = 0;
@@ -724,7 +725,7 @@ s32 SndPlayer1_CgsStreamMod::StopHandler(Command * apCommand)
         static_cast<SndPlayer1_CgsStreamMod*>(apCommand->pObject);
     for (u32 i = 0; i < self->mMaxRequests; ++i)
     {
-        if (self->Request(i).state != E_REQUESTSTATE_FREE)
+        if (self->GetRequestInternal(i)->state != E_REQUESTSTATE_FREE)
             self->RemoveRequest(i);
     }
     self->mCurrentRequest = 0;
@@ -744,32 +745,36 @@ namespace rw { namespace audio { namespace core {
 
 void SndPlayer1_CgsStreamMod::FeedCleanup()
 {
-    for (u32 i = 0; i < KU_MAX_DECODERFEEDS; ++i)
+    s32 liIndex = 0;
+    do
     {
-        SndPlayer1FeedDesc& feed = mFeedDesc[i];
-        if (feed.feedState != 2)
-            continue;
-        RequestInternal& request = Request(feed.requestIndex);
-        if (request.pDecoder->GetSamplesRemaining(feed.decoderRequestHandle) != 0)
-            continue;
-        feed.feedState = 0;
-        if (feed.mbStreamed)
+        SndPlayer1FeedDesc &feed = mFeedDesc[liIndex];
+        if (feed.feedState == 2)
         {
-            RequestExternal& external = mpRequestExternal[feed.requestIndex];
-            if (external.lockedChunks != 0)
+            const u32 luRequestIndex = feed.requestIndex;
+            RequestInternal *lpInternal = GetRequestInternal(luRequestIndex);
+            if (lpInternal->pDecoder->GetSamplesRemaining(feed.decoderRequestHandle) == 0)
             {
-                u32 next = external.unlockBufferSelect + 1;
-                if (next == KU_NUM_CHUNKS)
-                    next = 0;
-                if (next != external.writeBufferSelect)
+                feed.feedState = 0;
+                RequestExternal *lpExternal = &mpRequestExternal[luRequestIndex];
+                if (feed.mbStreamed)
                 {
-                    external.unlockBufferSelect = next;
-                    --external.lockedChunks;
+                    if (lpExternal->lockedChunks != 0)
+                    {
+                        u32 luNext = lpExternal->unlockBufferSelect + 1;
+                        if (luNext == KU_NUM_CHUNKS)
+                            luNext = 0;
+                        if (luNext != lpExternal->writeBufferSelect)
+                        {
+                            lpExternal->unlockBufferSelect = luNext;
+                            --lpExternal->lockedChunks;
+                        }
+                    }
+                    feed.mbStreamed = false;
                 }
             }
-            feed.mbStreamed = false;
         }
-    }
+    } while (++liIndex < KU_MAX_DECODERFEEDS);
 }
 
 u8* SndPlayer1_CgsStreamMod::SubmitChunk(
@@ -782,7 +787,7 @@ u8* SndPlayer1_CgsStreamMod::SubmitChunk(
     feed.feedState = 1;
     feed.chunkSamplesPlayed = 0;
     feed.requestIndex = static_cast<u8>(auRequestIndex);
-    feed.decoderRequestHandle = Request(auRequestIndex).pDecoder->Feed(
+    feed.decoderRequestHandle = GetRequestInternal(auRequestIndex)->pDecoder->Feed(
         apChunk + 8, static_cast<s32>(samples),
         static_cast<u8>(!abResetDecoder), 0,
         static_cast<const u8*>(0), 0);
@@ -793,7 +798,7 @@ u8* SndPlayer1_CgsStreamMod::SubmitChunk(
 bool SndPlayer1_CgsStreamMod::StreamNextChunk(
     u32 auIndex, bool abResetDecoder)
 {
-    RequestInternal& request = Request(auIndex);
+    RequestInternal& request = *GetRequestInternal(auIndex);
     RequestExternal& external = mpRequestExternal[auIndex];
     if (request.state == E_REQUESTSTATE_QUEUED &&
         (!external.pReadStream || !external.pReadStream->IsValid()))
@@ -817,7 +822,7 @@ bool SndPlayer1_CgsStreamMod::StreamNextChunk(
 
 bool SndPlayer1_CgsStreamMod::HandleLoopStart(u32 auIndex)
 {
-    RequestInternal& request = Request(auIndex);
+    RequestInternal& request = *GetRequestInternal(auIndex);
     RequestExternal& external = mpRequestExternal[auIndex];
     if (external.playType == 1)
         return StreamNextChunk(auIndex, true);
@@ -836,7 +841,7 @@ bool SndPlayer1_CgsStreamMod::HandleLoopStart(u32 auIndex)
 bool SndPlayer1_CgsStreamMod::HandleSampleEnd(
     u32 auIndex, bool* apbCompleted)
 {
-    RequestInternal& request = Request(auIndex);
+    RequestInternal& request = *GetRequestInternal(auIndex);
     RequestExternal& external = mpRequestExternal[auIndex];
     if (request.loopStart < 0)
     {
@@ -898,7 +903,7 @@ bool SndPlayer1_CgsStreamMod::StartRequest(u32 auIndex)
     };
 
     System* system = mpSystemUseGetSystemAccessor;
-    RequestInternal& request = Request(auIndex);
+    RequestInternal& request = *GetRequestInternal(auIndex);
     RequestExternal& external = mpRequestExternal[auIndex];
     System::Lock(system);
     DecoderRegistry* registry = System::GetDecoderRegistry(system);
@@ -944,13 +949,13 @@ int SndPlayer1_CgsStreamMod::Process(
     if (self->mNumDeclickSamples && self->mDcOffsetsGathered)
         return self->Declick(mixer);
 
-    RequestInternal* request = &self->Request(self->mCurrentRequest);
+    RequestInternal* request = self->GetRequestInternal(self->mCurrentRequest);
     self->mpLoadedDecoder = 0;
     while (self->IsRequestActive(request->state) && request->numSamples == 0)
     {
         request->state = E_REQUESTSTATE_COMPLETE;
         self->AdvanceCurrentRequest();
-        request = &self->Request(self->mCurrentRequest);
+        request = self->GetRequestInternal(self->mCurrentRequest);
     }
 
     u32 produced = 0;
@@ -1053,7 +1058,7 @@ int SndPlayer1_CgsStreamMod::Process(
             stack->mpTop = savedTop;
             carved = false;
             self->AdvanceCurrentRequest();
-            request = &self->Request(self->mCurrentRequest);
+            request = self->GetRequestInternal(self->mCurrentRequest);
             if (self->IsRequestActive(request->state) && request->pDecoder)
             {
                 savedTop = stack->mpTop;
@@ -1119,7 +1124,7 @@ void SndPlayer1_CgsStreamMod::RwacTimerClient(
     self->FeedCleanup();
     self->RequestCleanup();
     u8 index = self->mCurrentRequest;
-    RequestInternal* request = &self->Request(index);
+    RequestInternal* request = self->GetRequestInternal(index);
     if (!self->IsRequestActive(request->state))
     {
         self->mAttribute[1].f64 = 0.0;
@@ -1136,7 +1141,7 @@ void SndPlayer1_CgsStreamMod::RwacTimerClient(
     while (self->IsRequestActive(request->state) && request->numSamples == 0)
     {
         index = AdvanceRequestEquality(index, self->mMaxRequests);
-        request = &self->Request(index);
+        request = self->GetRequestInternal(index);
     }
     if (!self->IsRequestActive(request->state))
         return;
@@ -1241,7 +1246,7 @@ void SndPlayer1_CgsStreamMod::RwacTimerClient(
             index = AdvanceRequestEquality(index, self->mMaxRequests);
             if (index == self->mCurrentRequest)
                 return;
-            request = &self->Request(index);
+            request = self->GetRequestInternal(index);
             continue;
         }
 
@@ -1260,7 +1265,7 @@ void SndPlayer1_CgsStreamMod::RwacTimerClient(
                 index = AdvanceRequestEquality(index, self->mMaxRequests);
                 if (index == self->mCurrentRequest)
                     return;
-                request = &self->Request(index);
+                request = self->GetRequestInternal(index);
                 continue;
             }
         }

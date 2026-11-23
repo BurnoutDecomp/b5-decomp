@@ -73,46 +73,37 @@ void cLionBlockAlloc::DeInit()
 
 void* cLionBlockAlloc::Alloc()
 {
+    s32 lLeft = mBitBlockCount;
     s32 lIndex = mIndexLast;
-    s32 lLeft  = mBitBlockCount;
-    if (!lLeft)
+    while (lLeft != 0)
     {
-        return 0;
-    }
-
-    s32 lBits;
-    for (;;)
-    {
-        lBits = static_cast<s32>(mpBits[lIndex]);
-        if (lBits != -1)
+        const u32 lBits = mpBits[lIndex];
+        if (lBits != ~0u)
         {
-            break;
+            // Find the first clear bit in this word.
+            u32 lMask = 1;
+            u32 lOff = 0;
+            while ((lMask & lBits) != 0)
+            {
+                lMask *= 2;
+                ++lOff;
+            }
+
+            mpBits[lIndex] |= lMask;
+
+            mIndexLast  = lIndex;
+            mAllocCount = mAllocCount + 1;
+
+            return mpData + (32 * lIndex + lOff) * mItemSize;
         }
         if (++lIndex >= mBitBlockCount)
         {
             lIndex = 0;
         }
-        if (!--lLeft)
-        {
-            return 0;
-        }
+        --lLeft;
     }
 
-    // Find the first clear bit in this word.
-    u32 lMask = 1;
-    s32 lOff  = 0;
-    while ((lMask & static_cast<u32>(lBits)) != 0)
-    {
-        lMask *= 2;
-        ++lOff;
-    }
-
-    mpBits[lIndex] |= lMask;
-
-    mIndexLast  = lIndex;
-    mAllocCount = mAllocCount + 1;
-
-    return mpData + (32 * lIndex + lOff) * mItemSize;
+    return 0;
 }
 
 void cLionBlockAlloc::DeAlloc(void* apEntry)

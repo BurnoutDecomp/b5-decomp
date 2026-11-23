@@ -45,46 +45,35 @@ void EA::Thread::DynamicThreadArray::CheckDynamicThreadArray(bool bCloseAll)
 // X360 NOTE: this build does NOT call Initialize() first (see class comment).
 void EA::Thread::DynamicThreadArray::AddDynamicThreadHandle(HANDLE hThread, bool bAdd)
 {
-    if (hThread)
+    if (!hThread)
+        return;
+
+    EnterCriticalSection(&mCriticalSection);
+    if (bAdd)
     {
-        EnterCriticalSection(&mCriticalSection);
-
-        if (bAdd)
+        for (size_t luIndex = 0; luIndex < kMaxThreadDynamicArrayCount; ++luIndex)
         {
-            size_t  luIndex = 0;
-            HANDLE* lpSlot  = mhDynamicThreadArray;
-            while (*lpSlot)
+            if (!mhDynamicThreadArray[luIndex])
             {
-                ++luIndex;
-                ++lpSlot;
-                if (luIndex >= kMaxThreadDynamicArrayCount)
-                    goto Done; // table full: leave hThread non-null so it is closed below
+                mhDynamicThreadArray[luIndex] = hThread;
+                hThread = 0;
+                break;
             }
-
-            mhDynamicThreadArray[luIndex] = hThread;
-            hThread = 0; // stored successfully -- suppresses the CloseHandle below
-
-        Done:
-            if (hThread)
-                CloseHandle(hThread); // could not store it; close to match the DuplicateHandle that created it
         }
-        else
-        {
-            size_t  luIndex = 0;
-            HANDLE* lpSlot  = mhDynamicThreadArray;
-            while (*lpSlot != hThread)
-            {
-                ++luIndex;
-                ++lpSlot;
-                if (luIndex >= kMaxThreadDynamicArrayCount)
-                    goto Leave; // not found: by design not an error
-            }
-
+        if (hThread)
             CloseHandle(hThread);
-            mhDynamicThreadArray[luIndex] = 0;
-        }
-
-    Leave:
-        LeaveCriticalSection(&mCriticalSection);
     }
+    else
+    {
+        for (size_t luIndex = 0; luIndex < kMaxThreadDynamicArrayCount; ++luIndex)
+        {
+            if (mhDynamicThreadArray[luIndex] == hThread)
+            {
+                CloseHandle(hThread);
+                mhDynamicThreadArray[luIndex] = 0;
+                break;
+            }
+        }
+    }
+    LeaveCriticalSection(&mCriticalSection);
 }

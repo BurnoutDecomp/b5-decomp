@@ -128,14 +128,11 @@ void ICEAuthor::CommitCurrentAssembly()
     {
         // Grew: append the edited take-data to the edited-takes list tail, then start
         // a fresh edit buffer. mEditedTakeList[0]==Head sentinel, [1]==Tail. The
-        // ICETakeData node base (mPadNodeBase) provides the Next/Prev linkage:
-        // node-word[0]==Next, node-word[1]==Prev.
-        void** lppNode = reinterpret_cast<void**>(lpEdited);
-        void*  lpOldTail = mEditedTakeList[1];
-        *reinterpret_cast<void**>(lpOldTail) = lpEdited;      // oldTail->Next = edited
-        mEditedTakeList[1] = lpEdited;                        // Tail = edited
-        lppNode[0] = &mEditedTakeList[0];                     // edited->Next = head sentinel
-        lppNode[1] = lpOldTail;                               // edited->Prev = oldTail
+        bNode* lpOldTail = static_cast<bNode*>(mEditedTakeList[1]);
+        lpOldTail->Next = lpEdited;
+        mEditedTakeList[1] = lpEdited;
+        lpEdited->Next = reinterpret_cast<bNode*>(&mEditedTakeList[0]);
+        lpEdited->Prev = lpOldTail;
         mEditTake.NewEditBuffer();
     }
 }

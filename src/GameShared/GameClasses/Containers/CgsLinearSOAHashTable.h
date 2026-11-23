@@ -93,44 +93,29 @@ namespace CgsContainers
             return 0;
         }
 
-        // :420 -- probe from luKey's hash position (wrapping) for luKey; returns &mpValues[pos], or
-        // null if an empty slot is reached first (key absent). (X360 0x828DF3E0, <int,int>.)
+        // ARTIST 0x828DF3E0 searches from the hash position to the end and then
+        // wraps to the start. The 32-bit instance uses an unsigned key (divwu).
         ValueType* FindEntry(KeyType luKey)
         {
             const KeyType luStart = luKey % miLength;
-            KeyType       luPos   = luStart;
-            if (luStart < miLength)
+            KeyType luPos;
+            for (luPos = luStart; luPos < miLength; ++luPos)
             {
-                KeyType* lpKey = &mpKeys[luStart];
-                while (*lpKey != luKey)
-                {
-                    if (*lpKey == miInvalidKey)
-                        return 0;
-                    ++luPos;
-                    ++lpKey;
-                    if (luPos >= miLength)
-                        goto WrapScan;
-                }
-                return &mpValues[luPos];
+                const KeyType luSlotKey = mpKeys[luPos];
+                if (luSlotKey == luKey)
+                    return &mpValues[luPos];
+                if (luSlotKey == miInvalidKey)
+                    return 0;
             }
-
-        WrapScan:
-            luPos = 0;
-            if (luStart == 0)
-                return 0;
+            for (luPos = 0; luPos < luStart; ++luPos)
             {
-                KeyType* lpKey = mpKeys;
-                while (*lpKey != luKey)
-                {
-                    if (*lpKey == miInvalidKey)
-                        return 0;
-                    ++luPos;
-                    ++lpKey;
-                    if (luPos >= luStart)
-                        return 0;
-                }
-                return &mpValues[luPos];
+                const KeyType luSlotKey = mpKeys[luPos];
+                if (luSlotKey == luKey)
+                    return &mpValues[luPos];
+                if (luSlotKey == miInvalidKey)
+                    return 0;
             }
+            return 0;
         }
 
         // ---- LAYOUT (X360-observed store offsets, authoritative) ----
