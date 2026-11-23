@@ -1,30 +1,20 @@
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
-// Out-of-line bodies for the two CgsSceneManager::EntityId setters the X360 ARTIST
-// build emitted out-of-line (the remaining accessors stay inline in CgsEntityId.h).
+// CgsSceneManager::EntityId::SetEntityIndex, kept out of line here although the original had it
+// header-inline (DecFIGS has no CgsEntityId.cpp; ARTIST bakes CgsEntityId.h:160 into its assert and
+// inlines it into VolumeInstanceId::SetEntityIDEntityIndex 0x822B0E70, PropEntityID::SetEntityIndex
+// 0x822B79D0 and TrafficEntityModule::CleanUpCrashedVehiclePhysics 0x82720960). Its out-of-line
+// copy 0x8229FF58 exists because VehicleManager::ProcessShowtimeShunts (0x82629F20) and
+// ::HandleRaceCarTrafficCarPotentialContact (0x8263FA50) call it without inlining, and the x360
+// tree's versions of those two do not call it yet: back in the header, no object would emit the
+// verified copy. Move it next to SetOwner (CgsEntityId.h:157..162) once one of them does.
 // Store order and bit-fields are reproduced exactly from the X360 asm.
 
 namespace CgsSceneManager
 {
-    // 0x8229FEF0: SetOwner. clrlwi r31,r4,24 byte-masks the owner (u8); cmplwi 0xC + ble
-    // means the assert fires only when luOwner > 12, so the asserted range is
-    // luOwner <= 12 (the X360 binary is authoritative -- the earlier inline '< 8' was
-    // wrong). Assert string baked at CgsEntityId.h:153 (file/line dropped). Store:
-    // insrwi r11,r31,8,0 splices the owner into the top byte ->
-    // mId = (owner << KU_OWNER_BASE) | (mId & ~KU_OWNER_MASK).
-    void
-    EntityId::SetOwner( u8 luOwner )
-    {
-        CGS_ASSERT( luOwner <= 12,
-            CgsDev::Assert::MessageAt(
-                "Burnout Specfic: Bad entity type set",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsEntityId.h", 153 /* ARTIST 0x8229FF1C */));
-        mId = ( (u32)luOwner << KU_OWNER_BASE ) | ( mId & ~KU_OWNER_MASK );
-    }
-
     // 0x8229FF58: SetEntityIndex. cmplwi 0x4000 + blt asserts luEntityIndex < 1<<14.
-    // Assert string baked at CgsEntityId.h:160 (file/line dropped). Pack:
+    // Assert baked at CgsEntityId.h:160. Pack:
     // slwi r10,r30,10 (idx<<KU_ENTITY_INDEX_BASE); rlwinm r11,r11,0,22,7 clears
     // bits [10..23] leaving mask 0xFF0003FF (== ~KU_ENTITY_INDEX_MASK); or; stw ->
     // mId = (mId & ~KU_ENTITY_INDEX_MASK) | (idx << KU_ENTITY_INDEX_BASE).
