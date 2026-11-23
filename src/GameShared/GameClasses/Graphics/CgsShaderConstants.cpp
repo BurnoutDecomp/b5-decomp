@@ -360,6 +360,13 @@ void ShaderConstantTable::BeginFrame(CgsGraphics::DispatchBin* lpDispatchBin)
     }
 }
 
+// CgsShaderConstants.cpp:1411. Empty in this build: BrnRendererModule::SwapBuffers calls it at
+// 0x823FC6AC with r3 = &mShaderConstantTable, and the target is 0x8284CB38, the shared empty body;
+// the DecFIGS PS3 body (0xAB022C) is a lone blr as well.
+void ShaderConstantTable::EndFrame()
+{
+}
+
 // CgsShaderConstants.cpp:1498
 // Drain the dirty list into a dispatch-bin header block. The header (lpBinHeaderSpace,
 // viewed as bytes) holds: byte 0 = dirty count, bytes 1..count = the dirty constant

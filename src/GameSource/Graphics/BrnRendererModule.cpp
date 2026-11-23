@@ -14,6 +14,7 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Graphics/CgsRenderTarget.h"
+#include "GameShared/GameClasses/Graphics/CgsPerformanceTracker.h"
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsTextureScopeTable.h"
 #include "SDKs/RenderEngineClub/MAIN/components/src/statehelper.h"
 #include "rw/rwcore_general_alloc.h"
@@ -247,6 +248,8 @@ const D3DGAMMARAMP kInitialGammaRamp =
 void BrnRendererModule::Construct(const BrnGame::BrnCpuMonitors& globalMonitors,
     f32& aspectRatio, bool& highDefinition)
 {
+    // ARTIST bl 0x8284CB38 at 0x8240A7A0; DecFIGS PS3 stub 0x12250 names it.
+    CgsGraphics::PerformanceTracker::Startup();
     mpGraphicsAllocator = BrnResource::GetGraphicsAllocator();
     rw::IResourceAllocator* const allocator = mpGraphicsAllocator;
     mbMultisampledBackbuffer = true;
@@ -651,9 +654,15 @@ void BrnRendererModule::Destruct()
         mpGlassFractureTextureState = 0;
     mpGraphicsAllocator->Free(mEnvMapTextureStateResource);
     msPostFx.Destruct();
+    // ARTIST bl 0x8284CB38 at 0x82408AE4 (the shared empty body); the DecFIGS PS3 Destruct calls
+    // CgsGraphics::PerformanceTracker::Shutdown() here through its stub 0x10820.
+    CgsGraphics::PerformanceTracker::Shutdown();
 }
 
-// ARTIST823FC160. The call at823FC2A4 targets the true BLR ICF body8284CB38.
+// ARTIST 0x823FC160. Remaining difference: ARTIST inlines BrnCoronaManager::Clear (with its
+// CoronaBuffer::Lock) at 0x823FC2F4. DWARF defines Clear in BrnCoronaManager.cpp:412, so the
+// inlining comes from ARTIST's unity TU (assert path "gamesource\unity\../Graphics/..."),
+// not from a header body.
 void BrnRendererModule::StartOfFrame()
 {
     mDoubleBufferedDispatchFrame.GetDispatchFrameForWrite().Reset();
@@ -664,16 +673,23 @@ void BrnRendererModule::StartOfFrame()
     mIm2dDebugRenderBuffer.Clear();
     mIm3dBufferRacePosition.Clear();
     mIm3dBufferMenusAndHud.Clear();
+    // ARTIST bl 0x8284CB38 at 0x823FC2A4; DecFIGS PS3 stub 0x11720 names it.
+    CgsGraphics::PerformanceTracker::BeginFrame();
     CgsGraphics::mShaderConstantTable.BeginFrame(
         &mDoubleBufferedDispatchFrame.GetDispatchBinForWrite());
     CgsGraphics::gTextureScopeTable.BeginFrame();
     mCoronaManager.Clear();
 }
 
-// ARTIST823FC678. Two calls at823FC6AC/B0 also target8284CB38 (BLR).
+// ARTIST 0x823FC678. Remaining difference: ARTIST inlines BrnBlobbyShadowManager::Swap and
+// BrnCoronaManager::Swap (0x823FC748..0x823FC77C), both defined in their own .cpp (unity TU).
 void BrnRendererModule::SwapBuffers()
 {
     mDoubleBufferedDispatchFrame.Swap();
+    // ARTIST bl 0x8284CB38 at 0x823FC6AC (r3 = &mShaderConstantTable) and 0x823FC6B0; the
+    // DecFIGS PS3 stubs 0x10D00 and 0x11E50 name the two empty calls.
+    CgsGraphics::mShaderConstantTable.EndFrame();
+    CgsGraphics::PerformanceTracker::EndFrame();
     mEffectsArbitrator.EndOfFrame();
     mu8ShaderConstantsFrameInternal = mu8ShaderConstantsFrameExternal;
     mu8ShaderConstantsFrameExternal = static_cast<u8>(1 - mu8ShaderConstantsFrameExternal);
