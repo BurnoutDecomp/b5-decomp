@@ -10,7 +10,6 @@
 //   MixWithGain               @0x82B6A3F8 -- VMX block kernel, lowered scalar
 //   MixWithGainRamp           @0x82B6A568 -- VMX ramp kernel, lowered scalar
 //   ScaleSamples              @0x82B6B708 -- VMX block kernel, lowered scalar
-//   ClipFloats                @0x82B64B68 -- store-for-store
 //   DeClick                   @0x82B676F8 -- store-for-store
 //   ReOrderRwAudioCoreToWave  @0x82B6B590 -- store-for-store
 //   ReChannelGainWrite1x4/1x6/2x4/2x6/4x1/4x2/4x4/4x6/6x2/6x4/6x6
@@ -197,33 +196,6 @@ void ScaleSamples(f32 *pData, f32 scale, s32 numSamples)
     for (s32 i = 0; i < numSamples; ++i)
         pData[i] = pData[i] * scale;
 }
-
-// -------------------------------------------------------------------------------------
-// ClipFloats @0x82B64B68 -- clamp into [minValue, maxValue]; only out-of-range samples
-// are stored back (the in-range path never rewrites, exactly as the asm branches).
-// -------------------------------------------------------------------------------------
-#if defined(_XBOX) && defined(_MSC_VER)
-// Size optimization reproduces the ARTIST clip loop at 0x82B64B68.
-#pragma optimize("s", on)
-#endif
-
-void ClipFloats(f32 *pData, f32 minValue, f32 maxValue, s32 numSamples)
-{
-    f32 *const end = pData + numSamples;
-    for (f32 *sample = pData; sample < end; ++sample)
-    {
-        const f32 value = *sample;
-        // Both comparisons are ordered, so unordered samples are untouched.
-        if (value < minValue)
-            *sample = minValue;
-        else if (value > maxValue)
-            *sample = maxValue;
-    }
-}
-
-#if defined(_XBOX) && defined(_MSC_VER)
-#pragma optimize("", on)
-#endif
 
 // -------------------------------------------------------------------------------------
 // DeClick @0x82B676F8 -- fold each channel's residual click value into the first 16

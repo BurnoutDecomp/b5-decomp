@@ -129,26 +129,32 @@ namespace
 }
 
 // =====================================================================================
-// ClipFloats @0x82B64B68 -- clamp `aiCount` floats into [afMin, afMax] in place. A
-// core-namespace free function; its only ARTIST consumer is XenonDownMix, so it is
-// homed here.
+// ClipFloats @0x82B64B68 -- clamp samples in place using ordered comparisons.
+// The X360 audio PDB declares a void return, and the ARTIST caller XenonDownMix
+// uses the updated samples directly.
 // =====================================================================================
-f32 *ClipFloats(f32 *apValues, f32 afMin, f32 afMax, int aiCount)
+#if defined(_XBOX) && defined(_MSC_VER)
+// XDK size optimization preserves the original separate cursor and bound at 0x82B64B68.
+#pragma optimize("s", on)
+#endif
+
+void ClipFloats(f32 *apValues, f32 afMin, f32 afMax, int aiCount)
 {
     f32 *lpValue = apValues;
     f32 *lpEnd = apValues + aiCount;
     for (; lpValue < lpEnd; ++lpValue)
     {
         f32 lfSample = *lpValue;
-        if (!(lfSample >= afMin))
-            *lpValue = afMin;          // the console's `bge`-fails path -- a NaN is
-                                       // unordered and lands here too (preserved by
-                                       // the negated >= spelling)
+        if (lfSample < afMin)
+            *lpValue = afMin;
         else if (lfSample > afMax)
             *lpValue = afMax;
     }
-    return apValues;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // =====================================================================================
 // ReOrderRwAudioCoreToWave @0x82B6B590 -- de-interleave the planar SampleBuffer into

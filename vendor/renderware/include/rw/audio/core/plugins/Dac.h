@@ -143,7 +143,7 @@ public:
 struct SampleBuffer;
 f32 *ReOrderRwAudioCoreToWave(f32 *apOut, const SampleBuffer *apBuffer, int aiChannels,
                               int aiFrames);                        // @0x82B6B590
-f32 *ClipFloats(f32 *apValues, f32 afMin, f32 afMax, int aiCount);  // @0x82B64B68
+void ClipFloats(f32 *apValues, f32 afMin, f32 afMax, int aiCount);  // @0x82B64B68
 
 // The external-fill support surface (PC-home accessors over the Dac TU statics --
 // the console equivalents are XenonThread's direct in-TU static reads). Consumed by

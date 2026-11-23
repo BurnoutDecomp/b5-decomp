@@ -70,12 +70,6 @@ void MixWithGainRamp(f32 *pDst, f32 *pSrc, f32 gain, f32 step, s32 numSamples);
 void ScaleSamples(f32 *pData, f32 scale, s32 numSamples);
 
 // -------------------------------------------------------------------------------------
-// ClipFloats @0x82B64B68 -- clamp pData[i] into [minValue, maxValue] in place (only
-// out-of-range samples are stored back). (r3 data, f1 min, f2 max, r4/r5 dead, r6 count.)
-// -------------------------------------------------------------------------------------
-void ClipFloats(f32 *pData, f32 minValue, f32 maxValue, s32 numSamples);
-
-// -------------------------------------------------------------------------------------
 // DeClick @0x82B676F8 -- fold the per-channel residual "click" values a SubMix carries
 // (SubMixConnector::mDeClickValueTotal) into the first 16 samples of each channel of the
 // mix buffer, with a linearly decaying (16-j)/17 coefficient per sample j, then zero the
