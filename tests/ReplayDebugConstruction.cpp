@@ -19,7 +19,6 @@ int FireAssert(const char*,const char*,int) { ++asserts;return 0; }
 void* EndAssert() { return nullptr; }
 } }
 // The allocator is an observed dependency, not the RenderWare backend under test.
-namespace EA { namespace Allocator { ICoreAllocator::~ICoreAllocator() {} } }
 namespace rw {
 void* IResourceAllocator::Alloc(size_t,const char*,uint32_t,uint32_t,uint32_t) { ++unexpectedCalls;return nullptr; }
 void* IResourceAllocator::Alloc(size_t,const char*,uint32_t) { ++unexpectedCalls;return nullptr; }

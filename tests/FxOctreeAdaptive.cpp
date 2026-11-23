@@ -58,7 +58,6 @@ void StopMonitor(s32) {}
 } }
 
 // ---- the resource allocator Construct carves from: zeroed, aligned blocks, every request recorded ----------------
-namespace EA { namespace Allocator { ICoreAllocator::~ICoreAllocator() {} } }
 namespace rw
 {
     void* IResourceAllocator::Alloc(size_t, const char*, uint32_t, uint32_t, uint32_t) { return nullptr; }

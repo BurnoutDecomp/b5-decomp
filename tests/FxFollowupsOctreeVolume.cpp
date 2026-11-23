@@ -77,7 +77,6 @@ void StopMonitor(s32 liMonitorHandle)  { gaEvents.push_back(Event{ E_STOP_MONITO
 } }
 
 // ---- the resource allocator the extracted Construct carves its node arrays from ---------------------------------
-namespace EA { namespace Allocator { ICoreAllocator::~ICoreAllocator() {} } }
 namespace rw
 {
     void* IResourceAllocator::Alloc(size_t, const char*, uint32_t, uint32_t, uint32_t) { return nullptr; }

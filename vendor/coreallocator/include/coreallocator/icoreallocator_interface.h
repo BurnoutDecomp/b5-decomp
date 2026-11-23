@@ -51,14 +51,11 @@ namespace Allocator
     class ICoreAllocator
     {
     public:
-        // Polymorphic base destructor. Defined OUT-OF-LINE in
-        // coreallocator/source/icoreallocator_interface.cpp so the interface owns a
-        // real .cpp definition home -- the X360 base scalar-deleting destructor
-        // @ 0x82276820 (stores the ICoreAllocator vtable off_8200F5B4 into *this,
-        // then for the deleting variant conditionally operator-delete's). The body is
-        // empty (no members, no base); the vtable store + delete-tail is what the
-        // compiler emits.
-        virtual ~ICoreAllocator();
+        // The empty base destructor is inline. ARTIST's GeneralResourceAllocator
+        // destructor at 0x82BC0A50 emits no separate call to it. The generated
+        // scalar deleting destructor still owns the vtable install and deletion
+        // at 0x82276820.
+        virtual ~ICoreAllocator() {}
 
         // MSVC lays out a same-name virtual overload group in reverse declaration
         // order. ARTIST: aligned Alloc at +4, plain Alloc at +8, Free at +0xC.

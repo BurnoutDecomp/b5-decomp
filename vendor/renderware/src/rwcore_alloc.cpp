@@ -60,13 +60,13 @@ void* RwReallocMemStub(void* lpMemory, std::size_t lnSize)
     return rwMemoryFunctions.rwrealloc(lpMemory, lnSize);
 }
 
-// ARTIST 0x82BBC798. Release uses the unaligned CRT free operation.
+// ARTIST 0x82BBC798. Release forwards through the installed unaligned callback.
 void RwFreeMemStub(void* lpMemory)
 {
     rwMemoryFunctions.rwmalloc = std::malloc;
     rwMemoryFunctions.rwrealloc = std::realloc;
     rwMemoryFunctions.rwfree = std::free;
-    std::free(lpMemory);
+    rwMemoryFunctions.rwfree(lpMemory);
 }
 
 // rw::LinearResourceAllocator - the resource-memory linear (bump) allocator the game-data
