@@ -21,65 +21,36 @@ namespace audio
 namespace core
 {
 
-// FLAG (rwaudio PDB reconcile -- diverge): the NFS ProStreet 08 rwaudiocore PDB models
-// this differently. PDB ground truth (kept as-is, NOT applied, to preserve the ARTIST
-// layout + .cpp shape):
-//   class rw::audio::core::Iir2 [sizeof=16]  -- an INSTANCE class (no separate State
-//     struct); it directly holds the 4-float history split into TWO nested History
-//     members rather than one flat struct:
-//       +0x00 Iir2::History mInHistory  { float delay1; float delay2; }   (== mfX1, mfX2)
-//       +0x08 Iir2::History mOutHistory { float delay1; float delay2; }   (== mfY1, mfY2)
-//     struct Iir2::History [sizeof=8] { +0x00 float delay1; +0x04 float delay2; }
-//   The coefficient block below is PDB struct Iir2::FilterCoefficients [sizeof=20]
-//     { +0x00 a1; +0x04 a2; +0x08 b0; +0x0c b1; +0x10 b2; } -- field offsets MATCH this
-//     header's Iir2Coeffs exactly; only the names (a1/a2/b0/b1/b2) and the nested-vs-
-//     top-level shape differ.
-// Field OFFSETS all align; the divergence is structural (dataless class + flat top-level
-// state struct here vs. instance class + two nested History members in the PDB), so per
-// the reconcile rules the ARTIST modeling is preserved and no names/types are changed.
-//
-// Persistent filter state, direct-form-I history (4 floats, read at +0/+4/+8/+0xC):
-//   mfX1, mfX2 = input  history x[-1], x[-2]
-//   mfY1, mfY2 = output history y[-1], y[-2]
-struct Iir2State
-{
-    f32 mfX1; // +0x00
-    f32 mfX2; // +0x04
-    f32 mfY1; // +0x08
-    f32 mfY2; // +0x0C
-};
-
-// Coefficient block (5 floats, read from r6 at +0/+4/+8/+0xC/+0x10). Feedback
-// coefficients first (a1,a2), then feedforward (b0,b1,b2) -- matching the asm's
-// fnmsubs (feedback) / fmadds (feedforward) split.
-struct Iir2Coeffs
-{
-    f32 mfA1; // +0x00 -- y[n-1] feedback
-    f32 mfA2; // +0x04 -- y[n-2] feedback
-    f32 mfB0; // +0x08 -- x[n]   feedforward
-    f32 mfB1; // +0x0C -- x[n-1] feedforward
-    f32 mfB2; // +0x10 -- x[n-2] feedforward
-};
-
+// The Xbox 360 audio PDB identifies two histories in each 16-byte Iir2.
+// ARTIST clears them at 0x82B69F58, and the caller at 0x82B9E36C advances by 16 bytes.
 class Iir2
 {
 public:
+    struct FilterCoefficients
+    {
+        f32 a1;
+        f32 a2;
+        f32 b0;
+        f32 b1;
+        f32 b2;
+    };
+
     // Fixed processing-block length: the kernel runs until src reaches src + 0x400
     // bytes, i.e. 256 single-precision samples (asm: r11 = r5 + 0x400; r5 += 0x20/iter).
     enum { KI_BLOCK_SAMPLES = 256 };
 
-    // Filter one 256-sample block from `src` into `dst`, threading and updating the
-    // direct-form-I history in `state`. (Rendered nullary by IDA because the
-    // _savefpr/_restfpr prologue hides the register args; the asm register usage --
-    // r3=state, r4=dst, r5=src, r6=coeffs -- is authoritative.)
-    static void Filter(Iir2State *state, f32 *dst, const f32 *src, const Iir2Coeffs *coeffs);
+    void Filter(f32 *dst, const f32 *src, const FilterCoefficients *coeffs);
+    void ClearBuffer();
 
-    // Reset one channel's direct-form-I history to zero. A leaf the asm never gives its
-    // own export (folded into its call sites by the linker): every filter shape's
-    // Initialize<T> clears its 6 state slots through this, and each Process clears the
-    // running channels when the filter turns inactive. Stride between slots is
-    // sizeof(Iir2State) == 0x10 in every caller, matching the per-channel state array.
-    static void ClearBuffer(Iir2State *state);
+private:
+    struct History
+    {
+        f32 delay1;
+        f32 delay2;
+    };
+
+    History mInHistory;
+    History mOutHistory;
 };
 
 } // namespace core

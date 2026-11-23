@@ -14,7 +14,7 @@
 //
 // All six shapes share ONE biquad kernel (rw::audio::core::Iir2, see Iir2.h): each
 // holds a 5-coefficient block { a1, a2, b0, b1, b2 } and an array of per-channel
-// Iir2State history slots, and each runs the shared Iir2::Filter difference equation
+// Iir2 history slots, and each runs the shared Iir2::Filter difference equation
 // from its Process() entry. The shapes differ only in (a) which design parameters they
 // carry (cutoff, gain, Q), (b) the byte offsets of the coefficient block / state array,
 // and (c) the CalculateFilterCoefficients() that maps the parameters to the 5
@@ -29,7 +29,7 @@
 // the shapes embed the PlugIn base fields directly (composition, not inheritance) as a
 // PlugInBaseView at +0x00..+0x21; +0x00 is the same vtable word the game installs, and
 // the active channel count (the per-channel state-loop bound) lives at mbChannelCount
-// (+0x21). Six Iir2State slots are reserved per shape (Initialize<T> clears slots 0..5).
+// (+0x21). Six Iir2 slots are reserved per shape (Initialize<T> clears slots 0..5).
 // (2026-08-25 wave 4 CORRECTION: +0x18 is NOT "the live cutoff graph attribute" -- it
 // is the PDB's mDecaySamples, touched ONLY by the CreateInstance decay-rebase idiom;
 // each filter's cutoff lives at self+0x28, the shape's own attribute table that
@@ -161,8 +161,8 @@ public:
     char       mPad24[0x28 - 0x24];           // +0x24 .. +0x27
     f32        mfCutoffFreq;                  // +0x28
     char       mPad2C[0x30 - 0x2C];           // +0x2C .. +0x2F
-    Iir2State  mState[KI_IIR2_MAX_CHANNELS];  // +0x30 .. +0x8F
-    Iir2Coeffs mCoeffs;                       // +0x90 .. +0xA3
+    Iir2  mState[KI_IIR2_MAX_CHANNELS];  // +0x30 .. +0x8F
+    Iir2::FilterCoefficients mCoeffs;                       // +0x90 .. +0xA3
     f32        mfLastCutoffOmega;             // +0xA4
 };
 
@@ -184,8 +184,8 @@ public:
     char       mPad24[0x28 - 0x24];           // +0x24 .. +0x27
     f32        mfCutoffFreq;                  // +0x28
     char       mPad2C[0x30 - 0x2C];           // +0x2C .. +0x2F
-    Iir2State  mState[KI_IIR2_MAX_CHANNELS];  // +0x30 .. +0x8F
-    Iir2Coeffs mCoeffs;                       // +0x90 .. +0xA3
+    Iir2  mState[KI_IIR2_MAX_CHANNELS];  // +0x30 .. +0x8F
+    Iir2::FilterCoefficients mCoeffs;                       // +0x90 .. +0xA3
     f32        mfLastCutoffOmega;             // +0xA4
 };
 
@@ -209,8 +209,8 @@ public:
     char       mPad2C[0x30 - 0x2C];           // +0x2C .. +0x2F
     f32        mfFreqHi;                       // +0x30
     char       mPad34[0x38 - 0x34];           // +0x34 .. +0x37
-    Iir2State  mState[KI_IIR2_MAX_CHANNELS];  // +0x38 .. +0x97
-    Iir2Coeffs mCoeffs;                       // +0x98 .. +0xAB
+    Iir2  mState[KI_IIR2_MAX_CHANNELS];  // +0x38 .. +0x97
+    Iir2::FilterCoefficients mCoeffs;                       // +0x98 .. +0xAB
     f32        mfLastOmegaLo;                  // +0xAC
     f32        mfLastOmegaHi;                  // +0xB0
 };
@@ -235,9 +235,9 @@ public:
     char       mPad2C[0x30 - 0x2C];           // +0x2C .. +0x2F
     f32        mfGain;                         // +0x30
     char       mPad34[0x38 - 0x34];           // +0x34 .. +0x37
-    Iir2State  mState[KI_IIR2_MAX_CHANNELS];  // +0x38 .. +0x97
+    Iir2  mState[KI_IIR2_MAX_CHANNELS];  // +0x38 .. +0x97
     s32        mbActive;                       // +0x98
-    Iir2Coeffs mCoeffs;                       // +0x9C .. +0xAF
+    Iir2::FilterCoefficients mCoeffs;                       // +0x9C .. +0xAF
     f32        mfLastOmega;                    // +0xB0
     f32        mfLastGain;                     // +0xB4
 };
@@ -260,9 +260,9 @@ public:
     char       mPad2C[0x30 - 0x2C];           // +0x2C .. +0x2F
     f32        mfGain;                         // +0x30
     char       mPad34[0x38 - 0x34];           // +0x34 .. +0x37
-    Iir2State  mState[KI_IIR2_MAX_CHANNELS];  // +0x38 .. +0x97
+    Iir2  mState[KI_IIR2_MAX_CHANNELS];  // +0x38 .. +0x97
     s32        mbActive;                       // +0x98
-    Iir2Coeffs mCoeffs;                       // +0x9C .. +0xAF
+    Iir2::FilterCoefficients mCoeffs;                       // +0x9C .. +0xAF
     f32        mfLastOmega;                    // +0xB0
     f32        mfLastGain;                     // +0xB4
 };
@@ -291,9 +291,9 @@ public:
     char       mPad34[0x38 - 0x34];           // +0x34 .. +0x37
     f32        mfQ;                            // +0x38
     char       mPad3C[0x40 - 0x3C];           // +0x3C .. +0x3F
-    Iir2State  mState[KI_IIR2_MAX_CHANNELS];  // +0x40 .. +0x9F
+    Iir2  mState[KI_IIR2_MAX_CHANNELS];  // +0x40 .. +0x9F
     s32        mbActive;                       // +0xA0
-    Iir2Coeffs mCoeffs;                       // +0xA4 .. +0xB7
+    Iir2::FilterCoefficients mCoeffs;                       // +0xA4 .. +0xB7
     f32        mfLastOmega;                    // +0xB8
     f32        mfLastGain;                     // +0xBC
     f32        mfLastQ;                        // +0xC0

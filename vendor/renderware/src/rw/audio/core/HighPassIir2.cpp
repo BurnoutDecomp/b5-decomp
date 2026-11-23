@@ -77,7 +77,7 @@ char **HighPassIir2::GetPlugInDescRunTime()
 int HighPassIir2::CreateInstance(HighPassIir2 *self)
 {
     for (int i = 0; i < KI_IIR2_MAX_CHANNELS; ++i)
-        Iir2::ClearBuffer(&self->mState[i]);
+        self->mState[i].ClearBuffer();
 
     // Initialize<T>'s attribute-base wiring: the 0x28 immediate passed in r4 IS the
     // attribute-table offset (base SetAttribute writes land on mfCutoffFreq).
@@ -100,12 +100,12 @@ int HighPassIir2::CreateInstance(HighPassIir2 *self)
 // -------------------------------------------------------------------------------------
 // CalculateFilterCoefficients @0x82B978C0
 // s = sin(omega), c = cos(omega), k = 1/(1 + s/2). Stores (a1[36..40] ->
-// mfA1,mfA2,mfB0,mfB1,mfB2):
-//   mfA1 = -2*c * k
-//   mfA2 = (1 - s/2) * k
-//   mfB0 = (c + 1) / (2*(1 + s/2))
-//   mfB2 = (c + 1) / (2*(1 + s/2))
-//   mfB1 = -((c + 1) * k)
+// a1,a2,b0,b1,b2):
+//   a1 = -2*c * k
+//   a2 = (1 - s/2) * k
+//   b0 = (c + 1) / (2*(1 + s/2))
+//   b2 = (c + 1) / (2*(1 + s/2))
+//   b1 = -((c + 1) * k)
 // -------------------------------------------------------------------------------------
 void HighPassIir2::CalculateFilterCoefficients(f64 omega)
 {
@@ -115,11 +115,11 @@ void HighPassIir2::CalculateFilterCoefficients(f64 omega)
     const f64 half = s * 0.5;
     const f64 k = 1.0 / (half + 1.0);
 
-    mCoeffs.mfA1 = static_cast<f32>((c * -2.0) * k);
-    mCoeffs.mfA2 = static_cast<f32>((1.0 - half) * k);
-    mCoeffs.mfB0 = static_cast<f32>((c + 1.0) / ((half + 1.0) * 2.0));
-    mCoeffs.mfB2 = static_cast<f32>((c + 1.0) / ((half + 1.0) * 2.0));
-    mCoeffs.mfB1 = static_cast<f32>(-((c + 1.0) * k));
+    mCoeffs.a1 = static_cast<f32>((c * -2.0) * k);
+    mCoeffs.a2 = static_cast<f32>((1.0 - half) * k);
+    mCoeffs.b0 = static_cast<f32>((c + 1.0) / ((half + 1.0) * 2.0));
+    mCoeffs.b2 = static_cast<f32>((c + 1.0) / ((half + 1.0) * 2.0));
+    mCoeffs.b1 = static_cast<f32>(-((c + 1.0) * k));
 }
 
 // -------------------------------------------------------------------------------------
@@ -151,10 +151,9 @@ int HighPassIir2::Process(AudioProcessContext *ctx)
         AudioChannelBuffer *dst = ctx->mpDstBuffer;
         for (u32 ch = 0; ch < mBase.mbChannelCount; ++ch)
         {
-            Iir2::Filter(&mState[ch],
-                         dst->mpSamples + dst->muStride * ch,
-                         src->mpSamples + src->muStride * ch,
-                         &mCoeffs);
+            mState[ch].Filter(dst->mpSamples + dst->muStride * ch,
+                              src->mpSamples + src->muStride * ch,
+                              &mCoeffs);
         }
         AudioChannelBuffer *tmp = ctx->mpSrcBuffer;
         ctx->mpSrcBuffer = ctx->mpDstBuffer;
@@ -165,7 +164,7 @@ int HighPassIir2::Process(AudioProcessContext *ctx)
         if (mfLastCutoffOmega > KF_OMEGA_LO)
         {
             for (u32 ch = 0; ch < mBase.mbChannelCount; ++ch)
-                Iir2::ClearBuffer(&mState[ch]);
+                mState[ch].ClearBuffer();
         }
         mfLastCutoffOmega = omega;
     }

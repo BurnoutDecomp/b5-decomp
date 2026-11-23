@@ -78,12 +78,12 @@ int PeakingIir2::GetSize()
 // omega = pre-warped centre; gain = linear peak gain; q = quality factor. With
 // s = sin(omega), c = cos(omega), A = sqrt(gain), alpha = (s/(2*q)) / A,
 // v13 = A * (s/(2*q)), denom = alpha + 1, k = 1/denom, the asm stores (block at +0xA4,
-// a1[41..45] -> mfA1,mfA2,mfB0,mfB1,mfB2):
-//   mfA2 = (1 - alpha) * k
-//   mfB0 = (v13 + 1) * k
-//   mfA1 = k * (-2*c)
-//   mfB1 = k * (-2*c)
-//   mfB2 = (1 - v13) * k
+// a1[41..45] -> a1,a2,b0,b1,b2):
+//   a2 = (1 - alpha) * k
+//   b0 = (v13 + 1) * k
+//   a1 = k * (-2*c)
+//   b1 = k * (-2*c)
+//   b2 = (1 - v13) * k
 // -------------------------------------------------------------------------------------
 void PeakingIir2::CalculateFilterCoefficients(f64 omega, f64 gain, f64 q)
 {
@@ -96,11 +96,11 @@ void PeakingIir2::CalculateFilterCoefficients(f64 omega, f64 gain, f64 q)
     const f64 v13 = A * sOver2Q;
     const f64 k = 1.0 / (alpha + 1.0);
 
-    mCoeffs.mfA2 = static_cast<f32>((1.0 - alpha) * k);
-    mCoeffs.mfB0 = static_cast<f32>((v13 + 1.0) * k);
-    mCoeffs.mfA1 = static_cast<f32>(k * (c * -2.0));
-    mCoeffs.mfB1 = static_cast<f32>(k * (c * -2.0));
-    mCoeffs.mfB2 = static_cast<f32>((1.0 - v13) * k);
+    mCoeffs.a2 = static_cast<f32>((1.0 - alpha) * k);
+    mCoeffs.b0 = static_cast<f32>((v13 + 1.0) * k);
+    mCoeffs.a1 = static_cast<f32>(k * (c * -2.0));
+    mCoeffs.b1 = static_cast<f32>(k * (c * -2.0));
+    mCoeffs.b2 = static_cast<f32>((1.0 - v13) * k);
 }
 
 // -------------------------------------------------------------------------------------
@@ -113,7 +113,7 @@ void PeakingIir2::CalculateFilterCoefficients(f64 omega, f64 gain, f64 q)
 PeakingIir2 *PeakingIir2::CreateInstance(PeakingIir2 *self)
 {
     for (int i = 0; i < KI_IIR2_MAX_CHANNELS; ++i)
-        Iir2::ClearBuffer(&self->mState[i]);
+        self->mState[i].ClearBuffer();
 
     // PlugIn::Initialize<T>(self, 0x28) stores self+0x28 in the base attribute-table
     // slot (ARTIST helper @0x82BA1540, stw r11,0xC). The three authored attributes are
@@ -166,7 +166,7 @@ int PeakingIir2::Process(AudioProcessContext *ctx)
         if (mbActive == 1)
         {
             for (u32 ch = 0; ch < mBase.mbChannelCount; ++ch)
-                Iir2::ClearBuffer(&mState[ch]);
+                mState[ch].ClearBuffer();
             mbActive = 0;
         }
         mfLastOmega = omega;
@@ -197,10 +197,9 @@ int PeakingIir2::Process(AudioProcessContext *ctx)
         AudioChannelBuffer *dst = ctx->mpDstBuffer;
         for (u32 ch = 0; ch < mBase.mbChannelCount; ++ch)
         {
-            Iir2::Filter(&mState[ch],
-                         dst->mpSamples + dst->muStride * ch,
-                         src->mpSamples + src->muStride * ch,
-                         &mCoeffs);
+            mState[ch].Filter(dst->mpSamples + dst->muStride * ch,
+                              src->mpSamples + src->muStride * ch,
+                              &mCoeffs);
         }
         AudioChannelBuffer *tmp = ctx->mpSrcBuffer;
         ctx->mpSrcBuffer = ctx->mpDstBuffer;

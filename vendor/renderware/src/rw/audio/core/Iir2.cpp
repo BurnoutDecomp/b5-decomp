@@ -39,20 +39,20 @@ __declspec(noinline) f32 Iir2MulAdd(f32 a, f32 b, f32 c)
 }
 }
 
-void Iir2::Filter(Iir2State *state, f32 *dst, const f32 *src, const Iir2Coeffs *coeffs)
+void Iir2::Filter(f32 *dst, const f32 *src, const FilterCoefficients *coeffs)
 {
     const f32 KF_DENORMAL_FLUSH = 1.0e-18f; // flt_8214B108
 
-    const f32 c0 = coeffs->mfA1; // feedback  y[n-1]
-    const f32 c1 = coeffs->mfA2; // feedback  y[n-2]
-    const f32 c2 = coeffs->mfB0; // feedforward x[n]
-    const f32 c3 = coeffs->mfB1; // feedforward x[n-1]
-    const f32 c4 = coeffs->mfB2; // feedforward x[n-2]
+    const f32 c0 = coeffs->a1; // feedback  y[n-1]
+    const f32 c1 = coeffs->a2; // feedback  y[n-2]
+    const f32 c2 = coeffs->b0; // feedforward x[n]
+    const f32 c3 = coeffs->b1; // feedforward x[n-1]
+    const f32 c4 = coeffs->b2; // feedforward x[n-2]
 
-    f32 x1 = state->mfX1; // x[-1]
-    f32 x2 = state->mfX2; // x[-2]
-    f32 y1 = state->mfY1; // y[-1]
-    f32 y2 = state->mfY2; // y[-2]
+    f32 x1 = mInHistory.delay1; // x[-1]
+    f32 x2 = mInHistory.delay2; // x[-2]
+    f32 y1 = mOutHistory.delay1; // y[-1]
+    f32 y2 = mOutHistory.delay2; // y[-2]
 
     for (int i = 0; i < KI_BLOCK_SAMPLES; i += 8)
     {
@@ -99,24 +99,23 @@ void Iir2::Filter(Iir2State *state, f32 *dst, const f32 *src, const Iir2Coeffs *
         x1 = laInput[7];
     }
 
-    state->mfX1 = x1;
-    state->mfX2 = x2;
-    state->mfY1 = y1;
-    state->mfY2 = y2;
+    mInHistory.delay1 = x1;
+    mInHistory.delay2 = x2;
+    mOutHistory.delay1 = y1;
+    mOutHistory.delay2 = y2;
 }
 
 // -------------------------------------------------------------------------------------
 // rw::audio::core::Iir2::ClearBuffer
-// Zero one channel's biquad history. No standalone X360 export exists (the call name
-// rw::audio::core::Iir2::ClearBuffer is folded into its call sites); it clears the
-// 4-float Iir2State the Filter() difference equation threads.
+// Zero one channel's biquad history. The leaf at 0x82B69F58 is called from
+// the per-channel reset loop at 0x82B9E360.
 // -------------------------------------------------------------------------------------
-void Iir2::ClearBuffer(Iir2State *state)
+void Iir2::ClearBuffer()
 {
-    state->mfX1 = 0.0f;
-    state->mfX2 = 0.0f;
-    state->mfY1 = 0.0f;
-    state->mfY2 = 0.0f;
+    mInHistory.delay1 = 0.0f;
+    mInHistory.delay2 = 0.0f;
+    mOutHistory.delay1 = 0.0f;
+    mOutHistory.delay2 = 0.0f;
 }
 
 } // namespace core

@@ -71,12 +71,12 @@ char **LowPassIir2::GetPlugInDescRunTime()
 // CalculateFilterCoefficients @0x82B97DC0
 // omega = pre-warped cutoff angular frequency (rad/sample). Computes the 5 biquad
 // coefficients into mCoeffs (block at +0x90). With s = sin(omega), c = cos(omega) and
-// k = 1 / (1 + s/2) the asm computes (a1[36..40] -> mfA1,mfA2,mfB0,mfB1,mfB2):
-//   mfA1 = -2*c * k
-//   mfA2 = (1 - s/2) * k
-//   mfB1 = (1 - c) * k
-//   mfB0 = (1 - c) / (2*(1 + s/2))
-//   mfB2 = (1 - c) / (2*(1 + s/2))
+// k = 1 / (1 + s/2) the asm computes (a1[36..40] -> a1,a2,b0,b1,b2):
+//   a1 = -2*c * k
+//   a2 = (1 - s/2) * k
+//   b1 = (1 - c) * k
+//   b0 = (1 - c) / (2*(1 + s/2))
+//   b2 = (1 - c) / (2*(1 + s/2))
 // (sin is rounded to single precision before reuse: fp31 holds s as a 32-bit value.)
 // -------------------------------------------------------------------------------------
 void LowPassIir2::CalculateFilterCoefficients(f64 omega)
@@ -87,11 +87,11 @@ void LowPassIir2::CalculateFilterCoefficients(f64 omega)
     const f64 half = s * 0.5;
     const f64 k = 1.0 / (half + 1.0);
 
-    mCoeffs.mfA1 = static_cast<f32>((c * -2.0) * k);
-    mCoeffs.mfA2 = static_cast<f32>((1.0 - half) * k);
-    mCoeffs.mfB1 = static_cast<f32>((1.0 - c) * k);
-    mCoeffs.mfB0 = static_cast<f32>((1.0 - c) / ((half + 1.0) * 2.0));
-    mCoeffs.mfB2 = static_cast<f32>((1.0 - c) / ((half + 1.0) * 2.0));
+    mCoeffs.a1 = static_cast<f32>((c * -2.0) * k);
+    mCoeffs.a2 = static_cast<f32>((1.0 - half) * k);
+    mCoeffs.b1 = static_cast<f32>((1.0 - c) * k);
+    mCoeffs.b0 = static_cast<f32>((1.0 - c) / ((half + 1.0) * 2.0));
+    mCoeffs.b2 = static_cast<f32>((1.0 - c) / ((half + 1.0) * 2.0));
 }
 
 // -------------------------------------------------------------------------------------
@@ -106,7 +106,7 @@ void LowPassIir2::CalculateFilterCoefficients(f64 omega)
 LowPassIir2 *LowPassIir2::CreateInstance(LowPassIir2 *self)
 {
     for (int i = 0; i < KI_IIR2_MAX_CHANNELS; ++i)
-        Iir2::ClearBuffer(&self->mState[i]);
+        self->mState[i].ClearBuffer();
 
     self->mBase.mpAttributes = &self->mfCutoffFreq;   // Initialize<T>(self, 0x28)
 
@@ -154,10 +154,9 @@ int LowPassIir2::Process(AudioProcessContext *ctx)
         AudioChannelBuffer *dst = ctx->mpDstBuffer;
         for (u32 ch = 0; ch < mBase.mbChannelCount; ++ch)
         {
-            Iir2::Filter(&mState[ch],
-                         dst->mpSamples + dst->muStride * ch,
-                         src->mpSamples + src->muStride * ch,
-                         &mCoeffs);
+            mState[ch].Filter(dst->mpSamples + dst->muStride * ch,
+                              src->mpSamples + src->muStride * ch,
+                              &mCoeffs);
         }
         // Ping-pong the source/destination buffer slots.
         AudioChannelBuffer *tmp = ctx->mpSrcBuffer;
@@ -169,7 +168,7 @@ int LowPassIir2::Process(AudioProcessContext *ctx)
         if (mfLastCutoffOmega < KF_OMEGA_HI)
         {
             for (u32 ch = 0; ch < mBase.mbChannelCount; ++ch)
-                Iir2::ClearBuffer(&mState[ch]);
+                mState[ch].ClearBuffer();
         }
         mfLastCutoffOmega = omega;
     }

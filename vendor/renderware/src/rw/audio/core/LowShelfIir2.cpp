@@ -72,15 +72,15 @@ char **LowShelfIir2::GetPlugInDescRunTime()
 // omega = pre-warped cutoff; gain = linear shelf gain. With s = sin(omega),
 // c = cos(omega), A = sqrt(gain), and the constant 0.70710653 (= 1/sqrt(2)) the asm
 // builds the RBJ low-shelf coefficients, normalising by k = 1/denominator. Stores
-// (block at +0x9C, a1[39..43] -> mfA1,mfA2,mfB0,mfB1,mfB2):
+// (block at +0x9C, a1[39..43] -> a1,a2,b0,b1,b2):
 //   beta  = 2 * sqrt(A) * (s*0.70710653)
 //   denom = beta + (A-1)*c + (A+1)
 //   k     = 1/denom
-//   mfA2 = -(beta - ((A-1)*c + (A+1))) * k
-//   mfA1 = ((A+1)*c + (A-1)) * k * -2
-//   mfB0 = ( beta - ((A-1)*c - (A+1)) ) * k * A
-//   mfB2 = (-(beta + ((A-1)*c - (A+1))) ) * k * A   [fnmsubs form: -(beta - -((A-1)c-(A+1)))]
-//   mfB1 = (-((A+1)*c - (A-1)) * k * A) * 2
+//   a2 = -(beta - ((A-1)*c + (A+1))) * k
+//   a1 = ((A+1)*c + (A-1)) * k * -2
+//   b0 = ( beta - ((A-1)*c - (A+1)) ) * k * A
+//   b2 = (-(beta + ((A-1)*c - (A+1))) ) * k * A   [fnmsubs form: -(beta - -((A-1)c-(A+1)))]
+//   b1 = (-((A+1)*c - (A-1)) * k * A) * 2
 // (single-precision rounding matches the asm's frsp/fsqrts.)
 // -------------------------------------------------------------------------------------
 void LowShelfIir2::CalculateFilterCoefficients(f64 omega, f64 gain)
@@ -92,11 +92,11 @@ void LowShelfIir2::CalculateFilterCoefficients(f64 omega, f64 gain)
     const f64 beta = (Fsqrts(A) * (s * 0.70710653)) * 2.0;
     const f64 k = 1.0 / ((beta + ((A - 1.0) * c)) + (A + 1.0));
 
-    mCoeffs.mfA2 = static_cast<f32>(-(beta - (((A - 1.0) * c) + (A + 1.0))) * k);
-    mCoeffs.mfA1 = static_cast<f32>((((A + 1.0) * c) + (A - 1.0)) * k * -2.0);
-    mCoeffs.mfB0 = static_cast<f32>(((beta - (((A - 1.0) * c) - (A + 1.0))) * k) * A);
-    mCoeffs.mfB2 = static_cast<f32>((-(beta - -(((A - 1.0) * c) - (A + 1.0))) * k) * A);
-    mCoeffs.mfB1 = static_cast<f32>(((-(((A + 1.0) * c) - (A - 1.0)) * k) * A) * 2.0);
+    mCoeffs.a2 = static_cast<f32>(-(beta - (((A - 1.0) * c) + (A + 1.0))) * k);
+    mCoeffs.a1 = static_cast<f32>((((A + 1.0) * c) + (A - 1.0)) * k * -2.0);
+    mCoeffs.b0 = static_cast<f32>(((beta - (((A - 1.0) * c) - (A + 1.0))) * k) * A);
+    mCoeffs.b2 = static_cast<f32>((-(beta - -(((A - 1.0) * c) - (A + 1.0))) * k) * A);
+    mCoeffs.b1 = static_cast<f32>(((-(((A + 1.0) * c) - (A - 1.0)) * k) * A) * 2.0);
 }
 
 // -------------------------------------------------------------------------------------
@@ -109,7 +109,7 @@ void LowShelfIir2::CalculateFilterCoefficients(f64 omega, f64 gain)
 LowShelfIir2 *LowShelfIir2::CreateInstance(LowShelfIir2 *self)
 {
     for (int i = 0; i < KI_IIR2_MAX_CHANNELS; ++i)
-        Iir2::ClearBuffer(&self->mState[i]);
+        self->mState[i].ClearBuffer();
 
     self->mBase.mpAttributes = &self->mfCutoffFreq;   // Initialize<T>(self, 0x28)
 
@@ -150,7 +150,7 @@ int LowShelfIir2::Process(AudioProcessContext *ctx)
         if (mbActive == 1)
         {
             for (u32 ch = 0; ch < mBase.mbChannelCount; ++ch)
-                Iir2::ClearBuffer(&mState[ch]);
+                mState[ch].ClearBuffer();
             mbActive = 0;
         }
         mfLastOmega = omega;
@@ -173,10 +173,9 @@ int LowShelfIir2::Process(AudioProcessContext *ctx)
         AudioChannelBuffer *dst = ctx->mpDstBuffer;
         for (u32 ch = 0; ch < mBase.mbChannelCount; ++ch)
         {
-            Iir2::Filter(&mState[ch],
-                         dst->mpSamples + dst->muStride * ch,
-                         src->mpSamples + src->muStride * ch,
-                         &mCoeffs);
+            mState[ch].Filter(dst->mpSamples + dst->muStride * ch,
+                              src->mpSamples + src->muStride * ch,
+                              &mCoeffs);
         }
         AudioChannelBuffer *tmp = ctx->mpSrcBuffer;
         ctx->mpSrcBuffer = ctx->mpDstBuffer;

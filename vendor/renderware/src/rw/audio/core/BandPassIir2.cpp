@@ -69,12 +69,12 @@ char **BandPassIir2::GetPlugInDescRunTime()
 // CalculateFilterCoefficients @0x82B96A50
 // omegaLo/omegaHi = pre-warped low/high band edges. Q' = clamp(omegaLo/omegaHi, <= 20).
 // With s = sin(omegaLo), c = cos(omegaLo), alpha = s/(2*Q') and k = 1/(alpha + 1) the
-// asm stores (block at +0x98, a1[38..42] -> mfA1,mfA2,mfB0,mfB1,mfB2):
-//   mfA1 = -2*c * k
-//   mfA2 = (1 - alpha) * k
-//   mfB0 = k * alpha
-//   mfB1 = 0
-//   mfB2 = -(k * alpha)
+// asm stores (block at +0x98, a1[38..42] -> a1,a2,b0,b1,b2):
+//   a1 = -2*c * k
+//   a2 = (1 - alpha) * k
+//   b0 = k * alpha
+//   b1 = 0
+//   b2 = -(k * alpha)
 // -------------------------------------------------------------------------------------
 void BandPassIir2::CalculateFilterCoefficients(f64 omegaLo, f64 omegaHi)
 {
@@ -87,11 +87,11 @@ void BandPassIir2::CalculateFilterCoefficients(f64 omegaLo, f64 omegaHi)
     const f64 k = 1.0 / (alpha + 1.0);
     const f64 c = cos(omegaLo);
 
-    mCoeffs.mfB0 = static_cast<f32>(k * alpha);
-    mCoeffs.mfB1 = 0.0f;
-    mCoeffs.mfA2 = static_cast<f32>((1.0 - alpha) * k);
-    mCoeffs.mfB2 = static_cast<f32>(-(k * alpha));
-    mCoeffs.mfA1 = static_cast<f32>((c * -2.0) * k);
+    mCoeffs.b0 = static_cast<f32>(k * alpha);
+    mCoeffs.b1 = 0.0f;
+    mCoeffs.a2 = static_cast<f32>((1.0 - alpha) * k);
+    mCoeffs.b2 = static_cast<f32>(-(k * alpha));
+    mCoeffs.a1 = static_cast<f32>((c * -2.0) * k);
 }
 
 // -------------------------------------------------------------------------------------
@@ -105,7 +105,7 @@ void BandPassIir2::CalculateFilterCoefficients(f64 omegaLo, f64 omegaHi)
 BandPassIir2 *BandPassIir2::CreateInstance(BandPassIir2 *self)
 {
     for (int i = 0; i < KI_IIR2_MAX_CHANNELS; ++i)
-        Iir2::ClearBuffer(&self->mState[i]);
+        self->mState[i].ClearBuffer();
 
     self->mBase.mpAttributes = &self->mfFreqLo;       // Initialize<T>(self, 0x28)
 
@@ -169,10 +169,9 @@ int BandPassIir2::Process(AudioProcessContext *ctx)
         AudioChannelBuffer *dst = ctx->mpDstBuffer;
         for (u32 ch = 0; ch < mBase.mbChannelCount; ++ch)
         {
-            Iir2::Filter(&mState[ch],
-                         dst->mpSamples + dst->muStride * ch,
-                         src->mpSamples + src->muStride * ch,
-                         &mCoeffs);
+            mState[ch].Filter(dst->mpSamples + dst->muStride * ch,
+                              src->mpSamples + src->muStride * ch,
+                              &mCoeffs);
         }
         AudioChannelBuffer *tmp = ctx->mpSrcBuffer;
         ctx->mpSrcBuffer = ctx->mpDstBuffer;
@@ -189,7 +188,7 @@ int BandPassIir2::Process(AudioProcessContext *ctx)
         if (lastValid)
         {
             for (u32 ch = 0; ch < mBase.mbChannelCount; ++ch)
-                Iir2::ClearBuffer(&mState[ch]);
+                mState[ch].ClearBuffer();
         }
         mfLastOmegaLo = omegaLo;
         mfLastOmegaHi = omegaHi;
