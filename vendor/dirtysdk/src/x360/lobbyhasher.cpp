@@ -12,26 +12,22 @@
 
 static const s32 HASHER_MEMID = 1818784616;
 
-static s32 HashNumBucket(HasherRef* ref, s32 key)
-{
-    u32 uKey = (u32)key;
-    if (key < 0)
-    {
-        uKey = 0u - uKey;
-    }
-    return (s32)(uKey % (u32)ref->hashlen);
-}
-
+// ARTIST 0x82B30D88 bumps `expand` by one for the block's link record (addi r29,r4,1),
+// allocates and walks `table+expand`, and returns `expand-1` (addi r3,r29,-1).
+// DWARF (lobbyhasher.c:251-253): locals `table`, `item`.
 extern "C" s32 HasherExpand(HasherRef* ref, s32 expand)
 {
+ HasherT* table;
+ HasherT* item;
  if (expand < 1) expand=1;
- HasherT* table=static_cast<HasherT*>(DirtyMemAlloc((expand+1)*sizeof(HasherT), HASHER_MEMID, ref->memgroup));
+ ++expand;
+ table=static_cast<HasherT*>(DirtyMemAlloc(expand*sizeof(HasherT), HASHER_MEMID, ref->memgroup));
  if (!table) return -1;
  table->next=ref->list; ref->list=table;
- for (HasherT* item=table+1; item != table+expand+1; ++item) {
+ for (item=table+1; item != table+expand; ++item) {
   item->next=ref->avail; ref->avail=item;
  }
- return expand;
+ return expand-1;
 }
 extern "C" HasherRef* HasherCreate(s32 initial, s32 hashlen)
 {
@@ -44,7 +40,9 @@ extern "C" HasherRef* HasherCreate(s32 initial, s32 hashlen)
  ref->hashbuf=static_cast<HasherT**>(DirtyMemAlloc(sizeof(HasherT*)*hashlen,HASHER_MEMID,group));
  memset(ref->hashbuf,0,sizeof(HasherT*)*ref->hashlen);
  ref->compare=LobbyNameCmp;
- HasherExpand(ref,initial);
+ // ARTIST 0x82B3147C re-tests `initial > 0` before the expand call, although the
+ // clamp above already forces it.
+ if (initial>0) HasherExpand(ref,initial);
  return ref;
 }
 extern "C" void HasherDestroy(HasherRef* ref)
@@ -62,12 +60,14 @@ extern "C" void* HasherFlush(HasherRef* ref)
  item->next=ref->avail; ref->avail=item; --ref->items;
  return item->data;
 }
+// DWARF (lobbyhasher.c:362) gives HashStrHash one local, `int32_t hash`: the loop
+// walks `key` itself (XDK char is signed: ARTIST's extsb. at 0x82B30EFC).
 static s32 HashStrHash(HasherRef* ref, const char* key)
 {
- u32 hash=0;
- for (const signed char* p=reinterpret_cast<const signed char*>(key); *p; ++p)
-  if (*p>32) hash=(*p & 0x5f)+131u*hash;
- return (s32)(hash & 0x7fffffffu) % ref->hashlen;
+ s32 hash;
+ for (hash=0; *key!=0; ++key)
+  if (*key>' ') hash=(*key & 0x5f)+131*hash;
+ return (hash & 0x7fffffff) % ref->hashlen;
 }
 extern "C" s32 HashStrAdd(HasherRef* ref, const char* key, void* data)
 {
@@ -83,74 +83,60 @@ extern "C" void* HashStrFind(HasherRef* ref, const char* key)
   if (!ref->compare(item->key.ptr,key)) return item->data;
  return 0;
 }
+// DWARF (lobbyhasher.c:509-511): locals `item`, `link`, `hash`. ARTIST 0x82B31068
+// tests `(item = *link)` at the loop head, compares through a reloaded `*link`
+// (0x82B310E8) and steps with `link = &(*link)->next` (lwz r29,0(r29)); the unlink
+// follows the loop and owns the epilogue, the not-found exit branches to it
+// (0x82B3111C). HashNumDel (0x82B31298) has the same shape.
 extern "C" void* HashStrDel(HasherRef* ref, const char* key)
 {
- HasherT** link=&ref->hashbuf[HashStrHash(ref,key)];
- while (*link) {
-  HasherT* item=*link;
-  if (!ref->compare(item->key.ptr,key)) {
-   *link=item->next;
-   if (ref->iter.curr==item) ref->iter.curr=item->next;
-   item->next=ref->avail; ref->avail=item; --ref->items;
-   return item->data;
-  }
-  link=&item->next;
+ HasherT* item, **link;
+ s32 hash=HashStrHash(ref,key);
+ for (link=&ref->hashbuf[hash];; link=&(*link)->next) {
+  if ((item=*link)==0) return 0;
+  if (ref->compare((*link)->key.ptr,key)==0) break;
  }
- return 0;
+ *link=item->next;
+ if (ref->iter.curr==item) ref->iter.curr=item->next;
+ item->next=ref->avail; ref->avail=item; --ref->items;
+ return item->data;
 }
 
+// The numeric bucket is computed in place in each HashNum* function (DWARF lists no
+// numeric hash helper, only the `hash` local): ARTIST 0x82B31160/0x82B31228/0x82B31298
+// all open with the absolute key modulo hashlen (signed divw, cmpwi before the copy).
 extern "C" s32 HashNumAdd(HasherRef* ref, s32 key, void* data)
 {
-    const s32 iBucket = HashNumBucket(ref, key);
-    if (!ref->avail && HasherExpand(ref, (3 * ref->items + 10) / 2) <= 0)
-    {
-        return -1;
-    }
-
-    HasherT* pItem = ref->avail;
-    ref->avail = pItem->next;
-    pItem->key.val = key;
-    pItem->data = data;
-    pItem->next = ref->hashbuf[iBucket];
-    ref->hashbuf[iBucket] = pItem;
-    ++ref->items;
-    return 1;
+ HasherT* item;
+ s32 hash;
+ hash=(key>=0 ? key : -key)%ref->hashlen;
+ if (!ref->avail && HasherExpand(ref,(3*ref->items+10)/2)<=0) return -1;
+ item=ref->avail; ref->avail=item->next;
+ item->key.val=key; item->data=data; item->next=ref->hashbuf[hash]; ref->hashbuf[hash]=item;
+ ++ref->items; return 1;
 }
-
 extern "C" void* HashNumFind(HasherRef* ref, s32 key)
 {
-    for (HasherT* pItem = ref->hashbuf[HashNumBucket(ref, key)];
-         pItem != NULL; pItem = pItem->next)
-    {
-        if (pItem->key.val == key)
-        {
-            return pItem->data;
-        }
-    }
-    return NULL;
+ HasherT* item;
+ s32 hash;
+ hash=(key>=0 ? key : -key)%ref->hashlen;
+ for (item=ref->hashbuf[hash]; item!=0; item=item->next)
+  if (item->key.val==key) return item->data;
+ return 0;
 }
-
 extern "C" void* HashNumDel(HasherRef* ref, s32 key)
 {
-    HasherT** ppItem = &ref->hashbuf[HashNumBucket(ref, key)];
-    while (*ppItem != NULL)
-    {
-        HasherT* pItem = *ppItem;
-        if (pItem->key.val == key)
-        {
-            *ppItem = pItem->next;
-            if (ref->iter.curr == pItem)
-            {
-                ref->iter.curr = pItem->next;
-            }
-            pItem->next = ref->avail;
-            ref->avail = pItem;
-            --ref->items;
-            return pItem->data;
-        }
-        ppItem = &pItem->next;
-    }
-    return NULL;
+ HasherT* item, **link;
+ s32 hash;
+ hash=(key>=0 ? key : -key)%ref->hashlen;
+ for (link=&ref->hashbuf[hash];; link=&(*link)->next) {
+  if ((item=*link)==0) return 0;
+  if ((*link)->key.val==key) break;
+ }
+ *link=item->next;
+ if (ref->iter.curr==item) ref->iter.curr=item->next;
+ item->next=ref->avail; ref->avail=item; --ref->items;
+ return item->data;
 }
 
 extern "C" void HasherEnumInit(HasherRef* ref) { ref->iter.idx=0; ref->iter.curr=0; }
