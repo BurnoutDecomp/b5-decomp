@@ -80,7 +80,7 @@ void GeometryCollisionPredictor::GenerateSceneQueries(const Camera& lrCamera, f3
 void GeometryCollisionPredictor::ProcessSceneQueryResults(f32 lfTimestep)
 {
     (void)lfTimestep;
-    CGS_ASSERT(mLineTest.HasPackage(), "mLineTest.HasPackage()");                   // :538
+    CGS_ASSERT(mLineTest.HasPackage(), CgsDev::Assert::MessageAt("mLineTest.HasPackage()", "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.cpp", 538));                   // :538
 
     if (mLineTest.GetPackage().mbIntersection)
     {

@@ -147,7 +147,7 @@ void VisibilityCollisionPolicy::SetDesiredHeight(f32 lfDesiredHeight)
 // :206 "mbWillCollide" tripwire, exactly the X360's second inlined assert).
 f32 VisibilityCollisionPolicy::TimeUntilCollisionWithGeometry() const
 {
-    CGS_ASSERT(WillCollideWithGeometry(), "WillCollideWithGeometry()");   // :425 (non-gating)
+    CGS_ASSERT(WillCollideWithGeometry(), CgsDev::Assert::MessageAt("WillCollideWithGeometry()", "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.h", 425));   // :425 (non-gating)
     return mGeometryCollisionPredictor.GetTimeUntilCollision();
 }
 
@@ -155,7 +155,7 @@ f32 VisibilityCollisionPolicy::TimeUntilCollisionWithGeometry() const
 // GetSoonestPredictedCollision (its own BrnVehicleCollisionPredictor.h:69 "HasPredictedCollision()" tripwire).
 f32 VisibilityCollisionPolicy::TimeUntilCollisionWithVehicle() const
 {
-    CGS_ASSERT(WillCollideWithVehicle(), "WillCollideWithVehicle()");     // :431 (non-gating)
+    CGS_ASSERT(WillCollideWithVehicle(), CgsDev::Assert::MessageAt("WillCollideWithVehicle()", "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.h", 431));     // :431 (non-gating)
     return mVehicleCollisionPredictor.GetSoonestPredictedCollision().mfTimeUntilCollision;
 }
 

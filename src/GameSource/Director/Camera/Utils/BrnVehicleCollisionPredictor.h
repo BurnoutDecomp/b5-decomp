@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                   // Vector3 (Update's arguments)
 #include "GameShared/GameClasses/Core/CgsAssert.h"             // CGS_ASSERT (the predicted-collision tripwire)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"     // BrnDirector::VecFloat (Update's step) -- inside
                                                                // namespace BrnDirector the name must resolve to it,
                                                                // as CameraUtils.h explains (the two VecFloats mangle
@@ -53,7 +54,7 @@ public:
     // was predicted (non-gating), then returns the record.
     const PredictedCollision& GetSoonestPredictedCollision() const
     {
-        CGS_ASSERT(HasPredictedCollision(), "HasPredictedCollision()");   // :69 (non-gating)
+        CGS_ASSERT(HasPredictedCollision(), CgsDev::Assert::MessageAt("HasPredictedCollision()", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnVehicleCollisionPredictor.h", 69));   // :69 (non-gating)
         return mSoonestPredictedCollision;
     }
 

@@ -100,11 +100,8 @@ namespace
 }
 }
 
-// MaybeDrawText (X360 0x82824048) -- the shared "draw debug text iff on-screen" helper used by the
-// HUD draw loops. External to this TU (its own TU); declared so the compile gate sees its shape.
-// Signature recovered from the call sites: (display, text, x, y, scale, colour, centred).
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
+// The HUD draw loops' text calls go to Debug2DImmediateRender::DrawText(text, x, y, scale, colour),
+// X360 0x82824048 (IDA's "MaybeDrawText").
 
 namespace BrnAI
 {
@@ -311,7 +308,7 @@ void RouteMapDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDisplay
         const char* lpcDistanceFunction = KAPC_ASTAR_DISTANCE_FUNCTION_NAMES[
             mpAIModule->mRouteRequestManager.meDefaultAStarDistanceFunction];
         lStream << "Default distance function: " << lpcDistanceFunction;
-        MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f, 100.0f, 16.0f, 0xFFFFFFFFu, false);
+        lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 100.0f, 16.0f, 0xFFFFFFFFu);
 
         DrawRouteInMap(lpDisplay, mpAIModule->GetMasterRoute(), 0xFF0000FFu /* -16776961 */);
     }
@@ -561,7 +558,7 @@ void RouteMapDebugComponent::DrawAStarInMap(CgsDev::Debug2DImmediateRender* lpDi
     }
 
     lStream << ")";
-    MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f, 70.0f, 16.0f, 0xFFFFFFFFu, false);
+    lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 70.0f, 16.0f, 0xFFFFFFFFu);
 }
 
 // ====================================================================================================
@@ -592,7 +589,7 @@ void RouteMapDebugComponent::DrawAISectionInfo(CgsDev::Debug2DImmediateRender* l
                          lv3Middle.GetY().GetFloat(),
                          lv3Middle.GetZ().GetFloat());
 
-    MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f, 100.0f, 16.0f, 0xFFFFFFFFu, false);
+    lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 100.0f, 16.0f, 0xFFFFFFFFu);
 }
 
 
@@ -701,7 +698,7 @@ void RouteMapDebugComponent::DrawAISectionMap(CgsDev::Debug2DImmediateRender* lp
     }
     lStream << "Section count: " << static_cast<s32>(mpAISectionsData->muNumSections)
             << ", Line count: " << liLineCount;
-    MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f, 50.0f, 16.0f, 0xFFFFFFFFu, false);
+    lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 50.0f, 16.0f, 0xFFFFFFFFu);
 }
 
 // ARTIST 0x8278D7B0; DWARF BrnRouteMapDebugComponent.cpp:582.
@@ -750,8 +747,8 @@ void RouteMapDebugComponent::DrawCarsInMap(CgsDev::Debug2DImmediateRender* lpDis
         {
             CgsDev::SimpleStrStream lStream;
             lStream << static_cast<s32>(lpCar->mfDistanceToCheckpoint) << "m";
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lPosition.mV.x, lPosition.mV.y - 10.0f,
-                          10.0f, 0xFFFFFFFFu, false);
+            lpDisplay->DrawText(lStream.GetBuffer(), lPosition.mV.x, lPosition.mV.y - 10.0f,
+                          10.0f, 0xFFFFFFFFu);
             const u16 luDestination = lpCar->GetDestinationSectionIndex();
             if (luDestination != AICar::KI_INVALID_SECTION_INDEX)
             {
@@ -804,9 +801,9 @@ void RouteMapDebugComponent::DrawEventBlockSectionsInMap(CgsDev::Debug2DImmediat
             }
         }
         lStream << " )";
-        MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f,
+        lpDisplay->DrawText(lStream.GetBuffer(), 50.0f,
                       static_cast<f32>(liCheckpoint) * 20.0f + 100.0f,
-                      16.0f, 0xFFFFFFFFu, false);
+                      16.0f, 0xFFFFFFFFu);
     }
 }
 
@@ -1028,8 +1025,8 @@ void RouteMapDebugComponent::DrawDeadEndsInMap(CgsDev::Debug2DImmediateRender* l
         DrawX(lpDisplay, lv2MapPosition, 5.0f, lColour);
 
         if (mbHighDetailMap)
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lv2MapPosition.mV.x, lv2MapPosition.mV.y,
-                          12.0f, 0xFFFFFFFFu, false);
+            lpDisplay->DrawText(lStream.GetBuffer(), lv2MapPosition.mV.x, lv2MapPosition.mV.y,
+                          12.0f, 0xFFFFFFFFu);
     }
 }
 

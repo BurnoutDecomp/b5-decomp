@@ -26,8 +26,9 @@ namespace BrnDirector
         CGS_ASSERT(!mpInstance, CgsDev::Assert::MessageAt("mpInstance==NULL", "..\\..\\..\\GameSource\\Director/BrnDirectorDevTools.cpp", 46));
         CGS_ASSERT(lpDirectorModule, CgsDev::Assert::MessageAt("lpCameraModule != NULL", "..\\..\\..\\GameSource\\Director/BrnDirectorDevTools.cpp", 47));
 
-        mpDirectorResourceManager = lpDirectorResourceManager;
+        // ARTIST 0x821F6FC0 stores the module (+0x34) before the resource manager (+0x30).
         mpDirectorModule = lpDirectorModule;
+        mpDirectorResourceManager = lpDirectorResourceManager;
         mpInstance = this;
     }
 
