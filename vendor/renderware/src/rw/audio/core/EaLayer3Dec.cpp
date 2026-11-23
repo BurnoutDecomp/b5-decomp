@@ -6,6 +6,13 @@
 #include <cstddef>
 #include <cstring>
 #include <new>
+#include <xtl.h>
+
+#if defined(_XBOX) && defined(_MSC_VER)
+// The XDK size setting reproduces AllocateHybrid at 0x82B8C200 and the
+// MPEG destructor chain at 0x82B93B08, 0x82B94FB0, 0x82B95020 and 0x82B95348.
+#pragma optimize("s", on)
+#endif
 
 namespace rw
 {
@@ -54,9 +61,8 @@ class CMpegLayer3Base : public CMpegBase
 {
 public:
     CMpegLayer3Base();
-    void DestroyLayer3();
+    virtual ~CMpegLayer3Base();
     s32 AllocateHybrid(s32 channels);
-    static void *VectorDeletingDestructor(CMpegLayer3Base *self, char flags);
 
     HuffmanTable maHuffman[32];        // 0x50
     u8 mGranuleAndScaleState[0x15C];    // 0x150
@@ -74,23 +80,8 @@ class EALayer3Core : public CMpegLayer3Base
 {
 public:
     explicit EALayer3Core(s32 channels);
-    static void *VectorDeletingDestructor(EALayer3Core *self, char flags);
+    virtual ~EALayer3Core() {}
 };
-
-namespace
-{
-
-void *(*kLayer3BaseVtable[])(CMpegLayer3Base *, char) =
-{
-    &CMpegLayer3Base::VectorDeletingDestructor
-};
-
-void *(*kEaLayer3CoreVtable[])(EALayer3Core *, char) =
-{
-    &EALayer3Core::VectorDeletingDestructor
-};
-
-} // namespace
 
 CGS_STATIC_ASSERT(sizeof(HuffmanTable) == 8, "ARTIST Huffman descriptor stride");
 CGS_STATIC_ASSERT(sizeof(kHuffmanTables) == 32 * sizeof(HuffmanTable), "ARTIST Huffman descriptor count");
@@ -111,7 +102,6 @@ CMpegLayer3Base::CMpegLayer3Base()
     muHeaderWord = 0;
     mpPolySynthHistory = 0;
     mpPolySynthWork = 0;
-    mpVTable = kLayer3BaseVtable;
     mpGlobalGain = kGlobalGain;
     muHuffmanScale = 1024;
     mpCurrentGain = 0;
@@ -128,48 +118,33 @@ CMpegLayer3Base::CMpegLayer3Base()
 // ARTIST 0x82B8C200
 s32 CMpegLayer3Base::AllocateHybrid(s32 channels)
 {
-    const u32 bytes = static_cast<u32>(channels) * 2304;
+    const s32 bytes = channels * 2304;
     mpHybridHistory = static_cast<f32 *>(System::Alloc(off_83271928, bytes, "MP3HybridHistory", 16, 0));
     if (!mpHybridHistory)
         return -1;
-    std::memset(mpHybridHistory, 0, bytes);
+    XMemSet(mpHybridHistory, 0, bytes);
     return 0;
 }
 
-// ARTIST 0x82B93B08
-void CMpegLayer3Base::DestroyLayer3()
+// ARTIST inlines the base cleanup into the derived destructor and its own deleting thunk.
+CMpegBase::~CMpegBase()
 {
-    mpVTable = kLayer3BaseVtable;
-    if (mpHybridHistory)
-        System::Free(off_83271928, mpHybridHistory, 0);
-    CMpegBase::VectorDeletingDestructor(this, 0);
+    if (mpPolySynthHistory)
+        System::Free(off_83271928, mpPolySynthHistory, 0);
 }
 
-// ARTIST 0x82B95020
-void *CMpegLayer3Base::VectorDeletingDestructor(CMpegLayer3Base *self, char flags)
+// ARTIST 0x82B93B08
+CMpegLayer3Base::~CMpegLayer3Base()
 {
-    self->DestroyLayer3();
-    if ((flags & 1) != 0)
-        ::operator delete(self);
-    return self;
+    if (mpHybridHistory)
+        System::Free(off_83271928, mpHybridHistory, 0);
 }
 
 // ARTIST 0x82B94F50
 EALayer3Core::EALayer3Core(s32 channels)
 {
-    mpVTable = kEaLayer3CoreVtable;
     AllocateSynth(channels);
     AllocateHybrid(channels);
-}
-
-// ARTIST 0x82B95348
-void *EALayer3Core::VectorDeletingDestructor(EALayer3Core *self, char flags)
-{
-    self->mpVTable = kEaLayer3CoreVtable;
-    self->DestroyLayer3();
-    if ((flags & 1) != 0)
-        ::operator delete(self);
-    return self;
 }
 
 // ARTIST 0x82B953A0

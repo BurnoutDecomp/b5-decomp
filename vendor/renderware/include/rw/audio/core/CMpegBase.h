@@ -20,11 +20,8 @@
 // offset, width and side-effect. No LegacySrc source and no DecFIGS DWARF exist for this
 // TU. Sibling to the committed rw::audio::core homes (Decoder, Xas1Dec, XasDec, ...).
 //
-// LAYOUT NOTE (X360 byte offsets, from the asm). The compile target is x64 PC, so the two
-// pointer members (vptr / mpBitPointer / mpPolySynthHistory) widen; the fixed header
-// offsets below describe the X360 image and are reached only by named member -- never by
-// hardcoded offset. Gaps the reconstructed methods never touch are preserved as padding.
-//   +0x00  mpVTable                  (polymorphic base -> vector deleting destructor)
+// LAYOUT NOTE (X360 byte offsets, from ARTIST and the Xbox 360 RenderWare PDB).
+//   +0x00  vptr                      (polymorphic base with virtual destructor)
 //   +0x04  muSampleRate              (Hz; the divisor in the frame-size computation)
 //   +0x08  muSampleRateCopy          (duplicate written alongside muSampleRate)
 //   +0x0C  miBitRate                 (kbps table value for this frame)
@@ -68,9 +65,7 @@ namespace core
 {
 
 // -------------------------------------------------------------------------------------
-// CMpegBase -- see the file header for the byte layout. Polymorphic base; the compiler
-// emits a vector deleting destructor (modelled here as a static thunk, matching the
-// rwaudio plug-in family convention rather than a C++ `virtual ~`).
+// CMpegBase -- see the file header for the byte layout.
 // -------------------------------------------------------------------------------------
 class CMpegBase
 {
@@ -101,12 +96,10 @@ public:
     // Layer3Dec::Decode / EALayer3Core::Decode -- ignore it, so the return is void.)
     void PolySynth(s32 iChannel, f32 *pOutSamples, const f32 *pInSamples);
 
-    // @0x82B94FB0 -- vector deleting destructor: reinstall the CMpegBase vtable, free the
-    // poly-synth history, and (when bit 0 of `flags` is set) delete `self`.
-    static void *VectorDeletingDestructor(CMpegBase *self, char flags);
+    // Releases the synthesis history. The XDK emits the deleting thunk at 0x82B94FB0.
+    virtual ~CMpegBase();
 
     // ---- fixed header (X360 offsets in the file-header comment) ----
-    void *mpVTable;                 // +0x00
     u32   muSampleRate;             // +0x04
     u32   muSampleRateCopy;         // +0x08
     s32   miBitRate;                // +0x0C

@@ -9,16 +9,8 @@
 //   GetBits                    @0x82B8AAE8
 //   GetHeader                  @0x82B8F3F0
 //   ProcessHeader              @0x82B8F128
-//   `vector deleting destructor'@0x82B94FB0
-//   PolySynth                  @0x82B8EE50 -- reconstructed in MpegBase_wM_01.cpp:338
-//                                (NOT here; this TU only declares it. The old BLOCKED
-//                                claim below is historical -- retired 2026-08-25).
-//
-// PolySynth needs the un-recovered poly-phase synthesis-window coefficient rodata
-// (unk_82159D70 / unk_82159DB0) and the un-homed matrixing helper sub_82B8E258, and its
-// history-buffer addressing (the +0x38 rotating phase into the 2304-byte-per-channel block
-// at +0x4C) cannot be grounded without them. Reconstructing it would mean fabricating that
-// float table and the helper's contract, so it is left to its own TU -- an honest gap.
+// The destructor lives with the derived decoder lifecycle in EaLayer3Dec.cpp.
+// The PolySynth implementation is in MpegBase_wM_01.cpp.
 //
 // The `_savefpr_17` / `_restfpr_17` and the `twllei` / `twlgei` in the pseudocode are the
 // compiler's FP register save/restore helpers and its divide-by-zero / overflow trap
@@ -28,7 +20,13 @@
 #include "rw/audio/core/CMpegBase.h"
 #include "rw/audio/core/PlugIn.h" // rw::audio::core::System (Alloc / Free)
 
-#include <cstring> // std::memset (the X360 XMemSet)
+#include <xtl.h>
+
+#if defined(_XBOX) && defined(_MSC_VER)
+// The XDK size setting reproduces ARTIST's AllocateSynth at 0x82B8BFF0
+// and preserves GetHeader at 0x82B8F3F0.
+#pragma optimize("s", on)
+#endif
 
 namespace rw
 {
@@ -43,12 +41,6 @@ namespace
 // System allocator TU; here it is the target for System::Alloc / System::Free. Same global
 // reached from Decoder.cpp / Collection.cpp.
 extern "C" System *off_83271928;
-
-// ARTIST 0x8215A8E8 has one entry, the vector deleting destructor.
-void *(*kMpegBaseVtable[])(CMpegBase *, char) =
-{
-    &CMpegBase::VectorDeletingDestructor
-};
 
 // The MPEG frame-header lookup tables (off_8215A66C / off_8215A680 in the X360 rodata).
 // ProcessHeader only *indexes* them -- their contents (the standard MPEG sample-rate Hz and
@@ -76,11 +68,6 @@ namespace
     };
 }
 
-// XMemSet @ the X360 build = byte-wise memset; reproduced with std::memset.
-inline void XMemSet(void *dst, int value, u32 bytes)
-{
-    std::memset(dst, value, bytes);
-}
 } // namespace
 
 // -------------------------------------------------------------------------------------
@@ -92,15 +79,15 @@ inline void XMemSet(void *dst, int value, u32 bytes)
 // -------------------------------------------------------------------------------------
 s32 CMpegBase::AllocateSynth(s32 iChannelCount)
 {
-    const u32 uSize = 2304u * static_cast<u32>(iChannelCount);
+    const s32 liSize = iChannelCount * 2304;
 
-    void *pHistory = System::Alloc(off_83271928, uSize, "PolySynthHistoryF", 16, 0);
+    void *pHistory = System::Alloc(off_83271928, liSize, "PolySynthHistoryF", 16, 0);
     mpPolySynthHistory = pHistory;
 
     if (!pHistory)
         return -1;
 
-    XMemSet(pHistory, 0, uSize);
+    XMemSet(pHistory, 0, liSize);
     return 0;
 }
 
@@ -248,25 +235,6 @@ s32 CMpegBase::ProcessHeader(u32 uHeader)
 
     miFrameSize -= 4;
     return iResult;
-}
-
-// -------------------------------------------------------------------------------------
-// `vector deleting destructor' @0x82B94FB0
-// Reinstall the CMpegBase v-table, free the poly-synth history block through the shared
-// rwaudio System allocator, and -- when bit 0 of `flags` is set -- delete `self`.
-// -------------------------------------------------------------------------------------
-void *CMpegBase::VectorDeletingDestructor(CMpegBase *self, char flags)
-{
-    void *pHistory = self->mpPolySynthHistory;
-    self->mpVTable = kMpegBaseVtable;
-
-    if (pHistory)
-        System::Free(off_83271928, pHistory, 0);
-
-    if ((flags & 1) != 0)
-        ::operator delete(self);
-
-    return self;
 }
 
 } // namespace core
