@@ -20,8 +20,8 @@
 //
 // The lifecycle Register (X360 0x828331D8) is reconstructed below: it thread-safe-acquires the
 // DebugManager and threads the component onto its list via RegisterComponent / RegisterComponentSimple
-// (chosen by IsSimple()). Construct / Destruct are the base two-phase init/teardown over the two
-// members (the X360 inlines them; bodies reconstructed from the attested member set).
+// (chosen by IsSimple()). Construct / Destruct are the base two-phase init/teardown hooks; both are
+// empty in the original (DecFIGS bare blr bodies, folded into ARTIST's empty 0x8284CB38).
 //
 // The menu-row helpers share MenuManager's canonical CreateMenuPath/Add/Remove implementation.
 
@@ -40,20 +40,20 @@ namespace CgsDev
 
     // ---- lifecycle -----------------------------------------------------------------------------
 
-    // Base two-phase init (CgsDebugComponent.cpp:51). The X360 inlines it; reconstructed over the
-    // attested members - the component starts inactive and unlinked from the registration list.
+    // Base two-phase init (CgsDebugComponent.cpp:51): empty in the original. DecFIGS 0xB178C8 is a
+    // bare blr, and ARTIST's derived components call the folded blr at 0x8284CB38 for it (e.g.
+    // BuddyManagerDebugComponent::Construct at 0x82585664); the constructor leaves mbActive false and
+    // mpDebugLinkedListNext null.
     void DebugComponent::Construct()
     {
-        mbActive = false;
-        mpDebugLinkedListNext = 0;
     }
 
-    // Base teardown (CgsDebugComponent.cpp:79). Marks the component inactive; the X360 keeps no
-    // manager-side unregister entry point, so removal from the list is left to the manager.
+    // Base teardown (CgsDebugComponent.cpp:79): empty in the original. DecFIGS 0xB178D0 is a bare
+    // blr; ARTIST's derived Destructs tail-call the same 0x8284CB38 (e.g. at 0x825856EC).
     void DebugComponent::Destruct()
     {
-        mbActive = false;
     }
+
 
     // X360 0x828331D8. Thread-safe-acquire the debug manager, then thread this component onto its
     // list - RegisterComponentSimple for a "simple" (flat) component, RegisterComponent for one that
