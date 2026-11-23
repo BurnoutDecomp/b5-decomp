@@ -168,14 +168,21 @@ extern "C" s32 LobbyRankRowCount(LobbyRankT* r)
 
 #include "dirtymem.h"
 extern "C" LobbyLocalizeT* LobbyLocalizeDestroy(LobbyLocalizeT*);
-struct RankRowT { s32 pts; s32 rank; u32 uFlags; char name[20]; char stat[260]; };
-typedef char RankRowFlagsOffset[(offsetof(RankRowT,uFlags)==8)?1:-1];
+typedef char RankRowFlagsOffset[(offsetof(LobbyApiRankT,uFlags)==8)?1:-1];
+// DWARF (lobbyrank.c:2080-2082): locals pList, pRow, iAttrib. ARTIST 0x82B2724C clears
+// iAttrib up front, then ORs in the two flag bits (0x82B272B4, 0x82B272C0).
 extern "C" s32 LobbyRankRowAttrib(LobbyRankT* r, s32 row, s32* attrib)
 {
- if (!(r->eStatus & 2) || r->eDownloadStatus == 2) return -6;
- RankRowT* entry = static_cast<RankRowT*>(DispListIndex(r->pLists[r->uListIndex % r->uListCount].pList, row));
- if (!entry) return -13;
- *attrib = ((entry->uFlags & 1) ? 1 : 0) | ((entry->uFlags & 4) ? 4 : 0);
+ LobbyRankListT* pList;
+ LobbyApiRankT* pRow;
+ s32 iAttrib = 0;
+ if (!(r->eStatus & 2)) return -6;
+ if (r->eDownloadStatus == 2) return -6;
+ pList = &r->pLists[r->uListIndex % r->uListCount];
+ if ((pRow = static_cast<LobbyApiRankT*>(DispListIndex(pList->pList, row))) == 0) return -13;
+ if (pRow->uFlags & 1) iAttrib = 1;
+ if (pRow->uFlags & 4) iAttrib |= 4;
+ *attrib = iAttrib;
  return 0;
 }
 static void RankFlushList(LobbyRankT* r, u32 index)
@@ -208,33 +215,44 @@ extern "C" void LobbyRankDestroy(LobbyRankT* r)
  if (r->pSymTab) DirtyMemFree(r->pSymTab, 1819438699, r->iMemGroup);
  DirtyMemFree(r, 1819438699, r->iMemGroup);
 }
-static s32 RankSelectIndex(u32 oldIndex, s32 requested, u32 count)
+// ARTIST 0x82B261E0 (unnamed in the export set; DWARF lobbyrank.c:709 declares it
+// with the ranker first): LobbyRankSelect passes the ranker in r3 (0x82B26AA0).
+static s32 RankSelectIndex(LobbyRankT* pRanker, u32 oldIndex, s32 requested, u32 count)
 {
+ // ARTIST dispatches -100..-91 through a byte table (0x821465D8: 00 08 10 18 58 30 44
+ // 6C 6C 00): -91 shares -100's body, -93/-92 the shared -1 return, -96 the default.
  switch (requested) {
- case -100: return oldIndex;
+ case -100: case -91: return oldIndex;
  case -99: return 0;
  case -98: return count-1;
  case -97: return oldIndex+1 == count ? oldIndex : oldIndex+1;
  case -95: return oldIndex == count ? 0 : oldIndex+1;
  case -94: return oldIndex == 0 ? count-1 : oldIndex-1;
- default: return requested >= 0 && (u32)requested < count ? requested : -1;
+ case -93: case -92: break;
+ default:
+  if (requested >= 0 && (u32)requested < count) return requested;
+  break;
  }
+ return -1;
 }
+// DWARF (lobbyrank.c:1467-1469): locals pCategory, pIndex, pVariation.
 extern "C" s32 LobbyRankSelect(LobbyRankT* r, s32 category, s32 index, s32 variation)
 {
+ LobbyRankCategoryT* pCategory;
+ LobbyRankIndexT* pIndex;
+ LobbyRankVariationT* pVariation;
  if (category == -90) {
   if (index < 0) return -2;
   if (variation < 0) return -3;
   r->uListIndex = 0;
  } else {
-  category = RankSelectIndex(r->uCategoryIndex, category, r->uCategoryCount);
-  if (category < 0) return -1;
-  index = RankSelectIndex(r->uIndexIndex, index, r->pCategories[category].uIndexCount);
-  if (index < 0) return -2;
-  LobbyRankIndexT& item = r->pCategories[category].pIndices[index];
-  variation = RankSelectIndex(r->uVariationIndex, variation, item.uVariationCount);
-  if (variation < 0) return -3;
-  r->uListIndex = item.pVariations[variation].uListIndex;
+  if ((category = RankSelectIndex(r, r->uCategoryIndex, category, r->uCategoryCount)) < 0) return -1;
+  pCategory = &r->pCategories[category];
+  if ((index = RankSelectIndex(r, r->uIndexIndex, index, pCategory->uIndexCount)) < 0) return -2;
+  pIndex = &pCategory->pIndices[index];
+  if ((variation = RankSelectIndex(r, r->uVariationIndex, variation, pIndex->uVariationCount)) < 0) return -3;
+  pVariation = &pIndex->pVariations[variation];
+  r->uListIndex = pVariation->uListIndex;
  }
  r->uCategoryIndex=category; r->uIndexIndex=index; r->uVariationIndex=variation;
  r->uCurrentScrollColumn=0; r->uCurrentScrollRow=0;
@@ -249,7 +267,7 @@ extern "C" const char* LobbyRankData(LobbyRankT* r, s32 column, s32 row, char* o
 {
  if (!(r->eStatus & 2)) return 0;
  const LobbyRankListT& list = r->pLists[r->uListIndex % r->uListCount];
- RankRowT* entry = static_cast<RankRowT*>(DispListIndex(list.pList, row));
+ LobbyApiRankT* entry = static_cast<LobbyApiRankT*>(DispListIndex(list.pList, row));
  if (!entry) return 0;
  if (column == -3) { ds_strnzcpy(out, entry->name, length); return out; }
  if (column == -2) { ds_snzprintf(out, length, "%d", entry->pts); return out; }

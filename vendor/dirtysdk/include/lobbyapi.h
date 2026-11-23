@@ -81,6 +81,16 @@ struct LobbyApiUserT
     char           strClubTag[8];  // +0x22C
 };
 
+// One ranking row (DWARF lobbyapi.h:144-150); LobbyRank's display-list entries.
+struct LobbyApiRankT
+{
+    s32  pts;        // +0x00
+    s32  rank;       // +0x04
+    u32  uFlags;     // +0x08
+    char name[20];   // +0x0C
+    char stat[260];  // +0x20
+};
+
 // One player of a play record.
 struct LobbyApiPlayerT
 {
