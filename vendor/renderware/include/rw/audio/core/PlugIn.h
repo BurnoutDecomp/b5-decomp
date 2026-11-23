@@ -165,6 +165,47 @@ struct PlugInSetAttributeCommand
     f32 mfValue;               // +0x0C -- the value to store
 };
 
+enum ChannelMapValue
+{
+    CHANNELMAPVALUE_ANY = -2,
+    CHANNELMAPVALUE_STANDARD = -3,
+    CHANNELMAPVALUE_SAMEASINPUT = -4,
+    CHANNELMAPVALUE_TERMINATOR = -1
+};
+
+struct ChannelMapPair
+{
+    char input;
+    char output;
+};
+
+enum ParameterDirection
+{
+    PARAMETERDIRECTION_INPUT = 0,
+    PARAMETERDIRECTION_OUTPUT = 1
+};
+
+enum ParameterType
+{
+    PARAMETERTYPE_ENUM = 0,
+    PARAMETERTYPE_FLOAT32 = 1,
+    PARAMETERTYPE_FLOAT64 = 2,
+    PARAMETERTYPE_POINTERTOSTRING = 3,
+    PARAMETERTYPE_POINTER = 4,
+    PARAMETERTYPE_GUID = 5
+};
+
+struct ParameterDescToolSide;
+
+struct ParameterDescRunTime
+{
+    ParameterDirection parameterDirection;
+    ParameterType parameterType;
+    double minExtremeValue;
+    double maxExtremeValue;
+    ParameterDescToolSide *pParameterDescToolSide;
+};
+
 // -------------------------------------------------------------------------------------
 // PlugInDescRunTime -- the run-time-type record for one registered plug-in. Forms an
 // intrusive singly-linked list inside the registry. Layout grounded in
@@ -196,9 +237,9 @@ public:
     void *pCreateInstance;           // +0x08 -- int(*)(PlugIn*, void*) (PlugIn::CreateInstance @0x82B6A868)
     void *pPreProcess;               // +0x0C -- nullable; copied into the stage slot (@0x82B6EE44)
     void *pProcess;                  // +0x10 -- copied into the stage slot (@0x82B6EE28)
-    void *pChannelMaps;              // +0x14 (PDB name; UNPROVEN-consumer on X360 -- null on PC until a reader lands)
-    void *pParameterDescRunTime;     // +0x18 (same)
-    void *pEventDescRunTime;         // +0x1C (same)
+    ChannelMapPair *pChannelMaps;               // +0x14
+    ParameterDescRunTime *pParameterDescRunTime; // +0x18
+    void *pEventDescRunTime;         // +0x1C runtime event metadata
     void *pPlugInDescToolSide;       // +0x20 (zero in all 25 console records)
     void *mpNext;                    // +0x24 -- intrusive next link (PDB listNode)
     u32 muId;                        // +0x28 -- registration id fourcc (PDB guid)

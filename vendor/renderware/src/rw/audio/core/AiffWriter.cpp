@@ -3,8 +3,7 @@
 // debug plug-in.
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is
-// authoritative for every store/branch. No LegacySrc reference source, no DecFIGS DWARF, and no
-// ProStreet08 PDB entry exist for this type.
+// authoritative for every store and branch. The X360 audio MAP identifies the timer callback.
 //   CreateInstance                @0x82B9D488 -- store-for-store placement init
 //   EventEvent                    @0x82BA5448 -- post a start/stop record into the ring
 //   GetPlugInDescRunTime          @0x82B968B0 -- returns the registered "AiffWriter" desc
@@ -32,6 +31,7 @@
 #include <cstring> // std::memcpy / std::memset
 #include <cstddef> // offsetof -- the start record's header size on the host
 #include <new>
+#include <xtl.h>  // XMemCpy, XMemSet
 
 namespace rw
 {
@@ -39,10 +39,6 @@ namespace audio
 {
 namespace core
 {
-
-// XMemCpy is the Xbox platform block copy (declared here, defined in the platform TU);
-// used to flush the interleaved PCM staging buffer to mpBuf. @0x82BA2168 tail-calls it.
-extern "C" void *XMemCpy(void *pDest, const void *pSrc, unsigned int uiCount);
 
 // -------------------------------------------------------------------------------------
 // Opaque data symbols in the XEX (no exported contents); modelled as honest placeholder
@@ -389,7 +385,7 @@ int AiffWriter::StartHandler(void *pCommandRecord)
             // AddTimer returns 0 on success; the asm tests only its low byte.
             if (!self->mpSystem->mTimerManager.AddTimer(
                       &self->mTimerHandle,
-                      reinterpret_cast<TimerManager::TimerCallback>(&AiffWriter::RwacTimerClient),
+                      &AiffWriter::RwacTimerClient,
                       self, "AiffWriter", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
             {
                 self->mbTimerCreated = 1; // *(v1+77) = 1
@@ -509,15 +505,15 @@ void AiffWriter::ReleaseEvent(AiffWriter *self)
 
 // -------------------------------------------------------------------------------------
 // ARTIST 82B968C0: the timer writes one 256-frame interleaved block.
-int AiffWriter::RwacTimerClient(AiffWriter *self)
+void AiffWriter::RwacTimerClient(void *context, f32)
 {
-    const u32 bytes = static_cast<u32>(self->muChannelCount) << 9;
+    AiffWriter *self = static_cast<AiffWriter *>(context);
+    const u32 bytes = self->muChannelCount * KI_AIFF_BLOCK_SAMPLES * sizeof(s16);
     if (!self->mbDataWritten)
-        std::memset(self->mpBuf, 0, bytes);
-    const int written = static_cast<int>(std::fwrite(self->mpBuf, 1, bytes, self->mpFile));
+        XMemSet(self->mpBuf, 0, bytes);
+    std::fwrite(self->mpBuf, 1, bytes, self->mpFile);
     self->mbDataWritten = 0;
-    self->muSampleFrameCount += 256;
-    return written;
+    self->muSampleFrameCount += KI_AIFF_BLOCK_SAMPLES;
 }
 
 // `scalar deleting destructor' @0x82B9D428

@@ -59,17 +59,25 @@ static const f32 KF_PHASE_SCALE = 1.5258e-05f;      // flt_821565B0 (0x377FFC9C)
 // The dispatch thunk for the record's PreProcess/Process slots is unnecessary -- both PC
 // bodies are already the dispatched static shape.
 
-// off_82F8F8E0 -- the "Resample" runtime descriptor, REAL (descriptor-record wave; record
-// dump progress/scratch_dossiers/plugindesc_layout_codex.md). One of only three registered
-// plug-ins with a LIVE PreProcess slot. Metadata FLAG'd null per the descriptor-wave
-// convention (no committed consumer reads them).
+// ARTIST 0x82F8F8BC: accept any input channel count and keep it on output.
+ChannelMapPair Resample::sChannelMaps[] = {
+    { CHANNELMAPVALUE_ANY, CHANNELMAPVALUE_SAMEASINPUT },
+    { CHANNELMAPVALUE_TERMINATOR, CHANNELMAPVALUE_TERMINATOR }
+};
+
+// ARTIST 0x82F8F8C0: the runtime descriptor for the pitch attribute.
+ParameterDescRunTime Resample::sParameterDescRunTime[] = {
+    { PARAMETERDIRECTION_INPUT, PARAMETERTYPE_FLOAT32, 0.0, 32.0, 0 }
+};
+
+// The ARTIST runtime descriptor is at 0x82F8F8E0.
 PlugInDescRunTime Resample::sPlugInDescRunTime = {
     "Resample",
     reinterpret_cast<void *>(&Resample::GetSize),         // @0x82B9F3D8
     reinterpret_cast<void *>(&Resample::CreateInstance),  // @0x82BA37F0
     reinterpret_cast<void *>(&Resample::PreProcess),      // @0x82B9AC10
     reinterpret_cast<void *>(&Resample::Process),         // @0x82B9F3E8
-    0, 0, 0, 0,
+    sChannelMaps, sParameterDescRunTime, 0, 0,
     0,
     0x52737030u,       // 'Rsp0'
     2, 0, 1, 0, 0, 0,
@@ -148,47 +156,48 @@ int Resample::CreateInstance(Resample *self)
 // SetResampleIncrement @0x82B9A860 -- convert the resample ratio to a 16.16 fixed-point
 // increment (round-to-nearest), clamp it (and the stored ratio) to 4x, and cache the raw
 // ratio for change detection.
-//   inc = round(ratio * 65536);
-//   if (inc > 0x40000) { inc = 0x40000; self->mfResampleRatio = 4.0; }
-//   else               { self->mfResampleRatio = ratio; }
-//   self->mfLastRatio = ratio; self->muIncrementFixed = inc;
+// ARTIST branches at 0x82B9A884 to subtract rather than add the half-unit
+// rounding adjustment when the scaled ratio is negative.
 // -------------------------------------------------------------------------------------
-Resample *Resample::SetResampleIncrement(Resample *self, f32 ratio)
+void Resample::SetResampleIncrement(f32 ratio)
 {
     f32 scaled = ratio * 65536.0f;                                   // flt_8217F368
-    scaled = (scaled < 0.0f) ? (scaled - 0.5f) : (scaled + 0.5f);    // round to nearest
+    if (scaled < 0.0f)
+        scaled -= 0.5f;
+    else
+        scaled += 0.5f;
     int increment = static_cast<int>(scaled);                        // fctiwz (truncate)
 
     // 0x40000 == KU_RESAMPLE_UNITY * KU_MAX_RESAMPLE_RATIO (4x in 16.16).
     if (increment > (KU_RESAMPLE_UNITY * KU_MAX_RESAMPLE_RATIO))
     {
         increment = KU_RESAMPLE_UNITY * KU_MAX_RESAMPLE_RATIO;
-        self->mActualResampleRatio = static_cast<f32>(KU_MAX_RESAMPLE_RATIO); // flt_82004EF4 @ +0x30
+        mActualResampleRatio = static_cast<f32>(KU_MAX_RESAMPLE_RATIO); // flt_82004EF4 @ +0x30
     }
     else
     {
-        self->mActualResampleRatio = ratio;  // @ +0x30
+        mActualResampleRatio = ratio;  // @ +0x30
     }
     // The REQUESTED (unclamped) ratio is what PreProcess change-detects against, so a
     // pitch pinned above 4x recomputes once and then compares equal.
-    self->mRequestedResampleRatio = ratio;              // @ +0x34
-    self->mIncr16_16 = static_cast<u32>(increment);     // @ +0x3C
-    return self;
+    mRequestedResampleRatio = ratio;              // @ +0x34
+    mIncr16_16 = static_cast<u32>(increment);     // @ +0x3C
 }
 
 // -------------------------------------------------------------------------------------
-// PreProcess @0x82B9AC10 -- recompute the increment if the (outputRate/inputRate)*pitch
-// ratio has changed, work out this block's produced sample count, latch the requested
-// count, and scale the context's downstream gain by the clamped ratio.
+// PreProcess @0x82B9AC10 -- update the increment when (inputRate/outputRate)*pitch
+// changes, compute the input needed for the requested output, and scale the mixer gain.
 // -------------------------------------------------------------------------------------
-int Resample::PreProcess(Resample *self, AudioProcessContext *ctx, int /*a3*/,
+int Resample::PreProcess(PlugIn *pPlugIn, Mixer *ctx, bool /*discontinuity*/,
                          int outputSamples)
 {
+    // The existing layout places the PlugIn view at offset zero.
+    Resample *self = reinterpret_cast<Resample *>(pPlugIn);
     const f32 outputRate = ctx->mpFormat->mfSampleRate;             // *(ctx+0x30018)->+0x0C
     const f32 ratio = (self->mPreviousSampleRate / outputRate)
                     * self->mAttribute[ATTRIBUTE_SETPITCH].f32;
     if (self->mRequestedResampleRatio != ratio)
-        SetResampleIncrement(self, ratio);
+        self->SetResampleIncrement(ratio);
 
     // How many INPUT samples this stage must pull to yield `outputSamples`: the phase the
     // accumulator will reach, less what history already holds, plus the kernel's taps.

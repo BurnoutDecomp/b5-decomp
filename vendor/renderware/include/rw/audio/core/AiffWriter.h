@@ -15,8 +15,8 @@
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC); the asm is
 // authoritative for every member offset and every store. There is NO matching LegacySrc reference
-// source, NO DecFIGS DWARF, and NO ProStreet08 PDB entry for this type, so every offset
-// below is grounded directly in the disassembly of the bodied methods:
+// source or DecFIGS DWARF for this type. ARTIST attests the offsets below, and the
+// X360 audio MAP attests the timer callback signature.
 //   CreateInstance                @0x82B9D488
 //   EventEvent                    @0x82BA5448
 //   GetPlugInDescRunTime          @0x82B968B0
@@ -26,6 +26,7 @@
 //   ReleaseEvent                  @0x82BA53F8
 //   StartHandler                  @0x82B9D510
 //   StopHandler                   @0x82BA1EC0
+//   RwacTimerClient               @0x82B968C0
 //   `scalar deleting destructor'  @0x82B9D428
 //
 // Lowercase rw::audio:: namespaces match the third-party middleware API (per
@@ -73,6 +74,8 @@ typedef Mixer AudioProcessContext;       // pointer param only
 // -------------------------------------------------------------------------------------
 class AiffWriter
 {
+    static void RwacTimerClient(void *context, f32 time);
+
     // Writes the AIFF COMM sample rate as a ten-byte big-endian extended float.
     static void IntToExtended(u8 *pExtended, u32 uValue); // @0x82B96848
 
@@ -113,10 +116,6 @@ public:
     // COMM / INST / SSND) with the final sizes, close the file, and drop the pump timer.
     // Returns 8 (the record's byte size). @0x82BA1EC0.
     static int StopHandler(void *pCommandRecord);
-
-    // The registered profiling-timer callback that pumps the recording. Defined in its own
-    // ledger TU; declared here because StartHandler takes its address for AddTimer.
-    static int RwacTimerClient(AiffWriter *self);
 
     // Compiler `scalar deleting destructor': destruct the embedded TimerHandle sub-object,
     // reinstall the base v-table, then conditionally free. @0x82B9D428.

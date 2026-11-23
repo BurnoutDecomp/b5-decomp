@@ -80,8 +80,11 @@ namespace core
 class Resample
 {
     static PlugInDescRunTime sPlugInDescRunTime;
+    static ChannelMapPair sChannelMaps[];
+    static ParameterDescRunTime sParameterDescRunTime[];
     static u32 GetSize(PlugInConfig *pPlugInConfig); // @0x82B9F3D8
     u32 GetOutputSamples(u32 totalInputSamples); // @0x82B9A8D0
+    void SetResampleIncrement(f32 resampleRatio); // @0x82B9A860
 
 public:
     // Vendor enums/constants (resample.h).
@@ -106,11 +109,10 @@ public:
 
     static int          CreateInstance(Resample *self);                     // @0x82BA37F0
     static char       **GetPlugInDescRunTime();                             // @0x82B9A850
-    static int          PreProcess(Resample *self, AudioProcessContext *ctx,
-                                   int a3, int outputSamples);              // @0x82B9AC10
+    static int          PreProcess(PlugIn *pPlugIn, Mixer *pMixer,
+                                   bool discontinuity, int outputSamples);              // @0x82B9AC10
     static int          Process(Resample *self, AudioProcessContext *ctx,
                                 bool discontinuity);                        // @0x82B9F3E8
-    static Resample    *SetResampleIncrement(Resample *self, f32 ratio);    // @0x82B9A860
     static void        *VectorDeletingDestructor(Resample *self, char flags); // @0x82BA1C68
 
     // @0x82B9A918 -- the 2-tap linear interpolation kernel (raw-decoded from the XEX; the
