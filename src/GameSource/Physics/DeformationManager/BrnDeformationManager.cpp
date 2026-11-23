@@ -91,7 +91,7 @@ namespace Deformation
     // The deformation-pool capacities the Construct memset loops + the add/remove bounds asserts
     // pin (8 race cars, 20 traffic, 600+1 global traffic). Local names; the table extents are
     // the frozen-header array bounds (ma8RaceCarToModelIndex[8] / ma8TrafficToModelIndex[20] /
-    // ma8GlobalTrafficToModelIndex[601]).
+    // ma8GlobalTrafficToModelIndex[600]; ARTIST Construct clears 0x258 bytes).
     static const s32 KI_MAX_NUM_RACE_CARS                = 8;    // Vehicle::ku8MaxNumRaceCars
     static const s32 KI_MAX_NUM_PHYSICAL_TRAFFIC         = 20;   // Vehicle::ku8TotalMaxNumPhysicalTraffic
     static const s32 KI_MAX_TOTAL_TRAFFIC                = 600;  // BrnTraffic::KU_MAX_TOTAL_TRAFFIC

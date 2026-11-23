@@ -165,7 +165,7 @@
 
 #include "GameSource/Resource/BrnResourceAllocator.h"   // BrnResource::GetDebugAllocator
 #include "rw/rwcore_structs.h"                          // rw::Resource / rw::ResourceDescriptor
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT (CreateContactEvent tripwires)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"               // CGS_ASSERT + ARTIST locations
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h" // CgsPhysics::PhysicsSimulationIO::OutContactSpy
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"          // ContactSpy::{BaseContact, PropContact}
@@ -3660,9 +3660,13 @@ void PropManager::ProcessRemovePartInstanceEvents(
         // file; only the line differs (735 then 737). NON-GATING: the console falls straight
         // through into the call, so nothing is skipped when they fire.
         CGS_ASSERT( liPartIndex != KI_PROP_INDEX_NOT_FOUND,
-                    "liPartIndex != KI_PROP_INDEX_NOT_FOUND" );   // :735
+            CgsDev::Assert::MessageAt( "liPartIndex != KI_PROP_INDEX_NOT_FOUND",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../Physics/PropManager/BrnPropManager.cpp", 735 /* ARTIST 0x82627874 */ ) );
         CGS_ASSERT( liPartIndex != KI_PROP_INDEX_NOT_FOUND,
-                    "liPartIndex != KI_PROP_INDEX_NOT_FOUND" );   // :737
+            CgsDev::Assert::MessageAt( "liPartIndex != KI_PROP_INDEX_NOT_FOUND",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../Physics/PropManager/BrnPropManager.cpp", 737 /* ARTIST 0x8262788C */ ) );
 
         RemovePart( lEntityId,
                     static_cast<u32>( liPartIndex ),

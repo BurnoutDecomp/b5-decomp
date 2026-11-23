@@ -12,7 +12,7 @@
 //     (mDetachedPartManager) and the detached-WHEEL manager (mDetachedWheelManager),
 //     plus the per-car id / index lookup tables (maGlobalEntityIDs[28],
 //     ma8RaceCarToModelIndex[8], ma8TrafficToModelIndex[20],
-//     ma8GlobalTrafficToModelIndex[601]) and a private RNG (mRandom).
+//     ma8GlobalTrafficToModelIndex[600]) and a private RNG (mRandom).
 //   * Each sim step it processes the deformation event queues (add/remove/deactivate/
 //     validate/reset models), reads potential contacts into the per-car sensors,
 //     runs the sensor displacement + per-model update, then the post-physics pass
@@ -698,7 +698,11 @@ namespace Deformation
         s32                  miPlayerModelIndex;      // :367 player car's model slot (-1 if none)
         s8                   ma8RaceCarToModelIndex[8];          // :370 race-car index  -> model slot
         s8                   ma8TrafficToModelIndex[20];         // :371 traffic index   -> model slot
-        s8                   ma8GlobalTrafficToModelIndex[601];  // :374 global-traffic index -> model slot
+        // :374 global-traffic index -> model slot. 600 entries on ARTIST (the PS3 DWARF's 601 is
+        // version drift): Construct clears exactly 0x258 bytes from +0x12928 (0x826217EC) and
+        // miLastBodyToHaveIKUpdate sits at +0x12B80 with the perf monitors from +0x12B84
+        // (PostSceneUpdate 0x82644F5C) -- a 601-byte table would push both by 4.
+        s8                   ma8GlobalTrafficToModelIndex[600];
         s32                  miLastBodyToHaveIKUpdate;           // :376 round-robin IK-update cursor
 
         // :385. FLAG: the DWARF lists mDebugComponent here as an `extern ...
