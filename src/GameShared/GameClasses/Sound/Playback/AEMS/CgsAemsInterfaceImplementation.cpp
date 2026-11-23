@@ -48,12 +48,12 @@ namespace Playback
 {
     namespace
     {
-        void AddStage(rw::audio::core::VoiceStageConfig* apStages, u32& arStage,
+        void AddStage(rw::audio::core::PlugInConfig* apStages, u32& arStage,
                       void* apContext, uintptr_t auHandle, u32 auOutputChannels)
         {
-            apStages[arStage].mpContext = apContext;
-            apStages[arStage].mpDesc = reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(auHandle);
-            apStages[arStage].mu8OutputChannels = auOutputChannels;
+            apStages[arStage].pConstructorParams = apContext;
+            apStages[arStage].plugInHandle = reinterpret_cast<rw::audio::core::PlugInDescRunTime*>(auHandle);
+            apStages[arStage].outputChannels = auOutputChannels;
             ++arStage;
         }
     }
@@ -253,7 +253,7 @@ namespace Playback
         }
 
         f32 lfOne = 1.0f;
-        rw::audio::core::VoiceStageConfig laMain[10] = {};
+        rw::audio::core::PlugInConfig laMain[10] = {};
         u32 luStage = 0;
         const u32 luChannels = lpPlayer->mNumChannels;
         AddStage(laMain, luStage, &lfOne, mSndPlayer1Handle, luChannels);
@@ -320,15 +320,15 @@ namespace Playback
             for (u32 luChannel = 0;
                  luChannel < lpPlayer->mNumPannerVoices; ++luChannel)
             {
-                rw::audio::core::VoiceStageConfig laPanner[3] = {};
+                rw::audio::core::PlugInConfig laPanner[3] = {};
                 for (u32 luConfig = 0; luConfig < 3; ++luConfig)
                 {
-                    laPanner[luConfig].mpContext =
+                    laPanner[luConfig].pConstructorParams =
                         maAemsSubMixPlugInConfig[luConfig].mpInitialValue;
-                    laPanner[luConfig].mpDesc = reinterpret_cast<
+                    laPanner[luConfig].plugInHandle = reinterpret_cast<
                         rw::audio::core::PlugInDescRunTime*>(
                             maAemsSubMixPlugInConfig[luConfig].muPlugInHandle);
-                    laPanner[luConfig].mu8OutputChannels =
+                    laPanner[luConfig].outputChannels =
                         maAemsSubMixPlugInConfig[luConfig].mu8ChannelCount;
                 }
                 rw::audio::core::PlugIn** lppPannerPlugins = 0;

@@ -38,7 +38,7 @@
 #include "types.hpp" // f32, u32, u16, u8
 #include "rw/audio/core/Iir2Filters.h" // PlugInBaseView / AudioProcessContext / AudioFormat
 #include "rw/audio/core/PlugIn.h"      // PlugIn::Attribute_t (the 8-byte attribute slot)
-#include "rw/audio/core/Voice.h"       // VoiceStageConfig (GetSize's config argument)
+#include "rw/audio/core/Voice.h"       // PlugInConfig (GetSize's config argument)
 
 #include <cstddef>  // offsetof / size_t (the host history-buffer placement)
 #include "types.hpp"  // uintptr_t (the GetHistoryBuffer idiom)
@@ -79,6 +79,10 @@ namespace core
 // -------------------------------------------------------------------------------------
 class Resample
 {
+    static PlugInDescRunTime sPlugInDescRunTime;
+    static u32 GetSize(PlugInConfig *pPlugInConfig); // @0x82B9F3D8
+    u32 GetOutputSamples(u32 totalInputSamples); // @0x82B9A8D0
+
 public:
     // Vendor enums/constants (resample.h).
     enum ResampleMethod
@@ -101,9 +105,7 @@ public:
     enum { KU_MAX_INPUTSIZE = 8192, KU_MAX_OUTPUTSIZE = 8192 };
 
     static int          CreateInstance(Resample *self);                     // @0x82BA37F0
-    static u32          GetOutputSamples(Resample *self, int inputSamples); // @0x82B9A8D0
     static char       **GetPlugInDescRunTime();                             // @0x82B9A850
-    static int          GetSize(const VoiceStageConfig *config);            // @0x82B9F3D8
     static int          PreProcess(Resample *self, AudioProcessContext *ctx,
                                    int a3, int outputSamples);              // @0x82B9AC10
     static int          Process(Resample *self, AudioProcessContext *ctx,

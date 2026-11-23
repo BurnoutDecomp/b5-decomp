@@ -26,9 +26,9 @@ public:
     // times 2 bytes per sample. Returns null when the allocation fails.
     static Pcm16BigEnc *CreateInstance(s32 iNumChannels, s32 iSampleRate, System *pSystem);
 
-    s32 Encode(const f32 *pafInput, void *pOutput, s32 iNumSamples, s32 *piBytesWritten,
-               s32 iArg5, s32 *piAuxOut) ;
-    s32 Flush(void *pOutput, s32 *piBytesWritten, s32 iArg3, s32 *piAuxOut) ;
+    s32 Encode(f32 *pafInput, u8 *pOutput, s32 iNumSamples, s32 *piBytesWritten,
+               void *pSeekData, s32 *piAuxOut) ;
+    s32 Flush(u8 *pOutput, s32 *piBytesWritten, void *pSeekData, s32 *piAuxOut) ;
 };
 
 } // namespace core

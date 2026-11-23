@@ -253,12 +253,12 @@ SndPlayer1_CgsStreamMod::ComputeHostLayout(u32 auChannels, s32 aiMaxRequests)
 // GetSize @0x826A4210 -- the stage-carve stride. The constructor parameter's first float
 // is the request-ring depth (default 1); the config's +8 byte is the channel count.
 // -------------------------------------------------------------------------------------
-int SndPlayer1_CgsStreamMod::GetSize(const VoiceStageConfig* config)
+int SndPlayer1_CgsStreamMod::GetSize(const PlugInConfig* config)
 {
-    const s32 liMaxRequests = config->mpContext
-        ? PpcFctidzLowS32(*static_cast<const f32*>(config->mpContext))
+    const s32 liMaxRequests = config->pConstructorParams
+        ? PpcFctidzLowS32(*static_cast<const f32*>(config->pConstructorParams))
         : 1;
-    const u32 luChannels = config->mu8OutputChannels;
+    const u32 luChannels = config->outputChannels;
     return static_cast<int>(ComputeHostLayout(luChannels, liMaxRequests).totalBytes);
 }
 

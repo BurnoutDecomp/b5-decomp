@@ -96,28 +96,28 @@ struct VoiceStageData
 };
 
 // -------------------------------------------------------------------------------------
-// VoiceStageConfig -- one entry of the stage-configuration array handed to CreateInstance
-// (12-byte stride on X360). Only mpDesc (+0x04) and the low byte at +0x08 are read; the
-// whole entry is also passed by address to the descriptor's GetSize hook.
+// PlugInConfig -- one entry of the stage-configuration array handed to CreateInstance
+// (12-byte stride on X360). Voice passes each entry to the descriptor's GetSize hook
+// and to PlugIn::CreateInstance.
 // -------------------------------------------------------------------------------------
-struct VoiceStageConfig
+struct PlugInConfig
 {
     // ⭐ (phase-D probe crash root-cause, 2026-08-28): the +0x00 word is the stage's
     // CREATE CONTEXT POINTER -- the console PlugIn::CreateInstance reads this SAME
     // record as its `a4` (context at +0, init byte at +8); the splice staging's
     // config literals ({&1.0f,'SnP1',1}...) put the ctor-param float pointer here.
     // The former separate 'PlugInCreateDesc' host view diverged from this layout on
-    // x64 (its +8 byte landed INSIDE the widened mpDesc pointer -- a garbage channel
+    // x64 (its +8 byte landed INSIDE the widened plugInHandle pointer -- a garbage channel
     // count that overran the mixer), so the view is RETIRED and the create path
     // reads THIS record by name.
-    void *mpContext;             // +0x00 -- the create-context pointer (0 when unused)
-    PlugInDescRunTime *mpDesc;   // +0x04 -- describes this stage's plug-in
-    u8 mu8OutputChannels;       // +0x08 -- channel byte loaded by PlugIn::CreateInstance
+    void *pConstructorParams;             // +0x00 -- the create-context pointer (0 when unused)
+    PlugInDescRunTime *plugInHandle;   // +0x04 -- describes this stage's plug-in
+    u8 outputChannels;       // +0x08 -- channel byte loaded by PlugIn::CreateInstance
 };
 
 #if defined(D_PLATFORM_X360)
-CGS_STATIC_ASSERT(offsetof(VoiceStageConfig, mu8OutputChannels) == 8, "ARTIST voice stage channel byte");
-CGS_STATIC_ASSERT(sizeof(VoiceStageConfig) == 12, "ARTIST voice stage config stride");
+CGS_STATIC_ASSERT(offsetof(PlugInConfig, outputChannels) == 8, "ARTIST voice stage channel byte");
+CGS_STATIC_ASSERT(sizeof(PlugInConfig) == 12, "ARTIST voice stage config stride");
 #endif
 
 // -------------------------------------------------------------------------------------
@@ -134,7 +134,7 @@ public:
     // @0x82B6EC50 -- allocate + lay out a voice for `numStages` stages, placement-construct
     // each stage's PlugIn, insert the create-handler command into the ring. Returns the
     // voice (and writes its plug-in array through outPlugIns) or null on failure.
-    static Voice *CreateInstance(u8 priority, int numStages, VoiceStageConfig *configs,
+    static Voice *CreateInstance(u8 priority, int numStages, PlugInConfig *configs,
                                  PlugIn ***outPlugIns, System *system);
 
     // @0x82B6C020 -- deferred handler: insert the voice into the priority-sorted active list

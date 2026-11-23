@@ -116,7 +116,7 @@ public:
 
     // ---- bodied in PlugIn.cpp (offsets above are authoritative) ----
     static PlugIn *CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pDesc,
-                                  struct VoiceStageConfig *apConfig, char flag);
+                                  struct PlugInConfig *apConfig, char flag);
     static int Event(PlugIn *self, int aiEventId, void *apParam);
     static PlugIn *GetAttribute(PlugIn *self, int index, f32 *outValue);
     static PlugIn *SetAttribute(PlugIn *self, int index, f32 value);
@@ -145,7 +145,7 @@ public:
 };
 
 // (The former separate `PlugInCreateDesc` a4-record view is RETIRED -- the record
-// PlugIn::CreateInstance reads at `a4` IS the VoiceStageConfig (Voice.h): context
+// PlugIn::CreateInstance reads at `a4` IS the PlugInConfig (Voice.h): context
 // at +0, init byte at +8. The host view's own layout diverged from the widened
 // config -- the phase-D probe crash -- so the create path reads the config by name.)
 
@@ -192,7 +192,7 @@ public:
     // PlugIn::CreateInstance's create call) cast to the dispatched signature, exactly
     // where the console's generic dispatch happens.
     const char *pName;               // +0x00 (rodata-proven: points at the plug-in name)
-    void *pGetSize;                  // +0x04 -- u32(*)(const VoiceStageConfig*) (Voice::CreateInstance @0x82B6ECA0)
+    void *pGetSize;                  // +0x04 -- u32(*)(const PlugInConfig*) (Voice::CreateInstance @0x82B6ECA0)
     void *pCreateInstance;           // +0x08 -- int(*)(PlugIn*, void*) (PlugIn::CreateInstance @0x82B6A868)
     void *pPreProcess;               // +0x0C -- nullable; copied into the stage slot (@0x82B6EE44)
     void *pProcess;                  // +0x10 -- copied into the stage slot (@0x82B6EE28)

@@ -77,9 +77,9 @@ char **LowPassButterworth::GetPlugInDescRunTime()
 // The factory passes the stage config to both Butterworth size hooks. The
 // channel count at +0x08 sizes the kernel after the plug-in header.
 // -------------------------------------------------------------------------------------
-u32 LowPassButterworth::GetSize(const VoiceStageConfig *config)
+u32 LowPassButterworth::GetSize(const PlugInConfig *config)
 {
-    return Butterworth::GetSize(config->mu8OutputChannels)
+    return Butterworth::GetSize(config->outputChannels)
         + offsetof(LowPassButterworth, mButterworth);
 }
 

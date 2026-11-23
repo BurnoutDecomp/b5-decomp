@@ -51,7 +51,7 @@ namespace audio
 namespace core
 {
 
-struct VoiceStageConfig;
+struct PlugInConfig;
 
 // -------------------------------------------------------------------------------------
 // HighPassButterworth -- layout grounded in CreateInstance @0x82BA2CB0 and Process
@@ -83,7 +83,7 @@ public:
     int           Process(AudioProcessContext *ctx);                         // @0x82B976E0
     static void  *VectorDeletingDestructor(HighPassButterworth *self,
                                            char flags);                      // @0x82BA17A0
-    static u32    GetSize(const VoiceStageConfig *config);                  // @0x82B9DF88
+    static u32    GetSize(const PlugInConfig *config);                  // @0x82B9DF88
     static HighPassButterworth *CreateInstance(HighPassButterworth *self);   // @0x82BA2CB0
 
     PlugInBaseView mBase;                     // +0x00 .. +0x23

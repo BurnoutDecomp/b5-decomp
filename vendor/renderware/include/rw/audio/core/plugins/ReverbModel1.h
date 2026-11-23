@@ -76,6 +76,9 @@ class System; // owning rwaudio sub-system (PlugIn.h) -- used only through the .
 // -------------------------------------------------------------------------------------
 class ReverbModel1
 {
+    int CalculateG2Values(f32 *pCombG2);
+    void UpdateLatencyAndDecay();
+
 public:
     // ---- factory / v-table surface ----
     static int           GetSize();                                         // @0x82B9ADA8 -> 1088
@@ -95,9 +98,7 @@ public:
                                     s32 *pCombDelays);                       // @0x82B9AEE0
     static int  CalculateG1Values(ReverbModel1 *self, f32 *pCombG1,
                                   f64 sampleRate);                          // @0x82B9AFD0
-    static int  CalculateG2Values(ReverbModel1 *self, f32 *pCombG2);        // @0x82B9B1F8
     static int  ConfigureModel(ReverbModel1 *self, System *pSystem);        // @0x82BA3A10
-    static void UpdateLatencyAndDecay(ReverbModel1 *self);                  // @0x82B9F6A8
     static void RwacTimerClient(void *context, f32 time);                  // @0x82BA5720
     static void ReleaseEvent(ReverbModel1 *self);                         // @0x82B9ADB0
     static int  Process(ReverbModel1 *self, AudioProcessContext *ctx);     // @0x82B9F7D0

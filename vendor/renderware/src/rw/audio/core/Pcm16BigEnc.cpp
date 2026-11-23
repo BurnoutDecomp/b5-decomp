@@ -8,6 +8,11 @@
 // them back with on this host.
 // =====================================================================================
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces ARTIST Flush and the deleting destructor at 0x82BA6E78 and 0x82BA7A90.
+#pragma optimize("s", on)
+#endif
+
 #include "rw/audio/core/Pcm16BigEnc.h"
 #include "rw/audio/core/PlugIn.h" // System::Alloc
 
@@ -42,9 +47,9 @@ Pcm16BigEnc *Pcm16BigEnc::CreateInstance(s32 iNumChannels, s32 iSampleRate, Syst
         return 0;
 
     Pcm16BigEnc *lpEnc = ::new (lpMem) Pcm16BigEnc; // the v-table store, nothing else
-    lpEnc->mfField08 = KF_ZERO;
-    lpEnc->miField0C = KI_FIELD0C_SEED;
-    lpEnc->mfDataRate = static_cast<f32>(iNumChannels * iSampleRate) * KF_BYTES_PER_SAMPLE;
+    lpEnc->mVbrQuality = KF_ZERO;
+    lpEnc->mCbrRate = KI_FIELD0C_SEED;
+    lpEnc->mAverageDataRate = static_cast<f32>(iNumChannels * iSampleRate) * KF_BYTES_PER_SAMPLE;
     return lpEnc;
 }
 
@@ -54,11 +59,12 @@ Pcm16BigEnc *Pcm16BigEnc::CreateInstance(s32 iNumChannels, s32 iSampleRate, Syst
 // Reports 2 bytes per sample written, clears the optional out word, and returns
 // iNumSamples (everything was consumed).
 // -------------------------------------------------------------------------------------
-s32 Pcm16BigEnc::Encode(const f32 *pafInput, void *pOutput, s32 iNumSamples,
-                        s32 *piBytesWritten, s32 /*iArg5*/, s32 *piAuxOut)
+s32 Pcm16BigEnc::Encode(f32 *pafInput, u8 *pOutput, s32 iNumSamples,
+                        s32 *piBytesWritten, void * /*pSeekData*/, s32 *piAuxOut)
 {
-    s16 *lpOut = static_cast<s16 *>(pOutput);
-    const s32 liTotal = mucChannelCount * iNumSamples;
+    // ARTIST stores the PCM sample words with sth at 0x82BA7C4C.
+    s16 *lpOut = reinterpret_cast<s16 *>(pOutput);
+    const s32 liTotal = mNumChannels * iNumSamples;
     for (s32 i = 0; i < liTotal; ++i)
         lpOut[i] = static_cast<s16>(static_cast<s32>(pafInput[i] * KF_PCM16_FULL_SCALE));
 
@@ -71,7 +77,7 @@ s32 Pcm16BigEnc::Encode(const f32 *pafInput, void *pOutput, s32 iNumSamples,
 // -------------------------------------------------------------------------------------
 // Flush -- nothing is ever buffered: report 0 bytes, clear the optional out word, return 0.
 // -------------------------------------------------------------------------------------
-s32 Pcm16BigEnc::Flush(void * /*pOutput*/, s32 *piBytesWritten, s32 /*iArg3*/, s32 *piAuxOut)
+s32 Pcm16BigEnc::Flush(u8 * /*pOutput*/, s32 *piBytesWritten, void * /*pSeekData*/, s32 *piAuxOut)
 {
     *piBytesWritten = 0;
     if (piAuxOut)

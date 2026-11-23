@@ -42,9 +42,9 @@ public:
     // two arguments times 76/128 bytes per sample. Returns null when the allocation fails.
     static Xas1Enc *CreateInstance(s32 iNumChannels, s32 iSampleRate, System *pSystem);
 
-    s32 Encode(const f32 *pafInput, void *pOutput, s32 iNumSamples, s32 *piBytesWritten,
-               s32 iArg5, s32 *piAuxOut) ;
-    s32 Flush(void *pOutput, s32 *piBytesWritten, s32 iArg3, s32 *piAuxOut) ;
+    s32 Encode(f32 *pafInput, u8 *pOutput, s32 iNumSamples, s32 *piBytesWritten,
+               void *pSeekData, s32 *piAuxOut) ;
+    s32 Flush(u8 *pOutput, s32 *piBytesWritten, void *pSeekData, s32 *piAuxOut) ;
 
     // Code one 128-frame block of iNumChannels interleaved channels from pafFrames into
     // 76 * iNumChannels bytes at pOutput.

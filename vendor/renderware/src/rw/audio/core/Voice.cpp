@@ -51,7 +51,7 @@ static inline uintptr_t AlignUp(uintptr_t v, uintptr_t a)
 // record past the pointer block. Reads below go through the real type BY NAME;
 // the GetSize dispatch cast happens at the one call site, exactly where the
 // console's generic dispatch is.)
-typedef u32 (*VoiceStageGetSizeFn)(const VoiceStageConfig *config);
+typedef u32 (*VoiceStageGetSizeFn)(const PlugInConfig *config);
 
 // The console stores callable PPC vtables in every stage.  Several reconstructed
 // vendor plug-ins deliberately retain their original composition layout through
@@ -160,7 +160,7 @@ struct VoiceSetPriorityCommand
 // -------------------------------------------------------------------------------------
 // Voice::CreateInstance @0x82B6EC50
 // -------------------------------------------------------------------------------------
-Voice *Voice::CreateInstance(u8 priority, int numStages, VoiceStageConfig *configs,
+Voice *Voice::CreateInstance(u8 priority, int numStages, PlugInConfig *configs,
                              PlugIn ***outPlugIns, System *system)
 {
     // First pass: total block size = header + pointer array (8-aligned) + stage records,
@@ -172,7 +172,7 @@ Voice *Voice::CreateInstance(u8 priority, int numStages, VoiceStageConfig *confi
         static_cast<u32>(numStages) * sizeof(VoiceStageData);
     for (int i = 0; i < numStages; ++i)
     {
-        PlugInDescRunTime *desc = reinterpret_cast<PlugInDescRunTime *>(configs[i].mpDesc);
+        PlugInDescRunTime *desc = reinterpret_cast<PlugInDescRunTime *>(configs[i].plugInHandle);
         u32 stageSize = reinterpret_cast<VoiceStageGetSizeFn>(desc->pGetSize)(&configs[i]);
         blockSize = stageSize + static_cast<u32>(AlignUp(blockSize, 16));
     }
@@ -220,7 +220,7 @@ Voice *Voice::CreateInstance(u8 priority, int numStages, VoiceStageConfig *confi
     u8 flag = 0;
     for (int i = 0; i < numStages; ++i)
     {
-        PlugInDescRunTime *desc = reinterpret_cast<PlugInDescRunTime *>(configs[i].mpDesc);
+        PlugInDescRunTime *desc = reinterpret_cast<PlugInDescRunTime *>(configs[i].plugInHandle);
         VoiceStageData *stage = &voice->mpStageData[i];
 
         if (desc->mu8PlugInType <= 3)
@@ -233,7 +233,7 @@ Voice *Voice::CreateInstance(u8 priority, int numStages, VoiceStageConfig *confi
         PlugIn *placement = reinterpret_cast<PlugIn *>(placementCursor);
         placementCursor += sampleCount;
 
-        PlugIn *instance = PlugIn::CreateInstance(placement, voice, configs[i].mpDesc,
+        PlugIn *instance = PlugIn::CreateInstance(placement, voice, configs[i].plugInHandle,
                                                   &configs[i], static_cast<char>(flag));
         voice->mpPlugIns[i] = instance;
         if (!instance)
@@ -243,7 +243,7 @@ Voice *Voice::CreateInstance(u8 priority, int numStages, VoiceStageConfig *confi
         }
         stage->mpProcess = desc->pProcess;
         stage->mpPreProcess = desc->pPreProcess;
-        flag = configs[i].mu8OutputChannels;
+        flag = configs[i].outputChannels;
     }
 
     // Success: hand back the plug-in array and enqueue the create-handler command.

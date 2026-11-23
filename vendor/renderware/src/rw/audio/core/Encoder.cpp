@@ -7,6 +7,11 @@
 // empty virtual ~Encoder.
 // =====================================================================================
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces ARTIST GetDataRateOverhead at 0x82B68110.
+#pragma optimize("s", on)
+#endif
+
 #include "rw/audio/core/Encoder.h"
 #include "rw/audio/core/PlugIn.h" // System (mpAllocator +0x14)
 
@@ -23,7 +28,7 @@ namespace core
 // -------------------------------------------------------------------------------------
 s32 Encoder::GetDataRateOverhead()
 {
-    return mucChannelCount * 10240;
+    return mNumChannels * 10240;
 }
 
 // -------------------------------------------------------------------------------------

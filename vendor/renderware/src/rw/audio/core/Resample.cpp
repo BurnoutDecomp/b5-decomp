@@ -27,6 +27,12 @@
 #include <cstring>  // std::memset / std::memcpy (the X360 XMemSet / _blkmov)
 #include "types.hpp"  // uintptr_t
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces ARTIST GetOutputSamples and GetSize at
+// 0x82B9A8D0 and 0x82B9F3D8.
+#pragma optimize("s", on)
+#endif
+
 namespace rw
 {
 namespace audio
@@ -57,7 +63,7 @@ static const f32 KF_PHASE_SCALE = 1.5258e-05f;      // flt_821565B0 (0x377FFC9C)
 // dump progress/scratch_dossiers/plugindesc_layout_codex.md). One of only three registered
 // plug-ins with a LIVE PreProcess slot. Metadata FLAG'd null per the descriptor-wave
 // convention (no committed consumer reads them).
-static PlugInDescRunTime g_ResampleDesc = {
+PlugInDescRunTime Resample::sPlugInDescRunTime = {
     "Resample",
     reinterpret_cast<void *>(&Resample::GetSize),         // @0x82B9F3D8
     reinterpret_cast<void *>(&Resample::CreateInstance),  // @0x82BA37F0
@@ -76,24 +82,23 @@ static PlugInDescRunTime g_ResampleDesc = {
 // -------------------------------------------------------------------------------------
 char **Resample::GetPlugInDescRunTime()
 {
-    return reinterpret_cast<char **>(&g_ResampleDesc); // &off_82F8F8E0
+    return reinterpret_cast<char **>(&sPlugInDescRunTime); // &off_82F8F8E0
 }
 
 // -------------------------------------------------------------------------------------
 // GetSize @0x82B9F3D8 -- the per-instance allocation size: the fixed header plus a
 // 24-byte-per-channel history buffer. The channel count is the low byte of the stage
-// config's +0x08 field (the same byte Voice passes as the CreateInstance flag).
+// config field at +0x08 shared by the voice's sizing and construction passes.
 //
 // X360-LITERAL TRAP: the console's `80` is ITS OWN sizeof(Resample); the host header is
 // larger (widened base-view pointers), so the host must add its own aligned header size --
 // the SAME expression CreateInstance uses to place the buffer, so the allocation and the
 // placement can never disagree.
 // -------------------------------------------------------------------------------------
-int Resample::GetSize(const VoiceStageConfig *config)
+u32 Resample::GetSize(PlugInConfig *pPlugInConfig)
 {
-    return static_cast<int>(KU_RESAMPLE_HISTORY_BYTES_PER_CHANNEL
-                                * config->mu8OutputChannels
-                            + ResampleHistoryOffset());   // X360: 24 * channels + 80
+    return KU_RESAMPLE_HISTORY_BYTES_PER_CHANNEL * pPlugInConfig->outputChannels
+         + ResampleHistoryOffset();
 }
 
 // -------------------------------------------------------------------------------------
@@ -203,17 +208,17 @@ int Resample::PreProcess(Resample *self, AudioProcessContext *ctx, int /*a3*/,
 // this stage yields. Returns 0 if the input can't cover the kernel latency, 0x2000 while
 // the increment is still unset, else floor(((usable<<16) - fraction - 1) / increment).
 // -------------------------------------------------------------------------------------
-u32 Resample::GetOutputSamples(Resample *self, int inputSamples)
+u32 Resample::GetOutputSamples(u32 totalInputSamples)
 {
-    const int usable = inputSamples - self->mTargetHistorySamples + 1;
+    const s32 usable = static_cast<s32>(totalInputSamples - mTargetHistorySamples + 1u);
     if (usable <= 0)
         return 0;
 
-    const u32 increment = self->mIncr16_16;
+    const u32 increment = mIncr16_16;
     if (increment == 0)
         return KU_MAX_OUTPUTSIZE;   // 0x2000 -- the vendor MAX_OUTPUTSIZE
 
-    const u32 fraction = self->mAcc16_16;
+    const u32 fraction = mAcc16_16;
     // asm `twllei increment, 0` is the compiler's div-by-zero trap; already guarded above.
     return ((static_cast<u32>(usable) << 16) - fraction - 1u) / increment;
 }
@@ -314,7 +319,7 @@ int Resample::Process(Resample *self, AudioProcessContext *ctx, bool /*discontin
 
     // How many output samples the available input yields, capped at what PreProcess asked
     // for (the clamp is downward only).
-    u32 luOutputFrames = GetOutputSamples(self, static_cast<int>(luTotalInput));
+    u32 luOutputFrames = self->GetOutputSamples(luTotalInput);
     if (luOutputFrames > self->mOutputSamplesRequested)
         luOutputFrames = self->mOutputSamplesRequested;
 

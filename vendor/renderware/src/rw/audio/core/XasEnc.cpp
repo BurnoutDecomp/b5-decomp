@@ -12,6 +12,11 @@
 //     and then replaces the running maximum).
 // =====================================================================================
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces the ARTIST deleting destructor at 0x82BA7AD8.
+#pragma optimize("s", on)
+#endif
+
 #include "rw/audio/core/XasEnc.h"
 #include "rw/audio/core/PlugIn.h" // System::Alloc
 
@@ -107,9 +112,9 @@ XasEnc *XasEnc::CreateInstance(s32 iNumChannels, s32 iSampleRate, System *pSyste
 
     XasEnc *lpEnc = ::new (lpMem) XasEnc; // the v-table store, nothing else
     lpEnc->miBufferedSamples = 0;
-    lpEnc->mfField08 = KF_ZERO;
-    lpEnc->miField0C = KI_FIELD0C_SEED;
-    lpEnc->mfDataRate = static_cast<f32>(iNumChannels * iSampleRate) * KF_BYTES_PER_SAMPLE;
+    lpEnc->mVbrQuality = KF_ZERO;
+    lpEnc->mCbrRate = KI_FIELD0C_SEED;
+    lpEnc->mAverageDataRate = static_cast<f32>(iNumChannels * iSampleRate) * KF_BYTES_PER_SAMPLE;
     return lpEnc;
 }
 
@@ -217,10 +222,10 @@ void XasEnc::EncodeBlock(const f32 *pafFrames, u8 *pOutput, s32 iNumChannels)
 // code every whole block straight from the input, and buffer the remainder. Returns the
 // frames coded by this call (a frame left in the buffer is counted when its block is coded).
 // -------------------------------------------------------------------------------------
-s32 XasEnc::Encode(const f32 *pafInput, void *pOutput, s32 iNumSamples, s32 *piBytesWritten,
-                   s32 /*iArg5*/, s32 *piAuxOut)
+s32 XasEnc::Encode(f32 *pafInput, u8 *pOutput, s32 iNumSamples, s32 *piBytesWritten,
+                   void * /*pSeekData*/, s32 *piAuxOut)
 {
-    u8 *lpOut = static_cast<u8 *>(pOutput);
+    u8 *lpOut = pOutput;
     if (piAuxOut)
         *piAuxOut = 0;
     *piBytesWritten = 0;
@@ -231,17 +236,17 @@ s32 XasEnc::Encode(const f32 *pafInput, void *pOutput, s32 iNumSamples, s32 *piB
         s32 liTake = KI_BLOCK_SAMPLES - miBufferedSamples;
         if (iNumSamples < liTake)
             liTake = iNumSamples;
-        std::memcpy(mafBuffer + mucChannelCount * miBufferedSamples, pafInput,
-                    4 * mucChannelCount * liTake);
+        std::memcpy(mafBuffer + mNumChannels * miBufferedSamples, pafInput,
+                    4 * mNumChannels * liTake);
         iNumSamples -= liTake;
         miBufferedSamples += liTake;
-        pafInput += mucChannelCount * liTake;
+        pafInput += mNumChannels * liTake;
 
         if (miBufferedSamples == KI_BLOCK_SAMPLES)
         {
-            EncodeBlock(mafBuffer, lpOut, mucChannelCount);
+            EncodeBlock(mafBuffer, lpOut, mNumChannels);
             liCoded = KI_BLOCK_SAMPLES;
-            const s32 liBytes = KI_BLOCK_BYTES * mucChannelCount;
+            const s32 liBytes = KI_BLOCK_BYTES * mNumChannels;
             *piBytesWritten += liBytes;
             lpOut += liBytes;
             miBufferedSamples = 0;
@@ -255,10 +260,10 @@ s32 XasEnc::Encode(const f32 *pafInput, void *pOutput, s32 iNumSamples, s32 *piB
         liCoded += liBlocks * KI_BLOCK_SAMPLES;
         do
         {
-            EncodeBlock(pafInput, lpOut, mucChannelCount);
-            const s32 liBytes = KI_BLOCK_BYTES * mucChannelCount;
+            EncodeBlock(pafInput, lpOut, mNumChannels);
+            const s32 liBytes = KI_BLOCK_BYTES * mNumChannels;
             lpOut += liBytes;
-            pafInput += KI_BLOCK_SAMPLES * mucChannelCount;
+            pafInput += KI_BLOCK_SAMPLES * mNumChannels;
             *piBytesWritten += liBytes;
         } while (--liBlocks);
     }
@@ -266,7 +271,7 @@ s32 XasEnc::Encode(const f32 *pafInput, void *pOutput, s32 iNumSamples, s32 *piB
     if (iNumSamples != 0)
     {
         miBufferedSamples = iNumSamples;
-        std::memcpy(mafBuffer, pafInput, 4 * mucChannelCount * iNumSamples);
+        std::memcpy(mafBuffer, pafInput, 4 * mNumChannels * iNumSamples);
     }
     return liCoded;
 }
@@ -277,7 +282,7 @@ s32 XasEnc::Encode(const f32 *pafInput, void *pOutput, s32 iNumSamples, s32 *piB
 // and return 0; on that path the console clears *piAuxOut without the null test it applied
 // on entry, and the store is kept.
 // -------------------------------------------------------------------------------------
-s32 XasEnc::Flush(void *pOutput, s32 *piBytesWritten, s32 /*iArg3*/, s32 *piAuxOut)
+s32 XasEnc::Flush(u8 *pOutput, s32 *piBytesWritten, void * /*pSeekData*/, s32 *piAuxOut)
 {
     if (piAuxOut)
         *piAuxOut = 0;
@@ -285,17 +290,17 @@ s32 XasEnc::Flush(void *pOutput, s32 *piBytesWritten, s32 /*iArg3*/, s32 *piAuxO
     const s32 liBuffered = miBufferedSamples;
     if (liBuffered > 0 && liBuffered < KI_BLOCK_SAMPLES)
     {
-        const f32 *lpLast = mafBuffer + (liBuffered - 1) * mucChannelCount;
-        f32 *lpFill = mafBuffer + liBuffered * mucChannelCount;
+        const f32 *lpLast = mafBuffer + (liBuffered - 1) * mNumChannels;
+        f32 *lpFill = mafBuffer + liBuffered * mNumChannels;
         for (s32 liPad = KI_BLOCK_SAMPLES - liBuffered; liPad != 0; --liPad)
         {
-            for (s32 liC = 0; liC < mucChannelCount; ++liC)
+            for (s32 liC = 0; liC < mNumChannels; ++liC)
                 *lpFill++ = lpLast[liC];
         }
 
-        EncodeBlock(mafBuffer, static_cast<u8 *>(pOutput), mucChannelCount);
+        EncodeBlock(mafBuffer, pOutput, mNumChannels);
         miBufferedSamples = 0;
-        *piBytesWritten = KI_BLOCK_BYTES * mucChannelCount;
+        *piBytesWritten = KI_BLOCK_BYTES * mNumChannels;
         return liBuffered;
     }
 

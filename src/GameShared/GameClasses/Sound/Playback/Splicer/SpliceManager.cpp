@@ -1,6 +1,6 @@
 #include "GameShared/GameClasses/Sound/Playback/Splicer/SpliceManager.h"
 
-#include "rw/audio/core/Voice.h"   // rw::audio::core::Voice::CreateInstance / Release + VoiceStageConfig
+#include "rw/audio/core/Voice.h"   // rw::audio::core::Voice::CreateInstance / Release + PlugInConfig
 #include "rw/audio/core/PlugIn.h"  // System::GetPlugInRegistry / PlugInRegistry::GetPlugInHandle
 #include "rw/audio/core/plugins/SndPlayer1.h" // SndPlayer1::ConstructorParams (stage 0's context)
 #include "rw/rwcore_structs.h"     // rw::IResourceAllocator / BaseResourceDescriptors (Allocate)
@@ -137,7 +137,7 @@ SpliceManager::SpliceManager( const CgsSound::Playback::Environment& arEnvironme
 //
 // ⚠️ THE FIRST CONFIG FIELD IS NOT `const f32*`. An earlier revision of the banner below
 // described these chains as `{&1.0f, 'SnP1', 1}`, which reads as a float-pointer field.
-// It is the GENERIC create-context pointer (VoiceStageConfig::mpContext, the console
+// It is the GENERIC create-context pointer (PlugInConfig::pConstructorParams, the console
 // PlugInConfig's void* constructor-parameter slot). What stage zero points it at happens
 // to be a one-float SndPlayer1::ConstructorParams -- the depth of that voice's request
 // ring. Mono passes 1.0f (flt_82001C98) and stereo 2.0f (flt_82001D9C); both constants
@@ -159,27 +159,27 @@ SpliceManager::SpliceManager( const CgsSound::Playback::Environment& arEnvironme
 void SpliceManager::CreateMonoVoice( VoicePluginPair* apOutPair )
 {
     rw::audio::core::SndPlayer1::ConstructorParams lCtorParams = { 1.0f };  // flt_82001C98
-    rw::audio::core::VoiceStageConfig laPlugInChain[4];
+    rw::audio::core::PlugInConfig laPlugInChain[4];
 
-    laPlugInChain[0].mpContext      = &lCtorParams;
-    laPlugInChain[0].mpDesc         =
+    laPlugInChain[0].pConstructorParams = &lCtorParams;
+    laPlugInChain[0].plugInHandle       =
         static_cast<rw::audio::core::PlugInDescRunTime*>( sndplayerHandle );  // 'SnP1'
-    laPlugInChain[0].mu8OutputChannels = 1u;
+    laPlugInChain[0].outputChannels     = 1u;
 
-    laPlugInChain[1].mpContext      = 0;
-    laPlugInChain[1].mpDesc         =
+    laPlugInChain[1].pConstructorParams = 0;
+    laPlugInChain[1].plugInHandle       =
         static_cast<rw::audio::core::PlugInDescRunTime*>( resampleHandle );   // 'Rsp0'
-    laPlugInChain[1].mu8OutputChannels = 1u;
+    laPlugInChain[1].outputChannels     = 1u;
 
-    laPlugInChain[2].mpContext      = 0;
-    laPlugInChain[2].mpDesc         =
+    laPlugInChain[2].pConstructorParams = 0;
+    laPlugInChain[2].plugInHandle       =
         static_cast<rw::audio::core::PlugInDescRunTime*>( pannerHandle );     // 'Pn21'
-    laPlugInChain[2].mu8OutputChannels = 6u;
+    laPlugInChain[2].outputChannels     = 6u;
 
-    laPlugInChain[3].mpContext      = 0;
-    laPlugInChain[3].mpDesc         =
+    laPlugInChain[3].pConstructorParams = 0;
+    laPlugInChain[3].plugInHandle       =
         static_cast<rw::audio::core::PlugInDescRunTime*>( sendHandle );       // 'Sen0'
-    laPlugInChain[3].mu8OutputChannels = 6u;
+    laPlugInChain[3].outputChannels     = 6u;
 
     apOutPair->mpVoice = rw::audio::core::Voice::CreateInstance(
         0,                                   // r3 = priority 0
@@ -200,22 +200,22 @@ void SpliceManager::CreateMonoVoice( VoicePluginPair* apOutPair )
 void SpliceManager::CreateStereoVoice( VoicePluginPair* apOutPair )
 {
     rw::audio::core::SndPlayer1::ConstructorParams lCtorParams = { 2.0f };  // flt_82001D9C
-    rw::audio::core::VoiceStageConfig laPlugInChain[3];
+    rw::audio::core::PlugInConfig laPlugInChain[3];
 
-    laPlugInChain[0].mpContext      = &lCtorParams;
-    laPlugInChain[0].mpDesc         =
+    laPlugInChain[0].pConstructorParams = &lCtorParams;
+    laPlugInChain[0].plugInHandle       =
         static_cast<rw::audio::core::PlugInDescRunTime*>( sndplayerHandle );  // 'SnP1'
-    laPlugInChain[0].mu8OutputChannels = 2u;
+    laPlugInChain[0].outputChannels     = 2u;
 
-    laPlugInChain[1].mpContext      = 0;
-    laPlugInChain[1].mpDesc         =
+    laPlugInChain[1].pConstructorParams = 0;
+    laPlugInChain[1].plugInHandle       =
         static_cast<rw::audio::core::PlugInDescRunTime*>( resampleHandle );   // 'Rsp0'
-    laPlugInChain[1].mu8OutputChannels = 2u;
+    laPlugInChain[1].outputChannels     = 2u;
 
-    laPlugInChain[2].mpContext      = 0;
-    laPlugInChain[2].mpDesc         =
+    laPlugInChain[2].pConstructorParams = 0;
+    laPlugInChain[2].plugInHandle       =
         static_cast<rw::audio::core::PlugInDescRunTime*>( sendHandle );       // 'Sen0'
-    laPlugInChain[2].mu8OutputChannels = 2u;
+    laPlugInChain[2].outputChannels     = 2u;
 
     apOutPair->mpVoice = rw::audio::core::Voice::CreateInstance(
         0,                                   // r3 = priority 0

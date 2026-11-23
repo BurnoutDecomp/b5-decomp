@@ -55,7 +55,7 @@ namespace Playback
 
         explicit GenericRwacVoiceConfig(Environment& arEnvironment);
 
-        rw::audio::core::VoiceStageConfig& GetConfig(u32 au32Index)
+        rw::audio::core::PlugInConfig& GetConfig(u32 au32Index)
         {
             CGS_ASSERT(au32Index < 32u, "lu32I < SKU32_CONFIG_COUNT");
             return maConfig[au32Index];
@@ -63,10 +63,10 @@ namespace Playback
         void SetConfig(u32 au32Index, void* apHandle, u8 au8Channels,
                        void* apContext)
         {
-            rw::audio::core::VoiceStageConfig& lrConfig = GetConfig(au32Index);
-            lrConfig.mpContext = apContext;
-            lrConfig.mpDesc = static_cast<rw::audio::core::PlugInDescRunTime*>(apHandle);
-            lrConfig.mu8OutputChannels = au8Channels;
+            rw::audio::core::PlugInConfig& lrConfig = GetConfig(au32Index);
+            lrConfig.pConstructorParams = apContext;
+            lrConfig.plugInHandle = static_cast<rw::audio::core::PlugInDescRunTime*>(apHandle);
+            lrConfig.outputChannels = au8Channels;
         }
 
         GenericRwacVoiceScratchpad& GetScratchpad() { return mScratchPad; }
@@ -82,7 +82,7 @@ namespace Playback
         void Release();
 
     private:
-        rw::audio::core::VoiceStageConfig maConfig[32];
+        rw::audio::core::PlugInConfig maConfig[32];
         GenericRwacVoiceScratchpad mScratchPad;
         u32 mu32PluginCount;
         u32 mu32FirstSendPlugin;

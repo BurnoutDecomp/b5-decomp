@@ -8,7 +8,7 @@
 // =====================================================================================
 
 #include "rw/audio/core/PlugIn.h"
-#include "rw/audio/core/Voice.h" // VoiceStageConfig (the a4 record CreateInstance reads)
+#include "rw/audio/core/Voice.h" // PlugInConfig (the a4 record CreateInstance reads)
 #include "rw/audio/core/Send.h"
 namespace rw
 {
@@ -21,7 +21,7 @@ namespace core
 // descriptor-record wave 2026-08-28: the "+8 begin/validate hook" IS the typed
 // PlugInDescRunTime::pCreateInstance slot; the dispatch below casts at the call, the
 // console's own generic-dispatch site. The companion `a4` record IS the
-// VoiceStageConfig -- see Voice.h's phase-D root-cause note.)
+// PlugInConfig -- see Voice.h's phase-D root-cause note.)
 typedef int (*PlugInCreateInstanceFn)(PlugIn *self, void *context);
 
 // off_83271928 -- the shared System-singleton POINTER installed into PlugIn::mpSystem
@@ -40,7 +40,7 @@ extern "C" System *off_83271928;
 // begin hook; on failure it virtually destroys/cleans up and returns null.
 // -------------------------------------------------------------------------------------
 PlugIn *PlugIn::CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pDesc,
-                               VoiceStageConfig *apConfig, char flag)
+                               PlugInConfig *apConfig, char flag)
 {
     self->mLatencyInSamples = 0.0f;          // stfs flt(0) -> 0x14
     self->mpVoice = voice;                     // stw a2 -> 0x08
@@ -51,10 +51,10 @@ PlugIn *PlugIn::CreateInstance(PlugIn *self, Voice *voice, PlugInDescRunTime *pD
     self->mInputChannels = flag;             // stb a5 -> 0x20
 
     self->mOutputChannels =
-        apConfig->mu8OutputChannels; // lbz 8(a4) -> stb 0x21
+        apConfig->outputChannels; // lbz 8(a4) -> stb 0x21
 
     if (!reinterpret_cast<PlugInCreateInstanceFn>(pDesc->pCreateInstance)(
-            self, apConfig->mpContext)) // (*(a3+8))(self, *(a4))
+            self, apConfig->pConstructorParams)) // (*(a3+8))(self, *(a4))
     {
         // Begin failed: virtually destruct (vt[0]) then Destroy(0) (vt[3]) and bail.
         self->~PlugIn();                      // (**self)(self)

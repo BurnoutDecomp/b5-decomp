@@ -39,7 +39,7 @@
 #include "types.hpp" // f32, s32, u8, u16
 #include "rw/audio/core/Iir2Filters.h" // PlugInBaseView / AudioProcessContext
 #include "rw/audio/core/Butterworth.h" // Butterworth (embedded by value at the tail)
-#include "rw/audio/core/Voice.h"       // VoiceStageConfig (GetSize's config argument)
+#include "rw/audio/core/Voice.h"       // PlugInConfig (GetSize's config argument)
 
 namespace rw
 {
@@ -65,7 +65,7 @@ class LowPassButterworth
 {
 public:
     static char **GetPlugInDescRunTime();                                  // @0x82B97BF0
-    static u32    GetSize(const VoiceStageConfig *config);                 // @0x82B9E4B0
+    static u32    GetSize(const PlugInConfig *config);                 // @0x82B9E4B0
     static int    CreateInstance(LowPassButterworth *self);                // @0x82BA2FA0
     static int    Process(LowPassButterworth *self, AudioProcessContext *ctx,
                           bool discontinuity);                             // @0x82B97C00

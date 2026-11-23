@@ -246,16 +246,16 @@ SndPlayer1Layout SndPlayer1::ComputeLayout(u8 au8Channels, u32 auMaxRequests)
 // -------------------------------------------------------------------------------------
 // GetSize @0x82BA0220 -- the stage-carve stride.
 //
-// ⚠️ The channel count comes from the config's mu8OutputChannels. The console reads it as
-// `lbz r9, 8(r3)`, but +8 on x64 lands INSIDE the widened mpDesc -- that mis-read is
+// ⚠️ The channel count comes from the config's outputChannels. The console reads it as
+// `lbz r9, 8(r3)`, but +8 on x64 lands INSIDE the widened plugInHandle -- that mis-read is
 // exactly what caused the phase-D mixer-scribble crash, so this goes by name.
 // -------------------------------------------------------------------------------------
-int SndPlayer1::GetSize(const VoiceStageConfig *apConfig)
+int SndPlayer1::GetSize(const PlugInConfig *apConfig)
 {
     const ConstructorParams *lpParams =
-        static_cast<const ConstructorParams *>(apConfig->mpContext);
+        static_cast<const ConstructorParams *>(apConfig->pConstructorParams);
     const u32 luMaxRequests = lpParams ? TruncateRequestCount(lpParams->maxRequests) : 1u;
-    const u8 lu8Channels = apConfig->mu8OutputChannels;
+    const u8 lu8Channels = apConfig->outputChannels;
     return static_cast<int>(ComputeLayout(lu8Channels, luMaxRequests).muTotalSize);
 }
 
@@ -263,7 +263,7 @@ int SndPlayer1::GetSize(const VoiceStageConfig *apConfig)
 // CreateInstance @0x82BA6C80 -- 27 init stores in the assembly's exact order.
 //
 // The generic PlugIn::CreateInstance has already run the base init and passes the config's
-// mpContext as the constructor params; only the LOW BYTE of the return is tested, and on
+// pConstructorParams as the constructor params; only the LOW BYTE of the return is tested, and on
 // failure the generic caller runs vt[0] then vt[3] and returns null -- which is why nothing
 // here unwinds its own allocation.
 // -------------------------------------------------------------------------------------

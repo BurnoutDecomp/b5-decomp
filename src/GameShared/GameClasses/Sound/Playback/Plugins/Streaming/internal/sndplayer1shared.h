@@ -5,7 +5,7 @@
 
 #include "rw/audio/core/PlugIn.h"       // rw::audio::core::PlugIn (base) + Attribute_t
 #include "rw/audio/core/TimerHandle.h"  // rw::audio::core::TimerHandle (mCpuTicks @ console +0x50)
-#include "rw/audio/core/Voice.h"        // VoiceStageConfig (GetSize's config argument)
+#include "rw/audio/core/Voice.h"        // PlugInConfig (GetSize's config argument)
 
 #include <cstddef> // size_t (the host layout computation)
 
@@ -203,7 +203,7 @@ public:
     int GetPpuTicksEvent() const;
 
     // ---- the self-contained callbacks/helpers (phase E) --------------------------------
-    static int GetSize(const VoiceStageConfig *config);                 // @0x826A4210
+    static int GetSize(const PlugInConfig *config);                 // @0x826A4210
     static int PreProcess(SndPlayer1_CgsStreamMod *self, Mixer *ctx,
                           bool discontinuity, int outputSamplesRequested); // @0x8268CD10
     bool WaitForStartTime(Mixer *ctx, f64 adStartTime, u32 *apuSilence); // @0x8268CAF8

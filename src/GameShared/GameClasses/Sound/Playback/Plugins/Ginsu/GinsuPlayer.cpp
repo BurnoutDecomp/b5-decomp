@@ -28,7 +28,7 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacFactory.h"
 
 #include "rw/audio/core/Mixer.h" // Mixer (the process context) + SampleBuffer
-#include "rw/audio/core/Voice.h" // VoiceStageConfig (GetSize's config argument)
+#include "rw/audio/core/Voice.h" // PlugInConfig (GetSize's config argument)
 
 #include <cstdio>  // std::printf (the console's GetSamples failure diagnostic)
 #include <cstring> // std::memcpy / std::memcmp / std::memset
@@ -573,10 +573,10 @@ size_t GinsuPlayer::TableStorageOffset()
 // GetSize @0x826A40B8 -- the instance plus the copied index tables. With no constructor
 // params the console reserves a flat 4096-byte tail.
 // -------------------------------------------------------------------------------------
-int GinsuPlayer::GetSize(const VoiceStageConfig *config)
+int GinsuPlayer::GetSize(const PlugInConfig *config)
 {
     const PlayParams *lpParams =
-        static_cast<const PlayParams *>(config->mpContext);
+        static_cast<const PlayParams *>(config->pConstructorParams);
     const size_t luTableBytes = lpParams
         ? GinsuSynthData::GetTotalTableSize(lpParams->pGinFile)
         : 4096u;                                      // X360: 0x11D0 - 0x1D0

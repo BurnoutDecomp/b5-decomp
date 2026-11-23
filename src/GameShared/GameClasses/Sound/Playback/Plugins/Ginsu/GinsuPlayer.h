@@ -165,7 +165,7 @@ public:
     virtual int Event(int aiEventId, void *apParam);
 
     static char **GetPlugInDescRunTime();
-    static int    GetSize(const VoiceStageConfig *config);                 // @0x826A40B8
+    static int    GetSize(const PlugInConfig *config);                 // @0x826A40B8
     static int    CreateInstance(GinsuPlayer *self,
                                  const PlayParams *params);                // @0x826C3418
     static int    PreProcess(GinsuPlayer *self, Mixer *ctx, bool discontinuity,

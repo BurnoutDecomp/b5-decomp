@@ -37,6 +37,11 @@
 // CombFilter / AllPassFilter sub-objects have their destructors elided, per the asm.
 // =====================================================================================
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// The XDK size setting reproduces ARTIST's reverb bodies at 0x82B9ADB0, 0x82B9B1F8 and 0x82B9F6A8.
+#pragma optimize("s", on)
+#endif
+
 #include "rw/audio/core/plugins/ReverbModel1.h"
 #include "rw/audio/core/Voice.h"   // the owning Voice (mfFadeStart decay accumulator)
 #include "rw/audio/core/PlugIn.h"        // rw::audio::core::System (mTimerManager @+0x60)
@@ -611,14 +616,14 @@ int ReverbModel1::CalculateG1Values(ReverbModel1 *self, f32 *pCombG1, f64 sample
 // CalculateG2Values @0x82B9B1F8 -- the six comb damping gains. With the reverb time clamped
 // to at least 0.366, each damping gain is (1 - combG1[i]) * (1 - 0.366/reverbTime).
 // -------------------------------------------------------------------------------------
-int ReverbModel1::CalculateG2Values(ReverbModel1 *self, f32 *pCombG2)
+int ReverbModel1::CalculateG2Values(f32 *pCombG2)
 {
-    if (self->mfDecayTime < KF_DECAY_FLOOR)
-        self->mfDecayTime = KF_DECAY_FLOOR;
+    if (mfDecayTime < KF_DECAY_FLOOR)
+        mfDecayTime = KF_DECAY_FLOOR;
 
-    const f32 damp = 1.0f - (KF_DECAY_FLOOR / self->mfDecayTime); // v5
+    const f32 damp = 1.0f - (KF_DECAY_FLOOR / mfDecayTime); // v5
     for (int i = 0; i < 6; ++i)
-        pCombG2[i] = (1.0f - self->mfCombG1[i]) * damp;
+        pCombG2[i] = (1.0f - mfCombG1[i]) * damp;
     return 1;
 }
 
@@ -641,21 +646,21 @@ int ReverbModel1::ConfigureModel(ReverbModel1 *self, System *pSystem)
         CalculateCombDistances(self, &self->mfRoomSize, self->mfCombDistances);
         CalculateCombDelays(self, KF_INTERNAL_RATE, self->mfCombDistances, self->miCombDelays);
         CalculateG1Values(self, self->mfCombG1, KF_INTERNAL_RATE);
-        CalculateG2Values(self, self->mfCombG2);
+        self->CalculateG2Values(self->mfCombG2);
         recomputedRoom = true;
     }
     else if (self->mfLastSampleRate != KF_INTERNAL_RATE)
     {
         CalculateCombDelays(self, KF_INTERNAL_RATE, self->mfCombDistances, self->miCombDelays);
         CalculateG1Values(self, self->mfCombG1, KF_INTERNAL_RATE);
-        CalculateG2Values(self, self->mfCombG2);
+        self->CalculateG2Values(self->mfCombG2);
         recomputedRate = true;
     }
     else
     {
         if (self->mfDamping != self->mfLastDamping)
             CalculateG1Values(self, self->mfCombG1, KF_INTERNAL_RATE);
-        CalculateG2Values(self, self->mfCombG2);
+        self->CalculateG2Values(self->mfCombG2);
     }
 
     // Re-tune every comb section and, when its target delay changed, re-size + re-prime it.
@@ -733,7 +738,7 @@ int ReverbModel1::ConfigureModel(ReverbModel1 *self, System *pSystem)
     self->mfLastRoomSize   = self->mfRoomSize;
     self->mfLastDamping    = self->mfDamping;
     self->mfLastSampleRate = KF_INTERNAL_RATE;
-    UpdateLatencyAndDecay(self);
+    self->UpdateLatencyAndDecay();
     return 1;
 }
 
@@ -743,23 +748,23 @@ int ReverbModel1::ConfigureModel(ReverbModel1 *self, System *pSystem)
 // loop gain, via the Schroeder RT60 form  d - d*10/log10(g), and fold the delta into the
 // upstream voice's latency accumulator (voice +0x28).
 // -------------------------------------------------------------------------------------
-void ReverbModel1::UpdateLatencyAndDecay(ReverbModel1 *self)
+void ReverbModel1::UpdateLatencyAndDecay()
 {
     // Comb contribution: the largest comb delay (miCombDelays is ascending) and comb-0 gain.
-    const f32 combDelay = static_cast<f32>(self->miCombDelays[5]);
+    const f32 combDelay = static_cast<f32>(miCombDelays[5]);
     const f32 combLatency = combDelay - static_cast<f32>(
-        (combDelay * 10.0f) / static_cast<f32>(log10(self->mfCombG2[0])));
+        (combDelay * 10.0f) / static_cast<f32>(log10(mfCombG2[0])));
 
     // All-pass contribution: the largest section gain and delay length.
     f32 maxGain = 0.0f;
-    for (int i = 0; i < self->mbAllPassCount; ++i)
-        if (self->mfAllPassGain[i] > maxGain)
-            maxGain = self->mfAllPassGain[i];
+    for (int i = 0; i < mbAllPassCount; ++i)
+        if (mfAllPassGain[i] > maxGain)
+            maxGain = mfAllPassGain[i];
 
     s32 maxApDelay = 0;
-    for (int i = 0; i < self->mbAllPassCount; ++i)
-        if (self->miAllPassDelaySamples[i] > maxApDelay)
-            maxApDelay = self->miAllPassDelaySamples[i];
+    for (int i = 0; i < mbAllPassCount; ++i)
+        if (miAllPassDelaySamples[i] > maxApDelay)
+            maxApDelay = miAllPassDelaySamples[i];
 
     const f32 apDelay = static_cast<f32>(maxApDelay);
     const f32 newDecay = (apDelay - static_cast<f32>(
@@ -769,8 +774,8 @@ void ReverbModel1::UpdateLatencyAndDecay(ReverbModel1 *self)
     // (voice+0x28 == Voice::mfFadeStart, by name -- the expel-after-decay deadline;
     // 2026-08-25 wave 4: the former "+0x28 latency word" raw reinterpret is retired),
     // then latch it.
-    self->mBase.mpVoice->mfFadeStart += (newDecay - self->mBase.mDecaySamples);
-    self->mBase.mDecaySamples = newDecay;
+    mBase.mpVoice->mfFadeStart += (newDecay - mBase.mDecaySamples);
+    mBase.mDecaySamples = newDecay;
 }
 
 // -------------------------------------------------------------------------------------

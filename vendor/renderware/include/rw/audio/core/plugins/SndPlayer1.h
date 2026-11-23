@@ -28,7 +28,7 @@
 #include "types.hpp"                        // f32, f64, s32, u32, u16, u8
 #include "rw/audio/core/PlugIn.h"           // PlugIn (polymorphic base) + Attribute_t + System
 #include "rw/audio/core/TimerHandle.h"      // TimerHandle (the per-frame timer client)
-#include "rw/audio/core/Voice.h"            // VoiceStageConfig (GetSize's argument)
+#include "rw/audio/core/Voice.h"            // PlugInConfig (GetSize's argument)
 #include "rw/audio/core/StreamPool.h"       // StreamPool::StreamHandle
 
 #include <cstddef> // size_t
@@ -230,7 +230,7 @@ public:
     virtual void Destroy(int aFlags);                   // vt[3] deleting dtor @0x82B9EAF8
 
     static char **GetPlugInDescRunTime();                              // @0x82B9BE60
-    static int    GetSize(const VoiceStageConfig *apConfig);           // @0x82BA0220
+    static int    GetSize(const PlugInConfig *apConfig);           // @0x82BA0220
     static int    CreateInstance(SndPlayer1 *self,
                                  const ConstructorParams *apParams);   // @0x82BA6C80
     static void   GetFileInfo(const void* apData, FileInfo* apInfo);   // @0x82B9BE70

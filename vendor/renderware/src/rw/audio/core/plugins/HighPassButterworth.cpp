@@ -95,9 +95,9 @@ char **HighPassButterworth::GetPlugInDescRunTime()
 // Voice::CreateInstance passes the stage config to this hook. The channel byte
 // at config +0x08 sizes the kernel after the plug-in header.
 // -------------------------------------------------------------------------------------
-u32 HighPassButterworth::GetSize(const VoiceStageConfig *config)
+u32 HighPassButterworth::GetSize(const PlugInConfig *config)
 {
-    return Butterworth::GetSize(config->mu8OutputChannels)
+    return Butterworth::GetSize(config->outputChannels)
         + offsetof(HighPassButterworth, mButterworth);
 }
 
