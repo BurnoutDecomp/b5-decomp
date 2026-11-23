@@ -80,7 +80,9 @@ struct Environment;
 struct DynamicMixer : public Nicotine::IDynamicMixer
 {
     DynamicMixer() : mpEnvironment(0) {}
-    virtual ~DynamicMixer();
+    // No user-declared destructor: DWARF lists none, and ARTIST's deleting destructor
+    // (0x827DC970) is the implicit one -- it calls ~IDynamicMixer without first
+    // re-storing the DynamicMixer vtable.
 
     // DWARF :562. FLAG (DEFER): declared-only -- bodied with the mixer slices
     // (the Environment's Construct wires mpEnvironment + CreateInstance directly,

@@ -35,13 +35,6 @@ namespace CgsSound
 namespace Logic
 {
 
-DynamicMixer::~DynamicMixer()
-{
-    // No DynamicMixer-specific member teardown: the X360 destructor only runs the
-    // Nicotine::IDynamicMixer base sub-object destructor (implicit here) and, in the
-    // deleting flavour, frees storage -- both compiler/operator-delete concerns.
-}
-
 // @ 0x826A5308. Resolve the packed state/instance/effect identity carried by
 // the mix-map endpoint and attach it to the matching live logic effect.
 bool DynamicMixer::ConnectDMixIO(Nicotine::DMixIO* apDMixIO)

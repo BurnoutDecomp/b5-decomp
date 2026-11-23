@@ -1,5 +1,5 @@
 #include "GameSource/Sound/Passby/BrnPassbyStateManager.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Passby ctor range tripwire)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT + ARTIST locations
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"   // CgsSound::Playback::Name::MakeHash
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModule.h"
 #include "GameSource/Sound/BrnDebugComponent.h"
@@ -158,15 +158,21 @@ PassbyStateManager::Passby::Passby(
         EePassbyTypes leType,
         bool lbSuppressBoostBys,
         f32 lfVolumeModifier )
-    : mStaticPos()                                                // 16B zero (stvx128 v0)
+    // ARTIST 0x82683300/0x8268331C: vspltisw 0 + stvx128 -- the zero vector the SDK spells
+    // rw::math::vpu::GetVector3_Zero() (DWARF rw/math/vpu/detail/constants_operation_inline.h,
+    // not yet in this tree), written as the same splat the tree uses elsewhere.
+    : mStaticPos(__vspltisw(0))
     , mp3dControl( lp3dControl )                                  // @0x10
     , mfRelativeVelocityMagnitude( lfRelativeVelocityMagnitude )  // @0x14
     , meType( leType )                                            // @0x18
     , mfVolumeModifier( lfVolumeModifier )                        // @0x1C
     , mbSuppressBoostBys( lbSuppressBoostBys )                    // @0x20
 {
+    // ARTIST 0x82683330: the assert names BrnPassbyStateManager.h:94 (the original
+    // constructor is the header's inline one, emitted out of line).
     CGS_ASSERT( leType < AttribSys::Enums::ePassbyTypes::MaxPassbyTypes,
-                "leType < AttribSys::Enums::ePassbyTypes::MaxPassbyTypes" );
+        CgsDev::Assert::MessageAt("leType < AttribSys::Enums::ePassbyTypes::MaxPassbyTypes",
+            "..\\..\\..\\GameSource\\Sound/Passby/BrnPassbyStateManager.h", 94) );
 }
 
 // =============================================================================

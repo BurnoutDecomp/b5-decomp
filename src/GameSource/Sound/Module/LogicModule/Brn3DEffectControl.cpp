@@ -49,7 +49,8 @@ void Brn3DEffectControl::UpdateParams(f32 afDeltaTime)
 
 void Brn3DEffectControl::Notify(const CgsSound::Io::MessageHeader* apMessageHeader)
 {
-    if (apMessageHeader && apMessageHeader->GetEventId() == 1)
+    // ARTIST 0x82682C68 reads the event id straight away: no null test of the header.
+    if (apMessageHeader->GetEventId() == 1)
     {
         mDrawSphere =
             static_cast<const CgsSound::Io::Message<DrawSphere>*>(apMessageHeader)->mData;

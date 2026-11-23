@@ -1,5 +1,5 @@
 #include "GameSource/Sound/Collision/BrnCollisionState.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // =============================================================================
 // BrnSound::Logic::Collision::CollisionState -- out-of-line bodies.
@@ -48,9 +48,11 @@ CollisionState::~CollisionState()
 // clear both lifetime samples and remember the state clock at attachment time.
 void CollisionState::Attach(void* apvAttachment)
 {
-    CGS_ASSERT(apvAttachment != 0, "lpAttachment");
-    if (!apvAttachment)
-        return;
+    // ARTIST 0x826D343C: the assert is a tripwire only -- the copy and the base attach
+    // follow unconditionally (no early return).
+    CGS_ASSERT(apvAttachment != 0, CgsDev::Assert::MessageAt("lpvAttachment",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+        "../Sound/Collision/BrnCollisionState.cpp", 50 /* ARTIST 0x826D344C */));
 
     mOutputCollision = *static_cast<const OutputCollision*>(apvAttachment);
     CgsSound::Logic::State::Attach(apvAttachment);
