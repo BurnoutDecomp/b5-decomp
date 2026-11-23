@@ -15,8 +15,7 @@
 // through each bucket's FXBucketBase head (mpPreviousBucket/mpNextBucket) and the
 // FXBucketManager (mpFreeList/muNumFreeBuckets); see BrnDebrisArray.h for the layout map.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/Native/BrnDebrisRenderer.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/Native/BrnDebrisRenderer.cpp".
 
 namespace BrnParticle
 {
@@ -61,14 +60,14 @@ namespace Native
         CGS_ASSERT( ( leDebrisType >= 0 ) && ( leDebrisType < eDebrisArray_Max ),
             CgsDev::Assert::MessageAt(
                 "( leDebrisType >= 0 ) && ( leDebrisType < eDebrisArray_Max )",
-                KAC_ARTIST_ASSERT_FILE, 182 /* ARTIST 0x8227A408 */));
+                __FILE__, 182 /* ARTIST 0x8227A408 */));
 
         mpParams = &_gaDebrisArrayParams[leDebrisType];
 
         CGS_ASSERT( mpParams->mnNumParticles > 0,
             CgsDev::Assert::MessageAt(
                 "mpParams->mnNumParticles > 0",
-                KAC_ARTIST_ASSERT_FILE, 185 /* ARTIST 0x8227A44C */));
+                __FILE__, 185 /* ARTIST 0x8227A44C */));
 
         mpBucketManager = lpBucketManager;
         mpBuckets       = 0;

@@ -31,8 +31,7 @@
 // "A* Extract best open node" / "A* Find node" AddMonitor handles) is part of the X360
 // behaviour and reproduced store-for-store.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\route\\BrnAStar.h";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\route\\BrnAStar.h".
 
 namespace BrnAI
 {
@@ -106,12 +105,12 @@ const f32 AStar::KF_ZERO_EPSILON = 1.1920929e-07f;
 AStarNode* AStarNodePool::GetNode(u16 luNodeIndex)
 {
     CGS_ASSERT(luNodeIndex < KU_MAX_NODES,
-        CgsDev::Assert::MessageAt("luIndex < KU_MAX_NODES", KAC_ARTIST_ASSERT_FILE, 483 /* ARTIST 0x8276555C */));
+        CgsDev::Assert::MessageAt("luIndex < KU_MAX_NODES", __FILE__, 483 /* ARTIST 0x8276555C */));
     CGS_ASSERT(luNodeIndex % KU_MAX_PARTITION_NODES
                    < mauNodeCount[luNodeIndex / KU_MAX_PARTITION_NODES],
         CgsDev::Assert::MessageAt(
             "luIndex % KU_MAX_PARTITION_NODES < mauNodeCount[luIndex / KU_MAX_PARTITION_NODES]",
-            KAC_ARTIST_ASSERT_FILE, 484 /* ARTIST 0x827655A0 */));
+            __FILE__, 484 /* ARTIST 0x827655A0 */));
     return &maNodes[luNodeIndex];
 }
 

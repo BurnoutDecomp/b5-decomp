@@ -33,8 +33,7 @@
 // here as a free function so the texture-bind side effect is preserved (PC backend body / stub).
 extern IDirect3DDevice9* gpD3DDevice;
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/LionParticleRender.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Effects/Particles/LionParticleRender.cpp".
 
 namespace renderengine
 {
@@ -267,7 +266,7 @@ LionParticleRender::LionParticleRender()
 U32 LionParticleRender::HashMaterial(const cParticleMaterial* apMaterial)
 {
     CGS_ASSERT(apMaterial != 0,
-        CgsDev::Assert::MessageAt("apMaterial != NULL", KAC_ARTIST_ASSERT_FILE, 501 /* ARTIST 0x82279CE4 */));
+        CgsDev::Assert::MessageAt("apMaterial != NULL", __FILE__, 501 /* ARTIST 0x82279CE4 */));
 
     const u32 KU_FNV_OFFSET_BASIS = 0x811C9DC5u;
     const u32 KU_FNV_PRIME        = 0x01000193u;
@@ -289,7 +288,7 @@ U32 LionParticleRender::HashMaterial(const cParticleMaterial* apMaterial)
 U32 LionParticleRender::GetMaterialHandle(U32 auMaterialHash)
 {
     CGS_ASSERT(auMaterialHash != 0,
-        CgsDev::Assert::MessageAt("luMaterialHash != 0", KAC_ARTIST_ASSERT_FILE, 513 /* ARTIST 0x82279D74 */));
+        CgsDev::Assert::MessageAt("luMaterialHash != 0", __FILE__, 513 /* ARTIST 0x82279D74 */));
 
     for (s32 liIndex = 0; liIndex < siMaterialCount; ++liIndex)
     {
@@ -525,13 +524,13 @@ void LionParticleRender::RenderGroupBegin(const cParticleMaterial& arMaterial)
     CGS_ASSERT(arMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION,
         CgsDev::Assert::MessageAt(
             "lMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION",
-            KAC_ARTIST_ASSERT_FILE, 265 /* ARTIST 0x822941C8 */));
+            __FILE__, 265 /* ARTIST 0x822941C8 */));
 
     mpCurrentRenderer = mpRenderer;
     CGS_ASSERT(mpCurrentRenderer != 0,
         CgsDev::Assert::MessageAt(
             "A valid renderer is expected here.",
-            KAC_ARTIST_ASSERT_FILE, 269 /* ARTIST 0x822941F4 */));
+            __FILE__, 269 /* ARTIST 0x822941F4 */));
 
     SetMaterial(&arMaterial);
 }
@@ -546,13 +545,13 @@ void LionParticleRender::RenderGroupBeginLite(const cParticleMaterial& arMateria
     CGS_ASSERT(arMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION,
         CgsDev::Assert::MessageAt(
             "lMaterial.GetShaderType() == cParticleMaterial::eSHADER_LION",
-            KAC_ARTIST_ASSERT_FILE, 211 /* ARTIST 0x822894FC */));
+            __FILE__, 211 /* ARTIST 0x822894FC */));
 
     mpCurrentRenderer = mpRenderer;
     CGS_ASSERT(mpCurrentRenderer != 0,
         CgsDev::Assert::MessageAt(
             "A valid renderer is expected here.",
-            KAC_ARTIST_ASSERT_FILE, 215 /* ARTIST 0x82289528 */));
+            __FILE__, 215 /* ARTIST 0x82289528 */));
 
     mpCurrentRenderer->SetCameraData(mBackMat, mViewMat, mViewProjection);
 }
@@ -641,19 +640,19 @@ void LionParticleRender::SetMaterial(const cParticleMaterial* apMaterial)
 void LionParticleRender::TextureRegister(cParticleMaterial* apMaterial, char* apcTextureName)
 {
     CGS_ASSERT(apMaterial,
-        CgsDev::Assert::MessageAt("apMaterial", KAC_ARTIST_ASSERT_FILE, 141 /* ARTIST 0x822893C8 */));
+        CgsDev::Assert::MessageAt("apMaterial", __FILE__, 141 /* ARTIST 0x822893C8 */));
     CGS_ASSERT(apMaterial->GetShaderType() == cParticleMaterial::eSHADER_LION,
         CgsDev::Assert::MessageAt(
             "apMaterial->GetShaderType() == cParticleMaterial::eSHADER_LION",
-            KAC_ARTIST_ASSERT_FILE, 143 /* ARTIST 0x822893F0 */));
+            __FILE__, 143 /* ARTIST 0x822893F0 */));
     CGS_ASSERT(apMaterial->mUCoordOption != cParticleMaterial::eUVOPTION_FLIPPED,
         CgsDev::Assert::MessageAt(
             "apMaterial->mUCoordOption != cParticleMaterial::eUVOPTION_FLIPPED",
-            KAC_ARTIST_ASSERT_FILE, 144 /* ARTIST 0x82289418 */));
+            __FILE__, 144 /* ARTIST 0x82289418 */));
     CGS_ASSERT(apMaterial->mVCoordOption != cParticleMaterial::eUVOPTION_FLIPPED,
         CgsDev::Assert::MessageAt(
             "apMaterial->mVCoordOption != cParticleMaterial::eUVOPTION_FLIPPED",
-            KAC_ARTIST_ASSERT_FILE, 145 /* ARTIST 0x82289440 */));
+            __FILE__, 145 /* ARTIST 0x82289440 */));
 
     const u32 luMaterialHash = HashMaterial(apMaterial);
     u32 luMaterialHandle = GetMaterialHandle(luMaterialHash);

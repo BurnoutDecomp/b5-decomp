@@ -20,8 +20,7 @@
 #include <cmath>   // sqrtf
 #include <cstddef> // offsetof
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\racebalancing\\BrnRaceBalancingRoute.h";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\racebalancing\\BrnRaceBalancingRoute.h".
 
 namespace BrnAI
 {
@@ -91,16 +90,16 @@ f32 RaceBalancingRoute::ComputeRaceCompletionRatio(f32 lfDistanceToNextCheckpoin
 f32 RaceBalancingRoute::GetTime(GraphType leGraphType, s32 liTimeIndex) const
 {
     CGS_ASSERT(mbValid,
-        CgsDev::Assert::MessageAt("mbValid", KAC_ARTIST_ASSERT_FILE, 203 /* ARTIST 0x82765924 */));
+        CgsDev::Assert::MessageAt("mbValid", __FILE__, 203 /* ARTIST 0x82765924 */));
     CGS_ASSERT(liTimeIndex >= 0,
-        CgsDev::Assert::MessageAt("liTimeIndex >= 0", KAC_ARTIST_ASSERT_FILE, 204 /* ARTIST 0x82765948 */));
+        CgsDev::Assert::MessageAt("liTimeIndex >= 0", __FILE__, 204 /* ARTIST 0x82765948 */));
     CGS_ASSERT(liTimeIndex < miTimeCount,
-        CgsDev::Assert::MessageAt("liTimeIndex < miTimeCount", KAC_ARTIST_ASSERT_FILE, 205 /* ARTIST 0x82765970 */));
+        CgsDev::Assert::MessageAt("liTimeIndex < miTimeCount", __FILE__, 205 /* ARTIST 0x82765970 */));
     CGS_ASSERT(leGraphType >= 0,
-        CgsDev::Assert::MessageAt("leGraphType >= 0", KAC_ARTIST_ASSERT_FILE, 206 /* ARTIST 0x82765994 */));
+        CgsDev::Assert::MessageAt("leGraphType >= 0", __FILE__, 206 /* ARTIST 0x82765994 */));
     CGS_ASSERT(leGraphType < E_GRAPH_TYPE_COUNT,
         CgsDev::Assert::MessageAt(
-            "leGraphType < E_GRAPH_TYPE_COUNT", KAC_ARTIST_ASSERT_FILE, 207 /* ARTIST 0x827659B8 */));
+            "leGraphType < E_GRAPH_TYPE_COUNT", __FILE__, 207 /* ARTIST 0x827659B8 */));
 
     return mafTimes[leGraphType][liTimeIndex]
            + static_cast<f32>(miTakenDownCount) * mfTakenDownTimePenalty;

@@ -30,7 +30,7 @@
 #include "types.hpp"   // uintptr_t
 
 // Static storage for the effect ring (one definition per TU).
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\SharedClasses\\Graphics/VFXPropsResourceType.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\SharedClasses\\Graphics/VFXPropsResourceType.h".
 
 namespace BrnEffects
 {
@@ -45,9 +45,9 @@ namespace BrnParticle
     {
         CGS_ASSERT(luState < muNumPropStates,
             CgsDev::Assert::MessageAt(
-                "luState < muNumPropStates", KAC_ARTIST_ASSERT_FILE, 402 /* ARTIST 0x822770A8 */));   // VFXPropsResourceType.h:402
+                "luState < muNumPropStates", __FILE__, 402 /* ARTIST 0x822770A8 */));   // VFXPropsResourceType.h:402
         CGS_ASSERT(mpPropStates != 0,
-            CgsDev::Assert::MessageAt("mpPropStates != NULL", KAC_ARTIST_ASSERT_FILE, 403 /* ARTIST 0x822770D0 */));               // :403
+            CgsDev::Assert::MessageAt("mpPropStates != NULL", __FILE__, 403 /* ARTIST 0x822770D0 */));               // :403
         return reinterpret_cast<const VFXPropState*>(static_cast<uintptr_t>(mpPropStates)) + luState;
     }
 }

@@ -90,8 +90,7 @@
 // CalcDistanceFromPlayer @0x8276E1C8..0x8276E26C.
 // =================================================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIDriver.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/BrnAIDriver.cpp".
 
 namespace BrnAI
 {
@@ -201,10 +200,10 @@ namespace BrnAI
     NearbyVehicle* NearbyVehicles::GetVehiclePointer(s32 liEntry)
     {
         CGS_ASSERT(liEntry >= 0,
-            CgsDev::Assert::MessageAt("liEntry >= 0", KAC_ARTIST_ASSERT_FILE, 2942 /* ARTIST 0x8276689C */));                                 // :2942
+            CgsDev::Assert::MessageAt("liEntry >= 0", __FILE__, 2942 /* ARTIST 0x8276689C */));                                 // :2942
         CGS_ASSERT(liEntry < KI_MAX_NEARBY_VEHICLES,
             CgsDev::Assert::MessageAt(
-                "liEntry < KI_MAX_NEARBY_TRAFFIC", KAC_ARTIST_ASSERT_FILE, 2943 /* ARTIST 0x827668C0 */));  // :2943
+                "liEntry < KI_MAX_NEARBY_TRAFFIC", __FILE__, 2943 /* ARTIST 0x827668C0 */));  // :2943
         return &mVehicle[liEntry];                                                // mulli 0x70; add
     }
 
