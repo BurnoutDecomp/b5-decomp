@@ -89,8 +89,9 @@ namespace BrnAI
 {
 namespace AIModuleIO
 {
-    struct OutputBuffer : public CgsModule::IOBuffer
+    class OutputBuffer : public CgsModule::IOBuffer
     {
+    public:
         // Attested X360 member start offsets (bytes from this). ORDER/IDENTITY authority
         // only -- see the banner: the host layout cannot and does not reproduce them.
         enum EMemberOffset
@@ -113,6 +114,7 @@ namespace AIModuleIO
         // ("memcpy+0x131 <- ...::SetCrashInterface"), so this override lands WITH the first
         // producer that writes into the buffer rather than after it.
         void Construct();
+        void Destruct();   // DecFIGS BrnAIModuleIO.cpp:126, out of line (ARTIST DestroyIOBuffer 0x827B6180 calls it)
 
         // The AI module's resource request interface. Written by AIModule::LoadMapData
         // (LoadBundle "AI.dat" + AcquireResource "WorldMapData") through the WRITE twin

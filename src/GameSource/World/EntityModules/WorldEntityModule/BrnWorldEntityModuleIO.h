@@ -60,11 +60,13 @@ namespace WorldEntityIO
     typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface SceneInputInterface;
 
     // DWARF BrnWorldEntityModuleIO.h:61 — the world-entity "prepare" phase output buffer.
-    struct OutputBuffer_Prepare : public CgsModule::IOBuffer
+    class OutputBuffer_Prepare : public CgsModule::IOBuffer
     {
+    public:
         // PC restoration of the CreateIOBuffer<T> Construct step (the X360 stack template
         // runs T::Construct after the alloc; the PC generic placement-news only): raise
         // the IOBuffer status base, bring up the request queue + the scene input aggregate.
+        void Destruct();   // DecFIGS BrnWorldEntityModuleIO.cpp:35, out of line (ARTIST DestroyIOBuffer 0x827B7670 calls it)
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
@@ -98,10 +100,12 @@ namespace WorldEntityIO
 
     // ========================================================================
     // BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics (DWARF BrnWorldEntityModuleIO.h:234).
-    struct OutputBuffer_PostPhysics : public CgsModule::IOBuffer
+    class OutputBuffer_PostPhysics : public CgsModule::IOBuffer
     {
+    public:
         // X360 0x822EDFF0 -- IOBuffer status, the request queue Construct+Clear, the five
         // status flags (0/0/0/1/1) and the scene input aggregate.
+        void Destruct();   // DecFIGS BrnWorldEntityModuleIO.cpp:145, out of line (ARTIST DestroyIOBuffer 0x827B7820 calls it)
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
@@ -143,14 +147,16 @@ namespace WorldEntityIO
     // (DWARF BrnWorldEntityModuleIO.h:~278). The two payload fields are POINTERS
     // (the X360 stored them as 32-bit addresses; the consumers dereference them:
     // DispatchFrame::GetList / ShadowMap::CalcLodDistanceModifier).
-    struct InputBuffer_GenerateDispatchLists : public CgsModule::IOBuffer
+    class InputBuffer_GenerateDispatchLists : public CgsModule::IOBuffer
     {
+    public:
         typedef CgsModule::VariableEventQueue<32768, 16> SceneResultQueue;
 
         // X360 0x822D8BC8 -- IOBuffer status, the dispatch-frame pointer cleared, the
         // scene-result queue Construct (VariableEventQueue<32768,16>, the maPayload span --
         // X360 +8, and 8 + sizeof(VEQ<32768,16>) == 0x8018 == the shadow-map slot) and the
         // shadow-map pointer cleared.
+        void Destruct();   // DecFIGS BrnWorldEntityModuleIO.cpp:160, out of line (ARTIST DestroyIOBuffer 0x827BA1C8 calls it)
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
@@ -185,12 +191,14 @@ namespace WorldEntityIO
 
     // ========================================================================
     // BrnWorld::WorldEntityIO::InputBuffer_PreScene (DWARF BrnWorldEntityModuleIO.h:~95).
-    struct InputBuffer_PreScene : public CgsModule::IOBuffer
+    class InputBuffer_PreScene : public CgsModule::IOBuffer
     {
+    public:
         typedef RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface ActiveRaceCarInterface;
 
         // X360 0x822D8B18 -- IOBuffer status, the race-car interface Clear, then the two
         // RequestInterface flag bytes (+10496/+10497) cleared.
+        void Destruct();   // DecFIGS BrnWorldEntityModuleIO.cpp:49, out of line (ARTIST DestroyIOBuffer 0x827B8B48 calls it)
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
@@ -217,12 +225,14 @@ namespace WorldEntityIO
 
     // ========================================================================
     // BrnWorld::WorldEntityIO::InputBuffer_PostPhysics (DWARF BrnWorldEntityModuleIO.h:212).
-    struct InputBuffer_PostPhysics : public CgsModule::IOBuffer
+    class InputBuffer_PostPhysics : public CgsModule::IOBuffer
     {
+    public:
         // The GameAction event pipe (X360 VariableEventQueue<13312,16>).
         typedef CgsModule::VariableEventQueue<13312, 16> GameActionQueue;
 
         // X360 0x822D8BB0 -- IOBuffer status then the game-action queue (this+4).
+        void Destruct();   // DecFIGS BrnWorldEntityModuleIO.cpp:130, out of line (ARTIST DestroyIOBuffer 0x827BA018 calls it)
         void Construct()
         {
             CgsModule::IOBuffer::Construct();
@@ -243,8 +253,9 @@ namespace WorldEntityIO
 
     // ========================================================================
     // BrnWorld::WorldEntityIO::OutputBuffer_PreScene (DWARF BrnWorldEntityModuleIO.h:109).
-    struct OutputBuffer_PreScene : public CgsModule::IOBuffer
+    class OutputBuffer_PreScene : public CgsModule::IOBuffer
     {
+    public:
         typedef CgsModule::EventQueue<BrnWorld::PropEntityIO::PropInstancesNeededForZoneEvent, 30> PropInstancesNeededForZoneQueue;
         typedef CgsModule::EventQueue<BrnWorld::PropEntityIO::PropGraphicsLoadedEvent, 25>         PropGraphicsLoadedQueue;
         typedef CgsModule::EventQueue<BrnWorld::PropEntityIO::PropGraphicsUnloadedEvent, 25>       PropGraphicsUnloadedQueue;

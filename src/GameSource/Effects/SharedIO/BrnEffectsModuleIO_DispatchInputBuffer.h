@@ -54,9 +54,11 @@ namespace BrnEffects
 namespace EffectsIO
 {
     // EffectsModuleIO.h:196 -- struct DispatchInputBuffer : public IOBuffer.
-    struct DispatchInputBuffer : public CgsModule::IOBuffer
+    class DispatchInputBuffer : public CgsModule::IOBuffer
     {
+    public:
         // --- construction bodied in BrnEffectsModuleIO_DispatchInputBuffer.cpp ----------
+        void Destruct();   // DecFIGS EffectsModuleIO.cpp:118, out of line (ARTIST DestroyIOBuffer 0x823AED40 calls it)
         void              Construct();                                                          // @ 0x82288120 (DWARF EffectsModuleIO.h:201)
 
         // --- accessors bodied in BrnEffectsModuleIO_DispatchInputBuffer.cpp -------------

@@ -231,3 +231,19 @@ namespace ReplayIO
     }
 }
 }
+
+// DecFIGS BrnReplayModuleIO.cpp:115: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<InputBuffer_PostSim> @0x823AFDF0 calls.
+void BrnReplays::ReplayIO::InputBuffer_PostSim::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}
+
+// DecFIGS BrnReplayModuleIO.cpp:57: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<InputBuffer_PreSim> @0x823AFC48 calls.
+void BrnReplays::ReplayIO::InputBuffer_PreSim::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}

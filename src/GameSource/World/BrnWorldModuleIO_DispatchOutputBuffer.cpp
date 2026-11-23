@@ -157,3 +157,11 @@ void DispatchOutputBuffer::SetWhiteLevel(f32 lfWhiteLevel)
 }
 
 }   // namespace BrnWorldIO
+
+// DecFIGS BrnWorldModuleIO.cpp:203: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<DispatchOutputBuffer> @0x823AEB98 calls.
+void BrnWorldIO::DispatchOutputBuffer::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}

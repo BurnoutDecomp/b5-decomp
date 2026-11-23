@@ -59,8 +59,9 @@ namespace BrnEffects
 {
 namespace EffectsIO
 {
-    struct OutputBuffer : public CgsModule::IOBuffer
+    class OutputBuffer : public CgsModule::IOBuffer
     {
+    public:
     public:
         // The DWARF typedefs (EffectsModuleIO.h:303-305 / ParticleModuleIO.h:32).
         typedef BrnResource::GameDataIO::RequestInterface<4096>                 EffectsModuleResourceQueue;
@@ -73,7 +74,7 @@ namespace EffectsIO
         // RootOutputBuffer's (BrnRootSoundModuleIo.h) and the world UpdateOutputBuffer's.
         void Construct();
         // (:311) -- ICF-folded into IOBuffer::Destruct on the console (no member teardown).
-        void Destruct() { CgsModule::IOBuffer::Destruct(); }
+        void Destruct();   // DecFIGS EffectsModuleIO.cpp:153, out of line (ARTIST DestroyIOBuffer 0x823AE848 calls it)
 
         // X360 0x823BABF0 (R, :291) -- read-lock handle at this+0x4.
         const EffectsModuleResourceQueue* GetResourceRequestInterface() const;

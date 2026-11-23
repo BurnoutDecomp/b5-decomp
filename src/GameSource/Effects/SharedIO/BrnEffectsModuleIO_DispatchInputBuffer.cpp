@@ -121,3 +121,11 @@ void DispatchInputBuffer::SetWhiteLevel(f32 lfWhiteLevel)
 
 }   // namespace EffectsIO
 }   // namespace BrnEffects
+
+// DecFIGS EffectsModuleIO.cpp:118: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<DispatchInputBuffer> @0x823AED40 calls.
+void BrnEffects::EffectsIO::DispatchInputBuffer::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}

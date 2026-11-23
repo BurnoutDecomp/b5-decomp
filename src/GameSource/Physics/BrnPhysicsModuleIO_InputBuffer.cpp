@@ -278,3 +278,11 @@ namespace PhysicsModuleIO
     }
 }
 }
+
+// DecFIGS BrnPhysicsModuleIO.cpp:66: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<InputBuffer> @0x827B5FD0 calls.
+void BrnPhysics::PhysicsModuleIO::InputBuffer::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}

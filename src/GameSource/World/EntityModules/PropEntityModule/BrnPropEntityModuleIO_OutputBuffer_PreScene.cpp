@@ -166,3 +166,11 @@ namespace PropEntityIO
     }
 }
 }
+
+// DecFIGS BrnPropEntityModuleIO.cpp:156: the whole body is the base teardown. ARTIST 0x822DC3D0
+// (`b CgsModule::IOBuffer::Destruct`), the body every base-only buffer Destruct of the game
+// ICF-folds into; DestroyIOBuffer<OutputBuffer_PreScene> @0x827B6918 calls it.
+void BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}

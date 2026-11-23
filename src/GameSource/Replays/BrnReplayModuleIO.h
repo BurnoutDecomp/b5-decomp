@@ -20,8 +20,9 @@ namespace ReplayIO
 {
     // ---- post-sim output buffer ---------------------------------------------------
     // ARTIST 823AE66C allocates 0x614 bytes: IOBuffer followed by the queue.
-    struct OutputBuffer_PostSim : public CgsModule::IOBuffer
+    class OutputBuffer_PostSim : public CgsModule::IOBuffer
     {
+    public:
         typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
 
         // ARTIST 82653010 initializes IOBuffer then the queue.
@@ -58,8 +59,9 @@ namespace ReplayIO
     // The five owned accessors (this TU): GetStatusInterface const/non-const (this+4),
     // GetGameDataRequestInterface const/non-const (this+0x61C), GetGuiEventQueue const (this+0xA2C).
     // GROWN from a prior opaque-storage placeholder once this type's accessor TU landed.
-    struct OutputBuffer_PreSim : public CgsModule::IOBuffer
+    class OutputBuffer_PreSim : public CgsModule::IOBuffer
     {
+    public:
         typedef CgsGui::GuiEventQueueSmall GuiEventQueue;   // == CgsModule::VariableEventQueue<4096,16>
         typedef BrnResource::GameDataIO::RequestInterface<1024> GameDataRequestInterface;
 
@@ -108,14 +110,16 @@ namespace ReplayIO
     // timer-status block here so the two asm-attested offsets (queue +4, timer +0x3414) are
     // exact. GetTimerStatusI / SetTimerStatusInterface (this TU) reach the timer block by
     // name; AppendGameActionQueue bulk-appends into the queue base at +4.
-    struct InputBuffer_PreSim : public CgsModule::IOBuffer
+    class InputBuffer_PreSim : public CgsModule::IOBuffer
     {
+    public:
         typedef CgsModule::VariableEventQueue<13312, 16>     GameActionQueue;  // BaseGameActionQueue<13312> base
         typedef CgsInput::InputIO::PadOutputInformation      InputPadInformation;
 
         // ARTIST 0x82652F08: construct base and game-action queue, clear the timer
         // snapshot. The pad-input payload is deliberately not touched.
         void Construct();
+        void Destruct();   // DecFIGS BrnReplayModuleIO.cpp:57, out of line (ARTIST DestroyIOBuffer 0x823AFC48 calls it)
 
         // X360 0x823C9A38: write-lock (bit 3, "Not locked for writing", :72); bulk-appends the
         // source game-action queue into mGameActionQueue (VariableEventQueue<13312,16>::
@@ -146,12 +150,14 @@ namespace ReplayIO
     // The four owned accessors (this TU): GetRequestInterface non-const (this+4),
     // AppendRequestInterface (merges into this+4), GetGuiEvent const + GetGuiEventQueue
     // non-const (this+0x30).
-    struct InputBuffer_PostSim : public CgsModule::IOBuffer
+    class InputBuffer_PostSim : public CgsModule::IOBuffer
     {
+    public:
         typedef OutputBuffer_PreSim::GuiEventQueue GuiEventQueue;  // same GuiEventQueueSmall typedef
 
         // ARTIST 0x82652FE0: base flag, eleven named serialiser slots, then GUI queue.
         void Construct();
+        void Destruct();   // DecFIGS BrnReplayModuleIO.cpp:115, out of line (ARTIST DestroyIOBuffer 0x823AFDF0 calls it)
 
         // X360 0x823BB278: write-lock (bit 3, "Not locked for writing", :142); returns
         // &mRequestInterface (this+4).

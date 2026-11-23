@@ -74,3 +74,51 @@ namespace TriggerEntityModuleIO
     }
 }
 }
+
+// DecFIGS BrnTriggerEntityModuleIO.cpp:110: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<InputBuffer_PostScene> @0x827B8088 calls.
+void BrnWorld::TriggerEntityModuleIO::InputBuffer_PostScene::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}
+
+// DecFIGS BrnTriggerEntityModuleIO.cpp:167: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<InputBuffer_PrePhysics> @0x827B83E0 calls.
+void BrnWorld::TriggerEntityModuleIO::InputBuffer_PrePhysics::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}
+
+// DecFIGS BrnTriggerEntityModuleIO.cpp:53: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<InputBuffer_PreScene> @0x827B7D30 calls.
+void BrnWorld::TriggerEntityModuleIO::InputBuffer_PreScene::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}
+
+// DecFIGS BrnTriggerEntityModuleIO.cpp:138: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<OutputBuffer_PostScene> @0x827B8230 calls.
+void BrnWorld::TriggerEntityModuleIO::OutputBuffer_PostScene::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}
+
+// DecFIGS BrnTriggerEntityModuleIO.cpp: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<OutputBuffer_PrePhysics> @0x827B8588 calls.
+void BrnWorld::TriggerEntityModuleIO::OutputBuffer_PrePhysics::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}
+
+// DecFIGS BrnTriggerEntityModuleIO.cpp:81: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<OutputBuffer_PreScene> @0x827B7EE0 calls.
+void BrnWorld::TriggerEntityModuleIO::OutputBuffer_PreScene::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}

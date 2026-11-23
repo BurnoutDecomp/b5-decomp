@@ -37,8 +37,9 @@
 namespace BrnWorldIO
 {
     // DWARF BrnWorldModuleIO.h (struct DispatchOutputBuffer : public IOBuffer).
-    struct DispatchOutputBuffer : public CgsModule::IOBuffer
+    class DispatchOutputBuffer : public CgsModule::IOBuffer
     {
+    public:
         // ---- lifecycle ----------------------------------------------------------------
         // ⭐ ADDED 2026-08-15 (IO-buffer zero-fill removal audit). This buffer had NO Construct
         // at all on the PC side, which the audit flagged because WorldModule::GenerateDispatch-
@@ -61,6 +62,7 @@ namespace BrnWorldIO
         // CgsIOBufferStack.h). Modelled explicitly rather than left to inheritance so the next
         // reader of this header does not have to re-derive that from the binary.
         // FAKEMATCH: CreateIOBuffer calls the folded 12-byte initializer at 0x823AEB7C.
+        void Destruct();   // DecFIGS BrnWorldModuleIO.cpp:203, out of line (ARTIST DestroyIOBuffer 0x823AEB98 calls it)
         __declspec(noinline) void Construct() { CgsModule::IOBuffer::Construct(); }
 
         // --- accessors bodied in BrnWorldModuleIO_DispatchOutputBuffer.cpp --------------

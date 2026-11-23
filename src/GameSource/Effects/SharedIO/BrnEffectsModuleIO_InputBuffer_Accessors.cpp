@@ -240,3 +240,11 @@ void InputBuffer::SetAudioEffectsMessageQueue(const AudioEffectsMessageQueue* lp
 
 }   // namespace EffectsIO
 }   // namespace BrnEffects
+
+// DecFIGS EffectsModuleIO.cpp:67: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<InputBuffer> @0x823AFAA0 calls.
+void BrnEffects::EffectsIO::InputBuffer::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}

@@ -232,3 +232,11 @@ const DispatchInputBuffer::RenderSwitches* DispatchInputBuffer::GetRenderSwitche
 }
 
 }   // namespace BrnWorldIO
+
+// DecFIGS BrnWorldModuleIO.cpp:173: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<DispatchInputBuffer> @0x823AE9F0 calls.
+void BrnWorldIO::DispatchInputBuffer::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}

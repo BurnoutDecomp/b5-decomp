@@ -210,6 +210,7 @@ namespace PhysicsModuleIO
         // "Not Constructed" (CgsVariableEventQueue.h:759) on every frame the physics module ran.
         // Same family as the InputBuffer partial-Construct fixed 2026-08-09.
         void Construct();
+        void Destruct();   // DecFIGS BrnPhysicsModuleIO.cpp:107, out of line (ARTIST DestroyIOBuffer 0x827B7B80 calls it)
 
         static void _AssertLayout();
 
@@ -457,6 +458,7 @@ namespace PhysicsModuleIO
         // (CgsVariableEventQueue.h:454) before corrupting memory. Raise the status, then run the
         // queue's own Construct (the console's own construct-list shape for this buffer).
         void Construct();
+        void Destruct();   // DecFIGS BrnPhysicsModuleIO.cpp:66, out of line (ARTIST DestroyIOBuffer 0x827B5FD0 calls it)
 
         static void _AssertLayout();
 

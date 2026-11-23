@@ -41,8 +41,9 @@ namespace SceneManagerIO
     // bridge drives) is declared there.
 
     // The scene-manager update-phase input buffer.
-    struct InputBuffer_Update : public CgsModule::IOBuffer
+    class InputBuffer_Update : public CgsModule::IOBuffer
     {
+    public:
         // The Construct CreateIOBuffer<T> runs after the alloc (X360 instantiation
         // @0x827B59F0): raise the IOBuffer status base, then bring up the embedded
         // scene-update aggregate (the X360 InputBuffer_Update::Construct constructs the
@@ -140,8 +141,9 @@ namespace SceneManagerIO
     // _EventSphereTest.h (0x30), _EventVolumeTestDeepest.h (0xE0), _EventVolumeTestFine.h
     // (0xE0), the three _EventTriangleCollision*.h (0x30 / 0x30 / 0x08).
     // ------------------------------------------------------------------------
-    struct InputBuffer_Query : public CgsModule::IOBuffer
+    class InputBuffer_Query : public CgsModule::IOBuffer
     {
+    public:
         // The DWARF's queue typedefs (CgsSceneManagerModuleIO.h:165..:178).
         typedef InCoarseQueryQueue<16384>                                               InSmCoarseQueryQueue;                     // :165
         typedef CgsModule::EventQueue<InEventLineTest, 256>                             InCoarseLineTestQueue;                    // :168
@@ -160,7 +162,7 @@ namespace SceneManagerIO
         // DWARF :490. The console body is ICF-folded onto the bare `b CgsModule::IOBuffer::Destruct`
         // (DestroyIOBuffer<InputBuffer_Query> @0x823AF240 bl's the PropEntityIO::OutputBuffer_PreScene
         // fold @0x823AF2E4; the EventQueue/VariableEventQueue members have no Destruct work).
-        void Destruct() { CgsModule::IOBuffer::Destruct(); }
+        void Destruct();   // DecFIGS CgsSceneManagerModuleIO.cpp:147, out of line (ARTIST DestroyIOBuffer 0x823AF240 calls it)
 
         // The producer entry points (DWARF :494/:498/:502/:506). None is emitted out of line on
         // the console: every producer inlines `m<Queue>.AddEvent(event)` on the member seat --
@@ -238,8 +240,9 @@ namespace SceneManagerIO
     // DestroyIOBuffer<TriCacheQueryBuffer> @0x828C57A8 bl's CgsModule::IOBuffer::Destruct
     // directly -- the Destruct is the base's.
     // ------------------------------------------------------------------------
-    struct TriCacheQueryBuffer : public CgsModule::IOBuffer
+    class TriCacheQueryBuffer : public CgsModule::IOBuffer
     {
+    public:
         // DWARF :669 -- inlined into the CreateIOBuffer instantiation @0x828CC940.
         void Construct()
         {
@@ -331,8 +334,9 @@ namespace SceneManagerIO
     // (VolumeInstanceId/pointers), so the members land wherever the compiler puts them --
     // every access here and downstream is BY NAME. Do NOT re-pad to hit +32800.
     // ========================================================================
-    struct OutputBuffer : public CgsModule::IOBuffer
+    class OutputBuffer : public CgsModule::IOBuffer
     {
+    public:
         // ---- DWARF typedefs (all four are the member types, in DWARF order) ----
         typedef OutSceneQueryResultsQueue<32768>                             OutSmSceneQueryResultsQueue;  // :303
         typedef CgsModule::EventQueue<PotentialContact, 2048>                OutPotentialContactQueue;     // :290

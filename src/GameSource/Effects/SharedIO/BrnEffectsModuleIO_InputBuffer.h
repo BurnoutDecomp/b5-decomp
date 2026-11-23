@@ -67,8 +67,9 @@ namespace BrnEffects
 {
 namespace EffectsIO
 {
-    struct InputBuffer : public CgsModule::IOBuffer
+    class InputBuffer : public CgsModule::IOBuffer
     {
+    public:
         // ---- the DWARF typedefs (EffectsModuleIO.h:24 / :49 / :56 / :66) --------------
         typedef CgsModule::VariableEventQueue<4096, 16>                          InAttribSysUserEventQueue;
         typedef CgsModule::VariableEventQueue<13312, 16>                         GameActionQueue;
@@ -86,7 +87,7 @@ namespace EffectsIO
         // queue / interface constructed or cleared in the console's order.
         void Construct();
         // (:79) -- ICF-folded into IOBuffer::Destruct on the console (no member teardown).
-        void Destruct() { CgsModule::IOBuffer::Destruct(); }
+        void Destruct();   // DecFIGS EffectsModuleIO.cpp:67, out of line (ARTIST DestroyIOBuffer 0x823AFAA0 calls it)
 
         // ---- getters (read-lock, "Not locked for reading\n") -------------------------------
         const GameActionQueue*                  GetGameActionQueue() const;            // 0x8227DBE0 :145

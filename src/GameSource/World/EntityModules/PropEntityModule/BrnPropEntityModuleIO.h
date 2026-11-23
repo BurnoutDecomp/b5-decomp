@@ -264,7 +264,7 @@ namespace PropEntityIO
         // DestroyIOBuffer instantiations for OutputBuffer_Prepare @0x827B5E20, OutputBuffer_PreScene
         // @0x827B6918, InputBuffer_PreScene @0x827B89A0, OutputBuffer_PrePhysics @0x827B9470 and
         // InputBuffer_PostPhysics @0x827B9E70 all `bl` this address.)
-        void Destruct() { CgsModule::IOBuffer::Destruct(); }
+        void Destruct();   // DecFIGS BrnPropEntityModuleIO.cpp:156, out of line (ARTIST DestroyIOBuffer 0x827B6918 calls it)
 
         static void _AssertLayout();
 
@@ -353,7 +353,7 @@ namespace PropEntityIO
         // its own because it ICF-folded with OutputBuffer_PreScene::Destruct @0x822DC3D0
         // (`b CgsModule::IOBuffer::Destruct`) -- which is exactly what DestroyIOBuffer<
         // OutputBuffer_Prepare> @0x827B5E20 calls. Base-only, no member teardown.
-        void Destruct() { CgsModule::IOBuffer::Destruct(); }
+        void Destruct();   // DecFIGS BrnPropEntityModuleIO.cpp:284, out of line (ARTIST DestroyIOBuffer 0x827B5E20 calls it)
 
         static void _AssertLayout();
 
@@ -551,7 +551,7 @@ namespace PropEntityIO
         // DWARF :723. No out-of-line symbol of its own: like every base-only Destruct in this
         // family it ICF-folded with PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0,
         // which is the address DestroyIOBuffer<OutputBuffer_PostPhysics> @0x827B9C94 calls.
-        void Destruct() { CgsModule::IOBuffer::Destruct(); }
+        void Destruct();   // DecFIGS BrnPropEntityModuleIO.cpp:429, out of line (ARTIST DestroyIOBuffer 0x827B9BF0 calls it)
 
         // DWARF :742 / :745. Both header-inline on the console. RequestPropProgression's fold is
         // MEASURED at PostPhysicsUpdate 0x8230321C..0x82303228 -- `lis r10,0xC ; ori r10,0xB61C ;
@@ -630,7 +630,7 @@ namespace PropEntityIO
         // BODIED 2026-08-15 (IO-buffer zero-fill removal audit). ICF-folded with
         // OutputBuffer_PreScene::Destruct @0x822DC3D0 -- DestroyIOBuffer<OutputBuffer_PrePhysics>
         // @0x827B9470 calls that address. Base-only, no member teardown.
-        void Destruct() { CgsModule::IOBuffer::Destruct(); }
+        void Destruct();   // DecFIGS BrnPropEntityModuleIO.cpp:319, out of line (ARTIST DestroyIOBuffer 0x827B9470 calls it)
 
         static void _AssertLayout();
 
@@ -728,7 +728,7 @@ namespace PropEntityIO
         // BODIED 2026-08-15 (IO-buffer zero-fill removal audit). No symbol of its own in ARTIST
         // because it ICF-folded with OutputBuffer_PreScene::Destruct @0x822DC3D0 -- the address
         // DestroyIOBuffer<InputBuffer_PreScene> @0x827B89A0 calls. Base-only.
-        void Destruct() { CgsModule::IOBuffer::Destruct(); }
+        void Destruct();   // DecFIGS BrnPropEntityModuleIO.cpp:116, out of line (ARTIST DestroyIOBuffer 0x827B89A0 calls it)
 
         void SetReplayStatusInterface(const BrnReplays::ReplayIO::StatusInterface* lpReplayStatusInterface);
 
@@ -1077,7 +1077,7 @@ namespace PropEntityIO
         // BODIED 2026-08-15 (IO-buffer zero-fill removal audit): DestroyIOBuffer<
         // InputBuffer_PostPhysics> @0x827B9E70 calls PropEntityIO::OutputBuffer_PreScene::Destruct
         // @0x822DC3D0 -- the ICF representative, a bare `b CgsModule::IOBuffer::Destruct`.
-        void Destruct() { CgsModule::IOBuffer::Destruct(); }                // :567
+        void Destruct();   // DecFIGS BrnPropEntityModuleIO.cpp:389, out of line (ARTIST DestroyIOBuffer 0x827B9E70 calls it) (decl :567)
         const ContactSpyInterface* GetContactSpyInterface() const;          // :569
         const UpdatePropEventQueue* GetUpdatedPropQueue() const;            // :570
         ContactSpyInterface* GetContactSpyInterface();                      // :572
@@ -1109,8 +1109,9 @@ namespace PropEntityIO
     // 16 + 10*16 == 176 bytes on the host (12 + 10*16 == 172 on the console, mpEvents
     // widening 4->8), so a reinterpret_cast onto maDeferredPayload was an out-of-bounds
     // walk, not the project's opaque-storage idiom. The member is real now.
-    struct InputBuffer_PostScene : public CgsModule::IOBuffer
+    class InputBuffer_PostScene : public CgsModule::IOBuffer
     {
+    public:
         // DWARF :519 spells the member type RaceCarOutputInterface::RaceCarCrashCompleteEventQueue;
         // that interface's own home (BrnCrashModuleRaceCarIOInterfaces.h) is still a reserved
         // blob, so the queue is spelled out here from the Construct callee symbol. Same type
@@ -1155,11 +1156,12 @@ namespace PropEntityIO
     //     Construct, i.e. both ICF-folded into the base-only representatives.
     //   * The only decompiled consumer, PropEntityModule::PostSceneUpdate @0x822C4718, does
     //     nothing with it but LockForWrite @0x822C473C / UnlockForWrite @0x822C4800.
-    struct OutputBuffer_PostScene : public CgsModule::IOBuffer
+    class OutputBuffer_PostScene : public CgsModule::IOBuffer
     {
+    public:
         // FAKEMATCH: CreateIOBuffer calls the folded 12-byte initializer at 0x827B6C54.
         __declspec(noinline) void Construct() { CgsModule::IOBuffer::Construct(); }
-        void Destruct()  { CgsModule::IOBuffer::Destruct(); }    // :670, ICF-folded
+        void Destruct();   // DecFIGS BrnPropEntityModuleIO.cpp:221, out of line (ARTIST DestroyIOBuffer 0x827B6E18 calls it) (decl :670)
     };
 }
 }

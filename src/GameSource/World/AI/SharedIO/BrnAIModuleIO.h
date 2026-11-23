@@ -69,8 +69,9 @@ namespace BrnAI
 {
 namespace AIModuleIO
 {
-    struct InputBuffer : public CgsModule::IOBuffer
+    class InputBuffer : public CgsModule::IOBuffer
     {
+    public:
         // ---- DWARF typedefs (BrnAIModuleIO.h:66-:80) ------------------------------------
         typedef BrnTraffic::BrnTrafficIO::TrafficAIInterface                    TrafficAIInterface;            // :75
         typedef BrnGameState::GameStateModuleIO::GameActionQueue                GameActionQueue;               // :78 (BaseGameActionQueue<13312> == VariableEventQueue<13312,16>)
@@ -83,6 +84,7 @@ namespace AIModuleIO
         typedef BrnWorld::PlayerVehicleControls                                 PlayerVehicleControls;         // :168
 
         // X360 0x8278AB80 -- builds every member (see the .cpp for the console's own order).
+        void Destruct();   // DecFIGS BrnAIModuleIO.cpp:77, out of line (ARTIST DestroyIOBuffer 0x827B9118 calls it)
         void Construct();                                                                     // :95
 
         // ---- setters / appends (write-lock bit3) ---------------------------------------
@@ -138,8 +140,9 @@ namespace AIModuleIO
     // at console +0x04 (right after the 1-byte IOBuffer status flag).
     // Construct/Destruct bodied in BrnAIModuleIO_InputBuffer_PostPhysics.cpp.
     // ------------------------------------------------------------------------
-    struct InputBuffer_PostPhysics : public CgsModule::IOBuffer
+    class InputBuffer_PostPhysics : public CgsModule::IOBuffer
     {
+    public:
         typedef BrnPhysics::ContactSpy::ContactSpyInterface ContactSpyInterface;
 
         void Construct();   // X360 0x8277BCD0

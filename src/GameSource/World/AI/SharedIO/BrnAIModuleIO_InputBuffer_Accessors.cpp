@@ -295,3 +295,11 @@ namespace AIModuleIO
     }
 }
 }
+
+// DecFIGS BrnAIModuleIO.cpp:77: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<InputBuffer> @0x827B9118 calls.
+void BrnAI::AIModuleIO::InputBuffer::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}

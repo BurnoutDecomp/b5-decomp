@@ -195,3 +195,11 @@ namespace SceneManagerIO
     }
 }
 }
+
+// DecFIGS CgsSceneManagerModuleIO.cpp:147: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<InputBuffer_Query> @0x823AF240 calls.
+void CgsSceneManager::SceneManagerIO::InputBuffer_Query::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}

@@ -122,3 +122,11 @@ namespace PropEntityIO
     }
 }
 }
+
+// DecFIGS BrnPropEntityModuleIO.cpp:319: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<OutputBuffer_PrePhysics> @0x827B9470 calls.
+void BrnWorld::PropEntityIO::OutputBuffer_PrePhysics::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}

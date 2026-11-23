@@ -51,7 +51,7 @@ namespace TriggerEntityModuleIO
         // BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 -- the address
         // DestroyIOBuffer<TriggerEntityModuleIO::OutputBuffer_PreScene> @0x827B7EE0 calls, and a
         // bare `b CgsModule::IOBuffer::Destruct`. Base-only, no member teardown.
-        void Destruct() { CgsModule::IOBuffer::Destruct(); }
+        void Destruct();   // DecFIGS BrnTriggerEntityModuleIO.cpp:81, out of line (ARTIST DestroyIOBuffer 0x827B7EE0 calls it)
         const SceneInputInterface* GetSceneInputInterface() const;
         SceneInputInterface*       GetSceneInputInterface();
 
@@ -92,6 +92,7 @@ namespace TriggerEntityModuleIO
 
         // X360 0x822EED48 -- IOBuffer status + the aggregate's two embedded queues.
         void Construct();
+        void Destruct();   // DecFIGS BrnTriggerEntityModuleIO.cpp:53, out of line (ARTIST DestroyIOBuffer 0x827B7D30 calls it)
 
         // X360 0x827A3270: write-lock handle, returns &mInputInterface (this + 4). Body committed
         // in BrnTriggerEntityModuleIO_Accessors.cpp.
@@ -138,6 +139,7 @@ namespace TriggerEntityModuleIO
         TriggerQueryQueue*       GetQueryInputInterface();
         // X360 0x822DA168: *this = 1 then VariableEventQueue<4096,16>::Construct(this+4).
         void Construct();
+        void Destruct();   // DecFIGS BrnTriggerEntityModuleIO.cpp:110, out of line (ARTIST DestroyIOBuffer 0x827B8088 calls it)
     private:
         TriggerQueryQueue mQueryInputInterface;
     };
@@ -150,6 +152,7 @@ namespace TriggerEntityModuleIO
         SceneFineQueryQueue*       GetSceneFineQueryQueue()       { return &mSceneFineQueryQueue; }
         // X360 0x822DA180: *this = 1 then VariableEventQueue<2048,16>::Construct(this+4).
         void Construct();
+        void Destruct();   // DecFIGS BrnTriggerEntityModuleIO.cpp:138, out of line (ARTIST DestroyIOBuffer 0x827B8230 calls it)
     private:
         SceneFineQueryQueue mSceneFineQueryQueue;
     };
@@ -164,6 +167,7 @@ namespace TriggerEntityModuleIO
         SceneResultQueue*       GetSceneResultQueue()       { return &mSceneResultQueue; }
         // X360 0x822DA198: *this = 1 then VariableEventQueue<32768,16>::Construct(this+4).
         void Construct();
+        void Destruct();   // DecFIGS BrnTriggerEntityModuleIO.cpp:167, out of line (ARTIST DestroyIOBuffer 0x827B83E0 calls it)
     private:
         SceneResultQueue mSceneResultQueue;
     };
@@ -179,6 +183,7 @@ namespace TriggerEntityModuleIO
         // X360 0x822DA1B0: *this = 1, VariableEventQueue<1024,16>::Construct(this+4) then
         // ::Clear on the same queue.
         void Construct();
+        void Destruct();   // DecFIGS BrnTriggerEntityModuleIO.cpp, out of line (ARTIST DestroyIOBuffer 0x827B8588 calls it)
     private:
         TriggerEntityModuleOutputInterface mOutputInterface;
     };

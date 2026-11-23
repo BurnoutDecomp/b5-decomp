@@ -91,3 +91,11 @@ void OutputBuffer::SetResourceRequestInterface(const EffectsModuleResourceQueue*
 
 }   // namespace EffectsIO
 }   // namespace BrnEffects
+
+// DecFIGS EffectsModuleIO.cpp:153: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<OutputBuffer> @0x823AE848 calls.
+void BrnEffects::EffectsIO::OutputBuffer::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}

@@ -98,8 +98,10 @@ namespace RendererIO
     };
 
     // DWARF BrnRendererModuleIO.h:132 -- the renderer's per-frame INPUT buffer: the director camera.
-    struct InputBuffer : public CgsModule::IOBuffer
+    class InputBuffer : public CgsModule::IOBuffer
     {
+    public:
+        void Destruct();   // DecFIGS BrnRendererModuleIO.cpp:55, out of line (ARTIST DestroyIOBuffer 0x823AE0D0 calls it)
         void Construct();   // @ 0x82400190
 
         void SetBrnCamera(const BrnDirector::Camera::Camera& lrCamera);   // @ 0x823C8610 (write-lock)
@@ -116,8 +118,10 @@ namespace RendererIO
     // DWARF BrnRendererModuleIO.h:162 -- the renderer's per-frame OUTPUT buffer. Construct nulls every
     // owned pointer + both effects-frame arrays; the camera/switches/perfmon aggregates are left at
     // their default-constructed state (the X360 Construct does not touch them).
-    struct OutputBuffer : public CgsModule::IOBuffer
+    class OutputBuffer : public CgsModule::IOBuffer
     {
+    public:
+        void Destruct();   // DecFIGS BrnRendererModuleIO.cpp:132, out of line (ARTIST DestroyIOBuffer 0x823AE1A8 calls it)
         void Construct();   // @ 0x824001A8
 
         // Per-frame data-interface accessors, reconstructed from BURNOUT_X360_ARTIST.XEX.

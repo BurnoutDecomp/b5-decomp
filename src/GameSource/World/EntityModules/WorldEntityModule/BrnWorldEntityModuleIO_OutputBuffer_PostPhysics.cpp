@@ -102,3 +102,11 @@ namespace WorldEntityIO
     }
 }
 }
+
+// DecFIGS BrnWorldEntityModuleIO.cpp:145: the whole body is the base teardown. ARTIST ICF-folds it into
+// BrnWorld::PropEntityIO::OutputBuffer_PreScene::Destruct @0x822DC3D0 (`b CgsModule::IOBuffer::Destruct`),
+// the target DestroyIOBuffer<OutputBuffer_PostPhysics> @0x827B7820 calls.
+void BrnWorld::WorldEntityIO::OutputBuffer_PostPhysics::Destruct()
+{
+    CgsModule::IOBuffer::Destruct();
+}

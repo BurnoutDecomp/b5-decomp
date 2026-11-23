@@ -62,13 +62,15 @@ struct BrnShaderConstantsFrame;   // struct matches BrnShaderConstantsFrame.h:18
 namespace BrnWorldIO
 {
     // DWARF BrnWorldModuleIO.h:422 -- struct DispatchInputBuffer : public IOBuffer.
-    struct DispatchInputBuffer : public CgsModule::IOBuffer
+    class DispatchInputBuffer : public CgsModule::IOBuffer
     {
+    public:
         // ⭐ ADDED 2026-08-15 (IO-buffer zero-fill removal audit). X360 0x827C4988 -- this
         // Construct was NEVER written, so `CreateIOBuffer<DispatchInputBuffer>` ran only the
         // inherited CgsModule::IOBuffer::Construct and every pointer/switch below arrived as
         // whatever the previous IO-stack tenant left there (it only ever "worked" because the
         // old PC CreateIOBuffer<T> value-initialised the whole buffer). Body in the .cpp.
+        void Destruct();   // DecFIGS BrnWorldModuleIO.cpp:173, out of line (ARTIST DestroyIOBuffer 0x823AE9F0 calls it)
         void Construct();   // X360 0x827C4988
 
         // --- accessors bodied in BrnWorldModuleIO_DispatchInputBuffer.cpp ---------------
