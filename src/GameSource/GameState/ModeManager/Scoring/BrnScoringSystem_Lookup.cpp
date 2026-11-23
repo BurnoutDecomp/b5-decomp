@@ -22,9 +22,6 @@
 // (the BrnGameStateSharedIO.cpp / FlybyManager precedent) stands in for it in the asserts.
 // ============================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h";
-
 namespace BrnGameState
 {
 namespace
@@ -157,10 +154,10 @@ bool ScoringSystem::IsPlayerInScoringSystem(GameStateModuleIO::EPlayerScoringInd
 {
     CGS_ASSERT(leIndex >= GameStateModuleIO::E_PLAYER_SCORING_INDEX_0,
         CgsDev::Assert::MessageAt(
-            "lePlayerScoringIndex >= GsmIO::E_PLAYER_SCORING_INDEX_0", KAC_ARTIST_ASSERT_FILE, 2924 /* ARTIST 0x8231DFF4 */));
+            "lePlayerScoringIndex >= GsmIO::E_PLAYER_SCORING_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 2924 /* ARTIST 0x8231DFF4 */));
     CGS_ASSERT(leIndex < GameStateModuleIO::E_PLAYER_SCORING_INDEX_COUNT,
         CgsDev::Assert::MessageAt(
-            "lePlayerScoringIndex < GsmIO::E_PLAYER_SCORING_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 2925 /* ARTIST 0x8231E018 */));
+            "lePlayerScoringIndex < GsmIO::E_PLAYER_SCORING_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 2925 /* ARTIST 0x8231E018 */));
 
     return maCarData[leIndex].GetActiveRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_COUNT;
 }
@@ -365,13 +362,13 @@ s32 ScoringSystem::GetOnlineFinishPosition(EActiveRaceCarIndex leRaceCarIndex)
 {
     CGS_ASSERT(mpCurrentOnlineModeScoring != NULL,
         CgsDev::Assert::MessageAt(
-            "mpCurrentOnlineModeScoring", KAC_ARTIST_ASSERT_FILE, 3526 /* ARTIST 0x823112D8 */));
+            "mpCurrentOnlineModeScoring", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 3526 /* ARTIST 0x823112D8 */));
     CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
         CgsDev::Assert::MessageAt(
-            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 3527 /* ARTIST 0x823112FC */));
+            "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 3527 /* ARTIST 0x823112FC */));
     CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
         CgsDev::Assert::MessageAt(
-            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 3528 /* ARTIST 0x82311320 */));
+            "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 3528 /* ARTIST 0x82311320 */));
 
     return mpCurrentOnlineModeScoring->GetPlayerPosition(leRaceCarIndex);
 }

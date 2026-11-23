@@ -28,9 +28,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "rw/math/vpu/vector3_operation.h"                                           // vpu::Add / Subtract / Mult / Normalize
 
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
-
 namespace BrnPhysics
 {
 namespace Vehicle
@@ -437,7 +434,7 @@ namespace Vehicle
                 lStream << "Situation scale: " << KAF_SLAM_SITUATION_SCALE[meLastSlamImpactSituation] << ") ";
             }
 
-            MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 50.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+            lpRender->DrawText(lStream.GetBuffer(), KF_X, 50.0f, KF_TEXT_SCALE, KU_COLOUR);
         }
 
         if (mbDrawLastShuntInfo)
@@ -455,7 +452,7 @@ namespace Vehicle
                 lStream << "(Closing speed: " << mfLastShuntClosingSpeed << ")";
             }
 
-            MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 80.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+            lpRender->DrawText(lStream.GetBuffer(), KF_X, 80.0f, KF_TEXT_SCALE, KU_COLOUR);
         }
     }
 

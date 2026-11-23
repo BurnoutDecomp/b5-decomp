@@ -12,6 +12,7 @@
 // ============================================================================
 
 #include "GameSource/Game/BrnGameModule.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/Sound/Module/BrnRootSoundModuleIo.h"               // RootPreUpdateOutputBuffer / PreUpdateOutput
 #include "GameSource/Sound/Module/SharedIO/BrnPreUpdateSharedIo.h"      // AudioEffectsMessageQueue
@@ -68,8 +69,8 @@ namespace BrnGame
         BrnWorldIO::UpdateInputBuffer* lpWorldInputBuffer,
         BrnSound::Module::Io::RootPreUpdateOutputBuffer* lpSoundOutputBuffer)
     {
-        CGS_ASSERT(lpWorldInputBuffer != 0, "lpWorldInput");
-        CGS_ASSERT(lpSoundOutputBuffer != 0, "lpSoundOutputBuffer");
+        CGS_ASSERT(lpWorldInputBuffer != 0, CgsDev::Assert::MessageAt("lpWorldInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeSoundToX.cpp", 83));
+        CGS_ASSERT(lpSoundOutputBuffer != 0, CgsDev::Assert::MessageAt("lpSoundOutputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeSoundToX.cpp", 84));
 
         lpWorldInputBuffer->GetAudioCarDataLoadedQueue()->Append(
             lpSoundOutputBuffer->GetPreUpdateOutput().GetCarDataLoadedQueue());

@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                         // Vector3 / Matrix44Affine
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"        // THE canonical Camera::Behaviour base
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"          // CollisionPolicy(+AttachedToVehicle)
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"     // Utils::CameraShake::Parameters (the
@@ -472,7 +473,7 @@ inline void
 BehaviourAftertouchCrash::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourAftertouchCrash,
-               "lpParameters->GetType() == eBehaviourAftertouchCrash");
+               CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourAftertouchCrash", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.h", 252));
     mpParameters = lpParameters;                   // stw r4, +0x3D8(this)
     SetDebugParametersName(lpParameters->GetDebugName());
 }

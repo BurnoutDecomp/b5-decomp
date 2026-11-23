@@ -7,6 +7,7 @@
 #include "GameSource/BurnoutConstants.h"                                // EActiveRaceCarIndex, E_ACTIVE_RACE_CAR_INDEX_*
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"                // CgsSystem::Time
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGameState
 {
@@ -138,7 +139,7 @@ f32 OnlineRaceMode::GetOutroTimeout() const
     const EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex =
         lpGameStateModule->GetPlayerActiveRaceCarIndex();
     CGS_ASSERT(leLocalPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
-               "leLocalPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID");
+               CgsDev::Assert::MessageAt("leLocalPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineRaceMode.cpp", 268));
 
     ScoringSystem* lpScoringSystem = GetModeManager()->GetScoringSystem();
 
@@ -185,7 +186,7 @@ f32 OnlineRaceMode::GetOutroTimeout() const
     // winner. If they have not finished, return the fixed not-finished outro.
     if (lfLocalPlayersTime != 0.0f)
     {
-        CGS_ASSERT(lfLocalPlayersTime >= lfWinnersTime, "lfLocalPlayersTime >= lfWinnersTime");
+        CGS_ASSERT(lfLocalPlayersTime >= lfWinnersTime, CgsDev::Assert::MessageAt("lfLocalPlayersTime >= lfWinnersTime", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineRaceMode.cpp", 298));
 
         const f32 lfTimeBehindWinner = lfLocalPlayersTime - lfWinnersTime;
         if (lfTimeBehindWinner > KF_OUTRO_GRACE_SECONDS)

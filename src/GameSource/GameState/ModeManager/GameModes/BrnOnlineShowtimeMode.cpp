@@ -120,8 +120,8 @@ void OnlineShowtimeMode::Start(const StartGameModeParams* /*lpStartGameModeParam
     static const f32 KF_CRASH_TRAFFIC_DENSITY_SCALE = 2.5f; // PS3 DecFIGS 0x1D6CA4 (mfTrafficDensityScale)
     lpGameModeParams->SetTrafficDensityScale(KF_CRASH_TRAFFIC_DENSITY_SCALE);
 
-    lpGameModeParams->SetLargeVehicleProbability(1.3f);
-    lpGameModeParams->mbIsOnline = true;        // X360 *(a3+148)=1 (mbIsOnline is a public member; no SetIsOnline exists)
+    lpGameModeParams->mfTrafficSpeedScale = 1.3f;   // ARTIST 0x823222E0 `stfs f13, 0x38` (as CrashMode::Start)
+    lpGameModeParams->mbIsOnline = true;       // X360 *(a3+148)=1 (mbIsOnline is a public member; no SetIsOnline exists)
 
     // muFlags |= 0x1_1042139E (full 64-bit X360 crash mask: li r12,1; sldi 32; oris 0x1042; ori 0x139E
     // @ X360 0x82322278). The 0x1_00000000 bit is a genuine flag (KU_FLAG_DISABLE_PROP_PROGRESSION),

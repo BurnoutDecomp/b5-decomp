@@ -21,9 +21,6 @@
 #include "SharedClasses/AI/AISectionsResourceType.h"
 #include "rw/math/vpu/vector3_operation.h"                                         // Magnitude / operator-
 
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
-
 // BrnAI::AIDebugComponent -- the in-game "Main AI" debug overlay. Reconstructed from the X360
 // ARTIST build (function addresses cited per method) cross-checked against the DecFIGS DWARF
 // (member names / virtual shape) and the recovered base CgsDev::DebugComponent.
@@ -912,7 +909,7 @@ void AIDebugComponent::StateTableDrawEntry(CgsDev::Debug2DImmediateRender* lpDis
         lColour = 0xFF000000u | ((luBlue & 0xFFu) << 16) | ((luGreen & 0xFFu) << 8) | (luRed & 0xFFu);
     }
 
-    MaybeDrawText(lpDisplay, lpcText, mfStateTableX, mfStateTableY, 16.0f, lColour, false);
+    lpDisplay->DrawText(lpcText, mfStateTableX, mfStateTableY, 16.0f, lColour);
     mfStateTableY += KF_STATE_TABLE_ROW_HEIGHT;
 }
 

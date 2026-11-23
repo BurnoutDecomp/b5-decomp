@@ -12,9 +12,6 @@
 // Both X360 bodies leave Unlock's result in r3 (an incidental bool); the
 // originals are modelled void.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorSerialiser.cpp";
-
 namespace BrnReplays
 {
 
@@ -28,7 +25,7 @@ void DirectorSerialiser::Read()
 
     BrnDirector::Camera::Camera* lpStatic = GetStaticLayout();
     CGS_ASSERT(lpStatic != 0,
-        CgsDev::Assert::MessageAt("lpStatic", KAC_ARTIST_ASSERT_FILE, 38 /* ARTIST 0x82650378 */));   // :38 (non-gating)
+        CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorSerialiser.cpp", 38 /* ARTIST 0x82650378 */));   // :38 (non-gating)
 
     const EMode leMode = GetMode();
     bool lbSkip = (leMode == E_MODE_RECORDING_STALLED || leMode == E_MODE_PLAYING_STALLED);
@@ -58,7 +55,7 @@ void DirectorSerialiser::Write()
 
     BrnDirector::Camera::Camera* lpStatic = GetStaticLayout();
     CGS_ASSERT(lpStatic != 0,
-        CgsDev::Assert::MessageAt("lpStatic", KAC_ARTIST_ASSERT_FILE, 69 /* ARTIST 0x82650470 */));   // :69 (non-gating)
+        CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorSerialiser.cpp", 69 /* ARTIST 0x82650470 */));   // :69 (non-gating)
 
     if (!mbStaticCameraConstructed)
     {

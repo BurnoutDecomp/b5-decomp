@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameSource/Replays/Serialisers/BrnReplayEffectsSerialiser.h"
 
@@ -48,7 +49,7 @@ namespace BrnReplays
     {
         BaseSerialiser::Lock();
         EffectsSerialiserStaticLayout* lpStatic = GetStaticLayout();
-        CGS_ASSERT(lpStatic != 0, "lpStatic");
+        CGS_ASSERT(lpStatic != 0, CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.cpp", 69));
         switch (meMode)
         {
         case E_MODE_RECORDING:

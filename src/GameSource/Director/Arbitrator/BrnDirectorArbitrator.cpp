@@ -1,6 +1,7 @@
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitrator.h"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (the fly-world handle tripwire)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"          // ArbitratorState (cycle request / camera)
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourDebugFlyWorld.h"    // BehaviourDebugFlyWorld (WarpToLookAt)
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"             // DirectorIO::ControlInput (the named camera-control bytes)
@@ -440,7 +441,7 @@ namespace BrnDirector
             // li r5 0x127), tick the state (vtable +8), take its camera (arb +0x3920 == the
             // state's +0x10 Camera), and drop back to NORMAL on the frame it has released
             // itself (ArbStateCrashNav::Release zeroes meState; the same `lwz 0x4188 ; cmpwi 0`).
-            CGS_ASSERT(mArbStateCrashNav.IsActive(), "mArbStateCrashNav.IsActive()");
+            CGS_ASSERT(mArbStateCrashNav.IsActive(), CgsDev::Assert::MessageAt("mArbStateCrashNav.IsActive()", "..\\..\\..\\GameSource\\Director/Arbitrator/BrnDirectorArbitrator.cpp", 295));
             mArbStateCrashNav.Update(lrSharedInfo);
             lrCameraInOut = mArbStateCrashNav.GetCamera();
             if (!mArbStateCrashNav.IsActive())

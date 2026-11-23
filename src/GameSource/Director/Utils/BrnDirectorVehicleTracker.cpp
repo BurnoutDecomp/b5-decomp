@@ -8,6 +8,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "rw/math/vpu/vector3_operation.h"   // Vector3 lane ops
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"      // the REAL DirectorIO::InputBuffer
@@ -67,11 +68,11 @@ void VehicleTracker::Update(
     EActiveRaceCarIndex lePlayerCarIndex,
     bool lbForceNextWorldCrashToBeFastTopDown)
 {
-    CGS_ASSERT(lpGameState != NULL, "lpGameState != NULL");
-    CGS_ASSERT(lpInput != NULL, "lpInput != NULL");
-    CGS_ASSERT(miVehicleIndex != -1, "miVehicleIndex != -1");
+    CGS_ASSERT(lpGameState != NULL, CgsDev::Assert::MessageAt("lpGameState != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorVehicleTracker.cpp", 60));
+    CGS_ASSERT(lpInput != NULL, CgsDev::Assert::MessageAt("lpInput != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorVehicleTracker.cpp", 61));
+    CGS_ASSERT(miVehicleIndex != -1, CgsDev::Assert::MessageAt("miVehicleIndex != -1", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorVehicleTracker.cpp", 63));
     CGS_ASSERT(lpInput->GetUsedRaceCars()->IsBitSet(static_cast<u32>(miVehicleIndex)),
-               "lpInput->GetUsedRaceCars()->IsBitSet(miVehicleIndex)");
+               CgsDev::Assert::MessageAt("lpInput->GetUsedRaceCars()->IsBitSet(miVehicleIndex)", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorVehicleTracker.cpp", 64));
 
     // -- RE-FITTED TO THE REAL InputBuffer (2026-08-29, crash-camera wave). These three reads
     // used to go through the declaration-only slice this file used to carry in its header

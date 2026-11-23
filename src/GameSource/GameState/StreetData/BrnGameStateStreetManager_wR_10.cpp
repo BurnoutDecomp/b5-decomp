@@ -33,9 +33,6 @@
 
 #include <string.h>   // _strnicmp (the console's strnicmp)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp";
-
 namespace BrnGameState
 {
 
@@ -195,11 +192,11 @@ void StreetManager::SetChallengeFriendHighScore( BrnStreetData::ChallengeIndex l
 {
     CGS_ASSERT( liIndex < BrnGameState::KI_MAX_CHALLENGES,
         CgsDev::Assert::MessageAt(
-            "liIndex < BrnGameState::KI_MAX_CHALLENGES", KAC_ARTIST_ASSERT_FILE, 3674 /* ARTIST 0x82324C30 */));
+            "liIndex < BrnGameState::KI_MAX_CHALLENGES", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3674 /* ARTIST 0x82324C30 */));
     CGS_ASSERT( liIndex >= 0,
-        CgsDev::Assert::MessageAt("liIndex >= 0", KAC_ARTIST_ASSERT_FILE, 3675 /* ARTIST 0x82324C54 */));
+        CgsDev::Assert::MessageAt("liIndex >= 0", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3675 /* ARTIST 0x82324C54 */));
     CGS_ASSERT( lpData,
-        CgsDev::Assert::MessageAt("lpData", KAC_ARTIST_ASSERT_FILE, 3676 /* ARTIST 0x82324C78 */));
+        CgsDev::Assert::MessageAt("lpData", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3676 /* ARTIST 0x82324C78 */));
 
     maNetworkChallengeData[liIndex].Copy( lpData );
 }

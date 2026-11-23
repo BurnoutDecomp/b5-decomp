@@ -27,8 +27,6 @@
 // OnlineStuntRunModeScoring. This leaf header forward-declares ScoringSystem only (no cycle).
 #include "GameSource/GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.h"
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\BurnoutConstants.h";
-
 namespace BrnGameState
 {
     // ------------------------------------------------------------------------
@@ -425,7 +423,7 @@ namespace BrnGameState
             CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
                 CgsDev::Assert::MessageAt(
                     "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                    KAC_ARTIST_ASSERT_FILE, 39 /* ARTIST 0x823206B4 */));
+                    "..\\..\\..\\GameSource\\BurnoutConstants.h", 39 /* ARTIST 0x823206B4 */));
         }
 
         return liTeamScore;
@@ -487,7 +485,7 @@ namespace BrnGameState
             CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
                 CgsDev::Assert::MessageAt(
                     "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                    KAC_ARTIST_ASSERT_FILE, 39 /* ARTIST 0x82320438 */));
+                    "..\\..\\..\\GameSource\\BurnoutConstants.h", 39 /* ARTIST 0x82320438 */));
         }
 
         return liCount;
@@ -540,7 +538,7 @@ namespace BrnGameState
             CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
                 CgsDev::Assert::MessageAt(
                     "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                    KAC_ARTIST_ASSERT_FILE, 39 /* ARTIST 0x8232061C */));
+                    "..\\..\\..\\GameSource\\BurnoutConstants.h", 39 /* ARTIST 0x8232061C */));
         }
 
         return true;
@@ -567,7 +565,7 @@ namespace BrnGameState
             CGS_ASSERT(liSlot + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
                 CgsDev::Assert::MessageAt(
                     "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                    KAC_ARTIST_ASSERT_FILE, 39 /* ARTIST 0x823207D4 */));
+                    "..\\..\\..\\GameSource\\BurnoutConstants.h", 39 /* ARTIST 0x823207D4 */));
         }
 
         return true;

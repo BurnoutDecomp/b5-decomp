@@ -317,7 +317,7 @@ void BehaviourBystanderCam::SetupTweaker(Utils::Tweaker& lrTweaker)
 {
     lrTweaker.Construct();
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters");   // cpp:416
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourBystanderCam.cpp", 416));   // cpp:416
 
     Parameters* lpParams = const_cast<Parameters*>(mpParameters);
     lrTweaker.AddMapping("Rig X", &lpParams->mfTargetSpaceX, KF_TWEAK_TRANSLATION_SPEED_X,

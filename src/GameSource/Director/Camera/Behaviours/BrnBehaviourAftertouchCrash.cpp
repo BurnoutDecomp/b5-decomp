@@ -478,7 +478,7 @@ bool BehaviourAftertouchCrash::Update(Camera& lrCamera, const BehaviourSharedInf
     static f32 sfDeadzone       = 0.2f;
     static f32 sfAdjustmentRate = 1.0f;
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");                       // .cpp:163
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCrash.cpp", 163));                       // .cpp:163
 
     const Parameters&                        lrParameters = *mpParameters;
     const BrnPhysics::Vehicle::RaceCarState& lrCarState   = lrSharedInfo.mPlayerInfo.mRaceCarState;

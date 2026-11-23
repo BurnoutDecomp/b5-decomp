@@ -22,7 +22,6 @@
 // The X360 assert path (BrnSystemHWX360Massive.h:98) is dropped per convention;
 // the rodata message is reproduced verbatim.
 // ---------------------------------------------------------------------------
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\X360/BrnSystemHWX360Massive.cpp";
 
 namespace BrnMassive
 {
@@ -88,7 +87,7 @@ namespace BrnMassive
     void* System360HWMassive::BurnoutMassiveMalloc(unsigned int luSize)
     {
         CGS_ASSERT(gpMassiveHeapMalloc != 0,
-            CgsDev::Assert::MessageAt("spHeapMalloc != NULL", KAC_ARTIST_ASSERT_FILE, 53 /* ARTIST 0x823AB128 */));
+            CgsDev::Assert::MessageAt("spHeapMalloc != NULL", "..\\..\\..\\GameSource\\X360/BrnSystemHWX360Massive.cpp", 53 /* ARTIST 0x823AB128 */));
 
         EA::Thread::ThreadId lThreadId = EA::Thread::GetThreadId();
         if (gsMassiveAllocThreadId == MassiveUnsetThreadId())
@@ -97,7 +96,7 @@ namespace BrnMassive
             CGS_ASSERT(gsMassiveAllocThreadId == lThreadId,
                 CgsDev::Assert::MessageAt(
                     "Massive Allocating From Multiple Threads",
-                    KAC_ARTIST_ASSERT_FILE, 65 /* ARTIST 0x823AB168 */));
+                    "..\\..\\..\\GameSource\\X360/BrnSystemHWX360Massive.cpp", 65 /* ARTIST 0x823AB168 */));
 
         void* lpResult = gpMassiveHeapMalloc->Malloc(static_cast<s32>(luSize), 4);
         if (lpResult == 0 && (CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -167,10 +166,10 @@ namespace BrnMassive
                 if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
                     *CgsDev::Log::gpDebugPrint << "[Massive] Initialising\n";
 
-                CGS_ASSERT(mpClientCore == 0, "Client core not NULL");
+                CGS_ASSERT(mpClientCore == 0, CgsDev::Assert::MessageAt("Client core not NULL", "..\\..\\..\\GameSource\\X360/BrnSystemHWX360Massive.cpp", 194));
 
                 mpClientCore = MassiveAdClient3::CMassiveClientCore::Initialize(&lInit);
-                CGS_ASSERT(mpClientCore != 0, "Failed to initialise Massive");
+                CGS_ASSERT(mpClientCore != 0, CgsDev::Assert::MessageAt("Failed to initialise Massive", "..\\..\\..\\GameSource\\X360/BrnSystemHWX360Massive.cpp", 196));
 
                 MassiveAdClient3::CMassiveClientCore::Instance();
                 MassiveAdClient3::CMassiveClientCore::Log(
@@ -219,7 +218,7 @@ namespace BrnMassive
                                1, KU_MASSIVE_SHUTDOWN_TIMEOUT_MS) != 0,
                     CgsDev::Assert::MessageAt(
                         "Failed to Shutdown Massive",
-                        KAC_ARTIST_ASSERT_FILE, 260 /* ARTIST 0x823AB560 */));
+                        "..\\..\\..\\GameSource\\X360/BrnSystemHWX360Massive.cpp", 260 /* ARTIST 0x823AB560 */));
 
                 mpClientCore = 0;
                 break;
@@ -230,7 +229,7 @@ namespace BrnMassive
 
             default:
                 CGS_ASSERT(false,
-                    CgsDev::Assert::MessageAt("false", KAC_ARTIST_ASSERT_FILE, 273 /* ARTIST 0x823AB58C */));
+                    CgsDev::Assert::MessageAt("false", "..\\..\\..\\GameSource\\X360/BrnSystemHWX360Massive.cpp", 273 /* ARTIST 0x823AB58C */));
                 break;
         }
         return 1;

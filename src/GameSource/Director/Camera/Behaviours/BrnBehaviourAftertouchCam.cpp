@@ -323,8 +323,8 @@ Vector3 BehaviourAftertouchCam::CalculateDesiredTargetPos(const BehaviourSharedI
 // ----------------------------------------------------------------------------
 bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSharedInfo)
 {
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");                                              // :310
-    CGS_ASSERT(mSourceShot.IsValid(), "mParameters.IsValid()");                                         // :311
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp", 310));                                              // :310
+    CGS_ASSERT(mSourceShot.IsValid(), CgsDev::Assert::MessageAt("mParameters.IsValid()", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp", 311));                                         // :311
 
     const BrnPhysics::Vehicle::RaceCarState& lrCarState = lrSharedInfo.mPlayerInfo.mRaceCarState;
     const f32 lfTimestep = lrSharedInfo.GetTimestep(BrnDirector::Timestep::E_WORLD);

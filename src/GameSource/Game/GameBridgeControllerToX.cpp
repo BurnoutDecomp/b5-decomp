@@ -48,6 +48,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h"               // CgsGui::GuiModule::AddGuiEvent<T> (the real GUI event sink)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Input/CgsInputModuleIO.h" // CgsInput::InputIO::OutputBuffer / PadOutputInformation / ActionInfo
 #include "GameShared/GameClasses/System/Input/CgsInputTypes.h"    // CgsInput::KU_NUMBER_OF_PADS
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h" // BrnDirector::DirectorIO::InputBuffer
@@ -487,10 +488,10 @@ namespace BrnGame
         BrnGameState::GameStateModuleIO::ControllerToGameStateInterface::UnBindResultQueue* const
             lpGameStateInputUnbindResultQueue =
                 lpGameStateInput->GetControllerToGameStateInterface()->GetUnBindResultsQueue();
-        CGS_ASSERT(lpInputBindResultQueue != 0, "lpInputBindResultQueue");
-        CGS_ASSERT(lpInputUnbindResultQueue != 0, "lpInputUnbindResultQueue");
-        CGS_ASSERT(lpGameStateInputBindResultQueue != 0, "lpGameStateInputBindResultQueue");
-        CGS_ASSERT(lpGameStateInputUnbindResultQueue != 0, "lpGameStateInputUnbindResultQueue");
+        CGS_ASSERT(lpInputBindResultQueue != 0, CgsDev::Assert::MessageAt("lpInputBindResultQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeControllerToX.cpp", 797));
+        CGS_ASSERT(lpInputUnbindResultQueue != 0, CgsDev::Assert::MessageAt("lpInputUnbindResultQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeControllerToX.cpp", 798));
+        CGS_ASSERT(lpGameStateInputBindResultQueue != 0, CgsDev::Assert::MessageAt("lpGameStateInputBindResultQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeControllerToX.cpp", 799));
+        CGS_ASSERT(lpGameStateInputUnbindResultQueue != 0, CgsDev::Assert::MessageAt("lpGameStateInputUnbindResultQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeControllerToX.cpp", 800));
         lpGameStateInputBindResultQueue->Append(*lpInputBindResultQueue);
         lpGameStateInputUnbindResultQueue->Append(*lpInputUnbindResultQueue);
 

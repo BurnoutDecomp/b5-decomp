@@ -11,9 +11,6 @@
 
 #include <cstdlib>
 
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
-
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The takedown debug menu registers three display
 // toggles + a "force takedown" action with the real CgsDev::DebugComponent debug-menu API. The
 // X360 issued these through the (unnamed) DebugComponent registration helpers (now the real
@@ -54,7 +51,7 @@ namespace BrnGameState
                 }
             }
 
-            MaybeDrawText(lpRender, lStream.GetBuffer(), 100.0f, 50.0f, 20.0f, 0xFFFFFFFFu, false);
+            lpRender->DrawText(lStream.GetBuffer(), 100.0f, 50.0f, 20.0f, 0xFFFFFFFFu);
         }
     }
 

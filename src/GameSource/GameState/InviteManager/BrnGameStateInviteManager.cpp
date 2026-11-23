@@ -21,6 +21,7 @@
 #include "GameSource/GameState/SharedIO/BrnGameStateModuleInputIOInterfaces.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                     // CgsDev::Assert::Begin/Fire/EndAssert
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                           // CgsDev::StrStream (dynamic assert message)
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h" // CgsDev::DebugInterface
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"       // CgsDev::DebugRender::Draw2DText / RGBA
@@ -320,7 +321,7 @@ namespace BrnGameState
     {
         const PreparedForInviteAction* lpPreparedForInviteAction =
             reinterpret_cast<const PreparedForInviteAction*>(lpAction);
-        CGS_ASSERT(lpPreparedForInviteAction, "lpPreparedForInviteAction");
+        CGS_ASSERT(lpPreparedForInviteAction, CgsDev::Assert::MessageAt("lpPreparedForInviteAction", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/InviteManager/BrnGameStateInviteManager.cpp", 505));
 
         mModulePreparedBitArray.SetBit(lpPreparedForInviteAction->meModulePreparedForInvite);
     }

@@ -17,6 +17,7 @@
 #include "GameSource/Director/Utils/BrnDirectorWorldMap.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"    // CgsDev::Log (diagnostics)
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h"  // RequestInterface<512> (LoadData)
 #include "GameSource/Resource/SharedIO/BrnGameDataEvents.h"        // GetGameDataEvent (the lane replies)
@@ -269,7 +270,7 @@ namespace BrnDirector
             return true;
 
         default:
-            CGS_ASSERT(false, "unhandled case");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 190));
             return false;
         }
     }
@@ -465,7 +466,7 @@ namespace BrnDirector
             *lpu8Rung = static_cast<u8>(*lpu8Rung - lpNeighbour->muOurStartRung);
             *lpu8Rung = static_cast<u8>(lpNeighbour->muTheirStartRung + *lpu8Rung);
             CGS_ASSERT(*lpu8Rung <= lpSection->muNumRungs,
-                       "*lpu8Rung <= lpSection->muNumRungs");
+                       CgsDev::Assert::MessageAt("*lpu8Rung <= lpSection->muNumRungs", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 500));
 
             // Parameter, likewise (two stfs).
             *lpfParameterOnSection = *lpfParameterOnSection
@@ -473,7 +474,7 @@ namespace BrnDirector
             *lpfParameterOnSection = static_cast<f32>(lpNeighbour->muTheirStartRung)
                                    + *lpfParameterOnSection;
             CGS_ASSERT(*lpfParameterOnSection <= static_cast<f32>(lpSection->muNumRungs),
-                       "*lpfParameterOnSection <= (float32_t)lpSection->muNumRungs");
+                       CgsDev::Assert::MessageAt("*lpfParameterOnSection <= (float32_t)lpSection->muNumRungs", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 504));
         }
     }
 

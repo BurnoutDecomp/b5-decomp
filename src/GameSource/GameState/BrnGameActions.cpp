@@ -25,8 +25,6 @@ const float KF_QUERY_POS_EPSILON = 1.1920928955078125e-07f;
 // turned the fork into eight hard compile errors on the first try. The real
 // `*CgsDev::Log::gpDebugPrint << ...` chain is used below instead.
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\GameState/BrnGameActions.h";
-
 namespace BrnGameState
 {
 namespace GameStateModuleIO
@@ -74,7 +72,7 @@ void RemotePlayerDisconnectedAction::SetActiveRaceCarIndex(EActiveRaceCarIndex l
     CGS_ASSERT((leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
         CgsDev::Assert::MessageAt(
             "( leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 ) && ( leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )",
-            KAC_ARTIST_ASSERT_FILE, 6360 /* ARTIST 0x8230FECC */));
+            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 6360 /* ARTIST 0x8230FECC */));
 
     meActiveRaceCarIndex = leActiveRaceCarIndex;
 }
@@ -85,7 +83,7 @@ void RemotePlayerDisconnectedAction::SetNetworkPlayerID(BrnNetwork::NetworkPlaye
     CGS_ASSERT(lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
         CgsDev::Assert::MessageAt(
             "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            KAC_ARTIST_ASSERT_FILE, 6374 /* ARTIST 0x8230FF2C */));
+            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 6374 /* ARTIST 0x8230FF2C */));
 
     mPlayerID = lPlayerID;
 }
@@ -121,7 +119,7 @@ void OnlinePlayerAddedAction::SetPlayerScoringIndex(EPlayerScoringIndex lePlayer
         (lePlayerScoringIndex <  E_PLAYER_SCORING_INDEX_COUNT),
         CgsDev::Assert::MessageAt(
             "(lePlayerScoringIndex >= E_PLAYER_SCORING_INDEX_0) && (lePlayerScoringIndex < E_PLAYER_SCORING_INDEX_COUNT)",
-            KAC_ARTIST_ASSERT_FILE, 6390 /* ARTIST 0x82355224 */));
+            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 6390 /* ARTIST 0x82355224 */));
 
     mePlayerScoringIndex = lePlayerScoringIndex;
 }
@@ -145,10 +143,10 @@ void RankInfoResponseAction::SetProgressionRanks(s32 liPlayerRank, s32 liRankCou
 {
     CGS_ASSERT(liPlayerRank < liRankCount,
         CgsDev::Assert::MessageAt(
-            "liPlayerRank < liRankCount", KAC_ARTIST_ASSERT_FILE, 6879 /* ARTIST 0x823554EC */));
+            "liPlayerRank < liRankCount", "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 6879 /* ARTIST 0x823554EC */));
     CGS_ASSERT(liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK,
         CgsDev::Assert::MessageAt(
-            "liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK", KAC_ARTIST_ASSERT_FILE, 6880 /* ARTIST 0x82355510 */));
+            "liPlayerRank != KI_PLAYER_HAS_FINISHED_LAST_RANK", "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 6880 /* ARTIST 0x82355510 */));
 
     miPlayerRank  = liPlayerRank;
     miOfflineRace = liOfflineRace;
@@ -184,7 +182,7 @@ void PrepareForModeAction::Construct(const GameModeParams* lpGameModeParams,
                                      bool                   lbComingFromOnlineLobbyMode)
 {
     CGS_ASSERT(lpGameModeParams,
-        CgsDev::Assert::MessageAt("lpGameModeParams", KAC_ARTIST_ASSERT_FILE, 1183 /* ARTIST 0x8230FE1C */));
+        CgsDev::Assert::MessageAt("lpGameModeParams", "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 1183 /* ARTIST 0x8230FE1C */));
 
     mePrepareForModeStage             = E_PFM_STAGE_ALL_IN_ONE;
     mGameModeParams                   = *lpGameModeParams;
@@ -244,10 +242,10 @@ void PrepareForModeAction::SetPlayerDisconnected(BrnNetwork::NetworkPlayerID lPl
 {
     CGS_ASSERT(miNumPlayersDisconnected >= 0,
         CgsDev::Assert::MessageAt(
-            "miNumPlayersDisconnected >= 0", KAC_ARTIST_ASSERT_FILE, 1160 /* ARTIST 0x8230FD90 */));
+            "miNumPlayersDisconnected >= 0", "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 1160 /* ARTIST 0x8230FD90 */));
     CGS_ASSERT(miNumPlayersDisconnected < 7,
         CgsDev::Assert::MessageAt(
-            "miNumPlayersDisconnected < (BrnWorld::KI_MAX_ACTIVE_RACE_CARS - 1)", KAC_ARTIST_ASSERT_FILE, 1161 /* ARTIST 0x8230FDB8 */));
+            "miNumPlayersDisconnected < (BrnWorld::KI_MAX_ACTIVE_RACE_CARS - 1)", "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 1161 /* ARTIST 0x8230FDB8 */));
 
     maDisconnectedNetworkPlayerID[miNumPlayersDisconnected] = lPlayerID;
     ++miNumPlayersDisconnected;
@@ -272,7 +270,7 @@ void OnlineRoundResults::SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerI
     CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
         CgsDev::Assert::MessageAt(
             "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-            KAC_ARTIST_ASSERT_FILE, 6641 /* ARTIST 0x8231CA6C */));
+            "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 6641 /* ARTIST 0x8231CA6C */));
 
     if (liPosition == -1)
     {
@@ -281,11 +279,11 @@ void OnlineRoundResults::SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerI
     else
     {
         CGS_ASSERT(liPosition >= 0,
-            CgsDev::Assert::MessageAt("liPosition >= 0", KAC_ARTIST_ASSERT_FILE, 6649 /* ARTIST 0x8231CAAC */));
+            CgsDev::Assert::MessageAt("liPosition >= 0", "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 6649 /* ARTIST 0x8231CAAC */));
         CGS_ASSERT(liPosition < KI_MAX_PLAYERS,
             CgsDev::Assert::MessageAt(
                 "liPosition < KI_MAX_PLAYERS",
-                KAC_ARTIST_ASSERT_FILE, 6650 /* ARTIST 0x8231CAD0 */));
+                "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 6650 /* ARTIST 0x8231CAD0 */));
 
         maPlayerPosition[liPosition] = lNetworkPlayerID;
     }

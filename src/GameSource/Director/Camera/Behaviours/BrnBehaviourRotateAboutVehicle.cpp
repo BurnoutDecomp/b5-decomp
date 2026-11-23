@@ -14,6 +14,7 @@
 // ============================================================================
 
 #include <cmath>                                 // sqrtf / sinf / cosf / fabsf
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h"
 #include "GameSource/Director/Camera/Camera.h"   // Camera::mTransform / mfFOV / RequestMotionBlur / SetFOV
@@ -314,7 +315,7 @@ void BehaviourRotateAboutVehicle::Construct()
 // ============================================================================
 bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");                          // .cpp:136
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.cpp", 136));                          // .cpp:136
 
     // ---- 1. the camera-state FOLLOW bit --------------------------------------
     // `lbz r11,9(this)` then `ld/ori 2/std` at camera +0x140. The same bit
@@ -714,7 +715,7 @@ void BehaviourRotateAboutVehicle::BecomeSimilarTo(const Camera& lrSourceCamera,
 void BehaviourRotateAboutVehicle::SetParameters(const Behaviour::Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == 18u,
-               "lpParameters->GetType() == eBehaviourRotateAboutVehicle");   // .cpp:299
+               CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourRotateAboutVehicle", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.cpp", 299));   // .cpp:299
 
     mpParameters = static_cast<const Parameters*>(lpParameters);
 }

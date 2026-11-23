@@ -12,9 +12,6 @@
 #include "GameSource/Director/Camera/BrnDepthOfField.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnDepthOfField.h";
-
 namespace BrnDirector
 {
 namespace Camera
@@ -46,25 +43,25 @@ void DepthOfField::SetParams(f32 lfFocusStartDistanceMeters,
                              f32 lfBlurriness)
 {
     CGS_ASSERT(lfBlurriness >= 0.0f,
-        CgsDev::Assert::MessageAt("lfBlurriness >= 0.0f", KAC_ARTIST_ASSERT_FILE, 123 /* ARTIST 0x821F1B1C */));
+        CgsDev::Assert::MessageAt("lfBlurriness >= 0.0f", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnDepthOfField.h", 123 /* ARTIST 0x821F1B1C */));
     CGS_ASSERT(lfBlurriness <= 1.0f,
-        CgsDev::Assert::MessageAt("lfBlurriness <= 1.0f", KAC_ARTIST_ASSERT_FILE, 124 /* ARTIST 0x821F1B48 */));
+        CgsDev::Assert::MessageAt("lfBlurriness <= 1.0f", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnDepthOfField.h", 124 /* ARTIST 0x821F1B48 */));
     CGS_ASSERT(lfFocusStartDistanceMeters >= 0.0f,
         CgsDev::Assert::MessageAt(
             "lfFocusStartDistanceMeters >= 0.0f",
-            KAC_ARTIST_ASSERT_FILE, 125 /* ARTIST 0x821F1B6C */));
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnDepthOfField.h", 125 /* ARTIST 0x821F1B6C */));
     CGS_ASSERT(lfPerfectFocusStartDistanceMeters >= lfFocusStartDistanceMeters,
         CgsDev::Assert::MessageAt(
             "lfPerfectFocusStartDistanceMeters >= lfFocusStartDistanceMeters",
-            KAC_ARTIST_ASSERT_FILE, 126 /* ARTIST 0x821F1B90 */));
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnDepthOfField.h", 126 /* ARTIST 0x821F1B90 */));
     CGS_ASSERT(lfPerfectFocusEndDistanceMeters >= lfPerfectFocusStartDistanceMeters,
         CgsDev::Assert::MessageAt(
             "lfPerfectFocusEndDistanceMeters >= lfPerfectFocusStartDistanceMeters",
-            KAC_ARTIST_ASSERT_FILE, 127 /* ARTIST 0x821F1BB4 */));
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnDepthOfField.h", 127 /* ARTIST 0x821F1BB4 */));
     CGS_ASSERT(lfFocusEndDistanceMeters >= lfPerfectFocusEndDistanceMeters,
         CgsDev::Assert::MessageAt(
             "lfFocusEndDistanceMeters >= lfPerfectFocusEndDistanceMeters",
-            KAC_ARTIST_ASSERT_FILE, 128 /* ARTIST 0x821F1BD8 */));
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnDepthOfField.h", 128 /* ARTIST 0x821F1BD8 */));
 
     mfBlurriness                      = lfBlurriness;                      // stfs f30, 0x10
     mfFocusStartDistanceMeters        = lfFocusStartDistanceMeters;        // stfs f29, 0x00

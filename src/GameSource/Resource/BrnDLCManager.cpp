@@ -21,8 +21,6 @@
 // worker in BrnDLCManagerMonitor.cpp and uses the native async-file providers.
 
 // The shared debug-HUD text helper (a global function, bodied in CgsDebug2DImmediateRender.cpp).
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
 static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Resource/BrnDLCManager.h";
 
@@ -484,7 +482,7 @@ namespace BrnResource
     {
         if (g_DLCFeatureAvailability.mBeatTheTeamGame.IsEnabled())   // byte_82FFA7F1
         {
-            MaybeDrawText(lpRender, "Beat the team mode", 700.0f, 40.0f, 16.0f, 0xFFFFFFC8u, false);
+            lpRender->DrawText("Beat the team mode", 700.0f, 40.0f, 16.0f, 0xFFFFFFC8u);
         }
     }
 

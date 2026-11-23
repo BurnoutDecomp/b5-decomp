@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT (the SetParameters type assert)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"               // CgsNumeric::Random (mRandom)
 #include "GameSource/BurnoutConstants.h"                            // EActiveRaceCarIndex (SetTarget)
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"        // THE canonical Camera::Behaviour base
@@ -106,7 +107,7 @@ public:
     void SetParameters(const Parameters* lpParameters)
     {
         CGS_ASSERT(lpParameters->GetType() == eBehaviourBystanderCam,
-                   "lpParameters->GetType() == eBehaviourBystanderCam");   // h:215
+                   CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourBystanderCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourBystanderCam.h", 215));   // h:215
         mpParameters = lpParameters;                                        // stw r31, 0x350(r30)
         SetDebugParametersName(lpParameters->GetDebugName());              // lwz 4(lp) ; stw 0x10(this)
     }

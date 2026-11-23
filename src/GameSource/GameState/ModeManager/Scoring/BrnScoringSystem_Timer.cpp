@@ -70,9 +70,6 @@
 //       guessed.
 // ============================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h";
-
 namespace BrnGameState
 {
 
@@ -110,7 +107,7 @@ const CgsSystem::Time ScoringSystem::GetTimeLimit() const
 void ScoringSystem::SetTimeLimitSeconds(f32 lfSeconds)
 {
     CGS_ASSERT(IsTimerActive(),
-        CgsDev::Assert::MessageAt("IsTimerActive()", KAC_ARTIST_ASSERT_FILE, 1406 /* ARTIST 0x82310868 */));
+        CgsDev::Assert::MessageAt("IsTimerActive()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 1406 /* ARTIST 0x82310868 */));
 
     mbMedalMode            = false;
     mbEliminationMode      = false;
@@ -126,10 +123,10 @@ void ScoringSystem::SetTimeLimitSeconds(f32 lfSeconds)
 void ScoringSystem::SetMedalModeTimer(f32 lfGold, f32 lfSilver, f32 lfBronze)
 {
     CGS_ASSERT(IsTimerActive(),
-        CgsDev::Assert::MessageAt("IsTimerActive()", KAC_ARTIST_ASSERT_FILE, 1428 /* ARTIST 0x8231092C */));
+        CgsDev::Assert::MessageAt("IsTimerActive()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 1428 /* ARTIST 0x8231092C */));
     CGS_ASSERT(lfGold > 0.0f,
         CgsDev::Assert::MessageAt(
-            "lfGoldTimeLimitSeconds > 0.0f", KAC_ARTIST_ASSERT_FILE, 1430 /* ARTIST 0x82310958 */));
+            "lfGoldTimeLimitSeconds > 0.0f", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 1430 /* ARTIST 0x82310958 */));
 
     mafMedalTimes[0] = lfGold;
     mafMedalTimes[1] = lfSilver;

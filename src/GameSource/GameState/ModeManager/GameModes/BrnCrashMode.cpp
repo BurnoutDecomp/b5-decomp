@@ -111,8 +111,11 @@ void CrashMode::Start(const StartGameModeParams* /*lpStartGameModeParams*/,
     static const f32 KF_CRASH_TRAFFIC_DENSITY_SCALE = 2.5f; // PS3 DecFIGS 0x1D6B70 (mfTrafficDensityScale)
     lpGameModeParams->SetTrafficDensityScale(KF_CRASH_TRAFFIC_DENSITY_SCALE);
 
-    // mfLargeVehicleProbability = 1.3 (X360 *(gap34+4) = 1.3).
-    lpGameModeParams->SetLargeVehicleProbability(1.3f);
+    // mfTrafficSpeedScale = 1.3: ARTIST 0x8232225C `stfs f13, 0x38` (flt_8201ECC8 == 0x3FA66666) and
+    // PS3 DecFIGS 0x1D6B70 `*(+56) = 1.3`; +0x38 is the member GameModeParams::Construct seeds third
+    // (0x8231C3E4), after mfTrafficDensityScale +0x30 and mfLargeVehicleProbability +0x34. DWARF
+    // declares no setter for it.
+    lpGameModeParams->mfTrafficSpeedScale = 1.3f;
 
     // muFlags |= 0x1_1042139E (full 64-bit X360 crash mask; the 0x1_00000000 bit is a real flag).
     lpGameModeParams->SetFlag(

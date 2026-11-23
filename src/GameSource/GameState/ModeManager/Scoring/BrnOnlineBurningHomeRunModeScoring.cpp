@@ -4,6 +4,7 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 #include "GameSource/GameState/BrnGameStateSharedIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"
 #include "GameSource/BurnoutConstants.h"
@@ -88,8 +89,8 @@ OnlineBurningHomeRunModeScoring::_BurningHomeRunPlayerFinishTimesCompare(const v
 {
     s32 liResult = 0;
 
-    CGS_ASSERT(lpPlayer1, "lpPlayer1");
-    CGS_ASSERT(lpPlayer2, "lpPlayer2");
+    CGS_ASSERT(lpPlayer1, CgsDev::Assert::MessageAt("lpPlayer1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineBurningHomeRunModeScoring.cpp", 173));
+    CGS_ASSERT(lpPlayer2, CgsDev::Assert::MessageAt("lpPlayer2", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineBurningHomeRunModeScoring.cpp", 174));
 
     const ComparisonData* lpP1 = static_cast<const ComparisonData*>(lpPlayer1);
     const ComparisonData* lpP2 = static_cast<const ComparisonData*>(lpPlayer2);
@@ -166,7 +167,7 @@ OnlineBurningHomeRunModeScoring::_BurningHomeRunPlayerFinishTimesCompare(const v
             {
                 // Neither timed out nor disconnected -> both must have completed the run.
                 CGS_ASSERT(!(lpP1->mbCompletedBurningHomeRun && lpP2->mbCompletedBurningHomeRun),
-                           "!( lpPlayer1->mbCompletedBurningHomeRun && lpPlayer2->mbCompletedBurningHomeRun )");
+                           CgsDev::Assert::MessageAt("!( lpPlayer1->mbCompletedBurningHomeRun && lpPlayer2->mbCompletedBurningHomeRun )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineBurningHomeRunModeScoring.cpp", 255));
                 if (lpP1->mbCompletedBurningHomeRun)
                 {
                     liResult = -1;           // P1 completed -> ranks first
@@ -207,7 +208,7 @@ void
 OnlineBurningHomeRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s32 liNumActiveCars)
 {
     GameStateModuleIO::CarScoreData lEmptyScoreData;
-    CGS_ASSERT(lpScoringSystem, "lpScoringSystem");
+    CGS_ASSERT(lpScoringSystem, CgsDev::Assert::MessageAt("lpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineBurningHomeRunModeScoring.cpp", 296));
     lEmptyScoreData.ClearData();
 
     ComparisonData laComparisonData[E_ACTIVE_RACE_CAR_INDEX_COUNT];
@@ -255,7 +256,7 @@ OnlineBurningHomeRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyst
         if (leRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_COUNT)   // skip empty/sentinel slot (== 8)
         {
             CarData* lpCarData = lpScoringSystem->GetCarData(leRaceCarIndex);
-            CGS_ASSERT(lpCarData, "lpCarData");
+            CGS_ASSERT(lpCarData, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineBurningHomeRunModeScoring.cpp", 339));
 
             if (lpCarData != NULL)
             {

@@ -4,6 +4,7 @@
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"                   // GetNetworkRoundManager / SetOnlineRaceCars
 #include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h"   // GetNetworkGameEvent + StartNetworkGameEvent
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // SendEvent default arm
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGameState
 {
@@ -117,7 +118,7 @@ void OnlineFreeBurnLobbyMode::SendEvent(EGameModeEvent leEvent)
             }
             break;
         default:
-            CGS_ASSERT(false, "Should not be in this state in Showtime mode!");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Should not be in this state in Showtime mode!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineFreeBurnLobbyMode.cpp", 239));
             break;
     }
 }

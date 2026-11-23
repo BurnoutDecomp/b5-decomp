@@ -14,9 +14,6 @@
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"   // BehaviourManager (the two GetCamera resolves)
 
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.cpp";
-
 namespace BrnDirector
 {
 namespace Camera
@@ -214,11 +211,11 @@ bool
 BehaviourInterpolate::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
 {
     CGS_ASSERT(mbSetup,
-        CgsDev::Assert::MessageAt("mbSetup", KAC_ARTIST_ASSERT_FILE, 78 /* ARTIST 0x82252A40 */));                                                   // :78
+        CgsDev::Assert::MessageAt("mbSetup", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.cpp", 78 /* ARTIST 0x82252A40 */));                                                   // :78
     CGS_ASSERT(lrInfo.mpInterpolateLockInterface != 0,
         CgsDev::Assert::MessageAt(
             "lSharedInfo.mpInterpolateLockInterface != NULL",
-            KAC_ARTIST_ASSERT_FILE, 79 /* ARTIST 0x82252A68 */));                     // :79
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.cpp", 79 /* ARTIST 0x82252A68 */));                     // :79
 
     mFromCamera.Prepare(*lrInfo.mpInterpolateLockInterface);
     mToCamera.Prepare(*lrInfo.mpInterpolateLockInterface);
@@ -377,7 +374,7 @@ BehaviourInterpolate::Release(const BehaviourSharedPrepareReleaseInfo& lrInfo)
     CGS_ASSERT(lrInfo.mpInterpolateLockInterface != 0,
         CgsDev::Assert::MessageAt(
             "lSharedInfo.mpInterpolateLockInterface != NULL",
-            KAC_ARTIST_ASSERT_FILE, 207 /* ARTIST 0x82252CE8 */));                     // :207 (0xCF)
+            "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.cpp", 207 /* ARTIST 0x82252CE8 */));                     // :207 (0xCF)
 
     mFromCamera.Release(*lrInfo.mpInterpolateLockInterface);
     mToCamera.Release(*lrInfo.mpInterpolateLockInterface);

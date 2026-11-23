@@ -12,10 +12,6 @@
 #include <stdlib.h> // qsort
 #include <cstring>  // std::memset (ClearData fills the blue-team finish-type array)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-    "../GameState/ModeManager/Scoring/BrnOnlineRoadRageModeScoring.cpp";
-
 namespace BrnGameState
 {
 // X360 @ 0x82314E48. Zero the per-slot red-team elimination tally. The base members + the other
@@ -344,9 +340,9 @@ int OnlineRoadRageModeScoring::_RedTeamPlayerCompare(const void* lpPlayer1, cons
     s32 liResult = 0;
 
     CGS_ASSERT(lpPlayer1,
-        CgsDev::Assert::MessageAt("lpPlayer1", KAC_ARTIST_ASSERT_FILE, 723 /* ARTIST 0x8231528C */));
+        CgsDev::Assert::MessageAt("lpPlayer1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRoadRageModeScoring.cpp", 723 /* ARTIST 0x8231528C */));
     CGS_ASSERT(lpPlayer2,
-        CgsDev::Assert::MessageAt("lpPlayer2", KAC_ARTIST_ASSERT_FILE, 724 /* ARTIST 0x823152B0 */));
+        CgsDev::Assert::MessageAt("lpPlayer2", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRoadRageModeScoring.cpp", 724 /* ARTIST 0x823152B0 */));
 
     const RedTeamSortData* lpP1 = static_cast<const RedTeamSortData*>(lpPlayer1);
     const RedTeamSortData* lpP2 = static_cast<const RedTeamSortData*>(lpPlayer2);
@@ -561,7 +557,7 @@ void OnlineRoadRageModeScoring::CalculatePositionsInResultsTable(ScoringSystem* 
 // results table.
 void OnlineRoadRageModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s32 liNumberOfCars)
 {
-    CGS_ASSERT(lpScoringSystem, "lpScoringSystem");
+    CGS_ASSERT(lpScoringSystem, CgsDev::Assert::MessageAt("lpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRoadRageModeScoring.cpp", 389));
 
     UpdatePlayerTeams(lpScoringSystem, liNumberOfCars);
 
@@ -611,7 +607,7 @@ void OnlineRoadRageModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyste
             }
             else
             {
-                CGS_ASSERT(false, "Online Road Rage player with no team\n");
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("Online Road Rage player with no team\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRoadRageModeScoring.cpp", 412));
             }
         }
 
@@ -733,7 +729,7 @@ void OnlineRoadRageModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyste
             if (lpCarData != NULL)
             {
                 CGS_ASSERT(GetCurrentPlayerTeam(leSlot) != GameStateModuleIO::E_PLAYER_TEAM_NONE,
-                           "GetCurrentPlayerTeam(leRaceCarIndex) != GsmIO::E_PLAYER_TEAM_NONE");
+                           CgsDev::Assert::MessageAt("GetCurrentPlayerTeam(leRaceCarIndex) != GsmIO::E_PLAYER_TEAM_NONE", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRoadRageModeScoring.cpp", 556));
                 CGS_ASSERT((GetCurrentPlayerTeam(leSlot) == GameStateModuleIO::E_PLAYER_TEAM_RED_TEAM) ||
                                (maeBlueTeamFinishTypes[leSlot] != GameStateModuleIO::E_BLUE_TEAM_FINISH_TYPE_COUNT),
                            "(GsmIO::E_PLAYER_TEAM_RED_TEAM == GetCurrentPlayerTeam(leRaceCarIndex)) || "

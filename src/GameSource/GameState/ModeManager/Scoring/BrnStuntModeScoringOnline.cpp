@@ -18,10 +18,6 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-    "../GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.cpp";
-
 namespace BrnGameState
 {
 // The per-car physics snapshot the interface hands back (the leap/proximity math reads its internals).
@@ -226,14 +222,14 @@ s32 StuntModeScoringOnline::CalculateMultiplier(const StuntInfo* lpStuntInfo,
 // ----------------------------------------------------------------------------
 void StuntModeScoringOnline::BankMultiplier(StuntInfo* lpRecentStunt)
 {
-    CGS_ASSERT(lpRecentStunt != NULL, "lpRecentStunt");
+    CGS_ASSERT(lpRecentStunt != NULL, CgsDev::Assert::MessageAt("lpRecentStunt", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.cpp", 628));
 
     // The recorded 6-word record's 4th word is cleared first (X360 a2[3] = 0).
     reinterpret_cast<s32*>(lpRecentStunt)[3] = 0;
 
     // Reserve the next free banked-multiplier slot (X360 BrnGameState::S == Array<>::AddNew).
     MultiplierData* lpSlot = maMultiplierData.AddNew();
-    CGS_ASSERT(lpSlot != NULL, "lpMultiplierData");
+    CGS_ASSERT(lpSlot != NULL, CgsDev::Assert::MessageAt("lpMultiplierData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.cpp", 633));
     if (lpSlot == NULL)
     {
         return;
@@ -280,13 +276,13 @@ bool StuntModeScoringOnline::WasStuntRecentlyPerformed(StuntInfo* lpStuntInfo)
 int StuntModeScoringOnline::_ChainableMultipliersSort(const void* lpData1, const void* lpData2)
 {
     CGS_ASSERT(lpData1 != NULL,
-        CgsDev::Assert::MessageAt("lpData1", KAC_ARTIST_ASSERT_FILE, 789 /* ARTIST 0x823136E4 */));
+        CgsDev::Assert::MessageAt("lpData1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.cpp", 789 /* ARTIST 0x823136E4 */));
     CGS_ASSERT(lpData2 != NULL,
-        CgsDev::Assert::MessageAt("lpData2", KAC_ARTIST_ASSERT_FILE, 790 /* ARTIST 0x82313708 */));
+        CgsDev::Assert::MessageAt("lpData2", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.cpp", 790 /* ARTIST 0x82313708 */));
     CGS_ASSERT(lpData1 != NULL,
-        CgsDev::Assert::MessageAt("lpChainableInfo1", KAC_ARTIST_ASSERT_FILE, 794 /* ARTIST 0x8231372C */));
+        CgsDev::Assert::MessageAt("lpChainableInfo1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.cpp", 794 /* ARTIST 0x8231372C */));
     CGS_ASSERT(lpData2 != NULL,
-        CgsDev::Assert::MessageAt("lpChainableInfo2", KAC_ARTIST_ASSERT_FILE, 795 /* ARTIST 0x82313750 */));
+        CgsDev::Assert::MessageAt("lpChainableInfo2", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.cpp", 795 /* ARTIST 0x82313750 */));
 
     const GameStateModuleIO::ChainableMultiplierInfo* lp1 =
         static_cast<const GameStateModuleIO::ChainableMultiplierInfo*>(lpData1);
@@ -414,7 +410,7 @@ void StuntModeScoringOnline::UpdateCarLeapStunts(const ActiveRaceCarOutputInterf
         }
         const RaceCarState* lpOtherState =
             lpRaceCar->GetRaceCarState(leCar);   // RCEntityActiveRaceCarO
-        CGS_ASSERT(lpOtherState != NULL, "lpRaceCarState");
+        CGS_ASSERT(lpOtherState != NULL, CgsDev::Assert::MessageAt("lpRaceCarState", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.cpp", 387));
         if (lpOtherState == NULL)
         {
             continue;
@@ -522,7 +518,7 @@ void StuntModeScoringOnline::UpdateCarLeapStunts(const ActiveRaceCarOutputInterf
 void StuntModeScoringOnline::UpdateCarsAroundPlayerAtTakeoff(const ActiveRaceCarOutputInterface* lpRaceCar)
 {
     const RaceCarState* lpPlayerState = lpRaceCar->GetPlayerRaceCarState();   // sub_82310240
-    CGS_ASSERT(lpPlayerState != NULL, "lpLocalPlayersCarState");
+    CGS_ASSERT(lpPlayerState != NULL, CgsDev::Assert::MessageAt("lpLocalPlayersCarState", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.cpp", 722));
 
     // Capture once per airborne window: only when not already captured AND the player is in the air
     // (X360 player air-time *(state + 0x404) > 0).
@@ -633,7 +629,7 @@ void StuntModeScoringOnline::Update(const ActiveRaceCarOutputInterface* lpRaceCa
     // When the player has landed (air-time <= 0) and no multipliers are live, refresh the cached
     // display score.
     const RaceCarState* lpPlayerState = lpRaceCar->GetPlayerRaceCarState();
-    CGS_ASSERT(lpPlayerState != NULL, "lpLocalPlayersCarState");
+    CGS_ASSERT(lpPlayerState != NULL, CgsDev::Assert::MessageAt("lpLocalPlayersCarState", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoringOnline.cpp", 243));
     const f32 lfAirTime = (lpPlayerState != NULL) ? lpRaceCar->TimePlayerInAir() : 0.0f;
     if (lfAirTime <= 0.0f)
     {

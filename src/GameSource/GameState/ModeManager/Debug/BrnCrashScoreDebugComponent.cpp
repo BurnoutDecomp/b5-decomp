@@ -12,10 +12,6 @@
 // five map onto the closed accessor set, the sixth -- "Highest jump" / mfHighestJump @ +0x320 -- has
 // no accessor in the DWARF, so it is read directly as a friend, exactly as the X360 binary does).
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-    "../GameState/ModeManager/Debug/BrnCrashScoreDebugComponent.cpp";
-
 namespace BrnGameState
 {
     // File-scope debug-HUD text colour (X360 dword_82CDB850, referenced only here). Packed RGBA8;
@@ -44,7 +40,7 @@ namespace BrnGameState
     {
         CGS_ASSERT(mpCrashScoring != 0,
             CgsDev::Assert::MessageAt(
-                "mpCrashScoring != NULL", KAC_ARTIST_ASSERT_FILE, 100 /* ARTIST 0x82312188 */));
+                "mpCrashScoring != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnCrashScoreDebugComponent.cpp", 100 /* ARTIST 0x82312188 */));
     }
 
     // @ 0x823121B0
@@ -104,7 +100,7 @@ namespace BrnGameState
     void CrashScoreDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
     {
         CGS_ASSERT(mpCrashScoring != 0,
-            CgsDev::Assert::MessageAt("mpCrashScoring != NULL", KAC_ARTIST_ASSERT_FILE, 82 /* ARTIST 0x8231EBC0 */));
+            CgsDev::Assert::MessageAt("mpCrashScoring != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnCrashScoreDebugComponent.cpp", 82 /* ARTIST 0x8231EBC0 */));
         if (mbShowScoring)
             DisplayScores(lpRender);
     }

@@ -28,6 +28,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Arbitrator/States/BrnArbStateTakedown.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"    // RequestStartEffectHook / EnsureEffectIsPlaying
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h" // GameState::meTakedownVictimID
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h" // ArbitratorStateContainer
@@ -1097,7 +1098,7 @@ namespace BrnDirector
             mLooseAttachment.GetBehaviour()->SetParameters(&mLooseAttachmentParameters);
 
             CGS_ASSERT(lrSharedInfo.mpGameState->mbTakedownActive,
-                       "lSharedInfo.mpGameState->mbTakedownActive");
+                       CgsDev::Assert::MessageAt("lSharedInfo.mpGameState->mbTakedownActive", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTakedown.cpp", 747));
 
             // The rig hangs off the PLAYER's car and looks at the VICTIM's.
             mLooseAttachment.GetBehaviour()->AttachTo(

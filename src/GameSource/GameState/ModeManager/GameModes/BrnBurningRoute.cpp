@@ -3,6 +3,7 @@
 #include "GameSource/GameState/Progression/BrnProgressionManager.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 namespace BrnGameState
@@ -14,9 +15,9 @@ void BurningRouteMode::Start(const StartGameModeParams* lpStartGameModeParams,
                              GameModeParams* lpGameModeParams, ScoringSystem*)
 {
     const BrnProgression::RaceEventData* lpEventData = lpStartGameModeParams->GetEventData();
-    CGS_ASSERT(lpEventData, "lpEventData");
+    CGS_ASSERT(lpEventData, CgsDev::Assert::MessageAt("lpEventData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurningRoute.cpp", 67));
     const BrnProgression::ProgressionRankData* lpRank = lpStartGameModeParams->GetProgressionRankData();
-    CGS_ASSERT(lpRank, "lpProgressionRankData");
+    CGS_ASSERT(lpRank, CgsDev::Assert::MessageAt("lpProgressionRankData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurningRoute.cpp", 70));
     lpGameModeParams->Construct(lpStartGameModeParams->GetGameModeType());
     lpGameModeParams->muJunctionID = lpStartGameModeParams->GetJunctionID();
     lpGameModeParams->miNumNetworkPlayers = 0;
@@ -47,10 +48,10 @@ void BurningRouteMode::Start(const StartGameModeParams* lpStartGameModeParams,
     lpGameModeParams->SetStartMechanism(lpStartGameModeParams->GetStartMechanism());
     lpGameModeParams->SetTrafficLightTriggerId(lpStartGameModeParams->GetTrafficLightTriggerId());
     mpModeManager->SetStartingGrid(lpGameModeParams, lpGameModeParams->GetNumRivals() + 1, false);
-    CGS_ASSERT(mpModeManager, "mpModeManager");
-    CGS_ASSERT(mpModeManager->GetProgressionManager(), "mpModeManager->GetProgressionManager()");
+    CGS_ASSERT(mpModeManager, CgsDev::Assert::MessageAt("mpModeManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurningRoute.cpp", 106));
+    CGS_ASSERT(mpModeManager->GetProgressionManager(), CgsDev::Assert::MessageAt("mpModeManager->GetProgressionManager()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurningRoute.cpp", 107));
     BrnProgression::Profile* lpProfile = mpModeManager->GetProgressionManager()->GetProfile();
-    CGS_ASSERT(lpProfile, "mpModeManager->GetProgressionManager()->GetProfile()");
+    CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("mpModeManager->GetProgressionManager()->GetProfile()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurningRoute.cpp", 108));
     const GameStateModuleIO::TargetEventScore* lpTarget = lpProfile->GetTargetEvent(lpGameModeParams->muJunctionID);
     const f32 lfTime = lpTarget ? static_cast<f32>(lpTarget->miScore) * 0.001f : lpEventData->GetTimeLimitSlow();
     lpGameModeParams->mfNeedForGold = lfTime;
@@ -66,10 +67,10 @@ void BurningRouteMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
     const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCars,
     bool lbPaused, const ScoringSystem* lpScoringSystem)
 {
-    CGS_ASSERT(lpOutput, "lpOutput != NULL");
-    CGS_ASSERT(lpInput, "lpInput != NULL");
+    CGS_ASSERT(lpOutput, CgsDev::Assert::MessageAt("lpOutput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurningRoute.cpp", 143));
+    CGS_ASSERT(lpInput, CgsDev::Assert::MessageAt("lpInput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurningRoute.cpp", 144));
     GameMode::PreWorldUpdate(lpOutput, lpInput, lpGlobalRaceCars, lpActiveRaceCars, lbPaused, lpScoringSystem);
-    CGS_ASSERT(lpGlobalRaceCars, "lpGlobalCarInterface != NULL");
+    CGS_ASSERT(lpGlobalRaceCars, CgsDev::Assert::MessageAt("lpGlobalCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurningRoute.cpp", 155));
     mePlayerActiveIndex = lpGlobalRaceCars->GetActiveRaceCarIndex(lpGlobalRaceCars->GetPlayerGlobalRaceCarIndex());
 }
 

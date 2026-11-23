@@ -144,7 +144,7 @@ bool MomentController::MomentHandle::Release()
 {
     if (mbIsAllocated)
     {
-        CGS_ASSERT(GetMoment()->Release(), "GetMoment().Release()");   //  (non-gating)
+        CGS_ASSERT(GetMoment()->Release(), CgsDev::Assert::MessageAt("GetMoment().Release()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.cpp", 281));   //  (non-gating)
         mMomentPoolHandle.Release();
         mbIsAllocated = false;
     }
@@ -234,7 +234,7 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
                                  MomentHandle& lrMomentHandleInOut,
                                  Camera::BehaviourManager& lrBehaviourManager)
 {
-    CGS_ASSERT(lrMomentHandleInOut.Release(), "lrMomentHandleInOut.Release()");
+    CGS_ASSERT(lrMomentHandleInOut.Release(), CgsDev::Assert::MessageAt("lrMomentHandleInOut.Release()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.cpp", 121));
 
     AbstractPoolVoidHandle lVoidHandle;
     switch (leMomentType)
@@ -279,7 +279,7 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
             // DO NOT "FIX" THE UNINITIALISED lVoidHandle ON THIS ARM -- the console has it too
             // (MSVC C4701 under /w14701 is a TRUE report of UB in the shipped binary): the default arm
             // writes nothing to the handle's stack slot and falls into the single shared Prepare.
-            CGS_ASSERT(false, "Unhandled moment type");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unhandled moment type", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.cpp", 202));
             break;
     }
 
@@ -287,7 +287,7 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
 
     CGS_ASSERT(lrMomentHandleInOut.IsAllocated(), "mbIsAllocated");
     CGS_ASSERT(lrMomentHandleInOut.GetMoment()->GetType() == leMomentType,
-               "lrMomentHandleInOut.GetMoment().GetType() == leMomentType");
+               CgsDev::Assert::MessageAt("lrMomentHandleInOut.GetMoment().GetType() == leMomentType", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.cpp", 211));
 
     Moment::Parameters* lpParameters = mMomentParameterBank.GetParameters(leMomentParamID);
 

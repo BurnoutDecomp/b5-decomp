@@ -37,8 +37,6 @@
 extern bool gbLogGuiAudioTriggers;
 
 // Existing compatibility provider; the original wrapper always disables screen checking.
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-    f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCheckScreen);
 
 namespace
 {
@@ -879,13 +877,13 @@ void GuiDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRender)
         char lacBuffer[1024];
         CgsDev::StrStream lStream(lacBuffer, sizeof(lacBuffer));
         lStream << "SPEED : " << mSpeedoInfo.miPlayerMPH << "mph \n";
-        MaybeDrawText(lpRender, lStream.GetBuffer(), 50.0f, 50.0f, 30.0f, 0xFFFFFFC8u, false);
+        lpRender->DrawText(lStream.GetBuffer(), 50.0f, 50.0f, 30.0f, 0xFFFFFFC8u);
         lStream.Reset();
         lStream << "RPM : " << mSpeedoInfo.miPlayerRPM << " \n";
-        MaybeDrawText(lpRender, lStream.GetBuffer(), 50.0f, 80.0f, 30.0f, 0xFFFFFFC8u, false);
+        lpRender->DrawText(lStream.GetBuffer(), 50.0f, 80.0f, 30.0f, 0xFFFFFFC8u);
         lStream.Reset();
         lStream << "GEAR : " << mSpeedoInfo.miPlayerGear << " \n";
-        MaybeDrawText(lpRender, lStream.GetBuffer(), 50.0f, 110.0f, 30.0f, 0xFFFFFFC8u, false);
+        lpRender->DrawText(lStream.GetBuffer(), 50.0f, 110.0f, 30.0f, 0xFFFFFFC8u);
         lStream.Reset();
     }
 }

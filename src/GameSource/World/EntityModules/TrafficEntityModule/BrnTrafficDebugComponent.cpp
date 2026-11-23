@@ -2078,9 +2078,6 @@ void DebugComponent::RenderVerticalMeter(CgsDev::Debug3DImmediateRender* lpDispl
 
 } // namespace BrnTraffic
 
-void MaybeDrawText(CgsDev::Debug2DImmediateRender*, const char*, f32, f32, f32,
-                  CgsDev::RGBA, bool);
-
 namespace BrnTraffic
 {
 
@@ -2090,16 +2087,16 @@ void DebugComponent::RenderPerfmon(CgsDev::Debug2DImmediateRender* lpDisplay,
                                     f32 lfX, f32 lfY, f32 lfScale)
 {
     const CgsDev::RGBA lColour = 0xFFFFFFFFu;
-    MaybeDrawText(lpDisplay, lpData->mpcName, lfX, lfY, lfScale, lColour, false);
+    lpDisplay->DrawText(lpData->mpcName, lfX, lfY, lfScale, lColour);
     char lacText[32];
     CgsCore::SPrintf(lacText, sizeof(lacText), "%.03f", lpData->mfCurrentValue);
-    MaybeDrawText(lpDisplay, lacText, lfX + 200.0f, lfY, lfScale, lColour, false);
+    lpDisplay->DrawText(lacText, lfX + 200.0f, lfY, lfScale, lColour);
     CgsCore::SPrintf(lacText, sizeof(lacText), "%.03f", lpData->mfAverageValue);
-    MaybeDrawText(lpDisplay, lacText, lfX + 270.0f, lfY, lfScale, lColour, false);
+    lpDisplay->DrawText(lacText, lfX + 270.0f, lfY, lfScale, lColour);
     CgsCore::SPrintf(lacText, sizeof(lacText), "%.03f", lpData->mfMinMaxValue);
-    MaybeDrawText(lpDisplay, lacText, lfX + 340.0f, lfY, lfScale, lColour, false);
+    lpDisplay->DrawText(lacText, lfX + 340.0f, lfY, lfScale, lColour);
     CgsCore::SPrintf(lacText, sizeof(lacText), "%d", lpData->miNumCalls);
-    MaybeDrawText(lpDisplay, lacText, lfX + 410.0f, lfY, lfScale, lColour, false);
+    lpDisplay->DrawText(lacText, lfX + 410.0f, lfY, lfScale, lColour);
 }
 
 // ARTIST 0x82754038. Assembly multiplies screen width by 0.5 before adding 50;
@@ -2108,16 +2105,16 @@ void DebugComponent::RenderPerformanceTable(CgsDev::Debug2DImmediateRender* lpDi
 {
     const f32 lfX = lpDisplay->GetVirtualScreenSize().mV.x * 0.5f + 50.0f;
     const CgsDev::RGBA lColour = 0xFFFFFFFFu;
-    MaybeDrawText(lpDisplay, "Traffic [special]", lfX, 76.0f, 24.0f, lColour, false);
-    MaybeDrawText(lpDisplay, "Current", lfX + 200.0f, 84.0f, 16.0f, lColour, false);
-    MaybeDrawText(lpDisplay, "Average", lfX + 270.0f, 84.0f, 16.0f, lColour, false);
-    MaybeDrawText(lpDisplay, "Min/Max", lfX + 340.0f, 84.0f, 16.0f, lColour, false);
-    MaybeDrawText(lpDisplay, "Calls", lfX + 410.0f, 84.0f, 16.0f, lColour, false);
-    MaybeDrawText(lpDisplay, "DECISION", lfX, 100.0f, 16.0f, lColour, false);
+    lpDisplay->DrawText("Traffic [special]", lfX, 76.0f, 24.0f, lColour);
+    lpDisplay->DrawText("Current", lfX + 200.0f, 84.0f, 16.0f, lColour);
+    lpDisplay->DrawText("Average", lfX + 270.0f, 84.0f, 16.0f, lColour);
+    lpDisplay->DrawText("Min/Max", lfX + 340.0f, 84.0f, 16.0f, lColour);
+    lpDisplay->DrawText("Calls", lfX + 410.0f, 84.0f, 16.0f, lColour);
+    lpDisplay->DrawText("DECISION", lfX, 100.0f, 16.0f, lColour);
     RenderPerfmon(lpDisplay, &mpModule->mPostPhysPerfmonData_Decision, lfX, 116.0f, 16.0f);
     RenderPerfmon(lpDisplay, &mpModule->mParamPerfmonData_Decision, lfX, 132.0f, 16.0f);
     RenderPerfmon(lpDisplay, &mpModule->mVehiclePerfmonData_Decision, lfX, 148.0f, 16.0f);
-    MaybeDrawText(lpDisplay, "NON-DECISION", lfX, 180.0f, 16.0f, lColour, false);
+    lpDisplay->DrawText("NON-DECISION", lfX, 180.0f, 16.0f, lColour);
     RenderPerfmon(lpDisplay, &mpModule->mPostPhysPerfmonData_NonDecision, lfX, 196.0f, 16.0f);
     RenderPerfmon(lpDisplay, &mpModule->mParamPerfmonData_NonDecision, lfX, 212.0f, 16.0f);
     RenderPerfmon(lpDisplay, &mpModule->mVehiclePerfmonData_NonDecision, lfX, 228.0f, 16.0f);
@@ -2177,12 +2174,12 @@ void DebugComponent::DrawPlayerCarHullId(CgsDev::Debug2DImmediateRender* lpDispl
     CGS_ASSERT(mpModule != 0, "mpModule != NULL");
     CGS_ASSERT(lpDisplay != 0, "lpDisplay != NULL");
     if (mpModule->meLocalPlayerIndex != 0)
-        MaybeDrawText(lpDisplay, "Warning: Hull ID is for car zero, not player",
-                      40.0f, 100.0f, 16.0f, 0xFF0000FFu, false);
+        lpDisplay->DrawText("Warning: Hull ID is for car zero, not player",
+                      40.0f, 100.0f, 16.0f, 0xFF0000FFu);
     char lacText[256];
     CgsCore::SPrintf(lacText, sizeof(lacText), "Traf Hull: %u",
                     static_cast<u32>(mpModule->maaRaceCarHulls[0].GetItem(0)));
-    MaybeDrawText(lpDisplay, lacText, 60.0f, 100.0f, 16.0f, 0xFFFFFFFFu, false);
+    lpDisplay->DrawText(lacText, 60.0f, 100.0f, 16.0f, 0xFFFFFFFFu);
 }
 
 // ARTIST 0x82750AE8. stwu allocates 0x10C0 and the stream's capacity is 0x1000:

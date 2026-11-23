@@ -6,9 +6,6 @@
 // Bodied here (1 ledger function, class:BrnDirector::DirectorOutputInterface):
 //   DirectorOutputInterface::IsIntroCameraStartingToLookAtRival @0x823A7AB8
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Director/SharedIO/BrnDirectorOutputInterface.h";
-
 namespace BrnDirector
 {
 
@@ -18,9 +15,9 @@ bool DirectorOutputInterface::IsIntroCameraStartingToLookAtRival(
 {
     CGS_ASSERT(lpuRivalryNumberOut != 0,
         CgsDev::Assert::MessageAt(
-            "lpuRivalryNumberOut != NULL", KAC_ARTIST_ASSERT_FILE, 101 /* ARTIST 0x823A7AE8 */));   // :101
+            "lpuRivalryNumberOut != NULL", "..\\..\\..\\GameSource\\Director/SharedIO/BrnDirectorOutputInterface.h", 101 /* ARTIST 0x823A7AE8 */));   // :101
     CGS_ASSERT(lpfSecsRemaining != 0,
-        CgsDev::Assert::MessageAt("lpfSecsRemaining != NULL", KAC_ARTIST_ASSERT_FILE, 102 /* ARTIST 0x823A7B0C */));         // :102
+        CgsDev::Assert::MessageAt("lpfSecsRemaining != NULL", "..\\..\\..\\GameSource\\Director/SharedIO/BrnDirectorOutputInterface.h", 102 /* ARTIST 0x823A7B0C */));         // :102
 
     *lpuRivalryNumberOut = muIntroCameraRivalryNumber;
     *lpfSecsRemaining    = mfIntroCameraSecsRemaining;

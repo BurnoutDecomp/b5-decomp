@@ -1,6 +1,7 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentPassengerSeesAction.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/BrnBehaviourParameterBank.h"   // the passenger-cam moment block
 
 // BrnDirector::MomentPassengerSeesAction -- reconstructed from
@@ -175,7 +176,7 @@ void MomentPassengerSeesAction::Update(f32 lfTimeStep, void* lrBehaviourControll
         break;
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");   //  (non-gating)
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPassengerSeesAction.cpp", 198));   //  (non-gating)
         return;
     }
 

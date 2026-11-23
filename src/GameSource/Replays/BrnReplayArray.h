@@ -49,6 +49,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (bounds / capacity)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnReplays
 {
@@ -107,7 +108,7 @@ namespace BrnReplays
         // maElements[muLength] and post-increments the count.
         T& PushBack(const T& lrElement)
         {
-            CGS_ASSERT(muLength < KU_MAX_LENGTH, "muLength < MaxLength");
+            CGS_ASSERT(muLength < KU_MAX_LENGTH, CgsDev::Assert::MessageAt("muLength < MaxLength", "..\\..\\..\\GameSource\\Replays/BrnReplayArray.h", 98));
             T& lrSlot = maElements[muLength];
             lrSlot = lrElement;
             ++muLength;

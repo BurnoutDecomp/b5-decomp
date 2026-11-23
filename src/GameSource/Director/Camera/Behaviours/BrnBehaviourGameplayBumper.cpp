@@ -25,6 +25,7 @@
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"           // the Euler / rotate / angle-diff helpers
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"      // VehicleInfo (mAABB)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/fpu/scalar_operation.h"                         // Abs / Cos / Sin
 #include "rw/math/vpu/vector3_operation.h"                        // operator+/-/* , Cross, Normalize, IsValid
 #include "rw/math/vpu/matrix44affine_operation.h"                 // Mult(Matrix44Affine, Matrix44Affine)
@@ -91,8 +92,8 @@ void BehaviourGameplayBumper::Parameters::Set(const Source* lpSource)
     mfYOffset               = lpfSrc[0x04 / 4];   // <- source[0x04]
     mfZOffset               = lpfSrc[0x00 / 4];   // <- source[0x00]
 
-    CGS_ASSERT(mfBoostFOV > 0.0f, "mfBoostFOV > 0.0f");
-    CGS_ASSERT(mfFOV > 0.0f, "mfFOV > 0.0f");
+    CGS_ASSERT(mfBoostFOV > 0.0f, CgsDev::Assert::MessageAt("mfBoostFOV > 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGameplayBumper.cpp", 75));
+    CGS_ASSERT(mfFOV > 0.0f, CgsDev::Assert::MessageAt("mfFOV > 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGameplayBumper.cpp", 76));
 }
 
 // ----------------------------------------------------------------------------
@@ -228,7 +229,7 @@ void BehaviourGameplayBumper_SetParametersAnchor(
 bool BehaviourGameplayBumper::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
     // @0x822267A0..0x822267DC
-    CGS_ASSERT(mpParameters != 0, "Updating with no parameters");   // :115
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("Updating with no parameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGameplayBumper.cpp", 115));   // :115
     if (mpParameters == 0 || !mpParameters->mbIsValid)
         return true;
 

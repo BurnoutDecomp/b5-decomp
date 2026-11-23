@@ -71,6 +71,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/MomentController/BrnMomentParameterBank.h"
 
 namespace BrnDirector
@@ -176,7 +177,7 @@ Moment::Parameters* MomentParameterBank::GetParameters(EMomentParamID leMomentPa
         case E_PARAM_TUMBLING_SIDE_CRASH_ONLY:
             return &mParamsTumblingSideCrashOnly;
         default:
-            CGS_ASSERT(false, "unhandled parameter type");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled parameter type", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentParameterBank.cpp", 195));
             return 0;
     }
 }

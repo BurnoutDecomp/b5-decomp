@@ -1,6 +1,7 @@
 #include "GameSource/Director/Camera/Utils/BrnCameraSmoothMover.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/fpu/scalar_operation.h"              // rw::math::fpu::{Abs, Clamp, IsValid}
 
 // BrnDirector::Camera::Utils::SmoothMover -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -139,13 +140,13 @@ void SmoothMover::UpdateWithLimitsNoCentering(f32 lfTimestep, f32 lfForceApplied
     mfCurrentValue  = fpu::Clamp(mfCurrentValue + lfNewSpeed * lfTimestep,
                                  lParameters.mfMinValue, lParameters.mfMaxValue);
 
-    CGS_ASSERT(mfCurrentSpeed < KF_SANITY_LIMIT,  "mfCurrentSpeed < 10000.0f");
+    CGS_ASSERT(mfCurrentSpeed < KF_SANITY_LIMIT,  CgsDev::Assert::MessageAt("mfCurrentSpeed < 10000.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraSmoothMover.cpp", 187));
     // cpp:188 -- the X360 streams value/speed/params/force into the message; folded static.
     CGS_ASSERT(mfCurrentValue < KF_SANITY_LIMIT,  "mfCurrentValue < 10000.0f");
-    CGS_ASSERT(mfCurrentSpeed > -KF_SANITY_LIMIT, "mfCurrentSpeed > -10000.0f");
-    CGS_ASSERT(mfCurrentValue > -KF_SANITY_LIMIT, "mfCurrentValue > -10000.0f");
-    CGS_ASSERT(fpu::IsValid(mfCurrentSpeed), "RwMathFPU::IsValid(mfCurrentSpeed)");
-    CGS_ASSERT(fpu::IsValid(mfCurrentValue), "RwMathFPU::IsValid(mfCurrentValue)");
+    CGS_ASSERT(mfCurrentSpeed > -KF_SANITY_LIMIT, CgsDev::Assert::MessageAt("mfCurrentSpeed > -10000.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraSmoothMover.cpp", 189));
+    CGS_ASSERT(mfCurrentValue > -KF_SANITY_LIMIT, CgsDev::Assert::MessageAt("mfCurrentValue > -10000.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraSmoothMover.cpp", 190));
+    CGS_ASSERT(fpu::IsValid(mfCurrentSpeed), CgsDev::Assert::MessageAt("RwMathFPU::IsValid(mfCurrentSpeed)", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraSmoothMover.cpp", 192));
+    CGS_ASSERT(fpu::IsValid(mfCurrentValue), CgsDev::Assert::MessageAt("RwMathFPU::IsValid(mfCurrentValue)", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraSmoothMover.cpp", 193));
 }
 
 // @ 0x8220D608
@@ -186,12 +187,12 @@ void SmoothMover::UpdateWithLimitsWithCentering(f32 lfTimestep, f32 lfForceAppli
                                     lParameters.mfMinValue, lParameters.mfMaxValue);
     }
 
-    CGS_ASSERT(mfCurrentSpeed < KF_SANITY_LIMIT,  "mfCurrentSpeed < 10000.0f");
-    CGS_ASSERT(mfCurrentValue < KF_SANITY_LIMIT,  "mfCurrentValue < 10000.0f");
-    CGS_ASSERT(mfCurrentSpeed > -KF_SANITY_LIMIT, "mfCurrentSpeed > -10000.0f");
-    CGS_ASSERT(mfCurrentValue > -KF_SANITY_LIMIT, "mfCurrentValue > -10000.0f");
-    CGS_ASSERT(fpu::IsValid(mfCurrentSpeed), "RwMathFPU::IsValid(mfCurrentSpeed)");
-    CGS_ASSERT(fpu::IsValid(mfCurrentValue), "RwMathFPU::IsValid(mfCurrentValue)");
+    CGS_ASSERT(mfCurrentSpeed < KF_SANITY_LIMIT,  CgsDev::Assert::MessageAt("mfCurrentSpeed < 10000.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraSmoothMover.cpp", 135));
+    CGS_ASSERT(mfCurrentValue < KF_SANITY_LIMIT,  CgsDev::Assert::MessageAt("mfCurrentValue < 10000.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraSmoothMover.cpp", 136));
+    CGS_ASSERT(mfCurrentSpeed > -KF_SANITY_LIMIT, CgsDev::Assert::MessageAt("mfCurrentSpeed > -10000.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraSmoothMover.cpp", 137));
+    CGS_ASSERT(mfCurrentValue > -KF_SANITY_LIMIT, CgsDev::Assert::MessageAt("mfCurrentValue > -10000.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraSmoothMover.cpp", 138));
+    CGS_ASSERT(fpu::IsValid(mfCurrentSpeed), CgsDev::Assert::MessageAt("RwMathFPU::IsValid(mfCurrentSpeed)", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraSmoothMover.cpp", 140));
+    CGS_ASSERT(fpu::IsValid(mfCurrentValue), CgsDev::Assert::MessageAt("RwMathFPU::IsValid(mfCurrentValue)", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraSmoothMover.cpp", 141));
 }
 }
 }

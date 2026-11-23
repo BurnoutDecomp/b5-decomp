@@ -60,11 +60,6 @@
 // The native timer API returns the complete 64-bit time-base value.
 #include "GameShared/GameClasses/System/Timer/CgsTimeUtils.h"
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp";
-static const char KAC_ARTIST_ASSERT_HEADER[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h";
-
 namespace BrnGame
 {
     // File-scope globals the X360 GameMain references:
@@ -3067,11 +3062,11 @@ namespace BrnGame
         CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput)
     {
         CGS_ASSERT(lpPostWorldInput != 0,
-            CgsDev::Assert::MessageAt("lpInputBuffer", KAC_ARTIST_ASSERT_HEADER, 238 /* ARTIST 0x823BCF6C */));
+            CgsDev::Assert::MessageAt("lpInputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 238 /* ARTIST 0x823BCF6C */));
         lpPostWorldInput->LockForWrite();
         lpPostWorldInput->PostMappingRequest(KA_CONSOLE_DEFAULT_GAME_INPUT_MAPPING, -1);
         CGS_ASSERT(lpPostWorldInput != 0,
-            CgsDev::Assert::MessageAt("lpInputBuffer", KAC_ARTIST_ASSERT_HEADER, 248 /* ARTIST 0x823BCFA8 */));
+            CgsDev::Assert::MessageAt("lpInputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 248 /* ARTIST 0x823BCFA8 */));
         lpPostWorldInput->UnlockForWrite();
     }
 
@@ -3081,11 +3076,11 @@ namespace BrnGame
         CgsInput::InputIO::PostWorldInputBuffer* lpPostWorldInput)
     {
         CGS_ASSERT(lpPostWorldInput != 0,
-            CgsDev::Assert::MessageAt("lpInputBuffer", KAC_ARTIST_ASSERT_HEADER, 238 /* ARTIST 0x823BD3C0 */));
+            CgsDev::Assert::MessageAt("lpInputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 238 /* ARTIST 0x823BD3C0 */));
         lpPostWorldInput->LockForWrite();
         lpPostWorldInput->PostBindRequest(0, liPort);
         CGS_ASSERT(lpPostWorldInput != 0,
-            CgsDev::Assert::MessageAt("lpInputBuffer", KAC_ARTIST_ASSERT_HEADER, 248 /* ARTIST 0x823BD3F8 */));
+            CgsDev::Assert::MessageAt("lpInputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleUtils.h", 248 /* ARTIST 0x823BD3F8 */));
         lpPostWorldInput->UnlockForWrite();
     }
 
@@ -3183,9 +3178,9 @@ namespace BrnGame
             return;
 
         CGS_ASSERT(miInputModuleState == 3,
-                   "meInputBindState == E_INPUTBINDSTATE_BIND_REQUESTED");
+                   CgsDev::Assert::MessageAt("meInputBindState == E_INPUTBINDSTATE_BIND_REQUESTED", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3393));
         CGS_ASSERT(lrResult.meResultCode == CgsInput::E_BINDRESULTOK,
-                   "CgsInput::E_BINDRESULTOK == lResult.GetResultCode()");
+                   CgsDev::Assert::MessageAt("CgsInput::E_BINDRESULTOK == lResult.GetResultCode()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3394));
 
         miPlayer0ControllerPort = lrResult.miPort;
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -3207,11 +3202,11 @@ namespace BrnGame
         CGS_ASSERT(miInputModuleState == 6,
             CgsDev::Assert::MessageAt(
                 "meInputBindState == E_INPUTBINDSTATE_UNBIND_REQUESTED",
-                KAC_ARTIST_ASSERT_FILE, 3421 /* ARTIST 0x823A8D94 */));
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3421 /* ARTIST 0x823A8D94 */));
         CGS_ASSERT(lrResult.meResultCode == CgsInput::E_UNBINDRESULTOK,
             CgsDev::Assert::MessageAt(
                 "CgsInput::E_UNBINDRESULTOK == lResult.GetResultCode()",
-                KAC_ARTIST_ASSERT_FILE, 3422 /* ARTIST 0x823A8DBC */));
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3422 /* ARTIST 0x823A8DBC */));
 
         miPlayer0ControllerPort = CgsInput::KU_NUMBER_OF_PADS;
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
@@ -3377,15 +3372,15 @@ namespace BrnGame
         CGS_ASSERT(lpGameStateModuleOutputBuffer != 0,
             CgsDev::Assert::MessageAt(
                 "lpGameStateModuleOutputBuffer != NULL",
-                KAC_ARTIST_ASSERT_FILE, 3450 /* ARTIST 0x823DCB7C */));
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3450 /* ARTIST 0x823DCB7C */));
         CGS_ASSERT(lpInputModuleOutputBuffer != 0,
             CgsDev::Assert::MessageAt(
                 "lpInputModuleOutputBuffer != NULL",
-                KAC_ARTIST_ASSERT_FILE, 3451 /* ARTIST 0x823DCBA0 */));
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3451 /* ARTIST 0x823DCBA0 */));
         CGS_ASSERT(lpGuiModuleModelOutputBuffer != 0,
             CgsDev::Assert::MessageAt(
                 "lpGuiModuleModelOutputBuffer != NULL",
-                KAC_ARTIST_ASSERT_FILE, 3452 /* ARTIST 0x823DCBC4 */));
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3452 /* ARTIST 0x823DCBC4 */));
 
         BrnUpdateSet leUpdateSet = ConstructUpdateSetFromFsm();
 
@@ -3409,7 +3404,7 @@ namespace BrnGame
         CGS_ASSERT(lpNetworkModuleOutputBuffer != 0,
             CgsDev::Assert::MessageAt(
                 "lpNetworkModuleOutputBuffer != NULL",
-                KAC_ARTIST_ASSERT_FILE, 3491 /* ARTIST 0x823DCC60 */));
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnGameModule.cpp", 3491 /* ARTIST 0x823DCC60 */));
         lpNetworkModuleOutputBuffer->LockForRead();
         if (IsEventInGuiQueue(44, lpNetworkModuleOutputBuffer->GetGuiEventQueue()))
             leUpdateSet |= 0x2;

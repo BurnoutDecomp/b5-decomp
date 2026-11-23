@@ -9,6 +9,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                               // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h"  // GetState / SetCurrentState
 #include "GameSource/Director/Camera/Camera.h"                                   // Camera::Camera (Construct / operator=)
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"                      // NewBehaviour<> / CheckNoBehavioursAreAllocatedByState
@@ -92,7 +93,7 @@ namespace BrnDirector
         }
 
         default:
-            CGS_ASSERT(false, "unhandled state");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateRenderMetrics.cpp", 132));
             break;
         }
     }

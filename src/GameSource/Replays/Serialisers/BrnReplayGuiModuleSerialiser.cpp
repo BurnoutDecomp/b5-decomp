@@ -1,4 +1,5 @@
 #include "BrnReplayGuiModuleSerialiser.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 namespace BrnReplays
@@ -25,7 +26,7 @@ namespace BrnReplays
         if (GetMode() == E_MODE_PLAYING)
         {
             GuiModuleStaticLayout* lpStaticLayout = GetStaticLayout();
-            CGS_ASSERT(lpStaticLayout != 0, "lpStaticLayout");
+            CGS_ASSERT(lpStaticLayout != 0, CgsDev::Assert::MessageAt("lpStaticLayout", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayGuiModuleSerialiser.cpp", 199));
             BaseSerialiser::Read(lpStaticLayout, 992);
         }
 

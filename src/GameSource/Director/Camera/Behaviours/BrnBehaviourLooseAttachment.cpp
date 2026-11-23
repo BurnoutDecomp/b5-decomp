@@ -22,8 +22,6 @@
 #include <cstddef>   // offsetof
 #include "rw/math/vpu/matrix44affine_operation.h"
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h";
-
 namespace BrnDirector
 {
 namespace Camera
@@ -261,7 +259,7 @@ void BehaviourLooseAttachment::AttachTo(s32 leRaceCarIndex)
     CGS_ASSERT(leRaceCarIndex < KU_MAX_NUM_RACE_CARS,
         CgsDev::Assert::MessageAt(
             "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
-            KAC_ARTIST_ASSERT_FILE, 222 /* ARTIST 0x821F448C */));
+            "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 222 /* ARTIST 0x821F448C */));
 }
 
 // ----------------------------------------------------------------------------
@@ -282,7 +280,7 @@ void BehaviourLooseAttachment::SetTarget(s32 leRaceCarIndex)
     CGS_ASSERT(leRaceCarIndex < KU_MAX_NUM_RACE_CARS,
         CgsDev::Assert::MessageAt(
             "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
-            KAC_ARTIST_ASSERT_FILE, 222 /* ARTIST 0x821F44EC */));
+            "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 222 /* ARTIST 0x821F44EC */));
 }
 
 // Pin the field-walk offsets of the parameter block: the derived members start right after the

@@ -1,4 +1,5 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineFreeBurnMode.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
@@ -84,7 +85,7 @@ void OnlineFreeBurnMode::SendEvent(EGameModeEvent leEvent)
             }
             break;
         default:
-            CGS_ASSERT(false, "Should not be in this state in Showtime mode!");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Should not be in this state in Showtime mode!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineFreeBurnMode.cpp", 175));
             break;
     }
 }

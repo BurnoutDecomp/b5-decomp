@@ -1,6 +1,7 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentTumbling.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/vector3_operation.h"                         // Vector3 operator-/*/+ + Dot
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"   // AllVehicleData (used mask + race cars)
 
@@ -193,7 +194,7 @@ void MomentTumbling::SetGyroCamParameters(const void* lSharedInfo)
         return;
 
     default:
-        CGS_ASSERT(false, "invalid subtype");   //  (non-gating)
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("invalid subtype", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentTumbling.cpp", 343));   //  (non-gating)
         return;
     }
 }
@@ -202,7 +203,7 @@ void MomentTumbling::SetGyroCamParameters(const void* lSharedInfo)
 // request pair (behaviour +0x630/+0x631).
 void MomentTumbling::SignalIsGoodTimeToPlant()
 {
-    CGS_ASSERT(IsValid(), "IsValid()");   //  (non-gating)
+    CGS_ASSERT(IsValid(), CgsDev::Assert::MessageAt("IsValid()", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentTumbling.cpp", 265));   //  (non-gating)
     if (mpParameters->meSubType == Parameters::E_SUBTYPE_LEAD)
     {
         mGyroCam.GetBehaviour()->SignalGoodTimeToPlant();
@@ -244,7 +245,7 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
     Camera::BehaviourManager* lpBehaviourManager =
         static_cast<Camera::BehaviourManager*>(lrBehaviourController);
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");   //  (non-gating)
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentTumbling.cpp", 89));   //  (non-gating)
 
     // ---- the per-frame angular-velocity smoother (before the state machine) ----
     {

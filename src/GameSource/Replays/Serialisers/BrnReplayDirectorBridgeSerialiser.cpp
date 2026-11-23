@@ -1,4 +1,5 @@
 #include "GameSource/Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // BrnReplays::DirectorBridgeSerialiser -- reconstructed from
 // BURNOUT_X360_ARTIST.XEX. (This file's earlier Construct-only slice is
@@ -66,7 +67,7 @@ void DirectorBridgeSerialiser::Read()
     BaseSerialiser::Lock();
 
     DirectorBridgeSerialiserStaticLayout* lpStatic = GetStaticLayout();
-    CGS_ASSERT(lpStatic != 0, "lpStatic");   // :149 (non-gating)
+    CGS_ASSERT(lpStatic != 0, CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayDirectorBridgeSerialiser.cpp", 149));   // :149 (non-gating)
 
     const EMode leMode = GetMode();
     bool lbSkip = (leMode == E_MODE_RECORDING_STALLED || leMode == E_MODE_PLAYING_STALLED);

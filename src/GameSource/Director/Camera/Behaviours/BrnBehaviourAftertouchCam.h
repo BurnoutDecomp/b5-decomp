@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"  // Utils::CameraShake::Parameters (embedded "Shake Params" sub-block)
 #include "GameSource/AttribSys/Generated/classes/aftertouchcam.h" // Attrib::Gen::aftertouchcam (the adopted source shot)
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"         // the Camera::Behaviour base
@@ -245,7 +246,7 @@ inline void
 BehaviourAftertouchCam::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourAftertouchCam,
-               "lpParameters->GetType() == eBehaviourAftertouchCam");
+               CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourAftertouchCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.h", 198));
     mpParameters = lpParameters;
     SetDebugParametersName(lpParameters->GetDebugName());
 }

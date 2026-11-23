@@ -301,7 +301,7 @@ void TrainingManager::SendTrainingTickerMessage(GameStateModuleIO::GameActionQue
 void TrainingManager::DEBUG_ClearTrainingFlags()
 {
     BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-    CGS_ASSERT(lpProfile, "lpProfile");
+    CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp", 975));
     lpProfile->ClearTrainingFlags();
 }
 
@@ -520,7 +520,7 @@ void TrainingManager::RequestTraining(BrnProgression::ETrainingType leTrainingTy
     if (luType >= 0x100u)
     {
         CGS_ASSERT(false,
-                   "leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT"); // :355
+                   CgsDev::Assert::MessageAt("leTrainingType >= 0 && leTrainingType < BrnProgression::E_TRAINING_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp", 355)); // :355
     }
 
     // `if (!*v3 && !*(v3+20) && (v2 != 8 || *(gsm+42300) >= 30.0))`
@@ -588,7 +588,7 @@ void TrainingManager::RequestTraining(BrnProgression::ETrainingType leTrainingTy
         {
             const BrnWorld::RaceCarEntityModuleIO::BoostOutputInfo*
                 lpcBoostInfo = lpcIface->GetBoostOutputInfoN(lpcIface->GetPlayerActiveRaceCarIndex());
-            CGS_ASSERT(lpcBoostInfo, "lpBoostInfo");   // :412
+            CGS_ASSERT(lpcBoostInfo, CgsDev::Assert::MessageAt("lpBoostInfo", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp", 412));   // :412
             if (!lpcBoostInfo->mbBoostIsFull)          // `*(v11+28)`
             {
                 return;

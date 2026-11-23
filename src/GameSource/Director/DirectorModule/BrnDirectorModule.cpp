@@ -174,7 +174,7 @@ bool DirectorModule::Release()
         return true;
 
     default:
-        CGS_ASSERT(false, "Invalid Stage\n");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Stage\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModule.cpp", 200));
         return false;
     }
 }
@@ -363,7 +363,7 @@ void DirectorModule::ProcessSceneQueryResults(
             break;
         }
         default:
-            CGS_ASSERT(false, "Unhandled result type");                           // .cpp:537
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unhandled result type", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModule.cpp", 537));                           // .cpp:537
             break;
         }
     }

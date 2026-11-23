@@ -1,5 +1,6 @@
 #include "GameSource/Resource/BrnGameDataModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Memory/CgsMemoryModule.h"   // MemoryModule::InitOptions
 #include "GameSource/Resource/BrnResourceAllocator.h"        // Allocators::mpInternalDebugAllocator
 #include "rw/rwcore_structs.h"                                // rw::IResourceAllocator / Resource / ResourceDescriptor
@@ -229,7 +230,7 @@ namespace BrnResource
             mePrepareStage = E_PREPARE_GAMETALK;
             if (!mGameTalk.Prepare(10.0f, 0.01666666753590107f))
                 goto Pending;
-            CGS_ASSERT(mDebugGameTalkInterface.Prepare(), "mDebugGameTalkInterface.Prepare()");
+            CGS_ASSERT(mDebugGameTalkInterface.Prepare(), CgsDev::Assert::MessageAt("mDebugGameTalkInterface.Prepare()", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 519));
             // fall through
         case E_PREPARE_LIVE_UPDATE:
             mePrepareStage = E_PREPARE_LIVE_UPDATE;
@@ -515,7 +516,7 @@ namespace BrnResource
     bool GameDataModule::PrepareAttribSysSchemaResource(CgsModule::IOBufferStack* lpInputStack,
         CgsModule::IOBufferStack* lpOutputStack, CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer)
     {
-        CGS_ASSERT(lpAttribModuleInputBuffer != 0, "lpAttribModuleInputBuffer != NULL");
+        CGS_ASSERT(lpAttribModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpAttribModuleInputBuffer != NULL", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 1481));
         CgsResource::ResourceIO::InputBuffer* lpResourceInput = 0;
         lpInputStack->CreateIOBuffer(&lpResourceInput, "Resource");
         lpResourceInput->LockForWrite();
@@ -542,7 +543,7 @@ namespace BrnResource
             lpInputStack->DestroyIOBuffer(&lpResourceInput);
             return true;
         default:
-            CGS_ASSERT(false, "Invalid resource prepare stage.\n");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid resource prepare stage.\n", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 1534));
             break;
         }
         lpResourceInput->UnlockForWrite();
@@ -1308,7 +1309,7 @@ namespace BrnResource
                 static_cast<const GameDataIO::SwapInCollisionWorldRequest*>(lpEvent));
             break;
         default:
-            CGS_ASSERT(false, "Invalid event id\n");   // X360 line 2791
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid event id\n", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 2791));   // X360 line 2791
             break;
         }
     }
@@ -1711,7 +1712,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
             const VehicleListEntry* lpVehicleListEntry =
                 mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
-            CGS_ASSERT(lpVehicleListEntry != 0, "lpVehicleListEntry");   // X360 line 3956
+            CGS_ASSERT(lpVehicleListEntry != 0, CgsDev::Assert::MessageAt("lpVehicleListEntry", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3956));   // X360 line 3956
             if (lpVehicleListEntry == 0)
                 return;   // [marked deviation] the X360 assert is non-fatal and the next
                           // load would fault on the null entry; guard the host instead.
@@ -1800,8 +1801,8 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         {
             CGS_ASSERT(strstr(lacVehicleID, "VEH_") != 0, "strstr( lacVehicleID, \"VEH_\" )");
             lpVehicle = mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
-            CGS_ASSERT(lpVehicle != 0, "lpVehicleListEntry");
-            CGS_ASSERT(muLoadedSoundBundlesCount == 2, "muLoadedSoundBundlesCount == 2");
+            CGS_ASSERT(lpVehicle != 0, CgsDev::Assert::MessageAt("lpVehicleListEntry", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 5031));
+            CGS_ASSERT(muLoadedSoundBundlesCount == 2, CgsDev::Assert::MessageAt("muLoadedSoundBundlesCount == 2", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 5034));
         }
         const u32 luBundleCount = lpEvent->meType == E_ASSETSET_SOUND ? 2 : 1;
         for (u32 luBundle = 0; luBundle < luBundleCount; ++luBundle)
@@ -3294,7 +3295,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
             const CgsResource::Events::AcquireResourceResponse* lpResponse,
             CgsAttribSys::AttribSysIO::InputBuffer* lpAttribModuleInputBuffer)
     {
-        CGS_ASSERT(lpAttribModuleInputBuffer != 0, "lpAttribModuleInputBuffer != NULL");   // X360 line 3357
+        CGS_ASSERT(lpAttribModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpAttribModuleInputBuffer != NULL", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3357));   // X360 line 3357
         GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(lpResponse->miEventId)];
         const s32 liSlotIndex = lpResponse->miEventId;
 
@@ -3313,7 +3314,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
                    // type-5 reply routes through ProcessUnregisterVehicleAttribsResponse)
         {
             CGS_ASSERT(lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS,
-                       "lpSlot->mEvent.GetGameDataType() == E_ASSETSET_ATTRIBS");   // line 3542
+                       CgsDev::Assert::MessageAt("lpSlot->mEvent.GetGameDataType() == E_ASSETSET_ATTRIBS", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3542));   // line 3542
             if (lpSlot->mEvent.meType != E_ASSETSET_ATTRIBS)
                 break;
             CgsResource::ResourceHandle lHandle;
@@ -3406,7 +3407,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         }
 
         default:
-            CGS_ASSERT(false, "Invalid event type received\n");   // X360 line 3559
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid event type received\n", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3559));   // X360 line 3559
             break;
         }
         lpAttribModuleInputBuffer->UnlockForWrite();
@@ -3452,7 +3453,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
         if (lpSlot->mEvent.meType == E_ASSETSET_SOUND)
         {
-            CGS_ASSERT(muLoadedSoundBundlesCount != 0, "muLoadedSoundBundlesCount != 0");   // line 3618
+            CGS_ASSERT(muLoadedSoundBundlesCount != 0, CgsDev::Assert::MessageAt("muLoadedSoundBundlesCount != 0", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3618));   // line 3618
             if (muLoadedSoundBundlesCount-- != 1)
                 return;   // more sound bundles still unloading -- keep the slot alive
         }
@@ -3587,7 +3588,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         const s32 liResponseId = lpSlot->miResponseEventId;
         if (liResponseId != 50 && liResponseId != 66)
         {
-            CGS_ASSERT(false, "Invalid event type received\n");   // X360 line 3817
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid event type received\n", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3817));   // X360 line 3817
             return;
         }
         if (lpSlot->mEvent.meType != E_ASSETSET_ATTRIBS)
@@ -3611,7 +3612,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         const s32 liSlotIndex = *reinterpret_cast<const s32*>(lpResponse);
         GameDataEventSlot* lpSlot = &mGameDataEventSlotPool[static_cast<s16>(liSlotIndex)];
         CGS_ASSERT(lpSlot->mEvent.meType == E_ASSETSET_ATTRIBS,
-                   "leBundleAssetSet == E_ASSETSET_ATTRIBS");   // X360 line 3861
+                   CgsDev::Assert::MessageAt("leBundleAssetSet == E_ASSETSET_ATTRIBS", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 3861));   // X360 line 3861
         char lacVehicleID[KI_CGSID_STRING_LEN];
         CgsIDConvertToString(lpSlot->mEvent.mId, lacVehicleID);
         char lacFileName[128];

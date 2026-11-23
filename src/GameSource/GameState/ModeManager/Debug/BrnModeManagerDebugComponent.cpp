@@ -6,9 +6,6 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, u32 luColour, bool lbJustify);
-
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The mode-manager debug menu registers a handful of
 // mode tunables (its own + the mode manager's + some global marked-man tweaks) and an "end event"
 // action with the real CgsDev::DebugComponent debug-menu API (RegisterVariable / SetRange /
@@ -70,13 +67,13 @@ namespace BrnGameState
             if (lpCurrentMode != 0)
             {
                 lStream << lpCurrentMode->GetName() << " state: " << lpCurrentMode->GetCurrentState() << "\n";
-                MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 100.0f,
-                              KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
+                lpRender->DrawText(lStream.GetBuffer(), KF_X, 100.0f,
+                              KF_TEXT_SCALE, KU_TEXT_COLOUR);
 
                 lStream.Reset();
                 lStream << "Traffic level: " << mpModeManager->mCurrentGameModeParams.mfTrafficDensityScale;
-                MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 120.0f,
-                              KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
+                lpRender->DrawText(lStream.GetBuffer(), KF_X, 120.0f,
+                              KF_TEXT_SCALE, KU_TEXT_COLOUR);
 
                 lStream.Reset();
                 lStream << "Rank ratio: " << mpModeManager->mCurrentGameModeParams.mfProgressionRankAsRatio;
@@ -86,8 +83,8 @@ namespace BrnGameState
                 lStream << "No mode";
             }
 
-            MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 140.0f,
-                          KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
+            lpRender->DrawText(lStream.GetBuffer(), KF_X, 140.0f,
+                          KF_TEXT_SCALE, KU_TEXT_COLOUR);
 
             const GameStateModuleIO::EGameModeType leMode = mpModeManager->meCurrentGameModeType;
             bool lbDrawModeLine = false;
@@ -119,8 +116,8 @@ namespace BrnGameState
 
             if (lbDrawModeLine)
             {
-                MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 160.0f,
-                              KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
+                lpRender->DrawText(lStream.GetBuffer(), KF_X, 160.0f,
+                              KF_TEXT_SCALE, KU_TEXT_COLOUR);
             }
 
             if (leMode == GameStateModuleIO::E_MODE_ONLINE_FUGITIVE ||
@@ -138,8 +135,8 @@ namespace BrnGameState
                         lStream << lpCarData->GetScoreData()->GetOnlineStuntScore() << " ";
                     }
                 }
-                MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 160.0f,
-                              KF_TEXT_SCALE, KU_TEXT_COLOUR, false);
+                lpRender->DrawText(lStream.GetBuffer(), KF_X, 160.0f,
+                              KF_TEXT_SCALE, KU_TEXT_COLOUR);
             }
         }
 

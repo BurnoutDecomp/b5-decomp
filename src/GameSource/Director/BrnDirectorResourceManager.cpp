@@ -45,6 +45,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"// AcquireResourceResponse
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysModuleIO.h" // AttribSysRequestInterface<512>::RegisterVault
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"             // the one-shot bank diagnostic
 #include "GameSource/AttribSys/Generated/classes/aftertouchcam.h"      // the mAfterTouchCam class key
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"  // Attrib::StringToKey
@@ -253,7 +254,7 @@ const Attrib::Gen::shotgroup& DirectorResourceManager::GetEventIntroShots(
         break;
 
     default:    // includes E_MODE_ELIMINATOR (6) -- see the note above
-        CGS_ASSERT(false, "Invalid Event Requested");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Event Requested", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 615));
         break;
     }
 
@@ -319,7 +320,7 @@ const Attrib::Gen::shotgroup& DirectorResourceManager::GetEventCompletionShots(
         if (liFinishLineID == KI_FINISH_LINE_SOUTH_WEST) return mRaceFinishSouthWest;  // +920
         if (liFinishLineID == KI_FINISH_LINE_WEST)       return mRaceFinishWest;       // +936
         if (liFinishLineID == KI_FINISH_LINE_NORTH_WEST) return mRaceFinishNorthWest;  // +952
-        CGS_ASSERT(false, "Unknown finish line");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown finish line", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 704));
         break;
 
     default:    // every other mode -- no assert here, see the note above
@@ -563,26 +564,26 @@ bool DirectorResourceManager::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
         mOnlineLobbyStartGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("480584"), 0);   // +696
         mPursuitStartGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("474389"), 0);   // +712
         mStuntRaceStartGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("559418"), 0);   // +728
-        CGS_ASSERT(mStuntRaceStartGroup.IsValid(), "mStuntRaceStartGroup.IsValid()");   // cpp:181
-        CGS_ASSERT(mStuntRaceStartGroup.Num_ShotList() > 0, "mStuntRaceStartGroup.Num_ShotList() > 0");   // cpp:182
+        CGS_ASSERT(mStuntRaceStartGroup.IsValid(), CgsDev::Assert::MessageAt("mStuntRaceStartGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 181));   // cpp:181
+        CGS_ASSERT(mStuntRaceStartGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mStuntRaceStartGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 182));   // cpp:182
         mMarkedManStartGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("559367"), 0);   // +744
-        CGS_ASSERT(mMarkedManStartGroup.IsValid(), "mMarkedManStartGroup.IsValid()");   // cpp:185
-        CGS_ASSERT(mMarkedManStartGroup.Num_ShotList() > 0, "mMarkedManStartGroup.Num_ShotList() > 0");   // cpp:186
+        CGS_ASSERT(mMarkedManStartGroup.IsValid(), CgsDev::Assert::MessageAt("mMarkedManStartGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 185));   // cpp:185
+        CGS_ASSERT(mMarkedManStartGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mMarkedManStartGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 186));   // cpp:186
         mBurningRouteFinishGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("480563"), 0);   // +760
         mMarkedManFinishGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("480562"), 0);   // +776
         mRaceFinishGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("476830"), 0);   // +792
         mRoadRageFinishGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("561160"), 0);   // +808
         mStuntFinishGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("480560"), 0);   // +824
-        CGS_ASSERT(mBurningRouteFinishGroup.IsValid(), "mBurningRouteFinishGroup.IsValid()");   // cpp:194
-        CGS_ASSERT(mMarkedManFinishGroup.IsValid(), "mMarkedManFinishGroup.IsValid()");   // cpp:195
-        CGS_ASSERT(mRaceFinishGroup.IsValid(), "mRaceFinishGroup.IsValid()");   // cpp:196
-        CGS_ASSERT(mRoadRageFinishGroup.IsValid(), "mRoadRageFinishGroup.IsValid()");   // cpp:197
-        CGS_ASSERT(mStuntFinishGroup.IsValid(), "mStuntFinishGroup.IsValid()");   // cpp:198
-        CGS_ASSERT(mBurningRouteFinishGroup.Num_ShotList() > 0, "mBurningRouteFinishGroup.Num_ShotList() > 0");   // cpp:200
-        CGS_ASSERT(mMarkedManFinishGroup.Num_ShotList() > 0, "mMarkedManFinishGroup.Num_ShotList() > 0");   // cpp:201
-        CGS_ASSERT(mRaceFinishGroup.Num_ShotList() > 0, "mRaceFinishGroup.Num_ShotList() > 0");   // cpp:202
-        CGS_ASSERT(mRoadRageFinishGroup.Num_ShotList() > 0, "mRoadRageFinishGroup.Num_ShotList() > 0");   // cpp:203
-        CGS_ASSERT(mStuntFinishGroup.Num_ShotList() > 0, "mStuntFinishGroup.Num_ShotList() > 0");   // cpp:204
+        CGS_ASSERT(mBurningRouteFinishGroup.IsValid(), CgsDev::Assert::MessageAt("mBurningRouteFinishGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 194));   // cpp:194
+        CGS_ASSERT(mMarkedManFinishGroup.IsValid(), CgsDev::Assert::MessageAt("mMarkedManFinishGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 195));   // cpp:195
+        CGS_ASSERT(mRaceFinishGroup.IsValid(), CgsDev::Assert::MessageAt("mRaceFinishGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 196));   // cpp:196
+        CGS_ASSERT(mRoadRageFinishGroup.IsValid(), CgsDev::Assert::MessageAt("mRoadRageFinishGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 197));   // cpp:197
+        CGS_ASSERT(mStuntFinishGroup.IsValid(), CgsDev::Assert::MessageAt("mStuntFinishGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 198));   // cpp:198
+        CGS_ASSERT(mBurningRouteFinishGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mBurningRouteFinishGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 200));   // cpp:200
+        CGS_ASSERT(mMarkedManFinishGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mMarkedManFinishGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 201));   // cpp:201
+        CGS_ASSERT(mRaceFinishGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mRaceFinishGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 202));   // cpp:202
+        CGS_ASSERT(mRoadRageFinishGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mRoadRageFinishGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 203));   // cpp:203
+        CGS_ASSERT(mStuntFinishGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mStuntFinishGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 204));   // cpp:204
         mRaceFinishNorth = Attrib::Gen::shotgroup(Attrib::StringToKey("561973"), 0);   // +840
         mRaceFinishNorthEast = Attrib::Gen::shotgroup(Attrib::StringToKey("561960"), 0);   // +856
         mRaceFinishEast = Attrib::Gen::shotgroup(Attrib::StringToKey("561961"), 0);   // +872
@@ -591,14 +592,14 @@ bool DirectorResourceManager::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
         mRaceFinishSouthWest = Attrib::Gen::shotgroup(Attrib::StringToKey("561964"), 0);   // +920
         mRaceFinishWest = Attrib::Gen::shotgroup(Attrib::StringToKey("561965"), 0);   // +936
         mRaceFinishNorthWest = Attrib::Gen::shotgroup(Attrib::StringToKey("561972"), 0);   // +952
-        CGS_ASSERT(mRaceFinishNorth.IsValid(), "mRaceFinishNorth.IsValid()");   // cpp:215
-        CGS_ASSERT(mRaceFinishNorthEast.IsValid(), "mRaceFinishNorthEast.IsValid()");   // cpp:216
-        CGS_ASSERT(mRaceFinishEast.IsValid(), "mRaceFinishEast.IsValid()");   // cpp:217
-        CGS_ASSERT(mRaceFinishSouthEast.IsValid(), "mRaceFinishSouthEast.IsValid()");   // cpp:218
-        CGS_ASSERT(mRaceFinishSouth.IsValid(), "mRaceFinishSouth.IsValid()");   // cpp:219
-        CGS_ASSERT(mRaceFinishSouthWest.IsValid(), "mRaceFinishSouthWest.IsValid()");   // cpp:220
-        CGS_ASSERT(mRaceFinishWest.IsValid(), "mRaceFinishWest.IsValid()");   // cpp:221
-        CGS_ASSERT(mRaceFinishNorthWest.IsValid(), "mRaceFinishNorthWest.IsValid()");   // cpp:222
+        CGS_ASSERT(mRaceFinishNorth.IsValid(), CgsDev::Assert::MessageAt("mRaceFinishNorth.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 215));   // cpp:215
+        CGS_ASSERT(mRaceFinishNorthEast.IsValid(), CgsDev::Assert::MessageAt("mRaceFinishNorthEast.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 216));   // cpp:216
+        CGS_ASSERT(mRaceFinishEast.IsValid(), CgsDev::Assert::MessageAt("mRaceFinishEast.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 217));   // cpp:217
+        CGS_ASSERT(mRaceFinishSouthEast.IsValid(), CgsDev::Assert::MessageAt("mRaceFinishSouthEast.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 218));   // cpp:218
+        CGS_ASSERT(mRaceFinishSouth.IsValid(), CgsDev::Assert::MessageAt("mRaceFinishSouth.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 219));   // cpp:219
+        CGS_ASSERT(mRaceFinishSouthWest.IsValid(), CgsDev::Assert::MessageAt("mRaceFinishSouthWest.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 220));   // cpp:220
+        CGS_ASSERT(mRaceFinishWest.IsValid(), CgsDev::Assert::MessageAt("mRaceFinishWest.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 221));   // cpp:221
+        CGS_ASSERT(mRaceFinishNorthWest.IsValid(), CgsDev::Assert::MessageAt("mRaceFinishNorthWest.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 222));   // cpp:222
         mDriveThruGasStationGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("428141"), 0);   // +984
         mDriveThruBodyShopGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("428144"), 0);   // +1000
         mDriveThruTyreShopGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("428142"), 0);   // +1016
@@ -606,50 +607,50 @@ bool DirectorResourceManager::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
         mDriveThruTuningShopGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("428140"), 0);   // +1048
         mShakeAnimsGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("428114"), 0);   // +1304
         mCarSelectMotorCity = Attrib::Gen::shotgroup(Attrib::StringToKey("432577"), 0);   // +1064
-        CGS_ASSERT(mCarSelectMotorCity.IsValid(), "mCarSelectMotorCity.IsValid()");   // cpp:233
-        CGS_ASSERT(mCarSelectMotorCity.Num_ShotList() >= 4, "mCarSelectMotorCity.Num_ShotList() >= 4");   // cpp:234
+        CGS_ASSERT(mCarSelectMotorCity.IsValid(), CgsDev::Assert::MessageAt("mCarSelectMotorCity.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 233));   // cpp:233
+        CGS_ASSERT(mCarSelectMotorCity.Num_ShotList() >= 4, CgsDev::Assert::MessageAt("mCarSelectMotorCity.Num_ShotList() >= 4", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 234));   // cpp:234
         mCarSelectMotorCityRivalUnlock = Attrib::Gen::shotgroup(Attrib::StringToKey("558663"), 0);   // +1080
-        CGS_ASSERT(mCarSelectMotorCityRivalUnlock.IsValid(), "mCarSelectMotorCityRivalUnlock.IsValid()");   // cpp:237
-        CGS_ASSERT(mCarSelectMotorCityRivalUnlock.Num_ShotList() >= 2, "mCarSelectMotorCityRivalUnlock.Num_ShotList() >= 2");   // cpp:238
+        CGS_ASSERT(mCarSelectMotorCityRivalUnlock.IsValid(), CgsDev::Assert::MessageAt("mCarSelectMotorCityRivalUnlock.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 237));   // cpp:237
+        CGS_ASSERT(mCarSelectMotorCityRivalUnlock.Num_ShotList() >= 2, CgsDev::Assert::MessageAt("mCarSelectMotorCityRivalUnlock.Num_ShotList() >= 2", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 238));   // cpp:238
         mCarSelectWestAcres = Attrib::Gen::shotgroup(Attrib::StringToKey("450907"), 0);   // +1096
-        CGS_ASSERT(mCarSelectWestAcres.IsValid(), "mCarSelectWestAcres.IsValid()");   // cpp:241
-        CGS_ASSERT(mCarSelectWestAcres.Num_ShotList() >= 4, "mCarSelectWestAcres.Num_ShotList() >= 4");   // cpp:242
+        CGS_ASSERT(mCarSelectWestAcres.IsValid(), CgsDev::Assert::MessageAt("mCarSelectWestAcres.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 241));   // cpp:241
+        CGS_ASSERT(mCarSelectWestAcres.Num_ShotList() >= 4, CgsDev::Assert::MessageAt("mCarSelectWestAcres.Num_ShotList() >= 4", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 242));   // cpp:242
         mCarSelectWestAcresRivalUnlock = Attrib::Gen::shotgroup(Attrib::StringToKey("558657"), 0);   // +1112
-        CGS_ASSERT(mCarSelectWestAcresRivalUnlock.IsValid(), "mCarSelectWestAcresRivalUnlock.IsValid()");   // cpp:245
-        CGS_ASSERT(mCarSelectWestAcresRivalUnlock.Num_ShotList() >= 2, "mCarSelectWestAcresRivalUnlock.Num_ShotList() >= 2");   // cpp:246
+        CGS_ASSERT(mCarSelectWestAcresRivalUnlock.IsValid(), CgsDev::Assert::MessageAt("mCarSelectWestAcresRivalUnlock.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 245));   // cpp:245
+        CGS_ASSERT(mCarSelectWestAcresRivalUnlock.Num_ShotList() >= 2, CgsDev::Assert::MessageAt("mCarSelectWestAcresRivalUnlock.Num_ShotList() >= 2", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 246));   // cpp:246
         mCarSelectSouthBay = Attrib::Gen::shotgroup(Attrib::StringToKey("450916"), 0);   // +1128
-        CGS_ASSERT(mCarSelectSouthBay.IsValid(), "mCarSelectSouthBay.IsValid()");   // cpp:249
-        CGS_ASSERT(mCarSelectSouthBay.Num_ShotList() >= 4, "mCarSelectSouthBay.Num_ShotList() >= 4");   // cpp:250
+        CGS_ASSERT(mCarSelectSouthBay.IsValid(), CgsDev::Assert::MessageAt("mCarSelectSouthBay.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 249));   // cpp:249
+        CGS_ASSERT(mCarSelectSouthBay.Num_ShotList() >= 4, CgsDev::Assert::MessageAt("mCarSelectSouthBay.Num_ShotList() >= 4", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 250));   // cpp:250
         mCarSelectSouthBayRivalUnlock = Attrib::Gen::shotgroup(Attrib::StringToKey("558658"), 0);   // +1144
-        CGS_ASSERT(mCarSelectSouthBayRivalUnlock.IsValid(), "mCarSelectSouthBayRivalUnlock.IsValid()");   // cpp:253
-        CGS_ASSERT(mCarSelectSouthBayRivalUnlock.Num_ShotList() >= 2, "mCarSelectSouthBayRivalUnlock.Num_ShotList() >= 2");   // cpp:254
+        CGS_ASSERT(mCarSelectSouthBayRivalUnlock.IsValid(), CgsDev::Assert::MessageAt("mCarSelectSouthBayRivalUnlock.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 253));   // cpp:253
+        CGS_ASSERT(mCarSelectSouthBayRivalUnlock.Num_ShotList() >= 2, CgsDev::Assert::MessageAt("mCarSelectSouthBayRivalUnlock.Num_ShotList() >= 2", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 254));   // cpp:254
         mCarSelectHeartbreak = Attrib::Gen::shotgroup(Attrib::StringToKey("451080"), 0);   // +1160
-        CGS_ASSERT(mCarSelectHeartbreak.IsValid(), "mCarSelectHeartbreak.IsValid()");   // cpp:257
-        CGS_ASSERT(mCarSelectHeartbreak.Num_ShotList() >= 4, "mCarSelectHeartbreak.Num_ShotList() >= 4");   // cpp:258
+        CGS_ASSERT(mCarSelectHeartbreak.IsValid(), CgsDev::Assert::MessageAt("mCarSelectHeartbreak.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 257));   // cpp:257
+        CGS_ASSERT(mCarSelectHeartbreak.Num_ShotList() >= 4, CgsDev::Assert::MessageAt("mCarSelectHeartbreak.Num_ShotList() >= 4", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 258));   // cpp:258
         mCarSelectHeartbreakRivalUnlock = Attrib::Gen::shotgroup(Attrib::StringToKey("558660"), 0);   // +1176
-        CGS_ASSERT(mCarSelectHeartbreakRivalUnlock.IsValid(), "mCarSelectHeartbreakRivalUnlock.IsValid()");   // cpp:261
-        CGS_ASSERT(mCarSelectHeartbreakRivalUnlock.Num_ShotList() >= 2, "mCarSelectHeartbreakRivalUnlock.Num_ShotList() >= 2");   // cpp:262
+        CGS_ASSERT(mCarSelectHeartbreakRivalUnlock.IsValid(), CgsDev::Assert::MessageAt("mCarSelectHeartbreakRivalUnlock.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 261));   // cpp:261
+        CGS_ASSERT(mCarSelectHeartbreakRivalUnlock.Num_ShotList() >= 2, CgsDev::Assert::MessageAt("mCarSelectHeartbreakRivalUnlock.Num_ShotList() >= 2", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 262));   // cpp:262
         mCarSelectLowerPeaks = Attrib::Gen::shotgroup(Attrib::StringToKey("450948"), 0);   // +1192
-        CGS_ASSERT(mCarSelectLowerPeaks.IsValid(), "mCarSelectLowerPeaks.IsValid()");   // cpp:265
-        CGS_ASSERT(mCarSelectLowerPeaks.Num_ShotList() >= 4, "mCarSelectLowerPeaks.Num_ShotList() >= 4");   // cpp:266
+        CGS_ASSERT(mCarSelectLowerPeaks.IsValid(), CgsDev::Assert::MessageAt("mCarSelectLowerPeaks.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 265));   // cpp:265
+        CGS_ASSERT(mCarSelectLowerPeaks.Num_ShotList() >= 4, CgsDev::Assert::MessageAt("mCarSelectLowerPeaks.Num_ShotList() >= 4", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 266));   // cpp:266
         mCarSelectLowerPeaksRivalUnlock = Attrib::Gen::shotgroup(Attrib::StringToKey("558659"), 0);   // +1208
-        CGS_ASSERT(mCarSelectLowerPeaksRivalUnlock.IsValid(), "mCarSelectLowerPeaksRivalUnlock.IsValid()");   // cpp:269
-        CGS_ASSERT(mCarSelectLowerPeaksRivalUnlock.Num_ShotList() >= 2, "mCarSelectLowerPeaksRivalUnlock.Num_ShotList() >= 2");   // cpp:270
+        CGS_ASSERT(mCarSelectLowerPeaksRivalUnlock.IsValid(), CgsDev::Assert::MessageAt("mCarSelectLowerPeaksRivalUnlock.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 269));   // cpp:269
+        CGS_ASSERT(mCarSelectLowerPeaksRivalUnlock.Num_ShotList() >= 2, CgsDev::Assert::MessageAt("mCarSelectLowerPeaksRivalUnlock.Num_ShotList() >= 2", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 270));   // cpp:270
         mCarSelectIdle = Attrib::Gen::shotgroup(Attrib::StringToKey("611284"), 0);   // +1224
-        CGS_ASSERT(mCarSelectIdle.IsValid(), "mCarSelectIdle.IsValid()");   // cpp:273
-        CGS_ASSERT(mCarSelectIdle.Num_ShotList() > 0, "mCarSelectIdle.Num_ShotList() >= 1");   // cpp:274
+        CGS_ASSERT(mCarSelectIdle.IsValid(), CgsDev::Assert::MessageAt("mCarSelectIdle.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 273));   // cpp:273
+        CGS_ASSERT(mCarSelectIdle.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mCarSelectIdle.Num_ShotList() >= 1", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 274));   // cpp:274
         mCarSelectOutro = Attrib::Gen::shotgroup(Attrib::StringToKey("611285"), 0);   // +1240
-        CGS_ASSERT(mCarSelectOutro.IsValid(), "mCarSelectOutro.IsValid()");   // cpp:277
-        CGS_ASSERT(mCarSelectOutro.Num_ShotList() > 0, "mCarSelectOutro.Num_ShotList() >= 1");   // cpp:278
+        CGS_ASSERT(mCarSelectOutro.IsValid(), CgsDev::Assert::MessageAt("mCarSelectOutro.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 277));   // cpp:277
+        CGS_ASSERT(mCarSelectOutro.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mCarSelectOutro.Num_ShotList() >= 1", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 278));   // cpp:278
         mCarUnlock = Attrib::Gen::shotgroup(Attrib::StringToKey("553098"), 0);   // +1256
-        CGS_ASSERT(mCarUnlock.IsValid(), "mCarUnlock.IsValid()");   // cpp:281
-        CGS_ASSERT(mCarUnlock.Num_ShotList() > 0, "mCarUnlock.Num_ShotList() > 0");   // cpp:282
+        CGS_ASSERT(mCarUnlock.IsValid(), CgsDev::Assert::MessageAt("mCarUnlock.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 281));   // cpp:281
+        CGS_ASSERT(mCarUnlock.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mCarUnlock.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 282));   // cpp:282
         mGameIntroGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("606002"), 0);   // +1272
-        CGS_ASSERT(mGameIntroGroup.IsValid(), "mGameIntroGroup.IsValid()");   // cpp:285
-        CGS_ASSERT(mGameIntroGroup.Num_ShotList() > 0, "mGameIntroGroup.Num_ShotList() > 0");   // cpp:286
+        CGS_ASSERT(mGameIntroGroup.IsValid(), CgsDev::Assert::MessageAt("mGameIntroGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 285));   // cpp:285
+        CGS_ASSERT(mGameIntroGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mGameIntroGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 286));   // cpp:286
         mBurnoutLicense = Attrib::Gen::shotgroup(Attrib::StringToKey("605835"), 0);   // +1288
-        CGS_ASSERT(mBurnoutLicense.IsValid(), "mBurnoutLicense.IsValid()");   // cpp:289
-        CGS_ASSERT(mBurnoutLicense.Num_ShotList() > 0, "mBurnoutLicense.Num_ShotList() > 0");   // cpp:290
+        CGS_ASSERT(mBurnoutLicense.IsValid(), CgsDev::Assert::MessageAt("mBurnoutLicense.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 289));   // cpp:289
+        CGS_ASSERT(mBurnoutLicense.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mBurnoutLicense.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 290));   // cpp:290
         mJumpRig = Attrib::Gen::shotgroup(Attrib::StringToKey("440805"), 0);   // +1320
         mHardStopWorldLeft = Attrib::Gen::shotgroup(Attrib::StringToKey("461063"), 0);   // +1336
         mHardStopWorldRight = Attrib::Gen::shotgroup(Attrib::StringToKey("461057"), 0);   // +1352
@@ -661,17 +662,17 @@ bool DirectorResourceManager::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
         mTakedown = Attrib::Gen::shotgroup(Attrib::StringToKey("475241"), 0);   // +1528
         mCrashbreaker = Attrib::Gen::shotgroup(Attrib::StringToKey("478055"), 0);   // +1544
         mTakendown = Attrib::Gen::shotgroup(Attrib::StringToKey("575796"), 0);   // +1560
-        CGS_ASSERT(mTakendown.IsValid(), "mTakendown.IsValid()");   // cpp:309
-        CGS_ASSERT(mTakendown.Num_ShotList() > 0, "mTakendown.Num_ShotList() > 0");   // cpp:310
+        CGS_ASSERT(mTakendown.IsValid(), CgsDev::Assert::MessageAt("mTakendown.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 309));   // cpp:309
+        CGS_ASSERT(mTakendown.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mTakendown.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 310));   // cpp:310
         mFastCrashShotGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("494628"), 0);   // +1400
-        CGS_ASSERT(mFastCrashShotGroup.IsValid(), "mFastCrashShotGroup.IsValid()");   // cpp:313
-        CGS_ASSERT(mFastCrashShotGroup.Num_ShotList() > 0, "mFastCrashShotGroup.Num_ShotList() > 0");   // cpp:314
+        CGS_ASSERT(mFastCrashShotGroup.IsValid(), CgsDev::Assert::MessageAt("mFastCrashShotGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 313));   // cpp:313
+        CGS_ASSERT(mFastCrashShotGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mFastCrashShotGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 314));   // cpp:314
         mNormalCrashShotGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("543590"), 0);   // +1416
-        CGS_ASSERT(mNormalCrashShotGroup.IsValid(), "mNormalCrashShotGroup.IsValid()");   // cpp:317
-        CGS_ASSERT(mNormalCrashShotGroup.Num_ShotList() > 0, "mNormalCrashShotGroup.Num_ShotList() > 0");   // cpp:318
+        CGS_ASSERT(mNormalCrashShotGroup.IsValid(), CgsDev::Assert::MessageAt("mNormalCrashShotGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 317));   // cpp:317
+        CGS_ASSERT(mNormalCrashShotGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mNormalCrashShotGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 318));   // cpp:318
         mSlowCrashShotGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("542963"), 0);   // +1432
-        CGS_ASSERT(mSlowCrashShotGroup.IsValid(), "mSlowCrashShotGroup.IsValid()");   // cpp:321
-        CGS_ASSERT(mSlowCrashShotGroup.Num_ShotList() > 0, "mSlowCrashShotGroup.Num_ShotList() > 0");   // cpp:322
+        CGS_ASSERT(mSlowCrashShotGroup.IsValid(), CgsDev::Assert::MessageAt("mSlowCrashShotGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 321));   // cpp:321
+        CGS_ASSERT(mSlowCrashShotGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mSlowCrashShotGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 322));   // cpp:322
         mRankUpGroup = Attrib::Gen::shotgroup(Attrib::StringToKey("544056"), 0);   // +968
         CGS_ASSERT(mRankUpGroup.IsValid(), "mRankUpGroup.IsValid()");   // cpp:325
         CGS_ASSERT(mRankUpGroup.Num_ShotList() > 0, "mRankUpGroup.Num_ShotList() > 0");   // cpp:326
@@ -699,42 +700,42 @@ bool DirectorResourceManager::Prepare(DirectorIO::OutputBuffer* lpOutputBuffer,
 
         mTestbed = Attrib::Gen::shotgroup(Attrib::StringToKey("535488"), 0);   // +1576
         mTestbed2 = Attrib::Gen::shotgroup(Attrib::StringToKey("568320"), 0);   // +1592
-        CGS_ASSERT(mTestbed.IsValid(), "mTestbed.IsValid()");   // cpp:337
-        CGS_ASSERT(mTestbed2.IsValid(), "mTestbed2.IsValid()");   // cpp:338
-        CGS_ASSERT(mRoadRageStartGroup.IsValid(), "mRoadRageStartGroup.IsValid()");   // cpp:342
-        CGS_ASSERT(mRaceStartGroup.IsValid(), "mRaceStartGroup.IsValid()");   // cpp:343
-        CGS_ASSERT(mRaceStartRivalInFrontGroup.IsValid(), "mRaceStartRivalInFrontGroup.IsValid()");   // cpp:344
-        CGS_ASSERT(mBurningRouteStartGroup.IsValid(), "mBurningRouteStartGroup.IsValid()");   // cpp:345
-        CGS_ASSERT(mSurvivorStartGroup.IsValid(), "mSurvivorStartGroup.IsValid()");   // cpp:346
-        CGS_ASSERT(mEliminatorStartGroup.IsValid(), "mEliminatorStartGroup.IsValid()");   // cpp:347
-        CGS_ASSERT(mTrafficAttackStartGroup.IsValid(), "mTrafficAttackStartGroup.IsValid()");   // cpp:348
-        CGS_ASSERT(mOnlineRaceStart.IsValid(), "mOnlineRaceStart.IsValid()");   // cpp:349
-        CGS_ASSERT(mOnlineLobbyStartGroup.IsValid(), "mOnlineLobbyStartGroup.IsValid()");   // cpp:350
-        CGS_ASSERT(mPursuitStartGroup.IsValid(), "mPursuitStartGroup.IsValid()");   // cpp:351
-        CGS_ASSERT(mDriveThruGasStationGroup.IsValid(), "mDriveThruGasStationGroup.IsValid()");   // cpp:353
-        CGS_ASSERT(mDriveThruBodyShopGroup.IsValid(), "mDriveThruBodyShopGroup.IsValid()");   // cpp:354
-        CGS_ASSERT(mDriveThruTyreShopGroup.IsValid(), "mDriveThruTyreShopGroup.IsValid()");   // cpp:355
-        CGS_ASSERT(mDriveThruAutoPartsGroup.IsValid(), "mDriveThruAutoPartsGroup.IsValid()");   // cpp:356
-        CGS_ASSERT(mDriveThruTuningShopGroup.IsValid(), "mDriveThruTuningShopGroup.IsValid()");   // cpp:357
-        CGS_ASSERT(mShakeAnimsGroup.IsValid(), "mShakeAnimsGroup.IsValid()");   // cpp:359
-        CGS_ASSERT(mJumpRig.IsValid(), "mJumpRig.IsValid()");   // cpp:360
-        CGS_ASSERT(mHardStopWorldLeft.IsValid(), "mHardStopWorldLeft.IsValid()");   // cpp:361
-        CGS_ASSERT(mHardStopWorldRight.IsValid(), "mHardStopWorldRight.IsValid()");   // cpp:362
-        CGS_ASSERT(mHardStopCarLeft.IsValid(), "mHardStopCarLeft.IsValid()");   // cpp:363
-        CGS_ASSERT(mHardStopCarRight.IsValid(), "mHardStopCarRight.IsValid()");   // cpp:364
-        CGS_ASSERT(mAfterCrash.IsValid(), "mAfterCrash.IsValid()");   // cpp:365
-        CGS_ASSERT(mAfterCrashSafe.IsValid(), "mAfterCrashSafe.IsValid()");   // cpp:366
-        CGS_ASSERT(mFailsafe.IsValid(), "mFailsafe.IsValid()");   // cpp:367
-        CGS_ASSERT(mCrashbreaker.IsValid(), "mCrashbreaker.IsValid()");   // cpp:368
-        CGS_ASSERT(mRaceStartGroup.Num_ShotList() > 0, "mRaceStartGroup.Num_ShotList() > 0");   // cpp:371  [v149 == &mRaceStartGroup]
-        CGS_ASSERT(mRaceStartRivalInFrontGroup.Num_ShotList() > 0, "mRaceStartRivalInFrontGroup.Num_ShotList() > 0");   // cpp:372
-        CGS_ASSERT(mOnlineRaceStart.Num_ShotList() > 0, "mOnlineRaceStart.Num_ShotList() > 0");   // cpp:373
-        CGS_ASSERT(mJumpRig.Num_ShotList() > 0, "mJumpRig.Num_ShotList() > 0");   // cpp:374
-        CGS_ASSERT(mAfterCrash.Num_ShotList() > 0, "mAfterCrash.Num_ShotList() > 0");   // cpp:375
-        CGS_ASSERT(mAfterCrashSafe.Num_ShotList() > 0, "mAfterCrashSafe.Num_ShotList() > 0");   // cpp:376
-        CGS_ASSERT(mFailsafe.Num_ShotList() > 0, "mFailsafe.Num_ShotList() > 0");   // cpp:377
-        CGS_ASSERT(mCrashbreaker.Num_ShotList() > 0, "mCrashbreaker.Num_ShotList() > 0");   // cpp:378
-        CGS_ASSERT(mPursuitStartGroup.Num_ShotList() > 0, "mPursuitStartGroup.Num_ShotList() > 0");   // cpp:379
+        CGS_ASSERT(mTestbed.IsValid(), CgsDev::Assert::MessageAt("mTestbed.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 337));   // cpp:337
+        CGS_ASSERT(mTestbed2.IsValid(), CgsDev::Assert::MessageAt("mTestbed2.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 338));   // cpp:338
+        CGS_ASSERT(mRoadRageStartGroup.IsValid(), CgsDev::Assert::MessageAt("mRoadRageStartGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 342));   // cpp:342
+        CGS_ASSERT(mRaceStartGroup.IsValid(), CgsDev::Assert::MessageAt("mRaceStartGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 343));   // cpp:343
+        CGS_ASSERT(mRaceStartRivalInFrontGroup.IsValid(), CgsDev::Assert::MessageAt("mRaceStartRivalInFrontGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 344));   // cpp:344
+        CGS_ASSERT(mBurningRouteStartGroup.IsValid(), CgsDev::Assert::MessageAt("mBurningRouteStartGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 345));   // cpp:345
+        CGS_ASSERT(mSurvivorStartGroup.IsValid(), CgsDev::Assert::MessageAt("mSurvivorStartGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 346));   // cpp:346
+        CGS_ASSERT(mEliminatorStartGroup.IsValid(), CgsDev::Assert::MessageAt("mEliminatorStartGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 347));   // cpp:347
+        CGS_ASSERT(mTrafficAttackStartGroup.IsValid(), CgsDev::Assert::MessageAt("mTrafficAttackStartGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 348));   // cpp:348
+        CGS_ASSERT(mOnlineRaceStart.IsValid(), CgsDev::Assert::MessageAt("mOnlineRaceStart.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 349));   // cpp:349
+        CGS_ASSERT(mOnlineLobbyStartGroup.IsValid(), CgsDev::Assert::MessageAt("mOnlineLobbyStartGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 350));   // cpp:350
+        CGS_ASSERT(mPursuitStartGroup.IsValid(), CgsDev::Assert::MessageAt("mPursuitStartGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 351));   // cpp:351
+        CGS_ASSERT(mDriveThruGasStationGroup.IsValid(), CgsDev::Assert::MessageAt("mDriveThruGasStationGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 353));   // cpp:353
+        CGS_ASSERT(mDriveThruBodyShopGroup.IsValid(), CgsDev::Assert::MessageAt("mDriveThruBodyShopGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 354));   // cpp:354
+        CGS_ASSERT(mDriveThruTyreShopGroup.IsValid(), CgsDev::Assert::MessageAt("mDriveThruTyreShopGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 355));   // cpp:355
+        CGS_ASSERT(mDriveThruAutoPartsGroup.IsValid(), CgsDev::Assert::MessageAt("mDriveThruAutoPartsGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 356));   // cpp:356
+        CGS_ASSERT(mDriveThruTuningShopGroup.IsValid(), CgsDev::Assert::MessageAt("mDriveThruTuningShopGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 357));   // cpp:357
+        CGS_ASSERT(mShakeAnimsGroup.IsValid(), CgsDev::Assert::MessageAt("mShakeAnimsGroup.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 359));   // cpp:359
+        CGS_ASSERT(mJumpRig.IsValid(), CgsDev::Assert::MessageAt("mJumpRig.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 360));   // cpp:360
+        CGS_ASSERT(mHardStopWorldLeft.IsValid(), CgsDev::Assert::MessageAt("mHardStopWorldLeft.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 361));   // cpp:361
+        CGS_ASSERT(mHardStopWorldRight.IsValid(), CgsDev::Assert::MessageAt("mHardStopWorldRight.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 362));   // cpp:362
+        CGS_ASSERT(mHardStopCarLeft.IsValid(), CgsDev::Assert::MessageAt("mHardStopCarLeft.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 363));   // cpp:363
+        CGS_ASSERT(mHardStopCarRight.IsValid(), CgsDev::Assert::MessageAt("mHardStopCarRight.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 364));   // cpp:364
+        CGS_ASSERT(mAfterCrash.IsValid(), CgsDev::Assert::MessageAt("mAfterCrash.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 365));   // cpp:365
+        CGS_ASSERT(mAfterCrashSafe.IsValid(), CgsDev::Assert::MessageAt("mAfterCrashSafe.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 366));   // cpp:366
+        CGS_ASSERT(mFailsafe.IsValid(), CgsDev::Assert::MessageAt("mFailsafe.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 367));   // cpp:367
+        CGS_ASSERT(mCrashbreaker.IsValid(), CgsDev::Assert::MessageAt("mCrashbreaker.IsValid()", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 368));   // cpp:368
+        CGS_ASSERT(mRaceStartGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mRaceStartGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 371));   // cpp:371  [v149 == &mRaceStartGroup]
+        CGS_ASSERT(mRaceStartRivalInFrontGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mRaceStartRivalInFrontGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 372));   // cpp:372
+        CGS_ASSERT(mOnlineRaceStart.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mOnlineRaceStart.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 373));   // cpp:373
+        CGS_ASSERT(mJumpRig.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mJumpRig.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 374));   // cpp:374
+        CGS_ASSERT(mAfterCrash.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mAfterCrash.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 375));   // cpp:375
+        CGS_ASSERT(mAfterCrashSafe.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mAfterCrashSafe.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 376));   // cpp:376
+        CGS_ASSERT(mFailsafe.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mFailsafe.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 377));   // cpp:377
+        CGS_ASSERT(mCrashbreaker.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mCrashbreaker.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 378));   // cpp:378
+        CGS_ASSERT(mPursuitStartGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("mPursuitStartGroup.Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/BrnDirectorResourceManager.cpp", 379));   // cpp:379
         LogShotGroupBankState();
     }
     // fall through

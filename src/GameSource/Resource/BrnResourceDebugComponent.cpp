@@ -7,10 +7,6 @@
 
 #include <cstring>
 
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour,
-                  bool lbCheckScreen);
-
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnResource::DebugComponent::Update           @ 0x82666F38
 //   BrnResource::DebugComponent::RenderHUD        @ 0x82662008
@@ -348,22 +344,22 @@ namespace BrnResource
         const f32 lfColumnGap = 2.0f;
         const f32 lfHeaderScale = lfTextYStep + lfColumnGap;
 
-        MaybeDrawText(lpRender, "Name", lfNameX, lfHeaderY, lfHeaderScale,
-                      guResourceHudTextColour, false);
-        MaybeDrawText(lpRender, "Type", lfTypeX, lfHeaderY, lfHeaderScale,
-                      guResourceHudTextColour, false);
-        MaybeDrawText(lpRender, "MM Size", lfMainSizeX, lfHeaderY, lfHeaderScale,
-                      guResourceHudTextColour, false);
-        MaybeDrawText(lpRender, "MM Curr Used", lfMainCurrentX, lfHeaderY, lfHeaderScale,
-                      guResourceHudTextColour, false);
-        MaybeDrawText(lpRender, "MM Max Used", lfMainPeakX, lfHeaderY, lfHeaderScale,
-                      guResourceHudTextColour, false);
-        MaybeDrawText(lpRender, "VM Size", lfVideoSizeX, lfHeaderY, lfHeaderScale,
-                      guResourceHudTextColour, false);
-        MaybeDrawText(lpRender, "VM Curr Used", lfVideoCurrentX, lfHeaderY, lfHeaderScale,
-                      guResourceHudTextColour, false);
-        MaybeDrawText(lpRender, "VM Max Used", lfVideoPeakX, lfHeaderY, lfHeaderScale,
-                      guResourceHudTextColour, false);
+        lpRender->DrawText("Name", lfNameX, lfHeaderY, lfHeaderScale,
+                      guResourceHudTextColour);
+        lpRender->DrawText("Type", lfTypeX, lfHeaderY, lfHeaderScale,
+                      guResourceHudTextColour);
+        lpRender->DrawText("MM Size", lfMainSizeX, lfHeaderY, lfHeaderScale,
+                      guResourceHudTextColour);
+        lpRender->DrawText("MM Curr Used", lfMainCurrentX, lfHeaderY, lfHeaderScale,
+                      guResourceHudTextColour);
+        lpRender->DrawText("MM Max Used", lfMainPeakX, lfHeaderY, lfHeaderScale,
+                      guResourceHudTextColour);
+        lpRender->DrawText("VM Size", lfVideoSizeX, lfHeaderY, lfHeaderScale,
+                      guResourceHudTextColour);
+        lpRender->DrawText("VM Curr Used", lfVideoCurrentX, lfHeaderY, lfHeaderScale,
+                      guResourceHudTextColour);
+        lpRender->DrawText("VM Max Used", lfVideoPeakX, lfHeaderY, lfHeaderScale,
+                      guResourceHudTextColour);
 
         f32 lfRowY = lfHeaderY + lfTextYStep + 5.0f;
         for (s32 liIndex = 0; liIndex < KI_ALLOCATOR_STATS_ROW_COUNT; ++liIndex)
@@ -372,10 +368,10 @@ namespace BrnResource
             if (lrRow.macName[0] == '\0')
                 continue;
 
-            MaybeDrawText(lpRender, lrRow.macName, lfNameX, lfRowY, lfTextScale,
-                          guResourceHudTextColour, false);
-            MaybeDrawText(lpRender, KAPC_ALLOCATOR_TYPE_NAMES[lrRow.meAllocatorType],
-                          lfTypeX, lfRowY, lfTextScale, guResourceHudTextColour, false);
+            lpRender->DrawText(lrRow.macName, lfNameX, lfRowY, lfTextScale,
+                          guResourceHudTextColour);
+            lpRender->DrawText(KAPC_ALLOCATOR_TYPE_NAMES[lrRow.meAllocatorType],
+                          lfTypeX, lfRowY, lfTextScale, guResourceHudTextColour);
             lpRender->DrawDataSize(lrRow.mMainMemInfo.miSize, lfMainSizeX, lfRowY,
                                    lfTextScale, guResourceHudTextColour);
             lpRender->DrawDataSize(lrRow.mMainMemInfo.miCurrUsed, lfMainCurrentX, lfRowY,

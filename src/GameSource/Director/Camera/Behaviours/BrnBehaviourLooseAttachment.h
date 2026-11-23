@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                          // Vector3
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"         // THE canonical Camera::Behaviour base
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"           // CollisionPolicy(+AttachedToVehicle)
 #include "GameSource/Director/Camera/Utils/BrnPositionLag.h"         // Utils::PositionLag (+ ::Parameters)
@@ -373,7 +374,7 @@ inline void
 BehaviourLooseAttachment::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourLooseAttachment,
-               "lpParameters->GetType() == eBehaviourLooseAttachment");
+               CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourLooseAttachment", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourLooseAttachment.h", 164));
     mpParameters = lpParameters;               // stw r4, +0x324(this)
     SetDebugParametersName(lpParameters->GetDebugName());
 }

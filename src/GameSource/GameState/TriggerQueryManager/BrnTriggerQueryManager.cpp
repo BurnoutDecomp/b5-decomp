@@ -1,4 +1,5 @@
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleOutputInterface.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"
 
@@ -675,10 +676,10 @@ void TriggerQueryManager::SubmitTriggerQueries(
     GameStateModuleIO::OutputBuffer* lpOutput,
     const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface)
 {
-    CGS_ASSERT(lpOutput != NULL, "lpOutput != NULL");
-    CGS_ASSERT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL");
+    CGS_ASSERT(lpOutput != NULL, CgsDev::Assert::MessageAt("lpOutput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 795));
+    CGS_ASSERT(lpActiveRaceCarInterface != NULL, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 796));
     GameStateModuleIO::TriggerQueryInputInterface* lpTriggerInterface = lpOutput->GetTriggerQueryInputInterface();
-    CGS_ASSERT(lpTriggerInterface != NULL, "lpTriggerInterface != NULL");
+    CGS_ASSERT(lpTriggerInterface != NULL, CgsDev::Assert::MessageAt("lpTriggerInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 800));
     for (s32 liCar = static_cast<s32>(lpActiveRaceCarInterface->maCarsInTheRace.GetLength()); liCar > 0; )
     {
         const BrnWorld::RaceCarEntityModuleIO::CarsInTheRaceData& lrCar = lpActiveRaceCarInterface->maCarsInTheRace[--liCar];
@@ -828,13 +829,13 @@ void TriggerQueryManager::PostWorldUpdate(
     using GameStateModuleIO::SoundTriggerAction;
     using BrnWorld::TriggerEntityModuleIO::OutLineTestResultEvent;
     CgsDev::PerfMonCpu::StartMonitor(gsiPostWorldUpdatePM);
-    CGS_ASSERT(lpInput != NULL, "lpInput != NULL");
+    CGS_ASSERT(lpInput != NULL, CgsDev::Assert::MessageAt("lpInput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 408));
     const BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface* lpTriggerResults = lpInput->GetTriggerEntityOutputInterface();
-    CGS_ASSERT(lpTriggerResults != NULL, "lpTriggerResults != NULL");
+    CGS_ASSERT(lpTriggerResults != NULL, CgsDev::Assert::MessageAt("lpTriggerResults != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 412));
     const BrnWorld::TriggerEntityModuleIO::TriggerEntityModuleOutputInterface* lpTriggerResultQueue = lpTriggerResults;
-    CGS_ASSERT(lpTriggerResultQueue != NULL, "lpTriggerResultQueue != NULL");
+    CGS_ASSERT(lpTriggerResultQueue != NULL, CgsDev::Assert::MessageAt("lpTriggerResultQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 416));
     const RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface = lpInput->GetActiveRaceCarOutputInterface();
-    CGS_ASSERT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL");
+    CGS_ASSERT(lpActiveRaceCarInterface != NULL, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TriggerQueryManager/BrnTriggerQueryManager.cpp", 419));
     // 82386CD8..CEC: these are results for this frame, including an empty one.
     lpModeManager->ClearModeStartRegion();
     mbPlayerInTrafficLightRegion = false;

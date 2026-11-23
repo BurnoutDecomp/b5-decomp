@@ -38,9 +38,6 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h"      // DebugPrinter::Print
 #include "SDKs/Packages/ICE/ICEData.hpp"                                          // ICE::ICETakeData::GetName
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp";
-
 namespace BrnDirector
 {
     ArbStateTestbed* ArbStateTestbed::spTestbed        = 0;
@@ -241,7 +238,7 @@ namespace BrnDirector
             }
             else
             {
-                CGS_ASSERT(false, "No ShotRef or Parameters!");
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("No ShotRef or Parameters!", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp", 233));
             }
 
             mfRunningTime = 0.0f;
@@ -251,7 +248,7 @@ namespace BrnDirector
 
         case E_STATE_GENERIC_UPDATE:
         {
-            CGS_ASSERT(mpCamera != 0, "mpCamera");
+            CGS_ASSERT(mpCamera != 0, CgsDev::Assert::MessageAt("mpCamera", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp", 244));
 
             GetNonConstCamera() = *mpCamera;
             GetNonConstCamera().mState_uFlags |= (1 << Camera::CameraState::E_FLAG_VALID);
@@ -280,7 +277,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, "unhandled state");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp", 288));
             break;
         }
     }
@@ -411,9 +408,9 @@ namespace BrnDirector
     void ArbStateTestbed::RegisterParameters()
     {
         CGS_ASSERT(mpParameters,
-            CgsDev::Assert::MessageAt("mpParameters", KAC_ARTIST_ASSERT_FILE, 344 /* ARTIST 0x82263F34 */));
+            CgsDev::Assert::MessageAt("mpParameters", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp", 344 /* ARTIST 0x82263F34 */));
         CGS_ASSERT(spDebugComponent,
-            CgsDev::Assert::MessageAt("spDebugComponent", KAC_ARTIST_ASSERT_FILE, 345 /* ARTIST 0x82263F60 */));
+            CgsDev::Assert::MessageAt("spDebugComponent", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp", 345 /* ARTIST 0x82263F60 */));
 
         Camera::DebugMenuSerialiser lSerialiser;
         lSerialiser.Construct(spDebugComponent, Camera::DebugMenuSerialiser::E_MODE_ADD_TO_MENU);
@@ -425,7 +422,7 @@ namespace BrnDirector
         if (mpParameters != 0)
         {
             CGS_ASSERT(spDebugComponent,
-                CgsDev::Assert::MessageAt("spDebugComponent", KAC_ARTIST_ASSERT_FILE, 362 /* ARTIST 0x82263FE4 */));
+                CgsDev::Assert::MessageAt("spDebugComponent", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp", 362 /* ARTIST 0x82263FE4 */));
 
             Camera::DebugMenuSerialiser lSerialiser;
             lSerialiser.Construct(spDebugComponent, Camera::DebugMenuSerialiser::E_MODE_REMOVE_FROM_MENU);
@@ -440,14 +437,14 @@ namespace BrnDirector
     void ArbStateTestbed::Deactivate(void* /*lpUnused*/)
     {
         CGS_ASSERT(spTestbed != NULL,
-            CgsDev::Assert::MessageAt("spTestbed != NULL", KAC_ARTIST_ASSERT_FILE, 318 /* ARTIST 0x821F6200 */));
+            CgsDev::Assert::MessageAt("spTestbed != NULL", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp", 318 /* ARTIST 0x821F6200 */));
         spTestbed->meState = E_STATE_RELEASING;
     }
 
     void ArbStateTestbed::GenericActivateCam(void* lpParameters)
     {
         CGS_ASSERT(spTestbed != NULL,
-            CgsDev::Assert::MessageAt("spTestbed != NULL", KAC_ARTIST_ASSERT_FILE, 328 /* ARTIST 0x8226BD60 */));
+            CgsDev::Assert::MessageAt("spTestbed != NULL", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp", 328 /* ARTIST 0x8226BD60 */));
         spTestbed->UnregisterParameters();
         spTestbed->mpParameters = static_cast<Camera::Behaviour::Parameters*>(lpParameters);
         spTestbed->mpShotRef    = 0;
@@ -457,7 +454,7 @@ namespace BrnDirector
     void ArbStateTestbed::ActivateIceCam(void* lpShotRef)
     {
         CGS_ASSERT(spTestbed != NULL,
-            CgsDev::Assert::MessageAt("spTestbed != NULL", KAC_ARTIST_ASSERT_FILE, 425 /* ARTIST 0x82264070 */));
+            CgsDev::Assert::MessageAt("spTestbed != NULL", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateTestbed.cpp", 425 /* ARTIST 0x82264070 */));
         spTestbed->UnregisterParameters();
         spTestbed->mpShotRef    = static_cast<Camera::Camera::ShotReference*>(lpShotRef);
         spTestbed->mpParameters = 0;

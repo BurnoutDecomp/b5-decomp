@@ -3,6 +3,7 @@
 // wrapper remains deferred; the action translator has its separately owned TU.
 
 #include "GameSource/Game/BrnGameModule.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Game/GameBridgeGameStateToX.h"
 #include "GameSource/Game/GameBridgeControllerToX.h"                // CgsGui::GuiModule + AddGuiEvent<T> (established placeholder home)
 
@@ -40,16 +41,16 @@ namespace BrnGame
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
         const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
     {
-        CGS_ASSERT(lpGuiInput != 0, "lpGuiInput");
-        CGS_ASSERT(lpGameStateOutput != 0, "lpGameStateOutput");
+        CGS_ASSERT(lpGuiInput != 0, CgsDev::Assert::MessageAt("lpGuiInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 423));
+        CGS_ASSERT(lpGameStateOutput != 0, CgsDev::Assert::MessageAt("lpGameStateOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 424));
         const BrnGameState::GameStateModuleIO::ScoringOutputInterface* lpScoringOutputInterface =
             lpGameStateOutput->GetScoringOutputInterface();
         const BrnGameState::GameStateModuleIO::OnlineScoringOutputInterface* lpOnlScoringOutputInterface =
             lpGameStateOutput->GetOnlineScoringOutputInterface();
-        CGS_ASSERT(lpScoringOutputInterface != 0, "lpScoringOutputInterface");
-        CGS_ASSERT(lpOnlScoringOutputInterface != 0, "lpOnlScoringOutputInterface");
-        CGS_ASSERT(lpGuiInput->GetGuiEvents() != 0, "lpGuiInput->GetGuiEvents()");
-        CGS_ASSERT(lpGameStateOutput->GetGuiEventQueue() != 0, "lpGameStateOutput->GetGuiEventQueue()");
+        CGS_ASSERT(lpScoringOutputInterface != 0, CgsDev::Assert::MessageAt("lpScoringOutputInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 431));
+        CGS_ASSERT(lpOnlScoringOutputInterface != 0, CgsDev::Assert::MessageAt("lpOnlScoringOutputInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 432));
+        CGS_ASSERT(lpGuiInput->GetGuiEvents() != 0, CgsDev::Assert::MessageAt("lpGuiInput->GetGuiEvents()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 434));
+        CGS_ASSERT(lpGameStateOutput->GetGuiEventQueue() != 0, CgsDev::Assert::MessageAt("lpGameStateOutput->GetGuiEventQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 435));
 
         // 823EE9C4: the Append result is ignored. It neither clears nor retires its source.
         lpGuiInput->GetGuiEvents()->Append(*lpGameStateOutput->GetGuiEventQueue());

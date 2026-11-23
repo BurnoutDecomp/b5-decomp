@@ -3,6 +3,7 @@
 #include <cmath>                                                        // std::asin / std::fabs (the de-SIMD'd XMVectorASin + fabs)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // GameActionQueue::AddEvent, CgsModule::Event
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                  // OutputBuffer::GetGameActionQueue / PreWorldInputBuffer::GetTimerStatusInterface
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"            // ModeManager::SetStartingGrid / GetProgressionManager
@@ -223,12 +224,12 @@ void StuntAttackMode::Start(const StartGameModeParams* lpStartGameModeParams,
                             ScoringSystem*             /*lpScoringSystem*/)
 {
     // 0x82331EB4..0x82331EE0 -- assert strings verbatim, file/line come from CGS_ASSERT.
-    CGS_ASSERT(lpStartGameModeParams->GetEventData() != 0, "lpEventData");                       // :66
+    CGS_ASSERT(lpStartGameModeParams->GetEventData() != 0, CgsDev::Assert::MessageAt("lpEventData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnStuntAttackMode.cpp", 66));                       // :66
     CGS_ASSERT(lpStartGameModeParams->GetProgressionRankData() != 0, "mpProgressionRankData != NULL");
 
     const BrnProgression::ProgressionRankData* lpProgressionRankData =
         lpStartGameModeParams->GetProgressionRankData();
-    CGS_ASSERT(lpProgressionRankData != 0, "lpProgressionRankData");                             // :69
+    CGS_ASSERT(lpProgressionRankData != 0, CgsDev::Assert::MessageAt("lpProgressionRankData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnStuntAttackMode.cpp", 69));                             // :69
 
     // 0x82331F40..0x82331F48.
     lpGameModeParams->Construct(lpStartGameModeParams->GetGameModeType());
@@ -278,9 +279,9 @@ void StuntAttackMode::Start(const StartGameModeParams* lpStartGameModeParams,
 
     // 0x8233208C..0x8233210C -- three guards, all fired AFTER the call above (the console
     // evaluates the rank first and only then checks the pointers; kept in that order).
-    CGS_ASSERT(GetModeManager() != 0, "mpModeManager");                                          // :105
-    CGS_ASSERT(GetModeManager()->GetProgressionManager() != 0, "mpModeManager->GetProgressionManager()"); // :106
-    CGS_ASSERT(lpProgressionManager->GetProfile() != 0, "mpModeManager->GetProgressionManager()->GetProfile()"); // :107
+    CGS_ASSERT(GetModeManager() != 0, CgsDev::Assert::MessageAt("mpModeManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnStuntAttackMode.cpp", 105));                                          // :105
+    CGS_ASSERT(GetModeManager()->GetProgressionManager() != 0, CgsDev::Assert::MessageAt("mpModeManager->GetProgressionManager()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnStuntAttackMode.cpp", 106)); // :106
+    CGS_ASSERT(lpProgressionManager->GetProfile() != 0, CgsDev::Assert::MessageAt("mpModeManager->GetProgressionManager()->GetProfile()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnStuntAttackMode.cpp", 107)); // :107
 
     // 0x82332110..0x8233215C. If the profile already carries a target-event record for this
     // event, its stored score (TargetEventScore::miScore @+0x20) is the target; otherwise ask the

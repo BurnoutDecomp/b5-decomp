@@ -31,6 +31,7 @@
 // ----------------------------------------------------------------------------
 
 #include "GameSource/GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameShared/GameClasses/Development/CgsStrStream.h"     // CgsDev::StrStreamBase (debug print)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"       // gpDebugPrint / gxMessageFilterFlags
@@ -216,9 +217,9 @@ bool AchievementManagerX360::Release()
 void AchievementManagerX360::Update(const GameStateModuleIO::PreWorldInputBuffer* lpPreWorldInputBuffer,
                                     GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpPreWorldInputBuffer, "lpPreWorldInputBuffer");
+    CGS_ASSERT(lpPreWorldInputBuffer, CgsDev::Assert::MessageAt("lpPreWorldInputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.cpp", 388));
     CGS_ASSERT(lpPreWorldInputBuffer->GetControllerToGameStateInterface(),
-               "lpPreWorldInputBuffer->GetControllerToGameStateInterface()");
+               CgsDev::Assert::MessageAt("lpPreWorldInputBuffer->GetControllerToGameStateInterface()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.cpp", 389));
 
     const s32 liActiveControllerPort =
         lpPreWorldInputBuffer->GetControllerToGameStateInterface()->GetActiveControllerPort();
@@ -235,8 +236,8 @@ void AchievementManagerX360::Update(const GameStateModuleIO::PreWorldInputBuffer
         return;
     }
 
-    CGS_ASSERT(miUserIndex >= KI_MIN_USER_INDEX, "miUserIndex >= 0");
-    CGS_ASSERT(miUserIndex <= KI_MAX_USER_INDEX, "miUserIndex <= 3");
+    CGS_ASSERT(miUserIndex >= KI_MIN_USER_INDEX, CgsDev::Assert::MessageAt("miUserIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.cpp", 408));
+    CGS_ASSERT(miUserIndex <= KI_MAX_USER_INDEX, CgsDev::Assert::MessageAt("miUserIndex <= 3", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.cpp", 409));
 
     if (mOverLapped.IsOperationInProgress())
     {
@@ -368,7 +369,7 @@ bool AchievementManagerX360::GetAchievementsFromX360Api(GameStateModuleIO::Outpu
 // ----------------------------------------------------------------------------
 void AchievementManagerX360::WriteAchievements(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(!mOverLapped.IsOperationInProgress(), "!mOverLapped.IsOperationInProgress()");
+    CGS_ASSERT(!mOverLapped.IsOperationInProgress(), CgsDev::Assert::MessageAt("!mOverLapped.IsOperationInProgress()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.cpp", 453));
     mOverLapped.Construct();
 
     s32 liNumAchievements = 0;

@@ -20,9 +20,6 @@
 // modules when a mode starts. It owns no resources (plain value type).
 // =============================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h";
-
 namespace BrnGameState
 {
 namespace
@@ -364,7 +361,7 @@ void StartGameModeParams::SetProgressionRankData(const BrnProgression::Progressi
 {
     CGS_ASSERT(lpProgressionRankData != NULL,
         CgsDev::Assert::MessageAt(
-            "lpProgressionRankData != NULL", KAC_ARTIST_ASSERT_FILE, 953 /* ARTIST 0x823544BC */));
+            "lpProgressionRankData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h", 953 /* ARTIST 0x823544BC */));
     mpProgressionRankData = lpProgressionRankData;
 }
 
@@ -395,7 +392,7 @@ void StartGameModeParams::SetPlayerVehicleGamePlayData(const BrnResource::Vehicl
 {
     CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL,
         CgsDev::Assert::MessageAt(
-            "lpPlayerCarVehicleListEntry != NULL", KAC_ARTIST_ASSERT_FILE, 985 /* ARTIST 0x823545BC */));
+            "lpPlayerCarVehicleListEntry != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h", 985 /* ARTIST 0x823545BC */));
     mpPlayerCarVehicleListEntry = lpPlayerCarVehicleListEntry;
 }
 

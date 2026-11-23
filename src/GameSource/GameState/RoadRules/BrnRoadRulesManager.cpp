@@ -4,6 +4,7 @@
 #include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"  // BrnGameState::StreetManager (single home for GetStreetData)
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "SharedClasses/StreetData/BrnStreetData.h"       // BrnStreetData::StreetData / Road
 
 // BrnGameState::StreetManager (incl. its GetStreetData() accessor) now lives in its single
@@ -26,7 +27,7 @@ CgsID BrnGameState::RoadRulesManager::GetCurrentRoadID() const
     }
 
     // *(this+20): asserted present (baked "mpStreetManager").
-    CGS_ASSERT( mpStreetManager, "mpStreetManager" );
+    CGS_ASSERT( mpStreetManager, CgsDev::Assert::MessageAt("mpStreetManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 1324) );
 
     // ResourcePtr<StreetData>::operator-> wrapped by StreetManager::GetStreetData().
     const BrnStreetData::StreetData* lpStreetData = mpStreetManager->GetStreetData();
@@ -128,7 +129,7 @@ void RoadRulesManager::OnEnterRoad(GameStateModuleIO::GameActionQueue* queue, Br
         action.maParRivalIds[i] = mpStreetManager->GetParRivalId(road, static_cast<BrnStreetData::ScoreType>(i));
     queue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&action),
                     GameStateModuleIO::E_ACTION_ROAD_RULES_ENTER_ROAD, sizeof(action));   // console size 0xA8
-    CGS_ASSERT(mpModeManager != 0, "mpModeManager");
+    CGS_ASSERT(mpModeManager != 0, CgsDev::Assert::MessageAt("mpModeManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 983));
     if (GameMode* mode = mpModeManager->GetCurrentGameMode())
         mode->OnEnterRoad(road);
 }

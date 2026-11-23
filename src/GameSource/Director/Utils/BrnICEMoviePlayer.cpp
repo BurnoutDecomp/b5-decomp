@@ -17,8 +17,6 @@
 // real Camera TUs are reconstructed.
 // ============================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp";
-
 namespace BrnDirector
 {
 
@@ -57,7 +55,7 @@ static const CgsResource::ID MakeCGSId(IceMovie::EIceGroup leGroup, u32 luTakeIn
         CgsCore::SPrintf(lacName, sizeof(lacName), "World_LandMark_%i", luDisplayIndex);
         break;
     case IceMovie::E_ICE_GROUP_WORLD_SIGNATURE:
-        CGS_ASSERT(static_cast<s32>(luTakeIndex) != -1, "luTakeIndex > 0");
+        CGS_ASSERT(static_cast<s32>(luTakeIndex) != -1, CgsDev::Assert::MessageAt("luTakeIndex > 0", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 65));
         // World-signature is the ONE group that formats the RAW 0-based take index, not the
         // +1 display index: the X360 computes (luTakeIndex + 1) - 1 == luTakeIndex here
         // (XEX MakeCGSId @0x821F79F8 `v8 - 1`; PS3 DecFIGS @0x4D390 `World_Signature_%i,
@@ -160,19 +158,19 @@ void ICEMoviePlaylist::Construct()
 void ICEMoviePlaylist::InsertMovieBefore(s32 liDesiredZeroBasedIndex, const IceMovie& lrMovie)
 {
     const s32 liMoviePoolIndex = mMoviePool.AllocateObject();
-    CGS_ASSERT(liMoviePoolIndex != -1, "liMoviePoolIndex != -1");
+    CGS_ASSERT(liMoviePoolIndex != -1, CgsDev::Assert::MessageAt("liMoviePoolIndex != -1", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 235));
 
     mMoviePool[liMoviePoolIndex] = lrMovie;
 
-    CGS_ASSERT(liDesiredZeroBasedIndex >= 0, "liDesiredZeroBasedIndex >= 0");
+    CGS_ASSERT(liDesiredZeroBasedIndex >= 0, CgsDev::Assert::MessageAt("liDesiredZeroBasedIndex >= 0", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 237));
     mMoviePoolIndicies.InsertBefore(static_cast<u32>(liDesiredZeroBasedIndex), liMoviePoolIndex);
 
     const s32 liIndex = mDebugMenuRemoveData.AllocateObject();
-    CGS_ASSERT(liIndex != -1, "liIndex != -1");
+    CGS_ASSERT(liIndex != -1, CgsDev::Assert::MessageAt("liIndex != -1", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 244));
 
     mDebugMenuRemoveData[liIndex].mpThisPlaylist = this;
     mDebugMenuRemoveData[liIndex].miIndex        = liMoviePoolIndex;
-    CGS_ASSERT(liIndex == liMoviePoolIndex, "liIndex == liMoviePoolIndex");
+    CGS_ASSERT(liIndex == liMoviePoolIndex, CgsDev::Assert::MessageAt("liIndex == liMoviePoolIndex", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 247));
 
     // GetCount() carries the "Array used before Construct/Clear was called" assert.
     miDebugMenuNewMovieIndex = mMoviePoolIndicies.GetCount() + 1;
@@ -384,7 +382,7 @@ void ICEMoviePlayer::Construct()
 bool ICEMoviePlayer::Prepare(ICEWrapper* lpICEWrapper)
 {
     CGS_ASSERT(lpICEWrapper != 0,
-        CgsDev::Assert::MessageAt("lpICEWrapper != NULL", KAC_ARTIST_ASSERT_FILE, 460 /* ARTIST 0x821F7CF4 */));
+        CgsDev::Assert::MessageAt("lpICEWrapper != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 460 /* ARTIST 0x821F7CF4 */));
     mpICEWrapper = lpICEWrapper;
     return true;
 }
@@ -433,8 +431,8 @@ void ICEMoviePlayer::ApplyFlashHookToCamera()
 // ----------------------------------------------------------------------------
 void ICEMoviePlayer::Play()
 {
-    CGS_ASSERT(mpICEWrapper != 0, "mpICEWrapper != NULL");
-    CGS_ASSERT(!mbIsPlaying, "!mbIsPlaying");
+    CGS_ASSERT(mpICEWrapper != 0, CgsDev::Assert::MessageAt("mpICEWrapper != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 471));
+    CGS_ASSERT(!mbIsPlaying, CgsDev::Assert::MessageAt("!mbIsPlaying", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 472));
 
     mbIsLooping           = false;
     mbIsPlaying           = true;
@@ -460,9 +458,9 @@ void ICEMoviePlayer::Play()
 void ICEMoviePlayer::Loop()
 {
     CGS_ASSERT(mpICEWrapper != 0,
-        CgsDev::Assert::MessageAt("mpICEWrapper != NULL", KAC_ARTIST_ASSERT_FILE, 494 /* ARTIST 0x82251374 */));
+        CgsDev::Assert::MessageAt("mpICEWrapper != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 494 /* ARTIST 0x82251374 */));
     CGS_ASSERT(!mbIsPlaying,
-        CgsDev::Assert::MessageAt("!mbIsPlaying", KAC_ARTIST_ASSERT_FILE, 495 /* ARTIST 0x8225139C */));
+        CgsDev::Assert::MessageAt("!mbIsPlaying", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 495 /* ARTIST 0x8225139C */));
 
     Play();
     mbIsLooping = true;
@@ -477,13 +475,13 @@ void ICEMoviePlayer::Loop()
 void ICEMoviePlayer::CutToInterpolateOut()
 {
     CGS_ASSERT(mpICEWrapper != 0,
-        CgsDev::Assert::MessageAt("mpICEWrapper != NULL", KAC_ARTIST_ASSERT_FILE, 506 /* ARTIST 0x821F7D64 */));
+        CgsDev::Assert::MessageAt("mpICEWrapper != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 506 /* ARTIST 0x821F7D64 */));
     CGS_ASSERT(mbIsPlaying,
-        CgsDev::Assert::MessageAt("mbIsPlaying", KAC_ARTIST_ASSERT_FILE, 507 /* ARTIST 0x821F7D8C */));
+        CgsDev::Assert::MessageAt("mbIsPlaying", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 507 /* ARTIST 0x821F7D8C */));
     CGS_ASSERT(mbIsLooping,
-        CgsDev::Assert::MessageAt("mbIsLooping", KAC_ARTIST_ASSERT_FILE, 508 /* ARTIST 0x821F7DB4 */));
+        CgsDev::Assert::MessageAt("mbIsLooping", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 508 /* ARTIST 0x821F7DB4 */));
     CGS_ASSERT(mbShouldInterpolateOut,
-        CgsDev::Assert::MessageAt("mbShouldInterpolateOut", KAC_ARTIST_ASSERT_FILE, 509 /* ARTIST 0x821F7DDC */));
+        CgsDev::Assert::MessageAt("mbShouldInterpolateOut", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 509 /* ARTIST 0x821F7DDC */));
 
     mbInterpolateOutNow = true;
 }
@@ -496,8 +494,8 @@ void ICEMoviePlayer::CutToInterpolateOut()
 // ----------------------------------------------------------------------------
 void ICEMoviePlayer::Stop()
 {
-    CGS_ASSERT(mpICEWrapper != 0, "mpICEWrapper != NULL");
-    CGS_ASSERT(mbIsPlaying, "mbIsPlaying");
+    CGS_ASSERT(mpICEWrapper != 0, CgsDev::Assert::MessageAt("mpICEWrapper != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 519));
+    CGS_ASSERT(mbIsPlaying, CgsDev::Assert::MessageAt("mbIsPlaying", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.cpp", 520));
 
     mbIsPlaying     = false;
     mbHasReachedEnd = false;

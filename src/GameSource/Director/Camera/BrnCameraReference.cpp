@@ -13,8 +13,6 @@
 // All asserts are the X360's non-gating tripwires (the bodies fall through after
 // firing, exactly as the console does).
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Director/Camera/BrnCameraReference.cpp";
-
 namespace BrnDirector
 {
 namespace Camera
@@ -48,13 +46,13 @@ void CameraReference::Construct()
 void CameraReference::Setup(const BrnDirector::ICEWrapper* lpIceWrapper)
 {
     CGS_ASSERT(meType == E_TYPE_INVALID,
-        CgsDev::Assert::MessageAt("meType == E_TYPE_INVALID", KAC_ARTIST_ASSERT_FILE, 95 /* ARTIST 0x821F8538 */));   // :95
+        CgsDev::Assert::MessageAt("meType == E_TYPE_INVALID", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraReference.cpp", 95 /* ARTIST 0x821F8538 */));   // :95
 
     mpIceWrapper = lpIceWrapper;
     meType       = E_TYPE_ICE;
 
     CGS_ASSERT(mpIceWrapper != 0,
-        CgsDev::Assert::MessageAt("mpIceWrapper != NULL", KAC_ARTIST_ASSERT_FILE, 99 /* ARTIST 0x821F8568 */));              // :99
+        CgsDev::Assert::MessageAt("mpIceWrapper != NULL", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraReference.cpp", 99 /* ARTIST 0x821F8568 */));              // :99
 }
 
 // ----------------------------------------------------------------------------
@@ -107,7 +105,7 @@ void CameraReference::Setup(Camera lCamera)
 // @ 0x8223EA80 -- cpp:172. Refresh mCamera from the referenced source and return it.
 const Camera& CameraReference::GetCamera(const BehaviourManager* lpBehaviourController)
 {
-    CGS_ASSERT(IsValid(), "IsValid()");   // :174 (non-gating)
+    CGS_ASSERT(IsValid(), CgsDev::Assert::MessageAt("IsValid()", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraReference.cpp", 174));   // :174 (non-gating)
 
     switch (meType)
     {
@@ -115,7 +113,7 @@ const Camera& CameraReference::GetCamera(const BehaviourManager* lpBehaviourCont
         break;   // mCamera already holds the cached camera
 
     case E_TYPE_BEHAVIOUR:
-        CGS_ASSERT(mbBehaviourLocked, "mbBehaviourLocked");   // :187
+        CGS_ASSERT(mbBehaviourLocked, CgsDev::Assert::MessageAt("mbBehaviourLocked", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraReference.cpp", 187));   // :187
         // X360: helper-pool slot lookup (manager+0xFAB0 pool, de-inlined
         // operator[]) + the slot's embedded camera at +0x10 == the committed
         // GetCameraFromBehaviour contract.
@@ -124,7 +122,7 @@ const Camera& CameraReference::GetCamera(const BehaviourManager* lpBehaviourCont
 
     case E_TYPE_ICE:
     {
-        CGS_ASSERT(mpIceWrapper != 0, "mpIceWrapper != NULL");   // :194
+        CGS_ASSERT(mpIceWrapper != 0, CgsDev::Assert::MessageAt("mpIceWrapper != NULL", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraReference.cpp", 194));   // :194
         // ⭐ SETTLED 2026-08-01. The X360 forms &wrapper->mICECamera.mCamera (+0x11D70,
         // `lis 1 / ori 0x1D70 / add.`) and null-checks the ADDRESS, so GetCamera()
         // returns a POINTER -- now confirmed by the DecFIGS DWARF
@@ -133,13 +131,13 @@ const Camera& CameraReference::GetCamera(const BehaviourManager* lpBehaviourCont
         // BrnDirectorICEWrapper.h). The const_cast that used to sit here only existed
         // to work around the old reference-returning, non-const declaration.
         const Camera* lpIceCamera = mpIceWrapper->GetCamera();
-        CGS_ASSERT(lpIceCamera != 0, "mpIceWrapper->GetCamera() != NULL");   // :195
+        CGS_ASSERT(lpIceCamera != 0, CgsDev::Assert::MessageAt("mpIceWrapper->GetCamera() != NULL", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraReference.cpp", 195));   // :195
         mCamera = *lpIceCamera;
         break;
     }
 
     default:
-        CGS_ASSERT(false, "this case shouldn't be reachable");   // :202
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("this case shouldn't be reachable", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraReference.cpp", 202));   // :202
         break;
     }
 
@@ -149,11 +147,11 @@ const Camera& CameraReference::GetCamera(const BehaviourManager* lpBehaviourCont
 // @ 0x822523F0 -- cpp:110. Lock the referenced behaviour for interpolation.
 void CameraReference::Prepare(const BehaviourControllerLockInterface& lLockInterface)
 {
-    CGS_ASSERT(IsValid(), "IsValid()");   // :112 (non-gating)
+    CGS_ASSERT(IsValid(), CgsDev::Assert::MessageAt("IsValid()", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraReference.cpp", 112));   // :112 (non-gating)
 
     if (meType == E_TYPE_BEHAVIOUR)
     {
-        CGS_ASSERT(mbBehaviourLocked == false, "mbBehaviourLocked == false");   // :116
+        CGS_ASSERT(mbBehaviourLocked == false, CgsDev::Assert::MessageAt("mbBehaviourLocked == false", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraReference.cpp", 116));   // :116
         lLockInterface.LockBehaviourForInterpolation(mBehaviourHelperIndex);
         mbBehaviourLocked = true;
     }

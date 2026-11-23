@@ -370,7 +370,7 @@ inline void
 BehaviourGyroCam::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourGyroCam,
-               "lpParameters->GetType() == eBehaviourGyroCam");
+               CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourGyroCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.h", 240));
     mpParameters = lpParameters;                 // stw r31, 0x14(this)
     SetDebugParametersName(lpParameters->GetDebugName());
 }

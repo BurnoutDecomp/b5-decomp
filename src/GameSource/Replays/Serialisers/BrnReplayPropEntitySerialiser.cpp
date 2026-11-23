@@ -23,6 +23,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"
 #include "GameSource/Replays/Serialisers/BrnReplayPropSerialiserFrame.h"
 // The class declaration moved to its DWARF home so other TUs (PropCellManager) can
@@ -78,7 +79,7 @@ namespace BrnReplays
     s32 PropEntitySerialiser::Read(PropSerialiserStaticLayout* lpStaticLayout)
     {
         Lock();
-        CGS_ASSERT(lpStaticLayout != 0, "lpStaticLayout");
+        CGS_ASSERT(lpStaticLayout != 0, CgsDev::Assert::MessageAt("lpStaticLayout", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.cpp", 68));
 
         // Only progress while actually playing back (mode == E_MODE_PLAYING). The asm
         // walks the playing family {4,5,6} then strips the prepare/stall/restore modes,
@@ -106,7 +107,7 @@ namespace BrnReplays
     s32 PropEntitySerialiser::Write(PropSerialiserStaticLayout* lpStaticLayout)
     {
         Lock();
-        CGS_ASSERT(lpStaticLayout != 0, "lpStaticLayout");
+        CGS_ASSERT(lpStaticLayout != 0, CgsDev::Assert::MessageAt("lpStaticLayout", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.cpp", 100));
 
         // Only progress while recording (mode in the recording family {1,2,3}).
         if (meMode == E_MODE_RECORDING_PREPARING ||

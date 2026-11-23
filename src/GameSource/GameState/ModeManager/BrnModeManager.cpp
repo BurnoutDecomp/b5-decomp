@@ -37,9 +37,6 @@
 #include <stdlib.h>                                    // getenv        ([mode-results] diag)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // gpDebugPrint ([mode-results] diag)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp";
-
 namespace BrnGameState
 {
 
@@ -47,7 +44,7 @@ namespace BrnGameState
 // previous-state mirror; a finished mode still exits while simulation is paused.
 void ModeManager::PausedUpdate(GameStateModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer != 0, "lpOutput");
+    CGS_ASSERT(lpOutputBuffer != 0, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1019));
     GameStateModuleIO::GameModeOutputInterface* const lpModeOutput =
         lpOutputBuffer->GetGameModeOutputInterface();
     lpModeOutput->miCurrentGameModeType = meCurrentGameModeType;
@@ -123,11 +120,11 @@ s32 ModeManager::GetNextLandmarkIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex) 
     CGS_ASSERT(leGlobalRaceCarIndex >= 0,
         CgsDev::Assert::MessageAt(
             "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
-            KAC_ARTIST_ASSERT_FILE, 5483 /* ARTIST 0x823298BC */));
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5483 /* ARTIST 0x823298BC */));
     CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
         CgsDev::Assert::MessageAt(
             "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
-            KAC_ARTIST_ASSERT_FILE, 5484 /* ARTIST 0x823298E0 */));
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5484 /* ARTIST 0x823298E0 */));
 
     const s32 liNext = maCarCheckpointData[leGlobalRaceCarIndex].GetNextCheckpointIndex();
     return static_cast<u8>(liNext);   // X360 clrlwi r3,r3,24 (low byte -- the LandmarkIndex)
@@ -136,9 +133,9 @@ s32 ModeManager::GetNextLandmarkIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex) 
 // X360 0x8231E960. Popcount of the car's "remaining" bit set.
 u32 ModeManager::CountCheckpointsRemaining(EGlobalRaceCarIndex leGlobalRaceCarIndex) const
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= 0, "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leGlobalRaceCarIndex >= 0, CgsDev::Assert::MessageAt("leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5549));
     CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-               "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+               CgsDev::Assert::MessageAt("leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5550));
 
     // The X360 inlines a SWAR popcount over the car's remaining bit mask. The semantically-equivalent
     // named operation: gather every still-remaining checkpoint index; the count IS that population.
@@ -152,19 +149,19 @@ u32 ModeManager::CountCheckpointsRemaining(EGlobalRaceCarIndex leGlobalRaceCarIn
 void ModeManager::MarkCarHittingCheckpoint(u32 luCheckpointIndex, EGlobalRaceCarIndex leGlobalRaceCarIndex)
 {
     CGS_ASSERT(static_cast<s32>(luCheckpointIndex) >= 0,
-        CgsDev::Assert::MessageAt("liCheckpointIndex >= 0", KAC_ARTIST_ASSERT_FILE, 5514 /* ARTIST 0x8231E830 */));
+        CgsDev::Assert::MessageAt("liCheckpointIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5514 /* ARTIST 0x8231E830 */));
     CGS_ASSERT(luCheckpointIndex < muNumLandmarks,
         CgsDev::Assert::MessageAt(
             "static_cast<uint32_t>( liCheckpointIndex ) < muNumLandmarks",
-            KAC_ARTIST_ASSERT_FILE, 5515 /* ARTIST 0x8231E860 */));
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5515 /* ARTIST 0x8231E860 */));
     CGS_ASSERT(leGlobalRaceCarIndex >= 0,
         CgsDev::Assert::MessageAt(
             "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
-            KAC_ARTIST_ASSERT_FILE, 5517 /* ARTIST 0x8231E884 */));
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5517 /* ARTIST 0x8231E884 */));
     CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
         CgsDev::Assert::MessageAt(
             "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
-            KAC_ARTIST_ASSERT_FILE, 5518 /* ARTIST 0x8231E8A8 */));
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5518 /* ARTIST 0x8231E8A8 */));
 
     maCarCheckpointData[leGlobalRaceCarIndex].MarkCheckpointAsHit(static_cast<s32>(luCheckpointIndex));
 }
@@ -175,11 +172,11 @@ void ModeManager::ResetCheckpointDataForNextLap(EGlobalRaceCarIndex leGlobalRace
     CGS_ASSERT(leGlobalRaceCarIndex >= 0,
         CgsDev::Assert::MessageAt(
             "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0",
-            KAC_ARTIST_ASSERT_FILE, 5533 /* ARTIST 0x8231E904 */));
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5533 /* ARTIST 0x8231E904 */));
     CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
         CgsDev::Assert::MessageAt(
             "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT",
-            KAC_ARTIST_ASSERT_FILE, 5534 /* ARTIST 0x8231E928 */));
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5534 /* ARTIST 0x8231E928 */));
 
     maCarCheckpointData[leGlobalRaceCarIndex].SetupCheckpoints(static_cast<s32>(muNumLandmarks));
 }
@@ -187,9 +184,9 @@ void ModeManager::ResetCheckpointDataForNextLap(EGlobalRaceCarIndex leGlobalRace
 // X360 0x82329910. Process a landmark trigger for the given car.
 bool ModeManager::HasRaceCarHitValidCheckpoint(s16 luLandmarkId, EGlobalRaceCarIndex leGlobalRaceCarIndex)
 {
-    CGS_ASSERT(leGlobalRaceCarIndex >= 0, "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leGlobalRaceCarIndex >= 0, CgsDev::Assert::MessageAt("leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5631));
     CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-               "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");
+               CgsDev::Assert::MessageAt("leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5632));
 
     // Find the mode-local checkpoint index whose landmark-region id matches the triggered landmark.
     u32 luCheckpoint = 0;
@@ -211,9 +208,9 @@ bool ModeManager::HasRaceCarHitValidCheckpoint(s16 luLandmarkId, EGlobalRaceCarI
     // interface (`*(4*(global+525)+interface)`), de-inlined here to the GlobalToActiveRaceCarIndex()
     // helper, which is bodied at BrnModeManager_Accessors.cpp.
     const EActiveRaceCarIndex leActiveRaceCarIndex = GlobalToActiveRaceCarIndex(leGlobalRaceCarIndex);
-    CGS_ASSERT(leActiveRaceCarIndex >= 0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+    CGS_ASSERT(leActiveRaceCarIndex >= 0, CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5650));
     CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+               CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5651));
 
     // For the online burning-home-run mode, the car must be in the "running" scoring state.
     if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN)
@@ -301,7 +298,7 @@ void ModeManager::SetupStuntChallenge()
 void ModeManager::EndStuntChallenge()
 {
     StuntModeScoringOnline* lpStuntModeScoring = mScoringSystem.GetOnlineStuntScorer();
-    CGS_ASSERT(lpStuntModeScoring != 0, "lpStuntModeScoring");
+    CGS_ASSERT(lpStuntModeScoring != 0, CgsDev::Assert::MessageAt("lpStuntModeScoring", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5609));
     // The same vtable +0x10 reset as SetupStuntChallenge (0x8231212C..0x8231213C) ==
     // StuntModeScoringOnline::ClearData 0x82321968.
     lpStuntModeScoring->ClearData();
@@ -481,7 +478,7 @@ void ModeManager::SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOu
         // (online stunt scorer end-of-mode finalise -- see FLAG)
     }
 
-    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
+    CGS_ASSERT(mpGameStateModule != 0, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3208));
     const EActiveRaceCarIndex lePlayer = mpGameStateModule->GetPlayerActiveRaceCarIndex();
 
     lAction.meFinishedGameModeType = meCurrentGameModeType;
@@ -552,7 +549,7 @@ void ModeManager::SendModeResults(CgsModule::VariableEventQueue<13312, 16>* lpOu
 // X360 0x82329B68. Refresh the cumulative results and latch the final-standings flag.
 void ModeManager::TellGuiToShowOnlineFinalStandings()
 {
-    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
+    CGS_ASSERT(mpGameStateModule != 0, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5747));
 
     const bool lbOnline = (mpCurrentGameMode != 0) ? mpCurrentGameMode->IsOnline() : false;
 
@@ -669,7 +666,7 @@ void ModeManager::RaceCarFinishes(EGlobalRaceCarIndex leGlobalRaceCarIndex,
 // ARTIST 0x82311A68.
 void ModeManager::PlayerTriggersLandmark(LandmarkIndex lLandmarkIndex)
 {
-    CGS_ASSERT(static_cast<s32>(lLandmarkIndex) != -1, "lLandmarkIndex != K_INVALID_LANDMARK");
+    CGS_ASSERT(static_cast<s32>(lLandmarkIndex) != -1, CgsDev::Assert::MessageAt("lLandmarkIndex != K_INVALID_LANDMARK", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2660));
     mPlayerCurrentLandmark = lLandmarkIndex;
     if (!mpCurrentGameMode && mbReadyForModeIntro &&
         mpGameStateModule->GetProgressionManager()->LandmarkHasAvailableRaces(lLandmarkIndex))

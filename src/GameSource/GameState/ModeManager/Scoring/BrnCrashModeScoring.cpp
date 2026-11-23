@@ -535,11 +535,11 @@ namespace BrnGameState
             s32* lpiScoreMultiplierEarned,
             s32* lpiComboBonusEarned)
     {
-        CGS_ASSERT(lpiVehicleTypeCrashed,    "lpiVehicleTypeCrashed");
-        CGS_ASSERT(lpiVehicleBaseScore,      "lpiVehicleBaseScore");
-        CGS_ASSERT(lpeVehicleScoreCategory,  "lpeVehicleScoreCategory");
-        CGS_ASSERT(lpiScoreMultiplierEarned, "lpiScoreMultiplierEarned");
-        CGS_ASSERT(lpiComboBonusEarned,      "lpiComboBonusEarned");
+        CGS_ASSERT(lpiVehicleTypeCrashed,    CgsDev::Assert::MessageAt("lpiVehicleTypeCrashed", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 564));
+        CGS_ASSERT(lpiVehicleBaseScore,      CgsDev::Assert::MessageAt("lpiVehicleBaseScore", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 565));
+        CGS_ASSERT(lpeVehicleScoreCategory,  CgsDev::Assert::MessageAt("lpeVehicleScoreCategory", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 566));
+        CGS_ASSERT(lpiScoreMultiplierEarned, CgsDev::Assert::MessageAt("lpiScoreMultiplierEarned", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 567));
+        CGS_ASSERT(lpiComboBonusEarned,      CgsDev::Assert::MessageAt("lpiComboBonusEarned", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 568));
 
         s32 liChainBonus = 0;
         s32 liBaseValue  = 0;
@@ -591,9 +591,9 @@ namespace BrnGameState
             s32* lpiScore, s32* lpiMultiplier,
             BrnTraffic::VehicleScoreCategory* lpeCategory)
     {
-        CGS_ASSERT(lpiScore,    "lpiScore");
-        CGS_ASSERT(lpiMultiplier, "lpiMultiplier");
-        CGS_ASSERT(lpeCategory, "lpeCategory");
+        CGS_ASSERT(lpiScore,    CgsDev::Assert::MessageAt("lpiScore", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 887));
+        CGS_ASSERT(lpiMultiplier, CgsDev::Assert::MessageAt("lpiMultiplier", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 888));
+        CGS_ASSERT(lpeCategory, CgsDev::Assert::MessageAt("lpeCategory", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 889));
 
         // VehicleScoreLookup row (DWARF BrnCrashModeScoring.cpp:79-84): midType@+0 (CgsID, 8B),
         // meCategory@+8, miScore@+0xC (s16), miMultiplier@+0xE (s16). 16-byte stride.
@@ -677,7 +677,7 @@ namespace BrnGameState
             *lpeCategory = BrnTraffic::E_VEHICLESCORE_BIGRIG; *lpiScore = 10000; *lpiMultiplier = 0;
             break;
         default:
-            CGS_ASSERT(false, "Unknown vehicle class in CrashModeScoring.");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown vehicle class in CrashModeScoring.", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 937));
             break;
         }
 
@@ -732,7 +732,7 @@ namespace BrnGameState
         {
             // Player (A) hit traffic (B).
             CGS_ASSERT(luOwnerB == K_OWNER_TRAFFIC_VEHICLE,
-                       "lEntityIdB.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
+                       CgsDev::Assert::MessageAt("lEntityIdB.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 442));
             if (luIndexA != luLocalPlayerIndex || GetRecentCrash(static_cast<u16>(luIndexB)) != 0)
             {
                 return false;
@@ -744,7 +744,7 @@ namespace BrnGameState
         {
             // Player (B) hit traffic (A).
             CGS_ASSERT(luOwnerA == K_OWNER_TRAFFIC_VEHICLE,
-                       "lEntityIdA.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");
+                       CgsDev::Assert::MessageAt("lEntityIdA.GetOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 459));
             if (luIndexB != luLocalPlayerIndex || GetRecentCrash(static_cast<u16>(luIndexA)) != 0)
             {
                 return false;
@@ -794,7 +794,7 @@ namespace BrnGameState
         {
             maRecentCrashes.Erase(0);
         }
-        CGS_ASSERT(GetRecentCrash(luTrafficCarIndex) == 0, "GetRecentCrash(luTrafficCarIndex) == NULL");
+        CGS_ASSERT(GetRecentCrash(luTrafficCarIndex) == 0, CgsDev::Assert::MessageAt("GetRecentCrash(luTrafficCarIndex) == NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 530));
         maRecentCrashes.Append(lCrash);
 
         ++miCurrentComboCount;        // *(a1+0x2E0) = *(a1+0x2E0)+1  (chain link recorded)

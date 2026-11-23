@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (intro asserts)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                         // CgsCore::SPrintf
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorUtils.h"          // ArbUtils::ChangeToState
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h" // ArbitratorStateContainer::EState
@@ -276,7 +277,7 @@ namespace BrnDirector
             if (mRaceIntroBehaviourHandle.GetBehaviour()->HasFinishedOrFailed())
             {
                 const bool lbReleased = mRaceIntroBehaviourHandle.Release();
-                CGS_ASSERT(lbReleased, "mRaceIntroBehaviourHandle.Release()");
+                CGS_ASSERT(lbReleased, CgsDev::Assert::MessageAt("mRaceIntroBehaviourHandle.Release()", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateRaceIntro.cpp", 192));
 
                 ArbUtils::ChangeToState<EState>(
                     this, lrSharedInfo, ArbitratorStateContainer::E_STATE_ROAMING,
@@ -297,7 +298,7 @@ namespace BrnDirector
         }
 
         default:
-            CGS_ASSERT(false, "unhandled state");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateRaceIntro.cpp", 213));
             break;
         }
 

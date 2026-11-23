@@ -8,10 +8,8 @@
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. This TU owns the registration, HUD, and callback
 // bodies; the renderer is reached through the manager's DecFIGS-named BoostBarRenderer accessor.
 
-// X360 0x82824048. This is the global helper defined in CgsDebug2DImmediateRender.cpp.
-// Keep its declaration at global scope so calls bind to the existing provider, not a BrnGui symbol.
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
+// The text calls go to Debug2DImmediateRender::DrawText(text, x, y, scale, colour), X360 0x82824048
+// (IDA's "MaybeDrawText").
 
 namespace BrnGui
 {
@@ -177,19 +175,19 @@ void GuiCustRendererDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lp
 
     if (mbBoostBarDebugScreenEnabled)
     {
-        ::MaybeDrawText(lpDisplay, "Red Channel",               KF_LABEL_X_RED,      KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
-        ::MaybeDrawText(lpDisplay, "Green Channel",             KF_LABEL_X_GREEN,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
-        ::MaybeDrawText(lpDisplay, "Inner Flame",               KF_LABEL_X_INNER,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
-        ::MaybeDrawText(lpDisplay, "(Red * Inner Colour)",      KF_LABEL_X_INNER,    KF_ROW_Y_SECOND, KF_TEXT_SCALE, K_WHITE, false);
-        ::MaybeDrawText(lpDisplay, "Outer Flame",               KF_LABEL_X_OUTER,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
-        ::MaybeDrawText(lpDisplay, "(Green * Outer Colour)",    KF_LABEL_X_OUTER,    KF_ROW_Y_SECOND, KF_TEXT_SCALE, K_WHITE, false);
-        ::MaybeDrawText(lpDisplay, "Outer Flame + Inner Flame", KF_LABEL_X_COMBINED, KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE, false);
+        lpDisplay->DrawText("Red Channel",               KF_LABEL_X_RED,      KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE);
+        lpDisplay->DrawText("Green Channel",             KF_LABEL_X_GREEN,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE);
+        lpDisplay->DrawText("Inner Flame",               KF_LABEL_X_INNER,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE);
+        lpDisplay->DrawText("(Red * Inner Colour)",      KF_LABEL_X_INNER,    KF_ROW_Y_SECOND, KF_TEXT_SCALE, K_WHITE);
+        lpDisplay->DrawText("Outer Flame",               KF_LABEL_X_OUTER,    KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE);
+        lpDisplay->DrawText("(Green * Outer Colour)",    KF_LABEL_X_OUTER,    KF_ROW_Y_SECOND, KF_TEXT_SCALE, K_WHITE);
+        lpDisplay->DrawText("Outer Flame + Inner Flame", KF_LABEL_X_COMBINED, KF_ROW_Y_TOP,    KF_TEXT_SCALE, K_WHITE);
     }
 
     if (mbShowCustomRenderStatus)
     {
-        ::MaybeDrawText(lpDisplay, "Currently active renderers (number of textures):",
-                      KF_LIST_X, KF_LIST_HEADER_Y, KF_TEXT_SCALE, K_WHITE, false);
+        lpDisplay->DrawText("Currently active renderers (number of textures):",
+                      KF_LIST_X, KF_LIST_HEADER_Y, KF_TEXT_SCALE, K_WHITE);
 
         s32 liVisibleRow = 0;
         for (s32 liComponent = 0; liComponent < KI_CUSTOM_RENDER_TYPE_COUNT; ++liComponent)
@@ -215,7 +213,7 @@ void GuiCustRendererDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lp
             }
 
             const f32 lfRowY = static_cast<f32>(liVisibleRow) * KF_LIST_ROW_STEP;
-            ::MaybeDrawText(lpDisplay, lpcName, KF_LIST_X, lfRowY, KF_TEXT_SCALE, K_WHITE, false);
+            lpDisplay->DrawText(lpcName, KF_LIST_X, lfRowY, KF_TEXT_SCALE, K_WHITE);
 
             const s32 liTextureCount = mpCustRenderManager->GetNumTexturesForComponent(liComponent);
             lpDisplay->DrawValue(static_cast<u32>(liTextureCount),

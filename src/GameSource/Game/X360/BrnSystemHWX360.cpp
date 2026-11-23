@@ -132,7 +132,7 @@ namespace BrnHW
         }
         else if (meReleaseStage != E_PREPARESTAGE_DONE)
         {
-            CGS_ASSERT(false, "false");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("false", "..\\..\\..\\GameSource\\X360/BrnSystemHWX360.cpp", 160));
         }
         return 1;
     }

@@ -6,6 +6,7 @@
 #include "SDKs/XboxMath/XMVectorACos.h"                                        // XboxMath::XMVectorACos (X360 0x821F0980)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"     // StartGameModeParams / GameModeParams / EGameModeStartMechanism
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"                  // ModeManager (GetNetworkRoundManager / SetOnlineRaceCars / GetCurrentGameModeType / GetTrafficData)
 #include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h"  // NetworkRoundManager (GetNetworkGameEvent / GetNetworkRoundEvent / GetCurrentRound / GetTotalRounds)
@@ -161,7 +162,7 @@ bool OnlineStuntRunMode::ShouldFinish(ScoringSystem* lpScoringSystem)
             {
                 const CarData* lpCarData =
                     lpScoringSystem->GetCarData(static_cast<EActiveRaceCarIndex>(liMember));
-                CGS_ASSERT(lpCarData, "lpCarData");
+                CGS_ASSERT(lpCarData, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.cpp", 288));
 
                 // X360 reads the per-car eliminated flag (CarScoreData +0xD9) and the disconnected
                 // flag (CarScoreData +0x69), both through the embedded score record.

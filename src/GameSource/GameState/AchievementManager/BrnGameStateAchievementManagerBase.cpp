@@ -26,10 +26,6 @@
 #include "GameSource/GameState/BrnGameStateModule.h"                 // mpGameStateModule accessors
 #include "GameSource/BurnoutConstants.h"                             // EActiveRaceCarIndex
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-    "../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp";
-
 namespace BrnGameState
 {
 
@@ -102,19 +98,19 @@ void AchievementManagerBase::Construct(BrnProgression::ProgressionManager* lpPro
                                        GameStateModule* lpGameStateModule)
 {
     CGS_ASSERT(lpProgressionManager,
-        CgsDev::Assert::MessageAt("lpProgressionManager", KAC_ARTIST_ASSERT_FILE, 64 /* ARTIST 0x8235A980 */));
+        CgsDev::Assert::MessageAt("lpProgressionManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 64 /* ARTIST 0x8235A980 */));
     mpProgressionManager = lpProgressionManager;
 
     CGS_ASSERT(lpStreetManager,
-        CgsDev::Assert::MessageAt("lpStreetManager", KAC_ARTIST_ASSERT_FILE, 67 /* ARTIST 0x8235A9A8 */));
+        CgsDev::Assert::MessageAt("lpStreetManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 67 /* ARTIST 0x8235A9A8 */));
     mpStreetManager = lpStreetManager;
 
     CGS_ASSERT(lpScoringSystem,
-        CgsDev::Assert::MessageAt("lpScoringSystem", KAC_ARTIST_ASSERT_FILE, 70 /* ARTIST 0x8235A9D0 */));
+        CgsDev::Assert::MessageAt("lpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 70 /* ARTIST 0x8235A9D0 */));
     mpScoringSystem = lpScoringSystem;
 
     CGS_ASSERT(lpGameStateModule,
-        CgsDev::Assert::MessageAt("lpGameStateModule", KAC_ARTIST_ASSERT_FILE, 73 /* ARTIST 0x8235A9F8 */));
+        CgsDev::Assert::MessageAt("lpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 73 /* ARTIST 0x8235A9F8 */));
     mpGameStateModule = lpGameStateModule;
 }
 
@@ -169,11 +165,11 @@ void AchievementManagerBase::OnSetRoadRule(BrnStreetData::ScoreType leScoreType,
 // ----------------------------------------------------------------------------
 void AchievementManagerBase::OnTakedown()
 {
-    CGS_ASSERT(mpProgressionManager, "mpProgressionManager");
+    CGS_ASSERT(mpProgressionManager, CgsDev::Assert::MessageAt("mpProgressionManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 186));
     // The X360 takes the address of the embedded Profile (mpProgressionManager + 0x170)
     // and asserts it non-null ("lpProfile"). With a non-null mpProgressionManager that
     // interior address is always non-null; the assert is preserved for parity below.
-    CGS_ASSERT(mpProgressionManager != 0, "lpProfile");
+    CGS_ASSERT(mpProgressionManager != 0, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 188));
 
     if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_GET_500_TAKEDOWNS)
         && mpProgressionManager->GetProfileTotalTakedowns() >= KI_GET_500_TAKEDOWNS)
@@ -228,8 +224,8 @@ void AchievementManagerBase::OnEventWin(GameStateModuleIO::EGameModeType leGameM
         // X360 case 7: millionaires-club -- player score >= 1,000,000 (online or offline block).
         if (!IsAchievementEarnt(E_X360_ACHIEVEMENT_MILLIONAIRES_CLUB))
         {
-            CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
-            CGS_ASSERT(mpGameStateModule, "mpGameStateModule");
+            CGS_ASSERT(mpScoringSystem, CgsDev::Assert::MessageAt("mpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 356));
+            CGS_ASSERT(mpGameStateModule, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 357));
 
             const bool lbOnline = mpGameStateModule->IsOnlineGameMode();
             if (mpScoringSystem->GetPlayerScore(lbOnline) >= KI_MILLIONAIRE_SCORE)
@@ -252,7 +248,7 @@ void AchievementManagerBase::OnEventWin(GameStateModuleIO::EGameModeType leGameM
         break;
 
     default:
-        CGS_ASSERT(false, " invalid game mode type ");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt(" invalid game mode type ", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 390));
         break;
     }
 }
@@ -265,7 +261,7 @@ void AchievementManagerBase::OnEventWin(GameStateModuleIO::EGameModeType leGameM
 void AchievementManagerBase::OnLicenseUpgrade(u8 luNewLicenseRank)
 {
     CGS_ASSERT(luNewLicenseRank > 0 && luNewLicenseRank <= 6,
-               "liNewLicenseRank > 0 && liNewLicenseRank <= 6");
+               CgsDev::Assert::MessageAt("liNewLicenseRank > 0 && liNewLicenseRank <= 6", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 408));
 
     const EAchievement leAchievement = KAE_LICENSE_ACHIEVEMENTS[luNewLicenseRank - 1];
     if (!IsAchievementEarnt(leAchievement))
@@ -309,7 +305,7 @@ void AchievementManagerBase::OnCollectStunt(StuntElementType leStuntType)
         break;
 
     default:
-        CGS_ASSERT(false, "dodgy stunt type!");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("dodgy stunt type!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 535));
         break;
     }
 }

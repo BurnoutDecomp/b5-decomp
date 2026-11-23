@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT (the SetParameters type assert)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"     // THE canonical Camera::Behaviour base
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"       // VisibilityCollisionPolicy (mCollisionPolicy)
 
@@ -84,7 +85,7 @@ public:
     void SetParameters(const Parameters* lpParameters)
     {
         CGS_ASSERT(lpParameters->GetType() == eBehaviourFixedCam,
-                   "lpParameters->GetType() == eBehaviourFixedCam");   // h:124
+                   CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourFixedCam", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFixedCam.h", 124));   // h:124
         mpParameters = lpParameters;                                    // stw r4, 0x2A0(this)
         SetDebugParametersName(lpParameters->GetDebugName());          // lwz 4(lp) ; stw 0x10(this)
     }

@@ -11,6 +11,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/BrnCameraState.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/BrnCameraValidityAccount.h"   // sbFailFlagMaskSet / sFailFlagMask (Clear)
 #include <cstddef>   // offsetof
 #include <cstring>   // strcmp
@@ -73,9 +74,9 @@ static const char* const KAAC_FLAG_NAMES[CameraState::E_FLAG_COUNT] =
 // ----------------------------------------------------------------------------
 const char* CameraState::GetDebugFlagName(EFlag leFlag)
 {
-    CGS_ASSERT(leFlag < E_FLAG_COUNT, "leFlag < E_FLAG_COUNT");
+    CGS_ASSERT(leFlag < E_FLAG_COUNT, CgsDev::Assert::MessageAt("leFlag < E_FLAG_COUNT", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraState.cpp", 175));
     CGS_ASSERT(std::strcmp(KAAC_FLAG_NAMES[CONSISTENCY_TEST], "CONSISTENCY TEST") == 0,
-               "!strcmp(KAAC_FLAG_NAMES[CONSISTENCY_TEST], \"CONSISTENCY TEST\")");
+               CgsDev::Assert::MessageAt("!strcmp(KAAC_FLAG_NAMES[CONSISTENCY_TEST], \"CONSISTENCY TEST\")", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraState.cpp", 179));
     return KAAC_FLAG_NAMES[leFlag];
 }
 
@@ -222,7 +223,7 @@ void CameraState::Construct()
 // ----------------------------------------------------------------------------
 CameraState CameraState::Interpolate(const CameraState& lrFrom, const CameraState& lrTo, f32 lfT)
 {
-    CGS_ASSERT(lfT >= 0.0f && lfT <= 1.0f, "lfT >= 0.0f && lfT <= 1.0f");   // .cpp:121
+    CGS_ASSERT(lfT >= 0.0f && lfT <= 1.0f, CgsDev::Assert::MessageAt("lfT >= 0.0f && lfT <= 1.0f", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraState.cpp", 121));   // .cpp:121
 
     // The FAILED-range bits merged inside the `lfT < 1` arm (set OR clear).
     static const u32 KAU_MERGED_IN_ARM[2] = { 0u, 13u };

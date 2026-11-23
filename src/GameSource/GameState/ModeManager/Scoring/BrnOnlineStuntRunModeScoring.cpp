@@ -4,6 +4,7 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"
 #include "GameSource/GameState/BrnGameStateSharedIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <stdlib.h> // qsort
 
@@ -189,8 +190,8 @@ void OnlineStuntRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyste
     for (s32 liTeamRank = 0; liTeamRank < liNumContestingTeams; ++liTeamRank)
     {
         const s32 liTeam = laTeamData[liTeamRank].miTeam;
-        CGS_ASSERT(liTeam >= 0, "lePlayerTeam >= GsmIO::E_PLAYER_TEAM_START");
-        CGS_ASSERT(liTeam < KI_MAX_PLAYER_TEAMS, "lePlayerTeam < GsmIO::E_PLAYER_TEAM_COUNT");
+        CGS_ASSERT(liTeam >= 0, CgsDev::Assert::MessageAt("lePlayerTeam >= GsmIO::E_PLAYER_TEAM_START", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.cpp", 189));
+        CGS_ASSERT(liTeam < KI_MAX_PLAYER_TEAMS, CgsDev::Assert::MessageAt("lePlayerTeam < GsmIO::E_PLAYER_TEAM_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.cpp", 190));
         laTeamStandings[liTeam] = liRankValue;
         --liRankValue;
     }
@@ -200,9 +201,9 @@ void OnlineStuntRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyste
     {
         const PlayerSortData& lRow = laPlayerData[liPosition];
         CarData* lpCarData = lpScoringSystem->GetCarData(static_cast<EActiveRaceCarIndex>(lRow.miRaceCarIndex));
-        CGS_ASSERT(lpCarData, "lpCarData");
+        CGS_ASSERT(lpCarData, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.cpp", 202));
         GameStateModuleIO::CarScoreData* lpScore = lpCarData->GetScoreData();
-        CGS_ASSERT(lpScore, "lpCarScoreData");
+        CGS_ASSERT(lpScore, CgsDev::Assert::MessageAt("lpCarScoreData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.cpp", 203));
 
         if (lRow.mbDisconnected)
         {
@@ -211,8 +212,8 @@ void OnlineStuntRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyste
         else
         {
             const s32 liTeam = static_cast<s32>(lpCarData->GetTeam());
-            CGS_ASSERT(liTeam >= 0, "lpCarData->GetTeam() >= GsmIO::E_PLAYER_TEAM_START");
-            CGS_ASSERT(liTeam < KI_MAX_PLAYER_TEAMS, "lpCarData->GetTeam() < GsmIO::E_PLAYER_TEAM_COUNT");
+            CGS_ASSERT(liTeam >= 0, CgsDev::Assert::MessageAt("lpCarData->GetTeam() >= GsmIO::E_PLAYER_TEAM_START", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.cpp", 208));
+            CGS_ASSERT(liTeam < KI_MAX_PLAYER_TEAMS, CgsDev::Assert::MessageAt("lpCarData->GetTeam() < GsmIO::E_PLAYER_TEAM_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineStuntRunModeScoring.cpp", 209));
             lpScore->SetOnlineRacePoints(laTeamStandings[liTeam]);
         }
 

@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                            // Vector3
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"           // THE Behaviour base
 #include "GameSource/Director/Camera/Utils/BrnCameraShake.h"           // Utils::CameraShake(+Params)
                                                                        //   + CameraShakeICEController
@@ -273,7 +274,7 @@ inline void
 BehaviourGameplayBumper::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourGameplayBumper,
-               "lpParameters->GetType() == eBehaviourGameplayBumper");
+               CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourGameplayBumper", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGameplayBumper.h", 152));
     mpParameters = lpParameters;                                  // stw r4,  0x828(this)
     SetDebugParametersName(lpParameters->GetDebugName());         // stw r11, 0x10(this)
 }

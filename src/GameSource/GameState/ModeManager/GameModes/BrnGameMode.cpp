@@ -4,6 +4,7 @@
 #include "GameSource/GameState/ModeManager/GameModeStates/BrnGameModeState.h"
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"   // ScoringSystem::GetPlayerNoInputTime / GetPlayerStationaryTime (slot 13)
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [stunt] the mode-state ladder rung (see SetCurrentState)
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"   // GetIntroDurationSeconds: the current mode / type / flyby count
 // PreWorldUpdate's rival-visibility scan: the complete active-race-car output interface
@@ -599,8 +600,8 @@ s32 GameMode::CalculateMaxPlayerWrecks(const StartGameModeParams* lpStartGameMod
     // embedded block; reproduced as the tripwire it is.
     const BrnResource::VehicleListEntry* lpPlayerCarVehicleListEntry =
         lpStartGameModeParams->GetPlayerVehicleGamePlayData();
-    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, "lpPlayerCarVehicleListEntry != NULL");   // cpp:414
-    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, "lpPlayerCarVehicleListEntryGamePlayData != NULL"); // cpp:417
+    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, CgsDev::Assert::MessageAt("lpPlayerCarVehicleListEntry != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnGameMode.cpp", 414));   // cpp:414
+    CGS_ASSERT(lpPlayerCarVehicleListEntry != NULL, CgsDev::Assert::MessageAt("lpPlayerCarVehicleListEntryGamePlayData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnGameMode.cpp", 417)); // cpp:417
     if (lpPlayerCarVehicleListEntry == NULL)
     {
         return KI_NUM_WEAKEST_CAR_CRASHES;   // [PC GUARD] assert-is-not-a-guard; console would deref NULL

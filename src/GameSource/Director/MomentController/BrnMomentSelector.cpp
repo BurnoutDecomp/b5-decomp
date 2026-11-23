@@ -220,7 +220,7 @@ u32 MomentSelector::SnoopNumValidMoments()
 
 void MomentSelector::Update(f32 lfTimestep)
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");
+    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 117));
 
     mfTimeActive += lfTimestep;      // +0x1C4
     ++miFramesActive;                // +0x1C8
@@ -374,12 +374,12 @@ void MomentSelector::Update(f32 lfTimestep)
             }
             u32 luMomentToUninhibit = 0;
             const bool lbPickedBest = PickBestInhibitedMoment(&luMomentToUninhibit, E_PICK_BEST_FUSSY);
-            CGS_ASSERT(lbPickedBest, "PickBestInhibitedMoment(&luMomentToUninhibit)");   // cpp:207
+            CGS_ASSERT(lbPickedBest, CgsDev::Assert::MessageAt("PickBestInhibitedMoment(&luMomentToUninhibit)", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 207));   // cpp:207
             mMomentHandleArray[luMomentToUninhibit].GetMoment()->SetInhibited(false);
 
             u32 luMomentInhibit = 0;
             const bool lbPickedWorst = PickWorstUninhibitedMoment(&luMomentInhibit, E_PICK_WORST_FUSSY);
-            CGS_ASSERT(lbPickedWorst, "PickWorstUninhibitedMoment(&luMomentInhibit)");   // cpp:210
+            CGS_ASSERT(lbPickedWorst, CgsDev::Assert::MessageAt("PickWorstUninhibitedMoment(&luMomentInhibit)", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 210));   // cpp:210
             mMomentHandleArray[luMomentInhibit].GetMoment()->Inhibit();
    // [DIAG]
       // [DIAG]
@@ -550,9 +550,9 @@ bool MomentSelector::Release()
 // handle, and a zero recency entry.
 bool MomentSelector::AddMoment(MomentDescription lMoment)
 {
-    CGS_ASSERT(!mbPrepared, "!mbPrepared");
+    CGS_ASSERT(!mbPrepared, CgsDev::Assert::MessageAt("!mbPrepared", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 282));
     CGS_ASSERT(mMomentDescriptionArray.GetLength() < mMomentDescriptionArray.GetCapacity(),
-               "mMomentDescriptionArray.GetLength() < mMomentDescriptionArray.GetCapacity()");
+               CgsDev::Assert::MessageAt("mMomentDescriptionArray.GetLength() < mMomentDescriptionArray.GetCapacity()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 283));
 
     MomentController::MomentHandle lMomentHandle;
     lMomentHandle.Construct();                      // console: the single zero byte into the slot

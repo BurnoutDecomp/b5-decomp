@@ -35,9 +35,6 @@
 #include <cmath>                                                // std::floor (the lane walkers)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // the lane-seated diagnostic
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.h";
-
 namespace BrnDirector
 {
 namespace Camera
@@ -226,10 +223,10 @@ void TrafficLaneTruck::PickSplitToTakeBackwards(const BrnTraffic::Section& lrSec
                                                 u8* lpOutDirection)
 {
     CGS_ASSERT(lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT,
-               "lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT");
-    CGS_ASSERT(lpOutSection != 0, "lpOutSection");
-    CGS_ASSERT(lpOutHull != 0, "lpOutHull");
-    CGS_ASSERT(lpOutDirection != 0, "lpOutDirection");
+               CgsDev::Assert::MessageAt("lePreferredDirection < BrnTraffic::E_DIRECTIONS_COUNT", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.cpp", 207));
+    CGS_ASSERT(lpOutSection != 0, CgsDev::Assert::MessageAt("lpOutSection", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.cpp", 208));
+    CGS_ASSERT(lpOutHull != 0, CgsDev::Assert::MessageAt("lpOutHull", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.cpp", 209));
+    CGS_ASSERT(lpOutDirection != 0, CgsDev::Assert::MessageAt("lpOutDirection", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.cpp", 210));
 
     u32 luDirection = static_cast<u32>(lePreferredDirection);
     if (lrSection.mauBackwardSections[luDirection] == 0xFF)
@@ -357,7 +354,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneForwards(
         BrnDirector::WorldMap::LanePosition* lpPositionInOut,
         rw::math::vpu::Matrix44Affine* lpTransformOut)
 {
-    CGS_ASSERT(lpPositionInOut->mbValid, "lpPositionInOut->mbValid");
+    CGS_ASSERT(lpPositionInOut->mbValid, CgsDev::Assert::MessageAt("lpPositionInOut->mbValid", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.cpp", 275));
 
     const BrnTraffic::Hull*    lpHull    = lrWorldMap.GetTrafficHullData(lpPositionInOut->muHullIndex);
     const BrnTraffic::Section* lpSection = lpHull->GetSection(lpPositionInOut->muSection);
@@ -369,7 +366,7 @@ void TrafficLaneTruck::MoveAlongTrafficLaneForwards(
                                     - lpaCumulativeLengths[luCurrentRung];
     u32        luNumSegments        = lpSection->GetNumSegments();
 
-    CGS_ASSERT(lfDistToMove >= KF_ZERO, "lfDistToMove >= 0.0f");
+    CGS_ASSERT(lfDistToMove >= KF_ZERO, CgsDev::Assert::MessageAt("lfDistToMove >= 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.cpp", 286));
 
     for (;;)
     {
@@ -604,7 +601,7 @@ void TrafficLaneTruck::MoveAlongTrafficLane(BrnTraffic::Directions lePreferredDi
                                             BrnDirector::WorldMap::LanePosition* lpPositionInOut,
                                             rw::math::vpu::Matrix44Affine* lpTransformOut)
 {
-    CGS_ASSERT(lpPositionInOut->mbValid, "lpPositionInOut->mbValid");
+    CGS_ASSERT(lpPositionInOut->mbValid, CgsDev::Assert::MessageAt("lpPositionInOut->mbValid", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.cpp", 517));
 
     if (lfDistToMove >= KF_ZERO)
         MoveAlongTrafficLaneForwards(lePreferredDirection, lrWorldMap, lfDistToMove,
@@ -660,7 +657,7 @@ void TrafficLaneTruck::MoveAlongTrafficLane(BrnTraffic::Directions lePreferredDi
 void TrafficLaneTruck::Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTimestep,
                               void* /*lpRandom*/)
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");
+    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.cpp", 95));
 
     if (!mLanePosition.mbValid)
         return;
@@ -724,7 +721,7 @@ void TrafficLaneTruck::Update(const BrnDirector::WorldMap& lrWorldMap, f32 lfTim
 rw::math::vpu::Matrix44Affine TrafficLaneTruck::GetTransform() const
 {
     CGS_ASSERT(mbPrepared,
-        CgsDev::Assert::MessageAt("mbPrepared", KAC_ARTIST_ASSERT_FILE, 63 /* ARTIST 0x821F5408 */));
+        CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.h", 63 /* ARTIST 0x821F5408 */));
     return mTransform;                                 // 4x lvx128 (this+0x20) -> 4x stvx128 (sret)
 }
 
@@ -734,7 +731,7 @@ rw::math::vpu::Matrix44Affine TrafficLaneTruck::GetTransform() const
 rw::math::vpu::Vector3 TrafficLaneTruck::GetLocalAngularVelocity() const
 {
     CGS_ASSERT(mbPrepared,
-        CgsDev::Assert::MessageAt("mbPrepared", KAC_ARTIST_ASSERT_FILE, 73 /* ARTIST 0x821F54A0 */));
+        CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.h", 73 /* ARTIST 0x821F54A0 */));
     return mLocalAngularVelocity;                      // lvx128 (this+0x60) -> stvx128 (sret)
 }
 
@@ -744,7 +741,7 @@ rw::math::vpu::Vector3 TrafficLaneTruck::GetLocalAngularVelocity() const
 rw::math::vpu::Vector3 TrafficLaneTruck::GetLinearVelocity() const
 {
     CGS_ASSERT(mbPrepared,
-        CgsDev::Assert::MessageAt("mbPrepared", KAC_ARTIST_ASSERT_FILE, 76 /* ARTIST 0x821F5510 */));
+        CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRoadRunner.h", 76 /* ARTIST 0x821F5510 */));
     return mLinearVelocity;                            // lvx128 (this+0x70) -> stvx128 (sret)
 }
 

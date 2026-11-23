@@ -5,6 +5,7 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"
 #include "GameSource/GameState/BrnGameStateTypes.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Timer/CgsTime.h"
 
 #include <stdlib.h> // qsort
@@ -61,8 +62,8 @@ void OnlineRaceModeScoring::WriteDataToOutput(GameStateModuleIO::OnlineScoringOu
 // below mean "order by finish time, break ties by player id".
 int OnlineRaceModeScoring::_PlayerFinishTimesCompare(const void* lpPlayer1, const void* lpPlayer2)
 {
-    CGS_ASSERT(lpPlayer1, "lpPlayer1");
-    CGS_ASSERT(lpPlayer2, "lpPlayer2");
+    CGS_ASSERT(lpPlayer1, CgsDev::Assert::MessageAt("lpPlayer1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRaceModeScoring.cpp", 126));
+    CGS_ASSERT(lpPlayer2, CgsDev::Assert::MessageAt("lpPlayer2", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRaceModeScoring.cpp", 127));
 
     const IndexToFinishTuple* lpP1 = static_cast<const IndexToFinishTuple*>(lpPlayer1);
     const IndexToFinishTuple* lpP2 = static_cast<const IndexToFinishTuple*>(lpPlayer2);
@@ -173,7 +174,7 @@ void OnlineRaceModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSystem, s
 {
     GameStateModuleIO::CarScoreData lDefaultScoreData;
 
-    CGS_ASSERT(lpScoringSystem, "lpScoringSystem");
+    CGS_ASSERT(lpScoringSystem, CgsDev::Assert::MessageAt("lpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRaceModeScoring.cpp", 248));
 
     lDefaultScoreData.ClearData();
 

@@ -12,6 +12,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourGyroCam.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
 #include <algorithm>
@@ -83,7 +84,7 @@ void AttachmentTruck::Update(rw::math::vpu::Vector3 lPosition, rw::math::vpu::Ve
 bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
     using namespace rw::math::vpu;
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.cpp", 226));
     if (!mAttachedTo.IsValid(*lrInfo.GetWorld()))
     {
         Fail(lrCamera, 11);

@@ -15,9 +15,6 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                       // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/AssertSystem/CgsAssertManager.h" // CGS_ASSERT
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraTweaker.cpp";
-
 namespace BrnDirector
 {
     namespace Camera
@@ -101,7 +98,7 @@ namespace BrnDirector
             {
                 CGS_ASSERT(lpcName != 0, "lpcName != NULL");
                 CGS_ASSERT(lpfVariableToTweak != 0, "lpfVariableToTweak != NULL");
-                CGS_ASSERT(leAxisToMapTo < E_AXIS_COUNT, "leAxisToMapTo < E_AXIS_COUNT");
+                CGS_ASSERT(leAxisToMapTo < E_AXIS_COUNT, CgsDev::Assert::MessageAt("leAxisToMapTo < E_AXIS_COUNT", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraTweaker.cpp", 172));
                 CGS_ASSERT(leMap < E_MAP_COUNT, "leMap < E_MAP_COUNT");
 
                 AxisMapping& lrMapping = maAxisMapping[leMap][leAxisToMapTo];
@@ -121,19 +118,19 @@ namespace BrnDirector
             {
                 CGS_ASSERT(lpcName != 0,
                     CgsDev::Assert::MessageAt(
-                        "lpcName != NULL", KAC_ARTIST_ASSERT_FILE, 169 /* ARTIST 0x821F861C */));
+                        "lpcName != NULL", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraTweaker.cpp", 169 /* ARTIST 0x821F861C */));
                 CGS_ASSERT(lpfVariableToTweak != 0,
                     CgsDev::Assert::MessageAt(
-                        "lpfVariableToTweak != NULL", KAC_ARTIST_ASSERT_FILE, 170 /* ARTIST 0x821F8640 */));
+                        "lpfVariableToTweak != NULL", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraTweaker.cpp", 170 /* ARTIST 0x821F8640 */));
                 CGS_ASSERT(lpfScale != 0,
                     CgsDev::Assert::MessageAt(
-                        "lpfScale != NULL", KAC_ARTIST_ASSERT_FILE, 171 /* ARTIST 0x821F8664 */));
+                        "lpfScale != NULL", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraTweaker.cpp", 171 /* ARTIST 0x821F8664 */));
                 CGS_ASSERT(leAxisToMapTo < E_AXIS_COUNT,
                     CgsDev::Assert::MessageAt(
-                        "leAxisToMapTo < E_AXIS_COUNT", KAC_ARTIST_ASSERT_FILE, 172 /* ARTIST 0x821F8688 */));
+                        "leAxisToMapTo < E_AXIS_COUNT", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraTweaker.cpp", 172 /* ARTIST 0x821F8688 */));
                 CGS_ASSERT(leMap < E_MAP_COUNT,
                     CgsDev::Assert::MessageAt(
-                        "leMap < E_MAP_COUNT", KAC_ARTIST_ASSERT_FILE, 173 /* ARTIST 0x821F86AC */));
+                        "leMap < E_MAP_COUNT", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraTweaker.cpp", 173 /* ARTIST 0x821F86AC */));
 
                 AxisMapping& lrMapping = maAxisMapping[leMap][leAxisToMapTo];
                 lrMapping.mfScale            = 0.0f;
@@ -150,7 +147,7 @@ namespace BrnDirector
                                                 EMap leMap)
             {
                 CGS_ASSERT(lpcName != 0, "lpcName != NULL");
-                CGS_ASSERT(lpFunction != 0, "lpFunction != NULL");
+                CGS_ASSERT(lpFunction != 0, CgsDev::Assert::MessageAt("lpFunction != NULL", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraTweaker.cpp", 195));
                 CGS_ASSERT(leControl < DebugController::E_CONTROL_COUNT, "leControl < E_CONTROL_COUNT");
                 CGS_ASSERT(leMap < E_MAP_COUNT, "leMap < E_MAP_COUNT");
 

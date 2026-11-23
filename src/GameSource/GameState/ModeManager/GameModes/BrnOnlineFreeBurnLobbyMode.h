@@ -3,6 +3,7 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnOnlineGameMode.h"
 #include "GameSource/GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.h"   // mBurnoutSkillzManager (by value)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // the two inline setters
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGameState
 {
@@ -84,13 +85,13 @@ public:
     // Inlined into ModeManager::Construct, each firing its own assert ahead of the manager's.
     void SetStreetManager(StreetManager* lpStreetManager)
     {
-        CGS_ASSERT(lpStreetManager, "lpStreetManager");
+        CGS_ASSERT(lpStreetManager, CgsDev::Assert::MessageAt("lpStreetManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\GameModes/BrnOnlineFreeBurnLobbyMode.h", 175));
         mBurnoutSkillzManager.SetStreetManager(lpStreetManager);
     }
 
     void SetMugshotManager(MugshotManager* lpMugshotManager)
     {
-        CGS_ASSERT(lpMugshotManager, "lpMugshotManager");
+        CGS_ASSERT(lpMugshotManager, CgsDev::Assert::MessageAt("lpMugshotManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\GameModes/BrnOnlineFreeBurnLobbyMode.h", 190));
         mBurnoutSkillzManager.SetMugshotManager(lpMugshotManager);
     }
 

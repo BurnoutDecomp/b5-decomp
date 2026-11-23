@@ -1,4 +1,5 @@
 #include "GameSource/Replays/Stream/BrnReplayDiskReadStream.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
@@ -329,7 +330,7 @@ namespace BrnReplays
                             void* lpBlockData = 0;
                             s32   liBlockSize = 0;
                             bool  lbStarted   = StartAsyncReadInternal(&lpBlockData, &liBlockSize);
-                            CGS_ASSERT(lbStarted, "Failed to read data\n");
+                            CGS_ASSERT(lbStarted, CgsDev::Assert::MessageAt("Failed to read data\n", "..\\..\\..\\GameSource\\Replays/Stream/BrnReplayDiskReadStream.cpp", 209));
                             CGS_ASSERT(liBlockSize >= miBlockSize, "Data too small\n");
 
                             XMemCpy(lpDest, lpBlockData, static_cast<size_t>(miBlockSize));

@@ -18,9 +18,6 @@
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"                     // GuiEventTickerClearMessages / GuiEventTickerCustomMessage
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"  // InGamePlayerStatusData
 
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCheckScreen);
-
 namespace BrnGui
 {
     const CgsGui::sResourceTuple OnlineInstantResultsState::maResourceTuplesToLoad[] =
@@ -294,8 +291,8 @@ namespace BrnGui
         char lacStatus[1064];
 
         CgsCore::SPrintf(lacText, 1024, "HELLO!");
-        MaybeDrawText(lpDisplay, lacText, 80.0f, 100.0f, 20.0f,
-                      static_cast<CgsDev::RGBA>(-1), false);
+        lpDisplay->DrawText(lacText, 80.0f, 100.0f, 20.0f,
+                      static_cast<CgsDev::RGBA>(-1));
 
         const s32 liNumPlayers = mOnlinePostEvent.miNumPlayersInEvent;
         if (liNumPlayers > 0)
@@ -354,18 +351,18 @@ namespace BrnGui
                                          lpPlayerInfo->mPlayerName.GetPlayerName(),
                                          lpcStatus, static_cast<s32>(lrRecord.muValue1C));
                     }
-                    MaybeDrawText(lpDisplay, lacText, 80.0f, lfRowY, 20.0f,
-                                  static_cast<CgsDev::RGBA>(-1), false);
+                    lpDisplay->DrawText(lacText, 80.0f, lfRowY, 20.0f,
+                                  static_cast<CgsDev::RGBA>(-1));
                 }
                 lfRowY += 24.0f;
             }
 
             CgsCore::SPrintf(lacText, 1024, "%d PLAYERS IN GAME", liNumPlayers);
-            MaybeDrawText(lpDisplay, lacText, 80.0f, lfRowY, 20.0f,
-                          static_cast<CgsDev::RGBA>(-1), false);
+            lpDisplay->DrawText(lacText, 80.0f, lfRowY, 20.0f,
+                          static_cast<CgsDev::RGBA>(-1));
             CgsCore::SPrintf(lacText, 1024, "STATE=%d", static_cast<s32>(meCurrentState));
-            MaybeDrawText(lpDisplay, lacText, 80.0f, lfRowY + 24.0f, 20.0f,
-                          static_cast<CgsDev::RGBA>(-1), false);
+            lpDisplay->DrawText(lacText, 80.0f, lfRowY + 24.0f, 20.0f,
+                          static_cast<CgsDev::RGBA>(-1));
         }
     }
 

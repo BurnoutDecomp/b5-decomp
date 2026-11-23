@@ -35,9 +35,6 @@
 
 #include <cstring>
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayTrafficEntitySerialiser.h";
-
 namespace BrnReplays
 {
     // -------------------------------------------------------------------------
@@ -100,7 +97,7 @@ namespace BrnReplays
         CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
             CgsDev::Assert::MessageAt(
                 "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
-                KAC_ARTIST_ASSERT_FILE, 507 /* ARTIST 0x827072AC */));
+                "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayTrafficEntitySerialiser.h", 507 /* ARTIST 0x827072AC */));
 
         u8* lpBase = reinterpret_cast<u8*>(GetStaticLayout());
         const u32 luChunk = luVehicle / KU_VEHICLES_PER_CHUNK;
@@ -120,7 +117,7 @@ namespace BrnReplays
         CGS_ASSERT(luVehicle < KU_MAX_TOTAL_TRAFFIC,
             CgsDev::Assert::MessageAt(
                 "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
-                KAC_ARTIST_ASSERT_FILE, 476 /* ARTIST 0x82707214 */));
+                "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayTrafficEntitySerialiser.h", 476 /* ARTIST 0x82707214 */));
 
         u8* lpBase = reinterpret_cast<u8*>(GetStaticLayout());
         const u32 luChunk = luVehicle / KU_VEHICLES_PER_CHUNK;
@@ -286,7 +283,7 @@ namespace BrnReplays
     // GetFirstBitSet / GetNextBitSet.
     void TrafficEntitySerialiser::ReadFrame(TrafficEntitySerialiserStaticLayout* lpFrame, s32 liArg3)
     {
-        CGS_ASSERT(lpFrame != 0, "lpFrame");
+        CGS_ASSERT(lpFrame != 0, CgsDev::Assert::MessageAt("lpFrame", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayTrafficEntitySerialiser.cpp", 438));
         // The X360 fires FOUR alignment asserts under the single (ptr & 0xF) != 0 guard
         // (0x8265DD9C-0x8265DE18), each citing a distinct member.
         CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mActiveHullsForLocalPlayer) & 0xf) == 0,
@@ -294,9 +291,9 @@ namespace BrnReplays
         CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mActiveHullsForLocalPlayer) & 0xf) == 0,
                    "(reinterpret_cast<uintptr_t>(&lpFrame->mHeader) & 0xf) == 0");
         CGS_ASSERT((reinterpret_cast<uintptr_t>(lpFrame->maPhysicsInfo) & 0xf) == 0,
-                   "(reinterpret_cast<uintptr_t>(&lpFrame->maPhysicsInfo) & 0xf) == 0");
+                   CgsDev::Assert::MessageAt("(reinterpret_cast<uintptr_t>(&lpFrame->maPhysicsInfo) & 0xf) == 0", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayTrafficEntitySerialiser.cpp", 449));
         CGS_ASSERT((reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0,
-                   "(reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0");
+                   CgsDev::Assert::MessageAt("(reinterpret_cast<uintptr_t>(&lpFrame->mTrafficLightManager) & 0xf) == 0", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayTrafficEntitySerialiser.cpp", 451));
 
         BaseSerialiser::Read(&lpFrame->mActiveHullsForLocalPlayer, 148);
         BaseSerialiser::Read(&lpFrame->muLocalPlayerHull, 2);
@@ -402,7 +399,7 @@ namespace BrnReplays
     s32 TrafficEntitySerialiser::Read()
     {
         Lock();
-        CGS_ASSERT(GetStaticLayout() != 0, "GetStaticLayout()");
+        CGS_ASSERT(GetStaticLayout() != 0, CgsDev::Assert::MessageAt("GetStaticLayout()", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayTrafficEntitySerialiser.cpp", 138));
 
         const EMode leMode = meMode;
 

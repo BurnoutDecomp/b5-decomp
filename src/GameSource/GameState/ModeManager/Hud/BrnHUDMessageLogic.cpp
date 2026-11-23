@@ -37,8 +37,6 @@
 // here as the call (BrnScoringSystem_Timer.cpp documents the same lowering). The
 // `lpCarData != NULL` asserts fire at BrnHUDMessageLogic.cpp:1026 / :1120 / :1120 in the
 // X360 build; preserved via CGS_ASSERT.
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp";
 
 namespace BrnGameState
 {
@@ -213,7 +211,7 @@ void HUDMessageLogic::PreWorldUpdate(GameStateModuleIO::GameActionQueue* lpOutpu
 {
     CGS_ASSERT(lpOutputGameActionQueue != NULL,
         CgsDev::Assert::MessageAt(
-            "lpOutputGameActionQueue != NULL", KAC_ARTIST_ASSERT_FILE, 116 /* ARTIST 0x82389274 */));
+            "lpOutputGameActionQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 116 /* ARTIST 0x82389274 */));
 
     lpOutputGameActionQueue->Append(mActionQueue);
     mActionQueue.Clear();
@@ -235,8 +233,8 @@ void HUDMessageLogic::PostWorldUpdate(
     EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
     bool lbIsGameModeInProgress)
 {
-    CGS_ASSERT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL");
-    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");
+    CGS_ASSERT(lpActiveRaceCarInterface != NULL, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 144));
+    CGS_ASSERT(lpScoringSystem != NULL, CgsDev::Assert::MessageAt("lpScoringSystem != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 145));
 
     if (meCurrentGameModeType != leGameModeType)
     {
@@ -472,9 +470,9 @@ void HUDMessageLogic::GenerateFinisherMessage(
     }
 
     CGS_ASSERT(meFinishedRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-               "meFinishedRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");      // .cpp:621
+               CgsDev::Assert::MessageAt("meFinishedRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 621));      // .cpp:621
     CGS_ASSERT(meFinishedRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "meFinishedRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");   // .cpp:622
+               CgsDev::Assert::MessageAt("meFinishedRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 622));   // .cpp:622
 
     if (meFinishedRaceCarIndex != lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex())
     {
@@ -515,7 +513,7 @@ void HUDMessageLogic::GenerateRivalCheckpointMessage(
     meCheckpointTriggeringRaceCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
 
     const EActiveRaceCarIndex lePlayerCarIndex = lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
-    CGS_ASSERT(leRaceCarIndex != lePlayerCarIndex, "leRaceCarIndex != lePlayerCarIndex");   // .cpp:707
+    CGS_ASSERT(leRaceCarIndex != lePlayerCarIndex, CgsDev::Assert::MessageAt("leRaceCarIndex != lePlayerCarIndex", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 707));   // .cpp:707
 
     const f32 lfRaceCarDistToFinish = lpScoringSystem->GetRaceCarDistanceToFinish(leRaceCarIndex);
     const f32 lfPlayerDistToFinish  = lpScoringSystem->GetRaceCarDistanceToFinish(lePlayerCarIndex);
@@ -725,7 +723,7 @@ void HUDMessageLogic::DetectOnlineCrashes(
         if (leCrashedCarIndex != lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex())
         {
             const s32 liAllocatedIndex = mBufferedCrashingCars.AllocateObject();
-            CGS_ASSERT(liAllocatedIndex >= 0, "liAllocatedIndex >= 0");   // BrnHUDMessageLogic.cpp:804
+            CGS_ASSERT(liAllocatedIndex >= 0, CgsDev::Assert::MessageAt("liAllocatedIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 804));   // BrnHUDMessageLogic.cpp:804
 
             // `bge` @0x823945EC: the failure arm branches past the stores to the loop tail
             // (`b 0x82394694` @0x82394608), so a full pool drops the crash.
@@ -838,7 +836,7 @@ void HUDMessageLogic::GenerateStuntMessage(ScoringSystem* lpScoringSystem)
     StuntModeScoring* lpStuntModeScoring = lbOnlineStuntFamily
                                              ? lpScoringSystem->GetOnlineStuntScorer()   // ss+0x2620
                                              : lpScoringSystem->GetStuntScorer();        // ss+0x350
-    CGS_ASSERT(lpStuntModeScoring != NULL, "lpStuntModeScoring");
+    CGS_ASSERT(lpStuntModeScoring != NULL, CgsDev::Assert::MessageAt("lpStuntModeScoring", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 1228));
 
     ComboPerformedMessage lComboMessage;
     if (lpStuntModeScoring->WasComboRecentlyPerformed(&lComboMessage.miComboScore,
@@ -1101,7 +1099,7 @@ void HUDMessageLogic::GenerateOnlineStuntRunScoreMessages(ScoringSystem* lpScori
     {
         const CarData* lpCarData = lpScoringSystem->GetCarData(leWatchedCar);
         CGS_ASSERT(lpCarData != NULL,
-            CgsDev::Assert::MessageAt("lpCarData != NULL", KAC_ARTIST_ASSERT_FILE, 1120 /* ARTIST 0x82394D18 */));
+            CgsDev::Assert::MessageAt("lpCarData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 1120 /* ARTIST 0x82394D18 */));
 
         StuntRunScoreMessage lMessage;
         lMessage.mNetworkPlayerID = lpCarData->GetNetworkPlayerID();
@@ -1120,7 +1118,7 @@ void HUDMessageLogic::GenerateOnlineBlueTeamEscapingMessage(
     f32 lfDelta,
     EActiveRaceCarIndex lePlayerActiveRaceCarIndex)
 {
-    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");
+    CGS_ASSERT(lpScoringSystem != NULL, CgsDev::Assert::MessageAt("lpScoringSystem != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 1340));
 
     if (lpScoringSystem->GetNumberOfActiveCars() > 0)
     {
@@ -1192,7 +1190,7 @@ void HUDMessageLogic::GenerateOnlineBlueTeamAreBehindYouMessage(
     f32 lfDelta,
     EActiveRaceCarIndex lePlayerActiveRaceCarIndex)
 {
-    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");
+    CGS_ASSERT(lpScoringSystem != NULL, CgsDev::Assert::MessageAt("lpScoringSystem != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 1428));
 
     if (lpScoringSystem->GetNumberOfActiveCars() > 0)
     {
@@ -1265,7 +1263,7 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
     EActiveRaceCarIndex,
     bool lbIsGameModeInProgress)
 {
-    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");
+    CGS_ASSERT(lpScoringSystem != NULL, CgsDev::Assert::MessageAt("lpScoringSystem != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 1517));
 
     s32 liBestRacePosition = KI_NO_LEADER_RACE_POSITION;
     EActiveRaceCarIndex leLeadingTeamCarIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
@@ -1354,7 +1352,7 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
 void HUDMessageLogic::GenerateBurningHomeRunCheckpointMessage(ModeManager* lpModeManager,
                                                               ScoringSystem* lpScoringSystem)
 {
-    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem");
+    CGS_ASSERT(lpScoringSystem != NULL, CgsDev::Assert::MessageAt("lpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 1189));
 
     const EActiveRaceCarIndex leRaceCarIndex = meCheckpointTriggeringRaceCarIndex;
     if (leRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
@@ -1420,10 +1418,10 @@ void HUDMessageLogic::GenerateOnlineTeamChangeMessages(
     const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
     EActiveRaceCarIndex lePlayerActiveRaceCarIndex)
 {
-    CGS_ASSERT(lpVehicleOutputInterface, "lpVehicleOutputInterface");
+    CGS_ASSERT(lpVehicleOutputInterface, CgsDev::Assert::MessageAt("lpVehicleOutputInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 1297));
     CGS_ASSERT((lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                (lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-               "( lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+               CgsDev::Assert::MessageAt("( lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 1298));
 
     BrnPhysics::Vehicle::CrashingRaceCarInterface lCrashingRaceCars;
     lCrashingRaceCars.SetFromVehicleOutputInterface(lpVehicleOutputInterface);

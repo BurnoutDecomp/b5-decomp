@@ -14,8 +14,6 @@
 #include "GameSource/Director/Utils/BrnAbstractPool.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Director/Utils/BrnAbstractPool.cpp";
-
 namespace BrnDirector
 {
 
@@ -23,14 +21,14 @@ bool AbstractPoolVoidHandle::Prepare(IAbstractPoolFreeObject* lpFreeObjectInterf
                                      void* lpObject, s32 liIndex, s32 liSize)
 {
     CGS_ASSERT( lpObject != 0,
-        CgsDev::Assert::MessageAt("lpObject != NULL", KAC_ARTIST_ASSERT_FILE, 33 /* ARTIST 0x821F76F8 */));
+        CgsDev::Assert::MessageAt("lpObject != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnAbstractPool.cpp", 33 /* ARTIST 0x821F76F8 */));
     CGS_ASSERT( lpFreeObjectInterface != 0,
         CgsDev::Assert::MessageAt(
-            "lpFreeObjectInterface != NULL", KAC_ARTIST_ASSERT_FILE, 34 /* ARTIST 0x821F771C */));
+            "lpFreeObjectInterface != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnAbstractPool.cpp", 34 /* ARTIST 0x821F771C */));
     CGS_ASSERT( liIndex >= 0,
-        CgsDev::Assert::MessageAt("liIndex >= 0", KAC_ARTIST_ASSERT_FILE, 35 /* ARTIST 0x821F7740 */));
+        CgsDev::Assert::MessageAt("liIndex >= 0", "..\\..\\..\\GameSource\\Director/Utils/BrnAbstractPool.cpp", 35 /* ARTIST 0x821F7740 */));
     CGS_ASSERT( liSize >= 0,
-        CgsDev::Assert::MessageAt("liSize >= 0", KAC_ARTIST_ASSERT_FILE, 36 /* ARTIST 0x821F7764 */));
+        CgsDev::Assert::MessageAt("liSize >= 0", "..\\..\\..\\GameSource\\Director/Utils/BrnAbstractPool.cpp", 36 /* ARTIST 0x821F7764 */));
 
     mpObject              = lpObject;
     mpFreeObjectInterface = lpFreeObjectInterface;

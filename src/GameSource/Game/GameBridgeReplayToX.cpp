@@ -25,6 +25,7 @@
 #include "GameSource/Game/GameBridgeGameStateToX.h"    // BrnGame::PushGuiEvent (the shared GUI event push)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Replays/BrnReplayModuleIO.h"       // BrnReplays::ReplayIO::OutputBuffer_PreSim
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // VariableEventQueue<32768,16>::Append<4096,16>
 
@@ -44,14 +45,14 @@ namespace BrnGame
         const BrnReplays::ReplayIO::OutputBuffer_PreSim* lpReplayOutput)
     {
         // GameBridgeReplayToX.cpp:89 / :90 -- both buffer pointers must be valid.
-        CGS_ASSERT(lpGuiInput != 0, "lpGuiInput");
-        CGS_ASSERT(lpReplayOutput != 0, "lpReplayOutput");
+        CGS_ASSERT(lpGuiInput != 0, CgsDev::Assert::MessageAt("lpGuiInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeReplayToX.cpp", 89));
+        CGS_ASSERT(lpReplayOutput != 0, CgsDev::Assert::MessageAt("lpReplayOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeReplayToX.cpp", 90));
 
         // ---- (1) status-interface -> GuiReplayStatusEvent --------------------------
         // GameBridgeReplayToX.cpp:92 -- the replay output buffer's status interface.
         const BrnReplays::ReplayIO::StatusInterface* lpStatusInterface =
             lpReplayOutput->GetStatusInterface();
-        CGS_ASSERT(lpStatusInterface != 0, "lpStatusInterface"); // :93
+        CGS_ASSERT(lpStatusInterface != 0, CgsDev::Assert::MessageAt("lpStatusInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeReplayToX.cpp", 93)); // :93
 
         // Build the GUI status event and copy the status interface into it
         // (BrnReplays::ReplayIO::StatusInterface::operator=), then queue the whole record.

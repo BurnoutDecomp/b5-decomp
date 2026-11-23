@@ -18,6 +18,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourFixedCam.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"               // Utils::CreateLookAt
 #include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h"          // Utils::Tweaker (SetupTweaker)
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                   // CgsNumeric::Random::RandomFloat
@@ -209,7 +210,7 @@ void BehaviourFixedCam::SetupTweaker(Utils::Tweaker& lrTweaker)
 {
     lrTweaker.Construct();
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters");   // cpp:180
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFixedCam.cpp", 180));   // cpp:180
 
     Parameters* lpParameters = const_cast<Parameters*>(mpParameters);
     lrTweaker.AddMapping("Roll", &lpParameters->mfMaxDutch, KF_TWEAK_SCALE,

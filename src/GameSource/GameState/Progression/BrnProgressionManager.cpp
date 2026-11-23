@@ -15,6 +15,7 @@
 // ===================================================================================
 
 #include "BrnProgressionManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "BrnProfile.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress (AddCar's "CARBEAGT" test)
@@ -232,8 +233,8 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
                                   void* lpTriggerData,
                                   BrnGameState::AchievementManagerBase* lpAchievementManager)
 {
-    CGS_ASSERT(lpOutput != 0, "lpOutput");            // X360 BrnProgressionManager.cpp:249
-    CGS_ASSERT(lpReceiverQueue != 0, "lpReceiverQueue");  // X360 :250
+    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 249));            // X360 BrnProgressionManager.cpp:249
+    CGS_ASSERT(lpReceiverQueue != 0, CgsDev::Assert::MessageAt("lpReceiverQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 250));  // X360 :250
 
     // ✅ [progression wave: lifecycle, 2026-09-06] THE PROFILE BOOT SEAM IS RETIRED, ITS OWN
     // DELETE-WHEN PAID. The seam that stood here (landed 2026-08-24, deform-land wave) called
@@ -255,11 +256,11 @@ bool ProgressionManager::Prepare2(BrnGameState::GameStateModuleIO::OutputBuffer*
         return false;
     }
 
-    CGS_ASSERT(lpTriggerData != 0, "lpTriggerData");
+    CGS_ASSERT(lpTriggerData != 0, CgsDev::Assert::MessageAt("lpTriggerData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 261));
     mpTriggerData     = lpTriggerData;           // X360 +0x20924 (a5)
     mpModeManager = lpModeManager;               // X360 +0x2093C (a3) -- the MODE manager; see the header
 
-    CGS_ASSERT(lpAchievementManager != 0, "lpAchievementManager");
+    CGS_ASSERT(lpAchievementManager != 0, CgsDev::Assert::MessageAt("lpAchievementManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 265));
     mpAchievementManager = lpAchievementManager; // X360 +0x20938 (a6)
 
     // The five trailing calls are dispatched by RunPrepare2Tail in the original order.
@@ -1109,7 +1110,7 @@ s32 ProgressionManager::GetStuntRunScoreTarget(const BrnGameState::GameModeParam
                                                const BrnGameState::StartGameModeParams* lpStartGameModeParams) const
 {
     const RaceEventData* lpStuntRunEventData = lpStartGameModeParams->GetEventData();
-    CGS_ASSERT(lpStuntRunEventData != NULL, "lpStuntRunEventData != NULL");
+    CGS_ASSERT(lpStuntRunEventData != NULL, CgsDev::Assert::MessageAt("lpStuntRunEventData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 3891));
 
     // `lwz r11,0x14 / addi r11,r11,-1 / extsb r25` -- narrowed to a signed byte, like every other
     // rank count in this file.
@@ -1200,7 +1201,7 @@ s8 ProgressionManager::GetProgressionRankForGameMode(BrnGameState::GameStateModu
                leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ROAD_RAGE    ||
                leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_STUNT_ATTACK ||
                leGameModeType == BrnGameState::GameStateModuleIO::E_MODE_MARKED_MAN,
-               "This game mode doesn't have separate difficulty scaling");
+               CgsDev::Assert::MessageAt("This game mode doesn't have separate difficulty scaling", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 3779));
 
     // Profile::GetNumRankWinsForGameMode owns the range assert the console fires here.
     const s32 liRankWins = mProfile.GetNumRankWinsForGameMode(leGameModeType);
@@ -1221,7 +1222,7 @@ s8 ProgressionManager::GetProgressionRankForGameMode(BrnGameState::GameStateModu
     --liProgressionRank;
 
     CGS_ASSERT(liProgressionRank >= 0 && liProgressionRank < liNumRanks,
-               "liProgressionRank >= 0 && liProgressionRank < liNumRanks");
+               CgsDev::Assert::MessageAt("liProgressionRank >= 0 && liProgressionRank < liNumRanks", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 3802));
 
     return static_cast<s8>(liProgressionRank);
 }

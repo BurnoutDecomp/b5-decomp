@@ -21,12 +21,8 @@
 // X360 bl's them directly); declared here so the compile gate sees their shape, mirroring the
 // sibling DebugComponent reconstructions.
 //
-//   MaybeDrawText (X360 0x82824048) -- "draw debug text iff on-screen" -> the renderer's
-//     DrawText(text, x, y, scale, colour) gated on a bounds test. The extra register args the
-//     decompiler shows are artifacts.
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
-
+//   Debug2DImmediateRender::DrawText(text, x, y, scale, colour) (X360 0x82824048, which IDA names
+//     "MaybeDrawText"): packs (x, y) into a Vector2 and calls the Vector2 overload.
 
 namespace CgsNetwork
 {
@@ -277,7 +273,7 @@ namespace CgsNetwork
         const f32 lfBottomY = ((lfIndex + 1.0f) * 15.0f) * 2.0f + 50.0f;              // index*30 + 80
 
         // 1) The row label, top line.
-        MaybeDrawText(lpRender, lpcName, 50.0f, lfLabelY, 15.0f, KU_TEXT_COLOUR, false);
+        lpRender->DrawText(lpcName, 50.0f, lfLabelY, 15.0f, KU_TEXT_COLOUR);
 
         // 2) The filled bandwidth bar, from the 50px left margin to the scaled length.
         lpRender->DrawBox(50.0f, lfRowY, lfBarLength + 50.0f, lfBottomY, lBarColour);
@@ -286,7 +282,7 @@ namespace CgsNetwork
         char              lacValue[128];
         CgsDev::StrStream lValueStream(lacValue, sizeof(lacValue));
         lValueStream << lfMaxOnGraph << "\n";
-        MaybeDrawText(lpRender, lValueStream.GetBuffer(), 50.0f, lfRowY, 15.0f, KU_TEXT_COLOUR, false);
+        lpRender->DrawText(lValueStream.GetBuffer(), 50.0f, lfRowY, 15.0f, KU_TEXT_COLOUR);
 
         // 4) The max-bandwidth threshold marker: a vertical line at lfMax's scaled position (no +50).
         const f32     lfMaxLength   = lfPlotWidth * (lfMax * lfInvMaxGraph);

@@ -40,10 +40,6 @@
 #include <cstring>  // memcpy
 #include <cstdlib>  // getenv (BRN_STUNT_DIAG)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-    "../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp";
-
 namespace BrnGameState
 {
 
@@ -158,15 +154,15 @@ CGS_STATIC_ASSERT((offsetof(RoadRuleBeatenNetEvent, miActionValue) == 8 &&
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::Construct(ModeManager* lpModeManager)
 {
-    CGS_ASSERT(lpModeManager, "lpModeManager");
+    CGS_ASSERT(lpModeManager, CgsDev::Assert::MessageAt("lpModeManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 51));
 
     mpScoringSystem = lpModeManager->GetScoringSystem();
-    CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
+    CGS_ASSERT(mpScoringSystem, CgsDev::Assert::MessageAt("mpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 54));
 
     // The achievement manager is the subobject embedded in the owning GameStateModule
     // (the console reaches it as modeManager->mpGameStateModule + 181680).
     mpAchievementManager = lpModeManager->GetGameStateModule()->GetAchievementManager();
-    CGS_ASSERT(mpAchievementManager, "mpAchievementManager");
+    CGS_ASSERT(mpAchievementManager, CgsDev::Assert::MessageAt("mpAchievementManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 57));
 
     mfCurrentTimeInAir = 0.0f;
     mabDirtyFlags.Construct();        // zero the dirty-flag bit set
@@ -190,13 +186,13 @@ void BurnoutSkillzManager::Construct(ModeManager* lpModeManager)
 // ----------------------------------------------------------------------------
 void BurnoutSkillzManager::ClearAllBurnoutSkillzData()
 {
-    CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
+    CGS_ASSERT(mpScoringSystem, CgsDev::Assert::MessageAt("mpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 94));
 
     for (s32 liScoringIndex = 0; liScoringIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liScoringIndex)
     {
         CarData* lpCarData = mpScoringSystem->GetCarDataFromPlayerScoringIndex(
             static_cast<GameStateModuleIO::EPlayerScoringIndex>(liScoringIndex));
-        CGS_ASSERT(lpCarData, "lpCarData");
+        CGS_ASSERT(lpCarData, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 101));
         lpCarData->ResetRoadRulesScores();
     }
 
@@ -256,17 +252,17 @@ bool BurnoutSkillzManager::GetRoadRuleHighScore(BrnNetwork::NetworkPlayerID lNet
                                                 BrnStreetData::ChallengeHighScoreEntry* lpData)
 {
     CGS_ASSERT(mpScoringSystem,
-        CgsDev::Assert::MessageAt("mpScoringSystem", KAC_ARTIST_ASSERT_FILE, 784 /* ARTIST 0x823227F8 */));
+        CgsDev::Assert::MessageAt("mpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 784 /* ARTIST 0x823227F8 */));
 
     CarData* lpCarData = mpScoringSystem->GetCarData(lNetworkPlayerID);
     if (lpCarData)
     {
         CGS_ASSERT(lpData,
-            CgsDev::Assert::MessageAt("lpData", KAC_ARTIST_ASSERT_FILE, 794 /* ARTIST 0x82322834 */));
+            CgsDev::Assert::MessageAt("lpData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 794 /* ARTIST 0x82322834 */));
         CGS_ASSERT(liIndex < KI_MAX_CHALLENGES && liIndex >= 0,
             CgsDev::Assert::MessageAt(
                 "liIndex < BrnGameState::KI_MAX_CHALLENGES && liIndex >= 0",
-                KAC_ARTIST_ASSERT_FILE, 795 /* ARTIST 0x82322860 */));
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 795 /* ARTIST 0x82322860 */));
         lpCarData->GetRoadRulesScores(liIndex, lpData);
         return true;
     }
@@ -282,17 +278,17 @@ void BurnoutSkillzManager::SetRoadRuleHighScore(BrnNetwork::NetworkPlayerID lNet
                                                 BrnStreetData::ChallengeHighScoreEntry* lpData)
 {
     CGS_ASSERT(mpScoringSystem,
-        CgsDev::Assert::MessageAt("mpScoringSystem", KAC_ARTIST_ASSERT_FILE, 818 /* ARTIST 0x823228D8 */));
+        CgsDev::Assert::MessageAt("mpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 818 /* ARTIST 0x823228D8 */));
 
     CarData* lpCarData = mpScoringSystem->GetCarData(lNetworkPlayerID);
     CGS_ASSERT(lpCarData,
-        CgsDev::Assert::MessageAt("lpCarData", KAC_ARTIST_ASSERT_FILE, 822 /* ARTIST 0x8232290C */));
+        CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 822 /* ARTIST 0x8232290C */));
     CGS_ASSERT(lpData,
-        CgsDev::Assert::MessageAt("lpData", KAC_ARTIST_ASSERT_FILE, 825 /* ARTIST 0x82322930 */));
+        CgsDev::Assert::MessageAt("lpData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 825 /* ARTIST 0x82322930 */));
     CGS_ASSERT(liIndex < KI_MAX_CHALLENGES && liIndex >= 0,
         CgsDev::Assert::MessageAt(
             "liIndex < BrnGameState::KI_MAX_CHALLENGES && liIndex >= 0",
-            KAC_ARTIST_ASSERT_FILE, 826 /* ARTIST 0x8232295C */));
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 826 /* ARTIST 0x8232295C */));
     lpCarData->SetRoadRulesScores(liIndex, lpData);
 }
 
@@ -307,9 +303,9 @@ void BurnoutSkillzManager::SetNewSkillIfGreater(BurnoutSkillzData::EBurnoutSkill
 {
     CGS_ASSERT(lpSkillzData, "lpSkillzData");
     CGS_ASSERT(leSkillType >= BurnoutSkillzData::E_BURNOUT_SKILL_START,
-               "leSkillType >= BurnoutSkillzData::E_BURNOUT_SKILL_START");
+               CgsDev::Assert::MessageAt("leSkillType >= BurnoutSkillzData::E_BURNOUT_SKILL_START", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 552));
     CGS_ASSERT(leSkillType < BurnoutSkillzData::E_BURNOUT_SKILL_COUNT,
-               "leSkillType < BurnoutSkillzData::E_BURNOUT_SKILL_COUNT");
+               CgsDev::Assert::MessageAt("leSkillType < BurnoutSkillzData::E_BURNOUT_SKILL_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 553));
     CGS_ASSERT(leLocalPlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
                leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                "( leLocalPlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
@@ -330,9 +326,9 @@ void BurnoutSkillzManager::SendUpdatePlayerSkillsEvent(::EActiveRaceCarIndex leA
                                                        bool lbShowHudMessage)
 {
     CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-               "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+               CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 1194));
     CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+               CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 1195));
 
     mabDirtyFlags.SetBit(static_cast<u32>(leActiveRaceCarIndex));
     maiBurnoutSkillsUpdatedFlags[leActiveRaceCarIndex] |= 4u;
@@ -359,7 +355,7 @@ void BurnoutSkillzManager::UpdateBoostChains(
 
     const BoostOutputInfo* lpBoostInfo =
         lpActiveCarInterface->GetBoostOutputInfoN(leLocalPlayerActiveRaceCarIndex);
-    CGS_ASSERT(lpBoostInfo, "lpBoostInfo");
+    CGS_ASSERT(lpBoostInfo, CgsDev::Assert::MessageAt("lpBoostInfo", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 519));
 
     // muNumChained (+0x0C): the live boost-chain count. While it is non-zero the chain is
     // still going; when it drops to zero and we have a banked chain count, award it.
@@ -383,12 +379,12 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePostWorld(
     const GameStateModuleIO::GameEventQueue* lpQueue,
     ::EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex)
 {
-    CGS_ASSERT(lpSkillzData, "lpSkillzData");
-    CGS_ASSERT(lpQueue, "lpQueue");
+    CGS_ASSERT(lpSkillzData, CgsDev::Assert::MessageAt("lpSkillzData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 851));
+    CGS_ASSERT(lpQueue, CgsDev::Assert::MessageAt("lpQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 852));
     CGS_ASSERT(leLocalPlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-               "leLocalPlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+               CgsDev::Assert::MessageAt("leLocalPlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 853));
     CGS_ASSERT(leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+               CgsDev::Assert::MessageAt("leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 854));
 
     const GameEventQueueImpl* lpQueueImpl = reinterpret_cast<const GameEventQueueImpl*>(lpQueue);
 
@@ -404,7 +400,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePostWorld(
         {
             const PowerParkResultEventView* lpPowerParkEvent =
                 reinterpret_cast<const PowerParkResultEventView*>(lpEvent);
-            CGS_ASSERT(lpPowerParkEvent, "lpPowerParkEvent");
+            CGS_ASSERT(lpPowerParkEvent, CgsDev::Assert::MessageAt("lpPowerParkEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 975));
             if (lpPowerParkEvent->miResult == 1)
             {
                 SetNewSkillIfGreater(BurnoutSkillzData::E_BURNOUT_SKILL_POWER_PARKING, lpSkillzData,
@@ -417,7 +413,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePostWorld(
         {
             const NearMissChainCompleteEventView* lpNearMissEvent =
                 reinterpret_cast<const NearMissChainCompleteEventView*>(lpEvent);
-            CGS_ASSERT(lpNearMissEvent, "lpNearMissEvent");
+            CGS_ASSERT(lpNearMissEvent, CgsDev::Assert::MessageAt("lpNearMissEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 931));
             if (lpNearMissEvent->mbValid)
             {
                 SetNewSkillIfGreater(BurnoutSkillzData::E_BURNOUT_SKILL_NEAR_MISSES, lpSkillzData,
@@ -429,7 +425,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePostWorld(
         case 'E': // InAirEvent (69)
         {
             const InAirEventView* lpInAirEvent = reinterpret_cast<const InAirEventView*>(lpEvent);
-            CGS_ASSERT(lpInAirEvent, "lpInAirEvent");
+            CGS_ASSERT(lpInAirEvent, CgsDev::Assert::MessageAt("lpInAirEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 951));
             lbInAirReceived = true;
             mfCurrentTimeInAir = lpInAirEvent->mfTimeInAir;
             break;
@@ -438,7 +434,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePostWorld(
         {
             const OncomingCompletedEventView* lpOncomingEvent =
                 reinterpret_cast<const OncomingCompletedEventView*>(lpEvent);
-            CGS_ASSERT(lpOncomingEvent, "lpOncomingEvent");
+            CGS_ASSERT(lpOncomingEvent, CgsDev::Assert::MessageAt("lpOncomingEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 914));
             SetNewSkillIfGreater(BurnoutSkillzData::E_BURNOUT_SKILL_ONCOMING, lpSkillzData,
                                  leLocalPlayerActiveRaceCarIndex, lpOncomingEvent->mfOncomingDistance);
             break;
@@ -447,7 +443,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePostWorld(
         {
             const TrafficCheckingChainEventView* lpTrafficCheckEvent =
                 reinterpret_cast<const TrafficCheckingChainEventView*>(lpEvent);
-            CGS_ASSERT(lpTrafficCheckEvent, "lpEvent");
+            CGS_ASSERT(lpTrafficCheckEvent, CgsDev::Assert::MessageAt("lpEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 964));
             miCurrentTrafficChain = lpTrafficCheckEvent->miChainLength;
             break;
         }
@@ -455,7 +451,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePostWorld(
         {
             const CompletedStuntEventView* lpCompletedStuntEvent =
                 reinterpret_cast<const CompletedStuntEventView*>(lpEvent);
-            CGS_ASSERT(lpCompletedStuntEvent, "lpCompletedStuntEvent");
+            CGS_ASSERT(lpCompletedStuntEvent, CgsDev::Assert::MessageAt("lpCompletedStuntEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 872));
             SetNewSkillIfGreater(BurnoutSkillzData::E_BURNOUT_SKILL_SPIN, lpSkillzData,
                                  leLocalPlayerActiveRaceCarIndex,
                                  lpCompletedStuntEvent->mfSpinRadians * 57.29578f);
@@ -515,7 +511,7 @@ void BurnoutSkillzManager::ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* 
 {
     CGS_ASSERT(leLocalActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
                leLocalActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "( leLocalActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leLocalActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+               CgsDev::Assert::MessageAt("( leLocalActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leLocalActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 365));
     CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
 
     s32                   liPreviousHolderScore = 0;
@@ -530,7 +526,7 @@ void BurnoutSkillzManager::ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* 
         if (lePreviousHolderRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID &&
             lePreviousHolderRaceCarIndex != leLocalActiveRaceCarIndex)
         {
-            CGS_ASSERT(mpMugshotManager, "mpMugshotManager");
+            CGS_ASSERT(mpMugshotManager, CgsDev::Assert::MessageAt("mpMugshotManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 381));
             const BrnStreetData::Road* lpRoad =
                 mpStreetManager->GetStreetData()->GetRoad(liChallengeIndex);
             mpMugshotManager->ProcessBeatenRoadRuleEvent(
@@ -551,7 +547,7 @@ void BurnoutSkillzManager::ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* 
             mpStreetManager->GetStreetData()->GetRoad(liChallengeIndex);
         lBeatenEvent.mu64RoadID = lpRoad->GetId();
         CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
-        CGS_ASSERT(lpOutputBuffer->GetGameActionQueue(), "lpOutputBuffer->GetGameActionQueue()");
+        CGS_ASSERT(lpOutputBuffer->GetGameActionQueue(), CgsDev::Assert::MessageAt("lpOutputBuffer->GetGameActionQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 401));
         reinterpret_cast<GameActionQueueImpl*>(lpOutputBuffer->GetGameActionQueue())
             ->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBeatenEvent), 169, 24);
 
@@ -602,7 +598,7 @@ void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
     const GameStateModuleIO::OnlineRoadRulesPersonalBestRecvEvent* lpPersonalBestEvent,
     ::EActiveRaceCarIndex leLocalPlayersActiveRaceCarIndex)
 {
-    CGS_ASSERT(lpPersonalBestEvent, "lpPersonalBestEvent");
+    CGS_ASSERT(lpPersonalBestEvent, CgsDev::Assert::MessageAt("lpPersonalBestEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 668));
 
     const OnlineRoadRulesPersonalBestRecvEventView* lpEventView =
         reinterpret_cast<const OnlineRoadRulesPersonalBestRecvEventView*>(lpPersonalBestEvent);
@@ -614,7 +610,7 @@ void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
 
     const BrnNetwork::Road::ChallengeIndex liChallengeIndex = lpEventView->mChallengeIndex;
     CGS_ASSERT(liChallengeIndex < KI_MAX_CHALLENGES && liChallengeIndex >= 0,
-               "lChallengeIndex < BrnGameState::KI_MAX_CHALLENGES && lChallengeIndex >= 0");
+               CgsDev::Assert::MessageAt("lChallengeIndex < BrnGameState::KI_MAX_CHALLENGES && lChallengeIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 673));
 
     for (s32 liScoreType = BrnStreetData::E_SCORE_TYPE_START;
          liScoreType < BrnStreetData::E_SCORE_TYPE_COUNT; ++liScoreType)
@@ -638,7 +634,7 @@ void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
                 ::EActiveRaceCarIndex leSenderRaceCarIndex = GetActiveRaceCarIndex(lpEventView->mPlayerID);
                 if (leSenderRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
                 {
-                    CGS_ASSERT(mpStreetManager, "mpStreetManager");
+                    CGS_ASSERT(mpStreetManager, CgsDev::Assert::MessageAt("mpStreetManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 703));
 
                     // ARTIST writes the skill before choosing selector0/1. If the local car
                     // was the previous holder, notification149 precedes the action169 post.
@@ -661,7 +657,7 @@ void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
                     const BrnStreetData::Road* lpRoad =
                         mpStreetManager->GetStreetData()->GetRoad(liChallengeIndex);
                     lBeatenEvent.mu64RoadID = lpRoad->GetId();
-                    CGS_ASSERT(lpActionQueue, "lpActionQueue");
+                    CGS_ASSERT(lpActionQueue, CgsDev::Assert::MessageAt("lpActionQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 732));
                     lpActionQueueImpl->AddEvent(
                         reinterpret_cast<const CgsModule::Event*>(&lBeatenEvent), 169, 24);
                 }
@@ -690,7 +686,7 @@ void BurnoutSkillzManager::ProcessNetworkRoadRulePB(
             if (leSenderRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
             {
                 CGS_ASSERT(leSenderRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                           "leNetworkPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                           CgsDev::Assert::MessageAt("leNetworkPlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 759));
                 SendUpdatePlayerSkillsEvent(leSenderRaceCarIndex, false);
             }
         }
@@ -706,12 +702,12 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
     GameStateModuleIO::GameActionQueue* lpActionQueue,
     ::EActiveRaceCarIndex leLocalPlayersActiveRaceCarIndex)
 {
-    CGS_ASSERT(lpActionQueue, "lpActionQueue");
-    CGS_ASSERT(lpEventQueue, "lpEventQueue");
+    CGS_ASSERT(lpActionQueue, CgsDev::Assert::MessageAt("lpActionQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 1049));
+    CGS_ASSERT(lpEventQueue, CgsDev::Assert::MessageAt("lpEventQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 1050));
     CGS_ASSERT(leLocalPlayersActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-               "leLocalPlayersActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+               CgsDev::Assert::MessageAt("leLocalPlayersActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 1051));
     CGS_ASSERT(leLocalPlayersActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "leLocalPlayersActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+               CgsDev::Assert::MessageAt("leLocalPlayersActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 1052));
 
     const GameEventQueueImpl* lpEventQueueImpl = reinterpret_cast<const GameEventQueueImpl*>(lpEventQueue);
     GameActionQueueImpl*      lpActionQueueImpl = reinterpret_cast<GameActionQueueImpl*>(lpActionQueue);
@@ -741,8 +737,8 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
             BurnoutSkillzData* lpSkillzData =
                 mpScoringSystem->GetBurnoutSkillzData(leLocalPlayersActiveRaceCarIndex);
             CarData* lpLocalCarData = mpScoringSystem->GetCarData(leLocalPlayersActiveRaceCarIndex);
-            CGS_ASSERT(lpSkillzData, "lpSkillzData");
-            CGS_ASSERT(lpLocalCarData, "lpCarData");
+            CGS_ASSERT(lpSkillzData, CgsDev::Assert::MessageAt("lpSkillzData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 1088));
+            CGS_ASSERT(lpLocalCarData, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 1089));
             if (lpLocalCarData && lpSkillzData)
             {
                 // Rebroadcast the local player's skillz totals (action 168 / 68 bytes).
@@ -769,7 +765,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
         {
             const BurnoutSkillzEventView* lpBurnoutSkillzEvent =
                 reinterpret_cast<const BurnoutSkillzEventView*>(lpEvent);
-            CGS_ASSERT(lpBurnoutSkillzEvent, "lpBurnoutSkillzEvent");
+            CGS_ASSERT(lpBurnoutSkillzEvent, CgsDev::Assert::MessageAt("lpBurnoutSkillzEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 1122));
 
             ::EActiveRaceCarIndex leNetworkPlayerActiveRaceCarIndex =
                 GetActiveRaceCarIndex(lpBurnoutSkillzEvent->mPlayerID);
@@ -836,7 +832,7 @@ void BurnoutSkillzManager::ProcessGameEventInputQueuePreWorld(
 void BurnoutSkillzManager::UpdateLobbyRoadRulesScores(
     const GameStateModuleIO::NetworkToGameStateInterface::RoadRulesReceivedQueue* lpRoadRulesRecvQueue)
 {
-    CGS_ASSERT(lpRoadRulesRecvQueue, "lpRoadRulesRecvQueue");
+    CGS_ASSERT(lpRoadRulesRecvQueue, CgsDev::Assert::MessageAt("lpRoadRulesRecvQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 581));
 
     // The received road-rules queue sits at +0x0 of the network interface; the console tests its
     // length (+0x8 of the queue header) and takes a whole-record copy of each entry.
@@ -1012,7 +1008,7 @@ void BurnoutSkillzManager::PreWorldUpdate(
     bool lbExitingFreeburnLobby)
 {
     CGS_ASSERT(lpActiveCarInterface, "lpActiveCarInterface");
-    CGS_ASSERT(lpInput, "lpInput");
+    CGS_ASSERT(lpInput, CgsDev::Assert::MessageAt("lpInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 160));
     CGS_ASSERT(lpActiveCarInterface, "lpActiveCarInterface");
 
     ::EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex =
@@ -1021,7 +1017,7 @@ void BurnoutSkillzManager::PreWorldUpdate(
                "Player car index hasn't been set");
     CGS_ASSERT(leLocalPlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID &&
                leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "( leLocalPlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+               CgsDev::Assert::MessageAt("( leLocalPlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 165));
 
     ProcessGameEventInputQueuePreWorld(lpInput->GetGameEventQueue(), lpOutput->GetGameActionQueue(),
                                        leLocalPlayerActiveRaceCarIndex);
@@ -1031,9 +1027,9 @@ void BurnoutSkillzManager::PreWorldUpdate(
     if (!lbExitingFreeburnLobby && mBufferedScoreChallengeIndex != -1)
     {
         CGS_ASSERT(meBufferedScoreType != BrnStreetData::E_SCORE_TYPE_COUNT,
-                   "meBufferedScoreType != BrnStreetData::E_SCORE_TYPE_COUNT");
+                   CgsDev::Assert::MessageAt("meBufferedScoreType != BrnStreetData::E_SCORE_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 182));
         CGS_ASSERT(mBufferedChallengeScore.ContainsData(BrnStreetData::E_SCORE_TYPE_COUNT),
-                   "mBufferedChallengeScore.ContainsData()");
+                   CgsDev::Assert::MessageAt("mBufferedChallengeScore.ContainsData()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 183));
         ProcessNewRoadScore(lpOutput, mBufferedChallengeScore, meBufferedScoreType,
                             mBufferedScoreChallengeIndex, leLocalPlayerActiveRaceCarIndex);
         mBufferedChallengeScore.Construct();
@@ -1042,7 +1038,7 @@ void BurnoutSkillzManager::PreWorldUpdate(
     }
 
     const RaceCarState* lpRaceCarState = lpActiveCarInterface->GetPlayerRaceCarState();
-    CGS_ASSERT(lpRaceCarState, "lpRaceCarState");
+    CGS_ASSERT(lpRaceCarState, CgsDev::Assert::MessageAt("lpRaceCarState", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnBurnoutSkillzManager.cpp", 198));
 
     // The single byte the console tests here is element +0x44A, mbCrashing -- not the reset flag.
     if (lpRaceCarState->mbCrashing)

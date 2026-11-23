@@ -23,6 +23,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                   // Vector3/Matrix44Affine/VecFloat
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"         // CgsNumeric::Random
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"  // CgsSceneManager::EntityId
 #include "GameSource/BurnoutConstants.h"                      // EActiveRaceCarIndex
@@ -324,7 +325,7 @@ private:
 inline void
 BehaviourRig::SetParameters(const Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == eBehaviourRig, "lpParameters->GetType() == eBehaviourRig");
+    CGS_ASSERT(lpParameters->GetType() == eBehaviourRig, CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourRig", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourRig.h", 255));
     mpParameters = lpParameters;
     SetDebugParametersName(lpParameters->GetDebugName());
     SetNotPrepared();

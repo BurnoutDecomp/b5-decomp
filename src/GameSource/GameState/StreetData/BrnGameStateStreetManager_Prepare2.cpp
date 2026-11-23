@@ -25,9 +25,6 @@
 
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp";
-
 namespace BrnGameState
 {
 
@@ -40,9 +37,9 @@ bool StreetManager::Prepare2( GameStateModuleIO::OutputBuffer* lpOutput,
                               const TriggerQueryManager* lpTriggerQueryManager )
 {
     CGS_ASSERT( lpOutput != NULL,
-        CgsDev::Assert::MessageAt("lpOutput", KAC_ARTIST_ASSERT_FILE, 314 /* ARTIST 0x82350A0C */));
+        CgsDev::Assert::MessageAt("lpOutput", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 314 /* ARTIST 0x82350A0C */));
     CGS_ASSERT( lpReceiverQueue != NULL,
-        CgsDev::Assert::MessageAt("lpReceiverQueue", KAC_ARTIST_ASSERT_FILE, 315 /* ARTIST 0x82350A30 */));
+        CgsDev::Assert::MessageAt("lpReceiverQueue", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 315 /* ARTIST 0x82350A30 */));
 
     if ( !LoadStreetData( lpOutput, lpReceiverQueue ) )
     {

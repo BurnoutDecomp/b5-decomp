@@ -91,11 +91,8 @@ namespace
 }
 }
 
-// MaybeDrawText (X360 0x82824048) -- the shared "draw debug text iff on-screen" helper used by the
-// HUD draw loops. External to this TU (its own TU); declared so the compile gate sees its shape.
-// Signature recovered from the call sites: (display, text, x, y, scale, colour, centred).
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
+// The HUD draw loops' text calls go to Debug2DImmediateRender::DrawText(text, x, y, scale, colour),
+// X360 0x82824048 (IDA's "MaybeDrawText").
 
 namespace BrnAI
 {
@@ -208,10 +205,10 @@ void RaceBalancingDebugComponent::DrawGraphFrame(CgsDev::Debug2DImmediateRender*
     // (origin.x + 50, origin.y + 10) -- vaddfp, asm-confirmed. Y-label: (origin.x - 50,
     // origin.y - flt_820C3FAC) -- vsubfp origin.x - var_70(=50.0) @0x827749F0, vsubfp origin.y -
     // flt_820C3FAC @0x827749FC. Raw word 0x42C80000 pins flt_820C3FAC as 100.0.
-    MaybeDrawText(lpDisplay, lpcXAxisLabel, lv2Origin.mV.x + 50.0f, lv2Origin.mV.y + 10.0f,
-                  KF_TEXT_SCALE, K_WHITE, false);
-    MaybeDrawText(lpDisplay, lpcYAxisLabel, lv2Origin.mV.x - 50.0f, lv2Origin.mV.y - 100.0f,
-                  KF_TEXT_SCALE, K_WHITE, false);
+    lpDisplay->DrawText(lpcXAxisLabel, lv2Origin.mV.x + 50.0f, lv2Origin.mV.y + 10.0f,
+                  KF_TEXT_SCALE, K_WHITE);
+    lpDisplay->DrawText(lpcYAxisLabel, lv2Origin.mV.x - 50.0f, lv2Origin.mV.y - 100.0f,
+                  KF_TEXT_SCALE, K_WHITE);
 }
 
 // ====================================================================================================
@@ -250,7 +247,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
 
     if (miCurrentRival >= lpManager->maRaceBalancingGraphs.GetCount())
     {
-        MaybeDrawText(lpDisplay, "No graph", 200.0f, 180.0f, KF_TEXT_SCALE, K_WHITE, false);
+        lpDisplay->DrawText("No graph", 200.0f, 180.0f, KF_TEXT_SCALE, K_WHITE);
     }
     else
     {
@@ -295,7 +292,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         const f32 lfDifficultyPercent = mpAIModule->GetProgressionRankAsRatio() * 100.0f;
         lOut << static_cast<s32>(lfDifficultyPercent); //ARTIST82796EE4: fctiwz, signed%d
         lOut << "%";
-        MaybeDrawText(lpDisplay, lStream.GetBuffer(), 200.0f, 280.0f, KF_TEXT_SCALE, K_WHITE, false);
+        lpDisplay->DrawText(lStream.GetBuffer(), 200.0f, 280.0f, KF_TEXT_SCALE, K_WHITE);
 
         // --- 2b. live completion ratio -----------------------------------------------------------
         if (lpCar != 0 && lpCar->HasValidRoute())
@@ -323,7 +320,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
             lStream.Reset();
             lOut << (lfCompletionRatio * 100.0f);
             lOut << "%";
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfX, 60.0f, KF_TEXT_SCALE, K_WHITE, false);
+            lpDisplay->DrawText(lStream.GetBuffer(), lfX, 60.0f, KF_TEXT_SCALE, K_WHITE);
         }
     }
 
@@ -333,8 +330,8 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
 
     if (miCurrentRival >= lpManager->maRaceBalancingRoutes.GetCount())
     {
-        MaybeDrawText(lpDisplay, "No balancing route", 700.0f, 480.0f, KF_NO_GRAPH_TEXT_SCALE,
-                      K_WHITE, false);
+        lpDisplay->DrawText("No balancing route", 700.0f, 480.0f, KF_NO_GRAPH_TEXT_SCALE,
+                      K_WHITE);
         return;
     }
 
@@ -357,8 +354,8 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         {
             lStatus << "Not in race";
         }
-        MaybeDrawText(lpDisplay, lStatus.GetBuffer(), 700.0f, 480.0f, KF_NO_GRAPH_TEXT_SCALE,
-                      K_WHITE, false);
+        lpDisplay->DrawText(lStatus.GetBuffer(), 700.0f, 480.0f, KF_NO_GRAPH_TEXT_SCALE,
+                      K_WHITE);
         return;
     }
 
@@ -398,13 +395,13 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
     const f32 lfCompletionRatio =
         lrRoute.ComputeRaceCompletionRatio(lfDistToCheckpoint, lpManager->miCheckpointCount);
     lOut << "Completion ratio: " << lfCompletionRatio;
-    MaybeDrawText(lpDisplay, lStream.GetBuffer(), 700.0f, 530.0f, KF_TEXT_SCALE, K_WHITE, false);
+    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 530.0f, KF_TEXT_SCALE, K_WHITE);
 
     // ROUTE: distance / checkpoint.
     lStream.Reset();
     lOut << "ROUTE: Distance: " << static_cast<s32>(lrRoute.mfDistance) << "m ";
     lOut << ", Checkpoint: " << lrRoute.miCurrentCheckpointIndex << "/" << lpManager->miCheckpointCount;
-    MaybeDrawText(lpDisplay, lStream.GetBuffer(), 700.0f, 550.0f, KF_TEXT_SCALE, K_WHITE, false);
+    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 550.0f, KF_TEXT_SCALE, K_WHITE);
 
     // The time-graph frame.
     DrawGraphFrame(lpDisplay, KV2_TIME_GRAPH_ORIGIN, KV2_TIME_GRAPH_SIZE, "Distance", "Time");
@@ -421,7 +418,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
     lOut << "-";
     lOut << static_cast<s32>(lrRoute.GetTime(E_GRAPH_TYPE_AHEAD, lpCar->GetNextRouteNodeIndex()));
     lOut << "s";
-    MaybeDrawText(lpDisplay, lStream.GetBuffer(), 700.0f, 570.0f, KF_TEXT_SCALE, K_WHITE, false);
+    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 570.0f, KF_TEXT_SCALE, K_WHITE);
 
     // CAR LOCATION: distance ahead / which graph / range / takedown count.
     lStream.Reset();
@@ -444,7 +441,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         lOut << "In range, ";
     }
     lOut << " Taken down " << lrRoute.miTakenDownCount << " times";
-    MaybeDrawText(lpDisplay, lStream.GetBuffer(), 700.0f, 590.0f, KF_TEXT_SCALE, K_WHITE, false);
+    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 590.0f, KF_TEXT_SCALE, K_WHITE);
 
     // SPEEDS: target / par bands / max player / min.
     lStream.Reset();
@@ -468,7 +465,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
     lOut << ", Max player: " << static_cast<s32>(lpCar->GetMaxPlayerSpeed() * KF_MS_TO_MPH);
     lOut << ", Min: " << static_cast<s32>(lpCar->GetDecentSpeed() * KF_MS_TO_MPH);
     lOut << "mph";
-    MaybeDrawText(lpDisplay, lStream.GetBuffer(), 700.0f, 610.0f, KF_TEXT_SCALE, K_WHITE, false);
+    lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 610.0f, KF_TEXT_SCALE, K_WHITE);
 
     // SPEED MATCHING (only when the car is speed-matching).
     if (lbSpeedMatching)
@@ -476,7 +473,7 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         lStream.Reset();
         lOut << "SPEED MATCHING: " << static_cast<s32>(lpCar->GetSpeedMatchSpeed() * KF_MS_TO_MPH);
         lOut << "mph";
-        MaybeDrawText(lpDisplay, lStream.GetBuffer(), 700.0f, 630.0f, KF_TEXT_SCALE, K_WHITE, false);
+        lpDisplay->DrawText(lStream.GetBuffer(), 700.0f, 630.0f, KF_TEXT_SCALE, K_WHITE);
     }
 
     // --- 5. the time graph itself -------------------------------------------------------------------
@@ -536,13 +533,13 @@ void RaceBalancingDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDi
         {
             lStream.Reset();
             lOut << static_cast<s32>(lrRoute.GetTime(E_GRAPH_TYPE_AHEAD, liIndex)) << "s";
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXPrev, lv2AheadPrev.mV.y - 24.0f,
-                          KF_TEXT_SCALE, K_WHITE, false);
+            lpDisplay->DrawText(lStream.GetBuffer(), lfXPrev, lv2AheadPrev.mV.y - 24.0f,
+                          KF_TEXT_SCALE, K_WHITE);
 
             lStream.Reset();
             lOut << static_cast<s32>(lrRoute.GetTime(E_GRAPH_TYPE_BEHIND, liIndex)) << "s";
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), lfXPrev, lv2BehindPrev.mV.y + 8.0f,
-                          KF_TEXT_SCALE, K_WHITE, false);
+            lpDisplay->DrawText(lStream.GetBuffer(), lfXPrev, lv2BehindPrev.mV.y + 8.0f,
+                          KF_TEXT_SCALE, K_WHITE);
         }
     }
 }

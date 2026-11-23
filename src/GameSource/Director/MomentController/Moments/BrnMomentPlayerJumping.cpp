@@ -27,9 +27,6 @@
 // Collection allocation and camera selection follow the native X360 bodies.
 // ============================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp";
-
 namespace BrnDirector
 {
 
@@ -97,7 +94,7 @@ template <typename TBehaviour, typename TParameters, u32 N>
 void BehaviourCollection<TBehaviour, TParameters, N>::AddShot(const TParameters* lpParams)
 {
     CGS_ASSERT(!mbAllocatedShots,
-               "can't add shots when the behaviours have been allocated (although this could be changed)");   // :159
+               CgsDev::Assert::MessageAt("can't add shots when the behaviours have been allocated (although this could be changed)", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 159));   // :159
 
     Shot lShot;                 // BehaviourHandle() clears the five handle words
     lShot.mpParams = lpParams;
@@ -131,7 +128,7 @@ bool BehaviourCollection<TBehaviour, TParameters, N>::Release()
 template <typename TBehaviour, typename TParameters, u32 N>
 bool BehaviourCollection<TBehaviour, TParameters, N>::Prepare(Camera::BehaviourManager& lrBehaviourManager)
 {
-    CGS_ASSERT(maShots.GetLength() > 0, "maShots.GetLength() > 0");
+    CGS_ASSERT(maShots.GetLength() > 0, CgsDev::Assert::MessageAt("maShots.GetLength() > 0", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 55));
     if (!mbAllocatedShots)
     {
         ++miCurrentCamera;
@@ -304,7 +301,7 @@ bool MomentPlayerJumping::PrepareCameras(Camera::BehaviourManager& lrBehaviourMa
         CGS_ASSERT(lbIce,
             CgsDev::Assert::MessageAt(
                 "mIceCollection.Prepare(lBehaviourManager)",
-                KAC_ARTIST_ASSERT_FILE, 416 /* ARTIST 0x82275610 */));
+                "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 416 /* ARTIST 0x82275610 */));
         break;
     }
     case E_TYPE_DROPPED_RIG_THEN_ATTACHED_RIG_SEQUENCE:
@@ -313,12 +310,12 @@ bool MomentPlayerJumping::PrepareCameras(Camera::BehaviourManager& lrBehaviourMa
         CGS_ASSERT(lbDropped,
             CgsDev::Assert::MessageAt(
                 "mDroppedRigCollection.Prepare(lBehaviourManager)",
-                KAC_ARTIST_ASSERT_FILE, 422 /* ARTIST 0x8227565C */));
+                "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 422 /* ARTIST 0x8227565C */));
         const bool lbRig = mRigCollection.Prepare(lrBehaviourManager);
         CGS_ASSERT(lbRig,
             CgsDev::Assert::MessageAt(
                 "mRigCollection.Prepare(lBehaviourManager)",
-                KAC_ARTIST_ASSERT_FILE, 423 /* ARTIST 0x82275690 */));
+                "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 423 /* ARTIST 0x82275690 */));
         break;
     }
     case E_TYPE_BYSTANDER_THEN_ATTACHED_RIG_SEQUENCE:
@@ -327,12 +324,12 @@ bool MomentPlayerJumping::PrepareCameras(Camera::BehaviourManager& lrBehaviourMa
         CGS_ASSERT(lbBystander,
             CgsDev::Assert::MessageAt(
                 "mBystanderCollection.Prepare(lBehaviourManager)",
-                KAC_ARTIST_ASSERT_FILE, 429 /* ARTIST 0x822756D8 */));
+                "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 429 /* ARTIST 0x822756D8 */));
         const bool lbRig = mRigCollection.Prepare(lrBehaviourManager);
         CGS_ASSERT(lbRig,
             CgsDev::Assert::MessageAt(
                 "mRigCollection.Prepare(lBehaviourManager)",
-                KAC_ARTIST_ASSERT_FILE, 430 /* ARTIST 0x8227570C */));
+                "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 430 /* ARTIST 0x8227570C */));
         break;
     }
     case E_TYPE_BYSTANDER_SHOT:
@@ -341,7 +338,7 @@ bool MomentPlayerJumping::PrepareCameras(Camera::BehaviourManager& lrBehaviourMa
         CGS_ASSERT(lbBystander,
             CgsDev::Assert::MessageAt(
                 "mBystanderCollection.Prepare(lBehaviourManager)",
-                KAC_ARTIST_ASSERT_FILE, 436 /* ARTIST 0x8227574C */));
+                "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 436 /* ARTIST 0x8227574C */));
         break;
     }
     case E_TYPE_DROPPED_RIG_SHOT:
@@ -350,7 +347,7 @@ bool MomentPlayerJumping::PrepareCameras(Camera::BehaviourManager& lrBehaviourMa
         CGS_ASSERT(lbDropped,
             CgsDev::Assert::MessageAt(
                 "mDroppedRigCollection.Prepare(lBehaviourManager)",
-                KAC_ARTIST_ASSERT_FILE, 442 /* ARTIST 0x82275790 */));
+                "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 442 /* ARTIST 0x82275790 */));
         break;
     }
     case E_TYPE_ATTACHED_RIG_SHOT:
@@ -359,12 +356,12 @@ bool MomentPlayerJumping::PrepareCameras(Camera::BehaviourManager& lrBehaviourMa
         CGS_ASSERT(lbRig,
             CgsDev::Assert::MessageAt(
                 "mRigCollection.Prepare(lBehaviourManager)",
-                KAC_ARTIST_ASSERT_FILE, 448 /* ARTIST 0x822757D4 */));
+                "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 448 /* ARTIST 0x822757D4 */));
         break;
     }
     default:
         CGS_ASSERT(false,
-            CgsDev::Assert::MessageAt("invalid type", KAC_ARTIST_ASSERT_FILE, 454 /* ARTIST 0x82275800 */));
+            CgsDev::Assert::MessageAt("invalid type", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 454 /* ARTIST 0x82275800 */));
         break;
     }
     return true;
@@ -449,7 +446,7 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, void* lrBehaviourController, co
     Camera::BehaviourManager& lrBehaviourManager = *static_cast<Camera::BehaviourManager*>(lrBehaviourController);
     const MomentSharedInfo&   lrSharedInfo       = *static_cast<const MomentSharedInfo*>(lSharedInfo);
 
-    CGS_ASSERT(mbPrepared, "mbPrepared");   // :263
+    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 263));   // :263
 
     switch (GetState())
     {
@@ -506,7 +503,7 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, void* lrBehaviourController, co
             SetState(E_STATE_INVALID_SEARCHING);
             return;
         }
-        CGS_ASSERT(false, "Unhandled status");   // :332
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unhandled status", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 332));   // :332
         if (leStatus == E_STATUS_FAILED || leStatus == E_STATUS_WAITING)
         {
             return;
@@ -518,7 +515,7 @@ void MomentPlayerJumping::Update(f32 lfTimeStep, void* lrBehaviourController, co
         break;
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");   // :400
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 400));   // :400
         return;
     }
 
@@ -608,7 +605,7 @@ bool MomentPlayerJumping::UpdateCamera(Camera::Camera& lrCamera)
         lbFailed = mRigCollection.HasFailed();
         break;
     default:
-        CGS_ASSERT(false, "invalid type");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("invalid type", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 665));
         break;
     }
     return !lbFailed;

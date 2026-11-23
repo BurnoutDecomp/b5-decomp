@@ -1,6 +1,7 @@
 #include "GameSource/Director/MomentController/BrnMoment.h"   // MomentBystanderSeesAction (concretely homed there)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/BrnBehaviourParameterBank.h"           // the bystander-cam moment blocks
 #include "GameSource/Director/Camera/Behaviours/BehaviourBystanderCam.h"    // BehaviourBystanderCam (SetParameters/SetTarget)
 
@@ -99,7 +100,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
     Camera::BehaviourManager* lpBehaviourManager =
         static_cast<Camera::BehaviourManager*>(lrBehaviourController);
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");   //  (non-gating)
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentBystanderSeesAction.cpp", 87));   //  (non-gating)
 
     switch (GetState())
     {
@@ -181,7 +182,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
         break;   // the shared valid tail
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");   //  (non-gating)
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentBystanderSeesAction.cpp", 196));   //  (non-gating)
         return;
     }
 

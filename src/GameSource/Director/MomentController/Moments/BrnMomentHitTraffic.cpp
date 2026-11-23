@@ -1,6 +1,7 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentHitTraffic.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/BrnBehaviourParameterBank.h"      // Camera::BehaviourParameterBank
 
 // BrnDirector::MomentHitTraffic -- reconstructed from the console executable
@@ -107,7 +108,7 @@ void MomentHitTraffic::Update(f32 lfTimeStep, void* lrBehaviourController,
         break;
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentHitTraffic.cpp", 125));
         break;
     }
 }

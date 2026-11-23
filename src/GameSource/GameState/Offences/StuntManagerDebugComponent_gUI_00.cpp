@@ -9,9 +9,6 @@
 #include "GameSource/GameState/TriggerQueryManager/BrnTriggerQueryManager.h"
 #include "SharedClasses/Trigger/BrnTriggerData.h"
 
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, u32 luColour, bool lbCentred);
-
 namespace BrnGameState
 {
     // ARTIST off_82CDB93C. The table is indexed by StuntElementType.
@@ -57,9 +54,9 @@ namespace BrnGameState
     {
         for (s32 liIndex = 0; liIndex < E_STUNT_ELEMENT_TYPE_COUNT; ++liIndex)
         {
-            MaybeDrawText(lpRender, maStrStreams[liIndex].GetBuffer(),
+            lpRender->DrawText(maStrStreams[liIndex].GetBuffer(),
                           100.0f, 100.0f + static_cast<f32>(liIndex) * 20.0f,
-                          16.0f, 0xFFFFFFFFu, false);
+                          16.0f, 0xFFFFFFFFu);
         }
     }
 

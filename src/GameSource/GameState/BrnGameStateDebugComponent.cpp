@@ -7,6 +7,7 @@
 #include "GameSource/GameState/StreetData/BrnGameStateStreetManager.h"
 #include "GameSource/GameState/TrainingManager/BrnTrainingManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
@@ -175,7 +176,7 @@ namespace
     // Byte +0x17 and the text buffer are intentionally left untouched, as in ARTIST.
     void GameStateDebugComponent::Construct(GameStateModule* lpGameStateModule)
     {
-        CGS_ASSERT(lpGameStateModule != 0, "lpGameStateModule != NULL");
+        CGS_ASSERT(lpGameStateModule != 0, CgsDev::Assert::MessageAt("lpGameStateModule != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateDebugComponent.cpp", 205));
 
         mpGameStateModule = lpGameStateModule;
         mbShowUpComingRoadRules = false;

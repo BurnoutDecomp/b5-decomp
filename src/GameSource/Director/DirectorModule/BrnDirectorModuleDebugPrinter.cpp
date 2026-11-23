@@ -1,4 +1,5 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugPrinter.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "BrnCommonTypes.h"                                                        // Vector2
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"  // CgsDev::DebugInterface
@@ -130,7 +131,7 @@ namespace BrnDirector
             mStringIndices.Erase(0);
 
             liNewIndex = mStringPool.AllocateObject();
-            CGS_ASSERT(liNewIndex != -1, "liNewIndex != -1");
+            CGS_ASSERT(liNewIndex != -1, CgsDev::Assert::MessageAt("liNewIndex != -1", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleDebugPrinter.cpp", 221));
         }
 
         LogString& lrString = mStringPool[liNewIndex];

@@ -29,9 +29,6 @@
 // read straight out of it; the initialiser bodies at 0x82C4D7A0..0x82C4D81C are the evidence.
 // ============================================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp";
-
 namespace BrnGameState
 {
     // -----------------------------------------------------------------------------------------
@@ -224,10 +221,10 @@ namespace BrnGameState
     {
         CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
             CgsDev::Assert::MessageAt(
-                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_ARTIST_ASSERT_FILE, 132 /* ARTIST 0x82359564 */));
+                "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 132 /* ARTIST 0x82359564 */));
         CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
             CgsDev::Assert::MessageAt(
-                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_ARTIST_ASSERT_FILE, 133 /* ARTIST 0x82359588 */));
+                "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 133 /* ARTIST 0x82359588 */));
         return &maRaceCarData[leActiveRaceCarIndex];
     }
 
@@ -498,7 +495,7 @@ namespace BrnGameState
     void TakedownManager::UpdateTakedownCamera(f32 lfDeltaTime, GameStateModuleIO::OutputBuffer* lpOutput,
                                                RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface)
     {
-        CGS_ASSERT(IsInTakedownCamera(), "IsInTakedownCamera()");
+        CGS_ASSERT(IsInTakedownCamera(), CgsDev::Assert::MessageAt("IsInTakedownCamera()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 1037));
 
         mfTakedownCameraTimer += lfDeltaTime;
 

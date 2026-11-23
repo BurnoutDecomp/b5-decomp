@@ -15,10 +15,8 @@
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"
 #include "GameSource/Gui/BrnGuiModule.h"
 
-// X360 0x82824048: the shared debug-HUD text helper already lives in
-// CgsDebug2DImmediateRender.cpp; keep its original no-screen-check behavior.
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCheckScreen);
+// The text calls go to Debug2DImmediateRender::DrawText(text, x, y, scale, colour), X360
+// 0x82824048 (IDA's "MaybeDrawText").
 
 namespace BrnGui
 {
@@ -159,7 +157,7 @@ namespace BrnGui
 
             if (lbDisplayEntry)
             {
-                MaybeDrawText(lpRender, lpcEntry, lfX, lfY, 12.0f, luColour, false);
+                lpRender->DrawText(lpcEntry, lfX, lfY, 12.0f, luColour);
                 ++luDisplayedCount;
                 lfX += 300.0f;
                 if ((luDisplayedCount & 3) == 0)
@@ -172,8 +170,8 @@ namespace BrnGui
 
         lStrStream.Reset();
         lStrStream << "Loadcount: " << luLoadedCount;
-        MaybeDrawText(lpRender, lStrStream.GetBuffer(), 50.0f, 15.0f, 12.0f,
-                      static_cast<CgsDev::RGBA>(0xFF00B9F5u), false);
+        lpRender->DrawText(lStrStream.GetBuffer(), 50.0f, 15.0f, 12.0f,
+                      static_cast<CgsDev::RGBA>(0xFF00B9F5u));
         lStrStream.Reset();
     }
 
@@ -208,9 +206,9 @@ namespace BrnGui
 
             lStrStream.Reset();
             lStrStream << lpcFlowName;
-            MaybeDrawText(lpRender, lStrStream.GetBuffer(), 50.0f,
+            lpRender->DrawText(lStrStream.GetBuffer(), 50.0f,
                           static_cast<f32>(luGridRow) * 3.0f + 50.0f, 12.0f,
-                          static_cast<CgsDev::RGBA>(0xFFF5B9F5u), false);
+                          static_cast<CgsDev::RGBA>(0xFFF5B9F5u));
             lStrStream.Reset();
 
             const StateLoadingHelper::ComponentsToWatch& lrComponents =
@@ -243,8 +241,8 @@ namespace BrnGui
 
                 lStrStream << (lbLoaded ? "L" : "U") << "\t-\t" << luComponentNameHash << "\t-\t"
                            << lpAptCommunicator->GetComponentNameForHash(luComponentNameHash);
-                MaybeDrawText(lpRender, lStrStream.GetBuffer(), lfX, lfComponentY, 12.0f,
-                              luColour, false);
+                lpRender->DrawText(lStrStream.GetBuffer(), lfX, lfComponentY, 12.0f,
+                              luColour);
                 lStrStream.Reset();
 
                 ++luComponentIndex;
@@ -260,8 +258,8 @@ namespace BrnGui
 
         lStrStream.Reset();
         lStrStream << "Loadcount: " << luLoadedCount << "    L = LOADED    U = UNLOADED";
-        MaybeDrawText(lpRender, lStrStream.GetBuffer(), 50.0f, 25.0f, 12.0f,
-                      static_cast<CgsDev::RGBA>(0xFF00B9F5u), false);
+        lpRender->DrawText(lStrStream.GetBuffer(), 50.0f, 25.0f, 12.0f,
+                      static_cast<CgsDev::RGBA>(0xFF00B9F5u));
         lStrStream.Reset();
     }
 

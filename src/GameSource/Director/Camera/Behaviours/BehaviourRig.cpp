@@ -20,6 +20,7 @@
 
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/CgsDebugManager.h"
@@ -185,7 +186,7 @@ BehaviourRig::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 {
     SetNotPrepared();
 
-    CGS_ASSERT(mAttachedToRef.IsValid(), "mAttachedToRef.HasBeenSet()");     // :115
+    CGS_ASSERT(mAttachedToRef.IsValid(), CgsDev::Assert::MessageAt("mAttachedToRef.HasBeenSet()", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourRig.cpp", 115));     // :115
     CGS_ASSERT(mpParameters != NULL, "mpParameters != NULL");                // :116
 
     mAccelSpring.Prepare(0.0f, 0.0f,
@@ -216,7 +217,7 @@ BehaviourRig::SetupTweaker(Utils::Tweaker& lrTweaker)
 {
     lrTweaker.Construct();
 
-    CGS_ASSERT(mpParameters != NULL, "mpParameters");                        // :372
+    CGS_ASSERT(mpParameters != NULL, CgsDev::Assert::MessageAt("mpParameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourRig.cpp", 372));                        // :372
 
     Parameters& lrParameters = const_cast<Parameters&>(*mpParameters);
     lrTweaker.AddMapping("DOF Blur Near", &lrParameters.mfDOFNear, KF_TWEAK_DOF_SCALE,

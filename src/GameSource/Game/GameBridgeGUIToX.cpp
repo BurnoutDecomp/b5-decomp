@@ -2,6 +2,7 @@
 #include "GameSource/Game/GameBridgeGUIToX.h"
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Replays/BrnReplayModuleIO.h"
 #include "GameSource/Replays/BrnReplayRequestInterface.h"
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"
@@ -32,7 +33,7 @@ namespace BrnGame
         const CgsGui::CgsGuiModuleIO::OutputBuffer* lpGuiOutputBuffer)
     {
         CGS_ASSERT(lpReplayModuleInputBuffer != 0 && lpGuiOutputBuffer != 0,
-                   "lpReplayModuleInputBuffer && lpGuiOutputBuffer");
+                   CgsDev::Assert::MessageAt("lpReplayModuleInputBuffer && lpGuiOutputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGUIToX.cpp", 1721));
 
         const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue =
             GetGuiOutEventQueue(lpGuiOutputBuffer);
@@ -276,7 +277,7 @@ namespace BrnGame
                 }
                 case 120:  // scoreboard gamercard: the highlighted PlayerName
                 {
-                    CGS_ASSERT(lp != 0, "lpGuiGamercardEvent");
+                    CGS_ASSERT(lp != 0, CgsDev::Assert::MessageAt("lpGuiGamercardEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGUIToX.cpp", 1154));
                     CgsNetwork::PlayerName lShowGamerCard;
                     std::memcpy(&lShowGamerCard, lp, sizeof(lShowGamerCard));
                     lpNetworkInputEventQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lShowGamerCard), 47,
@@ -285,7 +286,7 @@ namespace BrnGame
                 }
                 case 121:  // scoreboard score target: payload {score, category, index, variation, name[16], flag}
                 {          // -> {name[16], score, category, index, variation, flag}, 36 bytes
-                    CGS_ASSERT(lp != 0, "lpGuiReqScoreTargetEvent");
+                    CGS_ASSERT(lp != 0, CgsDev::Assert::MessageAt("lpGuiReqScoreTargetEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGUIToX.cpp", 1169));
                     s32 laiScoreTarget[9];
                     u8* lpScoreTarget = reinterpret_cast<u8*>(laiScoreTarget);
                     std::memcpy(lpScoreTarget, lp + 16, 16);
@@ -369,7 +370,7 @@ namespace BrnGame
                 }
                 case 568:  // compressed camera-picture request: {quality, format, target texture}
                 {
-                    CGS_ASSERT(lp != 0, "lpReqCompCamPicEvent");
+                    CGS_ASSERT(lp != 0, CgsDev::Assert::MessageAt("lpReqCompCamPicEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGUIToX.cpp", 1218));
                     IO::NetworkInReqCamPicEvent lReqCamPicEvent;
                     lReqCamPicEvent.miQualitySetting   = lpW[0];
                     lReqCamPicEvent.meCompressedFormat = static_cast<renderengine::PixelFormat>(lpW[1]);

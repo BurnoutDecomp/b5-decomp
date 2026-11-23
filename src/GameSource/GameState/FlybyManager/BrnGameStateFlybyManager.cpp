@@ -14,11 +14,11 @@ const char* FlybyManager::KPC_GAMERTAG_STRING_ID = "GAMERTAG";
 
 void FlybyManager::Construct(GameStateModule* lpGameStateModule, ScoringSystem* lpScoringSystem)
 {
-    CGS_ASSERT(lpGameStateModule, "lpGameStateModule");
+    CGS_ASSERT(lpGameStateModule, CgsDev::Assert::MessageAt("lpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateFlybyManager.cpp", 123));
 
     mpGameStateModule = lpGameStateModule;
 
-    CGS_ASSERT(lpScoringSystem, "lpScoringSystem");
+    CGS_ASSERT(lpScoringSystem, CgsDev::Assert::MessageAt("lpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateFlybyManager.cpp", 126));
 
     mpScoringSystem = lpScoringSystem;
     mRandom.Construct();
@@ -45,7 +45,7 @@ s32 FlybyManager::RivalRating::SortRivalsCallback(const void* lpData0, const voi
             || lpRival1->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID)
         {
             CGS_ASSERT((lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID) && (lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID),
-                       "( lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID ) && ( lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID )");
+                       CgsDev::Assert::MessageAt("( lpRival0->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID ) && ( lpRival1->mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateFlybyManager.cpp", 83));
         }
 
         return 0;

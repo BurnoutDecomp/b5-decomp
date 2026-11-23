@@ -1,6 +1,7 @@
 #include "GameSource/GameState/ModeManager/GameModes/BrnPursuitMode.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGameState
 {
@@ -36,8 +37,8 @@ void PursuitMode::Start(const StartGameModeParams* lpStartGameModeParams,
     const BrnProgression::ProgressionRankData* lpProgressionRankData =
         lpStartGameModeParams->GetProgressionRankData();
 
-    CGS_ASSERT(lpProgressionRankData != NULL, "lpProgressionRankData != NULL");
-    CGS_ASSERT(lpGameModeParams != NULL, "lpGameModeParams != NULL");
+    CGS_ASSERT(lpProgressionRankData != NULL, CgsDev::Assert::MessageAt("lpProgressionRankData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnPursuitMode.cpp", 53));
+    CGS_ASSERT(lpGameModeParams != NULL, CgsDev::Assert::MessageAt("lpGameModeParams != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnPursuitMode.cpp", 54));
 
     lpGameModeParams->Construct(GameStateModuleIO::E_MODE_PURSUIT);
 

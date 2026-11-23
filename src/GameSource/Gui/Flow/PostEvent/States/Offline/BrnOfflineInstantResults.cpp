@@ -59,9 +59,6 @@ CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventPlayMusicOnMenuStream) == 8),
 CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayMusicOnMenuStream, 40>) == 20),
               "X360 channel-40 menu-music record is {8,23,12}+8");
 
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCheckScreen);
-
 namespace BrnGui
 {
     namespace
@@ -2608,81 +2605,81 @@ namespace BrnGui
         const CgsDev::RGBA KU_RED = static_cast<CgsDev::RGBA>(-65536);
 
         CgsCore::SPrintf(lacText, 1024, "OFFLINE RESULTS DEBUGGING");
-        MaybeDrawText(lpDisplay, lacText, 80.0f, 100.0f, 15.0f, KU_WHITE, false);
+        lpDisplay->DrawText(lacText, 80.0f, 100.0f, 15.0f, KU_WHITE);
 
         f32 lfY = 118.0f;
         CgsCore::SPrintf(lacText, 1023, "Current State = %d", static_cast<s32>(meCurrentState));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_WHITE);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Win State = %d", static_cast<s32>(meWinState));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_WHITE);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Active SubState = %d", static_cast<s32>(meActiveSubState));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_WHITE);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "SubState State = %d", static_cast<s32>(meSubStateState));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_WHITE);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Photo Presentation Stage = %d", static_cast<s32>(mePhotoPresentationStage));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_WHITE);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Rank Up Presentation Stage = %d", static_cast<s32>(meRankUpPresentationStage));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_WHITE);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Car Unlock Presentation Stage = %d", static_cast<s32>(meCarUnlockPresentationStage));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_WHITE);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "New Rivals Presentation Stage = %d", static_cast<s32>(meNewRivalsPresentationStage));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_WHITE);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Free Car Presentation Stage = %d", static_cast<s32>(meFreeCarPresentationStages));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_WHITE, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_WHITE);
         lfY += 18.0f;
 
         CgsCore::SPrintf(lacText, 1023, "License Shown = %d", static_cast<s32>(mbLicenseShown));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_GREEN, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_GREEN);
         lfY += 18.0f;
         // The native second print intentionally reads +0x2224 again, not mbWinsIncremented at +0x222C.
         CgsCore::SPrintf(lacText, 1023, "Wins Incremented = %d", static_cast<s32>(mbLicenseShown));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_GREEN, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_GREEN);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Started Upgrade Trans Out = %d", static_cast<s32>(mbStartedUpgradeTransOut));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_GREEN, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_GREEN);
         lfY += 18.0f;
 
         CgsCore::SPrintf(lacText, 1023, "Results.Finished Game Mode Type = %d", mResults.meFinishedGameModeType);
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_RED);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Results.Beaten Rival = %x",
                          static_cast<u32>(mResults.mBeatenRival));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_RED);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Results.Player Finish Position = %d", static_cast<s32>(mResults.miPlayerFinishPosition));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_RED);
         lfY += 18.0f;
 
         // CgsArray::GetLength preserves the native assert-then-continue path and its -1 sentinel.
         const s32 liCarsToUnlockCount =
             static_cast<s32>(mResults.maCarsToUnlockFromSpecialEvent.GetLength());
         CgsCore::SPrintf(lacText, 1023, "Results.Cars To Unlock Count = %d", liCarsToUnlockCount);
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_RED);
         lfY += 18.0f;
 
         CgsCore::SPrintf(lacText, 1023, "Results.Rank Up (Old -> New) = %d (%d -> %d)",
                          static_cast<s32>(mResults.mbHasRankedUp),
                          mResults.miPlayerOldRank, mResults.miPlayerNewRank);
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_RED);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Results.Cars Revealed = %d", mResults.miCarsRevealed);
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_RED);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Results.Events Unlocked = %d", mResults.miEventsUnlocked);
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_RED);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Results.Completed Last Rank = %d", static_cast<s32>(mResults.mbCompletedLastRank));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_RED);
         lfY += 18.0f;
         CgsCore::SPrintf(lacText, 1023, "Results.Unlocked Free Car = %d", static_cast<s32>(mResults.mbHasUnlockedFreeCar));
-        MaybeDrawText(lpDisplay, lacText, 80.0f, lfY, 15.0f, KU_RED, false);
+        lpDisplay->DrawText(lacText, 80.0f, lfY, 15.0f, KU_RED);
     }
 }

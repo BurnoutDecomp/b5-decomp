@@ -2,6 +2,7 @@
 
 #include "GameSource/GameState/BrnGameStateModule.h"                 // BrnGameState::GameStateModule (full def + accessors)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                       // CgsIDUnCompress
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"     // CgsModule::VariableEventQueue<N,16>::AddEvent
 #include "GameShared/GameClasses/World/CgsWorldMap2D.h"              // CgsWorld::WorldMap2D::GetValue
@@ -22,9 +23,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 
 #include <cstring>   // strncmp, memcpy
-
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The "Reset Player Car" debug menu
 // (BrnGameState::ResetPlayerDebugComponent). It builds five menu lists off the loaded track +
@@ -71,7 +69,7 @@ namespace BrnGameState
     {
         // Base init (the X360 folds the CgsDev::DebugComponent::Construct body in via ICF).
 
-        CGS_ASSERT(lpGameStateModule != 0, "lpGameStateModule != NULL");
+        CGS_ASSERT(lpGameStateModule != 0, CgsDev::Assert::MessageAt("lpGameStateModule != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnResetPlayerDebugComponent.cpp", 77));
 
         mpGameStateModule        = lpGameStateModule;
         miCurrentLocationIndex   = 0;
@@ -152,13 +150,13 @@ namespace BrnGameState
 
         lStream.Reset();
         lStream << "Vehicle name: " << lpVehicle->GetName();
-        MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 200.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+        lpRender->DrawText(lStream.GetBuffer(), KF_X, 200.0f, KF_TEXT_SCALE, KU_COLOUR);
 
         char lacIdText[16];
         CgsIDUnCompress(lpVehicle->GetId(), lacIdText);
         lStream.Reset();
         lStream << "Vehicle id: " << lacIdText;
-        MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 225.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+        lpRender->DrawText(lStream.GetBuffer(), KF_X, 225.0f, KF_TEXT_SCALE, KU_COLOUR);
 
         lStream.Reset();
         lStream << "Default wheel name: " << lpVehicle->GetDefaultWheelName();
@@ -166,15 +164,15 @@ namespace BrnGameState
         {
             lStream << " - WHEEL NOT FOUND IN GAME";
         }
-        MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 250.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+        lpRender->DrawText(lStream.GetBuffer(), KF_X, 250.0f, KF_TEXT_SCALE, KU_COLOUR);
 
         lStream.Reset();
         lStream << "Is race vehicle: " << ((GetGamePlayFlags(lpVehicle) & KU_FLAG_RACE_VEHICLE) != 0);
-        MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 275.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+        lpRender->DrawText(lStream.GetBuffer(), KF_X, 275.0f, KF_TEXT_SCALE, KU_COLOUR);
 
         lStream.Reset();
         lStream << "Is trailer: " << ((GetGamePlayFlags(lpVehicle) & KU_FLAG_TRAILER) != 0);
-        MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 300.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+        lpRender->DrawText(lStream.GetBuffer(), KF_X, 300.0f, KF_TEXT_SCALE, KU_COLOUR);
 
         if ((GetGamePlayFlags(lpVehicle) & KU_FLAG_RACE_VEHICLE) != 0)
         {
@@ -183,7 +181,7 @@ namespace BrnGameState
                     << ", Speed: "     << GetGamePlayStat(lpVehicle, E_PLAYERSTATS_SPEED)
                     << ", Control: "   << GetGamePlayStat(lpVehicle, E_PLAYERSTATS_CONTROL)
                     << ", Strength: "  << GetGamePlayStat(lpVehicle, E_PLAYERSTATS_STRENGTH);
-            MaybeDrawText(lpRender, lStream.GetBuffer(), KF_X, 325.0f, KF_TEXT_SCALE, KU_COLOUR, false);
+            lpRender->DrawText(lStream.GetBuffer(), KF_X, 325.0f, KF_TEXT_SCALE, KU_COLOUR);
         }
     }
 

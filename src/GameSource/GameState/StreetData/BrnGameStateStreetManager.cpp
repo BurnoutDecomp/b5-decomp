@@ -43,9 +43,6 @@
 // (StreetManager keystone, wave B); the remaining 36 ledger methods land as
 // BrnGameStateStreetManager_wB_* partfiles.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\GameState/StreetData/BrnGameStateStreetManager.h";
-
 namespace BrnGameState
 {
 
@@ -369,11 +366,11 @@ bool StreetManager::LoadAIData( GameStateModuleIO::OutputBuffer* lpOutput,
             const CgsModule::Event* lpEvent = NULL;
             s32 liEventSize = 0;
             lpReceiverQueue->GetFirstEvent( &lpEvent, &liEventSize );
-            CGS_ASSERT( lpEvent != NULL, "lpEvent != NULL" );
+            CGS_ASSERT( lpEvent != NULL, CgsDev::Assert::MessageAt("lpEvent != NULL", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3464) );
 
             const BrnResource::GameDataIO::GameDataEvent* lpAIDataResponse =
                 reinterpret_cast<const BrnResource::GameDataIO::GameDataEvent*>( lpEvent );
-            CGS_ASSERT( lpAIDataResponse->miEventId == 1, "lpAIDataResponse->GetEventId() == 1" );
+            CGS_ASSERT( lpAIDataResponse->miEventId == 1, CgsDev::Assert::MessageAt("lpAIDataResponse->GetEventId() == 1", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3468) );
 
             // ARTIST 0x8234FA70 binds the received AI-lanes resource before
             // marking the load complete (same native-width handle as Progression).
@@ -501,7 +498,7 @@ bool StreetManager::LoadDistrictMap( GameStateModuleIO::OutputBuffer* lpOutput,
             return true;
 
         default:
-            CGS_ASSERT( false, "Unknown meDistrictMapLoadStage" );
+            CGS_ASSERT( false, CgsDev::Assert::MessageAt("Unknown meDistrictMapLoadStage", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3573) );
             return false;
     }
 }
@@ -630,7 +627,7 @@ void StreetManager::FillInRoadRulesQuery( GameStateModuleIO::RoadRulesBatchQuery
     lpRulesQueryAction->miNumRoads = GetStreetData()->GetRoadCount();
 
     CGS_ASSERT( lpRulesQueryAction->miNumRoads <= KI_MAX_CHALLENGES,
-                "lpRulesQueryAction->miNumRoads <= KI_MAX_CHALLENGES" );
+                CgsDev::Assert::MessageAt("lpRulesQueryAction->miNumRoads <= KI_MAX_CHALLENGES", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 4295) );
 
     for ( s32 liRoadIndex = 0; liRoadIndex < lpRulesQueryAction->miNumRoads; ++liRoadIndex )
     {
@@ -735,7 +732,7 @@ namespace BrnGameState
 void StreetManager::GetChallengeParScore( BrnStreetData::ChallengeIndex liIndex,
                                           BrnStreetData::ChallengeParScoresEntry* lpData ) const
 {
-    CGS_ASSERT( lpData, "lpData" );
+    CGS_ASSERT( lpData, CgsDev::Assert::MessageAt("lpData", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3750) );
 
     lpData->Copy( mpStreetData->GetChallengeParScore( liIndex ) );
 }
@@ -947,7 +944,7 @@ void StreetManager::GetChallengeUserScore( BrnStreetData::ChallengeIndex liIndex
                                            BrnStreetData::ChallengePlayerScoreEntry* lpData,
                                            bool lbByRoadIndex ) const
 {
-    CGS_ASSERT( lpData, "lpData" );
+    CGS_ASSERT( lpData, CgsDev::Assert::MessageAt("lpData", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3593) );
 
     lpData->Construct();
 
@@ -971,10 +968,10 @@ void StreetManager::GetChallengeUserScore( BrnStreetData::ChallengeIndex liIndex
     if ( liIndex >= 0 )
     {
         CGS_ASSERT( liIndex < BrnGameState::KI_MAX_CHALLENGES,
-                    "liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES" );
+                    CgsDev::Assert::MessageAt("liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3606) );
 
         const BrnStreetData::ChallengePlayerScoreEntry* lpChallenge = &maChallengeData[liIndex];
-        CGS_ASSERT( lpChallenge, "lpChallenge" );
+        CGS_ASSERT( lpChallenge, CgsDev::Assert::MessageAt("lpChallenge", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3610) );
         lpData->Copy( lpChallenge );
     }
 }
@@ -987,9 +984,9 @@ void StreetManager::GetChallengeFriendHighScore( BrnStreetData::ChallengeIndex l
                                                  bool lbByRoadIndex ) const
 {
     CGS_ASSERT( liIndex < BrnGameState::KI_MAX_CHALLENGES,
-                "liIndex < BrnGameState::KI_MAX_CHALLENGES" );
-    CGS_ASSERT( liIndex >= 0, "liIndex >= 0" );
-    CGS_ASSERT( lpData, "lpData" );
+                CgsDev::Assert::MessageAt("liIndex < BrnGameState::KI_MAX_CHALLENGES", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3624) );
+    CGS_ASSERT( liIndex >= 0, CgsDev::Assert::MessageAt("liIndex >= 0", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3625) );
+    CGS_ASSERT( lpData, CgsDev::Assert::MessageAt("lpData", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3626) );
 
     lpData->Construct();
 
@@ -1014,7 +1011,7 @@ void StreetManager::GetChallengeFriendHighScore( BrnStreetData::ChallengeIndex l
     if ( liSlotIndex >= 0 )
     {
         const BrnStreetData::ChallengeHighScoreEntry* lpChallenge = &maNetworkChallengeData[liSlotIndex];
-        CGS_ASSERT( lpChallenge, "lpChallenge" );
+        CGS_ASSERT( lpChallenge, CgsDev::Assert::MessageAt("lpChallenge", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3641) );
         lpData->Copy( lpChallenge );
     }
 }
@@ -1055,13 +1052,13 @@ namespace BrnGameState
         // at this+0x1DF0 is the DebugComponent base Construct).
         mStreetManagerDebugComponent.Construct( this );
 
-        CGS_ASSERT( lpProgression, "lpProgression" );
+        CGS_ASSERT( lpProgression, CgsDev::Assert::MessageAt("lpProgression", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 151) );
         mpProgressionManager = lpProgression;
 
-        CGS_ASSERT( lpGameStateModule, "lpGameStateModule" );
+        CGS_ASSERT( lpGameStateModule, CgsDev::Assert::MessageAt("lpGameStateModule", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 153) );
         mpGameStateModule = lpGameStateModule;
 
-        CGS_ASSERT( lpRoadRulesManager, "lpRoadRulesManager" );
+        CGS_ASSERT( lpRoadRulesManager, CgsDev::Assert::MessageAt("lpRoadRulesManager", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 155) );
         mpRoadRulesManager = lpRoadRulesManager;
 
         meLoadStage            = E_LOAD_NOT_STARTED;
@@ -1138,11 +1135,11 @@ namespace BrnGameState
             CgsDev::PerfMonCpu::AddMonitor( "UpcomingRoadsQSort",
                                             static_cast<CgsDev::PerfMonCpuPage>( 5 ), false, 1.0f, true );
 
-        CGS_ASSERT( miSetRoadRuleChallengeDataPM >= 0,     "miSetRoadRuleChallengeDataPM >= 0" );
-        CGS_ASSERT( miSetRoadRuleNetworkHighScoresPM >= 0, "miSetRoadRuleNetworkHighScoresPM >= 0" );
-        CGS_ASSERT( miUpcomingRoadsPM >= 0,                "miUpcomingRoadsPM >= 0" );
-        CGS_ASSERT( miUpcomingRoadsSentMessagePM >= 0,     "miUpcomingRoadsSentMessagePM >= 0" );
-        CGS_ASSERT( miUpcomingRoadsQSortPM >= 0,           "miUpcomingRoadsQSortPM >= 0" );
+        CGS_ASSERT( miSetRoadRuleChallengeDataPM >= 0,     CgsDev::Assert::MessageAt("miSetRoadRuleChallengeDataPM >= 0", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 224) );
+        CGS_ASSERT( miSetRoadRuleNetworkHighScoresPM >= 0, CgsDev::Assert::MessageAt("miSetRoadRuleNetworkHighScoresPM >= 0", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 225) );
+        CGS_ASSERT( miUpcomingRoadsPM >= 0,                CgsDev::Assert::MessageAt("miUpcomingRoadsPM >= 0", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 226) );
+        CGS_ASSERT( miUpcomingRoadsSentMessagePM >= 0,     CgsDev::Assert::MessageAt("miUpcomingRoadsSentMessagePM >= 0", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 227) );
+        CGS_ASSERT( miUpcomingRoadsQSortPM >= 0,           CgsDev::Assert::MessageAt("miUpcomingRoadsQSortPM >= 0", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 228) );
     }
 
     // -----------------------------------------------------------------------
@@ -1354,7 +1351,7 @@ namespace BrnGameState
                     }
                     break;
                 default:
-                    CGS_ASSERT( false, "How did it get here?" );
+                    CGS_ASSERT( false, CgsDev::Assert::MessageAt("How did it get here?", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 1050) );
                     break;
             }
         }
@@ -1372,7 +1369,7 @@ namespace BrnGameState
         {
             const BrnAI::Portal* lpPortal = lpSection->GetPortal( static_cast<u8>( liPortalIndex ) );
             const u16 luLinkSectionIndex = lpPortal->GetLinkSectionIndex();
-            CGS_ASSERT( luLinkSectionIndex != 0x7FFF, "luLinkSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX" );
+            CGS_ASSERT( luLinkSectionIndex != 0x7FFF, CgsDev::Assert::MessageAt("luLinkSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 1084) );
 
             // HasSectionAlreadyBeenWalked (inlined scan of mauWalkedSections).
             bool lbAlreadyWalked = false;
@@ -1474,7 +1471,7 @@ namespace BrnGameState
             return;
         }
 
-        CGS_ASSERT( liNumPortalsToExplore > 0, "liNumPortalsToExplore > 0" );
+        CGS_ASSERT( liNumPortalsToExplore > 0, CgsDev::Assert::MessageAt("liNumPortalsToExplore > 0", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 1187) );
 
         CgsDev::PerfMonCpu::StartMonitor( miUpcomingRoadsQSortPM );
         qsort( laSectionWalkData, static_cast<size_t>( liNumPortalsToExplore ),
@@ -1779,10 +1776,10 @@ void StreetManager::PushSectionIndex(u16 section)
 {
     CGS_ASSERT(miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK,
         CgsDev::Assert::MessageAt(
-            "miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK", KAC_ARTIST_ASSERT_FILE, 1062 /* ARTIST 0x8230F9C0 */));
+            "miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK", "..\\..\\..\\GameSource\\GameState/StreetData/BrnGameStateStreetManager.h", 1062 /* ARTIST 0x8230F9C0 */));
     CGS_ASSERT(section != 0x7FFF,
         CgsDev::Assert::MessageAt(
-            "luNewSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", KAC_ARTIST_ASSERT_FILE, 1063 /* ARTIST 0x8230F9E8 */));
+            "luNewSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", "..\\..\\..\\GameSource\\GameState/StreetData/BrnGameStateStreetManager.h", 1063 /* ARTIST 0x8230F9E8 */));
     mauWalkedSections[miNextFreeSectionSlot++] = section;
 }
 bool StreetManager::CanContinueWalking() { return miNextFreeSectionSlot < KI_MAX_SECTIONS_TO_WALK; }
@@ -1836,7 +1833,7 @@ namespace BrnGameState
             BrnAI::AIModuleIO::AICarOutputInterface* lpLastAICarOutputInterface,
             BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface )
     {
-        CGS_ASSERT( lpLastAICarOutputInterface != NULL, "lpLastAICarOutputInterface != NULL" );
+        CGS_ASSERT( lpLastAICarOutputInterface != NULL, CgsDev::Assert::MessageAt("lpLastAICarOutputInterface != NULL", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 1934) );
 
         const s32 liPlayerRoadTargetNodeIndex = miNewRoadNodeIndex - 2;
         if ( liPlayerRoadTargetNodeIndex >= 0 )
@@ -1845,13 +1842,13 @@ namespace BrnGameState
             // view it as the now-committed BrnAI::Route (same address the X360 asserts twice).
             const BrnAI::Route* lpPlayerRoute =
                 reinterpret_cast<const BrnAI::Route*>( lpLastAICarOutputInterface->GetPlayerRoute() );
-            CGS_ASSERT( lpPlayerRoute != NULL, "lpPlayerRoute != NULL" );
+            CGS_ASSERT( lpPlayerRoute != NULL, CgsDev::Assert::MessageAt("lpPlayerRoute != NULL", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 1946) );
 
             if ( lpPlayerRoute->GetNodeCount() >= 1 )
             {
                 const BrnAI::RouteNode* lpPlayerRoadTargetRouteNode =
                     lpPlayerRoute->GetNode( liPlayerRoadTargetNodeIndex );
-                CGS_ASSERT( lpPlayerRoadTargetRouteNode != NULL, "lpPlayerRoadTargetRouteNode != NULL" );
+                CGS_ASSERT( lpPlayerRoadTargetRouteNode != NULL, CgsDev::Assert::MessageAt("lpPlayerRoadTargetRouteNode != NULL", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 1955) );
 
                 // Node position onto the ground plane: (x, 0, y).
                 const f32 lfTargetNodeX = lpPlayerRoadTargetRouteNode->GetX();
@@ -1905,9 +1902,9 @@ namespace BrnGameState
             CGS_ASSERT( lePlayerActiveRaceCarIndex != ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
                         "Player car index hasn't been set" );
             CGS_ASSERT( lePlayerActiveRaceCarIndex > ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
-                        "lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID" );
+                        CgsDev::Assert::MessageAt("lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 561) );
             CGS_ASSERT( lePlayerActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                        "lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+                        CgsDev::Assert::MessageAt("lePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 562) );
 
             const u16 luRaceCarAISection = lpActiveRaceCarInterface->GetRaceCarAISection( lePlayerActiveRaceCarIndex );
             const BrnStreetData::RoadIndex liRoadIndex = GetRoadIndexFromAISectionIndex( luRaceCarAISection );

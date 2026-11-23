@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Behaviours/BehaviourRig.h"  // Utils::CameraShake::Parameters + Utils::Looker::Parameters (embedded param sub-blocks)
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"            // the Camera::Behaviour base
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"              // CollisionPolicyAttachedToVehicle
@@ -153,7 +154,7 @@ inline void
 BehaviourFailsafe::SetParameters(const Parameters* lpParameters)
 {
     CGS_ASSERT(lpParameters->GetType() == eBehaviourFailsafe,
-               "lpParameters->GetType() == eBehaviourFailsafe");
+               CgsDev::Assert::MessageAt("lpParameters->GetType() == eBehaviourFailsafe", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.h", 146));
     mpParameters = lpParameters;
     SetDebugParametersName(lpParameters->GetDebugName());
 }

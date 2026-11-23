@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (post-event asserts)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorUtils.h"          // ArbUtils::ChangeToState
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h" // ArbitratorStateContainer::EState
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"            // BrnDirector::GameState
@@ -232,7 +233,7 @@ namespace BrnDirector
             // race ladder, fires inside GetEventCompletionShots just before this line).
 
             CGS_ASSERT(lrEventCompleteShotGroup.Num_ShotList() > 0,
-                       "lEventCompleteShotGroup.Num_ShotList()>0");
+                       CgsDev::Assert::MessageAt("lEventCompleteShotGroup.Num_ShotList()>0", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStatePostEvent.cpp", 54));
 
             Camera::BehaviourIceAnim::ShotReference& lrShot =
                 PickAppropriateShot(lrEventCompleteShotGroup, lrSharedInfo);
@@ -353,7 +354,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, "unhandled state");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStatePostEvent.cpp", 160));
             break;
         }
     }

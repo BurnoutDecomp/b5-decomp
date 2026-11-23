@@ -8,8 +8,6 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 
 // The shared "draw debug text" helper (its home is CgsDebug2DImmediateRender.cpp).
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCentred);
 
 namespace BrnMassive
 {
@@ -75,9 +73,9 @@ const char* BrnMassiveDebugComponent::GetState(s32 liState) const
 void BrnMassiveDebugComponent::DrawText(CgsDev::Debug2DImmediateRender* lpRender, const char* lpcLabel,
                                         const char* lpcValue, f32 lfX, f32* lpfY)
 {
-    MaybeDrawText(lpRender, lpcLabel, lfX, *lpfY, mfTextScale, KU_COLOUR_WHITE, false);
+    lpRender->DrawText(lpcLabel, lfX, *lpfY, mfTextScale, KU_COLOUR_WHITE);
     const f32 lfLabelWidth = lpRender->CalcTextWidth(lpcLabel, mfTextScale);
-    MaybeDrawText(lpRender, lpcValue, lfLabelWidth + lfX, *lpfY, mfTextScale, KU_COLOUR_WHITE, false);
+    lpRender->DrawText(lpcValue, lfLabelWidth + lfX, *lpfY, mfTextScale, KU_COLOUR_WHITE);
     *lpfY = mfLineSpacing * mfTextScale + *lpfY;
 }
 
@@ -120,14 +118,14 @@ void BrnMassiveDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRende
 
     DrawSubscriber(mpDebugSubscriber, lpRender, 550.0f, 300.0f);
 
-    MaybeDrawText(lpRender, "Massive Debug", 100.0f, 100.0f, 32.0f, KU_COLOUR_TITLE, false);
+    lpRender->DrawText("Massive Debug", 100.0f, 100.0f, 32.0f, KU_COLOUR_TITLE);
 
     CGS_ASSERT(mpMassiveNames, "mpMassiveNames");
     CGS_ASSERT(mpSubscriberStates, "mpSubscriberStates");
 
     if (mbPaused)
     {
-        MaybeDrawText(lpRender, "PAUSED", 300.0f, 100.0f, 32.0f, KU_COLOUR_PAUSED, false);
+        lpRender->DrawText("PAUSED", 300.0f, 100.0f, 32.0f, KU_COLOUR_PAUSED);
     }
 
     char lacText[64];
@@ -142,7 +140,7 @@ void BrnMassiveDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRende
         }
 
         CgsCore::SPrintf(lacText, 64, "%s (%d)", mpMassiveNames[liName], liInvElementID);
-        MaybeDrawText(lpRender, lacText, 100.0f, lfY, 12.0f, KU_COLOUR_WHITE, false);
+        lpRender->DrawText(lacText, 100.0f, lfY, 12.0f, KU_COLOUR_WHITE);
 
         const f32 lfNextY = lfY + 15.0f;
 
@@ -158,7 +156,7 @@ void BrnMassiveDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpRende
     }
 
     CgsCore::SPrintf(lacText, 64, "Number of Impressions           : %d", miNumImpressions);
-    MaybeDrawText(lpRender, lacText, 100.0f, lfY, 16.0f, KU_COLOUR_COUNT, false);
+    lpRender->DrawText(lacText, 100.0f, lfY, 16.0f, KU_COLOUR_COUNT);
 }
 
 } // namespace BrnMassive

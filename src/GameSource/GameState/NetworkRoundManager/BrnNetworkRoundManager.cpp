@@ -1,10 +1,6 @@
 #include "GameSource/GameState/NetworkRoundManager/BrnNetworkRoundManager.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
-    "../GameState/NetworkRoundManager/BrnNetworkRoundManager.cpp";
-
 namespace BrnGameState
 {
 
@@ -30,7 +26,7 @@ void NetworkRoundManager::Destruct()
 void NetworkRoundManager::NetworkGameStarted(const GameStateModuleIO::StartNetworkGameEvent* lpStartNetworkGameEvent)
 {
     CGS_ASSERT(lpStartNetworkGameEvent,
-        CgsDev::Assert::MessageAt("lpStartNetworkGameEvent", KAC_ARTIST_ASSERT_FILE, 112 /* ARTIST 0x82358954 */));
+        CgsDev::Assert::MessageAt("lpStartNetworkGameEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/NetworkRoundManager/BrnNetworkRoundManager.cpp", 112 /* ARTIST 0x82358954 */));
 
     mStartNetworkGameEvent = *lpStartNetworkGameEvent;
 
@@ -39,9 +35,9 @@ void NetworkRoundManager::NetworkGameStarted(const GameStateModuleIO::StartNetwo
     mbStartingGameDueToPlayerJoin = lpStartNetworkGameEvent->mbIsStartingGameAfterPlayerJoin;
 
     CGS_ASSERT(miRoundsRemaining > 0,
-        CgsDev::Assert::MessageAt("miRoundsRemaining > 0", KAC_ARTIST_ASSERT_FILE, 118 /* ARTIST 0x823589A4 */));
+        CgsDev::Assert::MessageAt("miRoundsRemaining > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/NetworkRoundManager/BrnNetworkRoundManager.cpp", 118 /* ARTIST 0x823589A4 */));
     CGS_ASSERT(miTotalRounds > 0,
-        CgsDev::Assert::MessageAt("miTotalRounds > 0", KAC_ARTIST_ASSERT_FILE, 119 /* ARTIST 0x823589CC */));
+        CgsDev::Assert::MessageAt("miTotalRounds > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/NetworkRoundManager/BrnNetworkRoundManager.cpp", 119 /* ARTIST 0x823589CC */));
 }
 
 // X360 0x823589E8. Cache the incoming start-network-round event. The X360 copies 10 dwords (40
@@ -53,7 +49,7 @@ void NetworkRoundManager::NetworkGameStarted(const GameStateModuleIO::StartNetwo
 void NetworkRoundManager::NetworkRoundStarted(const GameStateModuleIO::StartNetworkRoundEvent* lpStartNetworkRoundEvent)
 {
     CGS_ASSERT(lpStartNetworkRoundEvent,
-        CgsDev::Assert::MessageAt("lpStartNetworkRoundEvent", KAC_ARTIST_ASSERT_FILE, 134 /* ARTIST 0x82358A14 */));
+        CgsDev::Assert::MessageAt("lpStartNetworkRoundEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/NetworkRoundManager/BrnNetworkRoundManager.cpp", 134 /* ARTIST 0x82358A14 */));
 
     mStartNetworkRoundEvent = *lpStartNetworkRoundEvent;
 }
@@ -64,7 +60,7 @@ void NetworkRoundManager::NetworkRoundStarted(const GameStateModuleIO::StartNetw
 void NetworkRoundManager::OnRoundStart()
 {
     CGS_ASSERT(miRoundsRemaining > 0,
-        CgsDev::Assert::MessageAt("miRoundsRemaining > 0", KAC_ARTIST_ASSERT_FILE, 149 /* ARTIST 0x82358A90 */));
+        CgsDev::Assert::MessageAt("miRoundsRemaining > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/NetworkRoundManager/BrnNetworkRoundManager.cpp", 149 /* ARTIST 0x82358A90 */));
 
     --miRoundsRemaining;
 }

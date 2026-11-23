@@ -135,7 +135,7 @@ namespace BrnDirector
         {
             CGS_ASSERT(mArrayOfStatePointers[luLoop] != 0, "Uninitialised state pointer");
             bool lbReleased = mArrayOfStatePointers[luLoop]->Release(lrSharedInfo);
-            CGS_ASSERT(lbReleased, "mArrayOfStatePointers[luLoop]->Release(lSharedInfo)");
+            CGS_ASSERT(lbReleased, CgsDev::Assert::MessageAt("mArrayOfStatePointers[luLoop]->Release(lSharedInfo)", "..\\..\\..\\GameSource\\Director/Arbitrator/BrnDirectorArbitratorStateContainer.cpp", 99));
         }
     }
 }

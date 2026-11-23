@@ -29,9 +29,6 @@
 // CGS_ASSERT (the house assert machinery the console Begin/Fire/End triples map to).
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h";
-
 namespace BrnGameState
 {
     // ------------------------------------------------------------------------
@@ -48,7 +45,7 @@ namespace BrnGameState
         CGS_ASSERT(static_cast<int>(eSkill) <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT,
             CgsDev::Assert::MessageAt(
                 "leEnumIndex <= BurnoutSkillzData::E_BURNOUT_SKILL_COUNT",
-                KAC_ARTIST_ASSERT_FILE, 109 /* ARTIST 0x8230FC38 */));
+                "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 109 /* ARTIST 0x8230FC38 */));
         return eOld;
     }
 
@@ -104,10 +101,10 @@ namespace BrnGameState
     {
         CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START,
             CgsDev::Assert::MessageAt(
-                "leSkillType >= E_BURNOUT_SKILL_START", KAC_ARTIST_ASSERT_FILE, 135 /* ARTIST 0x8230FC8C */));
+                "leSkillType >= E_BURNOUT_SKILL_START", "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 135 /* ARTIST 0x8230FC8C */));
         CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT,
             CgsDev::Assert::MessageAt(
-                "leSkillType < E_BURNOUT_SKILL_COUNT", KAC_ARTIST_ASSERT_FILE, 136 /* ARTIST 0x8230FCB0 */));
+                "leSkillType < E_BURNOUT_SKILL_COUNT", "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 136 /* ARTIST 0x8230FCB0 */));
 
         return mafBurnoutSkilz[eSkill];
     }

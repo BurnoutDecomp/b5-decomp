@@ -9,6 +9,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Utils/BrnPositionLag.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/vector3_operation.h"        // rw::math::vpu Vector3 Mult / Lerp / operator+
 #include "rw/math/vpu/matrix44affine_operation.h" // InverseOfMatrixWithOrthonormal3x3 / TransformPoint / TransformVector
 
@@ -81,7 +82,7 @@ void PositionLag::Construct()
 // ----------------------------------------------------------------------------
 void PositionLag::Update(const Parameters& lrParameters, f32 lfTimestep, rw::math::vpu::Matrix44Affine& lrTransform)
 {
-    CGS_ASSERT(mbConstructed, "mbConstructed");
+    CGS_ASSERT(mbConstructed, CgsDev::Assert::MessageAt("mbConstructed", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnPositionLag.cpp", 69));
 
     // (1) Inverse of the orthonormal affine: transpose the 3x3, inverse-transform the position.
     const rw::math::vpu::Matrix44Affine lInverseTransform =

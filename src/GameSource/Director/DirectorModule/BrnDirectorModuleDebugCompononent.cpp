@@ -17,6 +17,7 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleDebugCompononent.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnDirector
 {
@@ -35,7 +36,7 @@ namespace BrnDirector
 void DebugComponent::Construct(DirectorModule* lpDirectorModule)
 {
 
-    CGS_ASSERT(lpDirectorModule != 0, "lpCameraModule != NULL");
+    CGS_ASSERT(lpDirectorModule != 0, CgsDev::Assert::MessageAt("lpCameraModule != NULL", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleDebugCompononent.cpp", 57));
 
     mpDirectorModule          = lpDirectorModule;
     mbShowCameraPos           = false;

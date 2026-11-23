@@ -1,6 +1,7 @@
 #include "GameSource/Director/Camera/Utils/BrnOrientationLag.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/matrix44affine_operation.h"      // rw::math::vpu::SLerp
 
 // BrnDirector::Camera::Utils::OrientationLag -- reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -34,7 +35,7 @@ namespace Utils
     // @ 0x82222FB8
     void OrientationLag::Update(f32 lfTimestep, const rw::math::vpu::Matrix44Affine& lrTransform)
     {
-        CGS_ASSERT(mpParameters != NULL, "mpParameters != NULL");
+        CGS_ASSERT(mpParameters != NULL, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnOrientationLag.cpp", 60));
 
         if (mbFirstFrame)
         {

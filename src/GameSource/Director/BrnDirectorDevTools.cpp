@@ -4,6 +4,7 @@
 #include <stdlib.h>                                          // atof (the CameraPos float fields)
 #include "rw/core/stdc/stdc.h"                               // rw::core::stdc::ConvertAToI
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::SPrintf
 #include "GameShared/GameClasses/Development/DebugSystem/Interface/CgsDebugInterface.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Core/UI/CgsDebugUI.h"
@@ -22,8 +23,8 @@ namespace BrnDirector
     void DirectorDevTools::Construct(MainDirector* lpDirectorModule,
                                      DirectorResourceManager* lpDirectorResourceManager)
     {
-        CGS_ASSERT(!mpInstance, "mpInstance==NULL");
-        CGS_ASSERT(lpDirectorModule, "lpCameraModule != NULL");
+        CGS_ASSERT(!mpInstance, CgsDev::Assert::MessageAt("mpInstance==NULL", "..\\..\\..\\GameSource\\Director/BrnDirectorDevTools.cpp", 46));
+        CGS_ASSERT(lpDirectorModule, CgsDev::Assert::MessageAt("lpCameraModule != NULL", "..\\..\\..\\GameSource\\Director/BrnDirectorDevTools.cpp", 47));
 
         mpDirectorResourceManager = lpDirectorResourceManager;
         mpDirectorModule = lpDirectorModule;
@@ -74,7 +75,7 @@ namespace BrnDirector
     // -----------------------------------------------------------------------
     void DirectorDevTools::GameTalkMsgHandler(EA::GameTalk::GameTalkMessage* lpMessage)
     {
-        CGS_ASSERT(mpInstance != 0, "mpInstance!=NULL");   // :130 (non-fatal on the X360; the dispatch runs regardless)
+        CGS_ASSERT(mpInstance != 0, CgsDev::Assert::MessageAt("mpInstance!=NULL", "..\\..\\..\\GameSource\\Director/BrnDirectorDevTools.cpp", 130));   // :130 (non-fatal on the X360; the dispatch runs regardless)
 
         if (lpMessage->GetNumKeys() != 1)
             return;

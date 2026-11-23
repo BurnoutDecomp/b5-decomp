@@ -23,6 +23,7 @@
 // included here for the compile-only gate.
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameSource/Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.h"
 #include "GameSource/Replays/Serialisers/BrnReplayRaceCarSerialiserFrame.h"
@@ -89,7 +90,7 @@ namespace BrnReplays
     {
         Lock();
         RaceCarEntitySerialiserStaticLayout* lpLayout = GetStaticLayout();
-        CGS_ASSERT(lpLayout != 0, "lpStatic");
+        CGS_ASSERT(lpLayout != 0, CgsDev::Assert::MessageAt("lpStatic", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayRaceCarEntitySerialiser.cpp", 127));
 
         if (meMode == E_MODE_PLAYING)
         {

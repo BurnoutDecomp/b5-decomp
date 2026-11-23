@@ -50,6 +50,7 @@
 #include "GameSource/GameState/BrnGameActions.h"                         // PlayerReachedRoadRageTarget / HUDMessageRoadRageTimeExtensionAction
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // CgsModule::VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGameState
 {
@@ -102,7 +103,7 @@ namespace BrnGameState
     void RoadRageModeScoring::Update(const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface,
                                      f32 /* lfSimTimeStep */)
     {
-        CGS_ASSERT(lpActiveRaceCarInterface != NULL, "lpActiveRaceCarInterface != NULL");
+        CGS_ASSERT(lpActiveRaceCarInterface != NULL, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnRoadRageModeScoring.cpp", 91));
     }
 
     // FLAG no inline site found. ScoringSystem::Release @0x823124A0 (the only lifecycle caller)

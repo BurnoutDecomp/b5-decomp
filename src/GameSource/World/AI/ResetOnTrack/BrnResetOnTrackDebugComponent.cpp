@@ -16,9 +16,6 @@
 
 #include <math.h>
 
-void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
-                  f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool lbCheckScreen);
-
 namespace BrnAI
 {
 namespace
@@ -248,7 +245,7 @@ void ResetOnTrackDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDis
         {
             lStream << ", AI Driven";
         }
-        MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f, 50.0f, 12.0f, K_WHITE, false);
+        lpDisplay->DrawText(lStream.GetBuffer(), 50.0f, 50.0f, 12.0f, K_WHITE);
     }
 
     if (mbShowResetInfo)
@@ -296,9 +293,9 @@ void ResetOnTrackDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDis
                             ? ", Success"
                             : ", Failure");
 
-            MaybeDrawText(lpDisplay, lStream.GetBuffer(), 50.0f,
+            lpDisplay->DrawText(lStream.GetBuffer(), 50.0f,
                           100.0f + static_cast<f32>(liDisplayedRow) * 14.0f,
-                          12.0f, lbIsPlayerRequest ? K_WHITE : K_CYAN, false);
+                          12.0f, lbIsPlayerRequest ? K_WHITE : K_CYAN);
             ++liDisplayedRow;
         }
     }

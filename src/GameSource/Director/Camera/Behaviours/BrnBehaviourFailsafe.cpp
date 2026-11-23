@@ -16,6 +16,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourFailsafe.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameSource/Director/Camera/Camera.h"                     // Camera (Update publishes into it)
 #include "GameSource/Director/Camera/BrnCameraState.h"             // CameraState::E_FLAG_VALID
@@ -159,20 +160,20 @@ void BehaviourFailsafe::Construct()
 // ----------------------------------------------------------------------------
 bool BehaviourFailsafe::Prepare(const BehaviourSharedPrepareReleaseInfo& lSharedInfo)
 {
-    CGS_ASSERT(lSharedInfo.mpDirectorResourceManager != 0, "lSharedInfo.mpDirectorResourceManager");   // :73
+    CGS_ASSERT(lSharedInfo.mpDirectorResourceManager != 0, CgsDev::Assert::MessageAt("lSharedInfo.mpDirectorResourceManager", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.cpp", 73));   // :73
     const DirectorResourceManager& lrResources = *lSharedInfo.GetDirectorResourceManager();
 
     CGS_ASSERT(lrResources.GetFailsafe().Num_ShotList() > 0,
-               "lSharedInfo.mpDirectorResourceManager->GetFailsafe().Num_ShotList() > 0");              // :74
+               CgsDev::Assert::MessageAt("lSharedInfo.mpDirectorResourceManager->GetFailsafe().Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.cpp", 74));              // :74
     const Attrib::Gen::iceanim lShot(*lrResources.GetFailsafe().ShotList(0), 0);
 
     const bool lbControllerPrepared = mKeyAnimController.Prepare(lrResources, lShot.GetAnimGuid());
     CGS_ASSERT(lbControllerPrepared,
-               "mKeyAnimController.Prepare(*lSharedInfo.mpDirectorResourceManager, lShot.Guid())");     // :76
+               CgsDev::Assert::MessageAt("mKeyAnimController.Prepare(*lSharedInfo.mpDirectorResourceManager, lShot.Guid())", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.cpp", 76));     // :76
     (void)lbControllerPrepared;
 
     const ICE::ICETakeData* lpTakeData = lrResources.GetKeyAnimFromGuid(lShot.GetAnimGuid());
-    CGS_ASSERT(lpTakeData != 0, "lpTakeData != NULL");                                                 // :80
+    CGS_ASSERT(lpTakeData != 0, CgsDev::Assert::MessageAt("lpTakeData != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.cpp", 80));                                                 // :80
     SetDebugParametersName(lpTakeData->GetName());
 
     mOrientationLag.SetParameters(&mOrientationLagParams);
@@ -198,7 +199,7 @@ bool BehaviourFailsafe::Update(Camera& lrCamera, const BehaviourSharedInfo& lrSh
 {
     static f32 sfRotationRate = 10.0f;   // degrees per second
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");                                             // :102
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourFailsafe.cpp", 102));                                             // :102
 
     lrCamera.GetState().SetFlag(CameraState::E_FLAG_VALID, true);
 

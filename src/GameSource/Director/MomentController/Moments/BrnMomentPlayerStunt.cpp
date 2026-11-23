@@ -1,6 +1,7 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentPlayerStunt.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                       // CgsCore::SPrintf
 #include "GameShared/GameClasses/System/Resource/CgsResourceID.h"             // CgsResource::ID::HashString
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/common/AttributeKey.h"   // Attrib::StringToKey
@@ -262,7 +263,7 @@ void MomentPlayerStunt::Update(f32 /*lfTimeStep*/, void* lrBehaviourController,
         break;
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");   //  (non-gating)
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerStunt.cpp", 275));   //  (non-gating)
         return;
     }
 

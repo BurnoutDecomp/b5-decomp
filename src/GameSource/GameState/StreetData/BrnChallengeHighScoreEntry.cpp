@@ -123,7 +123,7 @@ void ChallengeHighScoreEntry::Construct(ChallengeData* lpData)
 bool ChallengeHighScoreEntry::UpdateEntry(const ChallengeHighScoreEntry* lpEntry,
                                           CgsContainers::FastBitArray<2>* lpUpdateScoresBitArray)
 {
-    CGS_ASSERT(lpEntry != NULL, "lpEntry");
+    CGS_ASSERT(lpEntry != NULL, CgsDev::Assert::MessageAt("lpEntry", "..\\..\\..\\GameSource\\GameState/StreetData/BrnChallengeHighScoreEntry.cpp", 105));
 
     if (lpUpdateScoresBitArray)
     {

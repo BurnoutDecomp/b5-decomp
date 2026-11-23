@@ -28,6 +28,7 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Gui/CgsGuiModule.h"         // CgsGui::GuiModule::AddGuiEvent
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // StrStream (streamed assert messages)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"              // BrnGui::GuiEventBoostInfo (event 206)
@@ -833,8 +834,8 @@ void BrnGameModule::BridgeWorldTrafficAndPropDataToGui(
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
         const BrnWorldIO::UpdateOutputBuffer* lpWorldOutput)
 {
-    CGS_ASSERT(lpGuiInput != 0, "lpGuiInput");         // cpp:126 (`li r5, 0x7E` @0x823E5590)
-    CGS_ASSERT(lpWorldOutput != 0, "lpWorldOutput");   // cpp:127 (`li r5, 0x7F` @0x823E55B4)
+    CGS_ASSERT(lpGuiInput != 0, CgsDev::Assert::MessageAt("lpGuiInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToGui.cpp", 126));         // cpp:126 (`li r5, 0x7E` @0x823E5590)
+    CGS_ASSERT(lpWorldOutput != 0, CgsDev::Assert::MessageAt("lpWorldOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToGui.cpp", 127));   // cpp:127 (`li r5, 0x7F` @0x823E55B4)
 
     const CgsModule::Event* lpEvent     = 0;   // DWARF :129
     s32                     liEventSize = 0;   // DWARF :130

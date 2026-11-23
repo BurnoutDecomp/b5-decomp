@@ -21,9 +21,6 @@
 // the console still Set()s the null name) -- and latch mbGotHooks. The out-flag asks the
 // caller to (re)enumerate the hooks while none have been registered yet.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h";
-
 namespace BrnDirector
 {
 
@@ -75,7 +72,7 @@ namespace BrnDirector
     {
         CGS_ASSERT(lpEffectInterface != 0,
             CgsDev::Assert::MessageAt(
-                "lpEffectInterface != NULL", KAC_ARTIST_ASSERT_FILE, 361 /* ARTIST 0x82232EB8 */));
+                "lpEffectInterface != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h", 361 /* ARTIST 0x82232EB8 */));
 
         if (mbStartRequested)
         {
@@ -108,7 +105,7 @@ namespace BrnDirector
 f32 EffectInterface::GetCurrentEffectBlendAmount() const
 {
     CGS_ASSERT(mbHasCurrentEffectName,
-        CgsDev::Assert::MessageAt("HasCurrentEffectName()", KAC_ARTIST_ASSERT_FILE, 115 /* ARTIST 0x821F1840 */));   // non-gating
+        CgsDev::Assert::MessageAt("HasCurrentEffectName()", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h", 115 /* ARTIST 0x821F1840 */));   // non-gating
     return mfCurrentEffectBlendAmount;
 }
 

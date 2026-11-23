@@ -25,9 +25,6 @@
 // The fail-safe never becomes valid on its own -- it just re-arms its camera request
 // each searching frame.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentFailsafe.cpp";
-
 namespace BrnDirector
 {
 namespace
@@ -51,7 +48,7 @@ void MomentFailSafe::Update(f32 lfTimeStep, void* lrBehaviourController,
     (void)lSharedInfo;
 
     CGS_ASSERT(mpParameters != NULL,
-        CgsDev::Assert::MessageAt("mpParameters != NULL", KAC_ARTIST_ASSERT_FILE, 69 /* ARTIST 0x8220A2E4 */));
+        CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentFailsafe.cpp", 69 /* ARTIST 0x8220A2E4 */));
 
     switch (GetState())
     {
@@ -66,7 +63,7 @@ void MomentFailSafe::Update(f32 lfTimeStep, void* lrBehaviourController,
     default:
         CGS_ASSERT(false,
             CgsDev::Assert::MessageAt(
-                "unhandled case in switch", KAC_ARTIST_ASSERT_FILE, 92 /* ARTIST 0x8220A314 */));
+                "unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentFailsafe.cpp", 92 /* ARTIST 0x8220A314 */));
         break;
     }
 }

@@ -10,6 +10,7 @@
 #include "GameSource/GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h"        // BrnGameState::BurnoutSkillzData
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"                    // CgsContainers::FastBitArray<8> (mabDirtyFlags)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                // CGS_ASSERT (inline setters)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // ---------------------------------------------------------------------------
 // BrnGameState::BurnoutSkillzManager  (DWARF home BrnBurnoutSkillzManager.h:53)
@@ -126,13 +127,13 @@ public:
     // Inline setters (inlined into ModeManager::Construct after the lobby mode's own assert).
     void SetStreetManager(StreetManager* lpStreetManager)
     {
-        CGS_ASSERT(lpStreetManager, "lpStreetManager");
+        CGS_ASSERT(lpStreetManager, CgsDev::Assert::MessageAt("lpStreetManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnBurnoutSkillzManager.h", 265));
         mpStreetManager = lpStreetManager;
     }
 
     void SetMugshotManager(MugshotManager* lpMugshotManager)
     {
-        CGS_ASSERT(lpMugshotManager, "lpMugshotManager");
+        CGS_ASSERT(lpMugshotManager, CgsDev::Assert::MessageAt("lpMugshotManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnBurnoutSkillzManager.h", 280));
         mpMugshotManager = lpMugshotManager;
     }
 

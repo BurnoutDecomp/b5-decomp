@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include <cstring>                                                              // std::strcmp (Checkpoint effect-name compare)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT (rank-up asserts)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorStateContainer.h" // ArbitratorStateContainer (hand-off)
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"            // BrnDirector::GameState (rank-up flags)
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"                 // Camera::RequestStartEffectHook / EffectInterface
@@ -113,7 +114,7 @@ namespace BrnDirector
                 lrSharedInfo.mpDirectorResourceManager->GetRankUp();
 
             CGS_ASSERT(lrRankUpShots.Num_ShotList() > 0,
-                       "lSharedInfo.mpDirectorResourceManager->GetRankUp().Num_ShotList() > 0");
+                       CgsDev::Assert::MessageAt("lSharedInfo.mpDirectorResourceManager->GetRankUp().Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateRankUp.cpp", 53));
 
             // Allocate the ICE-anim behaviour into the handle.
             lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(
@@ -261,7 +262,7 @@ namespace BrnDirector
         }
 
         default:
-            CGS_ASSERT(false, "unhandled state");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateRankUp.cpp", 153));
             break;
         }
     }

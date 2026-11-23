@@ -14,6 +14,7 @@
 // the union of the BrnMomentNewCarJoined_w*.cpp partfiles' #include lines, first occurrence wins, mount order (2026-09-15)
 #include "GameSource/Director/MomentController/Moments/BrnMomentNewCarJoined.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT (the unhandled-case assert)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"   // BrnDirector::Timestep::E_WORLD_NO_SLOMO
 
 // ============================================================================
@@ -270,7 +271,7 @@ void MomentNewCarJoined::Update(f32 /*lfTimeStep -- dead arg, see the banner*/,
         break;
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");   //  (non-gating)
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentNewCarJoined.cpp", 187));   //  (non-gating)
         return;
     }
 

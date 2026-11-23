@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (the helper tripwires)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Arbitrator/BrnDirectorArbitratorState.h"  // ArbitratorState / ArbStateSharedInfo
 #include "GameSource/Director/Camera/BrnBehaviourManager.h"  // Camera::BehaviourHandle / BehaviourHelperIndex
 #include "GameSource/Director/Camera/Behaviours/BrnBehaviourInterpolate.h" // THE BehaviourInterpolate home
@@ -127,7 +128,7 @@ namespace BrnDirector
         // which carries the :610 handle tripwire).
         Camera::Camera GetCamera() const
         {
-            CGS_ASSERT(IsReady(), "IsReady()");   // :68 (non-gating)
+            CGS_ASSERT(IsReady(), CgsDev::Assert::MessageAt("IsReady()", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCarSelect.h", 68));   // :68 (non-gating)
             return mInterpolater.GetProducedCamera();
         }
 
