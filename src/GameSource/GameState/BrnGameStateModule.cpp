@@ -1433,11 +1433,6 @@ BrnResource::WheelList* GameStateModule::GetWheelList()
 
 // The active player car / wheel ids the CarSelect FSM compares against its desired car
 // (X360 raw reads at this+0x456D8 / +0x456E0; both are written by OnSpecialEventPlayerCarChange).
-CgsID GameStateModule::GetActivePlayerCarId() const
-{
-    return mActivePlayerCarId;
-}
-
 CgsID GameStateModule::GetActivePlayerWheelId() const
 {
     return mActivePlayerWheelId;
@@ -1712,11 +1707,6 @@ bool GameStateModule::ShouldAllowTimedTutorialTips()
 
 // [tut-ticker] the declare-only ModeManager accessor, bodied (the X360 inlines the embedded
 // member's address; MugshotManager/TrainingManager reach it by name here).
-ModeManager* GameStateModule::GetModeManager()
-{
-    return &mModeManager;
-}
-
 // --------------------------------------------------------------------------------------------
 // ApplyCarStats (X360 0x82381188).
 // Publish the newly-selected car's gameplay stats out of its VehicleListEntry as the 24-byte

@@ -618,10 +618,7 @@ void ProgressionManager::SetRoadRuleNetworkHighScores(const BrnStreetData::Chall
 // (`CGS_ASSERT(mProgressionManager.GetProfile())`), so the console's own contract allows a
 // null answer; an embedded sub-object simply never is one.
 // ------------------------------------------------------------------------------------
-Profile* ProgressionManager::GetProfile()
-{
-    return &mProfile;
-}
+// (Bodied in the header, as the original: see BrnProgressionManager.h.)
 
 // ============================================================================================
 // [gateui] 2026-08-20 (owner `deps`) -- THE THREE STUNT-ELEMENT / ACHIEVEMENT ACCESSORS the

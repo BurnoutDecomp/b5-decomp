@@ -384,7 +384,9 @@ namespace BrnGameState
 
         // ---- street-data accessors ---------------------------------------------
         // DWARF :326 (committed body). Returns mpStreetData.operator->().
-        const BrnStreetData::StreetData* GetStreetData();
+        // DWARF h:326, header-inline: `mpStreetData.operator->()` at every ARTIST caller
+        // (its own assert is CgsResourcePtr.h's).
+        const BrnStreetData::StreetData* GetStreetData() { return mpStreetData.operator->(); }
 
         s32 GetRoadCount() const;                                        // :334
         void OnEnterNewRoad();                                           // :338

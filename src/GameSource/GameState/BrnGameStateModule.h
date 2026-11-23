@@ -280,7 +280,7 @@ public:
 
     bool IsActiveRaceCarStillPresent(::EActiveRaceCarIndex leActiveRaceCarIndex) const;
 
-    ModeManager* GetModeManager();
+    ModeManager* GetModeManager() { return &mModeManager; }   // header-inline (DWARF h:1068)
 
     GameStateModuleIO::EGameModeType GetCurrentGameModeType() const;
 
@@ -309,7 +309,7 @@ public:
                                        GameStateModuleIO::GameActionQueue* lpQueue,
                                        BrnProgression::RaceEventData::EModeType leModeType);
 
-    CgsID GetActivePlayerCarId() const;
+    CgsID GetActivePlayerCarId() const { return mActivePlayerCarId; }   // header-inline
 
     void RequestStreamingForVehicleSelection(GameStateModuleIO::GameActionQueue* lpActionQueue, CgsID lCarId);
 

@@ -1925,18 +1925,6 @@ void SplitArray<ProfileEvent, BrnGuiSaveLoad::ProfileEvent>(
 }
 
 // ------------------------------------------------------------------------------------
-// Profile::GetCarCount
-//
-// The number of CarData records actually populated in maCars (X360 read of Profile+0x26C).
-// The X360 inlines it at every call site; kept out-of-line here because BrnProfile.h already
-// declares it that way and several unmounted TUs bind to the symbol.
-// ------------------------------------------------------------------------------------
-s32 Profile::GetCarCount() const
-{
-    return miCarCount;
-}
-
-// ------------------------------------------------------------------------------------
 // Profile::IsStartOfGameDeformActive
 //
 // ⭐⭐ CORRECTION. The committed comment at BrnCarSelectManager.cpp's call site read

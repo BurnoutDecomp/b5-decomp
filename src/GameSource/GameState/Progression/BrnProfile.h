@@ -706,7 +706,7 @@ public:
     ProfileEvent* FindProfileEventByRaceEventId(CgsID lEventId);
 
     const char*     GetName() const { return macName; }   // inline everywhere it is read (+4)
-    s32             GetCarCount() const;
+    s32             GetCarCount() const { return miCarCount; }   // header-inline (DWARF h:458)
     const CarData*  GetCarData(s32 liIndex) const;
           CarData*  GetCarData(s32 liIndex);
     bool IsStartOfGameDeformActive() const;

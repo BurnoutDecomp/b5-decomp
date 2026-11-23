@@ -523,10 +523,7 @@ bool StreetManager::LoadDistrictMap( GameStateModuleIO::OutputBuffer* lpOutput,
 // Written as an explicit `.operator->()` rather than `mpStreetData.GetMemoryResource()`
 // so the console's assert line (CgsResourcePtr.h:544) is the one reproduced.
 // ----------------------------------------------------------------------------
-const BrnStreetData::StreetData* StreetManager::GetStreetData()
-{
-    return mpStreetData.operator->();
-}
+// (Bodied in the header, as the original: see BrnGameStateStreetManager.h.)
 
 // ============================================================================================
 // [event-starts producer wave 2026-08-27] Two reads this manager already OWNED but never

@@ -217,7 +217,10 @@ public:
     // (BrnProgressionManager.cpp :: GetProfile). It shows up as an UNDEF external in
     // StuntManager_gUI_00.obj only because that is a different, and legitimately separate,
     // translation unit. Recorded here so the next reader does not re-chase it.
-    Profile* GetProfile();
+    // DWARF h:364 / h:367, header-inline: ARTIST has no symbol for either; every caller
+    // forms `this + 0x170`.
+    const Profile* GetProfile() const { return &mProfile; }
+    Profile* GetProfile() { return &mProfile; }
 
     // (The StreetManager keystone's GetProgressionData() grow collided with the identical
     //  pre-existing DriveThruManager-batch declaration further down -- X360 attestation for it:

@@ -215,7 +215,7 @@ namespace BrnDirector
             // TU; the per-TU `cl /c` gate does not link). SetFOV asserts the FOV stays > 0
             // (Camera.h:424 in the X360 source). FLAG: these are Camera's own offset-authoritative
             // API; declared additively for the BrnLooker consumer.
-            f32  GetFOV() const;
+            f32  GetFOV() const { return mfFOV; }
             void SetFOV(f32 lfFOV);
 
             // X360-attested @0x82205B68 (DWARF Camera.h:174). The active near-clip distance:
@@ -224,8 +224,8 @@ namespace BrnDirector
             // ::Update reads it.)
             f32  GetNearClipDistance() const;
 
-            const rw::math::vpu::Matrix44Affine& GetTransform() const;
-            void SetTransform(const rw::math::vpu::Matrix44Affine& lrTransform);
+            const rw::math::vpu::Matrix44Affine& GetTransform() const { return mTransform; }
+            void SetTransform(const rw::math::vpu::Matrix44Affine& lrTransform) { mTransform = lrTransform; }
 
             // ADDITIVE (the Behaviour base + BehaviourHelper::Update): the per-camera flag
             // state and the validity account that overlays its head set (see the union
@@ -241,8 +241,8 @@ namespace BrnDirector
             // CameraEffects::GetShakeAmplitude()).
             const CameraEffects& GetEffects() const { return mEffects; }
             CameraEffects&       GetEffects()       { return mEffects; }
-            DepthOfField& GetDepthOfField();
-            const DepthOfField& GetDepthOfField() const;
+            DepthOfField& GetDepthOfField() { return mDepthOfField; }
+            const DepthOfField& GetDepthOfField() const { return mDepthOfField; }
 
             // ---- Layout (DWARF member order; offsets X360-pinned) -----------------
             rw::math::vpu::Matrix44Affine mTransform;        // +0x00  (64B)
