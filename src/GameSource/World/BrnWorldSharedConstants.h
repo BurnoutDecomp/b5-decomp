@@ -28,6 +28,7 @@ namespace BrnWorld
 {
     const s32 KI_MAX_RIVALS_IN_MODE  = 7;    // DWARF :33 -- Array<OpponentData,7> / the start-grid table width
     const s32 KI_MAX_RIVALS_IN_WORLD = 34;   // DWARF :34
+    const s32 KI_INVALID_RIVAL       = -1;   // DWARF :38
 
     // [takedown wave 2026-09-02] Who drives an active race car. DWARF BrnWorldSharedConstants.h:101.
     // X360-attested by the SetPlayerCarDriverAction producers: DriveThruManager::SetPlayerCarDriver

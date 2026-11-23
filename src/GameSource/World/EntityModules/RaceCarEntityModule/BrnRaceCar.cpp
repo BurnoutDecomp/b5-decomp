@@ -34,21 +34,14 @@
 #include "rw/math/vpu/matrix44affine_operation.h"             // rw::math::vpu::IsValid(Matrix44Affine)
 #include "rw/math/vpu/vector3_operation.h"                    // rw::math::vpu::IsValid(Vector3)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/BrnRaceCar.h";
-
 namespace BrnWorld
 {
 
 // kCGSID_NULL -- the empty content id (base-40 compress of the empty string == 0).
 static const CgsID KU_CGSID_NULL = 0;
 
-// Highest valid rival index tracked in the world (KI_MAX_RIVALS_IN_WORLD). The X360
-// AddToWorld asm range-checks the rival index against 0x22 (34) -- the rival-slot count.
-static const s32 KI_MAX_RIVALS_IN_WORLD = 34;
-
-// "no rival" sentinel for the rival index (non-AI cars store this).
-static const s8 KI_INVALID_RIVAL = -1;
+// KI_MAX_RIVALS_IN_WORLD (34; AddToWorld range-checks the rival index against 0x22) and the
+// "no rival" sentinel KI_INVALID_RIVAL (-1) come from BrnWorldSharedConstants.h (DWARF :34/:38).
 
 // ----------------------------------------------------------------------------
 // Construct @ 0x822A4B08. One-time construction of a global slot: identity transform,
@@ -198,7 +191,6 @@ void RaceCar::AddToWorld(ERaceCarType leType,
 // ----------------------------------------------------------------------------
 void RaceCar::AssignActiveRaceCar(ActiveRaceCar* lpActiveRaceCar)
 {
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
     CGS_ASSERT(IsInWorld(), "IsInWorld()");
     CGS_ASSERT(lpActiveRaceCar != 0, "lpActiveRaceCar != NULL");
 
@@ -219,7 +211,6 @@ void RaceCar::AssignActiveRaceCar(ActiveRaceCar* lpActiveRaceCar)
 // ----------------------------------------------------------------------------
 void RaceCar::RemoveActiveRaceCar()
 {
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
     CGS_ASSERT(IsInWorld(), "IsInWorld()");
     CGS_ASSERT(mpActiveRaceCar != 0, "mpActiveRaceCar != NULL");
     CGS_ASSERT(mpActiveRaceCar->IsAttached(), "IsAttached()");
@@ -238,7 +229,6 @@ void RaceCar::RemoveActiveRaceCar()
 // ----------------------------------------------------------------------------
 void RaceCar::RemoveFromWorld()
 {
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
     CGS_ASSERT(IsInWorld(), "IsInWorld()");
     CGS_ASSERT(mpActiveRaceCar == 0,
                "RaceCar being removed from world while it still has an ActiveRaceCar attached");
@@ -300,7 +290,6 @@ void RaceCar::RequestResetOnTrack(f32 lfSpeed, BrnAI::EResetType leType, f32 lfD
 // ----------------------------------------------------------------------------
 void RaceCar::UpdatePositioningData(const Matrix44Affine& lTransform, CgsWorld::WorldMap2D* lpWorldMap)
 {
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
     CGS_ASSERT(IsInWorld(), "IsInWorld()");
 
     if (!rw::math::vpu::IsValid(lTransform))
@@ -336,7 +325,6 @@ void RaceCar::UpdatePositioningData(const Matrix44Affine& lTransform, CgsWorld::
 // ----------------------------------------------------------------------------
 void RaceCar::UpdateVelocity(Vector3 lVelocity)
 {
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
     CGS_ASSERT(IsInWorld(), "IsInWorld()");
     CGS_ASSERT(rw::math::vpu::IsValid(lVelocity), "RwMath::IsValid( lVelocity )");
 
@@ -390,11 +378,8 @@ void RaceCar::SetActiveRaceCarIndex(EActiveRaceCarIndex leIndex)
 // ----------------------------------------------------------------------------
 ActiveRaceCar* RaceCar::GetActiveRaceCar()
 {
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT,
-        CgsDev::Assert::MessageAt(
-            "muType < E_RACE_CAR_TYPE_COUNT", KAC_ARTIST_ASSERT_FILE, 547 /* ARTIST 0x822B39BC */));
     CGS_ASSERT(IsInWorld(),
-        CgsDev::Assert::MessageAt("IsInWorld()", KAC_ARTIST_ASSERT_FILE, 401 /* ARTIST 0x822B39E4 */));
+        CgsDev::Assert::MessageAt("IsInWorld()", BRN_RACECAR_H_ASSERT_FILE, 401 /* ARTIST 0x822B39E4 */));
 
     return mpActiveRaceCar;
 }
@@ -412,9 +397,12 @@ ActiveRaceCar* RaceCar::GetActiveRaceCar()
 // ----------------------------------------------------------------------------
 bool RaceCar::HasActiveRaceCar() const
 {
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
+    if (!IsActive())
+    {
+        return false;
+    }
 
-    return muType != E_RACE_CAR_TYPE_INACTIVE && mpActiveRaceCar != 0;
+    return mpActiveRaceCar != 0;
 }
 
 // ----------------------------------------------------------------------------
@@ -422,14 +410,12 @@ bool RaceCar::HasActiveRaceCar() const
 // ----------------------------------------------------------------------------
 bool RaceCar::IsInRangeRival() const
 {
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
-
-    if (muType == E_RACE_CAR_TYPE_AI)
+    if (!IsAIDriven())
     {
-        return HasActiveRaceCar();
+        return false;
     }
 
-    return false;
+    return HasActiveRaceCar();
 }
 
 // ----------------------------------------------------------------------------
@@ -437,9 +423,12 @@ bool RaceCar::IsInRangeRival() const
 // ----------------------------------------------------------------------------
 bool RaceCar::IsOutOfRangeRival() const
 {
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT");
+    if (!IsAIDriven())
+    {
+        return false;
+    }
 
-    return muType == E_RACE_CAR_TYPE_AI && !HasActiveRaceCar();
+    return !HasActiveRaceCar();
 }
 
 // ----------------------------------------------------------------------------
@@ -510,38 +499,31 @@ void RaceCar::FillInOutputInterface(
         f32 lfSpeed,
         u16 lu16AISection)
 {
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT"); // :603
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT"); // :590
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT"); // :603
-    CGS_ASSERT(GetType() < E_RACE_CAR_TYPE_COUNT, "muType < E_RACE_CAR_TYPE_COUNT"); // :577
-
-    // r19: the rival index rides only on AI cars (the console `if (muType == 1)` arm).
-    s8 li8RivalIndex = -1;
-    if (GetType() == E_RACE_CAR_TYPE_AI)
+    // DWARF BrnRaceCar.cpp:460 names the one local; the four type predicates' own asserts
+    // (h:603 / h:590 / h:603 / h:577 in ARTIST) come from the inlined accessors.
+    s8 liRivalIndex = KI_INVALID_RIVAL;
+    if (IsAIDriven())
     {
-        li8RivalIndex = GetRivalIndex();
+        liRivalIndex = GetRivalIndex();
     }
 
-    const Vector3 lDirection = GetDirection();   // v2 (GetDirection @0x822B3610)
-    const Vector3 lPosition  = GetPosition();    // v1 (GetPosition @0x822B3588)
-
     lpGlobalCarInterface->SetRaceCarData(
-        lPosition,
-        lDirection,
-        GetWorldRegion(),                                   // QWORD @+0x7C
+        GetPosition(),
+        GetDirection(),
+        mWorldRegion,
         GetRivalId(),
         GetModelId(),
-        lfSpeed,                                            // f1 (caller-computed)
-        lu16AISection,                                      // r6 (caller-computed)
+        lfSpeed,
+        lu16AISection,
         GetGlobalRaceCarIndex(),
-        li8RivalIndex,
-        GetActiveRaceCarIndex(),                            // s8 @+0xAC
-        GetType() == E_RACE_CAR_TYPE_PLAYER,                // r28: muType == 0
-        GetType() == E_RACE_CAR_TYPE_AI,                    // r21: muType == 1
-        GetType() == E_RACE_CAR_TYPE_NETWORK,               // r20: muType == 2
-        IsInCurrentGameMode(),                              // r24
-        IsDispersing(),                                     // r18: byte @+0xAB
-        HasActiveRaceCar());                                // r25 (in-range flag)
+        liRivalIndex,
+        GetActiveRaceCarIndex(),
+        IsPlayerDriven(),
+        IsAIDriven(),
+        IsNetworkDriven(),
+        IsInCurrentGameMode(),
+        IsDispersing(),
+        HasActiveRaceCar());
 }
 
 // ============================================================================
