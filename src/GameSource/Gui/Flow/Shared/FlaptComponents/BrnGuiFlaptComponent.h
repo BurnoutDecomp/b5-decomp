@@ -12,43 +12,30 @@
 // component (FlaptButtonIconComponent, FlaptIconComponent, FlaptAnimatorComponent,
 // FlaptHelpItem, FlaptTimerFieldComponent, ...). It owns the StateInterface the
 // component talks to plus a single MovieClipRef handle (mAptRef) onto the live apt
-// movie clip the component drives, and exposes Prepare() which resolves+binds that
-// clip out of a loaded Flapt file. Reconstructed from BURNOUT_X360_ARTIST.XEX;
-// member names/types/shape taken from the DecFIGS DWARF
+// movie clip the component drives. Member names/types/shape from the DecFIGS DWARF
 // (references/DecFIGS/dwarfdump/.../BrnGuiFlaptComponent.h), gated on the X360 ledger.
 //
-// This is the single declaration home for the base so the FlaptComponents subclass
-// TUs share one definition (no ODR fork). It is the hard base/contained-type
-// dependency the subclasses #include and derive from.
+// SOURCE LINES: the declarations sit on the DWARF lines (class h:53, Construct h:64,
+// Prepare h:71/h:75, GetMovieClipRef h:84, SetInvalid h:87, members h:91/h:92) and the
+// header-inline Construct body follows the class, so its assert keeps the original
+// line h:113 that ARTIST bakes into every inlined copy (li r5,0x71 before FireAssert,
+// e.g. FriendsListEntry::Construct @0x82414B28, CompassComponent::Construct @0x82411568).
 //
-// LAYOUT (DWARF + the X360 asm of Prepare @ 0x8240E670 and the subclass Construct
-// bodies, e.g. FlaptIconComponent::Construct @ 0x8241C1F0 / FlaptHelpItem::Construct
-// @ 0x8241D198):
-//   +0x00  mpStateInterface  -- the GUI state channel (the subclass Construct stores
-//                               lpStateInterface into the FIRST word of the base
-//                               subobject; the base is NOT polymorphic -- the vptr,
-//                               where present, belongs to the *derived* class)
+// LAYOUT (X360 asm of Prepare @ 0x8240E670 and the subclass Construct bodies):
+//   +0x00  mpStateInterface  -- the GUI state channel. The base is NOT polymorphic:
+//                               polymorphic subclasses put their vptr at +0x00 and
+//                               this subobject at +0x04; the others place it at +0x00.
 //   +0x04  mAptRef           -- BrnFlapt::MovieClipRef (mpMovieClipInst @ +0x04,
 //                               mpTransform @ +0x08); Prepare fills it from the file
 // sizeof(BrnFlaptComponent) == 0x0C.
 //
-// IMPORTANT (X360 layout vs. PS3 DWARF): the base carries NO own vtable. Polymorphic
-// subclasses (FlaptIconComponent, FlaptTimerFieldComponent) introduce their vptr at
-// the component's +0x00 and place this base subobject AFTER it (so the base lands at
-// derived+0x04); non-polymorphic subclasses (FlaptButtonIconComponent, FlaptHelpItem)
-// place the base at +0x00 directly. Both are proven by the subclass Construct asm.
-//
-// Only Prepare is X360-attested for the base itself (the DWARF's Construct / the
-// MovieClipRef Prepare / SetPosition / GetMovieClipRef / SetInvalid are PS3-only or
-// inlined into the subclass bodies -- not in the X360 func ledger -- so they are not
-// declared here). Grow this header additively as those member TUs land. All member
-// access is BY NAME; there are no raw-offset hacks.
+// Not declared (no X360 ledger row): KU_MAX_COMPONENT_NAME_LEN (h:57) and
+// SetPosition (h:80). All member access is BY NAME; there are no raw-offset hacks.
 // ============================================================================
 
 namespace CgsGui
 {
-    // Stored by-pointer only; full type lives in CgsGuiStateInterface.h. Forward-
-    // declared here to keep that heavy GUI header out of this widely-included base.
+    // Stored by-pointer only; full type lives in CgsGuiStateInterface.h.
     struct StateInterface;
 }
 
@@ -59,59 +46,74 @@ namespace BrnFlapt
 
 namespace BrnGui
 {
+    // DWARF: BrnGuiFlaptComponent.h:53. The X360 lays it out as a plain (vtable-less)
+    // base; see LAYOUT above.
+    //
+    //
     class BrnFlaptComponent
     {
     public:
+        // (h:57 KU_MAX_COMPONENT_NAME_LEN: PS3-only, see the header comment.)
+        //
+        // Construct -- adopt the state channel and invalidate the clip. X360
+        // header-inline (never emitted out of line): the h:113 "lpStateInterface"
+        // tripwire, the interface store, the ref clear. DecFIGS declares two further
+        // const void* parameters no X360 inlined copy reads; the one-argument form is
+        // what every Gui caller passes.
+        //
+        void Construct(CgsGui::StateInterface* lpStateInterface);
+
         // Prepare @ 0x8240E670 -- resolve the named component within lFile (the
         // composite key is "lacParentName_lacName" when a parent prefix is given,
         // else just lacName), bind its MovieClipRef into mAptRef, and reset the
-        // bound clip's timeline. The subclasses forward up to this base
-        // implementation. The X360 returns the timeline-reset result in r3 as a
-        // tail-call artifact; logically (and per the DecFIGS declaration shape) the
-        // method returns void. Non-virtual: the base has no vtable (see LAYOUT).
-        void Prepare(const char* lacName,
-                     const BrnFlapt::FileRef& lFile,
-                     const char* lacParentName);
+        // bound clip's timeline. The X360 returns the reset result in r3 as a
+        // tail-call artifact; per the DecFIGS declaration the method returns void.
+        void Prepare(const char* lacName, const BrnFlapt::FileRef& lFile, const char* lacParentName);
 
-        // Prepare(const MovieClipRef*) @ 0x8240E740 -- adopt an already-resolved
-        // movie clip: assert it (h:164, the X360 out-of-line copy's own home), copy
-        // its two handle words into mAptRef and reset the bound clip's timeline.
-        // DWARF home is this header (BrnGuiFlaptComponent.h:164 assert cite); bodied
-        // out-of-line in BrnGuiFlaptComponent.cpp because the timeline reset needs the
-        // MovieClipInstance type this widely-included base header must not pull in.
+        // Prepare(const MovieClipRef*) @ 0x8240E740 -- adopt an already-resolved clip
+        // (assert h:164); bodied in BrnGuiFlaptComponent.cpp (needs MovieClipInstance).
         void Prepare(const BrnFlapt::MovieClipRef* lpMovieClipRef);
 
-        // SetInvalid -- drop the bound clip. ADDITIVE GROW (the DWARF declares it,
-        // BrnGuiFlaptComponent.h:30; the X360 always inlines it -- the per-component
-        // mAptRef zero-pairs in BrnGui::BaseOverlayState's reset path
-        // @0x824B1F0C/@0x824B2020/@0x824B2E50).
-        void SetInvalid() { mAptRef.SetInvalid(); }
-
-        // Construct -- adopt the state channel and invalidate the clip. ADDITIVE GROW
-        // (X360 header-inline; FriendsListEntry::Construct @0x82414B28 opens with it:
-        // the h:113 "lpStateInterface" tripwire, the interface store, the ref clear).
-        void Construct(CgsGui::StateInterface* lpStateInterface)
-        {
-            CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");   // BrnGuiFlaptComponent.h:113 (non-gating)
-            mpStateInterface = lpStateInterface;
-            mAptRef.SetInvalid();
-        }
-
-        // GetMovieClipRef -- the bound apt clip handle (mAptRef @+0x04). ADDITIVE GROW
-        // (DistrictMarkerComponent::Prepare @0x82420FB8 reaches each embedded container
-        // movie's clip ref to install its frame-trigger callback). Trivial accessor; no
-        // layout change.
-        BrnFlapt::MovieClipRef&       GetMovieClipRef()       { return mAptRef; }
+        // (h:80 SetPosition: PS3-only, see the header comment.)
+        //
+        // GetMovieClipRef -- the bound apt clip handle (DistrictMarkerComponent::Prepare
+        // @0x82420FB8 reaches each embedded container movie's clip ref through it). Non-
+        // virtual, like every member here: the base has no vtable (see LAYOUT).
+        //
         const BrnFlapt::MovieClipRef& GetMovieClipRef() const { return mAptRef; }
+        BrnFlapt::MovieClipRef&       GetMovieClipRef()       { return mAptRef; }
+        //
+        // SetInvalid -- drop the bound clip (X360 always inlines it: the mAptRef zero
+        void SetInvalid() { mAptRef.SetInvalid(); }   // pairs @0x824B1F0C / @0x824B2020)
 
     protected:
-        // +0x00 : the GUI state channel this component talks to (subclass Construct
-        // stores lpStateInterface here; only stored in this cluster).
+        // +0x00 the GUI state channel; +0x04 the live apt movie clip this component drives.
         CgsGui::StateInterface* mpStateInterface;
-
-        // +0x04 : the live apt movie clip this component drives.
-        BrnFlapt::MovieClipRef mAptRef;
+        BrnFlapt::MovieClipRef  mAptRef;
     };
+
+    // ------------------------------------------------------------------------
+    // Header-inline definitions (the original header defines them after the
+    // class; the assert below must stay on line 113, see SOURCE LINES above).
+    // ------------------------------------------------------------------------
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    inline void BrnFlaptComponent::Construct(CgsGui::StateInterface* lpStateInterface)
+    {
+        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
+        mpStateInterface = lpStateInterface;
+        mAptRef.SetInvalid();
+    }
 }
 
 #endif // BRN_GUI_FLAPT_COMPONENT_H
