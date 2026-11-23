@@ -242,19 +242,14 @@ DecoderRequest *Decoder::GetCurrentRequestDesc()
 // -------------------------------------------------------------------------------------
 s32 Decoder::GetSamplesRemaining(u8 ucIndex)
 {
-    DecoderRequest *pRequest = &RequestQueue()[ucIndex];
-
-    s32 iEnd = pRequest->miEndSample;
+    const DecoderRequest& request = RequestQueue()[ucIndex];
+    const s32 iEnd = request.miEndSample;
     if (iEnd == 0)
         return 0;
 
-    s32 iStart;
     if (ucIndex == mucRequestDecodeIndex)
-        iStart = miCurrentSampleOffset;
-    else
-        iStart = pRequest->miStartSample;
-
-    return iEnd - iStart;
+        return iEnd - miCurrentSampleOffset;
+    return iEnd - request.miStartSample;
 }
 
 // -------------------------------------------------------------------------------------

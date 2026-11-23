@@ -126,14 +126,7 @@ public:
 
     // @0x82B9E3A0 -- the registered Process callback. r5 (the discontinuity flag) is never
     // read; every path returns BUFFERSTATUS_AVAILABLE (1).
-    static int    Process(Limiter1 *self, AudioProcessContext *ctx, bool discontinuity);
-
-    // @0x82B97AB0 -- UNBLOCKED (phase E). The ABI is r3=self, f1=sampleRate ONLY (the
-    // former 8-arg spelling was a Hex-Rays artifact: the callee never reads incoming
-    // r4..r10, and the vendor header spells it `void Configure(float sampleRate)`). The
-    // machine return is CompressorLimiter1::Configure's untouched r3 (== &mCompressorLimiter1);
-    // the sole caller discards it, and the vendor's `void` is the authoritative spelling.
-    static void   Configure(Limiter1 *self, f32 afSampleRate);
+    static BufferStatus Process(PlugIn *pPlugIn, Mixer *ctx, bool discontinuity);
 
     PlugInBaseView      mBase;                 // +0x00 .. +0x23
     char                mPad24[0x28 - 0x24];   // +0x24 .. +0x27
@@ -143,8 +136,11 @@ public:
     f32                 mLastReleaseTime;      // +0x94
     f32                 mLastChannelMode;      // +0x98
     f32                 mLastSampleRate;       // +0x9C
-    s32                 mState;                // +0xA0 (State; stored/compared as a word)
+    State               mState;                // +0xA0 (State; stored/compared as a word)
     char                mPadA4[0xA8 - 0xA4];   // +0xA4 (X360 sizeof 0xA8 == 168)
+private:
+    void Configure(f32 sampleRate); // @0x82B97AB0
+
 };
 
 } // namespace core

@@ -233,17 +233,14 @@ public:
     static int    GetSize(const PlugInConfig *apConfig);           // @0x82BA0220
     static int    CreateInstance(SndPlayer1 *self,
                                  const ConstructorParams *apParams);   // @0x82BA6C80
-    static void   GetFileInfo(const void* apData, FileInfo* apInfo);   // @0x82B9BE70
+    static void   GetFileInfo(void* apData, FileInfo* apInfo);         // @0x82B9BE70
     static int    PreProcess(SndPlayer1 *self, AudioProcessContext *ctx,
                              bool discontinuity, int aiRequestedCount);// @0x82B9C2D8
     static int    Process(SndPlayer1 *self, AudioProcessContext *ctx,
                           bool discontinuity);                         // @0x82BA0568
 
-    bool WaitForStartTime(AudioProcessContext *ctx, f64 adStartTime,
-                          u32 *apuSamples);                            // @0x82B9C148
     int  Declick(AudioProcessContext *ctx);                            // @0x82B9C1C0
     void AdvanceCurrentRequest();                                      // @0x82B9C2E8
-    bool GetFeedSlot(u32 *apuOutSlot);                                 // @0x82BA0380
 
     // The per-frame timer client the constructor registers.
     static void RwacTimerClient(void *apContext, f32 afTimeToNextCall); // @0x82BA6980
@@ -251,10 +248,7 @@ public:
     static int  PlayHandler(void *apCommand);
     static int  StopHandler(void *apCommand);
     static int  ModifyStartTimeHandler(void *apCommand);
-    static void StreamLostCallback(void *apContext);
-    static void RemoveRequest(SndPlayer1 *self, u32 index);
     static void FeedCleanup(SndPlayer1 *self);
-    static void RequestCleanup(SndPlayer1 *self);
     static u8   StartRequest(SndPlayer1 *self, u32 index);
     static char *SubmitChunk(SndPlayer1 *self, char *block, u32 index,
                              u8 isNewFeedChunk, u8 seekActive);
@@ -349,6 +343,15 @@ public:
     u8  mNextFeedSlotToFree;                           // +0x1CE
     u8  mNextFeedSlotToCleanup;                        // +0x1CF [3.03]
     u8  mbTimerAdded;                                  // +0x1D0
+
+private:
+    bool WaitForStartTime(AudioProcessContext *ctx, f64 adStartTime,
+                          u32 *apuSamples);                            // @0x82B9C148
+    bool GetFeedSlot(s32 *apiOutSlot); // @0x82BA0380
+    static void StreamLostCallback(void *apContext);
+    void RemoveRequest(u32 index);
+    void RequestCleanup();
+
 };
 
 } // namespace core

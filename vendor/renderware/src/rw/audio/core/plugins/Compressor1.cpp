@@ -55,10 +55,6 @@ static const f32 KF_ONE               = 1.0f;   // flt_82001C98
 static const f32 KF_ATTACK_DEFAULT    = 0.1f;   // flt_8215BF00
 static const f32 KF_ZERO              = 0.0f;   // flt_82001CC0
 
-// Process branch immediates.
-static const f32 KF_BYPASS_THRESHOLD  = 20.0f;  // flt_820054CC (mfThreshold >= this -> bypass)
-static const f32 KF_BYPASS_RATIO      = 1.0f;   // flt_82001C98 (mfRatio <= this -> bypass)
-
 // Configure immediates. All dumped from the XEX rodata via headless IDA; the console symbol
 // is named against each so a later sweep can re-verify without re-deriving them.
 static const f32 KF_ATTACK_MAX        = 10.0f;   // flt_8215BF14 (41200000)
@@ -130,7 +126,7 @@ int Compressor1::CreateInstance(Compressor1 *self)
 
     self->mfThreshold         = KF_THRESHOLD_DEFAULT; // stfs console +0x28 (120.0)
     self->mfLastThreshold     = KF_THRESHOLD_DEFAULT; // stfs console +0xA0 (120.0)
-    self->muActive            = 0;                    // stw  console +0xB8
+    self->mState              = STATE_OFF;           // stw  console +0xB8
     self->mfRelease           = KF_RELEASE_DEFAULT;   // stfs console +0x40 (0.5)
     self->mfRatio             = KF_ONE;               // stfs console +0x30 (1.0)
     self->mfChannelLink       = KF_ONE;               // stfs console +0x48 (1.0)
@@ -176,57 +172,56 @@ int Compressor1::CreateInstance(Compressor1 *self)
 // pad this call site is retired with them. (The independent Limiter1::Configure decode
 // reached the identical seven-argument conclusion from its own call site.)
 //
-// The return value is whatever CompressorLimiter1::Configure leaves in r3 -- it never writes
-// r3, so it is the engine pointer that was passed in. Process discards it.
+// The audio PDB declares a void return.
 // -------------------------------------------------------------------------------------
-CompressorLimiter1 *Compressor1::Configure(Compressor1 *self, f32 lfSampleRate)
+void Compressor1::Configure(f32 lfSampleRate)
 {
     // NaN POLARITY. fcmpu sets LT/GT/EQ/FU; `bge` is `bc 4,LT` and `ble` is `bc 4,GT`, so BOTH
     // are TAKEN when the compare is unordered. A NaN attribute therefore takes the branch AWAY
     // from the floor store on the console -- it is left unclamped, not floored. The C++ `>=`
     // and `<=` forms are false for NaN and would store the floor, so each lower-bound test is
     // written as the NEGATED ordered predicate, which reproduces the console's unordered path.
-    const f32 lfAttack = self->mfAttack;
+    const f32 lfAttack = mfAttack;
     if (!(lfAttack < KF_ZERO)) // fcmpu/bge @0x82B96B54: NaN branches here, no floor store
     {
         if (lfAttack > KF_ATTACK_MAX)
-            self->mfAttack = KF_ATTACK_MAX;
+            mfAttack = KF_ATTACK_MAX;
     }
     else
     {
-        self->mfAttack = KF_ZERO;
+        mfAttack = KF_ZERO;
     }
 
-    const f32 lfRelease = self->mfRelease;
+    const f32 lfRelease = mfRelease;
     if (!(lfRelease < KF_ZERO)) // fcmpu/bge @0x82B96B7C: same unordered shape as the attack clamp
     {
         if (lfRelease > KF_RELEASE_MAX)
-            self->mfRelease = KF_RELEASE_MAX;
+            mfRelease = KF_RELEASE_MAX;
     }
     else
     {
-        self->mfRelease = KF_ZERO;
+        mfRelease = KF_ZERO;
     }
 
-    if (self->mfThreshold < KF_THRESHOLD_MIN) // fcmpu/bge @0x82B96BAC: NaN skips the store
-        self->mfThreshold = KF_THRESHOLD_MIN;
+    if (mfThreshold < KF_THRESHOLD_MIN) // fcmpu/bge @0x82B96BAC: NaN skips the store
+        mfThreshold = KF_THRESHOLD_MIN;
 
     // dB -> linear: 10^(threshold/20). The exponent multiply is a single-precision fmuls, the
     // pow itself runs in double, and frsp narrows the result back to f32 before it is used.
     const f32 lfThresholdOn = static_cast<f32>(
-        std::pow(KD_DB_LOG_BASE, static_cast<f64>(self->mfThreshold * KF_DB_EXP_SCALE)));
+        std::pow(KD_DB_LOG_BASE, static_cast<f64>(mfThreshold * KF_DB_EXP_SCALE)));
 
     // Attack length in samples: round half away from zero (fctiwz truncates, so the console
     // biases by +/-0.5 on the sign first), with 0 promoted to 1 so the engine never divides
     // by zero when it derives mCompExponentStepOn.
-    const f32 lfAttackSamples = lfSampleRate * self->mfAttack; // fmuls f0, f30, f0
+    const f32 lfAttackSamples = lfSampleRate * mfAttack; // fmuls f0, f30, f0
     s32 liAttackSamples = static_cast<s32>(lfAttackSamples < KF_ZERO
                                                ? lfAttackSamples - KF_ROUND_HALF
                                                : lfAttackSamples + KF_ROUND_HALF);
     if (liAttackSamples == 0)
         liAttackSamples = 1;
 
-    const f32 lfReleaseSamples = self->mfRelease * lfSampleRate; // fmuls f0, f0, f30
+    const f32 lfReleaseSamples = mfRelease * lfSampleRate; // fmuls f0, f0, f30
     s32 liReleaseSamples = static_cast<s32>(lfReleaseSamples < KF_ZERO
                                                 ? lfReleaseSamples - KF_ROUND_HALF
                                                 : lfReleaseSamples + KF_ROUND_HALF);
@@ -234,12 +229,12 @@ CompressorLimiter1 *Compressor1::Configure(Compressor1 *self, f32 lfSampleRate)
         liReleaseSamples = 1;
 
     // li r9, 1 / fcmpu vs 1.0 / beq keeps it, else li r9, 0.
-    const s32 liGroupChannels = (self->mfChannelLink == KF_ONE) ? 1 : 0;
+    const s32 liGroupChannels = (mfChannelLink == KF_ONE) ? 1 : 0;
 
-    return CompressorLimiter1::Configure(&self->mCompressorLimiter,
+    CompressorLimiter1::Configure(&mCompressorLimiter,
                                          lfThresholdOn,                          // f1
                                          lfThresholdOn * KF_THRESHOLD_OFF_MUL,   // f2
-                                         KF_ONE / self->mfRatio - KF_ONE,        // f3
+                                         KF_ONE / mfRatio - KF_ONE,        // f3
                                          liAttackSamples,                        // r7
                                          liReleaseSamples,                       // r8
                                          liGroupChannels);                       // r9
@@ -260,29 +255,19 @@ CompressorLimiter1 *Compressor1::Configure(Compressor1 *self, f32 lfSampleRate)
 // 0x82B9DA54..0x82B9DA78) rather than reusing the values compared above -- that is load-bearing,
 // because Configure clamps mfAttack / mfRelease / mfThreshold in place.
 // -------------------------------------------------------------------------------------
-int Compressor1::Process(Compressor1 *self, AudioProcessContext *ctx)
+BufferStatus Compressor1::Process(PlugIn *pPlugIn, Mixer *ctx, bool /*discontinuity*/)
 {
+    // The existing layout places the PlugIn view at offset zero.
+    Compressor1 *self = reinterpret_cast<Compressor1 *>(pPlugIn);
     const f32 lfThreshold = self->mfThreshold;
-    const f32 lfRatio     = self->mfRatio;
+    f32 lfRatio;
 
-    // fcmpu/bge @0x82B9D9B4 and fcmpu/ble @0x82B9D9C8 both branch to the bypass path, and both
-    // are taken when unordered -- so a NaN threshold or ratio BYPASSES on the console. Negated
-    // ordered predicates preserve that; the plain >= / <= forms would engage the compressor.
-    if (!(lfThreshold < KF_BYPASS_THRESHOLD) || !(lfRatio > KF_BYPASS_RATIO))
+    // The ordered comparisons keep an unordered threshold or ratio bypassed.
+    // ARTIST loads the 20 dB threshold at 0x820054CC and unity at 0x82001C98.
+    if (lfThreshold < 20.0f && (lfRatio = self->mfRatio) > 1.0f)
     {
-        // Disengaged: clear the engine buffer exactly once on the active->bypass edge.
-        if (self->muActive == 1)
-        {
-            CompressorLimiter1::ClearBuffer(&self->mCompressorLimiter);
-            self->muActive = 0;
-        }
-        self->mfLastThreshold = self->mfThreshold;
-        self->mfLastRatio     = self->mfRatio;
-    }
-    else
-    {
-        if (self->muActive == 0)
-            self->muActive = 1;
+        if (self->mState == STATE_OFF)
+            self->mState = STATE_ON;
 
         const f32 lfSampleRate = ctx->mpFormat->mfSampleRate;
 
@@ -295,7 +280,7 @@ int Compressor1::Process(Compressor1 *self, AudioProcessContext *ctx)
             || self->mfChannelLink != self->mfLastChannelLink
             || lfSampleRate != self->mfLastSampleRate)
         {
-            Compressor1::Configure(self, lfSampleRate); // return value discarded by the asm
+            self->Configure(lfSampleRate);
             self->mfLastThreshold   = self->mfThreshold;
             self->mfLastRatio       = self->mfRatio;
             self->mfLastAttack      = self->mfAttack;
@@ -307,7 +292,18 @@ int Compressor1::Process(Compressor1 *self, AudioProcessContext *ctx)
         CompressorLimiter1::Process(&self->mCompressorLimiter, ctx,
                                     self->mBase.mbChannelCount);
     }
-    return 1;
+    else
+    {
+        // Disengaged: clear the engine buffer exactly once on the active->bypass edge.
+        if (self->mState == STATE_ON)
+        {
+            CompressorLimiter1::ClearBuffer(&self->mCompressorLimiter);
+            self->mState = STATE_OFF;
+        }
+        self->mfLastThreshold = self->mfThreshold;
+        self->mfLastRatio     = self->mfRatio;
+    }
+    return BUFFERSTATUS_AVAILABLE;
 }
 
 } // namespace core

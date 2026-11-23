@@ -123,7 +123,11 @@ s32 HELPER_CMpegBase::Open(u8 *pData)
     mpDataStart = pData;
     mucIsOpen = 1;
 
-    if (!pData || GetHeader() != 0 || OpenSynth() < 0)
+    if (!pData)
+        return -1;
+    if (GetHeader() != 0)
+        return -1;
+    if (OpenSynth() < 0)
         return -1;
 
     OpenLayer(); // vtable slot 4 (+0x10); result ignored, matching the asm

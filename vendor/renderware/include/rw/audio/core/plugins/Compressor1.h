@@ -84,7 +84,7 @@ namespace core
 //   +0xAC  mfLastRelease            -- snapshot of +0x40 (init 0.5).
 //   +0xB0  mfLastChannelLink        -- snapshot of +0x48 (init 1.0).
 //   +0xB4  mfLastSampleRate         -- snapshot of the format sample-rate (init 0.0).
-//   +0xB8  muActive (u32)           -- 1 while the engine is actively compressing, else 0
+//   +0xB8  mState (State)         -- 1 while the engine is actively compressing, else 0
 //                                       (the active->bypass edge clears the engine buffer once).
 // The mPad24/2C/34/3C/44/4C spans are NOT there to reproduce absolute console offsets (they
 // cannot -- mBase is wider here). They exist to preserve the 8-byte spacing of the five graph
@@ -92,21 +92,19 @@ namespace core
 // -------------------------------------------------------------------------------------
 class Compressor1
 {
+    enum State
+    {
+        STATE_OFF = 0,
+        STATE_ON = 1,
+        NUM_STATES = 2
+    };
+
 public:
     static int    GetSize();                                         // @0x82B96B20
     static int    CreateInstance(Compressor1 *self);                 // @0x82BA2408
-    static int    Process(Compressor1 *self, AudioProcessContext *ctx); // @0x82B9D988
+    static BufferStatus Process(PlugIn *pPlugIn, Mixer *ctx, bool discontinuity); // @0x82B9D988
     static void  *ScalarDeletingDestructor(Compressor1 *self,
                                            char flags);              // @0x82BA1680
-
-    // @0x82B96B28. The asm reads exactly two incoming argument registers -- r3 (mr r31, r3
-    // @0x82B96B40) and f1 (fmr f30, f1 @0x82B96B44) -- and the sole call site
-    // @0x82B9DA48..0x82B9DA50 sets exactly those two. The a2..a8 ints in the IDA prototype are
-    // Hex-Rays artifacts of mis-typing sub_82C09970 (= pow(double,double)).
-    // Returns whatever the tail CompressorLimiter1::Configure leaves in r3, i.e. the engine
-    // pointer (that callee never writes r3), so the return type is the pointer, not an int --
-    // typing it `int` would truncate a 64-bit pointer on this host.
-    static CompressorLimiter1 *Configure(Compressor1 *self, f32 lfSampleRate);
 
     PlugInBaseView     mBase;                 // console +0x00 .. +0x23
     char               mPad24[0x28 - 0x24];   // console +0x24 .. +0x27
@@ -127,10 +125,12 @@ public:
     f32                mfLastRelease;         // console +0xAC
     f32                mfLastChannelLink;     // console +0xB0
     f32                mfLastSampleRate;      // console +0xB4
-    u32                muActive;              // console +0xB8
+    State              mState;                // console +0xB8
     char               mPadBC[0xC0 - 0xBC];   // console +0xBC (tail pad up to the console 0xC0)
 
 private:
+    void Configure(f32 sampleRate); // @0x82B96B28
+
     // Never called and never defined-out-of-line: a member-function body is a complete-class
     // context (and has private access), which is what lets these compile in-class. Pins ONLY
     // the pointer-width-invariant facts -- absolute console offsets are deliberately NOT pinned
@@ -153,14 +153,14 @@ private:
         CGS_STATIC_ASSERT((sizeof(CompressorLimiter1) == 0x50), "engine sizeof");
 
         // The snapshot block starts immediately after the embedded engine, and its six words
-        // are contiguous with muActive last (the console +0xA0..+0xB8 run).
+        // are contiguous with mState last (the console +0xA0..+0xB8 run).
         CGS_STATIC_ASSERT((offsetof(Compressor1, mfLastThreshold)
                           == offsetof(Compressor1, mCompressorLimiter) + sizeof(CompressorLimiter1)),
                       "engine/snapshot adjacency");
         CGS_STATIC_ASSERT((offsetof(Compressor1, mfLastSampleRate)
                           - offsetof(Compressor1, mfLastThreshold) == 20),
                       "snapshot block contiguity");
-        CGS_STATIC_ASSERT((offsetof(Compressor1, muActive)
+        CGS_STATIC_ASSERT((offsetof(Compressor1, mState)
                           - offsetof(Compressor1, mfLastSampleRate) == 4),
                       "active flag follows the snapshot block");
     }

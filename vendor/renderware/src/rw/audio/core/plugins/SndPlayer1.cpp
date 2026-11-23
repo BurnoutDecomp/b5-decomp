@@ -34,6 +34,7 @@
 #include <cstring> // std::memset
 #include <limits>
 #include <new>
+#include <ppcintrinsics.h>
 
 namespace rw
 {
@@ -369,36 +370,35 @@ int SndPlayer1::PreProcess(SndPlayer1 *self, AudioProcessContext * /*ctx*/,
 // -------------------------------------------------------------------------------------
 // WaitForStartTime @0x82B9C148 -- how much silence, if any, precedes a scheduled start.
 //
-// ⚠️ NaN POLARITY IS LOAD-BEARING and both tests are written in the form that preserves it.
-// A NaN start time must DECLINE (return false), not decode. Restructuring either compare
-// into a negated form would flip that.
-//
-// `this` is decode-attested unused; it stays a member because that is the console's shape.
+// ARTIST's nonpositive branch is taken when the stream-time comparison is
+// unordered at 0x82B9C160. A positive delay uses the ordered frame comparison.
 // -------------------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+// Match the compact ARTIST timing routine at 0x82B9C148.
+#pragma optimize("s", on)
+#endif
 bool SndPlayer1::WaitForStartTime(AudioProcessContext *ctx, f64 adStartTime,
                                   u32 *apuSamples)
 {
     const f64 ldDelta = adStartTime - ctx->mdStreamTime;
-
-    if (ldDelta <= 0.0)          // ordered; false for NaN, which falls through as it must
+    if (ldDelta > 0.0)
+    {
+        const f32 lfFrames = static_cast<f32>(ctx->mpFormat->mfSampleRate * ldDelta);
+        if (!(lfFrames < KF_MIX_FRAME))
+            return false;
+        // ARTIST 0x82B9C1A4: truncate to a 64-bit integer and store only its low word.
+        __stfiwx(__fctidz(ctx->mfResampleGain * lfFrames), 0, apuSamples);
+    }
+    else
     {
         *apuSamples = 0;
-        return true;             // the start has been reached -- decode this frame
     }
-
-    // The product is rounded to SINGLE before the comparison; keeping it double on the host
-    // would compare a slightly different value at the boundary.
-    const f32 lfFrames = static_cast<f32>(ctx->mpFormat->mfSampleRate * ldDelta);
-
-    if (!(lfFrames < KF_MIX_FRAME))
-        return false;            // a whole frame or more away (or NaN): decline, and leave
-                                 // *apuSamples deliberately UNWRITTEN
-
-    // Multiply at single precision, truncate toward zero into 64 bits, keep the low word.
-    *apuSamples = static_cast<u32>(
-        static_cast<s64>(ctx->mfResampleGain * lfFrames));
     return true;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // -------------------------------------------------------------------------------------
 // Declick @0x82B9C1C0 -- ramp every channel's last emitted sample down to silence, a slice
@@ -489,20 +489,28 @@ void SndPlayer1::AdvanceCurrentRequest()
 // -------------------------------------------------------------------------------------
 // GetFeedSlot @0x82BA0380 -- claim the next feed slot, if it is free.
 // -------------------------------------------------------------------------------------
-bool SndPlayer1::GetFeedSlot(u32 *apuOutSlot)
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization matches the ARTIST free-slot test at 0x82BA0394.
+#pragma optimize("s", on)
+#endif
+bool SndPlayer1::GetFeedSlot(s32 *apiOutSlot)
 {
-    const u32 luSlot = mNextFeedSlotToFill;
-    if (mFeedDesc[luSlot].feedState != FEEDSTATE_FREE)
-        return false;   // still busy -- the caller must back off
-
-    *apuOutSlot = luSlot;
-
-    u32 luNext = (mNextFeedSlotToFill + 1u) & 0xFFu;
-    if (luNext == KU_MAX_DECODERFEEDS)
-        luNext = 0;
-    mNextFeedSlotToFill = static_cast<u8>(luNext);
-    return true;
+    const u8 luSlot = mNextFeedSlotToFill;
+    if (mFeedDesc[luSlot].feedState == FEEDSTATE_FREE)
+    {
+        *apiOutSlot = luSlot;
+        u8 luNext = static_cast<u8>(mNextFeedSlotToFill + 1);
+        if (luNext == KU_MAX_DECODERFEEDS)
+            luNext = 0;
+        mNextFeedSlotToFill = luNext;
+        return true;
+    }
+    return false;
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // -------------------------------------------------------------------------------------
 // GetPpuTicksEvent @0x82BDD2D0 (vt[2]) -- `lwz r3, 0x50(r3) ; blr`: the timer client's
@@ -545,9 +553,8 @@ SndPlayer1::~SndPlayer1()
         mpSystemUseGetSystemAccessor->Free(mpRequestHandle, 0);
 }
 
-void SndPlayer1::GetFileInfo(const void* apData, FileInfo* apInfo)
+void SndPlayer1::GetFileInfo(void* apData, FileInfo* apInfo)
 {
-    assert(apData != 0 && apInfo != 0);
     BitGetter lBits;
     lBits.mpBitBuffer = static_cast<const u8*>(apData);
     lBits.mBitPosition = 0;
@@ -867,7 +874,7 @@ int SndPlayer1::StopHandler(void *rawCommand)
     for (u32 index = 0; index < self->mMaxRequests; ++index)
     {
         if (self->GetRequestInternal(index)->state != REQUESTSTATE_FREE)
-            RemoveRequest(self, index);
+            self->RemoveRequest(index);
     }
     self->mCurrentRequest = 0;
     self->mNextFreeRequest = 0;
@@ -899,11 +906,11 @@ int SndPlayer1::ModifyStartTimeHandler(void *rawCommand)
     return static_cast<int>(sizeof(SndPlayer1ModifyStartTimeCommand));
 }
 
-void SndPlayer1::RemoveRequest(SndPlayer1 *self, u32 index)
+void SndPlayer1::RemoveRequest(u32 index)
 {
-    System *system = self->mpSystemUseGetSystemAccessor;
-    RequestInternal *request = self->GetRequestInternal(index);
-    RequestExternal &external = self->mpRequestExternal[index];
+    System *system = mpSystemUseGetSystemAccessor;
+    RequestInternal *request = GetRequestInternal(index);
+    RequestExternal &external = mpRequestExternal[index];
 
     if (request->pDecoder != 0)
     {
@@ -913,7 +920,7 @@ void SndPlayer1::RemoveRequest(SndPlayer1 *self, u32 index)
 
     for (u32 slot = 0; slot < KU_MAX_DECODERFEEDS; ++slot)
     {
-        SndPlayer1FeedDesc &feed = self->mFeedDesc[slot];
+        SndPlayer1FeedDesc &feed = mFeedDesc[slot];
         if (feed.requestIndex != index)
             continue;
         rw::core::filesys::Chunk *chunk = feed.pChunkInfo;
@@ -938,32 +945,38 @@ void SndPlayer1::RemoveRequest(SndPlayer1 *self, u32 index)
         system->Free(external.pStreamLoopFileName, 0);
     request->state = REQUESTSTATE_FREE;
     if (external.expelMode == 1)
-        Voice::ExpelAfterDecay(self->mpVoice);
+        Voice::ExpelAfterDecay(mpVoice);
 }
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization matches the ARTIST cleanup loops at 0x82BA4080 and 0x82BA4100.
+#pragma optimize("s", on)
+#endif
 void SndPlayer1::StreamLostCallback(void *context)
 {
     SndPlayer1 *self = static_cast<SndPlayer1 *>(context);
     for (u32 index = 0; index < self->mMaxRequests; ++index)
     {
         if (self->GetRequestInternal(index)->state != REQUESTSTATE_FREE)
-            RemoveRequest(self, index);
+            self->RemoveRequest(index);
     }
     self->mCurrentRequest = 0;
     self->mNextFreeRequest = 0;
     self->mNextRequestToFree = 0;
 }
 
-void SndPlayer1::RequestCleanup(SndPlayer1 *self)
+void SndPlayer1::RequestCleanup()
 {
-    while (self->GetRequestInternal(self->mNextRequestToFree)->state ==
-           REQUESTSTATE_COMPLETE)
+    while (GetRequestInternal(mNextRequestToFree)->state == REQUESTSTATE_COMPLETE)
     {
-        RemoveRequest(self, self->mNextRequestToFree);
-        self->mNextRequestToFree = AdvanceRequestIndex(self->mNextRequestToFree,
-                                                       self->mMaxRequests);
+        RemoveRequest(mNextRequestToFree);
+        mNextRequestToFree = AdvanceRequestIndex(mNextRequestToFree, mMaxRequests);
     }
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 void SndPlayer1::FeedCleanup(SndPlayer1 *self)
 {
@@ -1141,7 +1154,7 @@ u8 SndPlayer1::StartRequest(SndPlayer1 *self, u32 index)
     }
     else
     {
-        u32 slot;
+        s32 slot;
         self->GetFeedSlot(&slot);
         external.feedSlotLatest = static_cast<u8>(slot);
         external.pNextChunk = SubmitChunk(
@@ -1204,7 +1217,7 @@ u8 SndPlayer1::StreamNextChunk(SndPlayer1 *self, u32 index,
     rw::core::filesys::Chunk *chunk = external.pRwCoreStream->GetChunk();
     if (chunk == 0)
         return 0;
-    u32 slot;
+    s32 slot;
     const bool gotSlot = self->GetFeedSlot(&slot);
     external.numBytesFed = static_cast<s32>(
         static_cast<u32>(external.numBytesFed) + chunk->muSize);
@@ -1231,7 +1244,7 @@ u8 SndPlayer1::HandleLoopStart(SndPlayer1 *self, u32 index)
     }
 
     external.pLoopStartChunk = external.pNextChunk;
-    u32 slot;
+    s32 slot;
     self->GetFeedSlot(&slot);
     external.feedSlotLatest = static_cast<u8>(slot);
     external.pNextChunk = SubmitChunk(self, external.pNextChunk, index, 1, 0);
@@ -1253,7 +1266,7 @@ u8 SndPlayer1::HandleSampleEnd(SndPlayer1 *self, u32 index, u8 *finished)
     {
         if (request->loopStart == 0)
             external.pLoopStartChunk = external.pSampleData;
-        u32 slot;
+        s32 slot;
         self->GetFeedSlot(&slot);
         external.feedSlotLatest = static_cast<u8>(slot);
         external.numSamplesFed = request->loopStart;
@@ -1278,7 +1291,7 @@ u8 SndPlayer1::HandleSampleEnd(SndPlayer1 *self, u32 index, u8 *finished)
     {
         if (request->loopStart == 0)
             external.pLoopStartChunk = external.pSampleData;
-        u32 slot;
+        s32 slot;
         self->GetFeedSlot(&slot);
         external.feedSlotLatest = static_cast<u8>(slot);
         external.pNextChunk = SubmitChunk(self, external.pLoopStartChunk, index, 1, 0);
@@ -1593,7 +1606,7 @@ void SndPlayer1::RwacTimerClient(void *apContext, f32 /*afTimeToNextCall*/)
         return;
 
     FeedCleanup(self);
-    RequestCleanup(self);
+    self->RequestCleanup();
 
     u8 index = self->mCurrentRequest;
     RequestInternal *request = self->GetRequestInternal(index);

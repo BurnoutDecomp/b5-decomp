@@ -108,6 +108,13 @@ struct SampleBuffer
     u8 mau8Tail[0x114 - 0x11];
 };
 
+// Result of a processing-stage callback.
+enum BufferStatus
+{
+    BUFFERSTATUS_UNAVAILABLE = 0,
+    BUFFERSTATUS_AVAILABLE = 1
+};
+
 // -------------------------------------------------------------------------------------
 // Mixer -- see the file header. 3 x 64-channel x 256-frame sample regions + the header.
 // Field spellings: the stage-visible fields keep the committed Iir2Filters.h

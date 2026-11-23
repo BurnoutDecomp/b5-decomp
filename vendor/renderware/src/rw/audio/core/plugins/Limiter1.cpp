@@ -189,21 +189,21 @@ int Limiter1::CreateInstance(Limiter1 *self)
 // the 0.95 hysteresis for the off threshold, a FIXED 50 ms attack, the attribute-driven
 // release, and the grouped/independent channel flag.
 // -------------------------------------------------------------------------------------
-void Limiter1::Configure(Limiter1 *self, f32 afSampleRate)
+void Limiter1::Configure(f32 afSampleRate)
 {
     // Clamp mAttribute[1] into [0, 10]. Both compares are fcmpu + a "not LT"/"not GT"
     // branch, so a NaN release time takes BOTH branch-arounds and is left UNCHANGED.
-    const f32 lfReleaseSeconds = self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32;
+    const f32 lfReleaseSeconds = mAttribute[ATTRIBUTE_SETRELEASETIME].f32;
     if (lfReleaseSeconds < KF_ZERO)
-        self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32 = KF_ZERO;            // stfs @ +0x30
+        mAttribute[ATTRIBUTE_SETRELEASETIME].f32 = KF_ZERO;            // stfs @ +0x30
     else if (lfReleaseSeconds > KF_MAX_RELEASETIME)
-        self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32 = KF_MAX_RELEASETIME; // stfs @ +0x30
+        mAttribute[ATTRIBUTE_SETRELEASETIME].f32 = KF_MAX_RELEASETIME; // stfs @ +0x30
 
     // thresholdOn = 10 ^ (thresholdDb / 20), through the CRT's DOUBLE pow core with the
     // exponent single-rounded first (fmuls) and the result narrowed after (frsp). The two
     // rounding points are load-bearing -- do not fold this into an algebraically equal exp.
     const f32 lfDbExponent =
-        self->mAttribute[ATTRIBUTE_SETTHRESHOLD].f32 * KF_DB_SCALE_AND_ATTACK; // fmuls
+        mAttribute[ATTRIBUTE_SETTHRESHOLD].f32 * KF_DB_SCALE_AND_ATTACK; // fmuls
     const f32 lfThresholdOn =
         static_cast<f32>(std::pow(KD_TEN, static_cast<f64>(lfDbExponent)));        // pow + frsp
     const f32 lfThresholdOff = lfThresholdOn * KF_THRESHOLD_OFF_SCALE;             // fmuls (0.95)
@@ -216,16 +216,16 @@ void Limiter1::Configure(Limiter1 *self, f32 afSampleRate)
     // The attribute-driven release, re-read AFTER the clamp above. A zero result becomes 1
     // so the callee's `exponent / releaseSamples` step cannot divide by zero.
     s32 liReleaseSamples = RoundHalfAwayFromZero(
-        afSampleRate * self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32);
+        afSampleRate * mAttribute[ATTRIBUTE_SETRELEASETIME].f32);
     if (liReleaseSamples == 0)
         liReleaseSamples = 1;
 
     // CHANNELMODE_GROUPED is an EXACT 1.0 test: any other value -- NaN included -- is
     // CHANNELMODE_INDEPENDENT (the console's `beq` is false when unordered).
     const s32 liGroupChannels =
-        (self->mAttribute[ATTRIBUTE_SETCHANNELMODE].f32 == KF_ONE) ? 1 : 0;
+        (mAttribute[ATTRIBUTE_SETCHANNELMODE].f32 == KF_ONE) ? 1 : 0;
 
-    CompressorLimiter1::Configure(&self->mCompressorLimiter1, lfThresholdOn, lfThresholdOff,
+    CompressorLimiter1::Configure(&mCompressorLimiter1, lfThresholdOn, lfThresholdOff,
                                   KF_COMP_EXPONENT, liAttackSamples, liReleaseSamples,
                                   liGroupChannels);
 }
@@ -239,15 +239,16 @@ void Limiter1::Configure(Limiter1 *self, f32 afSampleRate)
 // it switches ON and reconfigures only when one of {threshold, release, channel mode, the
 // context's sample rate} differs from its cache.
 // -------------------------------------------------------------------------------------
-int Limiter1::Process(Limiter1 *self, AudioProcessContext *ctx, bool /*discontinuity*/)
+BufferStatus Limiter1::Process(PlugIn *pPlugIn, Mixer *ctx, bool /*discontinuity*/)
 {
+    // The existing layout places the PlugIn view at offset zero.
+    Limiter1 *self = reinterpret_cast<Limiter1 *>(pPlugIn);
     const f32 lfThreshold = self->mAttribute[ATTRIBUTE_SETTHRESHOLD].f32; // lfs +0x28
-    const s32 liState = self->mState;                                          // lwz +0xA0
 
-    // `blt` is false when unordered, so a NaN threshold takes the OFF path.
-    if (!(lfThreshold < KF_MAX_THRESHOLD))
+    // NaN stays bypassed. ARTIST loads the 20 dB threshold from 0x820054CC.
+    if (!(lfThreshold < 20.0f))
     {
-        if (liState == STATE_ON)
+        if (self->mState == STATE_ON)
         {
             CompressorLimiter1::ClearBuffer(&self->mCompressorLimiter1);
             self->mState = STATE_OFF;
@@ -256,37 +257,38 @@ int Limiter1::Process(Limiter1 *self, AudioProcessContext *ctx, bool /*discontin
         // caches stay stale, so a later reactivation skips Configure only if those still
         // match as well (asm-exact; not an oversight to "fix").
         self->mLastThreshold = self->mAttribute[ATTRIBUTE_SETTHRESHOLD].f32; // stfs +0x90
-        return 1;
     }
-
-    if (liState == STATE_OFF)
-        self->mState = STATE_ON;   // a nonzero (already-on) state is left unchanged
-
-    const f32 lfSampleRate = ctx->mpFormat->mfSampleRate; // lfs 0xC(ctx->+0x30018)
-
-    // Reconfigure when ANY of the four cached inputs differs. Each compare is fcmpu + bne,
-    // so an unordered (NaN) live value counts as "changed".
-    if (lfThreshold != self->mLastThreshold ||
-        self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32 != self->mLastReleaseTime ||
-        self->mAttribute[ATTRIBUTE_SETCHANNELMODE].f32 != self->mLastChannelMode ||
-        lfSampleRate != self->mLastSampleRate)
+    else
     {
-        Configure(self, lfSampleRate);
+        if (self->mState == STATE_OFF)
+            self->mState = STATE_ON;   // a nonzero (already-on) state is left unchanged
 
-        // The caches are refreshed ONLY after Configure, and they re-read the live values
-        // (Configure may have clamped the release time in place).
-        self->mLastThreshold   = self->mAttribute[ATTRIBUTE_SETTHRESHOLD].f32;   // +0x90
-        self->mLastReleaseTime = self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32; // +0x94
-        self->mLastChannelMode = self->mAttribute[ATTRIBUTE_SETCHANNELMODE].f32; // +0x98
-        self->mLastSampleRate  = lfSampleRate;                                        // +0x9C
+        const f32 lfSampleRate = ctx->mpFormat->mfSampleRate; // lfs 0xC(ctx->+0x30018)
+
+        // Reconfigure when ANY of the four cached inputs differs. Each compare is fcmpu + bne,
+        // so an unordered (NaN) live value counts as "changed".
+        if (lfThreshold != self->mLastThreshold ||
+            self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32 != self->mLastReleaseTime ||
+            self->mAttribute[ATTRIBUTE_SETCHANNELMODE].f32 != self->mLastChannelMode ||
+            lfSampleRate != self->mLastSampleRate)
+        {
+            self->Configure(lfSampleRate);
+
+            // The caches are refreshed ONLY after Configure, and they re-read the live values
+            // (Configure may have clamped the release time in place).
+            self->mLastThreshold   = self->mAttribute[ATTRIBUTE_SETTHRESHOLD].f32;   // +0x90
+            self->mLastReleaseTime = self->mAttribute[ATTRIBUTE_SETRELEASETIME].f32; // +0x94
+            self->mLastChannelMode = self->mAttribute[ATTRIBUTE_SETCHANNELMODE].f32; // +0x98
+            self->mLastSampleRate  = lfSampleRate;                                        // +0x9C
+        }
+
+        // The kernel reads the source, writes the destination, and performs the src/dst SWAP
+        // ITSELF -- which is exactly why this body does not swap (the two must stay distinct
+        // while the gain curve is being built in the destination).
+        CompressorLimiter1::Process(&self->mCompressorLimiter1, ctx,
+                                    self->mBase.mbChannelCount); // lbz +0x21
     }
-
-    // The kernel reads the source, writes the destination, and performs the src/dst SWAP
-    // ITSELF -- which is exactly why this body does not swap (the two must stay distinct
-    // while the gain curve is being built in the destination).
-    CompressorLimiter1::Process(&self->mCompressorLimiter1, ctx,
-                                self->mBase.mbChannelCount); // lbz +0x21
-    return 1;                                                 // BUFFERSTATUS_AVAILABLE
+    return BUFFERSTATUS_AVAILABLE;
 }
 
 } // namespace core
