@@ -51,6 +51,7 @@
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"                     // CgsModule::IOBufferStack (the update legs' stacks)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                        // CgsModule::EventQueue<T,N> (takedown input queue)
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                // CgsModule::VariableEventQueue<N,16> (the three module-owned queues)
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                         // CgsGui::GuiEventQueueSmall (the output GUI queue)
 #include "GameShared/GameClasses/System/Timer/CgsFrameRate.h"                   // CgsSystem::EFrameRate (Prepare)
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"        // CgsSystem::TimerStatusInterface (+818016)
 #include "GameSource/Network/BrnNetworkManager.h"                               // BrnNetwork::BrnNetworkManager (+0x280)
@@ -75,7 +76,9 @@ namespace BrnNetwork
 {
     // The module's output GUI event queue (+848280). Every AddOutputGuiEvent<T> instance publishes
     // through GetOutputGuiEventQueue()->AddEvent(event, T::GetEventType(), sizeof(T)).
-    typedef CgsModule::VariableEventQueue<4096, 16> GuiEventQueueSmall;
+    // DWARF: CgsGui::GuiEventQueueSmall, GuiEventQueueBase<4096,16> (CgsGuiEvent.h:188), which adds
+    // no storage over VariableEventQueue<4096,16>.
+    typedef CgsGui::GuiEventQueueSmall GuiEventQueueSmall;
 
     class BrnNetworkModule : public CgsModule::ModuleSingleBuffered
     {
@@ -150,22 +153,27 @@ namespace BrnNetwork
             return &mNetworkManager;
         }
 
+        // DecFIGS BrnNetworkModule.h:466, streamed assert h:468 (ARTIST 0x82542B58 li r5,0x1D4;
+        // never inlined: its 16 callers, every AddOutputGuiEvent<T> among them, call it).
         GuiEventQueueSmall* GetOutputGuiEventQueue()
         {
-            CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
+            CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt(
+                "Can not use this function unless module is updating\n",
+                "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 468));
             return &mOutputGuiEventQueue;
         }
 
-        // Publish one GUI event onto the output GUI event queue. The event-type id and byte size fall
-        // out of TEvent, so one body reproduces every per-T instance; the explicit instantiations
-        // live in BrnNetworkModule_AddOutputGuiEvent_Inst.cpp.
+        // ??$AddOutputGuiEvent@V<T>...@BrnNetworkModule@BrnNetwork@@QAAXAAV<T>... == void
+        // AddOutputGuiEvent<T>(T&) (DecFIGS BrnNetworkModule.h:477, streamed assert h:479; 15 ARTIST
+        // instances, e.g. 0x825658C8): the queue's inline GuiEventQueueBase::AddGuiEvent<T> gives
+        // ARTIST's `li r6,size / li r5,id / mr r4,ev` AddEvent call.
         template<typename TEvent>
-        int AddOutputGuiEvent(const TEvent& lrEvent)
+        void AddOutputGuiEvent(TEvent& lEvent)
         {
-            CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
-            return GetOutputGuiEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lrEvent),
-                lrEvent.GetEventType(), static_cast<s32>(sizeof(TEvent)));
+            CGS_ASSERT(mbIsUpdating, CgsDev::Assert::StreamMessageAt(
+                "Can not use this function unless module is updating\n",
+                "..\\..\\..\\GameSource\\Network/BrnNetworkModule.h", 479));
+            GetOutputGuiEventQueue()->AddGuiEvent(lEvent);
         }
 
         BrnNetworkModuleIO::GameStateToNetworkInterface* GetGameStateToNetworkInterface();

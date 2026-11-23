@@ -41,9 +41,10 @@ namespace ModelIO
         // GuiResourceRequestQueue == ResourceRequestQueue<2048> (the GUI resource-request
         // queue handed to the loader; same 2064-byte queue the GuiResource/Gui buffers use).
         typedef CgsResource::ResourceIO::ResourceRequestQueue<2048> GuiResourceRequestQueue;
-        // The GUI out-event queue (18432-byte specialisation, proven by the X360
+        // The GUI out-event queue: DWARF types mOutEventQueue (h:161) as the GUI event-queue
+        // typedef, a GuiEventQueueBase (CgsGuiEvent.h:186), sized 18432 on X360 (the
         // VariableEventQueue<18432,16>::Append<18432,16> target in AddGuiOutEvents).
-        typedef CgsModule::VariableEventQueue<18432, 16> GuiEventQueue;
+        typedef CgsGui::GuiEventQueueBase<18432, 16> GuiEventQueue;
         // The large view-event queue (65536, Append<65536,16> target in AddViewOutEvents).
         typedef CgsGui::GuiEventQueueBase<65536, 16> GuiViewEventQueue;
         // The small load-notification queue (4096; AddLoadNotifications appends an 18432-byte

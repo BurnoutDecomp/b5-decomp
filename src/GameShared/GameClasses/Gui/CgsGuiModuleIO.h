@@ -46,9 +46,12 @@ namespace CgsGuiModuleIO
     class OutputBuffer : public CgsModule::IOBuffer
     {
     public:
-        // The out-event queue published to consumers: VariableEventQueue<18432,16>.
+        // The out-event queue published to consumers. DWARF types mOutEvents (h:207) as the GUI
+        // event-queue typedef, a CgsGui::GuiEventQueueBase (CgsGuiEvent.h:186); ARTIST sizes it
+        // VariableEventQueue<18432,16> (Construct/AddEvent at this+0x814, e.g. 0x82866148), as
+        // GuiResourceModuleIO.h models the same typedef. GuiEventQueueBase adds no storage.
         // GuiEventQueueSmall == VariableEventQueue<4096,16> is the source bulk-appended in.
-        typedef CgsModule::VariableEventQueue<18432, 16> GuiEventQueue;
+        typedef CgsGui::GuiEventQueueBase<18432, 16> GuiEventQueue;
         typedef CgsModule::VariableEventQueue<4096, 16>  GuiEventQueueSmall;
 
         // The same original ResourceRequestQueue<2048> as ModelIO and
@@ -105,33 +108,12 @@ namespace CgsGuiModuleIO
         // Byte-offset pins (compiled in the embed check).
         static void _AssertLayout();
 
-        // ---- single-event publisher template (X360-attested instances) ------------------
-        // X360 0x82866148 (AddGuiOutEvent<GuiEventSetSku>) / 0x82866200
-        // (AddGuiOutEvent<GuiEventSetLanguageNotification>): write-lock (bit 3) guarded; on a
-        // locked-for-writing buffer it pushes the event onto mOutEvents via
-        //   CgsModule::VariableEventQueue<18432,16>::AddEvent(&event, T::EventTypeId, 4)
-        // (this+0x814 == &mOutEvents; SetSku id 27/0x1B, SetLanguageNotification id 29/0x1D;
-        // record payload size 4). The assert path/line are
-        // "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiModuleIO.h":235. The event-type id and
-        // the 4-byte payload size come from the canonical enum payload types,
-        // so the per-instance constants fall out of T -- a single generic reproduces every X360
-        // instance store-for-store.
-        //
-        // The concrete instantiations (??$AddGuiOutEvent@V...) are emitted out-of-line and owned
-        // by the catch-all class:<global> TU, so this header provides ONLY the inline generic;
-        // no explicit instantiation is defined here (that would collide -- LNK2005 -- with the
-        // global TU's definitions). Bodied inline so any using TU can instantiate it.
+        // ---- single-event publisher template ----------------------------------------------
+        // ??$AddGuiOutEvent@V<T>@...@OutputBuffer@CgsGuiModuleIO@CgsGui@@QAAXAAV<T>... ==
+        // void AddGuiOutEvent<T>(T&) (18 ARTIST instances, e.g. 0x82866148 GuiEventSetSku).
+        // Header-inline body after the class (DecFIGS CgsGuiModuleIO.h:233).
         template <class T>
-        int AddGuiOutEvent(T& lrEvent)
-        {
-            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
-            // The on-queue payload byte count is sizeof(T) (the X360 AddEvent size arg varies per
-            // event type, e.g. 1/4/24/80/404); the event-type id is the GuiEvent<N> id carried by T.
-            return mOutEvents.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lrEvent),
-                                       lrEvent.GetEventType(), static_cast<s32>(sizeof(T)))
-                       ? 1
-                       : 0;
-        }
+        void AddGuiOutEvent(T& lEvent);
 
     private:
         u8                             maStatusPad[3];        // +1..+3 (force +4 placement)
@@ -139,6 +121,18 @@ namespace CgsGuiModuleIO
         GuiEventQueue                  mOutEvents;            // +2068 (DWARF :207)
         GameActionQueueStorage         mGameActionQueue;      //       (DWARF :209)
     };
+
+    // DecFIGS CgsGuiModuleIO.h:233 (streamed assert h:235, ARTIST li r5,0xEB): write-locked
+    // (status bit 3), then the queue's inline GuiEventQueueBase::AddGuiEvent<T> (PS3 inlining:
+    // CgsGuiEvent.h:380 at CgsGuiModuleIO.h:236), which gives ARTIST's
+    // `li r6,size / li r5,id / mr r4,ev / addi r3,this,0x814` AddEvent call.
+    template <class T>
+    void OutputBuffer::AddGuiOutEvent(T& lEvent)
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n",
+            "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsGuiModuleIO.h", 235));
+        mOutEvents.AddGuiEvent(lEvent);
+    }
 
     // ============================================================================
     // CgsGui::CgsGuiModuleIO::InputBuffer (DWARF CgsGuiModuleIO.h:61)

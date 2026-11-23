@@ -47,7 +47,8 @@ namespace EventInterpreterModuleIO
 
     struct OutputBuffer : public CgsModule::IOBuffer
     {
-        typedef CgsModule::VariableEventQueue<18432, 16> GuiEventQueue;
+        // DWARF mGuiOutEvents (h:123): the GuiEventQueueBase typedef (CgsGuiEvent.h:186), 18432 on X360.
+        typedef CgsGui::GuiEventQueueBase<18432, 16> GuiEventQueue;
         typedef CgsGui::GuiEventQueueBase<4096, 16> GuiEventQueueSmall;
         typedef CgsGui::GuiEventQueueBase<65536, 16> GuiEventQueueLarge;
 
