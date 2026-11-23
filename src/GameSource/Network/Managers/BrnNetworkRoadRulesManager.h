@@ -153,8 +153,8 @@ namespace BrnNetwork
         // names are CONNECTING and WAIT_TO_DOWNLOAD), so it stays a named literal.
         static const s32 KI_STATE_AUTO_LOGIN_PRIMED = 5;
 
-        typedef FifoQueue<BrnNetworkModuleIO::NetworkOutRecvRoadRulesPBEvent, 14> RoadRulesPersonalBestBuffer;
-        typedef FifoQueue<BrnNetworkModuleIO::NetworkInRoadRulesPBEvent, 2>       RoadRulesPBBuffer;
+        typedef CgsContainers::FifoQueue<BrnNetworkModuleIO::NetworkOutRecvRoadRulesPBEvent, 14> RoadRulesPersonalBestBuffer;
+        typedef CgsContainers::FifoQueue<BrnNetworkModuleIO::NetworkInRoadRulesPBEvent, 2>       RoadRulesPBBuffer;
 
         // One per-player road-rules data slot (console stride 0x2B8).
         struct RoadRulesData

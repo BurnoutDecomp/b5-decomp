@@ -126,7 +126,7 @@ namespace BrnNetwork
         s32                           miCurrentCategory;      // +0x08  (a1[2])
         s32                           miCurrentIndex;         // +0x0C  (a1[3])
         BrnNetwork::BrnNetworkModule* mpNetworkModule;        // +0x10  (a1[4])
-        FifoQueue<BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent,
+        CgsContainers::FifoQueue<BrnNetwork::BrnNetworkModuleIO::NetworkInSelectScoreboardEvent,
                   KI_EVENT_QUEUE_SIZE> mScoreboardEventQueue; // +0x14  (cursors a1[9..11])
         CgsNetwork::ServerInterfaceRankings* mpRankings;      // +0x30  (a1[12])
         CgsNetwork::ServerInterface*  mpServerInterface;      // +0x34  (a1[13])

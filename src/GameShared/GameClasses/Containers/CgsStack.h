@@ -1,175 +1,220 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (used-before-Construct / !IsEmpty / !IsFull invariants)
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
-// CgsContainers::Stack<Type, N>
-// ----------------------------------------------------------------
-// A fixed-capacity LIFO stack with embedded inline storage (Type maData[N]) and a
-// live count. The reusable generic the project's fixed-capacity-container family uses
-// for bounded stacks (ICE::ActionQueue : public Stack<ICE::ActionRef,20>, plus the
-// other instances the DWARF attests: Stack<BrnParticle::Native::TrailEmitter*,96>,
-// Stack<CgsGraphics::Im2dTransform,33>, Stack<u16,2>, ...).
+// CgsContainers::Stack<Type, Length> -- a fixed-capacity LIFO. Member set, names and lines
+// from the DecFIGS DWARF (references/DecFIGS/dwarfdump/GameShared/GameClasses/Containers/
+// CgsStack.h: namespace h:24, class h:33, maData h:81, miLength h:82); the header's shape (the
+// class declaring its members, the inline definitions after it) and the bodies from the
+// LegacySrc copy; ARTIST confirms every body and line. miLength holds 0x7FFFFFFF until
+// Construct/Clear ("Stack used before Construct/Clear was called").
 //
-// SHAPE (DecFIGS DWARF, GameShared/GameClasses/Containers/CgsStack.h, struct
-// CgsContainers::Stack<Type,N>):
-//     Type    maData[N];   // CgsStack.h:81   (+0x00)
-//     s32     miLength;     // CgsStack.h:82   (+N*sizeof(Type))
-// Method set attested by the DWARF: Stack()/Construct/Push/Grow/Pop/Peek/GetLength/
-//   IsFull/IsEmpty/Contains/GetMaxLength/Clear/operator[](int)[const].
+// SOURCE LINES: ARTIST bakes this header's assert lines into every inlined copy (file string
+// @0x82010F14): Push 98/99, Grow 110/111, Pop 121/122, Contains 132, Peek 149/150,
+// GetLength 160, IsFull 169, IsEmpty 177, operator[] const 201-203, operator[] 213-215. Push
+// and Grow assert !IsFull() and Pop/Peek !IsEmpty(), so IsFull's 169 / IsEmpty's 177 follow
+// them inline (e.g. 0x82286280: 98, 99, 169).
 //
-// SENTINEL / ASSERT MODEL (from the X360 asm for the <ICE::ActionRef,20> instance):
-//   An UNINITIALISED Stack has miLength == 0x7FFFFFFF (INT_MAX). Construct()/Clear()
-//   set it to 0. Every mutating/observing op first asserts the stack was constructed
-//   (miLength != 0x7FFFFFFF, "Stack used before Construct/Clear was called"). Pop/Peek
-//   additionally assert !IsEmpty() (miLength != 0); Push additionally asserts !IsFull()
-//   (miLength != N). The X360 inlines IsEmpty/IsFull into each caller, so the
-//   constructed-check fires twice per Pop/Peek/Push in the asm (once direct, once from
-//   the inlined IsEmpty/IsFull); collapsing them into the single CGS_ASSERT here is
-//   semantically identical. Most reconstructed assertion sites use CGS_ASSERT and its
-//   host __FILE__/__LINE__; GetLength preserves the original baked path/line attested by
-//   ARTIST and rereads the length after EndAssert.
 //
-// For Stack<ICE::ActionRef,20>: ActionRef is 8 bytes, so maData[20] occupies +0x00..+0x9F
-// (160 bytes) and miLength lands at +0xA0 (160) -- exactly the `*(this + 160)` / `result[40]`
-// the X360 pseudocode reads. Push copies the 8-byte element word-by-word (mID, mData), which
-// the generic `maData[miLength] = *lpEntry` reproduces.
 //
-// The element parameter is `class Type` and the non-type parameter is `s32 N`, matching the
-// original template signature (the DWARF spells instances with literal extents, e.g.
-// Stack<ICE::ActionRef,20>). Project scalar s32 stands in for the original int32_t (same width).
-
+//
+//
+//
 namespace CgsContainers
 {
 
-const s32 KI_STACK_UNCONSTRUCTED = 0x7FFFFFFF;   // INT_MAX sentinel: miLength of a not-yet-Construct/Clear'd Stack.
 
-template <class Type, s32 N>
-struct Stack
+
+
+const s32 KI_STACK_UNCONSTRUCTED = 0x7FFFFFFF;   // miLength before Construct/Clear
+
+template <class Type, s32 Length>
+class Stack
 {
-    // Bring the stack to its empty-but-usable state. Construct and Clear are the two
-    // entry points that clear the unconstructed sentinel (X360: both set miLength = 0).
-    void Construct() { miLength = 0; }
-    void Clear()     { miLength = 0; }
+public:
+    // h:36 (LegacySrc: `Stack() { miLength=0x7FFFFFFF; }`) is not restored: the owners in this
+    // tree construct their stacks explicitly and rely on the type staying an aggregate.
 
-    // X360 0x825313D0 (Push, <ICE::ActionRef,20>). Assert constructed + !full, then store
-    // the element at the top slot and grow the count.
-    void Push(const Type& lrEntry)
-    {
-        CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-        CGS_ASSERT(miLength != N, "!IsFull()");
-        maData[miLength] = lrEntry;
-        ++miLength;
-    }
+    // Construct h:89 / Clear h:191: empty but usable.
+    inline void Construct();
+    inline void Clear();
 
-    // X360 0x825314A0 (Pop, <ICE::ActionRef,20>). Assert constructed + !empty, then drop
-    // the top element (count only; the slot is left as-is).
-    void Pop()
-    {
-        CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-        CGS_ASSERT(miLength != 0, "!IsEmpty()");
-        --miLength;
-    }
+    // Push h:96 / Grow h:108 / Pop h:119: the checked stack operations.
+    inline void Push(const Type& lrEntry);
+    inline Type* Grow();
+    inline void Pop();
 
-    // X360 0x82531550 (Peek, <ICE::ActionRef,20>). Assert constructed + !empty, then return
-    // the top element (`8 * miLength + this - 8` == &maData[miLength - 1]).
-    const Type& Peek() const
-    {
-        CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-        CGS_ASSERT(miLength != 0, "!IsEmpty()");
-        return maData[miLength - 1];
-    }
+    // Contains h:130 / Peek h:147.
+    inline bool Contains(const Type& lrEntry) const;
+    inline const Type& Peek() const;
 
-    // X360 0x8252D5E8 (IsFull, <ICE::ActionRef,20>). Assert constructed, then return
-    // miLength == N (the asm computes it branchlessly as cntlzw(miLength - 20) >> 5).
-    bool IsFull() const
-    {
-        CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-        return miLength == N;
-    }
+    // GetLength h:158, IsFull h:167, IsEmpty h:175, GetMaxLength h:184.
+    inline s32 GetLength() const;
+    inline bool IsFull() const;
+    inline bool IsEmpty() const;
+    inline s32 GetMaxLength() const;
 
-    bool IsEmpty() const     { return miLength == 0; }
+    // operator[] h:199 (const) / h:211: the checked accessors.
+    inline const Type& operator[](s32 liIndex) const;
+    inline Type& operator[](s32 liIndex);
 
-    // X360 BrnTraffic::DebugComponent::UpdateStats @ 0x827584F0 asserts at the
-    // original CgsStack.h:160 site, continues, then rereads miLength after EndAssert.
-    s32 GetLength() const
-    {
-        if (miLength == KI_STACK_UNCONSTRUCTED)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "Stack used before Construct/Clear was called",
-                "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsStack.h",
-                160);
-            CgsDev::Assert::EndAssert();
-        }
-        return miLength;
-    }
+    // (DWARF: private from here; the tree's owners read the members by name.)
 
-    s32  GetMaxLength() const { return N; }
 
-    // X360 0x8246E520 (Grow, <CgsGraphics::Im2dTransform,33>). Assert constructed +
-    // !full, then claim the current top slot, advance the count, and hand back a
-    // pointer to that slot (`(miLength << log2(sizeof Type)) + this` == &maData[old]).
-    // The caller fills the returned slot in place (the X360 Push copies its argument
-    // into exactly this slot via VMX quad-word stores; Grow hands the slot back so the
-    // caller can construct in place instead). Additive: only the <...,33> instance
-    // instantiates Grow; the other Stack instances (e.g. <ICE::ActionRef,20>) do not.
-    Type* Grow()
-    {
-        CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-        CGS_ASSERT(miLength != N, "!IsFull()");
-        s32 liSlot = miLength;
-        ++miLength;
-        return &maData[liSlot];
-    }
 
-    // X360 Stack<T,N>::operator[](int) (e.g. Stack<u16,400> @ 0x8270C7D0, Stack<u16,1> @
-    // 0x8270CB30, Stack<u8,199> @ 0x8270C980 -- all driven by CgsAlgorithms::Shuffle). Assert
-    // constructed (CgsStack.h:213), then bounds-guard the index both ends (liIndex >= 0 @ :214,
-    // liIndex < miLength @ :215, both "Stack access overflow") before returning &maData[liIndex]
-    // (the asm computes the slot as `liIndex*sizeof(Type) + this`). Additive: the original header
-    // left this declared-only; the body is recovered from the X360 asm of the instantiations above.
-    Type& operator[](s32 liIndex)
-    {
-        CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-        CGS_ASSERT(liIndex >= 0, "Stack access overflow");
-        CGS_ASSERT(liIndex < miLength, "Stack access overflow");
-        return maData[liIndex];
-    }
-    const Type& operator[](s32 liIndex) const
-    {
-        CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-        CGS_ASSERT(liIndex >= 0, "Stack access overflow");
-        CGS_ASSERT(liIndex < miLength, "Stack access overflow");
-        return maData[liIndex];
-    }
 
-    // X360 Stack<T,N>::Contains(const T&) (e.g. Stack<u16,400> @ 0x8270A830, driven by
-    // BrnTraffic TrafficEntityModule::UpdateParams_UpdatePurgatoryList). Assert constructed
-    // (CgsStack.h:132 "Stack used before Construct/Clear was called"), early-out false when the
-    // stack is empty (miLength <= 0), then linear-scan maData[0..miLength) returning true on the
-    // first slot equal to lrEntry, false if none match within miLength entries. Additive: the
-    // original header left this declared-only; the body is recovered from the X360 asm above.
-    bool Contains(const Type& lrEntry) const
-    {
-        CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
-        if (miLength <= 0)
-        {
-            return false;
-        }
-        for (s32 li = 0; li < miLength; ++li)
-        {
-            if (maData[li] == lrEntry)
-            {
-                return true;
-            }
-        }
-        return false;
-    }
 
-    Type maData[N];
-    s32  miLength;
+
+
+
+
+
+
+
+
+
+
+
+
+
+    Type maData[Length];    // DWARF h:81
+    s32  miLength;          // DWARF h:82
 };
+
+
+
+template <class Type, s32 Length>
+inline void
+Stack<Type, Length>::Construct()
+{
+    Clear();
+}
+
+template <class Type, s32 Length>
+inline void
+Stack<Type, Length>::Push(const Type& lrEntry)
+{
+    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    CGS_ASSERT(!IsFull(), "!IsFull()");
+
+    maData[miLength] = lrEntry;
+    ++miLength;
+}
+
+
+template <class Type, s32 Length>
+inline Type*
+Stack<Type, Length>::Grow()
+{
+    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    CGS_ASSERT(!IsFull(), "!IsFull()");
+
+    Type* lpEntry = &maData[miLength];
+    ++miLength;
+    return lpEntry;
+}
+template <class Type, s32 Length>
+inline void
+Stack<Type, Length>::Pop()
+{
+    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    CGS_ASSERT(!IsEmpty(), "!IsEmpty()");
+
+    --miLength;
+}
+
+
+template <class Type, s32 Length>
+inline bool
+Stack<Type, Length>::Contains(const Type& lrEntry) const
+{
+    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    // ARTIST Stack<u16,400>::Contains @0x8270A830: a linear scan of the live entries.
+    for (s32 liIndex = 0; liIndex < miLength; ++liIndex)
+    {
+        if (maData[liIndex] == lrEntry)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+
+template <class Type, s32 Length>
+inline const Type&
+Stack<Type, Length>::Peek() const
+{
+    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    CGS_ASSERT(!IsEmpty(), "!IsEmpty()");
+
+    return maData[miLength - 1];
+}
+
+
+template <class Type, s32 Length>
+inline s32
+Stack<Type, Length>::GetLength() const
+{
+    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    return miLength;
+}
+
+
+template <class Type, s32 Length>
+inline bool
+Stack<Type, Length>::IsFull() const
+{
+    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    return (miLength == Length);
+}
+
+template <class Type, s32 Length>
+inline bool
+Stack<Type, Length>::IsEmpty() const
+{
+    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    return (miLength == 0);
+}
+
+
+template <class Type, s32 Length>
+inline s32
+Stack<Type, Length>::GetMaxLength() const
+{
+    return Length;
+}
+
+template <class Type, s32 Length>
+inline void
+Stack<Type, Length>::Clear()
+{
+    miLength = 0;
+}
+
+
+template <class Type, s32 Length>
+inline const Type&
+Stack<Type, Length>::operator[](s32 liIndex) const
+{
+    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    CGS_ASSERT(liIndex >= 0, "Stack access overflow");
+    CGS_ASSERT(liIndex < miLength, "Stack access overflow");
+
+    return maData[liIndex];
+}
+
+
+template <class Type, s32 Length>
+inline Type&
+Stack<Type, Length>::operator[](s32 liIndex)
+{
+    CGS_ASSERT(miLength != KI_STACK_UNCONSTRUCTED, "Stack used before Construct/Clear was called");
+    CGS_ASSERT(liIndex >= 0, "Stack access overflow");
+    CGS_ASSERT(liIndex < miLength, "Stack access overflow");
+
+    return maData[liIndex];
+}
 
 } // namespace CgsContainers

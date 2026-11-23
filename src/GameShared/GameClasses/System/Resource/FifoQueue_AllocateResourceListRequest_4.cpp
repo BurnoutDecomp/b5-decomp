@@ -19,4 +19,4 @@
 #include "GameShared/GameClasses/Containers/CgsFifoQueue.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"  // AllocateResourceListRequest (48B)
 
-template class FifoQueue<CgsResource::Events::AllocateResourceListRequest, 4>;
+template class CgsContainers::FifoQueue<CgsResource::Events::AllocateResourceListRequest, 4>;

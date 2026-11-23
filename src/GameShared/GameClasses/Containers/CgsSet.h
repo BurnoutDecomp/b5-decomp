@@ -3,201 +3,490 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Insert/Erase/Find/GetItem guards)
 
-// Set<T, N> -- a fixed-capacity unordered set with linear-search membership. Shape
-// (member names/types/order, method set + signatures) is authoritative from the DecFIGS
-// DWARF (references/DecFIGS/dwarfdump/GameShared/GameClasses/Containers/CgsSet.h):
+// CgsContainers::Set<T, N> -- a fixed-capacity unordered set with linear-search membership.
+// Namespace, member set, names and lines from the DecFIGS DWARF
+// (references/DecFIGS/dwarfdump/GameShared/GameClasses/Containers/CgsSet.h: namespace h:28,
+// class h:50, KU_INVALID h:53, maElements h:147, muLength h:148); the shape of the header (the
+// class declaring its members, the inline definitions after it) and the bodies from the
+// LegacySrc copy of the same header; ARTIST confirms every body and line.
 //
-//     T    maElements[N];   // CgsSet.h:147  (+0x00)  inline element buffer
-//     u32  muLength;        // CgsSet.h:148  live element count (full when == N)
+// SOURCE LINES: ARTIST bakes this header's line numbers into every inlined assert (li r5,
+// <line> before CgsDev::Assert::FireAssert, file string
+// "d:\p4\b5_main\burnout\main\code\gameshared\gameclasses\containers\CgsSet.h" @0x820185C8).
+// Each definition's declarator sits on its DWARF line and its asserts follow as in the
+// original: Insert h:177 (179/183), Erase h:201 (203/206), GetLength h:225 (227),
+// GetItem const h:255 (257/258), GetItem h:272 (274/275), Find h:303 (305), Contains h:330
+// (332), e.g. Set<u16,15>::Insert @0x822CA500, Set<u16,15>::Erase @0x822CA5A8,
+// Set<PropEntityID,32>::IsFull @0x822CA320 (GetLength's 227), Set<u16,15>::SetDifference<15,15>
+// @0x822E5440 (227, 257/258, 332).
 //
-// and the static sentinel:
+// FixUp/FixDown (h:428 / h:451, asserts 430 / 453 in BrnTraffic::Pvs::FixUp @0x827623E8) byte-
+// swap the live elements and the length word with rw::EndianSwap, which lands with a later
+// TU, so they are declared only. Union is not in the DWARF (no instantiation uses it); it
+// follows the DWARF members so that they keep their lines.
 //
-//     static const u32 KU_INVALID = 0xffffffff;   // CgsSet.h:53
-//
-// The DWARF lists each used instantiation as CgsContainers::Set<T,Nu> -- e.g.
-// Set<CgsID,512u>, Set<CgsID,5u>, Set<CgsID,11u>, Set<CgsID,14u>, Set<uint16_t,8u>,
-// Set<uint16_t,15u>, Set<uint16_t,72u>, Set<uint16_t,160u>, Set<BrnWorld::PropEntityID,32u>.
-// StuntModeScoring embeds one BY VALUE:
-//     typedef Set<CgsID,512u> StuntElementSet;                 // BrnStuntModeScoring.h:70
-//     StuntModeScoring::StuntElementSet mRecentStuntElementSet;// BrnStuntModeScoring.h:348
-//
-// Declared in namespace CgsContainers, as the DWARF spells every instantiation and the
-// LegacySrc copy of this header declares it (CgsSet.h:25 `namespace CgsContainers`). The
-// capacity is a u32 non-type parameter to match the DWARF spelling `<...,512u>`.
-//
-// Bodies are the canonical Set<T,N> template (recovered intact from the LegacySrc reference
-// tree, references/LegacySrc/.../Containers/CgsSet.h); the original guarded each public method
-// with a streamed `CgsDev::Assert::PrintStringed(...)` + `tw 31,1,1` trap, mapped here to the
-// project's CGS_ASSERT with the same message text. muLength == KU_INVALID is the
-// "used before Construct/Clear" sentinel; Clear() flips it to 0 (empty-but-usable).
-//
-// FixUp/FixDown are the big-endian fix-up shims; their bodies fold rw::EndianSwap over the
-// live elements + the length word. rw::EndianSwap lands with a later (not-yet-reconstructed)
-// TU, so those two are declared-only here -- StuntModeScoring uses only Insert/Contains/Clear
-// /Find and iteration (GetLength + operator[]), all of which are fully bodied below.
 namespace CgsContainers
 {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 template <typename T, u32 N>
 class Set
 {
 public:
-    // The sentinel returned by Find when an element is absent, and the "unconstructed"
-    // marker value for muLength (CgsSet.h:53). Equal across every instantiation.
     static const u32 KU_INVALID = 0xffffffffu;
 
-    // Bring the set to its empty-but-usable state (CgsSet.h:162). Construct just calls Clear.
-    void Construct()
-    {
-        Clear();
-    }
+    // Construct h:162: empty but usable (Clear).
+    inline void Construct();
 
-    // Insert lElement if not already present (CgsSet.h:177). No-op on a duplicate; asserts the
-    // set was Construct/Clear'd and has room before appending.
-    void Insert(const T& lElement)
-    {
-        CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+    // Insert h:177: add lElement unless it is already present.
+    inline void Insert(const T& lElement);
 
-        if (!Contains(lElement))
-        {
-            CGS_ASSERT(muLength < N, "Set container out of space");
+    // Erase h:201: unordered erase of lElement, which must be present.
+    inline void Erase(const T& lElement);
 
-            maElements[muLength] = lElement;
-            ++muLength;
-        }
-    }
+    // GetLength h:225 / GetCapacity h:240: the checked live count and the capacity.
+    inline u32 GetLength() const;
+    inline u32 GetCapacity() const;
 
-    // Remove lElement (CgsSet.h:201). Unordered erase: overwrite the found slot with the last
-    // live element, then drop the count. Asserts the element is present.
-    void Erase(const T& lElement)
-    {
-        CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+    // GetItem h:255 (const) / h:272: the checked accessors.
+    inline const T& GetItem(u32 luIndex) const;
+    inline T& GetItem(u32 luIndex);
 
-        u32 luIndex = Find(lElement);
-        CGS_ASSERT(luIndex != KU_INVALID, "luIndex != KU_INVALID");
+    // Clear h:288.
+    inline void Clear();
 
-        maElements[luIndex] = maElements[muLength - 1];
-        --muLength;
-    }
+    // Find h:303: the element's index, else KU_INVALID. Contains h:330.
+    inline u32 Find(const T& lElement) const;
+    inline bool Contains(const T& lElement) const;
 
-    // Live element count (CgsSet.h:225). Asserts the set was Construct/Clear'd.
-    u32 GetLength() const
-    {
-        CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
-        return muLength;
-    }
-
-    // Capacity of the inline buffer (CgsSet.h:240).
-    u32 GetCapacity() const
-    {
-        return N;
-    }
-
-    // Checked element accessors (CgsSet.h:255 / :272). Assert constructed + index in capacity.
-    const T& GetItem(u32 luIndex) const
-    {
-        CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
-        CGS_ASSERT(luIndex < N, "Set index out of bounds");
-        return maElements[luIndex];
-    }
-
-    T& GetItem(u32 luIndex)
-    {
-        CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
-        CGS_ASSERT(luIndex < N, "Set index out of bounds");
-        return maElements[luIndex];
-    }
-
-    // Empty-but-usable reset (CgsSet.h:288): zero live elements (flips muLength off the
-    // KU_INVALID sentinel so the guarded accessors stop firing).
-    void Clear()
-    {
-        muLength = 0;
-    }
-
-    // Linear search for lElement (CgsSet.h:303). Returns the index, or KU_INVALID when absent.
-    u32 Find(const T& lElement) const
-    {
-        CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
-
-        u32 luElement;
-        for (luElement = 0; luElement < muLength; ++luElement)
-        {
-            if (lElement == maElements[luElement])
-            {
-                return luElement;
-            }
-        }
-
-        return KU_INVALID;
-    }
-
-    // True when lElement is present (CgsSet.h:330). The double constructed-assert
-    // (Contains then Find) is faithful to the original.
-    bool Contains(const T& lElement) const
-    {
-        CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
-        return (Find(lElement) != KU_INVALID);
-    }
-
-    // Insert every element of lOther that is not already present (CgsSet.h, Union). The other
-    // set may have a different capacity.
+    // Union (not in the DWARF): insert every element of lOther.
     template <u32 Capacity2>
-    void Union(const Set<T, Capacity2>& lOther)
-    {
-        u32 luElement;
-        for (luElement = 0; luElement < lOther.GetLength(); ++luElement)
-        {
-            Insert(lOther[luElement]);
-        }
-    }
+    inline void Union(const Set<T, Capacity2>& lOther);
 
-    // Set this = lA \ lB (CgsSet.h, SetDifference): clear, then keep each element of lA that
-    // lB does not contain. lA / lB may have different capacities.
+    // SetDifference h:372: this = lA \ lB.
     template <u32 Capacity1, u32 Capacity2>
-    void SetDifference(const Set<T, Capacity1>& lA, const Set<T, Capacity2>& lB)
-    {
-        Clear();
+    inline void SetDifference(const Set<T, Capacity1>& lA, const Set<T, Capacity2>& lB);
 
-        u32 luElement;
-        for (luElement = 0; luElement < lA.GetLength(); ++luElement)
-        {
-            const T& lElement = lA[luElement];
+    // operator[] h:399 (const) / h:414: forward to GetItem.
+    inline const T& operator[](u32 luIndex) const;
+    inline T& operator[](u32 luIndex);
 
-            if (!lB.Contains(lElement))
-            {
-                Insert(lElement);
-            }
-        }
-    }
-
-    // Indexing operators forward to GetItem (CgsSet.h:399 / :414).
-    const T& operator[](u32 luIndex) const
-    {
-        return GetItem(luIndex);
-    }
-
-    T& operator[](u32 luIndex)
-    {
-        return GetItem(luIndex);
-    }
-
-    // True when the set is at capacity (CgsSet.h:474).
-    bool IsFull() const
-    {
-        CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
-        return muLength == N;
-    }
-
-    // Big-endian fix-up shims (CgsSet.h:428 / :451): byte-swap the length word and every live
-    // element for opposite-endian reads. Declared-only -- the bodies fold rw::EndianSwap, which
-    // lands with a later (not-yet-reconstructed) TU. StuntModeScoring does not call these.
+    // FixUp h:428 / FixDown h:451: the big-endian fix-up shims (declared only, see above).
     void FixUp();
     void FixDown();
 
+    // IsFull h:474: GetLength() == GetCapacity().
+    inline bool IsFull() const;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 private:
-    T   maElements[N];   // CgsSet.h:147  (+0x00)  inline element buffer
-    u32 muLength;        // CgsSet.h:148  live element count; KU_INVALID until Construct/Clear
+    T   maElements[N];   // DWARF h:147  (+0x00)  inline element buffer
+    u32 muLength;        // DWARF h:148  live element count; KU_INVALID until Construct/Clear
 };
+
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline void
+Set<T, N>::Construct()
+{
+    Clear();
+}
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline void
+Set<T, N>::Insert(const T& lElement)
+{
+    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+
+    if (!Contains(lElement))
+    {
+        CGS_ASSERT(muLength < N, "Set container out of space");
+
+        maElements[muLength] = lElement;
+        ++muLength;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline void
+Set<T, N>::Erase(const T& lElement)
+{
+    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+
+    u32 luIndex = Find(lElement);
+    CGS_ASSERT(luIndex != KU_INVALID, "luIndex != KU_INVALID");
+
+    // Unordered: the last live element fills the erased slot.
+    maElements[luIndex] = maElements[muLength - 1];
+
+    --muLength;
+}
+
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline u32
+Set<T, N>::GetLength() const
+{
+    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+    return muLength;
+}
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline u32
+Set<T, N>::GetCapacity() const
+{
+    return N;
+}
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline const T&
+Set<T, N>::GetItem(u32 luIndex) const
+{
+    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+    CGS_ASSERT(luIndex < N, "Set index out of bounds");
+    return maElements[luIndex];
+}
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline T&
+Set<T, N>::GetItem(u32 luIndex)
+{
+    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+    CGS_ASSERT(luIndex < N, "Set index out of bounds");
+    return maElements[luIndex];
+}
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline void
+Set<T, N>::Clear()
+{
+    muLength = 0;
+}
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline u32
+Set<T, N>::Find(const T& lElement) const
+{
+    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+
+    u32 luElement;
+    for (luElement = 0; luElement < muLength; ++luElement)
+    {
+        if (lElement == maElements[luElement])
+        {
+            return luElement;
+        }
+    }
+
+    return KU_INVALID;
+}
+
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline bool
+Set<T, N>::Contains(const T& lElement) const
+{
+    CGS_ASSERT(muLength != KU_INVALID, "Set used before Construct/Clear was called");
+    return (Find(lElement) != KU_INVALID);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+template <u32 Capacity1, u32 Capacity2>
+inline void
+Set<T, N>::SetDifference(const Set<T, Capacity1>& lA, const Set<T, Capacity2>& lB)
+{
+
+    Clear();
+
+    u32 luElement;    // DWARF h:377
+    for (luElement = 0; luElement < lA.GetLength(); ++luElement)
+    {
+        const T& lElement = lA[luElement];    // DWARF h:380
+
+        if (!lB.Contains(lElement))
+        {
+            Insert(lElement);
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline const T&
+Set<T, N>::operator[](u32 luIndex) const
+{
+    return GetItem(luIndex);
+}
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline T&
+Set<T, N>::operator[](u32 luIndex)
+{
+    return GetItem(luIndex);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template <typename T, u32 N>
+inline bool
+Set<T, N>::IsFull() const
+{
+    // ARTIST Set<PropEntityID,32>::IsFull @0x822CA320: GetLength's 227 assert, then the compare.
+    return (GetLength() == GetCapacity());
+}
+
+template <typename T, u32 N>
+template <u32 Capacity2>
+inline void
+Set<T, N>::Union(const Set<T, Capacity2>& lOther)
+{
+    u32 luElement;
+    for (luElement = 0; luElement < lOther.GetLength(); ++luElement)
+    {
+        Insert(lOther[luElement]);
+    }
+}
 
 } // namespace CgsContainers

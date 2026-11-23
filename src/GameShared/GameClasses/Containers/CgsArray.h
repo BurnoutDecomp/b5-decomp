@@ -1,7 +1,8 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT, CGS_ASSERT_STREAM
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // the streamed assert messages
 
 #include <cstdlib>   // std::qsort (Array<T,N>::QSort)
 
@@ -24,22 +25,21 @@
 // definition on the line named below; its asserts sit ten lines lower, on the lines ARTIST
 // passes. The comment lines inside each body hold those positions.
 //
-//
 namespace CgsContainers
 {
     template <typename T, u32 N> class Set;
 
+// STREAMED ASSERTS: the out-of-space (226/290), insert-index (312), bounds (539/557) and
+// QSort (636) asserts stream their message into CgsDev::Assert::gpcMessageBuffer through a
+// CgsDev::StrStream (CGS_ASSERT_STREAM), as ARTIST does; the count streams as uint32_t (the
+// DWARF's muLength), through StrStreamBase::operator<<(uint32_t).
 // STILL DIFFERENT from ARTIST (recorded, not yet restored):
-// - The out-of-space (226/290), insert-index (312), bounds (539/557) and QSort (636) asserts
-//   stream their message into CgsDev::Assert::gpcMessageBuffer through a StrStream on the
-//   console; here they pass a plain string.
 // - The DWARF signatures differ where explicit instantiations in other directories depend on
 //   ours: AppendArray is a member template on the other array's capacity
 //   (??$AppendArray@$0CA@@...), FindFirstInstanceOf returns uint32_t (KU_INVALID),
 //   InsertBefore takes a T&, QSort returns void.
 // - h:201 Construct(uint32_t) is declared by the DWARF; no ARTIST copy attests its body, so it
 //   is not reconstructed.
-//
 //
 //
 template <typename T, u32 N>
@@ -215,15 +215,15 @@ inline void
 Array<T, N>::Append(const T& lrElement)
 {
     // Push one element (out-of-line copies include Array<int,20>::Append @0x821FBCD0 and
-    // Array<float,10>::Append @0x821FDAD0). ARTIST streams the capacity message
-    // ("Array container out of space, Length: " << count << ", Capacity: " << N); it is a
-    // plain string here. The unsigned compare keeps the -1 sentinel failing.
+    // Array<float,10>::Append @0x821FDAD0). The capacity assert streams
+    // "Array container out of space, Length: " << count << ", Capacity: " << N. The unsigned
+    // compare keeps the -1 sentinel failing.
     //
     //
     //
     //
     CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
+    CGS_ASSERT_STREAM(static_cast<u32>(miCount) < N, "Array container out of space, Length: " << static_cast<u32>(miCount) << ", Capacity: " << N);
     maElements[miCount] = lrElement;
     ++miCount;
 }
@@ -280,14 +280,14 @@ Array<T, N>::Grow()
 {
     // Reserve the next free slot and return it unwritten; the caller fills it in place
     // (ARTIST Array<OverheadSignScore,32>::Grow @0x822ABF70 and the
-    // Array<ChainableMultiplierInfo,8> copy @0x823177E8). ARTIST streams the capacity
-    // message exactly as Append does; it is a plain string here.
+    // Array<ChainableMultiplierInfo,8> copy @0x823177E8). The capacity assert streams the
+    // same message as Append's.
     //
     //
     //
     //
     CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
+    CGS_ASSERT_STREAM(static_cast<u32>(miCount) < N, "Array container out of space, Length: " << static_cast<u32>(miCount) << ", Capacity: " << N);
     T* lpNewElement = &maElements[miCount];
     ++miCount;
     return lpNewElement;
@@ -303,13 +303,13 @@ Array<T, N>::InsertBefore(u32 luIndex, const T& lrElement)
 {
     // Insert so the element sits at luIndex, shifting the tail up one slot (ARTIST
     // Array<int,20>::InsertBefore @0x822111B0, ICEMoviePlaylist::InsertMovieBefore). The
-    // index check reads GetLength() (its 336 fires first); ARTIST streams "trying to insert
-    // before an invalid index: " << luIndex, a plain string here.
+    // index check reads GetLength() (its 336 fires first) and streams "trying to insert
+    // before an invalid index: " << luIndex; the capacity assert is a plain string.
     //
     //
     //
     //
-    CGS_ASSERT(luIndex <= GetLength(), "trying to insert before an invalid index");
+    CGS_ASSERT_STREAM(luIndex <= GetLength(), "trying to insert before an invalid index: " << luIndex);
     CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
     CGS_ASSERT(static_cast<u32>(miCount) < N, "Array container out of space");
     for (u32 luShift = GetLength(); luShift > luIndex; --luShift)
@@ -527,8 +527,8 @@ template <typename T, u32 N>
 inline const T&
 Array<T, N>::GetItem(u32 luIndex) const
 {
-    // The checked accessor (const). ARTIST streams "Array index out of bounds. Index: "
-    // << luIndex << ", length: " << count into the assert buffer (a plain string here).
+    // The checked accessor (const). The bounds assert streams "Array index out of bounds.
+    // Index: " << luIndex << ", length: " << count into the assert buffer.
     // Out-of-line const copies: Array<int,20>::GetItem const @0x821FF788, @0x8235B918
     // (sizeof T 48), @0x82200140 (116).
     //
@@ -536,7 +536,7 @@ Array<T, N>::GetItem(u32 luIndex) const
     //
     //
     CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Array index out of bounds");
+    CGS_ASSERT_STREAM(luIndex < static_cast<u32>(miCount), "Array index out of bounds. Index: " << luIndex << ", length: " << static_cast<u32>(miCount));
     return maElements[luIndex];
 }
 
@@ -554,7 +554,7 @@ Array<T, N>::GetItem(u32 luIndex)
     //
     //
     CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    CGS_ASSERT(luIndex < static_cast<u32>(miCount), "Array index out of bounds");
+    CGS_ASSERT_STREAM(luIndex < static_cast<u32>(miCount), "Array index out of bounds. Index: " << luIndex << ", length: " << static_cast<u32>(miCount));
     return maElements[luIndex];
 }
 
@@ -626,14 +626,14 @@ inline T*
 Array<T, N>::QSort(int (*lpfComparator)(const void* lpA, const void* lpB))
 {
     // In-place sort of the live elements through the C library qsort (ARTIST
-    // Array<ChainableMultiplierInfo,8>::QSort @0x82317950). ARTIST streams the constructed
-    // message; it is a plain string here. The console returns void; the buffer base returned
+    // Array<ChainableMultiplierInfo,8>::QSort @0x82317950); its constructed assert streams
+    // the message, unlike the others. The console returns void; the buffer base returned
     // here is what the explicit instantiation in Array_ChainableMultiplierInfo_8.cpp
     // declares.
     //
     //
     //
-    CGS_ASSERT(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
+    CGS_ASSERT_STREAM(miCount != KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
     const u32 luCount = static_cast<u32>(miCount);
     if (luCount > 1)
     {
@@ -641,14 +641,5 @@ Array<T, N>::QSort(int (*lpfComparator)(const void* lpA, const void* lpB))
     }
     return maElements;
 }
-
-// The Array<int,20> GetItem overloads have independently emitted X360 bodies with streamed
-// bounds-assert messages. Their explicit specializations live in CgsArrayInt20.cpp; the generic
-// accessors and operator[] remain unchanged for every other instantiation.
-// Both int20 operator[] overloads forward to their corresponding GetItem.
-template <> s32&       Array<s32, 20>::GetItem(u32 luIndex);
-template <> const s32& Array<s32, 20>::GetItem(u32 luIndex) const;
-template <> s32&       Array<s32, 20>::operator[](u32 luIndex);
-template <> const s32& Array<s32, 20>::operator[](u32 luIndex) const;
 
 } // namespace CgsContainers

@@ -1,157 +1,271 @@
 #pragma once
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT(_STREAM); kept for its users
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // Push's streamed assert
 
-// CgsContainers::RingBuffer<Type> / FixedRingBuffer<Type, Length>
-// ----------------------------------------------------------------
-// A circular FIFO over a caller-owned element buffer, plus a fixed-stride variant
-// that embeds its own inline storage (Type maData[Length]) and self-attaches it.
+// CgsContainers::RingBuffer<Type> -- a ring over a caller-supplied buffer: Push overwrites the
+// oldest entry once full; FixedRingBuffer<Type, Length> supplies an inline buffer. Member set,
+// names and lines from the DecFIGS DWARF (references/DecFIGS/dwarfdump/GameShared/GameClasses/
+// Containers/CgsRingBuffer.h: namespace h:24, mpData..miLength h:83-87, FixedRingBuffer::maData
+// h:106, FixedRingBuffer::Construct h:265); the header's shape and Push's body from the LegacySrc
+// copy; ARTIST confirms the bodies and the assert lines it bakes into every inlined copy (file
+// string @0x82018438): Push 137 (streamed "Read pos should equal write pos if buffer is
+// full\n", e.g. 0x822AD1A0), operator[] const 249 (e.g. TrafficManager::FindHashForFrame
+// @0x82552490), operator[] 258 (e.g. 0x822AD4E8).
 //
-// SHAPE (DecFIGS DWARF, GameShared/GameClasses/Containers/CgsRingBuffer.h, struct
-// CgsContainers::RingBuffer<Type> + FixedRingBuffer<Type,N> : public RingBuffer<Type>):
-//   RingBuffer<Type>:        Type* mpData; s32 miMaxLength, miReadPos, miWritePos, miLength;
-//   FixedRingBuffer<Type,N>: (bases RingBuffer<Type>) + Type maData[N];
-// Methods attested by the DWARF: RingBuffer Construct/Push/Grow/Pop/Peek/GetLength/
-//   GetMaxLength/GetSpace/IsFull/Clear/operator[](const&)/operator[](&); FixedRingBuffer Construct().
 //
-// BODY (grounded in the DWARF method set + the X360 asm of the RingBuffer using sites):
-// the read/write-position wrap arithmetic, the full-buffer read-pos advance, and the
-// operator[] (miReadPos + index) % miMaxLength addressing are reproduced exactly. The
-// two original assert sites (PrintStringed + `tw 31,1,1`) are ported to CGS_ASSERT.
 //
-// StuntModeScoring embeds FixedRingBuffer<Vector3,256> (mRecentJumpSet) and
-// FixedRingBuffer<u16,64> (mRecentPropSet) BY VALUE; its bodies call Construct (in
-// StuntModeScoring::Construct), Clear (ClearData/EndCombo) and Push + operator[]
-// (UpdateBufferedScore). This generic header covers every instantiation; the embedders
-// only need the right member order/types and the named methods, which this provides.
 //
-// The non-type parameter is a plain `int Length` and the element parameter is `class Type`,
-// matching the original template signature; the DWARF spells the instances with literal
-// extents (e.g. FixedRingBuffer<rw::math::vpu::Vector3,256>). Project scalar types (s32/u32)
-// stand in for the original int32_t/uint32_t (same widths).
-
+//
+//
+//
+//
 namespace CgsContainers
 {
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 template <class Type>
 class RingBuffer
 {
 public:
-    // Attach a caller-owned element buffer of liBufferLength slots, then reset to empty.
-    void Construct(Type* lpBuffer, s32 liBufferLength)
-    {
-        mpData      = lpBuffer;
-        miMaxLength = liBufferLength;
-        Clear();
-    }
+    // Construct h:113: adopt the buffer and clear.
+    inline void Construct(Type* lpBuffer, s32 liBufferLength);
 
-    // Append one entry at the write position, advancing it with wrap-around. When the
-    // buffer is already full the oldest entry is overwritten and the read position is
-    // advanced so the window stays at miMaxLength (read pos must then equal write pos).
-    void Push(const Type* lpEntry)
-    {
-        mpData[miWritePos] = *lpEntry;
-        miWritePos++;
-        miLength++;
+    // Push h:122: append, overwriting the oldest entry when full.
+    inline void Push(const Type* lpEntry);
 
-        if (miWritePos >= miMaxLength)
-        {
-            miWritePos = 0;
-        }
+    // Pop h:170 / Peek h:195: the oldest entry; false when empty.
+    inline bool Pop(Type* lpEntry);
+    inline bool Peek(Type* lpEntry) const;
 
-        if (miLength > miMaxLength)
-        {
-            miLength  = miMaxLength;
-            miReadPos = (miReadPos + 1) % miMaxLength;
-            CGS_ASSERT(miReadPos == miWritePos, "Read pos should equal write pos if buffer is full");
-        }
-    }
+    // GetLength h:210, GetMaxLength h:217, GetSpace h:224, IsFull h:231, Clear h:238.
+    inline s32 GetLength() const;
+    inline s32 GetMaxLength() const;
+    inline s32 GetSpace() const;
+    inline bool IsFull() const;
+    inline void Clear();
 
-    // Pop the oldest entry (optionally copying it out via lpEntry); false when empty.
-    bool Pop(Type* lpEntry)
-    {
-        if (miLength <= 0)
-        {
-            return false;
-        }
+    // operator[] h:247 (const) / h:256: the entry luIndex places after the oldest.
+    inline const Type& operator[](u32 luIndex) const;
+    inline Type& operator[](u32 luIndex);
 
-        if (lpEntry != 0)
-        {
-            *lpEntry = mpData[miReadPos];
-        }
-        miReadPos++;
-        miLength--;
 
-        if (miReadPos >= miMaxLength)
-        {
-            miReadPos = 0;
-        }
-        return true;
-    }
 
-    // Copy the oldest entry out without removing it; false when empty.
-    bool Peek(Type* lpEntry) const
-    {
-        if (miLength <= 0)
-        {
-            return false;
-        }
 
-        *lpEntry = mpData[miReadPos];
-        return true;
-    }
 
-    s32 GetLength() const    { return miLength; }
-    s32 GetMaxLength() const { return miMaxLength; }
-    s32 GetSpace() const     { return miMaxLength - miLength; }
-    bool IsFull() const      { return GetSpace() == 0; }
 
-    // Reset to empty (positions and live count to zero); the inline buffer is left as-is.
-    void Clear()
-    {
-        miReadPos  = 0;
-        miWritePos = 0;
-        miLength   = 0;
-    }
 
-    // Indexed read of the live window: 0 == oldest, GetLength()-1 == newest.
-    const Type& operator[](u32 luIndex) const
-    {
-        CGS_ASSERT(luIndex < static_cast<u32>(miLength), "Attempt to access element outside range");
-        return mpData[(miReadPos + luIndex) % miMaxLength];
-    }
 
-    Type& operator[](u32 luIndex)
-    {
-        // ARTIST @ 0x8264E0D0 and 0x827B4F88, source path at 0x82018438.
-        CGS_ASSERT(luIndex < static_cast<u32>(miLength), CgsDev::Assert::MessageAt(
-            "Attempt to access element outside range",
-            "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsRingBuffer.h", 258));
-        return mpData[(miReadPos + luIndex) % miMaxLength];
-    }
+
+
+
+
+
+
+
+
+
 
 private:
-    Type* mpData;
-    s32   miMaxLength;
-    s32   miReadPos;
-    s32   miWritePos;
-    s32   miLength;
+    Type* mpData;           // DWARF h:83
+    s32   miMaxLength;      // DWARF h:84
+    s32   miReadPos;        // DWARF h:85
+    s32   miWritePos;       // DWARF h:86
+    s32   miLength;         // DWARF h:87
 };
 
 template <class Type, int Length>
 class FixedRingBuffer : public RingBuffer<Type>
 {
 public:
-    // Attach the embedded inline buffer and reset to empty. The base RingBuffer<Type>
-    // does the actual position/count reset via its Construct.
-    void Construct()
-    {
-        RingBuffer<Type>::Construct(maData, Length);
-    }
+    // Construct h:265: run the base Construct over the inline buffer.
+    inline void Construct();
 
 private:
-    Type maData[Length];
+
+
+
+
+
+
+
+
+    Type maData[Length];    // DWARF h:106
 };
+
+
+
+template <class Type>
+inline void
+RingBuffer<Type>::Construct(Type* lpBuffer, s32 liBufferLength)
+{
+    mpData      = lpBuffer;
+    miMaxLength = liBufferLength;
+    Clear();
+}
+
+template <class Type>
+inline void
+RingBuffer<Type>::Push(const Type* lpEntry)
+{
+    mpData[miWritePos] = *lpEntry;
+    miWritePos++;
+    miLength++;
+
+    if (miWritePos >= miMaxLength)
+    {
+        miWritePos = 0;
+    }
+
+    if (miLength > miMaxLength)
+    {
+        miLength  = miMaxLength;
+        miReadPos = (miReadPos + 1) % miMaxLength;
+        CGS_ASSERT_STREAM(miReadPos == miWritePos, "Read pos should equal write pos if buffer is full\n");
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template <class Type>
+inline bool
+RingBuffer<Type>::Pop(Type* lpEntry)
+{
+    if (miLength <= 0)
+    {
+        return false;
+    }
+
+    if (lpEntry != 0)
+    {
+        *lpEntry = mpData[miReadPos];
+    }
+    miReadPos++;
+    miLength--;
+
+    if (miReadPos >= miMaxLength)
+    {
+        miReadPos = 0;
+    }
+    return true;
+}
+
+
+
+template <class Type>
+inline bool
+RingBuffer<Type>::Peek(Type* lpEntry) const
+{
+    if (miLength <= 0)
+    {
+        return false;
+    }
+
+    *lpEntry = mpData[miReadPos];
+    return true;
+}
+
+
+
+template <class Type>
+inline s32
+RingBuffer<Type>::GetLength() const
+{
+    return miLength;
+}
+
+template <class Type>
+inline s32
+RingBuffer<Type>::GetMaxLength() const
+{
+    return miMaxLength;
+}
+
+template <class Type>
+inline s32
+RingBuffer<Type>::GetSpace() const
+{
+    return miMaxLength - miLength;
+}
+
+template <class Type>
+inline bool
+RingBuffer<Type>::IsFull() const
+{
+    return GetSpace() == 0;
+}
+
+template <class Type>
+inline void
+RingBuffer<Type>::Clear()
+{
+    miReadPos  = 0;
+    miWritePos = 0;
+    miLength   = 0;
+}
+
+template <class Type>
+inline const Type&
+RingBuffer<Type>::operator[](u32 luIndex) const
+{
+    CGS_ASSERT(luIndex < static_cast<u32>(miLength), "Attempt to access element outside range");
+    return mpData[(miReadPos + luIndex) % miMaxLength];
+}
+
+
+template <class Type>
+inline Type&
+RingBuffer<Type>::operator[](u32 luIndex)
+{
+    CGS_ASSERT(luIndex < static_cast<u32>(miLength), "Attempt to access element outside range");
+    return mpData[(miReadPos + luIndex) % miMaxLength];
+}
+
+
+template <class Type, int Length>
+inline void
+FixedRingBuffer<Type, Length>::Construct()
+{
+    RingBuffer<Type>::Construct(maData, Length);
+}
+
 
 } // namespace CgsContainers

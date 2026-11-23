@@ -207,7 +207,7 @@ private:
 
     // ---- layout (X360-asm-recovered; see file header) ----
     CgsContainers::Array<CollectedBillboard, 5>          maCollectedBillboards;     // +0x00 (count @ +0x50)
-    FifoQueue<f32, 10>                    maRoadRageTakedownTimes;   // +0x58 (read@+0x80/write@+0x84/len@+0x88)
+    CgsContainers::FifoQueue<f32, 10>                    maRoadRageTakedownTimes;   // +0x58 (read@+0x80/write@+0x84/len@+0x88)
     CgsContainers::FastBitArray<8>        maTakenDownRaceCars;       // +0x90 (one u64 field: victims this event)
     CgsContainers::FastBitArray<15>       maCompletedChallenges;     // +0x98 (one u64 field: pending publish)
     f32                                   mlfCurrentRaceTime;        // +0xA0

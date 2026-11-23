@@ -7,4 +7,4 @@
 // the DWARF spells the type CgsContainers::FifoQueue<float,10u>.
 #include "GameShared/GameClasses/Containers/CgsFifoQueue.h"
 
-template class FifoQueue<f32, 10>;
+template class CgsContainers::FifoQueue<f32, 10>;

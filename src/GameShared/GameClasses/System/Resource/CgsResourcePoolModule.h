@@ -247,7 +247,7 @@ namespace CgsResource
         Pool              maPools[KI_MAX_POOLS];      // +0x1A38 the 128 resource pools (464B X360 stride)
         // ARTIST CgsPoolModule.h:194 -- canonical raw CreatePoolRequest FIFO (128 entries),
         // constructed with the module and driven by the canonical request/response processors.
-        FifoQueue<Events::CreatePoolRequest, 128> mPendingCreateRequests;
+        CgsContainers::FifoQueue<Events::CreatePoolRequest, 128> mPendingCreateRequests;
         CgsModule::EventReceiverQueue<16384, 16> mReceiverQueue; // +0x15844 (a1[22033]) create/delete-pool events (CgsPoolModule.h)
         ScratchPool       mScratchPool;              // +0x198C0 (a1+104576) defrag staging (Construct'd; InitPool deferred)
         AllocListSet      mAllocListSet;             // +0x19B00; DWARF CgsPoolModule.h:198
@@ -282,6 +282,6 @@ namespace CgsResource
         CgsMemory::RelocationParams mRelocationParams;   // :217
 
         // ARTIST 829076D8 dequeues at most one request while idle.
-        FifoQueue<Events::AllocateResourceListRequest, 4> mPendingAllocationRequests;
+        CgsContainers::FifoQueue<Events::AllocateResourceListRequest, 4> mPendingAllocationRequests;
     };
 }

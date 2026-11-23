@@ -17,4 +17,4 @@
 #include "GameShared/GameClasses/Containers/CgsFifoQueue.h"
 #include "GameSource/Network/BrnNetworkModuleIO.h"   // NetworkOutRecvRoadRulesPBEvent element (72B)
 
-template class FifoQueue<BrnNetwork::BrnNetworkModuleIO::NetworkOutRecvRoadRulesPBEvent, 14>;
+template class CgsContainers::FifoQueue<BrnNetwork::BrnNetworkModuleIO::NetworkOutRecvRoadRulesPBEvent, 14>;

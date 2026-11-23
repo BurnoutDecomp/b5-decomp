@@ -39,9 +39,10 @@ namespace Assert
 }
 
 // Evaluate the condition; on failure run the Begin/Fire/End assert sequence (FireAssert
-// forwards to CgsDev::Assert::Manager::HandleAssert, which logs the failure). The original
-// streamed the message into the assert buffer via StrStream; the call sites all pass a plain
-// string, so the message is forwarded directly.
+// forwards to CgsDev::Assert::Manager::HandleAssert, which logs the failure). The message is
+// passed to FireAssert as it is: ARTIST passes a plain message string straight in r3 wherever
+// the original message is one literal (e.g. "Array used before Construct/Clear was called" in
+// CgsContainers::Array<int,20>::Append @0x821FBCD0).
 #define CGS_ASSERT(condition, msg)                              \
     do                                                          \
     {                                                           \
@@ -51,4 +52,25 @@ namespace Assert
             CgsDev::Assert::FireAssert((msg), __FILE__, __LINE__); \
             CgsDev::Assert::EndAssert();                        \
         }                                                       \
+    } while (0)
+
+// CGS_ASSERT_STREAM: the streamed-message form. On failure the message is built by streaming
+// `stream` (one or more `<<` operands) into the shared CgsDev::Assert::gpcMessageBuffer through
+// a CgsDev::StrStream, then fired with this file and line. ARTIST shows the expansion inline
+// wherever the original streams a message, e.g. CgsContainers::Array<int,20>::GetItem
+// @0x821FF680: BeginAssert; the StrStream over gpcMessageBuffer / giMessageBufferSize; the
+// streamed pieces; FireAssert(gpcMessageBuffer, file, line); EndAssert. The same sequence
+// written out by hand is exact in CgsVariableEventQueue.h. A caller includes CgsStrStream.h.
+#define CGS_ASSERT_STREAM(condition, stream)                                                   \
+    do                                                                                         \
+    {                                                                                          \
+        if (!(condition))                                                                      \
+        {                                                                                      \
+            CgsDev::Assert::BeginAssert();                                                     \
+            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer,                     \
+                                         CgsDev::Assert::giMessageBufferSize);                 \
+            lStrStream << stream;                                                              \
+            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, __FILE__, __LINE__);  \
+            CgsDev::Assert::EndAssert();                                                       \
+        }                                                                                      \
     } while (0)

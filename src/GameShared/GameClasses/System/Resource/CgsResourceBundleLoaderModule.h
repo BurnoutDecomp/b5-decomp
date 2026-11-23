@@ -117,7 +117,7 @@ private:
     s32 miCurrentResource;
     s32 miCurrentMemoryType;
     s32 miCurrentResourcePosition;
-    FifoQueue<RunningLoad,4> mQueuedLoads;
+    CgsContainers::FifoQueue<RunningLoad,4> mQueuedLoads;
     Events::LoadBundleRequest mLoadRequest;
     Events::UnloadBundleRequest mUnloadRequest;
     Events::AllocateResourceListRequest mAllocationRequest;

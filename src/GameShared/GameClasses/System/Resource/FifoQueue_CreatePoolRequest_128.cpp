@@ -19,4 +19,4 @@
 #include "GameShared/GameClasses/Containers/CgsFifoQueue.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"  // CreatePoolRequest (172B)
 
-template class FifoQueue<CgsResource::Events::CreatePoolRequest, 128>;
+template class CgsContainers::FifoQueue<CgsResource::Events::CreatePoolRequest, 128>;

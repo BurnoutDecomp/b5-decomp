@@ -32,16 +32,18 @@ namespace Thread
 namespace CgsFileSystem
 {
     // @0x828D65F0
-    int Device::CallErrorCallback(int liError)
+    // DWARF: bool CallErrorCallback(EDeviceErrors) with a `bool lbResult` local (CgsDevice.h:150);
+    // the callback's bool result is kept as it is returned (`mr r31,r3`, no zero-extension).
+    bool Device::CallErrorCallback(int liError)
     {
-        int liResult = 0;
+        bool lbResult = false;
         if (mpfErrorCallback)
-            liResult = mpfErrorCallback(liError);
+            lbResult = mpfErrorCallback(liError);
 
         // Yield 5ms before the failing caller retries (asm stores 5 and passes &it).
         u32 luSleepMs = 5;
         EA::Thread::ThreadSleep(&luSleepMs);
-        return liResult;
+        return lbResult;
     }
 
     // ---- base "Not implemented" defaults for the worker-dispatched op interface --------

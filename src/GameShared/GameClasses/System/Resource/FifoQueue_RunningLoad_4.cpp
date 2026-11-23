@@ -18,4 +18,4 @@
 #include "GameShared/GameClasses/Containers/CgsFifoQueue.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceBundleLoaderModule.h"  // CgsResource::RunningLoad (148B)
 
-template class FifoQueue<CgsResource::RunningLoad, 4>;
+template class CgsContainers::FifoQueue<CgsResource::RunningLoad, 4>;

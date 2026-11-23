@@ -17,9 +17,12 @@
 // advances+wraps miWritePos at N, bumps miLength, refusing (return false) once
 // miLength >= N. DWARF spells Push's return as bool; the X360 renders it as int 0/1.
 //
-// Spelled as the unqualified FifoQueue<T,N> to match the committed Array<T,N> container
-// convention (the DWARF spells these CgsContainers::FifoQueue but the project's committed
-// containers live at global scope).
+// Declared in namespace CgsContainers, as the DWARF spells every instantiation
+// (CgsFifoQueue.h:24 `namespace CgsContainers`) and ARTIST names its out-of-line copies
+// (CgsContainers::FifoQueue<float,10>::Push @0x8235E7C0).
+namespace CgsContainers
+{
+
 template <typename T, s32 N>
 class FifoQueue
 {
@@ -99,3 +102,5 @@ private:
     s32 miWritePos;     // CgsFifoQueue.h:60  write cursor (the one Push advances/wraps)
     s32 miLength;       // CgsFifoQueue.h:61  live element count (full when == N)
 };
+
+} // namespace CgsContainers
