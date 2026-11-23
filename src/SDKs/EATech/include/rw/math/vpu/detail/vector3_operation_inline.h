@@ -215,7 +215,10 @@ inline VecFloat Magnitude(Vector3::InParam v)
     const VectorIntrinsic squared = __vmsum3fp(v.mV, v.mV);
     const VectorIntrinsic reciprocal = detail::Vector3NativeReciprocalRoot(squared, 2);
     const VectorIntrinsic zero = __vspltisw(0);
-    return VecFloat(__vsel(__vmulfp(squared, reciprocal), zero, __vcmpeqfp(squared, zero)));
+    // rwmath 1.02.00 Magnitude builds its mask as vcmpeqfp(zero, dotproduct) (LegacySrc
+    // vector3_operation_inline.h:144), unlike Normalize's (dot, zero); ARTIST keeps that operand
+    // order, e.g. RaceCarEntityModuleDebugComponent::Update 0x822D5680 `vcmpeqfp v12, v12(zero), v0`.
+    return VecFloat(__vsel(__vmulfp(squared, reciprocal), zero, __vcmpeqfp(zero, squared)));
 }
 
 // =====================================================================================
