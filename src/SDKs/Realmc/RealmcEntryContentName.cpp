@@ -26,12 +26,12 @@ namespace RealmcIface
 //     li r11,0 ; sth r11, 0xFE(r31)          -> zero the 16-bit word at +0xFE
 //   else:
 //     li r4,0 ; bl memset(r3=this, 0, 0x100) -> zero 256 bytes
-//   return r3 (this)
+//   (void: no return value is set)
 //
 // macTitle is a fixed 256-byte block; the trailing 16-bit word at +0xFE is the
 // final two-byte title slot, NUL-terminated after a copy.
 // ---------------------------------------------------------------------------
-EntryContentName* EntryContentName::SetTitle(const void* pTitleSource)
+void EntryContentName::SetTitle(const void* pTitleSource)
 {
     if (pTitleSource)
     {
@@ -43,7 +43,6 @@ EntryContentName* EntryContentName::SetTitle(const void* pTitleSource)
     {
         std::memset(macTitle, 0, 0x100);
     }
-    return this;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,9 +54,9 @@ EntryContentName* EntryContentName::SetTitle(const void* pTitleSource)
 //     li r11,0 ; stb r11, 0x129(r31)         -> NUL-terminate at +0x129
 //   else:
 //     li r11,0 ; stb r11, 0x100(r31)         -> macFileName[0] = 0
-//   return r3 (this)
+//   (void: no return value is set)
 // ---------------------------------------------------------------------------
-EntryContentName* EntryContentName::SetFileName(const char* pFileNameSource)
+void EntryContentName::SetFileName(const char* pFileNameSource)
 {
     if (pFileNameSource)
     {
@@ -69,7 +68,6 @@ EntryContentName* EntryContentName::SetFileName(const char* pFileNameSource)
     {
         macFileName[0] = '\0';
     }
-    return this;
 }
 
 // ---------------------------------------------------------------------------

@@ -18,14 +18,15 @@ public:
 
     // @ 0x82B51AD8 -- copy 256 bytes from pTitleSource into macTitle (or zero the
     //                 256 bytes when pTitleSource is null), then zero the 16-bit
-    //                 word at +0xFE. Returns this (the X360 returns r3).
-    EntryContentName* SetTitle(const void* pTitleSource);
+    //                 word at +0xFE. Returns nothing: ARTIST leaves r3 as the
+    //                 memcpy/memset result (no `mr r3,r31` before the epilogue).
+    void SetTitle(const void* pTitleSource);
 
     // @ 0x82B51B28 -- strncpy at most 42 bytes from pFileNameSource into
     //                 macFileName + zero-store the byte at +0x129 (NUL); when
     //                 pFileNameSource is null, zero-store macFileName[0] only.
-    //                 Returns this.
-    EntryContentName* SetFileName(const char* pFileNameSource);
+    //                 Returns nothing (no r3 set on the null path, 0x82B51B5C).
+    void SetFileName(const char* pFileNameSource);
 
     // Copy-construct: mnSize first, then SetTitle(rOther.macTitle) and
     // SetFileName(rOther.macFileName). muField130/muField134 are NOT copied here;
