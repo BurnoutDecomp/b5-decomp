@@ -73,6 +73,9 @@ typedef Mixer AudioProcessContext;       // pointer param only
 // -------------------------------------------------------------------------------------
 class AiffWriter
 {
+    // Writes the AIFF COMM sample rate as a ten-byte big-endian extended float.
+    static void IntToExtended(u8 *pExtended, u32 uValue); // @0x82B96848
+
 public:
     // Placement-init over `self`: install the v-table, default-construct the embedded
     // TimerHandle, clear the file/flag fields, and allocate the s16 PCM staging buffer
@@ -91,11 +94,6 @@ public:
 
     // The plug-in instance footprint (80 bytes). @0x82B96838.
     static int GetSize();
-
-    // Convert an unsigned integer `uValue` into its 80-bit IEEE-754 extended-precision
-    // big-endian form (10 bytes) in `pExtended`, as the AIFF COMM chunk stores the sample
-    // rate. Returns `pExtended`. @0x82B96848.
-    static u8 *IntToExtended(u8 *pExtended, u32 uValue);
 
     // Interleave one block's channels of the graph context's source buffer to signed-16-bit
     // PCM in mpBuf (via a System scratch reservation), when recording is live. Returns 1.

@@ -63,12 +63,12 @@ CGS_STATIC_ASSERT((offsetof(CreateParams, mucFlags) == 10), "ARTIST mixer creati
 // ARTIST 0x82B7BAB0 and 0x82B7BAD0.
 extern "C" void* SNDI_New(u32 auSize)
 {
-    return System::Alloc(off_83271928, auSize, "New Dummy ID", 16, 0);
+    return off_83271928->Alloc(auSize, "New Dummy ID", 16, 0);
 }
 
 extern "C" void SNDI_Delete(void* apBlock)
 {
-    System::Free(off_83271928, apBlock, 0);
+    off_83271928->Free(apBlock, 0);
 }
 
 // ARTIST 0x82B6FC80 is also used as the RSA signature copy thunk.
@@ -82,13 +82,13 @@ extern "C" void MIX_createFxglobals()
 {
     const u32 luFxBytes = (sizeof(f32*) + sizeof(s32) + sizeof(f32)) * Snd9::Hal::giNumOutputs;
     gppFxMixBuffer = static_cast<f32**>(
-        System::Alloc(off_83271928, luFxBytes, "Global FX mems", 16, 0));
+        off_83271928->Alloc(luFxBytes, "Global FX mems", 16, 0));
     gpiFxMixEnabled = reinterpret_cast<s32*>(gppFxMixBuffer + Snd9::Hal::giNumOutputs);
     gpfFxMixTail = reinterpret_cast<f32*>(gpiFxMixEnabled + Snd9::Hal::giNumOutputs);
     std::memset(gppFxMixBuffer, 0, luFxBytes);
 
     gppFxAllocations = static_cast<FxAllocation**>(
-        System::Alloc(off_83271928, sizeof(FxAllocation*) * Snd9::Hal::giNumOutputs,
+        off_83271928->Alloc(sizeof(FxAllocation*) * Snd9::Hal::giNumOutputs,
                       "Global FX mems", 16, 0));
     std::memset(gppFxAllocations, 0, sizeof(FxAllocation*) * Snd9::Hal::giNumOutputs);
     giFxGlobalsCreated = 1;
@@ -100,18 +100,18 @@ extern "C" void MIX_destroyFxglobals()
     if (!giFxGlobalsCreated)
         return;
 
-    System::Free(off_83271928, gppFxMixBuffer, 0);
+    off_83271928->Free(gppFxMixBuffer, 0);
     for (s32 i = 0; i < Snd9::Hal::giNumOutputs; ++i)
     {
         FxAllocation* lpAllocation = gppFxAllocations[i];
         while (lpAllocation)
         {
             FxAllocation* lpNext = lpAllocation->mpNext;
-            System::Free(off_83271928, lpAllocation, 0);
+            off_83271928->Free(lpAllocation, 0);
             lpAllocation = lpNext;
         }
     }
-    System::Free(off_83271928, gppFxAllocations, 0);
+    off_83271928->Free(gppFxAllocations, 0);
     giFxGlobalsCreated = 0;
 }
 
@@ -161,7 +161,7 @@ extern "C" void MIX_create(const CreateParams* apParams)
 
     for (s32 i = 0; i < 2; ++i)
     {
-        void* lpAllocation = System::Alloc(off_83271928, 0x20BC, "Mixer Ping Pong Temp Buf", 16, 0);
+        void* lpAllocation = off_83271928->Alloc(0x20BC, "Mixer Ping Pong Temp Buf", 16, 0);
         gapPingPongAllocation[i] = lpAllocation;
         // Leave the native 8-byte lead-in before aligning to 64 bytes.
         gapPingPongBuffer[i] = reinterpret_cast<f32*>(
@@ -169,7 +169,7 @@ extern "C" void MIX_create(const CreateParams* apParams)
     }
     for (s32 i = 0; i < gCreateParams.mucOutputCount; ++i)
     {
-        void* lpAllocation = System::Alloc(off_83271928, 0x840, "Mixer Output Buffer", 16, 0);
+        void* lpAllocation = off_83271928->Alloc(0x840, "Mixer Output Buffer", 16, 0);
         gapOutputAllocation[i] = lpAllocation;
         gapOutputBuffer[i] = reinterpret_cast<f32*>(
             (reinterpret_cast<uintptr_t>(lpAllocation) + 0x3F) & ~uintptr_t(0x3F));
@@ -179,7 +179,7 @@ extern "C" void MIX_create(const CreateParams* apParams)
         const u32 luBytesPerVoice = sizeof(Snd9::Hal::MixChannel) +
                                     2 * sizeof(f32) * Snd9::Hal::giNumOutputs;
         Snd9::Hal::gpMixChannels = static_cast<Snd9::Hal::MixChannel*>(
-            System::Alloc(off_83271928, luBytesPerVoice * gCreateParams.mucVoiceCount,
+            off_83271928->Alloc(luBytesPerVoice * gCreateParams.mucVoiceCount,
                           "Mixer Voice State", 16, 0));
         std::memset(Snd9::Hal::gpMixChannels, 0,
                     (sizeof(Snd9::Hal::MixChannel) + 2 * sizeof(f32) * Snd9::Hal::giNumOutputs) *
@@ -222,14 +222,14 @@ extern "C" void MIX_destroy()
     MIX_destroyFxglobals();
     if (Snd9::Hal::gpMixChannels)
     {
-        System::Free(off_83271928, Snd9::Hal::gpMixChannels, 0);
+        off_83271928->Free(Snd9::Hal::gpMixChannels, 0);
         Snd9::Hal::gpMixChannels = 0;
     }
     for (s32 i = 0; i < 2; ++i)
     {
         if (gapPingPongAllocation[i])
         {
-            System::Free(off_83271928, gapPingPongAllocation[i], 0);
+            off_83271928->Free(gapPingPongAllocation[i], 0);
             gapPingPongAllocation[i] = 0;
         }
     }
@@ -237,7 +237,7 @@ extern "C" void MIX_destroy()
     {
         if (gapOutputAllocation[i])
         {
-            System::Free(off_83271928, gapOutputAllocation[i], 0);
+            off_83271928->Free(gapOutputAllocation[i], 0);
             gapOutputAllocation[i] = 0;
         }
     }

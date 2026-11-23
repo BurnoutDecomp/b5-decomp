@@ -1,6 +1,11 @@
 // RenderWare audio collections allocate blocks through the shared System
 // allocator. ARTIST calls its virtual Alloc and Free directly.
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces the full ARTIST Release body at 0x82B6C5E8.
+#pragma optimize("s", on)
+#endif
+
 #include "rw/audio/core/Collection.h"
 #include "rw/audio/core/PlugIn.h"
 #include "coreallocator/icoreallocator_interface.h"
@@ -116,23 +121,23 @@ bool Collection::Defragment(Collection *self)
     return true;
 }
 
-void Collection::Release(Collection *self)
+void Collection::Release()
 {
-    ListNode *block = self->mNodeBlocks.Pop();
+    ListNode *block = mNodeBlocks.Pop();
     if (block)
     {
         do
         {
             off_83271928->mpAllocator->Free(block, 0);
-            block = self->mNodeBlocks.Pop();
+            block = mNodeBlocks.Pop();
         } while (block);
     }
 
-    self->mFree.Reset();
-    self->mUsed.Reset();
-    self->mNodeBlocks.Reset();
-    self->mSize = 0;
-    self->mCapacity = 0;
+    mFree.Reset();
+    mUsed.Reset();
+    mNodeBlocks.Reset();
+    mSize = 0;
+    mCapacity = 0;
 }
 
 } // namespace core

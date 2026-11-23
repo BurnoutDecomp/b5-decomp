@@ -81,7 +81,7 @@ s32 CMpegBase::AllocateSynth(s32 iChannelCount)
 {
     const s32 liSize = iChannelCount * 2304;
 
-    void *pHistory = System::Alloc(off_83271928, liSize, "PolySynthHistoryF", 16, 0);
+    void *pHistory = off_83271928->Alloc(liSize, "PolySynthHistoryF", 16, 0);
     mpPolySynthHistory = pHistory;
 
     if (!pHistory)

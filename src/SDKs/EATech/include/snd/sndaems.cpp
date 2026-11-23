@@ -1379,8 +1379,8 @@ bool AddAemsTimer()
     // The timer record is carved from the audio System's allocator, which the add-bank
     // path only touches inside the System critical section.
     rw::audio::core::System::Lock(off_83271928);
-    const bool lbFailed = rw::audio::core::TimerManager::AddTimer(
-            &off_83271928->mTimerManager, &gAemsTimerHandle,
+    const bool lbFailed = off_83271928->mTimerManager.AddTimer(
+            &gAemsTimerHandle,
             &AemsTimerCallback, 0, "Aems Modules", rw::audio::core::TIMERSTAGE_BEFORECOMMANDS,
             rw::audio::core::TIMERVISIBILITY_SHOWN);
     rw::audio::core::System::Unlock(off_83271928);
@@ -1480,7 +1480,7 @@ s32 BeginRemoveModuleBank(s32 aiBankHandle)
         // RemoveModuleBankCommand slot -- 12 bytes on the X360).
         if (lpBank->mpAllocatedBlock)
         {
-            rw::audio::core::System::Free(lpSystem, lpBank->mpAllocatedBlock, 0);
+            lpSystem->Free(lpBank->mpAllocatedBlock, 0);
         }
         lpBank->miRemoved = 1;
 
@@ -1726,8 +1726,8 @@ extern "C" void SNDAEMSI_CreateModuleInstance(Csis::Class* apClass,
         return;
     }
 
-    u8* lpInstance = static_cast<u8*>(rw::audio::core::System::Alloc(
-        lpSystem, lpModule->muInstanceSize, "AEMS Module Instance", 16, 0));
+    u8* lpInstance = static_cast<u8*>(lpSystem->Alloc(
+        lpModule->muInstanceSize, "AEMS Module Instance", 16, 0));
     if (!lpInstance)
     {
         rw::audio::core::System::Unlock(lpSystem);
@@ -1881,6 +1881,6 @@ extern "C" int SNDAEMSI_updatedestroy(void* apSubscriber)
     }
 
     --lpModule->muCurrentInstances;
-    rw::audio::core::System::Free(off_83271928, lpInstance, 0);
+    off_83271928->Free(lpInstance, 0);
     return 0;
 }

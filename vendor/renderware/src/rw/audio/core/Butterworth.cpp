@@ -12,6 +12,11 @@
 // See Butterworth.h for the byte-exact layout.
 // =====================================================================================
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces the full ARTIST GetSize body at 0x82B6C408.
+#pragma optimize("s", on)
+#endif
+
 #include "rw/audio/core/Butterworth.h"
 
 #include <cstring> // memset (the X360 XMemSet)

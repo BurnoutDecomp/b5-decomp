@@ -296,7 +296,7 @@ int Dac::CreateInstance(Dac *self)
 
     // The Mixer block: console 0x30080 bytes @128 == the host sizeof(Mixer) @128.
     System *lpSystem = self->mpSystemUseGetSystemAccessor;
-    void *lpMixerBlock = System::Alloc(lpSystem, static_cast<u32>(sizeof(Mixer)), 0, 128, 0);
+    void *lpMixerBlock = lpSystem->Alloc(static_cast<u32>(sizeof(Mixer)), 0, 128, 0);
     self->mpMixer = static_cast<Mixer *>(lpMixerBlock);
     if (lpMixerBlock)
     {
@@ -651,7 +651,7 @@ Dac::~Dac()
     System::SetRwAudioCoreThreadId(mpSystemUseGetSystemAccessor, &luZeroThreadId);
     StopImmediate(this);
     if (mpMixer)
-        System::Free(mpSystemUseGetSystemAccessor, mpMixer, 0);
+        mpSystemUseGetSystemAccessor->Free(mpMixer, 0);
 }
 
 // ARTIST 82B97208 / 82B97228: XAudio supplies the voice and packet contexts.

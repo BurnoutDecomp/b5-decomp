@@ -99,7 +99,7 @@ extern "C" void MIX_stop(s32 aiVoice)
         if (lpFilter->mpRestore) lpFilter->mpRestore(lpFilter);
         lpFilter=lrVoice.mpFilter;
         FilterState* lpNext=lpFilter->mpNext;
-        System::Free(off_83271928,lpFilter,0);
+        off_83271928->Free(lpFilter,0);
         lrVoice.mpFilter=lpNext;
     } while (lrVoice.mpFilter);
     lrVoice.mucState=0;

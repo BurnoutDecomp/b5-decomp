@@ -132,8 +132,7 @@ int SubMix::CreateInstance(SubMix *self, const ConstructorParams *params)
     const u32 luBytes = static_cast<u32>(self->mOutputChannels)
                       * KI_FRAME_SAMPLES * sizeof(f32);
     System *lpSystem = self->mpSystemUseGetSystemAccessor;
-    void *lpBuffer = System::Alloc(lpSystem, luBytes, KSZ_SUBMIX_BUFFER_TAG,
-                                   KI_BUFFER_ALIGN, 0);
+    void *lpBuffer = lpSystem->Alloc(luBytes, KSZ_SUBMIX_BUFFER_TAG, KI_BUFFER_ALIGN, 0);
 
     // The store happens on BOTH paths -- the console writes r3 to +0x24 before testing it,
     // so a failed allocation explicitly leaves mpSubMixBuffer null rather than stale.
@@ -286,7 +285,7 @@ SubMix::~SubMix()
     }
 
     if (mpSubMixBuffer)
-        System::Free(mpSystemUseGetSystemAccessor, mpSubMixBuffer, 0);
+        mpSystemUseGetSystemAccessor->Free(mpSubMixBuffer, 0);
 
     // FAITHFUL: the console does NOT clear mpSubMixBuffer or mSubMixAdded after freeing
     // and unlinking, so both are left stale. Clearing them would be safer but is behaviour

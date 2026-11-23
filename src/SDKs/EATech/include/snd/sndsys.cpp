@@ -87,7 +87,7 @@ extern "C" s32 SNDSYSI_chanpubinit()
 {
     const u32 luBytes = (sizeof(Hal::Channel) + sizeof(f32) * Hal::giNumOutputs) * giVoiceCount;
     Hal::gpChannels = static_cast<Hal::Channel*>(
-        System::Alloc(off_83271928, luBytes, "Common Voice State", 16, 0));
+        off_83271928->Alloc(luBytes, "Common Voice State", 16, 0));
     std::memset(Hal::gpChannels, 0, luBytes);
 
     f32* lpGains = reinterpret_cast<f32*>(Hal::gpChannels + giVoiceCount);

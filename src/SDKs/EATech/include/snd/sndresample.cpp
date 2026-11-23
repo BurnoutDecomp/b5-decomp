@@ -229,7 +229,7 @@ extern "C" void MIX_setpitch(s32 aiVoice, s32 aiPitch)
     if (!lrChannel.mpResample)
     {
         lrChannel.mpResample = static_cast<ResampleFilter*>(
-            System::Alloc(off_83271928, sizeof(ResampleFilter), "Resample Filter State", 16, 0));
+            off_83271928->Alloc(sizeof(ResampleFilter), "Resample Filter State", 16, 0));
         lrChannel.mpResample->mHeader.mpRestore = 0;
         lrChannel.mpResample->mHeader.muPriority = 160;
         lrChannel.mpResample->mHeader.mucFlags = 0;

@@ -296,7 +296,7 @@ int SndPlayer1::CreateInstance(SndPlayer1 *self, const ConstructorParams *apPara
     const size_t luHead = AlignUp(static_cast<u32>(sizeof(f32)),
                                   static_cast<u32>(__alignof(RequestExternal)));
     const size_t luBytes = luHead + sizeof(RequestExternal) * luMaxRequests;
-    void *lpBlock = System::Alloc(self->mpSystemUseGetSystemAccessor,
+    void *lpBlock = self->mpSystemUseGetSystemAccessor->Alloc(
                                   static_cast<u32>(luBytes), KSZ_ALLOC_NAME, 16, 0);
     self->mpRequestHandle = static_cast<f32 *>(lpBlock);           // [4] the BASE
     if (!lpBlock)
@@ -344,9 +344,9 @@ int SndPlayer1::CreateInstance(SndPlayer1 *self, const ConstructorParams *apPara
 
     // [phase 8] register the per-frame timer. AddTimer returns 0 on SUCCESS (only its low
     // byte is tested). A failure returns 0 WITHOUT freeing -- the teardown path frees.
-    if (TimerManager::AddTimer(&self->mpSystemUseGetSystemAccessor->mTimerManager,
-                               &self->mTimerClient, &SndPlayer1::RwacTimerClient,
-                               self, KSZ_TIMER_NAME, TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
+    if (self->mpSystemUseGetSystemAccessor->mTimerManager.AddTimer(
+            &self->mTimerClient, &SndPlayer1::RwacTimerClient,
+            self, KSZ_TIMER_NAME, TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
         return 0;
 
     self->mbTimerAdded = 1;
@@ -542,7 +542,7 @@ SndPlayer1::~SndPlayer1()
     if (mbTimerAdded == 1)
         System::RemoveTimer(mpSystemUseGetSystemAccessor, &mTimerClient);
     if (mpRequestHandle != 0)
-        System::Free(mpSystemUseGetSystemAccessor, mpRequestHandle, 0);
+        mpSystemUseGetSystemAccessor->Free(mpRequestHandle, 0);
 }
 
 void SndPlayer1::GetFileInfo(const void* apData, FileInfo* apInfo)
@@ -807,7 +807,7 @@ int SndPlayer1::PlayHandler(void *rawCommand)
         {
             const u32 bytes = static_cast<u32>(std::strlen(command->path)) + 1u;
             external.pStreamLoopFileName = static_cast<char *>(
-                System::Alloc(system, bytes, "SndPlayer1 StreamLoopFileName", 16, 0));
+                system->Alloc(bytes, "SndPlayer1 StreamLoopFileName", 16, 0));
             if (external.pStreamLoopFileName == 0)
                 goto fail;
             std::memcpy(external.pStreamLoopFileName, command->path, bytes);
@@ -935,7 +935,7 @@ void SndPlayer1::RemoveRequest(SndPlayer1 *self, u32 index)
         System::Unlock(system);
     }
     if (external.pStreamLoopFileName != 0)
-        System::Free(system, external.pStreamLoopFileName, 0);
+        system->Free(external.pStreamLoopFileName, 0);
     request->state = REQUESTSTATE_FREE;
     if (external.expelMode == 1)
         Voice::ExpelAfterDecay(self->mpVoice);

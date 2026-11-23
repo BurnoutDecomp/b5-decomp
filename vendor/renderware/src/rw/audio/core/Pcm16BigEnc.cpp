@@ -29,14 +29,14 @@ const f32 KF_PCM16_FULL_SCALE = 32767.0f;
 } // namespace
 
 // -------------------------------------------------------------------------------------
-// CreateInstance -- System::Alloc(pSystem, size, no name, align 16), then on success install
+// CreateInstance -- pSystem->Alloc(size, no name, align 16), then on success install
 // the v-table and seed +0x08 / +0x0C / +0x04 in the console's store order.
 // The console asks for its own sizeof (0x20); the host asks for the host sizeof, which the
 // widened mpSystem makes larger.
 // -------------------------------------------------------------------------------------
 Pcm16BigEnc *Pcm16BigEnc::CreateInstance(s32 iNumChannels, s32 iSampleRate, System *pSystem)
 {
-    void *lpMem = System::Alloc(pSystem, static_cast<u32>(sizeof(Pcm16BigEnc)), 0, 16,
+    void *lpMem = pSystem->Alloc(static_cast<u32>(sizeof(Pcm16BigEnc)), 0, 16,
                                 0);
     if (!lpMem)
         return 0;

@@ -414,7 +414,7 @@ int SndPlayer1_CgsStreamMod::CreateInstance(PlugIn* apBase, void* apContext)
     self->mTimerAdded = 0;
 
     self->mpRequestExternal = static_cast<RequestExternal*>(
-        System::Alloc(self->mpSystemUseGetSystemAccessor,
+        self->mpSystemUseGetSystemAccessor->Alloc(
                       static_cast<u32>(count) * sizeof(RequestExternal),
                       "SndPlayer1_CgsStreamMod RequestExternal array", 16, 0));
     if (!self->mpRequestExternal)
@@ -439,7 +439,7 @@ int SndPlayer1_CgsStreamMod::CreateInstance(PlugIn* apBase, void* apContext)
         {
             external.chunks[j].size = KU_DEFAULT_CHUNK_BYTES;
             external.chunks[j].buf = static_cast<u8*>(
-                System::Alloc(self->mpSystemUseGetSystemAccessor,
+                self->mpSystemUseGetSystemAccessor->Alloc(
                               KU_DEFAULT_CHUNK_BYTES,
                               "SndPlayer1_CgsStreamMod Chunk", 16, 0));
             CGS_ASSERT(external.chunks[j].buf != 0, "JStr chunk allocation");
@@ -471,10 +471,10 @@ int SndPlayer1_CgsStreamMod::CreateInstance(PlugIn* apBase, void* apContext)
         self->mFeedDesc[i].mbStreamed = false;
     }
 
-    if (TimerManager::AddTimer(
-            &self->mpSystemUseGetSystemAccessor->mTimerManager,
-            &self->mTimerHandle, &RwacTimerClient, self,
-            "SndPlayer", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
+    if (self->mpSystemUseGetSystemAccessor->mTimerManager.AddTimer(
+            &self->mTimerHandle, &RwacTimerClient,
+            self, "SndPlayer",
+            TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
         return 0;
     self->mTimerAdded = 1;
     return 1;
@@ -492,11 +492,11 @@ SndPlayer1_CgsStreamMod::~SndPlayer1_CgsStreamMod()
             for (u32 j = 0; j < KU_NUM_CHUNKS; ++j)
             {
                 if (mpRequestExternal[i].chunks[j].buf)
-                    System::Free(mpSystemUseGetSystemAccessor,
+                    mpSystemUseGetSystemAccessor->Free(
                                  mpRequestExternal[i].chunks[j].buf, 0);
             }
         }
-        System::Free(mpSystemUseGetSystemAccessor, mpRequestExternal, 0);
+        mpSystemUseGetSystemAccessor->Free(mpRequestExternal, 0);
     }
 }
 
@@ -662,7 +662,7 @@ s32 SndPlayer1_CgsStreamMod::PlayHandler(void* apCommand)
         {
             const u32 bytes = static_cast<u32>(std::strlen(spec.mpFilename) + 1);
             external.pStreamLoopFileName = static_cast<char*>(
-                System::Alloc(self->mpSystemUseGetSystemAccessor, bytes,
+                self->mpSystemUseGetSystemAccessor->Alloc(bytes,
                               "SndPlayer1_CgsStreamMod StreamLoopFileName",
                               16, 0));
             if (!external.pStreamLoopFileName)
@@ -717,7 +717,7 @@ void SndPlayer1_CgsStreamMod::RemoveRequest(u32 auIndex)
     }
     off_82FFBA0C->DoCloseStream(external.pReadStream);
     if (external.pStreamLoopFileName)
-        System::Free(mpSystemUseGetSystemAccessor,
+        mpSystemUseGetSystemAccessor->Free(
                      external.pStreamLoopFileName, 0);
     request.state = E_REQUESTSTATE_FREE;
     if (external.expelMode == 1)
@@ -1233,9 +1233,9 @@ void SndPlayer1_CgsStreamMod::RwacTimerClient(
                     << "**** STREAM WARNING: reallocating Chunk from "
                     << chunk.size << " to " << size << " ****\n";
             }
-            System::Free(self->mpSystemUseGetSystemAccessor, chunk.buf, 0);
+            self->mpSystemUseGetSystemAccessor->Free(chunk.buf, 0);
             chunk.buf = static_cast<u8*>(
-                System::Alloc(self->mpSystemUseGetSystemAccessor, size,
+                self->mpSystemUseGetSystemAccessor->Alloc(size,
                               "SndPlayer1_CgsStreamMod Chunk", 16, 0));
             CGS_ASSERT(chunk.buf != 0, "JStr resized chunk");
             chunk.size = size;

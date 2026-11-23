@@ -222,8 +222,8 @@ namespace Playback
             static_cast<AemsPlayerVoice*>(lpBaseVoice);
 
         rw::audio::core::System* lpSystem = GetDefaultRwacSystem();
-        void* lpMemory = rw::audio::core::System::Alloc(
-            lpSystem, static_cast<u32>(sizeof(AemsRWSamplePlayer)),
+        void* lpMemory = lpSystem->Alloc(
+            static_cast<u32>(sizeof(AemsRWSamplePlayer)),
             "AemsRWSamplePlayer", 16, 0);
         if (!lpMemory)
         {
@@ -435,7 +435,7 @@ namespace Playback
         }
         rw::audio::core::System* lpSystem = mpRwacSystem;
         this->~AemsRWSamplePlayer();
-        rw::audio::core::System::Free(lpSystem, this, 0);
+        lpSystem->Free(this, 0);
     }
 
     void AemsRWSamplePlayer::Pause()

@@ -85,7 +85,7 @@ char **Snd9Service::GetPlugInDescRunTime()
 // CreateInstance @0x82BA0130 -- placement-init a Snd9Service over `self`.
 //   If self is present, install the service vtable and construct its timer.
 //   self->mbTimerCreated = 0;
-//   buf = System::Alloc(self->mpSystem, 6144, "...mpMixBufStart", 128, 0);
+//   buf = self->mpSystem->Alloc(6144, "...mpMixBufStart", 128, 0);
 //   self->mpMixBufStart = buf;  if (!buf) return 0;
 //   carve the six channel sub-buffers, seed rate + counters,
 //   register the pump timer; on failure return 0, else mbTimerCreated = 1, return 1.
@@ -100,7 +100,7 @@ int Snd9Service::CreateInstance(Snd9Service *self)
 
     self->mbTimerCreated = 0; // stb 0 -> +0x68 (before the alloc)
 
-    void *buf = System::Alloc(self->mpSystem, 6144,
+    void *buf = self->mpSystem->Alloc(6144,
                               "rw::audio::core::Snd9Service::mpMixBufStart", 128, 0);
     self->mpMixBufStart = buf; // +0x3C
     if (!buf)
@@ -122,9 +122,9 @@ int Snd9Service::CreateInstance(Snd9Service *self)
     self->miSamplesRemaining = 0;                  // +0x64
 
     // Register the 100 Hz pump before the mixer runs.
-    if (TimerManager::AddTimer(&self->mpSystem->mTimerManager, &self->mTimerHandle,
-                               &Snd9Service::RwacTimerClient,
-                               self, "Snd9Service", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
+    if (self->mpSystem->mTimerManager.AddTimer(
+            &self->mTimerHandle, &Snd9Service::RwacTimerClient,
+            self, "Snd9Service", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
     {
         return 0;
     }
@@ -167,7 +167,7 @@ int Snd9Service::Process(Snd9Service *self, AudioProcessContext *ctx)
 // the Snd9 driver, then free the mix buffer if it exists.
 //   if (mbTimerCreated == 1) System::RemoveTimer(mpSystem, &mTimerHandle);
 //   result = SNDSYS_restore();
-//   if (mpMixBufStart) System::Free(off_83271928, mpMixBufStart, 0);
+//   if (mpMixBufStart) off_83271928->Free(mpMixBufStart, 0);
 //   return result;
 // (System::RemoveTimer / System::Free are void here; the asm's r3 pass into SNDSYS_restore
 // and the returned r3 from Free are that void-return register left-over, so the meaningful
@@ -181,7 +181,7 @@ int Snd9Service::ReleaseEvent(Snd9Service *self)
     int result = SNDSYS_restore();
 
     if (self->mpMixBufStart)
-        System::Free(off_83271928, self->mpMixBufStart, 0);
+        off_83271928->Free(self->mpMixBufStart, 0);
 
     return result;
 }

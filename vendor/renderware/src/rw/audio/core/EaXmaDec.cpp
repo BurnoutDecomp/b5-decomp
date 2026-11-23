@@ -178,7 +178,7 @@ void EaXmaDec::AllocateResources()
         static_cast<u32>(kuMutexSlot + sizeof(ContextRecord) * suNumContexts);
 
     u8 *lpBlock =
-        static_cast<u8 *>(System::Alloc(lpSystem, luBlockSize, "Snd Xma Resources", 16, 0));
+        static_cast<u8 *>(lpSystem->Alloc(luBlockSize, "Snd Xma Resources", 16, 0));
 
     // The X360's null test around the construction is the compiler's placement-new guard,
     // which `new (p) T` re-emits; on the null path the store leaves spPoolMutex null, which
@@ -257,7 +257,7 @@ void EaXmaDec::DeallocateResources()
     spPoolMutex->~Mutex();
 
     System *lpSystem = off_83271928;
-    System::Free(lpSystem, spPoolMutex, 0);
+    lpSystem->Free(spPoolMutex, 0);
     spRecords = 0;
     spPoolMutex = 0;
 

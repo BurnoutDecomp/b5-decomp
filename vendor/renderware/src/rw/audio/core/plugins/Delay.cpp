@@ -155,9 +155,8 @@ int Delay::CreateInstance(Delay *self, f32 *pMaxDelayTime)
 
     System *pSystem = reinterpret_cast<System *>(self->mBase.mpSystem);
     if (!self->mDelayLine.Init(channels, maxSamples, readLength)
-        || TimerManager::AddTimer(
-               &pSystem->mTimerManager, &self->mTimer,
-               &Delay::RwacTimerClient, self, "Delay",
+        || pSystem->mTimerManager.AddTimer(
+               &self->mTimer, &Delay::RwacTimerClient, self, "Delay",
                TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
     {
         return 0;

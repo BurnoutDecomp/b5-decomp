@@ -316,7 +316,7 @@ public:
     // ICoreAllocator @+0x14). Grounded in Free @0x82B6BE48: v3 = a3 ? a3 : this->mpAllocator;
     // v3->vtable[Free](v3, mem, 0). The third argument is an OPTIONAL ALLOCATOR OVERRIDE
     // (the asm dispatches through it directly), not a flag word -- every call site passes 0.
-    static void Free(System *self, void *mem, EA::Allocator::ICoreAllocator *allocatorOverride);
+    void Free(void *mem, EA::Allocator::ICoreAllocator *allocatorOverride);
 
     // Allocate `size` bytes through `allocatorOverride`, or the System's ICoreAllocator
     // (slot +0x14) when null -- the exact allocate counterpart of Free. Bodied in
@@ -325,8 +325,7 @@ public:
     // like Free's -- the real flag word is the constant 1, alignment offset 0). Callers:
     // CMpegBase::AllocateSynth @0x82B8BFF0, EaXmaDec::AllocateResources @0x82B8F580
     // (both pass 0 -> the System's own allocator).
-    static void *Alloc(System *self, u32 size, const char *name, u32 align,
-                       EA::Allocator::ICoreAllocator *allocatorOverride);
+    void *Alloc(u32 size, const char *name, u32 align, EA::Allocator::ICoreAllocator *allocatorOverride);
 
     // Unlink `voice` from the System's expulsion-candidate bookkeeping. The body lives in
     // the System TU (mangled ?RemoveVoiceFromExpulsionCandidateList@System@core@audio@rw@@);

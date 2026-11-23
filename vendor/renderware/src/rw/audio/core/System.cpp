@@ -308,23 +308,22 @@ void System::PhysicalFree(System *self, void *block)
 // ALLOCATOR OVERRIDE (the PlugIn.h declaration used to guess "flags"); the real
 // flag word is the constant 1, the alignment offset the constant 0.
 // -------------------------------------------------------------------------------------
-void *System::Alloc(System *self, u32 size, const char *name, u32 align,
-                    EA::Allocator::ICoreAllocator *allocatorOverride)
+void *System::Alloc(u32 size, const char *name, u32 align, EA::Allocator::ICoreAllocator *allocatorOverride)
 {
-    EA::Allocator::ICoreAllocator *lpAllocator =
-        allocatorOverride ? allocatorOverride : self->mpAllocator;
-    return lpAllocator->Alloc(size, name, 1, align, 0);
+    if (!allocatorOverride)
+        allocatorOverride = mpAllocator;
+    return allocatorOverride->Alloc(size, name, 1, align, 0);
 }
 
 // -------------------------------------------------------------------------------------
 // Free @0x82B6BE48 -- free `mem` through `allocatorOverride`, or the System's own allocator
 // when null.
 // -------------------------------------------------------------------------------------
-void System::Free(System *self, void *mem, EA::Allocator::ICoreAllocator *allocatorOverride)
+void System::Free(void *mem, EA::Allocator::ICoreAllocator *allocatorOverride)
 {
-    EA::Allocator::ICoreAllocator *allocator =
-        allocatorOverride ? allocatorOverride : self->mpAllocator;
-    allocator->Free(mem, 0);
+    if (!allocatorOverride)
+        allocatorOverride = mpAllocator;
+    allocatorOverride->Free(mem, 0);
 }
 
 // -------------------------------------------------------------------------------------
@@ -513,7 +512,7 @@ void System::ExecuteCommands(System *self)
     Lock(self);
     u32 luTimerPhase1Start = GetCpuCycle();
     TimerManager::ExecuteTimers(&self->mTimerManager, 1);
-    TimerManager::Defragment(&self->mTimerManager);
+    self->mTimerManager.Defragment();
     // BOTH timer phases are billed to this counter (asm: subf r10,r30,r26; add r10,r3,r10).
     self->muTimerExecutionCpuTicks =
         GetCpuCycle() + luTimerPhase0Cost - luTimerPhase1Start; // +0x10D8

@@ -187,9 +187,8 @@ int VuMeter::CreateInstance(VuMeter *self)
 
     // Register the per-frame decay timer on the System's embedded TimerManager (@+0x60).
     System *pSystem = reinterpret_cast<System *>(self->mBase.mpSystem);
-    if (TimerManager::AddTimer(
-            &pSystem->mTimerManager, &self->mTimer,
-            &VuMeter::RwacTimerClient,
+    if (pSystem->mTimerManager.AddTimer(
+            &self->mTimer, &VuMeter::RwacTimerClient,
             self, "VuMeter", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
     {
         return 0; // AddTimer non-zero == registration failed

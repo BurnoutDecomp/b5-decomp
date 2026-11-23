@@ -105,7 +105,7 @@ void AemsStandardSamplePlayer::Release()
         }
     }
 
-    rw::audio::core::System::Free(off_83271928, this, 0);
+    off_83271928->Free(this, 0);
 }
 
 // ARTIST 0x82B72060

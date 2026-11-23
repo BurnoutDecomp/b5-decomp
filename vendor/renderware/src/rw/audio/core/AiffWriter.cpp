@@ -18,6 +18,11 @@
 // See AiffWriter.h for the byte-exact layout.
 // =====================================================================================
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces ARTIST IntToExtended at 0x82B96848 and ReleaseEvent at 0x82BA53F8.
+#pragma optimize("s", on)
+#endif
+
 #include "rw/audio/core/AiffWriter.h"
 #include "rw/audio/core/PlugIn.h"       // rw::audio::core::System (Alloc/Free/RemoveTimer, ring)
 #include "rw/audio/core/TimerManager.h" // rw::audio::core::TimerManager::AddTimer
@@ -150,7 +155,7 @@ char **AiffWriter::GetPlugInDescRunTime()
 // CreateInstance @0x82B9D488 -- placement-init an AiffWriter over `self`.
 //   If self is present, install the writer vtable and construct its timer.
 //   self->mpFile = 0;  self->mbDataWritten = 0;  self->mbTimerCreated = 0;
-//   buf = System::Alloc(self->mpSystem, muBufferChannels<<9, "...mpBuf", 16, 0);
+//   buf = self->mpSystem->Alloc(muBufferChannels<<9, "...mpBuf", 16, 0);
 //   self->mpBuf = buf;  return buf != 0;
 // -------------------------------------------------------------------------------------
 int AiffWriter::CreateInstance(AiffWriter *self)
@@ -168,8 +173,8 @@ int AiffWriter::CreateInstance(AiffWriter *self)
     self->mbDataWritten = 0;       // stb 0 -> +0x4C
     self->mbTimerCreated = 0;      // stb 0 -> +0x4D
 
-    void *buf = System::Alloc(self->mpSystem, uBufferBytes,
-                              "rw::audio::core::AiffWriter::mpBuf", 16, 0);
+    void *buf = self->mpSystem->Alloc(
+        uBufferBytes, "rw::audio::core::AiffWriter::mpBuf", 16, 0);
     self->mpBuf = buf; // +0x40
     return buf != 0;
 }
@@ -254,7 +259,7 @@ AiffWriter *AiffWriter::EventEvent(AiffWriter *self, int a2, char **pName)
 //   mant   = uValue << (32 - iBits)  (leading 1 normalised to the top);  the 64-bit
 //            mantissa's top 32 bits are `mant` big-endian at [2..5], the low 32 bits 0.
 // -------------------------------------------------------------------------------------
-u8 *AiffWriter::IntToExtended(u8 *pExtended, u32 uValue)
+void AiffWriter::IntToExtended(u8 *pExtended, u32 uValue)
 {
     u32 uShifted = uValue >> 1;
     int iBits = 1;
@@ -277,7 +282,6 @@ u8 *AiffWriter::IntToExtended(u8 *pExtended, u32 uValue)
     pExtended[7] = 0;
     pExtended[8] = 0;
     pExtended[9] = 0;
-    return pExtended;
 }
 
 // -------------------------------------------------------------------------------------
@@ -383,8 +387,8 @@ int AiffWriter::StartHandler(void *pCommandRecord)
 
             // Register the pump timer in the System TimerManager (collection 1, visible).
             // AddTimer returns 0 on success; the asm tests only its low byte.
-            if (!TimerManager::AddTimer(
-                      &self->mpSystem->mTimerManager, &self->mTimerHandle,
+            if (!self->mpSystem->mTimerManager.AddTimer(
+                      &self->mTimerHandle,
                       reinterpret_cast<TimerManager::TimerCallback>(&AiffWriter::RwacTimerClient),
                       self, "AiffWriter", TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
             {
@@ -500,7 +504,7 @@ void AiffWriter::ReleaseEvent(AiffWriter *self)
     StopHandler(&rec);
 
     if (self->mpBuf)
-        System::Free(self->mpSystem, self->mpBuf, 0);
+        self->mpSystem->Free(self->mpBuf, 0);
 }
 
 // -------------------------------------------------------------------------------------

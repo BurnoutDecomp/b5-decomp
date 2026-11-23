@@ -57,7 +57,7 @@ public:
     static bool Defragment(Collection *self);
 
     // Free every owned NodeBlock and zero the container back to empty.
-    static void Release(Collection *self);
+    void Release();
 
     // Unlink `node` from the used list and push it back onto the free list.
     static void RemoveNode(Collection *self, ItemNode *node);

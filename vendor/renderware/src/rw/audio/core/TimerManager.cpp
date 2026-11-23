@@ -19,6 +19,11 @@
 
 #include "rw/audio/core/TimerManager.h"
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces ARTIST AddTimer at 0x82B6EB88 and Defragment at 0x82B6EC08.
+#pragma optimize("s", on)
+#endif
+
 namespace rw
 {
 namespace audio
@@ -63,10 +68,10 @@ TimerManager *TimerManager::TimerManager_ctor(TimerManager *self)
 // The audio PDB gives AddItem and AddTimer boolean results. ARTIST tests
 // AddItem's result at 0x82B6EBD8 before writing the handle.
 // -------------------------------------------------------------------------------------
-bool TimerManager::AddTimer(TimerManager *self, TimerHandle *handle, TimerCallback callback,
-                            void *context, const char *name, TimerStage stage, TimerVisibility visibility)
+bool TimerManager::AddTimer(TimerHandle *handle, TimerCallback const callback, void *context,
+                            const char *name, TimerStage stage, TimerVisibility visibility)
 {
-    Collection *pCollection = &self->maCollections[stage];
+    Collection *pCollection = &maCollections[stage];
 
     if (pCollection->mCapacity == 0)
         Collection::AddCapacity(pCollection, 74);
@@ -137,10 +142,10 @@ void TimerManager::ExecuteTimers(TimerManager *self, int collectionIndex)
 // Collection::Defragment result, dead at the only call site (System::ExecuteCommands
 // passes it straight into GetCpuCycle, which ignores its argument) -- modelled void.
 // -------------------------------------------------------------------------------------
-void TimerManager::Defragment(TimerManager *self)
+void TimerManager::Defragment()
 {
     for (int i = 0; i < 2; ++i)
-        Collection::Defragment(&self->maCollections[i]);
+        Collection::Defragment(&maCollections[i]);
 }
 
 // -------------------------------------------------------------------------------------
@@ -154,7 +159,7 @@ void TimerManager::Release(TimerManager *self)
     do
     {
         Collection::Clear(pCollection);
-        Collection::Release(pCollection);
+        pCollection->Release();
         --i;
         ++pCollection;
     } while (i);

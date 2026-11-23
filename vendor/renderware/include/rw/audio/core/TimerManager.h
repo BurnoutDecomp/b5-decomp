@@ -67,8 +67,8 @@ public:
     // Register a timer in Collection `collectionIndex`: grow that Collection if it has no
     // capacity yet (by 74 slots), allocate a Node wired to `handle`, then fill the handle.
     // Returns true if the collection could not grow.
-    static bool AddTimer(TimerManager *self, TimerHandle *handle, TimerCallback callback,
-                         void *context, const char *name, TimerStage stage, TimerVisibility visibility);
+    bool AddTimer(TimerHandle *handle, TimerCallback const callback, void *context,
+                  const char *name, TimerStage stage, TimerVisibility visibility);
 
     // Walk Collection `collectionIndex`'s used list, invoking each handle's callback and
     // timing it into TimerHandle::mCpuTicks; honour any deferred self-remove.
@@ -82,7 +82,7 @@ public:
     // must index maCollections[i] by name, never advance by a byte stride. (The X360 r3
     // return is the last Collection::Defragment result, dead at the only call site --
     // declared void.)
-    static void Defragment(TimerManager *self);
+    void Defragment();
 
     // Clear + release both owned Collections (frees their NodeBlocks).
     static void Release(TimerManager *self);

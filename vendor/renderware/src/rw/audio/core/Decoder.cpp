@@ -268,9 +268,9 @@ void Decoder::Release()
         mpFinaliser(this);
 
     if (mpAllocatedBlock)
-        System::Free(off_83271928, mpAllocatedBlock, 0);
+        off_83271928->Free(mpAllocatedBlock, 0);
 
-    System::Free(off_83271928, this, 0);
+    off_83271928->Free(this, 0);
 }
 
 // -------------------------------------------------------------------------------------

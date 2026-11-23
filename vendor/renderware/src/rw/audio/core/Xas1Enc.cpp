@@ -99,13 +99,13 @@ s32 QuantiseResidual(f32 afScaled)
 } // namespace
 
 // -------------------------------------------------------------------------------------
-// CreateInstance -- System::Alloc(pSystem, size, no name, align 16), then on success install
+// CreateInstance -- pSystem->Alloc(size, no name, align 16), then on success install
 // the v-table and seed +0x20 / +0x08 / +0x0C / +0x04 in the console's store order. The
 // console asks for its own sizeof (0x8024); the host asks for the host sizeof.
 // -------------------------------------------------------------------------------------
 Xas1Enc *Xas1Enc::CreateInstance(s32 iNumChannels, s32 iSampleRate, System *pSystem)
 {
-    void *lpMem = System::Alloc(pSystem, static_cast<u32>(sizeof(Xas1Enc)), 0, 16, 0);
+    void *lpMem = pSystem->Alloc(static_cast<u32>(sizeof(Xas1Enc)), 0, 16, 0);
     if (!lpMem)
         return 0;
 

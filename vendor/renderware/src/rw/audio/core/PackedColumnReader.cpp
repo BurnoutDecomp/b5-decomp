@@ -10,6 +10,11 @@
 // (the zig-zag SIGNED varint decoder, @0x82B6B818). See PackedColumnReader.h for layout.
 // =====================================================================================
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces the full ARTIST GetNextValue body at 0x82B6B9F8.
+#pragma optimize("s", on)
+#endif
+
 #include "rw/audio/core/PackedColumnReader.h"
 #include "rw/audio/core/Unpack0.h"
 

@@ -119,7 +119,7 @@ CMpegLayer3Base::CMpegLayer3Base()
 s32 CMpegLayer3Base::AllocateHybrid(s32 channels)
 {
     const s32 bytes = channels * 2304;
-    mpHybridHistory = static_cast<f32 *>(System::Alloc(off_83271928, bytes, "MP3HybridHistory", 16, 0));
+    mpHybridHistory = static_cast<f32 *>(off_83271928->Alloc(bytes, "MP3HybridHistory", 16, 0));
     if (!mpHybridHistory)
         return -1;
     XMemSet(mpHybridHistory, 0, bytes);
@@ -130,14 +130,14 @@ s32 CMpegLayer3Base::AllocateHybrid(s32 channels)
 CMpegBase::~CMpegBase()
 {
     if (mpPolySynthHistory)
-        System::Free(off_83271928, mpPolySynthHistory, 0);
+        off_83271928->Free(mpPolySynthHistory, 0);
 }
 
 // ARTIST 0x82B93B08
 CMpegLayer3Base::~CMpegLayer3Base()
 {
     if (mpHybridHistory)
-        System::Free(off_83271928, mpHybridHistory, 0);
+        off_83271928->Free(mpHybridHistory, 0);
 }
 
 // ARTIST 0x82B94F50
@@ -161,7 +161,7 @@ s32 EaLayer3DecBase::CreateInstance(u8 version)
     const usize bytes = mNumEaLayer3CoreInstances == 0
         ? 0 : (mNumEaLayer3CoreInstances - 1) * stride + sizeof(EALayer3Core);
     u8 *storage = static_cast<u8 *>(
-        System::Alloc(mpSystemUseGetSystemAccessor, bytes, "EALayer3Core Instances", kCoreAlignment, 0));
+        mpSystemUseGetSystemAccessor->Alloc(bytes, "EALayer3Core Instances", kCoreAlignment, 0));
 
     for (s32 core = 0; core < mNumEaLayer3CoreInstances; ++core)
     {

@@ -996,9 +996,8 @@ int ReverbModel1::CreateInstance(ReverbModel1 *self)
 
     // Register the per-frame reconfigure timer on the System's TimerManager (collection 1).
     System *pSystem = reinterpret_cast<System *>(self->mBase.mpSystem);
-    if (TimerManager::AddTimer(
-            &pSystem->mTimerManager, &self->mTimer,
-            &ReverbModel1::RwacTimerClient, self, "ReverbModel1",
+    if (pSystem->mTimerManager.AddTimer(
+            &self->mTimer, &ReverbModel1::RwacTimerClient, self, "ReverbModel1",
             TIMERSTAGE_BEFOREMIXER, TIMERVISIBILITY_HIDDEN))
     {
         return 0;

@@ -92,7 +92,7 @@ extern "C" void SNDI_precalcaztospkrvol()
 {
     using namespace Snd9;
     System::Lock(off_83271928);
-    gpAzimuthToSpeakerStorage=static_cast<u8*>(System::Alloc(off_83271928,
+    gpAzimuthToSpeakerStorage=static_cast<u8*>(off_83271928->Alloc(
         static_cast<u32>(gOptions.mOutput.mucDirectOutputCount)*256u, "Azimuth to Spkr Table",16,0));
     System::Unlock(off_83271928);
     const s32 count=gOptions.mOutput.mucDirectOutputCount;
@@ -121,6 +121,6 @@ extern "C" void SNDI_precalcaztospkrvol()
 extern "C" void SNDI_freespkrtable()
 {
     System::Lock(off_83271928);
-    System::Free(off_83271928,Snd9::gpAzimuthToSpeakerStorage,0);
+    off_83271928->Free(Snd9::gpAzimuthToSpeakerStorage,0);
     System::Unlock(off_83271928);
 }

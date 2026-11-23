@@ -149,7 +149,7 @@ s32 HELPER_CMpegBase::Close()
         mucIsOpen = 0;
 
         if (pHistory)
-            System::Free(off_83271928, pHistory, 0);
+            off_83271928->Free(pHistory, 0);
     }
     return 0;
 }
@@ -225,7 +225,7 @@ s32 HELPER_CMpegBase::OpenSynth()
     {
         const u32 uSize = static_cast<u32>(sizeof(f32[2][288])) * mucChannelCount;
 
-        void *pHistory = System::Alloc(off_83271928, uSize, "PolySynthHistoryF", 16, 0);
+        void *pHistory = off_83271928->Alloc(uSize, "PolySynthHistoryF", 16, 0);
         mpPolySynthHistoryF = static_cast<f32 (*)[2][288]>(pHistory);
 
         if (!pHistory)
