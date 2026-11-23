@@ -125,7 +125,7 @@ extern "C" TelemetryApiRefT* TelemetryApiCreate(u32 uNumEvents, s32 eBufferType)
         pRef->iMemGroup = iMemGroup;
         pRef->uEventBufSize = uNumEvents;
         pRef->eBufferType = static_cast<TelemetryApiBufferTypeE>(eBufferType);
-        pRef->uServerStringSize = pRef->uTagStringSize = 1024;
+        pRef->uTagStringSize = pRef->uServerStringSize = 1024;
         pRef->pServerString = reinterpret_cast<char*>(pRef + 1);
         pRef->pTagString = pRef->pServerString + 1024;
         pRef->Events = reinterpret_cast<TelemetryApiEventT*>(pRef->pTagString + 1024);

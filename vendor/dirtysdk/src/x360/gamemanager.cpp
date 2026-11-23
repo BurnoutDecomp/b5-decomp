@@ -715,7 +715,7 @@ extern "C" s32 GameManagerStatus(GameManagerRefT* pGameManager, s32 iSelect, voi
 {
     if (iSelect == FourCC('g', 'n', 'f', 'o'))
     {
-        if ((pBuf != NULL) && (iBufSize == (s32)sizeof(LobbyApiPlayT)))
+        if ((pBuf != NULL) && (iBufSize == sizeof(LobbyApiPlayT)))
         {
             memcpy(pBuf, &pGameManager->CurrPlay, sizeof(LobbyApiPlayT));
             return 0;
@@ -767,6 +767,8 @@ extern "C" s32 GameManagerControl(GameManagerRefT* pGameManager, s32 iControl, s
     }
     if (iControl == FourCC('l', 'o', 'c', 'k'))
     {
+        // ARTIST 0x82B1F354..0x82B1F418: the three lock transitions are one if/else-if
+        // chain that joins a single `return 0` (0x82B1F414).
         if ((pGameManager->iLocked == 1) && (iValue == 0))
         {
             NetPrintf(("gamemanager: unlocking game object state and processing most recent game update\n"));
@@ -775,16 +777,14 @@ extern "C" s32 GameManagerControl(GameManagerRefT* pGameManager, s32 iControl, s
             {
                 _GameManagerEventGame(pGameManager, &pGameManager->CurrPlay);
             }
-            return 0;
         }
-        if ((pGameManager->iLocked == 0) && (iValue == 1))
+        else if ((pGameManager->iLocked == 0) && (iValue == 1))
         {
             NetPrintf(("gamemanager: locking game object state\n"));
             pGameManager->iLocked = 1;
             memset(&pGameManager->CurrPlay, 0, sizeof(pGameManager->CurrPlay));
-            return 0;
         }
-        if ((pGameManager->iLocked > 0) || (iValue == 1))
+        else if ((pGameManager->iLocked > 0) || (iValue == 1))
         {
             pGameManager->iLocked = (s8)(pGameManager->iLocked + ((iValue == 0) ? -1 : 1));
             NetPrintf(("gamemanager: refcounting game object lock state to %d\n", pGameManager->iLocked));
