@@ -116,7 +116,7 @@ namespace CgsNetwork
         //   ConnectToServer  -- LoginManagerBase::UpdateConnectingOnline @ 0x8254F880
         //                       (ConnectToServer(conn, ip, port, 15000)).
         //   LogInToServer    -- LoginManagerBase::LogInToServer @ 0x82543AD0
-        //                       (LogInToServer(conn, userName, password)).
+        //                       (LogInToServer(conn, userName, password, NULL) -- r6 = 0).
         //   AgreeTOS         -- LoginManagerBase::AnswerAgreeTOS @ 0x82566478
         //                       (AgreeTOS(conn, true) -- r4 == 1).
         //   AgreeShareInfo   -- LoginManagerBase::AnswerOpenUsAccount @ 0x82543B30
@@ -124,7 +124,9 @@ namespace CgsNetwork
         // The 15000 ms connect timeout literal is the asm immediate at the call site. Declared-only
         // here; the bodies live in this component's own (DirtySock) TUs.
         void ConnectToServer(const char* lpcServerIP, s32 liServerPort, s32 liTimeoutMs);
-        void LogInToServer(const char* lpcUserName, const char* lpcPassword);
+        // DWARF (CgsServerInterfaceConnection.h:171): LogInToServer(const char*, const char*,
+        // void*). ARTIST's body (0x82886650) never reads the third argument (no r6 use).
+        void LogInToServer(const char* lpcUserName, const char* lpcPassword, void* lpUnused);
         void AgreeTOS(bool lbAgree);
         void AgreeShareInfo(bool lbAgreeShare1, bool lbAgreeShare2);
 

@@ -380,7 +380,7 @@ namespace BrnNetwork
 
         GetUserNameAndPassword(macUserName, macPassword);
         meSubState = E_SUBSTATE_LOGGING_IN;
-        mpNetworkManager->GetServerInterface()->GetConnectionComponent()->LogInToServer(macUserName, macPassword);
+        mpNetworkManager->GetServerInterface()->GetConnectionComponent()->LogInToServer(macUserName, macPassword, NULL); // li r6,0 at 0x82543B04
     }
 
     // X360 0x825438A8

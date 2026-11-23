@@ -274,7 +274,7 @@ void ServerInterfaceConnection::ConnectToServer(const char* lpcServerIP, s32 liS
                        &ServerInterfaceConnection::ServerConnectCallback, this);
 }
 
-void ServerInterfaceConnection::LogInToServer(const char* lpcUserName, const char* lpcPassword)
+void ServerInterfaceConnection::LogInToServer(const char* lpcUserName, const char* lpcPassword, void* /*lpUnused*/)
 {
     CGS_ASSERT(mpServerInterface->GetLobbyLoginRef() != 0, "mpServerInterface->GetLobbyLoginRef() != NULL");
     CGS_ASSERT(lpcUserName, "lpcUsername");
