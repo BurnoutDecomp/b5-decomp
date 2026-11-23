@@ -5,8 +5,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModule.cpp".
 
 namespace CgsGui
 {
@@ -61,7 +60,7 @@ namespace CgsGui
         default:
             CGS_ASSERT(false,
                 CgsDev::Assert::MessageAt(
-                    "Unknown prepare stage", KAC_ARTIST_ASSERT_FILE, 145 /* ARTIST 0x828478F8 */));
+                    "Unknown prepare stage", __FILE__, 145 /* ARTIST 0x828478F8 */));
             return false;
         }
     }
@@ -255,7 +254,7 @@ namespace CgsGui
         const ModelIO::InputBuffer::GuiEventInputQueue* lpInputEventQueue = lpInput->GetEventQueue();
         CGS_ASSERT(lpInputEventQueue != 0,
             CgsDev::Assert::MessageAt(
-                "lpInputEventQueue != NULL", KAC_ARTIST_ASSERT_FILE, 415 /* ARTIST 0x8285E0D4 */));
+                "lpInputEventQueue != NULL", __FILE__, 415 /* ARTIST 0x8285E0D4 */));
         if (lpInputEventQueue->CgsModule::VariableEventQueue<32768, 16>::GetLength() > 0)
             lpInterpreterInput->AddGuiEvents(*lpInputEventQueue);
     }

@@ -12,16 +12,6 @@
 // Reconstructed from the X360 ARTIST build (see CgsDebugRender.h for addresses). The events are POD and
 // passed to the queue as CgsModule::Event* by reinterpret (the queue stores them by byte image).
 
-namespace
-{
-    rw::math::vpu::Vector2 MakeDebugVector2(float x, float y, float z, float w)
-    {
-        rw::math::vpu::Vector2 value;
-        value.mV = rw::math::vpu::Vector4(x, y, z, w).mV;
-        return value;
-    }
-}
-
 namespace CgsDev
 {
     namespace
@@ -613,9 +603,8 @@ namespace CgsDev
     void DebugRender::Draw2DLineAtAngle(Vector2 lv2Start, f32 lfAngleRad,
                                         f32 lfLength, RGBA lColour)
     {
-        const Vector2 lv2End = MakeDebugVector2(lv2Start.mV.x + (std::cos(lfAngleRad) * lfLength),
-            lv2Start.mV.y - (std::sin(lfAngleRad) * lfLength),
-            0.0f, 0.0f);
+        const Vector2 lv2End = rw::math::vpu::Vector2(lv2Start.mV.x + (std::cos(lfAngleRad) * lfLength),
+            lv2Start.mV.y - (std::sin(lfAngleRad) * lfLength));
         Draw2DLine(lv2Start, lv2End, lColour);
     }
 
@@ -635,9 +624,8 @@ namespace CgsDev
     {
         const f32 lfDirectionX = std::cos(lfAngleRad);
         const f32 lfDirectionY = std::sin(lfAngleRad);
-        const Vector2 lv2End = MakeDebugVector2(lv2Start.mV.x + lfLength * lfDirectionX,
-            lv2Start.mV.y - lfLength * lfDirectionY,
-            0.0f, 0.0f);
+        const Vector2 lv2End = rw::math::vpu::Vector2(lv2Start.mV.x + lfLength * lfDirectionX,
+            lv2Start.mV.y - lfLength * lfDirectionY);
 
         Draw2DLine(lv2Start, lv2End, lColour);
         Draw2DArrowHead(lv2End, lfAngleRad, lfLength * 0.25f, lColour);
@@ -741,8 +729,8 @@ namespace CgsDev
 
     void DebugRender::Draw2DBox(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour)
     {
-        Draw2DBox(MakeDebugVector2(lfMinX, lfMinY, 0, 0),
-                  MakeDebugVector2(lfMaxX - lfMinX, lfMaxY - lfMinY, 0, 0), lColour);
+        Draw2DBox(rw::math::vpu::Vector2(lfMinX, lfMinY),
+                  rw::math::vpu::Vector2(lfMaxX - lfMinX, lfMaxY - lfMinY), lColour);
     }
 
     void DebugRender::Draw2DFrame(f32 lfMinX, f32 lfMinY, f32 lfMaxX, f32 lfMaxY, RGBA lColour)
@@ -788,8 +776,8 @@ namespace CgsDev
                 {
                     const Internal::CInEventDrawLine2D* lpEv =
                         reinterpret_cast<const Internal::CInEventDrawLine2D*>(lpEvent);
-                    Vector2 lv2Start = MakeDebugVector2(lpEv->mfX1, lpEv->mfY1, 0.0f, 0.0f);
-                    Vector2 lv2End = MakeDebugVector2(lpEv->mfX2, lpEv->mfY2, 0.0f, 0.0f);
+                    Vector2 lv2Start = rw::math::vpu::Vector2(lpEv->mfX1, lpEv->mfY1);
+                    Vector2 lv2End = rw::math::vpu::Vector2(lpEv->mfX2, lpEv->mfY2);
                     lpRenderer->DrawLine(lv2Start, lv2End, lpEv->mColour);
                     break;
                 }
@@ -798,8 +786,8 @@ namespace CgsDev
                 {
                     const Internal::CInEventDrawBox2D* lpEv =
                         reinterpret_cast<const Internal::CInEventDrawBox2D*>(lpEvent);
-                    lpRenderer->DrawBox(MakeDebugVector2(lpEv->mfX, lpEv->mfY, 0, 0),
-                                        MakeDebugVector2(lpEv->mfWidth, lpEv->mfHeight, 0, 0), lpEv->mColour);
+                    lpRenderer->DrawBox(rw::math::vpu::Vector2(lpEv->mfX, lpEv->mfY),
+                                        rw::math::vpu::Vector2(lpEv->mfWidth, lpEv->mfHeight), lpEv->mColour);
                     break;
                 }
 
@@ -807,9 +795,9 @@ namespace CgsDev
                 {
                     const Internal::CInEventDrawFrame2D* lpEv =
                         reinterpret_cast<const Internal::CInEventDrawFrame2D*>(lpEvent);
-                    const Vector2 lv2Min = MakeDebugVector2(lpEv->mfX, lpEv->mfY, 0.0f, 0.0f);
-                    const Vector2 lv2Max = MakeDebugVector2(lpEv->mfX + lpEv->mfWidth,
-                                             lpEv->mfY + lpEv->mfHeight, 0.0f, 0.0f);
+                    const Vector2 lv2Min = rw::math::vpu::Vector2(lpEv->mfX, lpEv->mfY);
+                    const Vector2 lv2Max = rw::math::vpu::Vector2(lpEv->mfX + lpEv->mfWidth,
+                                             lpEv->mfY + lpEv->mfHeight);
                     lpRenderer->DrawFrame(lv2Min, lv2Max, lpEv->mColour);
                     break;
                 }

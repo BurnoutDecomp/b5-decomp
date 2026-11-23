@@ -15,7 +15,7 @@ namespace
 {
     EA::Allocator::ICoreAllocator* gpMemcardAllocator = 0; // 8305A6F8
 }
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Gui/CgsSaveLoadX360.cpp".
 
 namespace CgsGui
 {
@@ -384,19 +384,19 @@ void* SaveLoadSystem::GetMugshotBufferFromImageId(s32 liImageId)
         CGS_ASSERT(liType < miNumberOfMugshotTypes,
             CgsDev::Assert::MessageAt(
                 "liType < miNumberOfMugshotTypes",
-                KAC_ARTIST_ASSERT_FILE, 1153 /* ARTIST 0x8284C964 */));
+                __FILE__, 1153 /* ARTIST 0x8284C964 */));
         CGS_ASSERT(liTypeIndex < miNumberOfMugshotsPerType,
             CgsDev::Assert::MessageAt(
                 "liIndex < miNumberOfMugshotsPerType",
-                KAC_ARTIST_ASSERT_FILE, 1154 /* ARTIST 0x8284C98C */));
+                __FILE__, 1154 /* ARTIST 0x8284C98C */));
 
         const s32 liIndex = miNumberOfMugshotsPerType * liType + liTypeIndex;
         CGS_ASSERT(0 <= liIndex,
-            CgsDev::Assert::MessageAt("0 <= liIndex", KAC_ARTIST_ASSERT_FILE, 1160 /* ARTIST 0x8284C9BC */));
+            CgsDev::Assert::MessageAt("0 <= liIndex", __FILE__, 1160 /* ARTIST 0x8284C9BC */));
         CGS_ASSERT(liIndex <= miNumberOfMugshotTypes * miNumberOfMugshotsPerType,
             CgsDev::Assert::MessageAt(
                 "liIndex <= miNumberOfMugshotTypes * miNumberOfMugshotsPerType",
-                KAC_ARTIST_ASSERT_FILE, 1161 /* ARTIST 0x8284C9EC */));
+                __FILE__, 1161 /* ARTIST 0x8284C9EC */));
 
         return reinterpret_cast<u8*>(mpMugshotBufferData) + miExtraFilesSizeBytes * liIndex;
     }

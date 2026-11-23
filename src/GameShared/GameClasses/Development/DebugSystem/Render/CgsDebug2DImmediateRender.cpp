@@ -11,22 +11,12 @@
 
 #pragma intrinsic(_rotl)
 
-namespace
-{
-    rw::math::vpu::Vector2 MakeDebugVector2(float x, float y, float z, float w)
-    {
-        rw::math::vpu::Vector2 value;
-        value.mV = rw::math::vpu::Vector4(x, y, z, w).mV;
-        return value;
-    }
-}
-
 // X360 0x82824048. Preserve the native global helper boundary: pack (x,y,0,0), then delegate
 // to the real member overload with screen checking disabled. The helper result is not consumed.
 void MaybeDrawText(CgsDev::Debug2DImmediateRender* lpDisplay, const char* lpcText,
                   f32 lfX, f32 lfY, f32 lfScale, CgsDev::RGBA lColour, bool /*lbCheckScreen*/)
 {
-    const rw::math::vpu::Vector2 lv2Position = MakeDebugVector2(lfX, lfY, 0.0f, 0.0f);
+    const rw::math::vpu::Vector2 lv2Position = rw::math::vpu::Vector2(lfX, lfY);
     lpDisplay->DrawText(lpcText, lv2Position, lfScale, lColour, false);
 }
 
@@ -41,7 +31,7 @@ namespace CgsDev
         miIm2dVertsHead       = 0;
         mpFont.Clear(); // ARTIST 8281A2D0..8281A2D4: restore the null font handle.
         mVectorFont.Construct();
-        mVectorFont.SetSize(MakeDebugVector2(10.0f,10.0f,0.0f,0.0f));
+        mVectorFont.SetSize(rw::math::vpu::Vector2(10.0f,10.0f));
         mVectorFont.SetRenderer(this);   // glyph strokes draw through this renderer's DrawLine
         mTextRenderer.Construct(); // ARTIST 8281A304
     }
@@ -139,10 +129,10 @@ namespace CgsDev
         if (Is2DPointOnScreen(lv2Start) || Is2DPointOnScreen(lv2End))
             return true;
 
-        const Vector2 topLeft = MakeDebugVector2(0.0f, 0.0f, 0.0f, 0.0f);
-        const Vector2 bottomLeft = MakeDebugVector2(0.0f, mfVirtualScreenHeight, 0.0f, 0.0f);
-        const Vector2 bottomRight = MakeDebugVector2(mfVirtualScreenWidth, mfVirtualScreenHeight, 0.0f, 0.0f);
-        const Vector2 topRight = MakeDebugVector2(mfVirtualScreenWidth, 0.0f, 0.0f, 0.0f);
+        const Vector2 topLeft = rw::math::vpu::Vector2(0.0f, 0.0f);
+        const Vector2 bottomLeft = rw::math::vpu::Vector2(0.0f, mfVirtualScreenHeight);
+        const Vector2 bottomRight = rw::math::vpu::Vector2(mfVirtualScreenWidth, mfVirtualScreenHeight);
+        const Vector2 topRight = rw::math::vpu::Vector2(mfVirtualScreenWidth, 0.0f);
         return Do2DLinesIntersect(lv2Start, lv2End, topLeft, bottomLeft) ||
                Do2DLinesIntersect(lv2Start, lv2End, bottomLeft, bottomRight) ||
                Do2DLinesIntersect(lv2Start, lv2End, bottomRight, topRight) ||
@@ -324,9 +314,9 @@ namespace CgsDev
     // EmitQuad retains the existing native triangle-strip adapter.
     void Debug2DImmediateRender::DrawBox(Vector2 lv2Position, Vector2 lv2Size, RGBA lColour)
     {
-        const Vector2 lv2End = MakeDebugVector2(lv2Position.mV.x + lv2Size.mV.x, lv2Position.mV.y + lv2Size.mV.y,
-                               lv2Position.mV.z + lv2Size.mV.z, lv2Position.mV.w + lv2Size.mV.w);
-        if (!Do2DBoxesIntersect(MakeDebugVector2(0, 0, 0, 0), GetVirtualScreenSize(), lv2Position, lv2End))
+        Vector2 lv2End;
+        lv2End.mV = __vaddfp(lv2Position.mV, lv2Size.mV);   // ARTIST vaddfp128: all four lanes
+        if (!Do2DBoxesIntersect(rw::math::vpu::Vector2(0, 0), GetVirtualScreenSize(), lv2Position, lv2End))
             return;
         EmitQuad(lv2Position.mV.x, lv2Position.mV.y, lv2End.mV.x, lv2End.mV.y, lColour);
     }
@@ -334,7 +324,7 @@ namespace CgsDev
     // ARTIST export hole 8281C3E0: f3-f1 and f4-f2 produce the vector size.
     void Debug2DImmediateRender::DrawBox(f32 lfX0, f32 lfY0, f32 lfX1, f32 lfY1, RGBA lColour)
     {
-        DrawBox(MakeDebugVector2(lfX0, lfY0, 0, 0), MakeDebugVector2(lfX1 - lfX0, lfY1 - lfY0, 0, 0), lColour);
+        DrawBox(rw::math::vpu::Vector2(lfX0, lfY0), rw::math::vpu::Vector2(lfX1 - lfX0, lfY1 - lfY0), lColour);
     }
 
     // X360 @0x8281C960 (the bordered frame around (x0,y0)-(x1,y1)): four DrawBox strips - the
@@ -349,14 +339,14 @@ namespace CgsDev
         const f32 lfOuterX0    = lfX0 - lfBorderSize;
         const f32 lfOuterWidth = (lfX1 + lfBorderSize) - lfOuterX0;
 
-        DrawBox(MakeDebugVector2(lfOuterX0, lfY0 - lfBorderSize, 0, 0),
-                MakeDebugVector2(lfOuterWidth, lfBorderSize, 0, 0), lColour); // top
-        DrawBox(MakeDebugVector2(lfOuterX0, lfY1, 0, 0),
-                MakeDebugVector2(lfOuterWidth, lfBorderSize, 0, 0), lColour); // bottom
-        DrawBox(MakeDebugVector2(lfOuterX0, lfY0, 0, 0),
-                MakeDebugVector2(lfBorderSize, lfY1 - lfY0, 0, 0), lColour); // left
-        DrawBox(MakeDebugVector2(lfX1, lfY0, 0, 0),
-                MakeDebugVector2(lfBorderSize, lfY1 - lfY0, 0, 0), lColour); // right
+        DrawBox(rw::math::vpu::Vector2(lfOuterX0, lfY0 - lfBorderSize),
+                rw::math::vpu::Vector2(lfOuterWidth, lfBorderSize), lColour); // top
+        DrawBox(rw::math::vpu::Vector2(lfOuterX0, lfY1),
+                rw::math::vpu::Vector2(lfOuterWidth, lfBorderSize), lColour); // bottom
+        DrawBox(rw::math::vpu::Vector2(lfOuterX0, lfY0),
+                rw::math::vpu::Vector2(lfBorderSize, lfY1 - lfY0), lColour); // left
+        DrawBox(rw::math::vpu::Vector2(lfX1, lfY0),
+                rw::math::vpu::Vector2(lfBorderSize, lfY1 - lfY0), lColour); // right
     }
 
     // ARTIST 8281C1F0: line-list mode and the original two screen-space endpoints.
@@ -422,14 +412,12 @@ namespace CgsDev
 
         const f32 lfTwoPi = 6.2831853071795864769f;
         const f32 lfStep = lfTwoPi / static_cast<f32>(liSegments);
-        Vector2 lPrevious = MakeDebugVector2(lv2Centre.mV.x + lfRadius, lv2Centre.mV.y, 0.0f, 0.0f);
+        Vector2 lPrevious = rw::math::vpu::Vector2(lv2Centre.mV.x + lfRadius, lv2Centre.mV.y);
         for (s32 liIndex = 1; liIndex <= liSegments; ++liIndex)
         {
             const f32 lfAngle = lfStep * static_cast<f32>(liIndex);
-            Vector2 lCurrent = MakeDebugVector2(lv2Centre.mV.x + cosf(lfAngle) * lfRadius,
-                lv2Centre.mV.y + sinf(lfAngle) * lfRadius,
-                0.0f,
-                0.0f);
+            Vector2 lCurrent = rw::math::vpu::Vector2(lv2Centre.mV.x + cosf(lfAngle) * lfRadius,
+                lv2Centre.mV.y + sinf(lfAngle) * lfRadius);
             DrawLine(lPrevious, lCurrent, lColour);
             lPrevious = lCurrent;
         }
@@ -529,7 +517,7 @@ namespace CgsDev
             meDrawingMode = E_DRAWING_LINES;
             mePrimitiveType = static_cast<renderengine::PrimitiveType>(2);
         }
-        mVectorFont.SetSize(MakeDebugVector2( lfScale, lfScale, 0.0f, 0.0f ));
+        mVectorFont.SetSize(rw::math::vpu::Vector2( lfScale, lfScale));
         mVectorFont.Print(lfX, lfY, lpcText, lColour);
     }
 
@@ -558,8 +546,8 @@ namespace CgsDev
                                                          f32 lfBorder)
     {
         const Vector2 lExtent = CalcTextExtent(lpcText, lfScale);
-        DrawBox(MakeDebugVector2(lfX - lfBorder, lfY - lfBorder, 0, 0),
-                MakeDebugVector2(lExtent.mV.x + lfBorder * 2.0f, lExtent.mV.y + lfBorder * 2.0f, 0, 0),
+        DrawBox(rw::math::vpu::Vector2(lfX - lfBorder, lfY - lfBorder),
+                rw::math::vpu::Vector2(lExtent.mV.x + lfBorder * 2.0f, lExtent.mV.y + lfBorder * 2.0f),
                 lBackgroundColour);
         DrawText(lpcText, lfX, lfY, lfScale, lTextColour);
     }
@@ -595,13 +583,13 @@ namespace CgsDev
                              liMegabytes, liKilobytes, liRemainder);
         }
 
-        const Vector2 lv2Position = MakeDebugVector2(lfX, lfY, 0.0f, 0.0f);
+        const Vector2 lv2Position = rw::math::vpu::Vector2(lfX, lfY);
         DrawText(lacSize, lv2Position, lfScale, lColour, false);
     }
 
     Vector2 Debug2DImmediateRender::GetVirtualScreenSize() const
     {
-        return MakeDebugVector2(mfVirtualScreenWidth, mfVirtualScreenHeight, 0.0f, 0.0f);
+        return rw::math::vpu::Vector2(mfVirtualScreenWidth, mfVirtualScreenHeight);
     }
 
     // ARTIST 0x8282C548. This is a fixed-width line splitter (rather than word wrapping): derive
@@ -665,7 +653,7 @@ namespace CgsDev
         }
 
         return VectorFont::ComputeTextExtent(
-            lpcText, MakeDebugVector2( lfScale, lfScale, 0.0f, 0.0f )).mV.x;
+            lpcText, rw::math::vpu::Vector2( lfScale, lfScale)).mV.x;
     }
 
     // X360 0x82824308. Bitmap-font height is exactly the requested text size; vector-font
@@ -676,10 +664,10 @@ namespace CgsDev
         {
             const CgsResource::CgsUtf8* lpUtf8 =
                 reinterpret_cast<const CgsResource::CgsUtf8*>(lpcText);
-            return MakeDebugVector2(mpFont->GetStringWidth(lpUtf8) * lfScale, lfScale, 0.0f, 0.0f);
+            return rw::math::vpu::Vector2(mpFont->GetStringWidth(lpUtf8) * lfScale, lfScale);
         }
 
         return VectorFont::ComputeTextExtent(
-            lpcText, MakeDebugVector2( lfScale, lfScale, 0.0f, 0.0f ));
+            lpcText, rw::math::vpu::Vector2( lfScale, lfScale));
     }
 }

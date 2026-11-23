@@ -40,8 +40,7 @@
 // The X360-baked assert file/line pairs are discarded per project convention (CGS_ASSERT
 // supplies __FILE__/__LINE__); the streamed-StrStream assert forms are collapsed to their
 // attested message literals, as the sibling CgsPoolModule.cpp TU does.
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/Resources/CgsGuiResourceModule.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/Resources/CgsGuiResourceModule.cpp".
 
 namespace CgsGui
 {
@@ -159,7 +158,7 @@ namespace CgsGui
             default:
                 CGS_ASSERT(false,
                     CgsDev::Assert::MessageAt(
-                        "Unknown prepare stage", KAC_ARTIST_ASSERT_FILE, 191 /* ARTIST 0x8284FD68 */));
+                        "Unknown prepare stage", __FILE__, 191 /* ARTIST 0x8284FD68 */));
                 return false;
         }
     }
@@ -338,7 +337,7 @@ namespace CgsGui
     {
         CGS_ASSERT(miNumBundlesToLoad > 0,
             CgsDev::Assert::MessageAt(
-                "miNumBundlesToLoad > 0", KAC_ARTIST_ASSERT_FILE, 949 /* ARTIST 0x82848498 */));
+                "miNumBundlesToLoad > 0", __FILE__, 949 /* ARTIST 0x82848498 */));
         --miNumBundlesToLoad;
         return maBundlesToLoad[miNumBundlesToLoad];
     }
@@ -455,7 +454,7 @@ namespace CgsGui
             {
                 CGS_ASSERT(lrBundle.mbParsed == false,
                     CgsDev::Assert::MessageAt(
-                        "lBundle.mbParsed == false", KAC_ARTIST_ASSERT_FILE, 283 /* ARTIST 0x8285F768 */));
+                        "lBundle.mbParsed == false", __FILE__, 283 /* ARTIST 0x8285F768 */));
                 LoadBundle(lrBundle, lpOutput);
             }
         }

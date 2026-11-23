@@ -1,0 +1,52 @@
+// CgsDevelopmentUnity: one of ARTIST's unity translation units (DWARF compile unit CgsDevelopmentUnity.cpp),
+// ARTIST 0x82815E68-0x82834418.
+// Each member also compiles on its own; this file holds only their includes.
+// Include form: as ARTIST's other unity TUs' __FILE__ strings show (relative to this directory).
+// Order: ARTIST's emission passes over the range (MSVC emits bottom-up over the call graph, each
+// level in definition order: 140/156 transitions forward).
+
+#include "CgsStrStream.cpp"
+#include "DebugSystem/Core/CgsDebugManager.cpp"
+#include "DebugSystem/Core/CgsDebugManagerCommands.cpp"  // holds functions of CgsDebugManager.cpp (x360 tree split)
+#include "DebugSystem/Interface/CgsDebugInterface.cpp"
+#include "DebugSystem/Core/Internal/CgsDebugInternal.cpp"
+#include "DebugSystem/Core/UI/CgsDebugUI.cpp"
+#include "DebugSystem/Core/UI/CgsWindow.cpp"
+#include "DebugSystem/Core/UI/Console/CgsConsole.cpp"
+#include "DebugSystem/Core/UI/CgsTypes.cpp"
+#include "DebugSystem/Core/UI/Functions/CgsFunctionManager.cpp"
+#include "DebugSystem/Core/UI/Functions/CgsMenuItemFunction.cpp"
+#include "DebugSystem/Core/UI/Menu/CgsMenu.cpp"
+#include "DebugSystem/Core/UI/Menu/CgsMenuItem.cpp"
+#include "DebugSystem/Core/UI/Menu/CgsMenuManager.cpp"
+#include "DebugSystem/Core/UI/Menu/CgsMenuWindow.cpp"
+#include "DebugSystem/Core/UI/Variables/CgsMenuItemVariable.cpp"
+#include "DebugSystem/Core/UI/Variables/CgsVariableManager.cpp"
+#include "DebugSystem/Core/UI/Windows/CgsErrorWindow.cpp"
+#include "DebugSystem/Core/UI/Variables/CgsVariable.cpp"
+#include "DebugSystem/Core/UI/Variables/MenuItems/CgsMenuItemVariableLineGraph.cpp"
+#include "DebugSystem/Core/UI/Windows/CgsCustomWindow.cpp"
+#include "DebugSystem/Core/UI/Windows/CgsLogWindow.cpp"
+#include "DebugSystem/Core/UI/ScriptInterface/CgsScriptInterface.cpp"
+#include "DebugSystem/Core/UI/ScriptInterface/CgsScriptInterface_part_window_savestate.cpp"  // part of CgsScriptInterface.cpp (x360 tree partfile)
+#include "DebugSystem/Core/UI/CommandWindow/CgsCommandWindow.cpp"
+#include "DebugSystem/Controller/CgsDebugController.cpp"
+#include "DebugSystem/Render/CgsDebugRender.cpp"
+#include "DebugSystem/Render/CgsDebug2DImmediateRender.cpp"
+#include "DebugSystem/Render/CgsDebug3DImmediateRender.cpp"
+#include "DebugSystem/Core/UI/Widgets/CgsWidgetLineGraph.cpp"
+#include "MessageSystem/DebugComponent/CgsDebugComponentMessageFilter.cpp"
+#include "PerfMon/Cpu/CgsPerfMonCpu.cpp"
+#include "PerfMon/Gpu/CgsPerfMonGpu.cpp"
+#include "PerfMon/Gpu/PS3/CgsPerfMonGpuPS3.cpp"
+#include "PerfMon/DebugComponent/CgsDebugComponentPerfMonCpu.cpp"
+#include "VectorFont/CgsVectorFont.cpp"
+#include "PerfMon/DebugComponent/CgsDebugComponentPerfMonGpu.cpp"
+#include "StackUnpick/CgsStackUnpick.cpp"
+#include "AssertSystem/CgsAssertManager.cpp"
+#include "Log/CgsLogFile.cpp"
+#include "Log/CgsLogCombined.cpp"
+#include "Log/CgsLogFileBuffered.cpp"
+#include "MapFile/Reader/CgsMapFileReaderMinimalMemory.cpp"
+#include "DebugSystem/Render/CgsDebugRenderStreamReader.cpp"
+#include "DebugSystem/Core/CgsDebugComponent.cpp"
