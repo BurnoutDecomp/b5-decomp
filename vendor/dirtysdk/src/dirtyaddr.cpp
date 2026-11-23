@@ -4,6 +4,11 @@
 // 64-bit host address (the XUID). Only the two conversions the game build carries are
 // reconstructed.
 
+// XDK size optimization matches ARTIST at 0x82B10168.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "dirtyaddr.h"
 #include "dirtylib.h"   // NetPrintf
 

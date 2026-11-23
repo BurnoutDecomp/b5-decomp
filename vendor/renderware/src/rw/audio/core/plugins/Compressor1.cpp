@@ -229,15 +229,11 @@ void Compressor1::Configure(f32 lfSampleRate)
         liReleaseSamples = 1;
 
     // li r9, 1 / fcmpu vs 1.0 / beq keeps it, else li r9, 0.
-    const s32 liGroupChannels = (mfChannelLink == KF_ONE) ? 1 : 0;
+    const bool groupChannels = mfChannelLink == KF_ONE;
 
-    CompressorLimiter1::Configure(&mCompressorLimiter,
-                                         lfThresholdOn,                          // f1
-                                         lfThresholdOn * KF_THRESHOLD_OFF_MUL,   // f2
-                                         KF_ONE / mfRatio - KF_ONE,        // f3
-                                         liAttackSamples,                        // r7
-                                         liReleaseSamples,                       // r8
-                                         liGroupChannels);                       // r9
+    mCompressorLimiter.Configure(lfThresholdOn, lfThresholdOn * KF_THRESHOLD_OFF_MUL,
+                                 KF_ONE / mfRatio - KF_ONE, liAttackSamples,
+                                 liReleaseSamples, groupChannels);                       // r9
 }
 
 // -------------------------------------------------------------------------------------
@@ -297,7 +293,7 @@ BufferStatus Compressor1::Process(PlugIn *pPlugIn, Mixer *ctx, bool /*discontinu
         // Disengaged: clear the engine buffer exactly once on the active->bypass edge.
         if (self->mState == STATE_ON)
         {
-            CompressorLimiter1::ClearBuffer(&self->mCompressorLimiter);
+            self->mCompressorLimiter.ClearBuffer();
             self->mState = STATE_OFF;
         }
         self->mfLastThreshold = self->mfThreshold;

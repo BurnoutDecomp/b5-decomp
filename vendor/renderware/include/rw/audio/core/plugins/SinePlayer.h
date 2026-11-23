@@ -15,7 +15,7 @@
 //   GetSize                       @0x82B98308  (X360 constant 72 == 0x48; host sizeof)
 //   PlayHandler                   @0x82B9B900  -> X360 li r3,0x10; host sizeof(SinePlayerPlayCommand)
 //                                                (deferred play cmd: latch start time)
-//   StopHandler                   @0x82B9B920  -> X360 li r3,8;    host sizeof(SinePlayerStopCommand)
+//   StopHandler                   @0x82B9B920  -> X360 li r3,8;    host sizeof(Command)
 //                                                (deferred stop cmd: clear playing)
 //   PreProcess                    @0x82B9B938  -> 0  (stow requested sample count)
 //   Process                       @0x82B9B948  -> 0/1 (generate the frame; ping-pong)
@@ -37,6 +37,7 @@
 // =====================================================================================
 
 #include "types.hpp" // f32, f64, s32, u32, u8
+#include "rw/audio/core/PlugIn.h" // Command
 #include "rw/audio/core/Iir2Filters.h" // PlugInBaseView / AudioProcessContext / AudioChannelBuffer / AudioFormat
 
 namespace rw
@@ -56,21 +57,14 @@ class SinePlayer;
 // sizeof(SinePlayerPlayCommand) (24 on x64 -- the two leading pointers widened), never the
 // console literal 16. The ring consumer (System::ExecuteCommands) calls the leading field
 // through int (*)(void *), so the handler slot carries exactly that type.
-struct SinePlayerPlayCommand
+struct SinePlayerPlayCommand : Command
 {
-    int (*mpHandler)(void *); // +0x00 (X360) -- &SinePlayer::PlayHandler
-    SinePlayer *mpTarget;      // +0x04 (X360) -- the SinePlayer instance
     f64         mdStartTime;   // +0x08 (X360) -- scheduled start time (double), latched into mdStartTime
 };
 
 // The matching queued Stop command (8 bytes / 2 words on the X360). Grounded in StopHandler
 // @0x82B9B920: handler(+0x00) / target(+0x04).
-// Host size = sizeof(SinePlayerStopCommand) (16 on x64), same stride rule as above.
-struct SinePlayerStopCommand
-{
-    int (*mpHandler)(void *); // +0x00 (X360) -- &SinePlayer::StopHandler
-    SinePlayer *mpTarget;      // +0x04 (X360) -- the SinePlayer instance
-};
+// Host size = sizeof(Command) (16 on x64), same stride rule as above.
 
 // -------------------------------------------------------------------------------------
 // SinePlayer -- layout grounded in CreateInstance @0x82BA3FB8 and Process @0x82B9B948
@@ -105,8 +99,8 @@ public:
     // @0x82B9B920. Each returns its command-record size, which is the ring cursor advance
     // System::ExecuteCommands applies -- so each returns the HOST sizeof of its record
     // (24 / 16 on x64), never the console literal (16 / 8).
-    static int   PlayHandler(void *lpCommand); // returns sizeof(SinePlayerPlayCommand)
-    static int   StopHandler(void *lpCommand); // returns sizeof(SinePlayerStopCommand)
+    static int   PlayHandler(Command *lpCommand); // returns sizeof(SinePlayerPlayCommand)
+    static int   StopHandler(Command *lpCommand); // returns sizeof(Command)
 
     // Per-frame setup: stow the requested sample count (a4). @0x82B9B938. Returns 0.
     static int   PreProcess(SinePlayer *self, int a2, int a3, int a4);

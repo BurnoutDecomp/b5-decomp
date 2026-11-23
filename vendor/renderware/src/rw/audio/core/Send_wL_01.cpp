@@ -152,10 +152,10 @@ namespace core
 // EventEvent already wrote as the HOST record size, NOT the console `(len + 16) & ~3`.
 // No floating point anywhere in this function, so no fcmpu/NaN-polarity concern.
 // -------------------------------------------------------------------------------------
-int Send::ConnectByNameHandler(void* cmd)
+int Send::ConnectByNameHandler(Command * cmd)
 {
     SendConnectByNameCommand* lpCmd = static_cast<SendConnectByNameCommand*>(cmd);
-    Send* lpSend = lpCmd->mpTarget; // lwz r30, 4(r31)
+    Send* lpSend = static_cast<Send *>(lpCmd->pObject); // lwz r30, 4(r31)
 
     DisconnectImmediate(lpSend); // bl @0x82B9FFA0
 

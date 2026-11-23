@@ -149,16 +149,9 @@ public:
     // The two deferred command records. RECORD-STRIDE RULE (the X360-literal trap): the
     // console sizes are 12 and 8, but both records lead with widening pointers, so the
     // producer's advance and each handler's return must be the HOST sizeof.
-    struct PlayCommand
+    struct PlayCommand : Command
     {
-        int (*mpHandler)(void *); // +0x00
-        GinsuPlayer *mpTarget;     // +0x04
         void *mpGinFile;           // +0x08
-    };
-    struct StopCommand
-    {
-        int (*mpHandler)(void *); // +0x00
-        GinsuPlayer *mpTarget;     // +0x04
     };
 
     // vt[1] -- EVENT_PLAY queues a bind+start; anything else queues a stop.
@@ -171,8 +164,8 @@ public:
     static int    PreProcess(GinsuPlayer *self, Mixer *ctx, bool discontinuity,
                              int outputSamplesRequested);                  // @0x8268C1D8
     static int    Process(GinsuPlayer *self, Mixer *ctx, bool isLastInput); // @0x8268C1E8
-    static int    PlayHandler(void *apCommand);                            // @0x826A4100
-    static int    StopHandler(void *apCommand);                            // @0x8268B1B8
+    static int    PlayHandler(Command *apCommand);                            // @0x826A4100
+    static int    StopHandler(Command *apCommand);                            // @0x8268B1B8
 
     // The host layout helper BOTH GetSize and PlayHandler must agree on: where the copied
     // tables start relative to the instance base. The console's 0x1D0/0x11D0/(self+0x1D7)&~7

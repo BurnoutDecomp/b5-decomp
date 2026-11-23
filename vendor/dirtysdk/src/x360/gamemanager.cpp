@@ -2,6 +2,11 @@
 // GameManagerRefT offsets follow ARTIST (0x82B1F1E0-0x82B1F968); lobby, ConnApi
 // and idle callbacks follow 0x82B1ECB8, 0x82B1EE58, 0x82B1F4E8 and 0x82B1F6B0.
 
+// XDK size optimization matches ARTIST at 0x82B1F460.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "gamemanager.h"
 #include "lobbyapi.h"
 #include "lobbyname.h"

@@ -132,8 +132,8 @@ int GainFader::Event(int aiEventId, void *apParam)
         luCursor + static_cast<u32>(sizeof(StartFadeCommand));   // X360: cursor += 0x20
 
     const StartFadeParams *lpParams = static_cast<const StartFadeParams *>(apParam);
-    lpCommand->mpHandler = &GainFader::StartFadeHandler;         // stw +0x00
-    lpCommand->mpTarget = this;                                  // stw +0x04
+    lpCommand->handler = &GainFader::StartFadeHandler;         // stw +0x00
+    lpCommand->pObject = this;                                  // stw +0x04
     lpCommand->startTime = lpParams->startTime;                  // lfd/stfd +0x08
     lpCommand->fadeTime = lpParams->fadeTime;                    // lfs/stfs +0x10
     lpCommand->endGain = lpParams->endGain;                      // lfs/stfs +0x14
@@ -149,10 +149,10 @@ int GainFader::Event(int aiEventId, void *apParam)
 // is latched as the pending Request for the next Process to service. Both compares are
 // ordered (fcmpu + bne), so a NaN in either field takes the real-fade path.
 // -------------------------------------------------------------------------------------
-int GainFader::StartFadeHandler(void *apCommand)
+int GainFader::StartFadeHandler(Command *apCommand)
 {
     StartFadeCommand *lpCommand = static_cast<StartFadeCommand *>(apCommand);
-    GainFader *lpSelf = lpCommand->mpTarget;
+    GainFader *lpSelf = static_cast<GainFader *>(lpCommand->pObject);
 
     u8 lu8Unserviced;
     if (lpCommand->startTime == KD_ZERO && lpCommand->fadeTime == KF_ZERO)

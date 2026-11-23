@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x82B30340.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "types.hpp"
 
 // ARTIST 0x82B302C8. Emits one UCS-2 code point without a terminator.

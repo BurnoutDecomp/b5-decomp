@@ -1,4 +1,9 @@
 // DirtySDK 5.5.3 CryptSSC2. ARTIST 82B32170/82B322B0/82B32340.
+// XDK size optimization matches ARTIST at 0x82B322B0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "types.hpp"
 #include <stddef.h>
 #include <string.h>

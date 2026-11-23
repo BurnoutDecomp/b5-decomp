@@ -21,6 +21,7 @@
 // lowercase namespaces are acceptable for matching a third-party/legacy API).
 // =====================================================================================
 
+#include "rw/audio/core/Command.h"
 #include "types.hpp" // f32, u32 (project primitives)
 #include "coreallocator/icoreallocator_interface.h" // EA::Allocator::ICoreAllocator
 #include "rw/audio/core/TimerManager.h" // rw::audio::core::TimerManager -- embedded by value in System (+0x60)
@@ -120,7 +121,7 @@ public:
     static int Event(PlugIn *self, int aiEventId, void *apParam);
     static PlugIn *GetAttribute(PlugIn *self, int index, f32 *outValue);
     static PlugIn *SetAttribute(PlugIn *self, int index, f32 value);
-    static int SetAttributeHandler(void *cmd);
+    static int SetAttributeHandler(Command *cmd);
 
     // FLAG (rwaudio PDB reconcile -- IDA Files/ProStreet08Milestone.pdb,
     // rw::audio::core::PlugIn [sizeof=36]): the ARTIST-asm-derived offsets below MATCH
@@ -157,10 +158,8 @@ public:
 // sizeof(PlugInSetAttributeCommand) (24 on x64 -- the pointers widened), never the
 // console literal 16. Producer and handler must always agree, or each enqueue
 // overruns its reserved stride and the ring replay eats the record's tail.
-struct PlugInSetAttributeCommand
+struct PlugInSetAttributeCommand : Command
 {
-    int (*mpHandler)(void *); // +0x00 -- always &PlugIn::SetAttributeHandler
-    PlugIn *mpTarget;          // +0x04 -- the PlugIn whose attribute is written
     int miIndex;               // +0x08 -- attribute index
     f32 mfValue;               // +0x0C -- the value to store
 };
@@ -418,8 +417,8 @@ public:
 
     // Deferred-teardown handler queued into the command ring by Release: release every
     // active voice, then every voice on the expelled list. Returns its own record size --
-    // host sizeof(SystemReleaseCommand) (X360: 8) per the ring contract. @0x82B6EA50.
-    static int ReleaseHandler(void *cmd);
+    // host sizeof(Command) (X360: 8) per the ring contract. @0x82B6EA50.
+    static int ReleaseHandler(Command *cmd);
 
     // Remove the manager's timer (@+0x60). @0x82B6EB80.
     static void RemoveTimer(System *self, TimerHandle *handle);

@@ -4,6 +4,11 @@
 // vendor snapshot). See eathread_semaphore.h for the committed-type / vendor-
 // snapshot divergence FLAG and the WAIT-TIMEOUT FLAG.
 
+// XDK size optimization matches ARTIST at 0x82B42970.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include <xtl.h>  // native semaphore APIs, atomics and _CountLeadingZeros
 #include <new>        // placement new (SemaphoreFactory::ConstructSemaphore)
 

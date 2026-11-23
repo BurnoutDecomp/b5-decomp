@@ -33,6 +33,11 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF5B08 and 0x82AF0128.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include <cstdlib>   // abort (the _purecall pure-virtual terminator @0x82C08F60)
 
 #include "SDKs/EATech/include/Apt/AptScriptFunctionBase.h"

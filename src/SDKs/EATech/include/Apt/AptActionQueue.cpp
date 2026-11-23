@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x82AD5E68 and 0x82ADC5E0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptActionQueue.h"
 
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValue::AddRef/Release + sReferenceRegistrationCb

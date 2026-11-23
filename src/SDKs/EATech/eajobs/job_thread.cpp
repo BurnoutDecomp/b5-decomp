@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x82BC9FB0 and 0x82BC9F60.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/eajobs/job_thread.h"
 #include "SDKs/EATech/eajobs/local_backend.h" // EA::Jobs::LocalBackend::LocalBackend (mpBackend dispatch target)
 #include "SDKs/EATech/eajobs/jobs.h" // EA::Jobs::GetAllocator (off_8327F280 Free)

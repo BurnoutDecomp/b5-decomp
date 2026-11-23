@@ -1416,10 +1416,8 @@ void RollbackConstructors(ModuleBank* bank, u16 count)
 // BeginRemoveModuleBank; replayed on the audio thread by Snd9::RemoveModuleBankHandler.
 // ARTIST uses three native words: handler, reserved, bank handle.
 // Offsets in the member comments are the console ones the asm encodes.
-struct RemoveModuleBankCommand
+struct RemoveModuleBankCommand : rw::audio::core::Command
 {
-    int (*mpfnHandler)(void* apCommand); // +0x00  &Snd9::RemoveModuleBankHandler
-    u32   muReserved;                    // +0x04  always 0
     s32   miBankHandle;                  // +0x08  the removed bank's handle
 };
 
@@ -1490,8 +1488,8 @@ s32 BeginRemoveModuleBank(s32 aiBankHandle)
         // ARTIST 82B72358 advances by the native 12-byte command.
         lpSystem->muDeferredRingCursor =
             luCursor + static_cast<u32>(sizeof(RemoveModuleBankCommand)); // X360: +0xC
-        lpCmd->mpfnHandler  = &Snd9::RemoveModuleBankHandler;
-        lpCmd->muReserved   = 0;
+        lpCmd->handler  = &Snd9::RemoveModuleBankHandler;
+        lpCmd->pObject   = 0;
         lpCmd->miBankHandle = aiBankHandle;
         liResult = 0;
     }
@@ -1543,7 +1541,7 @@ IAemsSamplePlayerFactory* SetSamplePlayerFactory(IAemsSamplePlayerFactory* apFac
 // ----------------------------------------------------------------------------
 // Snd9::RemoveModuleBankHandler @0x82B71650 / XB1 native-8 sub_14096C1F0.
 // ----------------------------------------------------------------------------
-int RemoveModuleBankHandler(void* apCommand)
+int RemoveModuleBankHandler(rw::audio::core::Command * apCommand)
 {
     Aems::RemoveModuleBankCommand* lpCommand =
         static_cast<Aems::RemoveModuleBankCommand*>(apCommand);

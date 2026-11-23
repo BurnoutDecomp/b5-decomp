@@ -21,6 +21,11 @@
 // See AptError.h for the layout / base-class derivation.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF0BF8 and 0x82AF0128.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptError.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"     // AptValue, toString/urlEncode
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"    // AptString::Create / GetInternalString

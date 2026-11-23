@@ -2,14 +2,18 @@
 // rw::audio::core::Gain bodies -- the per-voice volume audio plug-in.
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is
-// authoritative for every store/branch. No LegacySrc reference source, no DecFIGS DWARF, and no
-// ProStreet08 PDB entry exist for this type.
+// authoritative for every store and branch. The X360 audio PDB attests the callback ABI.
 //   CreateInstance         @0x82BA2BD0 -- store-for-store
 //   GetPlugInDescRunTime   @0x82B97350 -- returns the registered "Gain" descriptor
 //   Process                @0x82B97600 -- branch-for-branch de-clicked gain ramp
 //   `vector deleting destructor' @0x82BA1710 -- reinstalls base vtable, conditional free
 // See Gain.h for the byte-exact layout.
 // =====================================================================================
+
+#if defined(_XBOX) && defined(_MSC_VER)
+// The XDK size setting reproduces Gain::Process's record-form discontinuity test.
+#pragma optimize("s", on)
+#endif
 
 #include "rw/audio/core/Gain.h"
 #include "rw/audio/core/PlugIn.h"      // PlugInDescRunTime (the real descriptor record)
@@ -30,17 +34,15 @@ namespace core
 // storage so the bodies below link without fabricating their contents.
 static void *const KGN_GainVTable = 0;    // off_8217F3D4
 static void *const KGN_BasePlugInVTable = 0; // off_820AA810
-// off_82F8CB70 -- the "Gain" runtime descriptor, REAL (descriptor-record wave; the
-// console GetSize is the ICF-folded RawPuller2::GetSize @0x82B97348 -- the host
-// record carries the same shared body). Metadata FLAG'd null.
-// The console record's GetSize slot is the ICF-folded RawPuller2::GetSize @0x82B97348 (the console
-// footprints coincide); the HOST objects differ, so the fold is unfolded here --
-// the slot must size THIS type's host object (the stage-carve audit).
-static int GainGetSizeThunk() { return static_cast<int>(sizeof(Gain)); }
+// ARTIST folds this size callback with RawPuller2::GetSize at 0x82B97348.
+u32 Gain::GetSize(PlugInConfig *)
+{
+    return sizeof(Gain);
+}
 
-static PlugInDescRunTime g_GainDesc = {
+PlugInDescRunTime Gain::sPlugInDescRunTime = {
     "Gain",
-    reinterpret_cast<void *>(&GainGetSizeThunk),                                       // @0x82B97348 (console ICF fold; host unfolded)
+    reinterpret_cast<void *>(&Gain::GetSize),                                       // @0x82B97348 (console ICF fold; host unfolded)
     reinterpret_cast<void *>(&Gain::CreateInstance), // @0x82BA2BD0
     0,
     reinterpret_cast<void *>(&Gain::Process),        // @0x82B97600
@@ -63,15 +65,15 @@ static const f32 KF_GAIN_DECLICK_STEP = 0.015625f; // 1 / GAIN_DECLICK_FRAME_SIZ
 // -------------------------------------------------------------------------------------
 char **Gain::GetPlugInDescRunTime()
 {
-    return reinterpret_cast<char **>(&g_GainDesc); // &off_82F8CB70 (the record address)
+    return reinterpret_cast<char **>(&sPlugInDescRunTime); // &off_82F8CB70 (the record address)
 }
 
 // -------------------------------------------------------------------------------------
 // CreateInstance @0x82BA2BD0 -- placement-init a Gain over `self`.
 //   if (self) self->mBase.mpVTable = off_8217F3D4;
-//   self->mfCurrentGain(+0x30) = 1.0;
-//   self->mBase.mpAttributes(+0x0C) = &self->mfGain(+0x28);
-//   self->mfGain(+0x28) = 1.0;
+//   self->mPreviousGain(+0x30) = 1.0;
+//   self->mBase.mpAttributes(+0x0C) = self->mAttribute(+0x28);
+//   self->mAttribute[ATTRIBUTE_SETGAIN].f32(+0x28) = 1.0;
 //   return 1;
 // -------------------------------------------------------------------------------------
 int Gain::CreateInstance(Gain *self)
@@ -79,53 +81,53 @@ int Gain::CreateInstance(Gain *self)
     if (self)
         self->mBase.mpVTable = KGN_GainVTable; // off_8217F3D4
 
-    self->mfCurrentGain = 1.0f;                // flt_82001C98 @ +0x30
+    self->mPreviousGain = 1.0f;                // flt_82001C98 @ +0x30
     // Point the base attribute-table slot at the live gain attribute (self+0x28) so the
-    // base SetAttribute writes land on mfGain.
-    self->mBase.mpAttributes = &self->mfGain;  // @ +0x0C
-    self->mfGain = 1.0f;                        // flt_82001C98 @ +0x28
+    // base SetAttribute writes land on mAttribute[ATTRIBUTE_SETGAIN].f32.
+    self->mBase.mpAttributes = self->mAttribute;  // @ +0x0C
+    self->mAttribute[ATTRIBUTE_SETGAIN].f32 = 1.0f;                        // flt_82001C98 @ +0x28
     return 1;
 }
 
 // -------------------------------------------------------------------------------------
 // Process @0x82B97600 -- apply the scalar gain to every channel of the input frame, ramping
-// from mfCurrentGain toward mfGain over the 64-sample de-click window, then ping-pong the
+// from mPreviousGain toward mAttribute[ATTRIBUTE_SETGAIN].f32 over the 64-sample de-click window, then ping-pong the
 // context's src/dst channel-buffer slots and latch the current gain to the target.
 //   src = ctx->mpSrcBuffer(+0x3000C);  dst = ctx->mpDstBuffer(+0x30010);
-//   if (resetRamp) mfCurrentGain = mfGain;   // restart the ramp at the target
-//   step = (mfGain - mfCurrentGain) * (1/64);
+//   if (resetRamp) mPreviousGain = mAttribute[ATTRIBUTE_SETGAIN].f32;   // restart the ramp at the target
+//   step = (mAttribute[ATTRIBUTE_SETGAIN].f32 - mPreviousGain) * (1/64);
 //   for (c = 0; c < mBase.mbChannelCount; ++c)
 //       CopyWithGainRamp(dst->mpSamples + dst->muStride*c,
-//                        src->mpSamples + src->muStride*c, mfCurrentGain, step, 256);
+//                        src->mpSamples + src->muStride*c, mPreviousGain, step, 256);
 //   swap(ctx->mpSrcBuffer, ctx->mpDstBuffer);
-//   mfCurrentGain = mfGain;
+//   mPreviousGain = mAttribute[ATTRIBUTE_SETGAIN].f32;
 //   return 1;
 // -------------------------------------------------------------------------------------
-int Gain::Process(Gain *self, AudioProcessContext *ctx, char resetRamp)
+BufferStatus Gain::Process(PlugIn *pPlugIn, Mixer *ctx, bool discontinuity)
 {
+    // The existing layout places the PlugIn view at offset zero.
+    Gain *self = reinterpret_cast<Gain *>(pPlugIn);
     AudioChannelBuffer *srcBuffer = ctx->mpSrcBuffer; // *(a2+0x3000C) = v6
     AudioChannelBuffer *dstBuffer = ctx->mpDstBuffer; // *(a2+0x30010) = v7
 
-    if (resetRamp)
-        self->mfCurrentGain = self->mfGain;
+    if (discontinuity)
+        self->mPreviousGain = self->mAttribute[ATTRIBUTE_SETGAIN].f32;
 
-    const f32 step = (self->mfGain - self->mfCurrentGain) * KF_GAIN_DECLICK_STEP;
+    const f32 step = (self->mAttribute[ATTRIBUTE_SETGAIN].f32 - self->mPreviousGain) * KF_GAIN_DECLICK_STEP;
 
     const u32 channelCount = self->mBase.mbChannelCount; // lbz +0x21
     for (u32 channel = 0; channel < channelCount; ++channel)
     {
         f32 *pDst = dstBuffer->mpSamples + dstBuffer->muStride * channel;
         f32 *pSrc = srcBuffer->mpSamples + srcBuffer->muStride * channel;
-        CopyWithGainRamp(pDst, pSrc, self->mfCurrentGain, step, KI_MIXER_FRAME_SIZE);
+        CopyWithGainRamp(pDst, pSrc, self->mPreviousGain, step, KI_MIXER_FRAME_SIZE);
     }
 
     // Ping-pong the src/dst channel-buffer slots for the next stage.
-    AudioChannelBuffer *swapTmp = ctx->mpSrcBuffer;
-    ctx->mpSrcBuffer = ctx->mpDstBuffer;
-    ctx->mpDstBuffer = swapTmp;
+    ctx->SwapBuffers();
 
-    self->mfCurrentGain = self->mfGain;
-    return 1;
+    self->mPreviousGain = self->mAttribute[ATTRIBUTE_SETGAIN].f32;
+    return BUFFERSTATUS_AVAILABLE;
 }
 
 // -------------------------------------------------------------------------------------

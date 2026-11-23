@@ -10,6 +10,11 @@
 // See AptPseudoDisplayList.h for the layout derivation. No reference/DWARF body.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AEAFC8.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptPseudoDisplayList.h"
 
 #include <cstring>   // std::memset (the head node's 5 zeroing dword stores)

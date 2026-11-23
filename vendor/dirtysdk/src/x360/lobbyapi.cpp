@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x82B22F48 and 0x82B31E00.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "lobbyapi_x360_internal.h"
 
 #include "lobbyname.h"

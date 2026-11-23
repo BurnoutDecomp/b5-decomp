@@ -1,4 +1,9 @@
 // DirtySDK 5.5.3 native rank state: DecFIGS names, ARTIST PPC32 offsets.
+// XDK size optimization matches ARTIST at 0x82B26990 and 0x82B275F0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "lobbyrank.h"
 #include <stddef.h>
 #include <string.h>

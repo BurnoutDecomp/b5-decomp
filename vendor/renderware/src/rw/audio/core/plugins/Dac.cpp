@@ -113,15 +113,8 @@ namespace
     // ---- the deferred-command records EventEvent enqueues (ring contract: the
     // producer's cursor advance == the handler's return == the HOST sizeof; the
     // console literals are 8 and 12) ----
-    struct DacStartStopCommand
+    struct DacValueCommand : Command
     {
-        int (*mpHandler)(void *); // +0x00 -- &StartHandler / &StopHandler
-        Dac *mpDac;               // +0x04 -- the plug-in (console: the r3 event object)
-    };
-    struct DacValueCommand
-    {
-        int (*mpHandler)(void *); // +0x00 -- &SetModeHandler / &SetSampleRateHandler
-        Dac *mpDac;               // +0x04
         f32 mfValue;              // +0x08 -- the copied event parameter word
     };
 
@@ -421,19 +414,19 @@ int Dac::Event(int aiEventId, void *apParam)
         DacValueCommand *lpCommand = reinterpret_cast<DacValueCommand *>(
             lpSystem->mpDeferredRingBase + lpSystem->muDeferredRingCursor);
         lpSystem->muDeferredRingCursor += static_cast<u32>(sizeof(DacValueCommand));
-        lpCommand->mpHandler = (aiEventId == 1) ? &Dac::SetModeHandler
+        lpCommand->handler = (aiEventId == 1) ? &Dac::SetModeHandler
                                                 : &Dac::SetSampleRateHandler;
-        lpCommand->mpDac = this;
+        lpCommand->pObject = this;
         lpCommand->mfValue = *static_cast<f32 *>(apParam);   // the copied word
         return 0;
     }
 
     // Every other id (console: 3 == start, else stop): deferred 8-byte command.
-    DacStartStopCommand *lpCommand = reinterpret_cast<DacStartStopCommand *>(
+    Command *lpCommand = reinterpret_cast<Command *>(
         lpSystem->mpDeferredRingBase + lpSystem->muDeferredRingCursor);
-    lpSystem->muDeferredRingCursor += static_cast<u32>(sizeof(DacStartStopCommand));
-    lpCommand->mpDac = this;
-    lpCommand->mpHandler = (aiEventId == 3) ? &Dac::StartHandler : &Dac::StopHandler;
+    lpSystem->muDeferredRingCursor += static_cast<u32>(sizeof(Command));
+    lpCommand->pObject = this;
+    lpCommand->handler = (aiEventId == 3) ? &Dac::StartHandler : &Dac::StopHandler;
     return 0;
 }
 
@@ -473,36 +466,34 @@ Dac *Dac::StopImmediate(Dac *self)
 // The deferred-command handlers (ExecuteCommands replays; each returns its record's
 // HOST sizeof, matching its producer's advance -- console literals 8 / 12).
 // =====================================================================================
-int Dac::StartHandler(void *apCommand)   // @0x82B9DCF0 (raw-XEX recovery)
+int Dac::StartHandler(Command *apCommand)   // @0x82B9DCF0 (raw-XEX recovery)
 {
-    DacStartStopCommand *lpCommand = static_cast<DacStartStopCommand *>(apCommand);
     if (!sStarted)
     {
-        StartImmediate(lpCommand->mpDac);
+        StartImmediate(static_cast<Dac *>(apCommand->pObject));
         sCpuLoadBalancer.Reset();
         sCpuLoadBalancer.mOverheadCounter.mCpuCycleStart = GetCpuCycle();
     }
-    return static_cast<int>(sizeof(DacStartStopCommand));   // console li r3, 8
+    return static_cast<int>(sizeof(Command));   // console li r3, 8
 }
 
-int Dac::StopHandler(void *apCommand)    // @0x82B9DD48
+int Dac::StopHandler(Command *apCommand)    // @0x82B9DD48
 {
-    DacStartStopCommand *lpCommand = static_cast<DacStartStopCommand *>(apCommand);
     if (sStarted)
     {
-        StopImmediate(lpCommand->mpDac);
+        StopImmediate(static_cast<Dac *>(apCommand->pObject));
         sCpuLoadBalancer.Balance();
     }
-    return static_cast<int>(sizeof(DacStartStopCommand));   // console li r3, 8
+    return static_cast<int>(sizeof(Command));   // console li r3, 8
 }
 
 // SetModeHandler @0x82B9DB78 -- pick the best supported mode for the request, walking
 // the preference order {3, 2, 1, 0} from the requested mode's own preference slot;
 // republish the channel count; bounce the output (stop + start) if live.
-int Dac::SetModeHandler(void *apCommand)
+int Dac::SetModeHandler(Command *apCommand)
 {
     DacValueCommand *lpCommand = static_cast<DacValueCommand *>(apCommand);
-    Dac *lpDac = lpCommand->mpDac;
+    Dac *lpDac = static_cast<Dac *>(lpCommand->pObject);
 
     if (!sCapNumModes)
     {
@@ -551,7 +542,7 @@ int Dac::SetModeHandler(void *apCommand)
 }
 
 // SetSampleRateHandler @0x82B9DCE8 -- consume the record (only 48 kHz exists).
-int Dac::SetSampleRateHandler(void * /*apCommand*/)
+int Dac::SetSampleRateHandler(Command * /*apCommand*/)
 {
     return static_cast<int>(sizeof(DacValueCommand));   // console li r3, 0xC
 }

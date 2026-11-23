@@ -1,6 +1,11 @@
 // On2 VP6 decoder: the boolean (arithmetic) decoder, the raw header bit reader and the frame
 // header.
 
+// XDK size optimization matches ARTIST at 0x82B5AF98 and 0x82B5B098.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Common/vp6/vp6_decoder.h"
 
 extern "C"

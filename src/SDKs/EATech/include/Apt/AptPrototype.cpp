@@ -11,6 +11,11 @@
 // from the GC value pool and participates in the GC mark/teardown.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF0E80.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptPrototype.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValue (AddRef/Release, sReferenceRegistrationCb)
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"  // AptNativeString::c_str

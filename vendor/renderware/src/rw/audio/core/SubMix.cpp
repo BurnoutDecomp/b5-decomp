@@ -144,16 +144,16 @@ int SubMix::CreateInstance(SubMix *self, const ConstructorParams *params)
 
     // Queue the deferred registry push.
     const u32 luCursor = lpSystem->muDeferredRingCursor;       // lwz +0x10B8
-    SubMixCreateCommand *lpCommand =
-        reinterpret_cast<SubMixCreateCommand *>(lpSystem->mpDeferredRingBase + luCursor);
+    Command *lpCommand =
+        reinterpret_cast<Command *>(lpSystem->mpDeferredRingBase + luCursor);
     // RECORD STRIDE (X360-literal trap): the console `cursor += 8` is ITS sizeof; the host
     // record is larger because both fields widen, and ExecuteCommands advances by the
     // handler's RETURN -- which returns the same host sizeof. No capacity check exists in
     // this body; faithfully reproduced.
     lpSystem->muDeferredRingCursor =
-        luCursor + static_cast<u32>(sizeof(SubMixCreateCommand));
-    lpCommand->mpHandler = &SubMix::CreateInstanceHandler;     // stw +0x00 (@0x82B9C380)
-    lpCommand->mpTarget = self;                                // stw +0x04
+        luCursor + static_cast<u32>(sizeof(Command));
+    lpCommand->handler = &SubMix::CreateInstanceHandler;     // stw +0x00 (@0x82B9C380)
+    lpCommand->pObject = self;                                // stw +0x04
 
     // These clears happen ONLY on the successful path (after the allocation test).
     self->mDeClickRequired = 0;                                // stb +0x8D
@@ -170,10 +170,9 @@ int SubMix::CreateInstance(SubMix *self, const ConstructorParams *params)
 // The return value is the RING-CURSOR ADVANCE, not a success code (System::ExecuteCommands
 // advances the record pointer by whatever this returns).
 // -------------------------------------------------------------------------------------
-int SubMix::CreateInstanceHandler(void *apCommand)
+int SubMix::CreateInstanceHandler(Command *apCommand)
 {
-    SubMixCreateCommand *lpCommand = static_cast<SubMixCreateCommand *>(apCommand);
-    SubMix *lpSelf = lpCommand->mpTarget;
+    SubMix *lpSelf = static_cast<SubMix *>(apCommand->pObject);
 
     ListDNode *lpNode = &lpSelf->mSubMixListNode;
     lpNode->pnext = sSubMixList.phead;          // stw head -> node+0x00
@@ -185,7 +184,7 @@ int SubMix::CreateInstanceHandler(void *apCommand)
 
     // The console `li r3, 8` is its own record stride; producer and handler must agree, so
     // both use the HOST sizeof.
-    return static_cast<int>(sizeof(SubMixCreateCommand));
+    return static_cast<int>(sizeof(Command));
 }
 
 // -------------------------------------------------------------------------------------

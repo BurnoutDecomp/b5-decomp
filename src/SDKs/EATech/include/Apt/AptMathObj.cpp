@@ -5,6 +5,11 @@
 //   @0x82AF0AE8 is a compiler thunk -- dropped, not written).
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF0128.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptMathObj.h"
 
 // Construct the ActionScript Math object: an AptObject of value type AptVFT_Math

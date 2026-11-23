@@ -125,6 +125,14 @@ enum BufferStatus
 class Mixer
 {
 public:
+    // The original stage helper exchanges the source and destination slots.
+    void SwapBuffers()
+    {
+        SampleBuffer *const previousDestination = mpDstBuffer;
+        mpDstBuffer = mpSrcBuffer;
+        mpSrcBuffer = previousDestination;
+    }
+
     // The engine audio-frame quantum: 256 samples per channel per frame (the `li r4,
     // 0x100` Execute seeds every SampleBuffer stride with, and the 256.0f/rate period
     // Dac::CreateInstance publishes into the System).

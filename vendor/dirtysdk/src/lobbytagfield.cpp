@@ -10,6 +10,11 @@
 // SDK module (TagFieldDivider/Format/Rename/Find2/GetNumber64/GetFlags/SetDate/
 // GetDate/SetFloat/First/FindNext/GetStructureOffsets) is not part of it.
 
+// XDK size optimization matches ARTIST at 0x82B19F68 and 0x82B19C00.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "lobbytagfield.h"
 #include "dirtylib.h"   // NetPrintf
 #include "platform.h"   // ds_snzprintf, ds_timeinsecs, ds_secstotime, ds_timetosecs

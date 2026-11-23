@@ -1,4 +1,9 @@
 // DirtySDK 5.5.3 LobbyHasher: X360 ARTIST PPC32; DecFIGS declarations.
+// XDK size optimization matches ARTIST at 0x82B30D10.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "dirtymem.h"
 #include "lobbyapi_x360_internal.h"
 #include "lobbyname.h"

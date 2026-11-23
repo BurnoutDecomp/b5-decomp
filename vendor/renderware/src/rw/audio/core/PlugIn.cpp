@@ -109,7 +109,7 @@ PlugIn *PlugIn::SetAttribute(PlugIn *self, int index, f32 value)
     PlugInSetAttributeCommand *cmd =                            // *(self+0x20)+cursor
         reinterpret_cast<PlugInSetAttributeCommand *>(system->mpDeferredRingBase + cursor);
     // RECORD STRIDE (X360-literal trap): the asm's `addi r9,r9,0x10` IS the console
-    // sizeof(PlugInSetAttributeCommand) ({int(*)(void*), PlugIn*, int, f32} = 4+4+4+4).
+    // sizeof(PlugInSetAttributeCommand) ({int(*)(Command*), PlugIn*, int, f32} = 4+4+4+4).
     // On the host the widened pointers make the same record 24 bytes, and ExecuteCommands
     // advances the ring by the handler's return -- SetAttributeHandler below likewise
     // returns sizeof(PlugInSetAttributeCommand) -- so the enqueue stride must be the HOST
@@ -119,8 +119,8 @@ PlugIn *PlugIn::SetAttribute(PlugIn *self, int index, f32 value)
         cursor + static_cast<u32>(sizeof(PlugInSetAttributeCommand)); // X360: cursor += 0x10
 
     cmd->mfValue = value;                                       // stfs f1 -> +0xC
-    cmd->mpHandler = &PlugIn::SetAttributeHandler;              // stw &handler -> +0x00
-    cmd->mpTarget = self;                                       // stw self -> +0x04
+    cmd->handler = &PlugIn::SetAttributeHandler;              // stw &handler -> +0x00
+    cmd->pObject = self;                                       // stw self -> +0x04
     cmd->miIndex = index;                                       // stw a2 -> +0x08
     return self;
 }
@@ -130,10 +130,10 @@ PlugIn *PlugIn::SetAttribute(PlugIn *self, int index, f32 value)
 // The deferred-command callback: performs the actual attribute store, then returns the
 // consumed command size so the ring consumer can advance its cursor.
 // -------------------------------------------------------------------------------------
-int PlugIn::SetAttributeHandler(void *cmd)
+int PlugIn::SetAttributeHandler(Command *cmd)
 {
     PlugInSetAttributeCommand *c = static_cast<PlugInSetAttributeCommand *>(cmd);
-    c->mpTarget->mpAttribute[c->miIndex].f32 = c->mfValue; // *(8*idx + *(target+0xC)) = value
+    static_cast<PlugIn *>(c->pObject)->mpAttribute[c->miIndex].f32 = c->mfValue; // *(8*idx + *(target+0xC)) = value
     // The asm's `li r3,0x10` is the console sizeof(PlugInSetAttributeCommand); it must
     // stay identical to the producer's advance in SetAttribute above, so both sides use
     // the HOST sizeof (24 on x64).

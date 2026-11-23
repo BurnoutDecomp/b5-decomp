@@ -2,6 +2,11 @@
 // 0x82B28FF0, 0x82B290F0, 0x82B291F0, 0x82B29378-0x82B294C8,
 // and 0x82B29638. The connection state follows its X360 call edges; the two
 // XHV processing-mode constructors remain external providers.
+// XDK size optimization matches ARTIST at 0x82B29490.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "voip.h"
 #include "dirtylib.h"
 #include "dirtymem.h"

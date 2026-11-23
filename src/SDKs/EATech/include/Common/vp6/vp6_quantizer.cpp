@@ -1,5 +1,10 @@
 // On2 VP6 decoder: dequantisation tables.
 
+// XDK size optimization matches ARTIST at 0x82B59258 and 0x82B59210.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Common/vp6/vp6_decoder.h"
 
 #include <cstring>

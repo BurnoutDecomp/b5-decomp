@@ -30,6 +30,11 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AE82D8 and 0x82B06C80.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptExtObject.h"
 
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"          // the owned member hash

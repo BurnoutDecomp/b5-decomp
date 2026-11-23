@@ -18,6 +18,11 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AE85D0 and 0x82AE8928.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"
 
 #include "SDKs/EATech/include/Apt/AptDefine.h"   // gpNonGCPoolManager

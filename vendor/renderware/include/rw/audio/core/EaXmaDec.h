@@ -214,13 +214,14 @@ private:
                         s32 iRingByteOffset, s32 iNumChannels, s32 iFramesFirst,
                         s32 iFramesSecond);
 
+private:
     // ----- XMA packed-bitstream frame-walk helpers (no instance state) -----------------
 
     // @0x82B8FB20 -- pull `iNumBits` big-endian bits starting at bit position `iBitPos`
     // out of the packed byte stream `pStream`, shifting them into the low end of the 32-bit
-    // accumulator *puAccum (the prior contents are shifted up by `iNumBits` first). Returns
-    // the accumulator pointer. No-op for iNumBits <= 0.
-    static u32 *LeftShiftInBits(u32 *puAccum, const u8 *pStream, s32 iBitPos, s32 iNumBits);
+    // accumulator *puAccum (the prior contents are shifted up by `iNumBits` first).
+    // No-op for iNumBits <= 0.
+    static void LeftShiftInBits(u32 *puAccum, const u8 *pStream, s32 iBitPos, s32 iNumBits);
 
     // @0x82B8FB88 -- advance a (byte-cursor, bit-offset) pair across one XMA frame, decoding
     // the frame-length field with LeftShiftInBits and wrapping the cursor onto the next
@@ -229,10 +230,10 @@ private:
 
     // @0x82B8FA18 -- copy `iSize` bytes from `pSrc` to `pDst` (used to top up the XMA input
     // buffers). The X360 body is a hand-unrolled VMX unaligned block copy; semantically a
-    // plain byte copy. A member (the instance is passed in r3 by every call site) but the
-    // asm overwrites r3 with pDst before use, so `this` is unreferenced. Returns pDst.
-    void *XMAmemcpy(void *pDst, const void *pSrc, s32 iSize);
+    // plain byte copy. AllocateResources supplies the aligned destination packet buffers.
+    void XMAmemcpy(void * __restrict pDst, const void * __restrict pSrc, s32 iSize);
 
+public:
     // ----- appended per-instance state (X360 offsets in comments) ----------------------
 
     DecPair *mpPairs;                 // +0x34  pair table in the aligned instance tail

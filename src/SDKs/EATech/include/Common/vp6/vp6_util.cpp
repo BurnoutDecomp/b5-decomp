@@ -1,6 +1,11 @@
 // On2 VP6 decoder: generic block kernels, the bilinear sub-pixel filters, frame border extension
 // and the machine-specific kernel selection.
 
+// XDK size optimization matches ARTIST at 0x82B59548.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Common/vp6/vp6_decoder.h"
 
 #include <cstring>

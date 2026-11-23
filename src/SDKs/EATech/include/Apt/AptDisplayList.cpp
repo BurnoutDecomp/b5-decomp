@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x82AFD2B8 and 0x82AFE9F0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h" // native embedded movie accessor
 // ===========================================================================
 // EATech Apt -- AptDisplayList: the teardown / removal core of a movie clip's

@@ -77,10 +77,8 @@ struct RawPuller2PlayEvent
 // sizeof(RawPuller2PlayCommand) (40 on x64 -- four pointers widened), never the console
 // literal 24. The ring consumer (System::ExecuteCommands) calls the leading field through
 // int (*)(void *), so the handler slot carries exactly that type.
-struct RawPuller2PlayCommand
+struct RawPuller2PlayCommand : Command
 {
-    int (*mpHandler)(void *);       // +0x00 (X360) -- &RawPuller2::PlayHandler
-    RawPuller2      *mpTarget;      // +0x04 (X360) -- the RawPuller2 instance
     f32              mfNumChannels; // +0x08 (X360) -- play event word 0 (float channels)
     f32              mfSampleRate;  // +0x0C (X360) -- play event word 1 (pull rate)
     void            *mpContext;     // +0x10 (X360) -- play event word 2 (context)
@@ -88,12 +86,7 @@ struct RawPuller2PlayCommand
 };
 
 // The matching queued Stop command (8 bytes / 2 words on the X360): handler / puller.
-// Host size = sizeof(RawPuller2StopCommand) (16 on x64), same stride rule as above.
-struct RawPuller2StopCommand
-{
-    int (*mpHandler)(void *); // +0x00 (X360) -- &RawPuller2::StopHandler
-    RawPuller2 *mpTarget;     // +0x04 (X360) -- the RawPuller2 instance
-};
+// Host size = sizeof(Command) (16 on x64), same stride rule as above.
 
 class RawPuller2
 {
@@ -115,10 +108,10 @@ public:
 
     // Deferred command handlers replayed off the ring (the consumer calls each through
     // int (*)(void *) with the record's own address). Each returns its record's byte size
-    // -- host sizeof(RawPuller2PlayCommand) / sizeof(RawPuller2StopCommand) (X360: 24 / 8).
+    // -- host sizeof(RawPuller2PlayCommand) / sizeof(Command) (X360: 24 / 8).
     // X360 @0x82B9A540 / @0x82B9A5B0.
-    static int PlayHandler(void *cmd);
-    static int StopHandler(void *cmd);
+    static int PlayHandler(Command *cmd);
+    static int StopHandler(Command *cmd);
 
     // Per-frame setup + render. PreProcess stows the requested frame count; Process pulls
     // the callback and copies the produced channels into the output node. X360

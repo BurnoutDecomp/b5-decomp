@@ -8,6 +8,11 @@
 // Only the entry points the game build carries are reconstructed (DispListShown,
 // DispListFilt and DispListDirty are not part of it).
 
+// XDK size optimization matches ARTIST at 0x82B22928 and 0x82B22678.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "lobbydisplist.h"
 #include "lobbysort.h"   // LobbyMSort
 #include "dirtymem.h"    // DirtyMemAlloc / DirtyMemFree / DirtyMemGroupQuery

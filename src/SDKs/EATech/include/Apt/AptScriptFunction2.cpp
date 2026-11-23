@@ -18,6 +18,11 @@
 // (AptScriptFunction2ByteCode) format.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF14B0 and 0x82AE61C8.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptScriptFunction2.h"
 #include "SDKs/EATech/include/Apt/AptObject.h"   // AptValueWithHash (the live _global symbol type)
 #include "SDKs/EATech/include/Apt/AptFrameStack.h"               // spFrameStack->Set (the call-local hash)

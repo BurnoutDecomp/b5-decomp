@@ -102,10 +102,8 @@ public:
     // RECORD-STRIDE RULE (the X360-literal trap): the producer's cursor advance and
     // StartFadeHandler's return must BOTH be this record's size, and on the host that is
     // sizeof(StartFadeCommand) -- the two leading pointers widen -- never the console 0x20.
-    struct StartFadeCommand
+    struct StartFadeCommand : Command
     {
-        int (*mpHandler)(void *); // +0x00 -- &GainFader::StartFadeHandler
-        GainFader *mpTarget;       // +0x04
         f64 startTime;             // +0x08
         f32 fadeTime;              // +0x10
         f32 endGain;               // +0x14
@@ -131,7 +129,7 @@ public:
     static int    CreateInstance(GainFader *self);           // @0x82BA2C08
     static int    Process(GainFader *self, AudioProcessContext *ctx,
                           bool discontinuity);               // @0x82B97378
-    static int    StartFadeHandler(void *apCommand);         // @0x82B9DF18
+    static int    StartFadeHandler(Command *apCommand);         // @0x82B9DF18
 
     PlugIn::Attribute_t mAttribute[ATTRIBUTE_MAX]; // +0x28
     Request mLastRequest;        // +0x30 .. +0x47

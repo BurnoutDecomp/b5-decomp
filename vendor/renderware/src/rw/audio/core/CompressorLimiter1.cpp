@@ -28,9 +28,9 @@ namespace core
 // -------------------------------------------------------------------------------------
 // ClearBuffer @0x82B671F0 -- XMemSet(self, 0, 0x30): zero the 48-byte envelope scratch.
 // -------------------------------------------------------------------------------------
-void *CompressorLimiter1::ClearBuffer(CompressorLimiter1 *self)
+void CompressorLimiter1::ClearBuffer()
 {
-    return XMemSet(self, 0, 0x30);
+    XMemSet(mChannelHistory, 0, sizeof(mChannelHistory));
 }
 
 // -------------------------------------------------------------------------------------
@@ -46,25 +46,20 @@ void *CompressorLimiter1::ClearBuffer(CompressorLimiter1 *self)
 // (store ORDER per the asm: +0x30, +0x34, +0x38, +0x3C, +0x40, +0x4C, then +0x44, +0x48 --
 // the two derived steps come last, not in ascending offset order.)
 //
-// The +0x4C byte is the asm's `cntlzw(groupChannels&0xFF); extrwi bit26; xori 1`, i.e. it
-// is set exactly when the low byte is nonzero. The attack/release divisors are
-// sign-extended-to-i64 then converted to f32 (fcfid+frsp) before the divide, matching the
-// asm's stack round-trip. r3 is never written, so the machine return is the incoming self.
+// The bool is stored in the byte at +0x4C. The attack and release lengths pass through
+// signed 64-bit integer conversion before computing the two float steps.
 // -------------------------------------------------------------------------------------
-CompressorLimiter1 *CompressorLimiter1::Configure(CompressorLimiter1 *self, f32 thresholdOn,
-                                                  f32 thresholdOff, f32 compExponent,
-                                                  s32 attackSamples, s32 releaseSamples,
-                                                  s32 groupChannels)
+void CompressorLimiter1::Configure(f32 thresholdOn, f32 thresholdOff, f32 compExponent,
+                                     s32 attackSamples, s32 releaseSamples, bool groupChannels)
 {
-    self->mThresholdOn = thresholdOn;
-    self->mThresholdOff = thresholdOff;
-    self->mCompExponent = compExponent;
-    self->mAttackSamples = attackSamples;
-    self->mReleaseSamples = releaseSamples;
-    self->mGroupChannels = static_cast<u8>((groupChannels & 0xFF) != 0 ? 1 : 0);
-    self->mCompExponentStepOn = compExponent / static_cast<f32>(static_cast<s64>(attackSamples));
-    self->mCompExponentStepOff = compExponent / static_cast<f32>(static_cast<s64>(releaseSamples));
-    return self;
+    mThresholdOn = thresholdOn;
+    mThresholdOff = thresholdOff;
+    mCompExponent = compExponent;
+    mAttackSamples = attackSamples;
+    mReleaseSamples = releaseSamples;
+    mGroupChannels = static_cast<u8>(groupChannels ? 1 : 0);
+    mCompExponentStepOn = compExponent / static_cast<f32>(static_cast<s64>(attackSamples));
+    mCompExponentStepOff = compExponent / static_cast<f32>(static_cast<s64>(releaseSamples));
 }
 
 // =====================================================================================

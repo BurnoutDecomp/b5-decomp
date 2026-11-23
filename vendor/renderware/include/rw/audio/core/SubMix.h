@@ -74,14 +74,9 @@ public:
     // The queued command CreateInstance pushes into the System ring (console stride 8).
     // RECORD-STRIDE RULE (the X360-literal trap): the producer's cursor advance and
     // CreateInstanceHandler's return must BOTH be this record's size. On the host that is
-    // sizeof(SubMixCreateCommand) (16 -- both fields widen), never the console literal 8;
+    // sizeof(Command) (16 -- both fields widen), never the console literal 8;
     // a hard-coded 8 would let the next record overwrite the widened SubMix* and
     // desynchronise the whole command replay.
-    struct SubMixCreateCommand
-    {
-        int (*mpHandler)(void *); // +0x00 -- &SubMix::CreateInstanceHandler
-        SubMix *mpTarget;          // +0x04
-    };
 
     // vt[0] == ReleaseEvent @0x82BA0C18 -- drain every inbound connector, unlink from the
     // global registry, and free the accumulation buffer. (This tree maps the console's
@@ -92,7 +87,7 @@ public:
     static int    GetSize();                                    // @0x82B982F0
     static int    CreateInstance(SubMix *self,
                                  const ConstructorParams *params); // @0x82BA4680
-    static int    CreateInstanceHandler(void *apCommand);       // @0x82B9C380
+    static int    CreateInstanceHandler(Command *apCommand);       // @0x82B9C380
     static int    Process(SubMix *self, AudioProcessContext *ctx,
                           bool discontinuity);                  // @0x82B9C480
 

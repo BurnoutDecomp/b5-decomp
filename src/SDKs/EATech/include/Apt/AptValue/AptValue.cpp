@@ -14,6 +14,11 @@
 //   PreDestroy(); DestroyGCPointers(); delete this;.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AD8458.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValueVector.h"   // the deferred-release vector
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"              // mp__Proto__ (the MC parent-chain walk)

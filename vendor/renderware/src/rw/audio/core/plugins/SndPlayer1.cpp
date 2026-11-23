@@ -94,24 +94,15 @@ namespace
         f32 requestHandle;
     };
 
-    struct SndPlayer1StopCommand
-    {
-        int (*pHandler)(void *);
-        SndPlayer1 *pPlayer;
-    };
 
-    struct SndPlayer1ModifyStartTimeCommand
+    struct SndPlayer1ModifyStartTimeCommand : Command
     {
-        int (*pHandler)(void *);
-        SndPlayer1 *pPlayer;
         f64 startTime;
         f32 requestHandle;
     };
 
-    struct SndPlayer1PlayCommand
+    struct SndPlayer1PlayCommand : Command
     {
-        int (*pHandler)(void *);
-        SndPlayer1 *pPlayer;
         f64 startTime;
         f64 streamFileOffset;
         f64 seekTime;
@@ -590,11 +581,11 @@ int SndPlayer1::Event(int aiEventId, void *apParam)
     {
     case 1:
     {
-        SndPlayer1StopCommand *command = reinterpret_cast<SndPlayer1StopCommand *>(
+        Command *command = reinterpret_cast<Command *>(
             system->mpDeferredRingBase + system->muDeferredRingCursor);
         system->muDeferredRingCursor += static_cast<u32>(sizeof(*command));
-        command->pHandler = &SndPlayer1::StopHandler;
-        command->pPlayer = this;
+        command->handler = &SndPlayer1::StopHandler;
+        command->pObject = this;
         return 0;
     }
     case 2:
@@ -680,8 +671,8 @@ int SndPlayer1::Event(int aiEventId, void *apParam)
             reinterpret_cast<SndPlayer1ModifyStartTimeCommand *>(
                 system->mpDeferredRingBase + system->muDeferredRingCursor);
         system->muDeferredRingCursor += static_cast<u32>(sizeof(*command));
-        command->pHandler = &SndPlayer1::ModifyStartTimeHandler;
-        command->pPlayer = this;
+        command->handler = &SndPlayer1::ModifyStartTimeHandler;
+        command->pObject = this;
         command->startTime = input->newStartTime;
         command->requestHandle = input->requestHandle;
         return 0;
@@ -728,8 +719,8 @@ int SndPlayer1::Event(int aiEventId, void *apParam)
     SndPlayer1PlayCommand *command = reinterpret_cast<SndPlayer1PlayCommand *>(
         system->mpDeferredRingBase + system->muDeferredRingCursor);
     system->muDeferredRingCursor += static_cast<u32>(recordSize);
-    command->pPlayer = this;
-    command->pHandler = &SndPlayer1::PlayHandler;
+    command->pObject = this;
+    command->handler = &SndPlayer1::PlayHandler;
     command->requestHandle = *mpRequestHandle;
     command->startTime = play->startTime;
     command->streamFileOffset = play->streamFileOffset;
@@ -753,10 +744,10 @@ void SndPlayer1::Destroy(int /*aFlags*/)
     // equivalent from ~SndPlayer1; this slot exists so the base's dispatch shape holds.
 }
 
-int SndPlayer1::PlayHandler(void *rawCommand)
+int SndPlayer1::PlayHandler(Command *rawCommand)
 {
     SndPlayer1PlayCommand *command = static_cast<SndPlayer1PlayCommand *>(rawCommand);
-    SndPlayer1 *self = command->pPlayer;
+    SndPlayer1 *self = static_cast<SndPlayer1 *>(command->pObject);
     System *system = self->mpSystemUseGetSystemAccessor;
 
     self->mLastRequestHandleProcessed = command->requestHandle;
@@ -868,9 +859,13 @@ fail:
     return command->recordSize;
 }
 
-int SndPlayer1::StopHandler(void *rawCommand)
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces the ARTIST stop loop at 0x82BA44E0.
+#pragma optimize("s", on)
+#endif
+int SndPlayer1::StopHandler(Command *rawCommand)
 {
-    SndPlayer1 *self = static_cast<SndPlayer1StopCommand *>(rawCommand)->pPlayer;
+    SndPlayer1 *self = static_cast<SndPlayer1 *>(rawCommand->pObject);
     for (u32 index = 0; index < self->mMaxRequests; ++index)
     {
         if (self->GetRequestInternal(index)->state != REQUESTSTATE_FREE)
@@ -884,14 +879,18 @@ int SndPlayer1::StopHandler(void *rawCommand)
     self->mNextFeedSlotToFill = 0;
     self->mNextFeedSlotToFree = 0;
     self->mNumDeclickSamples = 16;
-    return static_cast<int>(sizeof(SndPlayer1StopCommand));
+    return static_cast<int>(sizeof(Command));
 }
 
-int SndPlayer1::ModifyStartTimeHandler(void *rawCommand)
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
+
+int SndPlayer1::ModifyStartTimeHandler(Command *rawCommand)
 {
     const SndPlayer1ModifyStartTimeCommand *command =
         static_cast<const SndPlayer1ModifyStartTimeCommand *>(rawCommand);
-    SndPlayer1 *self = command->pPlayer;
+    SndPlayer1 *self = static_cast<SndPlayer1 *>(command->pObject);
     const u8 maxRequests = self->mMaxRequests;
     for (u32 index = 0; index < maxRequests; ++index)
     {

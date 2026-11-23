@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x82AE2338 and 0x82AE1818.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptStd/AptCXForm.h"
 
 #include <cstring>   // memcpy

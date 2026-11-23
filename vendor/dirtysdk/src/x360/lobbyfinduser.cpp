@@ -1,4 +1,9 @@
 // DirtySDK 5.5.3 lobby find-user provider: ARTIST 82B23D88..82B24220.
+// XDK size optimization matches ARTIST at 0x82B24080 and 0x82B23F80.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "lobbyfinduser.h"
 #include "lobbytagfield.h"
 #include "lobbyname.h"

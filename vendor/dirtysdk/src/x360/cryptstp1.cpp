@@ -1,4 +1,9 @@
 // DirtySDK native STP1 frame protection, ARTIST82B3ABA8..82B3AE74.
+// XDK size optimization matches ARTIST at 0x82B3AD98 and 0x82B3ADC8.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "cryptstp1.h"
 #include <stddef.h>
 #include <string.h>

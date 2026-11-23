@@ -5,6 +5,11 @@
 //   @0x82AF16A0 is a compiler thunk -- dropped, not written).
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF0128.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptSound.h"
 
 // Construct the ActionScript Sound object: an AptObject of value type AptVFT_Sound

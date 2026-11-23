@@ -33,6 +33,7 @@
 // =====================================================================================
 
 #include "types.hpp" // f32, u32, s32, u8
+#include "rw/audio/core/PlugIn.h" // Command
 #include "rw/audio/core/Iir2Filters.h"     // PlugInBaseView / AudioProcessContext
 #include "rw/audio/core/SubMixConnector.h" // rw::audio::core::SubMixConnector, SubMix
 
@@ -66,10 +67,8 @@ struct RouteConnectEvent
 // (40 on x64 -- the handler/Route/SubMix pointers widened), never the console literal 24.
 // The ring consumer (System::ExecuteCommands) calls the leading field through
 // int (*)(void *), so the handler slot carries exactly that type.
-struct RouteConnectCommand
+struct RouteConnectCommand : Command
 {
-    int (*mpHandler)(void *); // +0x00 (X360) -- &Route::ConnectByPointerHandler
-    Route  *mpTarget;         // +0x04 (X360) -- the Route instance
     SubMix *mpSubMix;         // +0x08 (X360) -- target SubMix (connect event word 0)
     f32     mfGain0;          // +0x0C (X360) -- connect gain 0
     f32     mfGain1;          // +0x10 (X360) -- connect gain 1
@@ -112,7 +111,7 @@ public:
     // clear the gain array, then -- if the command carries a target SubMix -- link the
     // connector into that SubMix's connector list and store the three byte gains. Returns
     // the record's byte size -- host sizeof(RouteConnectCommand) (X360: 24). @0x82B9FB38.
-    static int ConnectByPointerHandler(void *cmd);
+    static int ConnectByPointerHandler(Command *cmd);
 
     // Scalar-deleting destructor: reset the vtable to the PlugIn base (off_820AA810) and,
     // for the deleting variant, operator delete. X360 @0x82BA1D10.

@@ -31,6 +31,8 @@
 // constructor node+C, program+28; fixed Module size3C and bank header58.
 // ============================================================================
 
+namespace rw { namespace audio { namespace core { struct Command; } } }
+
 namespace Snd9
 {
 
@@ -44,7 +46,7 @@ namespace Snd9
 // receives the command record and returns the consumed command size. FLAGGED
 // vendor extern -- declared, not defined, here.
 // ----------------------------------------------------------------------------
-int RemoveModuleBankHandler(void* apCommand);
+int RemoveModuleBankHandler(rw::audio::core::Command * apCommand);
 
 namespace Aems
 {

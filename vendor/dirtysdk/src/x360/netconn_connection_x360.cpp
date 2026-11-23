@@ -1,4 +1,9 @@
 // Native X360 NetConn connection state machine and public control operations.
+// XDK size optimization matches ARTIST at 0x82B12EA0 and 0x82B13070.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "netconn_x360_internal.h"
 #include "netconn.h"
 #include "dirtymem.h"

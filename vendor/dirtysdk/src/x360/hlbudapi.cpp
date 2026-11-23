@@ -11,6 +11,11 @@
 // This file is the X360 implementation. The PC backend in ../pc/hlbudapipc.cpp
 // models an offline/empty list and is not used here.
 
+// XDK size optimization matches ARTIST at 0x82B27F90 and 0x82B27E50.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "hlbudapi.h"
 #include "dirtymem.h"
 #include "lobbydisplist.h"

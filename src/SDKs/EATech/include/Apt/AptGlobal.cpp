@@ -11,6 +11,11 @@
 // See AptGlobal.h for the shape / layout derivation.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF0128 and 0x82AF5500.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptGlobal.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptString/EAString.h"      // EAStringC key

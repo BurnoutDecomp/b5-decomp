@@ -642,18 +642,18 @@ int GinsuPlayer::Event(int aiEventId, void *apParam)
         // returns the same host sizeof, or the ring replay desynchronises.
         lpSystem->muDeferredRingCursor =
             luCursor + static_cast<u32>(sizeof(PlayCommand));
-        lpCommand->mpHandler = &GinsuPlayer::PlayHandler;
-        lpCommand->mpTarget = this;
+        lpCommand->handler = &GinsuPlayer::PlayHandler;
+        lpCommand->pObject = this;
         lpCommand->mpGinFile = static_cast<PlayParams *>(apParam)->pGinFile;
     }
     else
     {
-        StopCommand *lpCommand =
-            reinterpret_cast<StopCommand *>(lpSystem->mpDeferredRingBase + luCursor);
+        Command *lpCommand =
+            reinterpret_cast<Command *>(lpSystem->mpDeferredRingBase + luCursor);
         lpSystem->muDeferredRingCursor =
-            luCursor + static_cast<u32>(sizeof(StopCommand));   // console 8
-        lpCommand->mpHandler = &GinsuPlayer::StopHandler;
-        lpCommand->mpTarget = this;
+            luCursor + static_cast<u32>(sizeof(Command));   // console 8
+        lpCommand->handler = &GinsuPlayer::StopHandler;
+        lpCommand->pObject = this;
     }
     return 0;
 }
@@ -661,11 +661,10 @@ int GinsuPlayer::Event(int aiEventId, void *apParam)
 // -------------------------------------------------------------------------------------
 // StopHandler @0x8268B1B8 -- clear the playing flag. The return is the ring-cursor advance.
 // -------------------------------------------------------------------------------------
-int GinsuPlayer::StopHandler(void *apCommand)
+int GinsuPlayer::StopHandler(Command *apCommand)
 {
-    StopCommand *lpCommand = static_cast<StopCommand *>(apCommand);
-    lpCommand->mpTarget->mPlaying = 0;
-    return static_cast<int>(sizeof(StopCommand));   // X360: li r3, 8
+    static_cast<GinsuPlayer *>(apCommand->pObject)->mPlaying = 0;
+    return static_cast<int>(sizeof(Command));   // X360: li r3, 8
 }
 
 // -------------------------------------------------------------------------------------
@@ -674,10 +673,10 @@ int GinsuPlayer::StopHandler(void *apCommand)
 // It marks itself playing FIRST, binds the content into the instance tail, publishes the
 // bound rate/range as readback attributes, and seeds the jump scheduler.
 // -------------------------------------------------------------------------------------
-int GinsuPlayer::PlayHandler(void *apCommand)
+int GinsuPlayer::PlayHandler(Command *apCommand)
 {
     PlayCommand *lpCommand = static_cast<PlayCommand *>(apCommand);
-    GinsuPlayer *lpSelf = lpCommand->mpTarget;
+    GinsuPlayer *lpSelf = static_cast<GinsuPlayer *>(lpCommand->pObject);
 
     lpSelf->mPlaying = 1;
     lpSelf->mpGinFile = lpCommand->mpGinFile;

@@ -60,11 +60,6 @@ static const int KI_FRAME = 256;
 // sizeof -- never the literal 8. See the RECORD STRIDE notes on EventEvent / ResetHandler.
 namespace
 {
-struct VuMeterResetCommand
-{
-    int (*mpHandler)(void *); // +0x00 -- always &VuMeter::ResetHandler
-    VuMeter *mpTarget;        // +0x04 -- the VuMeter to reset
-};
 } // namespace
 
 // -------------------------------------------------------------------------------------
@@ -104,19 +99,19 @@ VuMeter *VuMeter::ResetFunc(VuMeter *self)
 // -------------------------------------------------------------------------------------
 // ResetHandler @0x82B9D130 -- the deferred-command trampoline queued by EventEvent. Reset the
 // target VuMeter and return the command record's own size, which System::ExecuteCommands uses
-// as the ring advance (lpCursor += header->mpHandler(lpCursor)).
+// as the ring advance (lpCursor += header->handler(lpCursor)).
 //   console form: ResetFunc(*(cmd + 4)); return 8;   <- the 8 is CONSOLE sizeof, see below
 // RECORD STRIDE (X360-literal trap): the asm's `li r3,8` @0x82B9D144 IS the console
-// sizeof(VuMeterResetCommand) ({int(*)(void*), VuMeter*} = 4+4). On the host the two widened
+// sizeof(Command) ({int(*)(Command*), VuMeter*} = 4+4). On the host the two widened
 // pointers make the same record 16 bytes, so returning the literal 8 would step the consumer
 // into the middle of this record and misparse every following command -- the return must be
 // the HOST sizeof, exactly as the committed twin System::ReleaseHandler does for the same
 // immediate.
 // -------------------------------------------------------------------------------------
-int VuMeter::ResetHandler(void *cmd)
+int VuMeter::ResetHandler(Command *cmd)
 {
-    ResetFunc(static_cast<VuMeterResetCommand *>(cmd)->mpTarget);
-    return static_cast<int>(sizeof(VuMeterResetCommand)); // X360: li r3,8 @0x82B9D144
+    ResetFunc(static_cast<VuMeter *>(cmd->pObject));
+    return static_cast<int>(sizeof(Command)); // X360: li r3,8 @0x82B9D144
 }
 
 // -------------------------------------------------------------------------------------
@@ -129,18 +124,18 @@ VuMeter *VuMeter::EventEvent(VuMeter *self)
 {
     System *pSystem = reinterpret_cast<System *>(self->mBase.mpSystem);
 
-    VuMeterResetCommand *pCmd = reinterpret_cast<VuMeterResetCommand *>(
+    Command *pCmd = reinterpret_cast<Command *>(
         pSystem->mpDeferredRingBase + pSystem->muDeferredRingCursor);
     // RECORD STRIDE (X360-literal trap): the asm's `addi r10,r10,8` IS the console
-    // sizeof(VuMeterResetCommand) (4+4); on the host the record is 16 bytes and
+    // sizeof(Command) (4+4); on the host the record is 16 bytes and
     // System::ExecuteCommands replays the ring by the handler's return -- ResetHandler above
-    // likewise returns sizeof(VuMeterResetCommand) -- so the enqueue stride must be the HOST
+    // likewise returns sizeof(Command) -- so the enqueue stride must be the HOST
     // sizeof. Advancing by the literal 8 would let the next producer overwrite mpTarget.
     pSystem->muDeferredRingCursor +=
-        static_cast<u32>(sizeof(VuMeterResetCommand)); // X360: addi r10,r10,8 @0x82BA0F98
+        static_cast<u32>(sizeof(Command)); // X360: addi r10,r10,8 @0x82BA0F98
 
-    pCmd->mpHandler = &VuMeter::ResetHandler;
-    pCmd->mpTarget  = self;
+    pCmd->handler = &VuMeter::ResetHandler;
+    pCmd->pObject  = self;
     return self;
 }
 

@@ -38,6 +38,8 @@
 // =====================================================================================
 
 #include "rw/audio/core/EaXmaDec.h"
+#include <ppcintrinsics.h>
+#include <vectorintrinsics.h>
 #include "rw/audio/core/DecoderRegistry.h" // complete DecoderDesc (the descriptor is DEFINED in this TU)
 
 #include "rw/audio/core/PlugIn.h"                 // rw::audio::core::System (Alloc/PhysicalAlloc/Free)
@@ -47,6 +49,12 @@
 #include "types.hpp" // uintptr_t
 #include <cstring> // memcpy
 #include <new>     // placement new
+
+#if defined(_XBOX) && defined(_MSC_VER)
+// The XDK size setting reproduces the unaligned copy and bit-window helper
+// at 0x82B8FA18 and 0x82B8FB20, and keeps ParseToNextFrame's two calls out of line.
+#pragma optimize("s", on)
+#endif
 
 namespace rw
 {
@@ -322,18 +330,22 @@ void EaXmaDec::FeedEvent()
 // of a 32-bit word, shifted left by the intra-byte bit offset (iBitPos % 8), then shifted
 // down by (32 - iNumBits) so the requested field lands in the low bits.
 // -------------------------------------------------------------------------------------
-u32 *EaXmaDec::LeftShiftInBits(u32 *puAccum, const u8 *pStream, s32 iBitPos, s32 iNumBits)
+void EaXmaDec::LeftShiftInBits(u32 *puAccum, const u8 *pStream, s32 iBitPos, s32 iNumBits)
 {
     if (iNumBits > 0)
     {
-        const u8 *pByte = pStream + iBitPos / 8;
-        u32 uWindow = (static_cast<u32>(pByte[0]) << 24) |
-                      (static_cast<u32>(pByte[1]) << 16) |
-                      (static_cast<u32>(pByte[2]) << 8);
-        u32 uBits = (uWindow << (iBitPos % 8)) >> (32 - iNumBits);
-        *puAccum = uBits | (*puAccum << iNumBits);
+        const u32 uPrior = *puAccum;
+        const s32 iByte = iBitPos / 8;
+        const s32 iLeft = iBitPos % 8;
+        const s32 iRight = 32 - iNumBits;
+
+        u32 uWindow = pStream[iByte];
+        uWindow = (uWindow << 8) | pStream[iByte + 1];
+        uWindow = (uWindow << 8) | pStream[iByte + 2];
+        uWindow <<= 8;
+
+        *puAccum = ((uWindow << iLeft) >> iRight) | (uPrior << iNumBits);
     }
-    return puAccum;
 }
 
 // -------------------------------------------------------------------------------------
@@ -345,40 +357,90 @@ u32 *EaXmaDec::LeftShiftInBits(u32 *puAccum, const u8 *pStream, s32 iBitPos, s32
 // the byte cursor wraps onto the next 2048-byte (0x800) XMA packet and the offset rolls back
 // by one packet's worth of bits (0x3FE0).
 //
-// The X360 code leaves the LeftShiftInBits accumulator pointer in r3 on return, but every
-// caller ignores it, so the source shape is a void frame-walk.
 // -------------------------------------------------------------------------------------
 void EaXmaDec::ParseToNextFrame(const u8 **ppCursor, s32 *piBitOffset)
 {
-    s32 iBitOffset = *piBitOffset;
+    const s32 iBitOffset = *piBitOffset;
     s32 iTailBits = 0;
     if (iBitOffset > 0x3FD1)
         iTailBits = iBitOffset - 0x3FD1;
 
+    const s32 iFirstBits = 15 - iTailBits;
     const u8 *pStream = *ppCursor;
     u32 uFrameLen = 0;
-    LeftShiftInBits(&uFrameLen, pStream, iBitOffset + 32, 15 - iTailBits);
-    LeftShiftInBits(&uFrameLen, pStream, iBitOffset + (15 - iTailBits) + 64, iTailBits);
+    LeftShiftInBits(&uFrameLen, pStream, iBitOffset + 32, iFirstBits);
+    LeftShiftInBits(&uFrameLen, pStream, iFirstBits + iBitOffset + 64, iTailBits);
 
-    s32 iNext = iBitOffset + static_cast<s32>(uFrameLen);
-    if (static_cast<u32>(iNext) >= 0x3FE0u)
+    u32 uNext = uFrameLen + iBitOffset;
+    if (uNext >= 0x3FE0u)
     {
         *ppCursor = pStream + 2048;
-        iNext = *piBitOffset + static_cast<s32>(uFrameLen) - 0x3FE0;
+        uNext = *piBitOffset + uFrameLen - 0x3FE0;
     }
-    *piBitOffset = iNext;
+    *piBitOffset = uNext;
 }
 
 // -------------------------------------------------------------------------------------
 // XMAmemcpy @0x82B8FA18
 // Copy `iSize` bytes from `pSrc` to `pDst` (topping up the XMA hardware input buffers). The
-// X360 body is a hand-unrolled VMX unaligned block copy (lvlx/lvrx -> stvx128 over 128-byte
-// blocks) with a scalar memcpy tail; semantically a plain byte copy. A member, but the asm
-// overwrites r3 (this) with pDst before use, so the instance is unreferenced. Returns pDst.
+// XMA input buffers come from the 2048-byte-aligned pool at 0x82B8F580.
+// ARTIST uses indexed VMX loads for the possibly unaligned source and
+// aligned stores to the packet buffer. The remaining bytes use memcpy.
 // -------------------------------------------------------------------------------------
-void *EaXmaDec::XMAmemcpy(void *pDst, const void *pSrc, s32 iSize)
+void EaXmaDec::XMAmemcpy(void * __restrict pDst, const void * __restrict pSrc, s32 iSize)
 {
-    return std::memcpy(pDst, pSrc, static_cast<usize>(iSize));
+    u8 *pWrite = static_cast<u8 *>(pDst);
+    const u8 *pRead = static_cast<const u8 *>(pSrc);
+
+    __dcbt(0, pRead);
+    __dcbt(128, pRead);
+
+    if (iSize >= 128)
+    {
+        u32 uBlocks = static_cast<u32>(iSize) / 128;
+        iSize -= uBlocks * 128;
+        do
+        {
+            const __vector4 vLeft0 = __lvlx(pRead, 0);
+            const __vector4 vRight0 = __lvrx(pRead, 16);
+            const __vector4 vLeft1 = __lvlx(pRead, 16);
+            const __vector4 vRight1 = __lvrx(pRead, 32);
+            const __vector4 vLeft2 = __lvlx(pRead, 32);
+            const __vector4 vRight2 = __lvrx(pRead, 48);
+            const __vector4 vLeft3 = __lvlx(pRead, 48);
+            const __vector4 vRight3 = __lvrx(pRead, 64);
+            const __vector4 vLeft4 = __lvlx(pRead, 64);
+            const __vector4 vRight4 = __lvrx(pRead, 80);
+            const __vector4 vLeft5 = __lvlx(pRead, 80);
+            const __vector4 vRight5 = __lvrx(pRead, 96);
+            const __vector4 vLeft6 = __lvlx(pRead, 96);
+            const __vector4 vRight6 = __lvrx(pRead, 112);
+            const __vector4 vLeft7 = __lvlx(pRead, 112);
+            const __vector4 vRight7 = __lvrx(pRead, 128);
+            pRead += 128;
+            __dcbt(128, pRead);
+            const __vector4 vBlock0 = __vor(vLeft0, vRight0);
+            const __vector4 vBlock1 = __vor(vLeft1, vRight1);
+            const __vector4 vBlock2 = __vor(vLeft2, vRight2);
+            const __vector4 vBlock3 = __vor(vLeft3, vRight3);
+            const __vector4 vBlock4 = __vor(vLeft4, vRight4);
+            const __vector4 vBlock5 = __vor(vLeft5, vRight5);
+            const __vector4 vBlock6 = __vor(vLeft6, vRight6);
+            const __vector4 vBlock7 = __vor(vLeft7, vRight7);
+            __stvx(vBlock0, pWrite, 0);
+            __stvx(vBlock1, pWrite, 16);
+            __stvx(vBlock2, pWrite, 32);
+            __stvx(vBlock3, pWrite, 48);
+            __stvx(vBlock4, pWrite, 64);
+            __stvx(vBlock5, pWrite, 80);
+            __stvx(vBlock6, pWrite, 96);
+            __stvx(vBlock7, pWrite, 112);
+            pWrite += 128;
+        } while (--uBlocks);
+    }
+
+    if (iSize != 0)
+        std::memcpy(pWrite, pRead, iSize);
 }
 
 } // namespace core

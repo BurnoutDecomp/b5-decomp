@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x82B7E3B0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/snd/sndcontrol.h"
 
 #include "SDKs/EATech/include/snd/sndhal.h"

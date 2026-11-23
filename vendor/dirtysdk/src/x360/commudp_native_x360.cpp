@@ -1,4 +1,9 @@
 // DirtySDK native X360 CommUDP ownership and lifecycle, ARTIST82B40310.
+// XDK size optimization matches ARTIST at 0x82B3F980 and 0x82B3FA00.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "commall_x360_internal.h"
 #include "dirtylib_x360_internal.h"
 #include "dirtymem.h"

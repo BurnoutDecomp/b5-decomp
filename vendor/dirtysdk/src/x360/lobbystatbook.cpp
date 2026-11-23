@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x82B23C98 and 0x82B237D0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "lobbystatbook.h"
 #include "dirtymem.h"
 #include "dirtylib.h"

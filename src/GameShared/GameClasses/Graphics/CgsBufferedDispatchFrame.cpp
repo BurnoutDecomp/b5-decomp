@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x827F97F8.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "GameShared/GameClasses/Graphics/CgsBufferedDispatchFrame.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT (BeginAssert/FireAssert/EndAssert)
 

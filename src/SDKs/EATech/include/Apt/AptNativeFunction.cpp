@@ -12,6 +12,11 @@
 // See AptNativeFunction.h for the layout / base-class derivation.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF01E8 and 0x82AF0128.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptNativeFunction.h"
 
 CGS_STATIC_ASSERT(sizeof(AptNativeFunction) == 0x24, "ARTIST native function size");

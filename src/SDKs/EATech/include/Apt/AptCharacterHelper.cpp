@@ -24,6 +24,11 @@
 // EA SDK identifiers kept verbatim (CXX_NAMING_CONVENTIONS external-API exception).
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AE2FA0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptCharacterHelper.h"
 #include "SDKs/EATech/include/Apt/AptCharacterDynamicText.h"  // the text template layout (by name)
 #include "SDKs/EATech/include/Apt/AptCharacter.h"             // mnType / mnRefAndFlags / mpFixupLink

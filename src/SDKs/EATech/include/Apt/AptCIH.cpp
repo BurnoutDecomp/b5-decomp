@@ -17,6 +17,11 @@
 // thunk from the virtual destructor + operator delete, so it is not hand-written.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AE7340 and 0x82AD5B28.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptCIH.h"
 #include "SDKs/EATech/include/Apt/AptCharacter.h"
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"

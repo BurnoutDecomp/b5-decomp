@@ -26,6 +26,11 @@
 // own, and setIsDefined/setRefCount own mbIsDefined / mnReferenceCount.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82B00E30.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptCIHNone.h"
 
 // @0x82B00DC8

@@ -18,6 +18,11 @@
 // See AptKey.h for the shape / layout derivation.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AECE98 and 0x82AF0128.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptKey.h"
 
 #include "SDKs/EATech/include/Apt/AptObject.h"             // AptObject::Create / operator new

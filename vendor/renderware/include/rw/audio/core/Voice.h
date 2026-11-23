@@ -140,8 +140,8 @@ public:
     // @0x82B6C020 -- deferred handler: insert the voice into the priority-sorted active list
     // (growing it if full; else park the voice on the expelled list). Returns the record
     // size: X360 `li r3,8`, i.e. the CONSOLE sizeof -- on the host return
-    // sizeof(VoiceCreateCommand) (16), which must equal the producer's cursor advance.
-    static int CreateInstanceHandler(void *cmd);
+    // sizeof(Command) (16), which must equal the producer's cursor advance.
+    static int CreateInstanceHandler(Command *cmd);
 
     // @0x82B6BFD8 -- begin a fade-out: latch the decay target and queue the voice on the
     // System's expel-after-decay candidate list (no-op if not currently active).
@@ -155,9 +155,9 @@ public:
     static Voice *Release(Voice *self);
 
     // @0x82B6E0F8 -- deferred handler: ReleaseImmediate(voice, 0). Returns the record size:
-    // X360 `li r3,8` is the CONSOLE sizeof -- on the host return sizeof(VoiceReleaseCommand)
+    // X360 `li r3,8` is the CONSOLE sizeof -- on the host return sizeof(Command)
     // (16), matching the producer's cursor advance.
-    static int ReleaseHandler(void *cmd);
+    static int ReleaseHandler(Command *cmd);
 
     // @0x82B6DF38 -- tear down every stage PlugIn, unlink from the active/expelled lists
     // (unless keepInList), and free the voice block through the System allocator.
@@ -173,7 +173,7 @@ public:
     // @0x82B6E128 -- deferred handler: write the queued priority into mfPriority. Returns the
     // record size: X360 `li r3,0xC` is the CONSOLE sizeof -- on the host return
     // sizeof(VoiceSetPriorityCommand) (24), matching the producer's cursor advance.
-    static int SetPriorityHandler(void *cmd);
+    static int SetPriorityHandler(Command *cmd);
 
     // ---- layout (X360 byte offsets in the file-header comment; x64 widths, by-name access) ----
     // The per-voice mix-cost stat block (semantics grounded by Mixer::Execute

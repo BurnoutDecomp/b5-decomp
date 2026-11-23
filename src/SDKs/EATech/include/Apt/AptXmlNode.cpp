@@ -13,6 +13,11 @@
 // compiler's INLINED AptObject(AptVFT_XmlNode, 8) ctor body.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF0128.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptXmlNode.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AptValue base
 #include "SDKs/EATech/include/Apt/AptDefine.h"            // gpGCPoolManager

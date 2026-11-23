@@ -153,7 +153,7 @@ Route* Route::EventEvent(Route* self, int /*a2*/, const RouteConnectEvent* pEven
     RouteConnectCommand* lpCmd =
         reinterpret_cast<RouteConnectCommand*>(lpRingBase + luCursor);
     // RECORD STRIDE (X360-literal trap): the asm's `addi r9,r9,0x18` IS the console
-    // sizeof(RouteConnectCommand) ({int(*)(void*), Route*, SubMix*, f32 x3} = 4+4+4+4+4+4).
+    // sizeof(RouteConnectCommand) ({int(*)(Command*), Route*, SubMix*, f32 x3} = 4+4+4+4+4+4).
     // On the host the three widened pointers make the same record 40 bytes, and
     // ExecuteCommands advances the ring by the handler's return -- ConnectByPointerHandler
     // below likewise returns sizeof(RouteConnectCommand) -- so the enqueue stride must be
@@ -162,8 +162,8 @@ Route* Route::EventEvent(Route* self, int /*a2*/, const RouteConnectEvent* pEven
     lpSystem->muDeferredRingCursor =
         luCursor + static_cast<u32>(sizeof(RouteConnectCommand)); // X360: addi r9,r9,0x18 @0x82BA3DE0
 
-    lpCmd->mpHandler = &Route::ConnectByPointerHandler; // cmd[0]
-    lpCmd->mpTarget = self;                             // cmd[1]
+    lpCmd->handler = &Route::ConnectByPointerHandler; // cmd[0]
+    lpCmd->pObject = self;                             // cmd[1]
     lpCmd->mpSubMix = pEvent->mpSubMix;                 // cmd[2] = event word 0
     lpCmd->mfGain0 = pEvent->mfGain0;                   // cmd[3] = event word 1
     lpCmd->mfGain1 = pEvent->mfGain1;                   // cmd[4] = event word 2
@@ -214,10 +214,10 @@ SubMixConnector *Route::ReleaseEvent(Route *self)
 // connector address there directly, so the reconstruction writes &v4's storage by taking
 // the connector's own address (the value the asm stores is v4, i.e. &mConnector).
 // -------------------------------------------------------------------------------------
-int Route::ConnectByPointerHandler(void* cmd)
+int Route::ConnectByPointerHandler(Command * cmd)
 {
     RouteConnectCommand* lpCmd = static_cast<RouteConnectCommand*>(cmd);
-    Route* lpRoute = lpCmd->mpTarget; // v6/r6 = *(a1+4)
+    Route* lpRoute = static_cast<Route *>(lpCmd->pObject); // v6/r6 = *(a1+4)
 
     SubMixConnector* lpConn =
         SubMixConnector::Disconnect(&lpRoute->mSubMixConnector, lpRoute->mDeClickValue); // v4 = r3

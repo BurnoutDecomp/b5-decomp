@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x82BC9A08.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/eajobs/job_types.h" // EA::Jobs::JobInstanceHandle, SchedulerBackend
 #include "SDKs/EATech/eajobs/event.h"
 #include "SDKs/EATech/eajobs/detail.h"     // EA::Jobs::Detail::WaitOnYieldHelper

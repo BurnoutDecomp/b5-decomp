@@ -2,6 +2,11 @@
 // always-terminated printf pair. Only the entry points the tagfield/display-list
 // modules reach are reconstructed here.
 
+// XDK size optimization matches ARTIST at 0x82B2AAD0 and 0x82B2AA68.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "platform.h"
 
 #include <cstdarg>

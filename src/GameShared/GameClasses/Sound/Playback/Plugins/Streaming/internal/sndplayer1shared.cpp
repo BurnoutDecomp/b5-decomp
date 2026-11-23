@@ -165,8 +165,6 @@ namespace
         return command;
     }
 
-    typedef s32 (*JStrCommandHandler)(void*);
-
     struct PlayParams
     {
         f64 startTime;
@@ -197,27 +195,14 @@ namespace
         f32 requestHandle;
     };
 
-    struct JStrCommandBase
+    struct JStrModifyStartTimeCommand : Command
     {
-        JStrCommandHandler handler;
-        SndPlayer1_CgsStreamMod* self;
-    };
-
-    struct JStrStopCommand
-    {
-        JStrCommandBase base;
-    };
-
-    struct JStrModifyStartTimeCommand
-    {
-        JStrCommandBase base;
         f64 startTime;
         f32 requestHandle;
     };
 
-    struct JStrPlayCommand
+    struct JStrPlayCommand : Command
     {
-        JStrCommandBase base;
         f64 startTime;
         f64 streamFileOffset;
         u32 streamPoolGuid;
@@ -531,8 +516,8 @@ int SndPlayer1_CgsStreamMod::Event(int aiEventId, void* apParameter)
             static_cast<u32>(sizeof(JStrPlayCommand)) + pathBytes);
         JStrPlayCommand* command =
             ReserveDeferred<JStrPlayCommand>(system, bytes);
-        command->base.handler = &PlayHandler;
-        command->base.self = this;
+        command->handler = &PlayHandler;
+        command->pObject = this;
         command->startTime = params.startTime;
         command->streamFileOffset = params.streamFileOffset;
         command->streamPoolGuid = params.streamPoolGuid;
@@ -553,10 +538,10 @@ int SndPlayer1_CgsStreamMod::Event(int aiEventId, void* apParameter)
     }
     case 1:
     {
-        JStrStopCommand* command =
-            ReserveDeferred<JStrStopCommand>(system, sizeof(JStrStopCommand));
-        command->base.handler = &StopHandler;
-        command->base.self = this;
+        Command* command =
+            ReserveDeferred<Command>(system, sizeof(Command));
+        command->handler = &StopHandler;
+        command->pObject = this;
         break;
     }
     case 2:
@@ -608,8 +593,8 @@ int SndPlayer1_CgsStreamMod::Event(int aiEventId, void* apParameter)
         JStrModifyStartTimeCommand* command =
             ReserveDeferred<JStrModifyStartTimeCommand>(
                 system, sizeof(JStrModifyStartTimeCommand));
-        command->base.handler = &ModifyStartTimeHandler;
-        command->base.self = this;
+        command->handler = &ModifyStartTimeHandler;
+        command->pObject = this;
         command->startTime = params.newStartTime;
         command->requestHandle = params.requestHandle;
         break;
@@ -620,10 +605,10 @@ int SndPlayer1_CgsStreamMod::Event(int aiEventId, void* apParameter)
     return 0;
 }
 
-s32 SndPlayer1_CgsStreamMod::PlayHandler(void* apCommand)
+s32 SndPlayer1_CgsStreamMod::PlayHandler(Command * apCommand)
 {
     JStrPlayCommand* command = static_cast<JStrPlayCommand*>(apCommand);
-    SndPlayer1_CgsStreamMod* self = command->base.self;
+    SndPlayer1_CgsStreamMod* self = static_cast<SndPlayer1_CgsStreamMod*>(command->pObject);
     const u32 index = self->mNextFreeRequest;
     self->mLastRequestHandleProcessed = command->requestHandle;
     RequestInternal& request = self->Request(index);
@@ -681,11 +666,11 @@ s32 SndPlayer1_CgsStreamMod::PlayHandler(void* apCommand)
     return command->recordBytes;
 }
 
-s32 SndPlayer1_CgsStreamMod::ModifyStartTimeHandler(void* apCommand)
+s32 SndPlayer1_CgsStreamMod::ModifyStartTimeHandler(Command * apCommand)
 {
     JStrModifyStartTimeCommand* command =
         static_cast<JStrModifyStartTimeCommand*>(apCommand);
-    SndPlayer1_CgsStreamMod* self = command->base.self;
+    SndPlayer1_CgsStreamMod* self = static_cast<SndPlayer1_CgsStreamMod*>(command->pObject);
     for (u32 i = 0; i < self->mMaxRequests; ++i)
     {
         RequestInternal& request = self->Request(i);
@@ -748,10 +733,10 @@ void SndPlayer1_CgsStreamMod::StreamLostCallback(void* apContext)
     self->mNextRequestToFree = 0;
 }
 
-s32 SndPlayer1_CgsStreamMod::StopHandler(void* apCommand)
+s32 SndPlayer1_CgsStreamMod::StopHandler(Command * apCommand)
 {
     SndPlayer1_CgsStreamMod* self =
-        static_cast<JStrStopCommand*>(apCommand)->base.self;
+        static_cast<SndPlayer1_CgsStreamMod*>(apCommand->pObject);
     for (u32 i = 0; i < self->mMaxRequests; ++i)
     {
         if (self->Request(i).state != E_REQUESTSTATE_FREE)
@@ -765,7 +750,7 @@ s32 SndPlayer1_CgsStreamMod::StopHandler(void* apCommand)
     self->mNextFeedSlotToFill = 0;
     self->mNextFeedSlotToFree = 0;
     self->mNumDeclickSamples = 16;
-    return sizeof(JStrStopCommand);
+    return sizeof(Command);
 }
 
 }}}

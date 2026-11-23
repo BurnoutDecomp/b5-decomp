@@ -21,6 +21,11 @@
 // through the AptValue vtable (AddRef=vtbl[0], Release=vtbl[1]).
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AD9F50 and 0x82ADA010.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AddRef/Release (value refs)
 #include "SDKs/EATech/include/Apt/AptDefine.h"            // gpNonGCPoolManager

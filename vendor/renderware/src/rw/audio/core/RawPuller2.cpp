@@ -82,19 +82,19 @@ RawPuller2* RawPuller2::EventEvent(RawPuller2* self, int bStop, const RawPuller2
     if (bStop)
     {
         u32 luCursor = lpSystem->muDeferredRingCursor;            // *(v3+0x10B8)
-        RawPuller2StopCommand* lpCmd =
-            reinterpret_cast<RawPuller2StopCommand*>(lpRingBase + luCursor);
+        Command* lpCmd =
+            reinterpret_cast<Command*>(lpRingBase + luCursor);
         // RECORD STRIDE (X360-literal trap): the asm's `addi r10,r10,8` IS the console
-        // sizeof(RawPuller2StopCommand) ({int(*)(void*), RawPuller2*} = 4+4). On the host
+        // sizeof(Command) ({int(*)(Command*), RawPuller2*} = 4+4). On the host
         // the two widened pointers make the same record 16 bytes, and ExecuteCommands
         // advances the ring by the handler's return -- StopHandler below likewise returns
-        // sizeof(RawPuller2StopCommand) -- so the enqueue stride must be the HOST sizeof,
+        // sizeof(Command) -- so the enqueue stride must be the HOST sizeof,
         // never the literal 8. The cursor is advanced before the fields are written,
         // exactly as the asm orders the stores.
         lpSystem->muDeferredRingCursor =
-            luCursor + static_cast<u32>(sizeof(RawPuller2StopCommand)); // X360: addi r10,r10,8 @0x82B9F3C4
-        lpCmd->mpHandler = &RawPuller2::StopHandler;              // cmd[0] = StopHandler
-        lpCmd->mpTarget = self;                                   // cmd[1] = self
+            luCursor + static_cast<u32>(sizeof(Command)); // X360: addi r10,r10,8 @0x82B9F3C4
+        lpCmd->handler = &RawPuller2::StopHandler;              // cmd[0] = StopHandler
+        lpCmd->pObject = self;                                   // cmd[1] = self
     }
     else
     {
@@ -102,7 +102,7 @@ RawPuller2* RawPuller2::EventEvent(RawPuller2* self, int bStop, const RawPuller2
         RawPuller2PlayCommand* lpCmd =
             reinterpret_cast<RawPuller2PlayCommand*>(lpRingBase + luCursor);
         // RECORD STRIDE (X360-literal trap): the asm's `addi r9,r9,0x18` IS the console
-        // sizeof(RawPuller2PlayCommand) ({int(*)(void*), RawPuller2*, f32, f32, void*,
+        // sizeof(RawPuller2PlayCommand) ({int(*)(Command*), RawPuller2*, f32, f32, void*,
         // RawPuller2FillFn} = 4+4+4+4+4+4). On the host the four widened pointers make the
         // same record 40 bytes, and ExecuteCommands advances the ring by the handler's
         // return -- PlayHandler below likewise returns sizeof(RawPuller2PlayCommand) -- so
@@ -110,8 +110,8 @@ RawPuller2* RawPuller2::EventEvent(RawPuller2* self, int bStop, const RawPuller2
         // advanced before the fields are written, exactly as the asm orders the stores.
         lpSystem->muDeferredRingCursor =
             luCursor + static_cast<u32>(sizeof(RawPuller2PlayCommand)); // X360: addi r9,r9,0x18 @0x82B9F378
-        lpCmd->mpHandler = &RawPuller2::PlayHandler;              // cmd[0] = PlayHandler
-        lpCmd->mpTarget = self;                                   // cmd[1] = self
+        lpCmd->handler = &RawPuller2::PlayHandler;              // cmd[0] = PlayHandler
+        lpCmd->pObject = self;                                   // cmd[1] = self
         lpCmd->mfNumChannels = pEvent->mfNumChannels;             // cmd[2] = event[0]
         lpCmd->mfSampleRate = pEvent->mfSampleRate;               // cmd[3] = event[1]
         lpCmd->mpContext = pEvent->mpContext;                     // cmd[4] = event[2]
@@ -134,10 +134,10 @@ RawPuller2* RawPuller2::EventEvent(RawPuller2* self, int bStop, const RawPuller2
 // channel count via fctidz (round-toward-zero double->int, low byte taken). a1+0x10 /
 // a1+0x14 are the context and callback the Play event carried.
 // -------------------------------------------------------------------------------------
-int RawPuller2::PlayHandler(void* cmd)
+int RawPuller2::PlayHandler(Command * cmd)
 {
     RawPuller2PlayCommand* lpCmd = static_cast<RawPuller2PlayCommand*>(cmd);
-    RawPuller2* lpSelf = lpCmd->mpTarget; // v1 = *(a1+4)
+    RawPuller2* lpSelf = static_cast<RawPuller2 *>(lpCmd->pObject); // v1 = *(a1+4)
 
     const f32 lfRate = lpCmd->mfSampleRate;       // *(a1+0xC)
     const f32 lfChannelsF = lpCmd->mfNumChannels; // *(a1+8)
@@ -161,14 +161,14 @@ int RawPuller2::PlayHandler(void* cmd)
 //   *(*(a1+4) + 0x24) = 0   ; the puller's mpCallback = NULL (idle)
 //   return 8
 // -------------------------------------------------------------------------------------
-int RawPuller2::StopHandler(void* cmd)
+int RawPuller2::StopHandler(Command * cmd)
 {
-    RawPuller2StopCommand* lpCmd = static_cast<RawPuller2StopCommand*>(cmd);
-    lpCmd->mpTarget->mpPullCallback = 0; // *(*(a1+4)+0x24) = 0
+    Command* lpCmd = cmd;
+    static_cast<RawPuller2 *>(lpCmd->pObject)->mpPullCallback = 0; // *(*(a1+4)+0x24) = 0
     // RECORD STRIDE (X360-literal trap): the asm's `li r3,8` is the console
-    // sizeof(RawPuller2StopCommand); it must stay identical to the producer's advance in
+    // sizeof(Command); it must stay identical to the producer's advance in
     // EventEvent above, so both sides use the HOST sizeof (16 on x64).
-    return static_cast<int>(sizeof(RawPuller2StopCommand)); // X360: li r3,8 @0x82B9A5B8
+    return static_cast<int>(sizeof(Command)); // X360: li r3,8 @0x82B9A5B8
 }
 
 // -------------------------------------------------------------------------------------

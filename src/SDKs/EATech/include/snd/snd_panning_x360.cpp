@@ -1,5 +1,10 @@
 // ARTIST Snd9 speaker panning: 0x82B73000, 0x82B73080,
 // 0x82B73DF0, 0x82B73E78, 0x82B7CBD8, and 0x82B7CFF8.
+// XDK size optimization matches ARTIST at 0x82B73E78.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "types.hpp"
 #include "SDKs/EATech/include/snd/sndsys.h"
 #include "SDKs/EATech/include/snd/sndhal.h"

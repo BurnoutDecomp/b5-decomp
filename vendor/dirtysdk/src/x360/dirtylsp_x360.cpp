@@ -1,4 +1,9 @@
 // Native DirtySDK/Xenon title-server lookup, ARTIST 82B3AE78..82B3B1F8.
+// XDK size optimization matches ARTIST at 0x82B3AE78.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "dirtylsp.h"
 #include "dirtymem.h"
 #include "dirtylib.h"

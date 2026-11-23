@@ -65,6 +65,7 @@ namespace audio
 namespace core
 {
 
+struct Command;
 class System;                // owning sub-system (pointer member; full def in PlugIn.h)
 class Mixer;                             // the stage process context (unified; Mixer.h)
 typedef Mixer AudioProcessContext;       // pointer param only
@@ -110,12 +111,12 @@ public:
     // Deferred "start recording" ring handler: open the file named in the record, write the
     // 82-byte header placeholder, and register the pump timer. Returns the record's byte
     // size (used by the ring to advance). @0x82B9D510.
-    static int StartHandler(void *pCommandRecord);
+    static int StartHandler(Command *pCommandRecord);
 
     // Deferred "stop recording" ring handler: seek to 0 and rewrite the AIFF header (FORM /
     // COMM / INST / SSND) with the final sizes, close the file, and drop the pump timer.
     // Returns 8 (the record's byte size). @0x82BA1EC0.
-    static int StopHandler(void *pCommandRecord);
+    static int StopHandler(Command *pCommandRecord);
 
     // Compiler `scalar deleting destructor': destruct the embedded TimerHandle sub-object,
     // reinstall the base v-table, then conditionally free. @0x82B9D428.

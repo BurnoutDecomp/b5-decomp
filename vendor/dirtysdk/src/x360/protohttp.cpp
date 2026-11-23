@@ -1,4 +1,9 @@
 // DirtySDK 5.5.3 native HTTP state; layout corroborated by ARTIST 82B24CE0/82B25050.
+// XDK size optimization matches ARTIST at 0x82B255A8 and 0x82B25780.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "protohttp.h"
 #include "dirtymem.h"
 #include "dirtylib.h"

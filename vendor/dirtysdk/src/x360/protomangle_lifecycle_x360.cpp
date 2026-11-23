@@ -1,5 +1,10 @@
 // Native X360 ProtoMangle lifecycle, completion and query selectors.
 // ARTIST 82B17020, 82B17428, 82B175E8, 82B17D30 and 82B17F58.
+// XDK size optimization matches ARTIST at 0x82B17020.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "types.hpp"
 #include "dirtyaddr.h"
 #include "dirtymem.h"

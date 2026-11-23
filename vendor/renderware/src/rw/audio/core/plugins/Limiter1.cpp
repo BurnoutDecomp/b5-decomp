@@ -162,7 +162,7 @@ int Limiter1::CreateInstance(Limiter1 *self)
     if (self)
     {
         self->mBase.mpVTable = KLM_Limiter1VTable;                    // the Limiter1 v-table
-        CompressorLimiter1::ClearBuffer(&self->mCompressorLimiter1);  // XMemSet(+0x40, 0, 0x30)
+        self->mCompressorLimiter1.ClearBuffer();  // XMemSet(+0x40, 0, 0x30)
     }
     self->mBase.mpAttributes = &self->mAttribute[0];                  // attribute table @ +0x28
 
@@ -222,12 +222,11 @@ void Limiter1::Configure(f32 afSampleRate)
 
     // CHANNELMODE_GROUPED is an EXACT 1.0 test: any other value -- NaN included -- is
     // CHANNELMODE_INDEPENDENT (the console's `beq` is false when unordered).
-    const s32 liGroupChannels =
-        (mAttribute[ATTRIBUTE_SETCHANNELMODE].f32 == KF_ONE) ? 1 : 0;
+    const bool groupChannels = mAttribute[ATTRIBUTE_SETCHANNELMODE].f32 == KF_ONE;
 
-    CompressorLimiter1::Configure(&mCompressorLimiter1, lfThresholdOn, lfThresholdOff,
+    mCompressorLimiter1.Configure(lfThresholdOn, lfThresholdOff,
                                   KF_COMP_EXPONENT, liAttackSamples, liReleaseSamples,
-                                  liGroupChannels);
+                                  groupChannels);
 }
 
 // -------------------------------------------------------------------------------------
@@ -250,7 +249,7 @@ BufferStatus Limiter1::Process(PlugIn *pPlugIn, Mixer *ctx, bool /*discontinuity
     {
         if (self->mState == STATE_ON)
         {
-            CompressorLimiter1::ClearBuffer(&self->mCompressorLimiter1);
+            self->mCompressorLimiter1.ClearBuffer();
             self->mState = STATE_OFF;
         }
         // Only the THRESHOLD cache is refreshed on this path -- the release/mode/rate

@@ -10,6 +10,11 @@
 // double-buffers per tick) and swap it in.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AE1D50 and 0x82AECDC0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"
 #include "SDKs/EATech/include/Apt/AptRenderItem.h"
 #include "SDKs/EATech/include/Apt/AptCharacter.h"

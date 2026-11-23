@@ -245,9 +245,6 @@ public:
     // The per-frame timer client the constructor registers.
     static void RwacTimerClient(void *apContext, f32 afTimeToNextCall); // @0x82BA6980
 
-    static int  PlayHandler(void *apCommand);
-    static int  StopHandler(void *apCommand);
-    static int  ModifyStartTimeHandler(void *apCommand);
     static void FeedCleanup(SndPlayer1 *self);
     static u8   StartRequest(SndPlayer1 *self, u32 index);
     static char *SubmitChunk(SndPlayer1 *self, char *block, u32 index,
@@ -345,6 +342,9 @@ public:
     u8  mbTimerAdded;                                  // +0x1D0
 
 private:
+    static int StopHandler(Command *apCommand);
+    static int PlayHandler(Command *apCommand);
+    static int ModifyStartTimeHandler(Command *apCommand);
     bool WaitForStartTime(AudioProcessContext *ctx, f64 adStartTime,
                           u32 *apuSamples);                            // @0x82B9C148
     bool GetFeedSlot(s32 *apiOutSlot); // @0x82BA0380

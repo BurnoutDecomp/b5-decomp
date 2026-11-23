@@ -3,6 +3,11 @@
 // .ida-exports/BURNOUT_X360_ARTIST.XEX/ (X360 asm overrides DWARF).
 // See BrnEAThreadX360.h for the committed-type / vendor-snapshot divergence FLAG.
 
+// XDK size optimization matches ARTIST at 0x82BC9930 and 0x82B42FB8.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include <xtl.h>
 #include <process.h>  // _beginthreadex
 #include <string.h>   // strncpy

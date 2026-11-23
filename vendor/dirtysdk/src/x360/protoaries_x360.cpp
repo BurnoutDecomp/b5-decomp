@@ -1,5 +1,10 @@
 // DirtySDK 5.5.3 ProtoAries native X360 owner. ARTIST 82B29DC8..
 // 82B2AAxx; Update 82B2A0A0 recovered directly from image instructions.
+// XDK size optimization matches ARTIST at 0x82B29DC8 and 0x82B29E60.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "types.hpp"
 #include "dirtymem.h"
 #include "dirtylib.h"

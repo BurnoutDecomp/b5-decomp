@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x82B2F5A8.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "netgameutil.h"
 #include "commall_x360_internal.h"
 #include "dirtylib.h"

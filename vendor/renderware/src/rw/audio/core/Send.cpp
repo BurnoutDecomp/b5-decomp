@@ -290,10 +290,10 @@ int Send::Process(Send* self, AudioProcessContext* ctx, char resetRamp)
 // record, i.e. the console sizeof(SendConnectByPointerCommand) -- on the host that is the
 // host sizeof (24: three widened pointers), never the console literal 12.
 // -------------------------------------------------------------------------------------
-int Send::ConnectByPointerHandler(void* cmd)
+int Send::ConnectByPointerHandler(Command * cmd)
 {
     SendConnectByPointerCommand* lpCmd = static_cast<SendConnectByPointerCommand*>(cmd);
-    Send* lpSend = lpCmd->mpTarget; // send = *(cmd+4)
+    Send* lpSend = static_cast<Send *>(lpCmd->pObject); // send = *(cmd+4)
 
     DisconnectImmediate(lpSend);
 
@@ -435,8 +435,8 @@ Send* Send::EventEvent(Send* self, int useName, void* const* payload)
             reinterpret_cast<SendConnectByNameCommand*>(lpRingBase + luCursor);
         lpSystem->muDeferredRingCursor = luCursor + luSize;
 
-        lpCmd->mpHandler = &Send::ConnectByNameHandler; // cmd[0]
-        lpCmd->mpTarget = self;                         // cmd[1]
+        lpCmd->handler = &Send::ConnectByNameHandler; // cmd[0]
+        lpCmd->pObject = self;                         // cmd[1]
         lpCmd->muRecordSize = luSize;                   // cmd[2]
 
         char* lpDst = lpCmd->maName; // cmd + 0xC (X360)
@@ -455,8 +455,8 @@ Send* Send::EventEvent(Send* self, int useName, void* const* payload)
         lpSystem->muDeferredRingCursor =
             luCursor + static_cast<u32>(sizeof(SendConnectByPointerCommand)); // X360: +0xC
 
-        lpCmd->mpHandler = &Send::ConnectByPointerHandler; // cmd[0]
-        lpCmd->mpTarget = self;                            // cmd[1]
+        lpCmd->handler = &Send::ConnectByPointerHandler; // cmd[0]
+        lpCmd->pObject = self;                            // cmd[1]
         lpCmd->mpSubMix = static_cast<SubMix*>(payload[0]); // cmd[2] -- connect event word 0
     }
     return self;

@@ -1,6 +1,11 @@
 // DirtySDK ProtoSSL native object lifecycle and status, ARTIST 82B35758,
 // 82B36E58..82B36F9C, 82B37150 and 82B38108. Secure protocol functions
 // require the native handshake and crypto providers and are not substituted here.
+// XDK size optimization matches ARTIST at 0x82B37FD8 and 0x82B37F00.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "protossl.h"
 #include "protoname.h"
 #include "cryptarc4.h"

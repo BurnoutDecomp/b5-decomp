@@ -3,6 +3,11 @@
 //   Clone 0x82AEC950 / Render 0x82AFEC18 (vtable off_821458D0, flag 0x280000).
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AE1818 and 0x82AE1860.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptRenderItemStaticText.h"
 #include "SDKs/EATech/include/Apt/AptCharacterAnimation.h"   // the def base (the font resolvers)
 #include "SDKs/EATech/include/Apt/AptCIH.h"                    // KU_AptEmbeddedMovieOff

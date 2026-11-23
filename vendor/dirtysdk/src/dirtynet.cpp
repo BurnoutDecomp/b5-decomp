@@ -2,6 +2,11 @@
 //
 // Only NetHash is reconstructed; the game manager uses it for ConnApi client ids.
 
+// XDK size optimization matches ARTIST at 0x82B2FF70.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "dirtynet.h"
 
 extern "C" s32 NetHash(const char* pString)

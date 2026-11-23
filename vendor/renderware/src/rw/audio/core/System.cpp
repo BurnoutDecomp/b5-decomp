@@ -11,7 +11,7 @@
 // is called with the record's address, and its return IS the byte advance. That makes the
 // record stride a HOST sizeof, never the X360 immediate -- the producer/handler contract,
 // the full record table and the asm evidence live in
-// scratchpad/waveF/audio_ring.spec.md (SystemReleaseCommand here is the reference shape).
+// scratchpad/waveF/audio_ring.spec.md (Command here is the reference shape).
 // The CreateInstance tail-carve recipe and the recovered rodata live in
 // scratchpad/waveE/AudioSystem.spec.md.
 // =====================================================================================
@@ -82,24 +82,6 @@ __declspec(noinline) u32 GetCpuCycle()
 // scratch-stack top through System::mpObjectTable's pointer-width slots -- the former
 // u32[4] model under-sized those host reads.
 static StackAllocator skSystemStackAllocator = { 0, 0, 0, 0 };
-
-// The 8-byte deferred-teardown record ReleaseHandler reads: { handler, System* }.
-struct SystemReleaseCommand
-{
-    int (*mpHandler)(void *); // +0x00 -- &System::ReleaseHandler
-    System *mpSystem;          // +0x04 -- the owning System
-};
-
-// The common prefix of EVERY deferred-command record: its handler. ExecuteCommands' replay
-// walk reads the word at the cursor (asm 0x82B6F7F4 `lwz r11,0(r30)`), calls it with the
-// record's own address in r3 (0x82B6F7F8/0x82B6F800), and advances the cursor by the r3 it
-// returns (0x82B6F804 `add r30,r3,r30`). Every producer's record -- SystemReleaseCommand
-// above, PlugInSetAttributeCommand, VoiceCreateCommand, ... -- leads with this field, so the
-// consumer only ever needs the header to dispatch.
-struct SystemCommandHeader
-{
-    int (*mpHandler)(void *); // +0x00 -- the record's handler; returns the record's size
-};
 
 // The file-scope Profiler singleton GetProfiler lazily seeds and publishes at
 // System::mpProfiler. On the X360 this is the zero-initialised .data block at
@@ -490,10 +472,8 @@ void System::ExecuteCommands(System *self)
     char *lpEnd = lpCursor + self->muDeferredRingCursor;             // +0x10B8
     while (lpCursor < lpEnd)
     {
-        // The handler returns the record's size, which is the ring advance. It is a HOST
-        // sizeof on both sides of the contract (see the file header) -- reproducing the
-        // X360 immediates would overrun every reserved record.
-        lpCursor += reinterpret_cast<SystemCommandHeader *>(lpCursor)->mpHandler(lpCursor);
+        Command *command = reinterpret_cast<Command *>(lpCursor);
+        lpCursor += command->handler(command);
     }
 
     // The cursor is RE-READ (asm 0x82B6F810), not reused from the latch above: a handler may
@@ -522,12 +502,12 @@ void System::ExecuteCommands(System *self)
 // -------------------------------------------------------------------------------------
 // ReleaseHandler @0x82B6EA50 -- deferred teardown: release every active voice, then every
 // voice threaded onto the expelled list, returning the record's own size (the X360 `li
-// r3,8` IS sizeof(SystemReleaseCommand) on X360; ExecuteCommands advances the ring by
+// r3,8` IS sizeof(Command) on X360; ExecuteCommands advances the ring by
 // this return, so on the host it must be the HOST record size -- the record-stride rule).
 // -------------------------------------------------------------------------------------
-int System::ReleaseHandler(void *cmd)
+int System::ReleaseHandler(Command *cmd)
 {
-    System *self = static_cast<SystemReleaseCommand *>(cmd)->mpSystem;
+    System *self = static_cast<System *>(cmd->pObject);
 
     while (self->muActiveVoiceCount)
         Voice::ReleaseImmediate(self->mppVoiceListNodes->mpVoice, 0);
@@ -542,13 +522,13 @@ int System::ReleaseHandler(void *cmd)
         link = link->mpNext;
         Voice::ReleaseImmediate(voice, 0);
     }
-    return static_cast<int>(sizeof(SystemReleaseCommand));
+    return static_cast<int>(sizeof(Command));
 }
 
 // -------------------------------------------------------------------------------------
 // Release @0x82B6F998 -- tear the audio sub-system down. Reconstructed store-for-store
 // from the ARTIST asm:
-//   1. under the system lock, push a SystemReleaseCommand (the deferred ReleaseHandler)
+//   1. under the system lock, push a Command (the deferred ReleaseHandler)
 //      into the command ring;
 //   2. holding the command mutex, pump ExecuteCommands + sleep 1 ms until the ring drains
 //      AND the reference count falls to <= 0;
@@ -561,17 +541,17 @@ void System::Release(System *self)
 {
     // ---- 1. queue the deferred teardown record ---------------------------------------
     Lock(self);
-    SystemReleaseCommand *command = reinterpret_cast<SystemReleaseCommand *>(
+    Command *command = reinterpret_cast<Command *>(
         self->mpDeferredRingBase + self->muDeferredRingCursor);
     // RECORD STRIDE (X360-literal trap): the asm's `addi r11,r11,8` IS the console
-    // sizeof(SystemReleaseCommand) ({int(*)(void*), System*} = 4+4). On the host the same
+    // sizeof(Command) ({int(*)(Command*), System*} = 4+4). On the host the same
     // record is 16 bytes, and ExecuteCommands advances the ring by the handler's return --
-    // ReleaseHandler above likewise returns sizeof(SystemReleaseCommand) -- so the enqueue
+    // ReleaseHandler above likewise returns sizeof(Command) -- so the enqueue
     // stride must be the HOST sizeof, never the literal 8. Cursor is advanced before the
     // fields are written, exactly as the asm orders the stores.
-    self->muDeferredRingCursor += static_cast<u32>(sizeof(SystemReleaseCommand));
-    command->mpHandler = &ReleaseHandler;
-    command->mpSystem = self;
+    self->muDeferredRingCursor += static_cast<u32>(sizeof(Command));
+    command->handler = &ReleaseHandler;
+    command->pObject = self;
     Unlock(self);
 
     // ---- 2. pump the ring dry --------------------------------------------------------

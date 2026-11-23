@@ -211,9 +211,9 @@ public:
     bool GetFeedSlot(s32 *apiSlot);                                      // @0x826A4348
     void UnpackHeader(u32 auRequestIndex, void *apPacked);               // @0x8268C990
 
-    static s32 PlayHandler(void *apCommand);
-    static s32 StopHandler(void *apCommand);
-    static s32 ModifyStartTimeHandler(void *apCommand);
+    static s32 PlayHandler(Command *apCommand);
+    static s32 StopHandler(Command *apCommand);
+    static s32 ModifyStartTimeHandler(Command *apCommand);
     static void StreamLostCallback(void *apContext);
     void RemoveRequest(u32 auIndex);
     void RequestCleanup();

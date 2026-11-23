@@ -13,6 +13,11 @@
 // lookups to it before falling back to the generic object lookup.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF0E20 and 0x82AF0128.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptValue/AptStringObject.h"
 
 // ---------------------------------------------------------------------------

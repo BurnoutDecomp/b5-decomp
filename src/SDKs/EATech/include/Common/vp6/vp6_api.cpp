@@ -1,6 +1,11 @@
 // On2 VP6 decoder: library set-up, the playback instance, the synchronous frame decode and the
 // job-system decode path of the Xbox 360 build.
 
+// XDK size optimization matches ARTIST at 0x82B58100 and 0x82B58758.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Common/vp6/vp6_decoder.h"
 #include "SDKs/EATech/eajobs/job.h"
 #include "SDKs/EATech/eajobs/job_scheduler.h"

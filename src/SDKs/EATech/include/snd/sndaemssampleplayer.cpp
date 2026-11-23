@@ -23,6 +23,11 @@
 //
 // ============================================================================
 
+// XDK size optimization matches ARTIST at 0x82B720D8.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/snd/sndaemssampleplayer.h"
 
 #include "rw/audio/core/Voice.h"  // rw::audio::core::Voice::Release

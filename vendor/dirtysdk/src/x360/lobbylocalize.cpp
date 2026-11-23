@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x82B35288.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "lobbylocalize_internal.h"
 #include "dirtymem.h"
 #include <cstring>

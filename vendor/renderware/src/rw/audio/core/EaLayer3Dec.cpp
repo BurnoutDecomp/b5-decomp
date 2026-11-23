@@ -23,30 +23,16 @@ namespace core
 
 extern "C" System *off_83271928;
 
+struct HuffTable
+{
+    u16 tableSize;
+    s16 *pEntries;
+};
+
 namespace
 {
 
-struct HuffmanTable
-{
-    u16 sizeBytes;
-    const s16 *pCodes;
-};
-
 #include "EaLayer3Tables.inl"
-
-#define HUFFMAN(index) { sizeof(kHuffman##index), kHuffman##index }
-const HuffmanTable kHuffmanTables[] =
-{
-    { 0, 0 }, HUFFMAN(1), HUFFMAN(2), HUFFMAN(3),
-    { 0, 0 }, HUFFMAN(5), HUFFMAN(6), HUFFMAN(7),
-    HUFFMAN(8), HUFFMAN(9), HUFFMAN(10), HUFFMAN(11),
-    HUFFMAN(12), HUFFMAN(13), { 0, 0 }, HUFFMAN(15),
-    HUFFMAN(16), HUFFMAN(16), HUFFMAN(16), HUFFMAN(16),
-    HUFFMAN(16), HUFFMAN(16), HUFFMAN(16), HUFFMAN(16),
-    HUFFMAN(24), HUFFMAN(24), HUFFMAN(24), HUFFMAN(24),
-    HUFFMAN(24), HUFFMAN(24), HUFFMAN(24), HUFFMAN(24)
-};
-#undef HUFFMAN
 
 const usize kCoreAlignment = 16;
 
@@ -64,16 +50,20 @@ public:
     virtual ~CMpegLayer3Base();
     s32 AllocateHybrid(s32 channels);
 
-    HuffmanTable maHuffman[32];        // 0x50
+private:
+    void HuffmanTableSetup();
+
+public:
+    HuffTable mHuffTables[32];                   // 0x50
     u8 mGranuleAndScaleState[0x15C];    // 0x150
-    const f32 *mpGlobalGain;            // 0x2AC
-    const f32 *mpCurrentGain;           // 0x2B0
-    const s16 *mapActiveHuffman[3];     // 0x2B4
+    const f32 *mpTwoToNegativeQuarterPower;       // 0x2AC
+    const f32 *mpLoadedTwoToNegativeQuarterPower; // 0x2B0
+    s16 *mpLoadedTableSelect[3];                  // 0x2B4
     f32 *mpHybridHistory;              // 0x2C0
     f32 *mpHybridWork;                 // 0x2C4
     f32 *mapStereoWork[3];             // 0x2C8
     u8 mDecodeState2D4[4];              // 0x2D4
-    u16 muHuffmanScale;                // 0x2D8
+    u16 mTwoToNegativeQuarterPowerTableSize;      // 0x2D8
 };
 
 class EALayer3Core : public CMpegLayer3Base
@@ -83,36 +73,81 @@ public:
     virtual ~EALayer3Core() {}
 };
 
-CGS_STATIC_ASSERT(sizeof(HuffmanTable) == 8, "ARTIST Huffman descriptor stride");
-CGS_STATIC_ASSERT(sizeof(kHuffmanTables) == 32 * sizeof(HuffmanTable), "ARTIST Huffman descriptor count");
+CGS_STATIC_ASSERT(sizeof(HuffTable) == 8, "ARTIST Huffman descriptor stride");
 CGS_STATIC_ASSERT(sizeof(CMpegBase) == 0x50, "ARTIST MPEG base layout");
-CGS_STATIC_ASSERT(offsetof(CMpegLayer3Base, maHuffman) == 0x50, "ARTIST Huffman descriptors");
-CGS_STATIC_ASSERT(offsetof(CMpegLayer3Base, mpGlobalGain) == 0x2AC, "ARTIST global gain");
+CGS_STATIC_ASSERT(offsetof(CMpegBase, mOpened) == 0x17, "ARTIST MPEG open flag");
+CGS_STATIC_ASSERT(offsetof(CMpegBase, mResetSynthRequired) == 0x34, "ARTIST MPEG synth reset");
+CGS_STATIC_ASSERT(offsetof(CMpegLayer3Base, mHuffTables) == 0x50, "ARTIST Huffman descriptors");
+CGS_STATIC_ASSERT(offsetof(CMpegLayer3Base, mpTwoToNegativeQuarterPower) == 0x2AC, "ARTIST global gain");
 CGS_STATIC_ASSERT(offsetof(CMpegLayer3Base, mpHybridHistory) == 0x2C0, "ARTIST hybrid history");
-CGS_STATIC_ASSERT(offsetof(CMpegLayer3Base, muHuffmanScale) == 0x2D8, "ARTIST Huffman scale");
+CGS_STATIC_ASSERT(offsetof(CMpegLayer3Base, mTwoToNegativeQuarterPowerTableSize) == 0x2D8, "ARTIST Huffman scale");
 CGS_STATIC_ASSERT(sizeof(EALayer3Core) == 0x2DC, "ARTIST core instance size");
 CGS_STATIC_ASSERT(sizeof(Decoder) == 0x34, "ARTIST decoder base size");
 CGS_STATIC_ASSERT(sizeof(EaLayer3DecBase) == 0x58, "ARTIST core table offset");
 
-// ARTIST 0x82B93A98 and 0x82B8C068
-CMpegLayer3Base::CMpegLayer3Base()
+CMpegBase::CMpegBase()
 {
-    std::memset(mPad34, 0, sizeof(mPad34));
-    mPad17 = 0;
+    mResetSynthRequired = 0;
+    mOpened = 0;
     muHeaderWord = 0;
     mpPolySynthHistory = 0;
     mpPolySynthWork = 0;
-    mpGlobalGain = kGlobalGain;
-    muHuffmanScale = 1024;
-    mpCurrentGain = 0;
-    for (s32 table = 0; table < 32; ++table)
-    {
-        maHuffman[table].sizeBytes = kHuffmanTables[table].sizeBytes;
-        maHuffman[table].pCodes = kHuffmanTables[table].pCodes;
-    }
-    mapActiveHuffman[0] = 0;
-    mapActiveHuffman[1] = 0;
-    mapActiveHuffman[2] = 0;
+}
+
+// ARTIST 0x82B93A98
+CMpegLayer3Base::CMpegLayer3Base()
+{
+    mpTwoToNegativeQuarterPower = kGlobalGain;
+    mTwoToNegativeQuarterPowerTableSize = sizeof(kGlobalGain);
+    mpLoadedTwoToNegativeQuarterPower = 0;
+    HuffmanTableSetup();
+    mpLoadedTableSelect[0] = 0;
+    mpLoadedTableSelect[1] = 0;
+    mpLoadedTableSelect[2] = 0;
+}
+
+// ARTIST 0x82B8C068
+void CMpegLayer3Base::HuffmanTableSetup()
+{
+#define SET_TABLE(slot, table) \
+    mHuffTables[slot].tableSize = sizeof(kHuffman##table); \
+    mHuffTables[slot].pEntries = kHuffman##table
+    mHuffTables[0].tableSize = 0;
+    mHuffTables[0].pEntries = 0;
+    SET_TABLE(1, 1);
+    SET_TABLE(2, 2);
+    SET_TABLE(3, 3);
+    mHuffTables[4].tableSize = 0;
+    mHuffTables[4].pEntries = 0;
+    SET_TABLE(5, 5);
+    SET_TABLE(6, 6);
+    SET_TABLE(7, 7);
+    SET_TABLE(8, 8);
+    SET_TABLE(9, 9);
+    SET_TABLE(10, 10);
+    SET_TABLE(11, 11);
+    SET_TABLE(12, 12);
+    SET_TABLE(13, 13);
+    mHuffTables[14].tableSize = 0;
+    mHuffTables[14].pEntries = 0;
+    SET_TABLE(15, 15);
+    SET_TABLE(16, 16);
+    SET_TABLE(17, 16);
+    SET_TABLE(18, 16);
+    SET_TABLE(19, 16);
+    SET_TABLE(20, 16);
+    SET_TABLE(21, 16);
+    SET_TABLE(22, 16);
+    SET_TABLE(23, 16);
+    SET_TABLE(24, 24);
+    SET_TABLE(25, 24);
+    SET_TABLE(26, 24);
+    SET_TABLE(27, 24);
+    SET_TABLE(28, 24);
+    SET_TABLE(29, 24);
+    SET_TABLE(30, 24);
+    SET_TABLE(31, 24);
+#undef SET_TABLE
 }
 
 // ARTIST 0x82B8C200

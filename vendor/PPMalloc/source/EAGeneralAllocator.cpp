@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x82B516F0 and 0x82B51848.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "PPMalloc/EAGeneralAllocator.h"
 #include <xtl.h>
 #include <string.h>

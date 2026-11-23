@@ -140,20 +140,8 @@ static bool ReleaseComposedStage(PlugIn *apStage, const PlugInDescRunTime *apDes
 // are 16 / 16 / 24 because the handler and voice pointers widened. Both sides therefore
 // use `sizeof(...)`, never the console literal -- otherwise each enqueue overruns its
 // reserved stride and the replay walk dispatches through the previous record's tail.
-struct VoiceCreateCommand
+struct VoiceSetPriorityCommand : Command
 {
-    int (*mpHandler)(void *); // +0x00 -- &Voice::CreateInstanceHandler
-    Voice *mpVoice;           // +0x04
-};
-struct VoiceReleaseCommand
-{
-    int (*mpHandler)(void *); // +0x00 -- &Voice::ReleaseHandler
-    Voice *mpVoice;           // +0x04
-};
-struct VoiceSetPriorityCommand
-{
-    int (*mpHandler)(void *); // +0x00 -- &Voice::SetPriorityHandler
-    Voice *mpVoice;           // +0x04
     f32 mfPriority;           // +0x08
 };
 
@@ -249,21 +237,21 @@ Voice *Voice::CreateInstance(u8 priority, int numStages, PlugInConfig *configs,
     // Success: hand back the plug-in array and enqueue the create-handler command.
     *outPlugIns = voice->mpPlugIns;
     u32 cursor = system->muDeferredRingCursor;
-    VoiceCreateCommand *cmd =
-        reinterpret_cast<VoiceCreateCommand *>(system->mpDeferredRingBase + cursor);
-    // X360 `addi r11,r11,8` @0x82B6EE74 == console sizeof(VoiceCreateCommand); host = 16.
-    system->muDeferredRingCursor = cursor + static_cast<u32>(sizeof(VoiceCreateCommand));
-    cmd->mpHandler = &Voice::CreateInstanceHandler;
-    cmd->mpVoice = voice;
+    Command *cmd =
+        reinterpret_cast<Command *>(system->mpDeferredRingBase + cursor);
+    // X360 `addi r11,r11,8` @0x82B6EE74 == console sizeof(Command); host = 16.
+    system->muDeferredRingCursor = cursor + static_cast<u32>(sizeof(Command));
+    cmd->handler = &Voice::CreateInstanceHandler;
+    cmd->pObject = voice;
     return voice;
 }
 
 // -------------------------------------------------------------------------------------
 // Voice::CreateInstanceHandler @0x82B6C020
 // -------------------------------------------------------------------------------------
-int Voice::CreateInstanceHandler(void *cmd)
+int Voice::CreateInstanceHandler(Command *cmd)
 {
-    Voice *voice = static_cast<VoiceCreateCommand *>(cmd)->mpVoice;
+    Voice *voice = static_cast<Voice *>(cmd->pObject);
     System *system = voice->mpSystem;
 
     if (system->muActiveVoiceCount >= system->muActiveVoiceCapacity)
@@ -288,8 +276,8 @@ int Voice::CreateInstanceHandler(void *cmd)
                 head->mpPrev = node;
             system->mpExpelledVoiceList = node;
             // Same record size as the success path (the asm branches back to the shared
-            // `li r3,8` @0x82B6C158): console sizeof(VoiceCreateCommand), host 16.
-            return static_cast<int>(sizeof(VoiceCreateCommand));
+            // `li r3,8` @0x82B6C158): console sizeof(Command), host 16.
+            return static_cast<int>(sizeof(Command));
         }
         XMemCpy(newNodes, system->mppVoiceListNodes, oldBytes);
         system->mpAllocator->Free(system->mppVoiceListNodes, 0);
@@ -316,7 +304,7 @@ int Voice::CreateInstanceHandler(void *cmd)
     nodes[index].mpVoice = voice;
     nodes[index].muKey = voice->muBlockSize;
     ++system->muActiveVoiceCount;
-    return static_cast<int>(sizeof(VoiceCreateCommand)); // X360: li r3,8 @0x82B6C158
+    return static_cast<int>(sizeof(Command)); // X360: li r3,8 @0x82B6C158
 }
 
 // -------------------------------------------------------------------------------------
@@ -371,29 +359,29 @@ Voice *Voice::ExpelImmediate(Voice *self, u8 immediate)
 
 // -------------------------------------------------------------------------------------
 // Voice::Release @0x82B6EEA0 -- queue the release-handler command (one
-// VoiceReleaseCommand slot -- 8 bytes on the X360).
+// Command slot -- 8 bytes on the X360).
 // -------------------------------------------------------------------------------------
 Voice *Voice::Release(Voice *self)
 {
     System *system = self->mpSystem;
     u32 cursor = system->muDeferredRingCursor;
-    VoiceReleaseCommand *cmd =
-        reinterpret_cast<VoiceReleaseCommand *>(system->mpDeferredRingBase + cursor);
-    // X360 `addi r10,r10,8` == console sizeof(VoiceReleaseCommand); host = 16.
-    system->muDeferredRingCursor = cursor + static_cast<u32>(sizeof(VoiceReleaseCommand));
-    cmd->mpHandler = &Voice::ReleaseHandler;
-    cmd->mpVoice = self;
+    Command *cmd =
+        reinterpret_cast<Command *>(system->mpDeferredRingBase + cursor);
+    // X360 `addi r10,r10,8` == console sizeof(Command); host = 16.
+    system->muDeferredRingCursor = cursor + static_cast<u32>(sizeof(Command));
+    cmd->handler = &Voice::ReleaseHandler;
+    cmd->pObject = self;
     return self;
 }
 
 // -------------------------------------------------------------------------------------
 // Voice::ReleaseHandler @0x82B6E0F8 -- deferred: ReleaseImmediate(voice, 0).
 // -------------------------------------------------------------------------------------
-int Voice::ReleaseHandler(void *cmd)
+int Voice::ReleaseHandler(Command *cmd)
 {
-    Voice *voice = static_cast<VoiceReleaseCommand *>(cmd)->mpVoice;
+    Voice *voice = static_cast<Voice *>(cmd->pObject);
     Voice::ReleaseImmediate(voice, 0);
-    return static_cast<int>(sizeof(VoiceReleaseCommand)); // X360: li r3,8
+    return static_cast<int>(sizeof(Command)); // X360: li r3,8
 }
 
 // -------------------------------------------------------------------------------------
@@ -475,18 +463,18 @@ Voice *Voice::SetPriority(Voice *self, f32 priority)
     // record is 24 (widened pointers + tail padding to the 8-byte alignment).
     system->muDeferredRingCursor = cursor + static_cast<u32>(sizeof(VoiceSetPriorityCommand));
     cmd->mfPriority = priority;
-    cmd->mpHandler = &Voice::SetPriorityHandler;
-    cmd->mpVoice = self;
+    cmd->handler = &Voice::SetPriorityHandler;
+    cmd->pObject = self;
     return self;
 }
 
 // -------------------------------------------------------------------------------------
 // Voice::SetPriorityHandler @0x82B6E128 -- deferred: write the queued priority.
 // -------------------------------------------------------------------------------------
-int Voice::SetPriorityHandler(void *cmd)
+int Voice::SetPriorityHandler(Command *cmd)
 {
     VoiceSetPriorityCommand *c = static_cast<VoiceSetPriorityCommand *>(cmd);
-    c->mpVoice->mfPriority = c->mfPriority;
+    static_cast<Voice *>(c->pObject)->mfPriority = c->mfPriority;
     return static_cast<int>(sizeof(VoiceSetPriorityCommand)); // X360: li r3,0xC
 }
 

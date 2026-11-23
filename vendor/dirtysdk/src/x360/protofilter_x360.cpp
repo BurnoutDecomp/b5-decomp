@@ -3,6 +3,11 @@
 // RequestCancel @ 0x82B40678, Result @ 0x82B40730, ApplyFilter @ 0x82B407B0,
 // Control @ 0x82B40820, Destroy @ 0x82B40870.
 
+// XDK size optimization matches ARTIST at 0x82B40870.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "types.hpp"
 #include "dirtylib.h"
 #include "dirtymem.h"

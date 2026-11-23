@@ -77,20 +77,20 @@ int SinePlayer::GetSize()
 // ---------------------------------------------------------------------------
 // PlayHandler @0x82B9B900 -- replay of a queued Play command. Latch the command's start
 // time into the target's mdStartTime (a double) and raise the playing flag.
-//   target = cmd->mpTarget; target->mdStartTime = cmd->mdStartTime; target->mbPlaying = 1;
+//   target = static_cast<SinePlayer *>(cmd->pObject); target->mdStartTime = cmd->mdStartTime; target->mbPlaying = 1;
 //   return the command record size (the ring advance).
 // ---------------------------------------------------------------------------
-int SinePlayer::PlayHandler(void *lpCommand)
+int SinePlayer::PlayHandler(Command *lpCommand)
 {
     SinePlayerPlayCommand *cmd = reinterpret_cast<SinePlayerPlayCommand *>(lpCommand);
-    SinePlayer *self = cmd->mpTarget;      // *(a1 + 4)
+    SinePlayer *self = static_cast<SinePlayer *>(cmd->pObject);      // *(a1 + 4)
     self->mdStartTime = cmd->mdStartTime;  // stfd f0, 0x28  (double from *(a1 + 8))
     self->mbPlaying = 1;                    // stb 1, 0x3C
     // RECORD STRIDE (X360-literal trap): the asm's `li r3,0x10` IS the console
-    // sizeof(SinePlayerPlayCommand) ({int(*)(void*), SinePlayer*, f64} = 4+4+8). The ring
+    // sizeof(SinePlayerPlayCommand) ({int(*)(Command*), SinePlayer*, f64} = 4+4+8). The ring
     // consumer System::ExecuteCommands advances lpCursor by exactly this return, so it must
     // be the HOST sizeof (24 on x64) -- returning the literal 16 would leave the cursor 8
-    // bytes short and the next iteration would read a SystemCommandHeader straddling the
+    // bytes short and the next iteration would read a Command header straddling the
     // middle of this record. Any future SinePlayer producer (an EventEvent) must advance the
     // cursor by the same sizeof, never by 16.
     return static_cast<int>(sizeof(SinePlayerPlayCommand)); // X360: li r3,0x10 @0x82B9B90C
@@ -99,19 +99,19 @@ int SinePlayer::PlayHandler(void *lpCommand)
 // ---------------------------------------------------------------------------
 // StopHandler @0x82B9B920 -- replay of a queued Stop command. Clear the target's playing
 // flag.
-//   cmd->mpTarget->mbPlaying = 0; return the command record size (the ring advance).
+//   static_cast<SinePlayer *>(cmd->pObject)->mbPlaying = 0; return the command record size (the ring advance).
 // ---------------------------------------------------------------------------
-int SinePlayer::StopHandler(void *lpCommand)
+int SinePlayer::StopHandler(Command *lpCommand)
 {
-    SinePlayerStopCommand *cmd = reinterpret_cast<SinePlayerStopCommand *>(lpCommand);
-    cmd->mpTarget->mbPlaying = 0; // stb 0, 0x3C
+    Command *cmd = reinterpret_cast<Command *>(lpCommand);
+    static_cast<SinePlayer *>(cmd->pObject)->mbPlaying = 0; // stb 0, 0x3C
     // RECORD STRIDE (X360-literal trap): the asm's `li r3,8` IS the console
-    // sizeof(SinePlayerStopCommand) ({int(*)(void*), SinePlayer*} = 4+4). System::
+    // sizeof(Command) ({int(*)(Command*), SinePlayer*} = 4+4). System::
     // ExecuteCommands advances the ring cursor by this return, so it must be the HOST sizeof
     // (16 on x64) -- an 8-byte advance over a 16-byte record would land the cursor on this
     // record's mpTarget and call the SinePlayer pointer as the next command handler. Any
     // future producer must advance by the same sizeof, never by 8.
-    return static_cast<int>(sizeof(SinePlayerStopCommand)); // X360: li r3,8 @0x82B9B928
+    return static_cast<int>(sizeof(Command)); // X360: li r3,8 @0x82B9B928
 }
 
 // ---------------------------------------------------------------------------

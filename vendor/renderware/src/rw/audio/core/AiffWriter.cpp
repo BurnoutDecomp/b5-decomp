@@ -91,27 +91,20 @@ enum { KI_AIFF_SCRATCH_BYTES = 3072, KI_AIFF_BLOCK_SAMPLES = 256 };
 // are taken from sizeof/offsetof and the console values are kept only as comments.
 //
 // Start record (X360 12-byte header + path; host offsetof(maPath) == 20):
-//   +0x00  mpfnHandler   (StartHandler)
+//   +0x00  handler   (StartHandler)
 //   +0x04  mpWriter      (the AiffWriter this)
 //   +0x08  muRecordSize  (the rounded record byte size, returned by StartHandler)
 //   +0x0C  maPath[]      (the NUL-terminated output path)
-struct AiffCommandRecord
+struct AiffCommandRecord : Command
 {
-    int (*mpfnHandler)(void *);
-    AiffWriter *mpWriter;
     u32         muRecordSize;
     char        maPath[1];
 };
 
 // Stop record (X360 sizeof 8; host 16) -- header only. StopHandler reads just mpWriter and
 // returns this record's size as the ring advance.
-//   +0x00  mpfnHandler   (StopHandler)
+//   +0x00  handler   (StopHandler)
 //   +0x04  mpWriter      (the AiffWriter this)
-struct AiffStopCommandRecord
-{
-    int (*mpfnHandler)(void *);
-    AiffWriter *mpWriter;
-};
 
 // -------------------------------------------------------------------------------------
 // Store a 32-bit value big-endian (MSB first) into `p` -- the byte order every AIFF size /
@@ -182,12 +175,12 @@ int AiffWriter::CreateInstance(AiffWriter *self)
 //   if (a2) {  // stop: fixed 8-byte record
 //     rec = sys->mpDeferredRingBase + sys->muDeferredRingCursor;
 //     sys->muDeferredRingCursor += 8;
-//     rec->mpfnHandler = &StopHandler;  rec->mpWriter = self;
+//     rec->handler = &StopHandler;  rec->pObject = self;
 //   } else {   // start: 12-byte header + path, rounded up to 4 bytes
 //     name = *pName;  size = (strlen(name) + 16) & ~3;
 //     rec = sys->mpDeferredRingBase + sys->muDeferredRingCursor;
 //     sys->muDeferredRingCursor += size;
-//     rec->mpfnHandler = &StartHandler;  rec->mpWriter = self;  rec->muRecordSize = size;
+//     rec->handler = &StartHandler;  rec->pObject = self;  rec->muRecordSize = size;
 //     strcpy(rec->maPath, name);
 //   }
 //   return self;
@@ -200,12 +193,12 @@ AiffWriter *AiffWriter::EventEvent(AiffWriter *self, int a2, char **pName)
     {
         // Stop record: header only (handler + writer).
         u32 cursor = sys->muDeferredRingCursor;                 // *(v3+4280)
-        AiffStopCommandRecord *rec =
-            reinterpret_cast<AiffStopCommandRecord *>(sys->mpDeferredRingBase + cursor);
+        Command *rec =
+            reinterpret_cast<Command *>(sys->mpDeferredRingBase + cursor);
         sys->muDeferredRingCursor =
-            cursor + static_cast<u32>(sizeof(AiffStopCommandRecord)); // X360: +8 @0x82BA54E4
-        rec->mpfnHandler = &AiffWriter::StopHandler;
-        rec->mpWriter    = self;
+            cursor + static_cast<u32>(sizeof(Command)); // X360: +8 @0x82BA54E4
+        rec->handler = &AiffWriter::StopHandler;
+        rec->pObject    = self;
     }
     else
     {
@@ -229,8 +222,8 @@ AiffWriter *AiffWriter::EventEvent(AiffWriter *self, int a2, char **pName)
             reinterpret_cast<AiffCommandRecord *>(sys->mpDeferredRingBase + cursor);
         sys->muDeferredRingCursor = cursor + recordSize;
 
-        rec->mpfnHandler  = &AiffWriter::StartHandler;
-        rec->mpWriter     = self;
+        rec->handler  = &AiffWriter::StartHandler;
+        rec->pObject     = self;
         rec->muRecordSize = recordSize;
 
         // Copy the path (including its NUL terminator) into the record body.
@@ -346,7 +339,7 @@ int AiffWriter::Process(AiffWriter *self, AudioProcessContext *ctx)
 // -------------------------------------------------------------------------------------
 // StartHandler @0x82B9D510 -- deferred "start recording" ring handler. Runs on the audio
 // thread with `pCommandRecord` -> the start record EventEvent posted.
-//   self = record->mpWriter;
+//   self = static_cast<AiffWriter *>(record->pObject);
 //   build an 82-byte header placeholder (12-byte tag + 70 zero bytes);
 //   if (!self->mpFile) {
 //     self->mbTimerCreated = 0; self->muSampleFrameCount = 0; self->muSampleRate = 0;
@@ -360,10 +353,10 @@ int AiffWriter::Process(AiffWriter *self, AudioProcessContext *ctx)
 //   }
 //   return record->muRecordSize;
 // -------------------------------------------------------------------------------------
-int AiffWriter::StartHandler(void *pCommandRecord)
+int AiffWriter::StartHandler(Command *pCommandRecord)
 {
     AiffCommandRecord *record = static_cast<AiffCommandRecord *>(pCommandRecord);
-    AiffWriter *self = record->mpWriter; // v1 = *(a1+4)
+    AiffWriter *self = static_cast<AiffWriter *>(record->pObject); // v1 = *(a1+4)
 
     // The 82-byte header placeholder: a 12-byte "PlaceHolder\0" tag then 70 zero bytes.
     char header[82];
@@ -400,15 +393,14 @@ int AiffWriter::StartHandler(void *pCommandRecord)
 // StopHandler @0x82BA1EC0 -- deferred "stop recording" ring handler. Seeks back to the file
 // start and rewrites the AIFF header now that the final sizes are known, then closes the
 // file and unregisters the pump timer. Returns the stop record's byte size (the ring
-// advance) -- host sizeof(AiffStopCommandRecord); X360: li r3, 8 @0x82BA215C.
+// advance) -- host sizeof(Command); X360: li r3, 8 @0x82BA215C.
 //
 // The 82-byte header is FORM(8) + "AIFF"(4) + COMM(8+18) + INST(8+20) + SSND(8+8). All size
 // / count fields are big-endian (the asm builds them MSB-first).
 // -------------------------------------------------------------------------------------
-int AiffWriter::StopHandler(void *pCommandRecord)
+int AiffWriter::StopHandler(Command *pCommandRecord)
 {
-    AiffStopCommandRecord *record = static_cast<AiffStopCommandRecord *>(pCommandRecord);
-    AiffWriter *self = record->mpWriter; // v1 = *(a1+4)
+    AiffWriter *self = static_cast<AiffWriter *>(pCommandRecord->pObject); // v1 = *(a1+4)
 
     std::FILE *file = self->mpFile; // v2 = *(v1+60)
     if (file)
@@ -484,7 +476,7 @@ int AiffWriter::StopHandler(void *pCommandRecord)
         }
     }
 
-    return static_cast<int>(sizeof(AiffStopCommandRecord)); // X360: li r3, 8 @0x82BA215C
+    return static_cast<int>(sizeof(Command)); // X360: li r3, 8 @0x82BA215C
 }
 
 // -------------------------------------------------------------------------------------
@@ -494,8 +486,8 @@ int AiffWriter::StopHandler(void *pCommandRecord)
 // -------------------------------------------------------------------------------------
 void AiffWriter::ReleaseEvent(AiffWriter *self)
 {
-    AiffStopCommandRecord rec;
-    rec.mpWriter = self;
+    Command rec;
+    rec.pObject = self;
 
     StopHandler(&rec);
 

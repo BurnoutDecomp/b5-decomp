@@ -1,4 +1,9 @@
 // DirtySDK native X360 ProtoPing: ARTIST82B381F8..82B38C5C.
+// XDK size optimization matches ARTIST at 0x82B38B80 and 0x82B388C8.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "types.hpp"
 #include "dirtymem.h"
 #include "dirtylib.h"

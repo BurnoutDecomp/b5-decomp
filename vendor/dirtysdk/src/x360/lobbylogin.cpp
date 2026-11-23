@@ -1,4 +1,9 @@
 // DirtySDK 5.5.3 lobby login state primitives, ARTIST 82B20B68..82B20C88.
+// XDK size optimization matches ARTIST at 0x82B21C78.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "lobbylogin.h"
 #include "dirtymem.h"
 #include "dirtynet_x360_internal.h"

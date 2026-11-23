@@ -1,4 +1,9 @@
 // DirtySDK 5.5.3 lobby settings provider, recovered from ARTIST 82B1F968..82B1FC64.
+// XDK size optimization matches ARTIST at 0x82B1FAF0 and 0x82B1FB80.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "lobbysetting.h"
 #include "lobbytagfield.h"
 #include "dirtymem.h"

@@ -4,6 +4,11 @@
 // free-list spin-lock leaf + the base-ctor deferred-release note).
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AE5EE0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptValue/AptFloat.h"
 #include <xtl.h>   // _InterlockedExchange (the free-list spin lock)
 #include <new>        // placement new

@@ -112,10 +112,10 @@ public:
     // The four deferred-command handlers (replayed by System::ExecuteCommands; each
     // returns its own record's size -- the HOST sizeof, matching the producer's
     // cursor advance per the ring contract).
-    static int StartHandler(void *apCommand);         // @0x82B9DCF0 (raw-XEX recovery)
-    static int StopHandler(void *apCommand);          // @0x82B9DD48
-    static int SetModeHandler(void *apCommand);       // @0x82B9DB78
-    static int SetSampleRateHandler(void *apCommand); // @0x82B9DCE8 (return-size no-op)
+    static int StartHandler(Command *apCommand);         // @0x82B9DCF0 (raw-XEX recovery)
+    static int StopHandler(Command *apCommand);          // @0x82B9DD48
+    static int SetModeHandler(Command *apCommand);       // @0x82B9DB78
+    static int SetSampleRateHandler(Command *apCommand); // @0x82B9DCE8 (return-size no-op)
 
     static intptr_t XenonThreadFunc(void *pContext);
     void XenonThread();

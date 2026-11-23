@@ -1,5 +1,10 @@
 // Native DirtySDK 5.5.3 telemetry state and ring operations.
 // Layout: DecFIGS telemetryapi.c/.h; ARTIST 82B10B88, 82B11160, 82B11238.
+// XDK size optimization matches ARTIST at 0x82B10C00 and 0x82B11BF8.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "telemetryapi.h"
 #include "dirtylib.h"
 #include "dirtymem.h"

@@ -67,7 +67,7 @@ public:
     };
 
     // @0x82B671F0 -- zero the 48-byte per-channel envelope/gain scratch.
-    static void *ClearBuffer(CompressorLimiter1 *self);
+    void ClearBuffer();
 
     // @0x82B67188 -- store the two thresholds and the compressor exponent, the attack/release
     // lengths and their derived per-sample step coefficients, plus the channel-link flag.
@@ -78,10 +78,8 @@ public:
     // why the three integers land in r7..r9 and IDA invented phantom slots for r4..r6. No
     // caller (Limiter1::Configure @0x82B97AB0, Compressor1::Configure @0x82B96B28) prepares
     // an r10 or a stack tail argument. Parameter names are the members each one is stored to.
-    static CompressorLimiter1 *Configure(CompressorLimiter1 *self, f32 thresholdOn,
-                                         f32 thresholdOff, f32 compExponent,
-                                         s32 attackSamples, s32 releaseSamples,
-                                         s32 groupChannels);
+    void Configure(f32 thresholdOn, f32 thresholdOff, f32 compExponent,
+                   s32 attackSamples, s32 releaseSamples, bool groupChannels);
 
     // @0x82B64DB0 -- the per-block envelope-follower + gain-curve kernel. Hand-written
     // X360 VMX128 (2,294 instructions); DECODED AND BODIED 2026-08-28 (phase E; report

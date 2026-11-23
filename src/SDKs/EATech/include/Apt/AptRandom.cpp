@@ -21,6 +21,11 @@
 // y^=(y<<15)&0xEFC60000; y^=y>>18.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AE04F0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/Apt.h"
 
 namespace

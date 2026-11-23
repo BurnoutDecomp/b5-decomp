@@ -1,5 +1,10 @@
 // Native DirtySDK 5.5.3 tunnel lifecycle. ARTIST 82B2E120, 82B2E190,
 // 82B2E468, 82B2E8B0, 82B2EA10, 82B2F368 and 82B2F4A0.
+// XDK size optimization matches ARTIST at 0x82B2EA10.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "prototunnel.h"
 #include "cryptarc4.h"
 #include "dirtymem.h"

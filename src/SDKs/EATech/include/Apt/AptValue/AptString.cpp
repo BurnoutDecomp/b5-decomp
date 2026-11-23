@@ -11,6 +11,11 @@
 // cat (@0x82AECD10) is a follow-on (Hex-Rays dropped its second operand).
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AE5C40.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"
 
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"   // AptInteger::Create (boxed indices)

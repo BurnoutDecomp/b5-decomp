@@ -88,8 +88,8 @@ public:
     static VuMeter *ResetFunc(VuMeter *self);           // @0x82B9D038
     // Returns the command record's own size -- the ring advance System::ExecuteCommands
     // applies. The X360 `li r3,8` is the CONSOLE sizeof; the host record is 16, so the body
-    // returns sizeof(VuMeterResetCommand), never the literal.
-    static int      ResetHandler(void *cmd);            // @0x82B9D130
+    // returns sizeof(Command), never the literal.
+    static int      ResetHandler(Command *cmd);            // @0x82B9D130
 
     // ---- per-frame processing ----
     static void     RwacTimerClient(void *context, f32); // @0x82B9D0C8 (timer callback)

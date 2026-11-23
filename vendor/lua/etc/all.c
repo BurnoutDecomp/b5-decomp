@@ -2,6 +2,12 @@
 * all.c -- Lua core, libraries and interpreter in a single file
 */
 
+#if defined(_XBOX)
+/* Let the XDK ctype header select its single-byte locale before stdlib.h.
+   ARTIST add_s calls __pctype_func directly at 0x82BE43BC. */
+#include <ctype.h>
+#endif
+
 #define luaall_c
 
 #include "lapi.c"

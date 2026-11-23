@@ -39,6 +39,7 @@
 // =====================================================================================
 
 #include "types.hpp" // f32, u32, u8
+#include "rw/audio/core/PlugIn.h" // Command
 #include "rw/audio/core/Iir2Filters.h"     // PlugInBaseView / AudioProcessContext / AudioChannelBuffer
 #include "rw/audio/core/SubMixConnector.h" // rw::audio::core::SubMixConnector, SubMix
 
@@ -61,10 +62,8 @@ class Send; // fwd -- the ring records carry the Send instance
 // sizeof(SendConnectByPointerCommand) (24 on x64 -- three pointers widened), never the
 // console literal 12. The ring consumer (System::ExecuteCommands) calls the leading field
 // through int (*)(void *), so the handler slot carries exactly that type.
-struct SendConnectByPointerCommand
+struct SendConnectByPointerCommand : Command
 {
-    int (*mpHandler)(void *); // +0x00 (X360) -- &Send::ConnectByPointerHandler
-    Send   *mpTarget;         // +0x04 (X360) -- the Send instance
     SubMix *mpSubMix;         // +0x08 (X360) -- target SubMix (connect event word 0)
 };
 
@@ -77,10 +76,8 @@ struct SendConnectByPointerCommand
 // muRecordSize stores THAT host size (ConnectByNameHandler returns it as the ring
 // advance). Grounded in EventEvent @0x82BA3F00 (name path, `clrrwi r8,r8,2` + the
 // `v10[2] = size` store) and ConnectByNameHandler @0x82B9FF80 (returns *(cmd+8)).
-struct SendConnectByNameCommand
+struct SendConnectByNameCommand : Command
 {
-    int (*mpHandler)(void *); // +0x00 (X360) -- &Send::ConnectByNameHandler
-    Send *mpTarget;           // +0x04 (X360) -- the Send instance
     u32   muRecordSize;       // +0x08 (X360) -- this record's byte size (the ring advance)
     char  maName[1];          // +0x0C (X360) -- the NUL-terminated target SubMix name
 };
@@ -123,7 +120,7 @@ public:
     // connector, clear the gain array, then -- if the command carries a target SubMix --
     // link the connector into that SubMix's connector list. Returns the record's byte size
     // -- host sizeof(SendConnectByPointerCommand) (X360: 12). @0x82B9FEF8.
-    static int ConnectByPointerHandler(void *cmd);
+    static int ConnectByPointerHandler(Command *cmd);
 
     // BLOCKED (body pending) -- deferred name-connect handler @0x82B9FF80. Declared (the
     // X360 ledger attests it and EventEvent stores its address); the BODY is now FULLY
@@ -136,7 +133,7 @@ public:
     // .map; offsets confirmed in the ARTIST asm (the X360 build inlined SubMix::
     // EnumerateSubMixReset / EnumerateSubMix / GetName here). Returns the queued record's
     // muRecordSize (the ring advance). Full recipe: scratchpad/waveL/Send.spec.md.
-    static int ConnectByNameHandler(void *cmd);
+    static int ConnectByNameHandler(Command *cmd);
 
     // Queue a connect command into the owning System's deferred-command ring. When
     // `useName` is zero the command is the fixed pointer form (ConnectByPointerHandler,

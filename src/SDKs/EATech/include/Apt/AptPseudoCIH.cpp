@@ -1,3 +1,8 @@
+// XDK size optimization matches ARTIST at 0x82AE5AA0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptPseudoCIH.h"
 
 #include <new>   // placement new

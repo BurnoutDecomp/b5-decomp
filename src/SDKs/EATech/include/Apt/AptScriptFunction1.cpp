@@ -24,6 +24,11 @@
 // (AptScriptFunction1ByteCode) format.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF13A0 and 0x82B024A8.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptScriptFunction1.h"
 #include "SDKs/EATech/include/Apt/AptFrameStack.h"               // spFrameStack->Set (the call-local hash)
 #include "SDKs/EATech/include/Apt/AptDefine.h"                   // gpGCPoolManager

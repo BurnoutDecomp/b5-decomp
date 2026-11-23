@@ -8,6 +8,11 @@
 //   GetAnimationInst 0x82B7B358 / GetCosAngle 0x82AD7448.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AE2F30 and 0x82AE72E8.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptCIH.h"
 #include "SDKs/EATech/include/Apt/AptCharacterInst.h"            // GetTypeTag / mpProperties
 #include "SDKs/EATech/include/Apt/AptCharacterSpriteInstBase.h"  // mDisplayList (sprite-base child list)

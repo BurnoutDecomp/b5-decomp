@@ -4,6 +4,11 @@
 // output unless a debug hook is installed and swallows it. NetPrintfHook, the only
 // writer of the hook, is not part of the build, so the hook is always unset.
 
+// XDK size optimization matches ARTIST at 0x82B29970.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "dirtylib.h"
 #include "platform.h"
 

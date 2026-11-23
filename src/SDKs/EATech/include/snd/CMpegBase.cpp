@@ -40,6 +40,11 @@
 // they are dropped.
 // ============================================================================
 
+// XDK size optimization matches ARTIST at 0x82B7E688 and 0x82B74C98.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/snd/CMpegBase.h"
 #include "SDKs/EATech/include/snd/sndmix.h"
 

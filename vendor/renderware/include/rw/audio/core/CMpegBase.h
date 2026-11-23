@@ -26,12 +26,14 @@
 //   +0x08  muSampleRateCopy          (duplicate written alongside muSampleRate)
 //   +0x0C  miBitRate                 (kbps table value for this frame)
 //   +0x10  miFrameSize               (encoded frame size in bytes, less 4)
+//   +0x17  mOpened                   (open flag)
 //   +0x16  mucLayerValue             (4 - layer id: 1 => Layer I, 2 => II, 3 => III)
 //   +0x18  mucChannelCount           (1 mono / 2 stereo)
 //   +0x1C  muHeaderWord              (pre-read header word, used when mpBitPointer is null)
 //   +0x20  mpBitPointer              (byte cursor for GetBits / GetHeader)
 //   +0x2C  muBitBuffer               (left-justified bit accumulator)
 //   +0x30  miBitsAvailable           (valid bits currently in muBitBuffer)
+//   +0x34  mResetSynthRequired       (synthesis history reset flag)
 //   +0x38  mucPolySynthPhase[2]      (per-channel rotating poly-synth history phase, one u8
 //                                     per channel -- PolySynth loads 0x38(this + channel))
 //   +0x3A  mucIsMpeg25               (MPEG 2.5 flag)
@@ -70,6 +72,8 @@ namespace core
 class CMpegBase
 {
 public:
+    CMpegBase();
+
     // @0x82B8BFF0 -- allocate the poly-synth history block (2304 bytes per channel),
     // store it at mpPolySynthHistory and zero it. Returns 0 on success, -1 on failure.
     s32 AllocateSynth(s32 iChannelCount);
@@ -106,7 +110,7 @@ public:
     s32   miFrameSize;              // +0x10
     u8    mPad14[2];                // +0x14 .. +0x15  (opaque)
     u8    mucLayerValue;            // +0x16
-    u8    mPad17;                   // +0x17  (opaque)
+    u8    mOpened;                  // +0x17
     u8    mucChannelCount;          // +0x18
     u8    mPad19[3];                // +0x19 .. +0x1B  (opaque)
     u32   muHeaderWord;             // +0x1C
@@ -114,7 +118,7 @@ public:
     u8    mPad24[8];                // +0x24 .. +0x2B  (opaque)
     u32   muBitBuffer;              // +0x2C
     s32   miBitsAvailable;          // +0x30
-    u8    mPad34[4];                // +0x34 .. +0x37  (opaque)
+    s32   mResetSynthRequired;      // +0x34
     u8    mucPolySynthPhase[2];     // +0x38 .. +0x39  (per-channel; asm indexes 0x38(this + channel))
     u8    mucIsMpeg25;              // +0x3A
     u8    mucIsLsf;                 // +0x3B

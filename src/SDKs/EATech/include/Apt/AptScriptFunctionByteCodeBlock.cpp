@@ -13,6 +13,11 @@
 // See AptScriptFunctionByteCodeBlock.h for the layout / base-class derivation.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF1638 and 0x82AE6218.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptScriptFunctionByteCodeBlock.h"
 
 #include "SDKs/EATech/include/Apt/AptDefine.h"            // gpGCPoolManager

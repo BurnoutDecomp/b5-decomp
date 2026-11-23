@@ -15,6 +15,11 @@
 // return null. De-optimised back to that single `new` expression here.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF4F30.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptValueFactory.h"
 
 AptArray* AptValueFactory::CreateArray(int nCount, AptValue** ppItems)

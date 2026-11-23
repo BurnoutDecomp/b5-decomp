@@ -20,6 +20,11 @@
 // AptCXForm.translate per ARGB channel.
 // ===========================================================================
 
+// XDK size optimization matches ARTIST at 0x82AF0128.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/EATech/include/Apt/AptScriptColour.h"
 
 #include "SDKs/EATech/include/Apt/AptCIH.h"               // mpTarget -> char inst

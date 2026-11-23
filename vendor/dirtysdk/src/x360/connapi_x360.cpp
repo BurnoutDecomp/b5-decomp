@@ -1,5 +1,10 @@
 // DirtySDK ConnApi native X360 state and entry points; ARTIST 0x82B15430,
 // 0x82B155D8 and 0x82B162B0; declaration names cross-checked with DecFIGS.
+// XDK size optimization matches ARTIST at 0x82B163D0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "connapi.h"
 #include "prototunnel.h"
 #include "dirtymem.h"
