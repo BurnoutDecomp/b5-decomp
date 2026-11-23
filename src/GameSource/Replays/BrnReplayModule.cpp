@@ -1094,7 +1094,7 @@ namespace BrnReplays
         lCloseRequest.Construct(&mGameDataReceiverQueue, 0);
         lCloseRequest.SetFileHandle(mHeaderFile);
         lpOutputBuffer->GetGameDataRequestInterface()->mRequestQueue.AddEvent(
-            &lCloseRequest, 21);
+            lCloseRequest, 21);
 
         if (mPrimaryDiskReadStream.GetStatus() == DiskReadStream::E_STATUS_OPEN)
             mPrimaryDiskReadStream.Close();

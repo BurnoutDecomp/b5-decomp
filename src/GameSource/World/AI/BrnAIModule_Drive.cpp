@@ -999,7 +999,7 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
 
         }
 
-        lpQueue->AddEvent<BrnAIDriverControls>(&lControls, BrnPhysics::Vehicle::E_DRIVER_TYPE_AI);
+        lpQueue->AddEvent<BrnAIDriverControls>(lControls, BrnPhysics::Vehicle::E_DRIVER_TYPE_AI);
     }
 
 }

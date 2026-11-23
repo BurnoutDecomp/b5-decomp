@@ -31,7 +31,7 @@ namespace AIModuleIO
         ActivateRaceCarEvent lEvent;
         lEvent.meGlobalRaceCarIndex = leGlobalRaceCarIndex;
         lEvent.meActiveRaceCarIndex = leActiveRaceCarIndex;
-        mManagementQueue.AddEvent<ActivateRaceCarEvent>(&lEvent, E_EVENT_ACTIVATE_RACE_CAR);
+        mManagementQueue.AddEvent<ActivateRaceCarEvent>(lEvent, E_EVENT_ACTIVATE_RACE_CAR);
     }
 
     // @0x822FD6E0  Queue a "deactivate this car" management event.
@@ -45,7 +45,7 @@ namespace AIModuleIO
         DeactivateRaceCarEvent lEvent;
         lEvent.meGlobalRaceCarIndex = leGlobalRaceCarIndex;
         lEvent.mbIsInAMode = lbIsInAMode;
-        mManagementQueue.AddEvent<DeactivateRaceCarEvent>(&lEvent, E_EVENT_DEACTIVATE_RACE_CAR);
+        mManagementQueue.AddEvent<DeactivateRaceCarEvent>(lEvent, E_EVENT_DEACTIVATE_RACE_CAR);
     }
 
     // @0x822FD768  Queue a "detach AI control" management event.
@@ -58,7 +58,7 @@ namespace AIModuleIO
 
         DetachAIControlEvent lEvent;
         lEvent.meGlobalRaceCarIndex = leGlobalRaceCarIndex;
-        mManagementQueue.AddEvent<DetachAIControlEvent>(&lEvent, E_EVENT_DETACH_AI_CONTROL);
+        mManagementQueue.AddEvent<DetachAIControlEvent>(lEvent, E_EVENT_DETACH_AI_CONTROL);
     }
 
     // @0x822B22D0  Latch the player active-car snapshot (once per frame).
@@ -96,7 +96,7 @@ namespace AIModuleIO
         lEvent.muSection = luSection;
         lEvent.meDistrict = leDistrict;
         lEvent.muNumberOfMedalsToUnlock = luNumberOfMedalsToUnlock;
-        mManagementQueue.AddEvent<SetUpOutOfRangeRaceCarEvent>(&lEvent, E_EVENT_SET_UP_OUT_OF_RANGE_RACE_CAR);
+        mManagementQueue.AddEvent<SetUpOutOfRangeRaceCarEvent>(lEvent, E_EVENT_SET_UP_OUT_OF_RANGE_RACE_CAR);
     }
 
     // @0x82764F80  The latched player-car world position.

@@ -1612,7 +1612,7 @@ namespace BrnNetwork
         lpVoipManager->HandleReceivedHeadsetStatus(
             GetPlayerID(), static_cast<CgsNetwork::ENetworkHeadsetPlayerStatus>(lpUpdateData->meHeadsetStatus));
 
-        lpVehicleDriverInputInterface->GetUpdateDriverQueue()->AddEvent(&lNetworkDriverControls,
+        lpVehicleDriverInputInterface->GetUpdateDriverQueue()->AddEvent(lNetworkDriverControls,
                                                                         BrnPhysics::Vehicle::E_DRIVER_TYPE_NETWORK);
 
         // [PC HARNESS, NOT X360] bounded witness: the first update applied in each 210-frame bucket

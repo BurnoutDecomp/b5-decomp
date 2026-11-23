@@ -185,7 +185,7 @@ namespace BrnNetwork
         {
             BrnNetworkModuleIO::NetworkOutLiveRevengeProfileData lLiveRevengeProfileEvent;
             lLiveRevengeProfileEvent.mpLiveRevengeProfile = mpLiveRevengeProfile;
-            mpNetworkModule->GetNetworkEventQueue()->AddEvent(&lLiveRevengeProfileEvent,
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lLiveRevengeProfileEvent,
                                                               lLiveRevengeProfileEvent.GetEventType());
         }
 
@@ -208,7 +208,7 @@ namespace BrnNetwork
                        "If this assert fires then it the live revenge manager is corrupting the profile. Deleting your save game will fix this for now (tell Alex Veal).\n");
 
             BrnNetworkModuleIO::NetworkOutAutosaveProfile lAutosaveEvent;
-            mpNetworkModule->GetNetworkEventQueue()->AddEvent(&lAutosaveEvent, lAutosaveEvent.GetEventType());
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lAutosaveEvent, lAutosaveEvent.GetEventType());
             mbProfileIsDirty = false;
         }
     }
@@ -273,7 +273,7 @@ namespace BrnNetwork
         {
             BrnNetworkModuleIO::NetworkOutRivalCount lRivalCountMessage;
             lRivalCountMessage.miNumberOfRivals = liNewNumberOfRivals;
-            mpNetworkModule->GetNetworkEventQueue()->AddEvent(&lRivalCountMessage,
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lRivalCountMessage,
                                                               lRivalCountMessage.GetEventType());
         }
     }

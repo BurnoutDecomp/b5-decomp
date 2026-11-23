@@ -160,7 +160,7 @@ namespace BrnGui
             lRequest.mbAllowFailiure = false;
             lRequest.mbUseHDCache = false;
             lRequest.miPoolId = 11;
-            lpGameDataInput->GetRequestInterface()->mRequestQueue.AddEvent(&lRequest, 2);
+            lpGameDataInput->GetRequestInterface()->mRequestQueue.AddEvent(lRequest, 2);
         }
             // Fall through: the same call may consume an already-delivered reply.
         case E_MOVIEMANAGERSTATE_PREPARING_LOADING_BUNDLE:

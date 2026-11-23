@@ -3252,7 +3252,7 @@ namespace CgsSceneManager
             lResult.mu16GroupTag      = lpFineResult->mu16GroupTag;
             lResult.mbIntersection    = true;
         }
-        lpResultsQueue->AddEvent<SceneManagerIO::OutEventLineTestNearestResult>(&lResult, 2);
+        lpResultsQueue->AddEvent<SceneManagerIO::OutEventLineTestNearestResult>(lResult, 2);
     }
 
     // =========================================================================================
@@ -3861,14 +3861,14 @@ namespace CgsSceneManager
             {
                 lResult.mbIntersection = true;
                 lpSceneOutputBuffer->GetResultsQueue()->AddEvent<SceneManagerIO::OutEventLineTestFastDoubleSidedResult>(
-                    &lResult, KI_LINE_TEST_FAST_DOUBLE_SIDED_RESULT_EVENT);
+                    lResult, KI_LINE_TEST_FAST_DOUBLE_SIDED_RESULT_EVENT);
                 return;
             }
             if (lpQuery->mx32EntityTypeFlags == KU_ENTITY_TYPE_FLAG_WORLD)
             {
                 lResult.mbIntersection = false;
                 lpSceneOutputBuffer->GetResultsQueue()->AddEvent<SceneManagerIO::OutEventLineTestFastDoubleSidedResult>(
-                    &lResult, KI_LINE_TEST_FAST_DOUBLE_SIDED_RESULT_EVENT);
+                    lResult, KI_LINE_TEST_FAST_DOUBLE_SIDED_RESULT_EVENT);
                 return;
             }
         }
@@ -3923,7 +3923,7 @@ namespace CgsSceneManager
 
         lResult.mbIntersection = lbIntersection;
         lpSceneOutputBuffer->GetResultsQueue()->AddEvent<SceneManagerIO::OutEventLineTestFastDoubleSidedResult>(
-            &lResult, KI_LINE_TEST_FAST_DOUBLE_SIDED_RESULT_EVENT);
+            lResult, KI_LINE_TEST_FAST_DOUBLE_SIDED_RESULT_EVENT);
     }
     // ProcessSphereTestFast is bodied in CgsSceneManagerModule_wBT_01.cpp (it needs the vendor
     // rw::collision::SphereVolume, which cannot share this TU's volume header).
@@ -4022,7 +4022,7 @@ namespace CgsSceneManager
                 NoteVolumeTestDeepest(lQueryId.mId, lx32EntityTypeFlags, liWorldResults, -1, 0xFFFF, false,
                                       lWorldResult);                                                  // [DIAG]
                 lpResultsQueue->AddEvent<SceneManagerIO::OutEventVolumeTestDeepestResult>(
-                    &lWorldResult, KI_VOLUME_TEST_DEEPEST_RESULT_EVENT);
+                    lWorldResult, KI_VOLUME_TEST_DEEPEST_RESULT_EVENT);
                 return;
             }
         }
@@ -4093,7 +4093,7 @@ namespace CgsSceneManager
         }
         NoteVolumeTestDeepest(lQueryId.mId, lx32EntityTypeFlags, liWorldResults, liNumResultsWritten,
                               lu16ExcludeEntityIndex, lbExcludeParts, lResult);                       // [DIAG]
-        lpResultsQueue->AddEvent<SceneManagerIO::OutEventVolumeTestDeepestResult>(&lResult,
+        lpResultsQueue->AddEvent<SceneManagerIO::OutEventVolumeTestDeepestResult>(lResult,
                                                                                    KI_VOLUME_TEST_DEEPEST_RESULT_EVENT);
     }
     // =========================================================================================

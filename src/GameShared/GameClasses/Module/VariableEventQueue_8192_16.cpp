@@ -44,8 +44,8 @@ template const char* CgsModule::VariableEventQueue<8192, 16>::GetFirstWritePoint
 // (typed AddEvent = assert-then-forward with sizeof(EventT); Append = bulk
 // memcpy; AppendSafe = per-event GetFirst/Next + AddEventSafe). Element-type
 // homes are #included above so each EventT is a complete type.
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<BrnResource::GameDataIO::GetVehicleListRequest>(const BrnResource::GameDataIO::GetVehicleListRequest*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<BrnResource::GameDataIO::GetWheelListRequest>(const BrnResource::GameDataIO::GetWheelListRequest*, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<BrnResource::GameDataIO::GetVehicleListRequest>(const BrnResource::GameDataIO::GetVehicleListRequest&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<BrnResource::GameDataIO::GetWheelListRequest>(const BrnResource::GameDataIO::GetWheelListRequest&, s32);
 template bool CgsModule::VariableEventQueue<8192, 16>::Append<2048, 16>(const CgsModule::VariableEventQueue<2048, 16>&);
 template bool CgsModule::VariableEventQueue<8192, 16>::Append<4096, 16>(const CgsModule::VariableEventQueue<4096, 16>&);
 
@@ -60,48 +60,48 @@ template bool CgsModule::VariableEventQueue<8192, 16>::Append<4096, 16>(const Cg
 // <GuiEventAudioTraxPreview> == 0x18(24), Message<RaceCarIsNowActive> == 0x20(32),
 // Message<GuiAudioEvent>/<GuiEventAudioTraxUpdate> == 0x28/0x30, Message<GuiAudioTriggerEvent>
 // == 0x74(116). Each InnerT home is #included above so Message<InnerT> is a complete type.
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<bool> >(const CgsSound::Io::Message<bool>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<unsigned int> >(const CgsSound::Io::Message<unsigned int>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<float> >(const CgsSound::Io::Message<float>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<unsigned long long> >(const CgsSound::Io::Message<unsigned long long>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnProgression::ETrainingType> >(const CgsSound::Io::Message<BrnProgression::ETrainingType>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<CgsLanguage::ELanguage> >(const CgsSound::Io::Message<CgsLanguage::ELanguage>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<CgsSound::Playback::Name> >(const CgsSound::Io::Message<CgsSound::Playback::Name>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<AttribSys::Enums::OnlineVoiceOver::OnlineVoiceOver> >(const CgsSound::Io::Message<AttribSys::Enums::OnlineVoiceOver::OnlineVoiceOver>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::ESoundMessages> >(const CgsSound::Io::Message<BrnSound::ESoundMessages>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::FxVolumes> >(const CgsSound::Io::Message<BrnSound::FxVolumes>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::GameModeLostResults> >(const CgsSound::Io::Message<BrnSound::GameModeLostResults>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::RaceCarIsNowActive> >(const CgsSound::Io::Message<BrnSound::RaceCarIsNowActive>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_CameraCut> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_CameraCut>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_ResetOnTrack> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_ResetOnTrack>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_QuitEvent> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_QuitEvent>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_StruntJump> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_StruntJump>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_StuntSmash> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_StuntSmash>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_StuntStunt> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_StuntStunt>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiAudioEvent> >(const CgsSound::Io::Message<BrnGui::GuiAudioEvent>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent> >(const CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiEventAudioSettings> >(const CgsSound::Io::Message<BrnGui::GuiEventAudioSettings>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiEventAudioTraxPreview> >(const CgsSound::Io::Message<BrnGui::GuiEventAudioTraxPreview>*, s32);
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiEventAudioTraxUpdate> >(const CgsSound::Io::Message<BrnGui::GuiEventAudioTraxUpdate>*, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<bool> >(const CgsSound::Io::Message<bool>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<unsigned int> >(const CgsSound::Io::Message<unsigned int>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<float> >(const CgsSound::Io::Message<float>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<unsigned long long> >(const CgsSound::Io::Message<unsigned long long>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnProgression::ETrainingType> >(const CgsSound::Io::Message<BrnProgression::ETrainingType>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<CgsLanguage::ELanguage> >(const CgsSound::Io::Message<CgsLanguage::ELanguage>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<CgsSound::Playback::Name> >(const CgsSound::Io::Message<CgsSound::Playback::Name>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<AttribSys::Enums::OnlineVoiceOver::OnlineVoiceOver> >(const CgsSound::Io::Message<AttribSys::Enums::OnlineVoiceOver::OnlineVoiceOver>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::ESoundMessages> >(const CgsSound::Io::Message<BrnSound::ESoundMessages>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::FxVolumes> >(const CgsSound::Io::Message<BrnSound::FxVolumes>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::GameModeLostResults> >(const CgsSound::Io::Message<BrnSound::GameModeLostResults>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::RaceCarIsNowActive> >(const CgsSound::Io::Message<BrnSound::RaceCarIsNowActive>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_CameraCut> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_CameraCut>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_ResetOnTrack> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_ResetOnTrack>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_QuitEvent> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_QuitEvent>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_StruntJump> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_StruntJump>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_StuntSmash> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_StuntSmash>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_StuntStunt> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_StuntStunt>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiAudioEvent> >(const CgsSound::Io::Message<BrnGui::GuiAudioEvent>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent> >(const CgsSound::Io::Message<BrnGui::GuiAudioTriggerEvent>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiEventAudioSettings> >(const CgsSound::Io::Message<BrnGui::GuiEventAudioSettings>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiEventAudioTraxPreview> >(const CgsSound::Io::Message<BrnGui::GuiEventAudioTraxPreview>&, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiEventAudioTraxUpdate> >(const CgsSound::Io::Message<BrnGui::GuiEventAudioTraxUpdate>&, s32);
 // Message<GuiEventAudioTraxLastPlayedIndexes> == 0x28(40): 16-byte MessageHeader + 24-byte
 // GuiEvent<459> payload (BrnGuiDemangledEventTypes.h:293, id 459 size 24). Matches the baked
 // record-size arg in the X360 thunk @0x826DF2B0 (li r6,0x28), posted by
 // BrnSound::Module::SoundLogicModule::ProcessGuiEvents.
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiEventAudioTraxLastPlayedIndexes> >(const CgsSound::Io::Message<BrnGui::GuiEventAudioTraxLastPlayedIndexes>*, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnGui::GuiEventAudioTraxLastPlayedIndexes> >(const CgsSound::Io::Message<BrnGui::GuiEventAudioTraxLastPlayedIndexes>&, s32);
 // Message<BrnProgression::TrophyUnlockData::UnlockType> == 0x14(20): 16-byte MessageHeader + a
 // 4-byte enum payload (E_UNLOCKTYPE_*, home BrnGameActions.h). Matches the baked record-size arg
 // in the X360 thunk @0x826DED38 (li r6,0x14), posted by
 // BrnSound::Module::SoundLogicModule::ProcessGameActionQueue (the trophy-unlock sound cue).
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnProgression::TrophyUnlockData::UnlockType> >(const CgsSound::Io::Message<BrnProgression::TrophyUnlockData::UnlockType>*, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnProgression::TrophyUnlockData::UnlockType> >(const CgsSound::Io::Message<BrnProgression::TrophyUnlockData::UnlockType>&, s32);
 // Message<BrnSound::Logic::FxMessage_CameraPhoto> == 0x14(20): 16-byte MessageHeader + a 4-byte
 // FxMessage payload (empty FxMessage subclass fixing meType == E_CAMERA_PHOTO, home BrnFxEffect.h).
 // Matches the baked record-size arg in the X360 thunk @0x826DFC10 (li r6,20), posted by
 // BrnSound::Logic::CameraControl::UpdateParams (the photo-mode camera cue).
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_CameraPhoto> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_CameraPhoto>*, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::FxMessage_CameraPhoto> >(const CgsSound::Io::Message<BrnSound::Logic::FxMessage_CameraPhoto>&, s32);
 // Message<CgsGui::GuiEventPlayMusicOnMenuStream> == 0x18(24): 16-byte MessageHeader + the GuiEvent<23>
 // "play menu music stream" payload (home CgsGuiStateInterface.h). Matches the baked record-size arg
 // in the X360 thunk @0x826DF058 (li r6,24), posted by BrnSound::Module::SoundLogicModule::ProcessGuiEvents.
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<CgsGui::GuiEventPlayMusicOnMenuStream> >(const CgsSound::Io::Message<CgsGui::GuiEventPlayMusicOnMenuStream>*, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<CgsGui::GuiEventPlayMusicOnMenuStream> >(const CgsSound::Io::Message<CgsGui::GuiEventPlayMusicOnMenuStream>&, s32);
 // Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere> == 0x20(32): 16-byte MessageHeader + the
 // 16-byte DrawSphere payload (home Brn3DEffectControl.h). Matches the baked record-size arg in the
 // X360 typed-AddEvent thunk @0x826DF9B8 (li r6,0x20), posted by the 3-D effect controls
@@ -109,7 +109,7 @@ template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Me
 // Passby::PassbyEffect::ProcessUpdate, Vehicles::Engines::DualGinsuEffect::ProcessUpdate).
 CGS_STATIC_ASSERT((sizeof(CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere>) == 0x20),
               "Message<Brn3DEffectControl::DrawSphere> must be 32 bytes (X360 AddEvent li r6,0x20)");
-template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere> >(const CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere>*, s32);
+template bool CgsModule::VariableEventQueue<8192, 16>::AddEvent<CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere> >(const CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere>&, s32);
 
 // BLOCKED (2, precise -- NOT fabricated): the two remaining Message<InnerT> instances whose
 // InnerT is a genuinely un-homed BrnGui payload type. Homing them requires either editing the

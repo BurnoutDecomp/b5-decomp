@@ -85,14 +85,14 @@ namespace CgsSceneManager
             {
                 lResult.mbIntersection = true;
                 lpSceneOutputBuffer->GetResultsQueue()->AddEvent<SceneManagerIO::OutEventSphereTestFastResult>(
-                    &lResult, KI_SPHERE_TEST_FAST_RESULT_EVENT);
+                    lResult, KI_SPHERE_TEST_FAST_RESULT_EVENT);
                 return;
             }
             if (lpQuery->mx32EntityTypeFlags == KU_ENTITY_TYPE_FLAG_WORLD)
             {
                 lResult.mbIntersection = false;
                 lpSceneOutputBuffer->GetResultsQueue()->AddEvent<SceneManagerIO::OutEventSphereTestFastResult>(
-                    &lResult, KI_SPHERE_TEST_FAST_RESULT_EVENT);
+                    lResult, KI_SPHERE_TEST_FAST_RESULT_EVENT);
                 return;
             }
         }
@@ -171,6 +171,6 @@ namespace CgsSceneManager
 
         lResult.mbIntersection = lbIntersection;
         lpSceneOutputBuffer->GetResultsQueue()->AddEvent<SceneManagerIO::OutEventSphereTestFastResult>(
-            &lResult, KI_SPHERE_TEST_FAST_RESULT_EVENT);
+            lResult, KI_SPHERE_TEST_FAST_RESULT_EVENT);
     }
 }

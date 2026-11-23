@@ -12898,7 +12898,7 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
 
                 lpDriverInputInterface->GetUpdateDriverQueue()
                     ->AddEvent<BrnPhysics::Vehicle::BrnTrafficDriverControls>(
-                        &lControls, KI_DRIVER_EVENT_TYPE_TRAFFIC);             // 0x8274977C
+                        lControls, KI_DRIVER_EVENT_TYPE_TRAFFIC);             // 0x8274977C
 
                 if (lControls.mfGas > 0.0f || lControls.mfBrake > 0.0f)
                 {
@@ -12923,7 +12923,7 @@ void TrafficEntityModule::GenerateDriverInputs(BrnTrafficIO::OutputBuffer_PrePhy
             // AddEvent, with none of the post-dispatch work.
             lpDriverInputInterface->GetUpdateDriverQueue()
                 ->AddEvent<BrnPhysics::Vehicle::BrnTrafficDriverControls>(
-                    &lControls, KI_DRIVER_EVENT_TYPE_TRAFFIC);                 // 0x82749834
+                    lControls, KI_DRIVER_EVENT_TYPE_TRAFFIC);                 // 0x82749834
         }
     }
 
@@ -18628,7 +18628,7 @@ void TrafficEntityModule::PostNearbyTrafficSceneQueryRequest(
     lEvent.mfRadius               = KF_NEARBY_TRAFFIC_QUERY_RADIUS;
 
     lpOutput->GetSceneCoarseQueryQueue()->AddEvent(
-        &lEvent, CgsSceneManager::SceneManagerIO::E_IN_EVENT_SPHERE_TEST );
+        lEvent, CgsSceneManager::SceneManagerIO::E_IN_EVENT_SPHERE_TEST );
 }
 
 // ----------------------------------------------------------------------------
@@ -18920,7 +18920,7 @@ void TrafficEntityModule::AIPostSceneQueryRequests(
         lEvent.mxQueryFlags        = 0u;
 
         lpOutput->GetSceneCoarseQueryQueue()->AddEvent(
-            &lEvent, CgsSceneManager::SceneManagerIO::E_IN_EVENT_FRUSTUM_TEST_VP );
+            lEvent, CgsSceneManager::SceneManagerIO::E_IN_EVENT_FRUSTUM_TEST_VP );
     }
 }
 
@@ -19773,7 +19773,7 @@ void TrafficEntityModule::ManageTriggers(BrnTrafficIO::OutputBuffer_PreScene* lp
                 lAddEvent.mDimensions.mV.z              = std::fabs(lDimensions.mV.z);
                 lAddEvent.mDimensions.mV.w              = std::fabs(lDimensions.mV.w);
                 lpOutput->GetTriggerManagementInputInterface()->GetAddTriggerEventQueue()
-                    .AddEvent<BrnWorld::TriggerEntityModuleIO::InAddBoxTriggerEvent>(&lAddEvent, 2);
+                    .AddEvent<BrnWorld::TriggerEntityModuleIO::InAddBoxTriggerEvent>(lAddEvent, 2);
             }
         }
     }

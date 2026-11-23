@@ -60,7 +60,7 @@ namespace TriggerEntityModuleIO
 
         // X360 tail call: AddEvent<InAddBoxTriggerEvent>(this, &event, 2). mAddTriggerEventQueue is
         // the interface's first member (+0), so posting on it matches the asm's `this`-relative call.
-        mAddTriggerEventQueue.AddEvent<InAddBoxTriggerEvent>(&lEvent, 2);
+        mAddTriggerEventQueue.AddEvent<InAddBoxTriggerEvent>(lEvent, 2);
     }
 }
 }

@@ -363,7 +363,7 @@ void InternalBaseStreamer::PostLoadRequest( s32 liListIndex )
     lEvent.mId             = mpCurrentEntryList[liListIndex].mResourceId;
     lEvent.meType          = meAssetSet;
     lEvent.mbFailFlag      = mbAllowFailure;
-    mGDRequestInterface.mRequestQueue.AddEvent( &lEvent, 26 );
+    mGDRequestInterface.mRequestQueue.AddEvent( lEvent, 26 );
 }
 
 // ---------------------------------------------------------------------------
@@ -588,7 +588,7 @@ bool InternalBaseStreamer::UpdateUnloading()
                 lEvent.mId             = mpCurrentEntryList[liListIndex].mResourceId;
                 lEvent.meType          = meAssetSet;
                 lEvent.mbFailFlag      = false;
-                mGDRequestInterface.mRequestQueue.AddEvent( &lEvent, 39 );
+                mGDRequestInterface.mRequestQueue.AddEvent( lEvent, 39 );
 
                 mPendingEntryQueue[static_cast<u32>( liSlot )] = -1;
             }

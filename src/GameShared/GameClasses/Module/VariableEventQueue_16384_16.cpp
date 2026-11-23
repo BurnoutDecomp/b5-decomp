@@ -41,16 +41,16 @@ template const char* CgsModule::VariableEventQueue<16384, 16>::GetFirstWritePoin
 // (typed AddEvent = assert-then-forward with sizeof(EventT); Append = bulk
 // memcpy; AppendSafe = per-event GetFirst/Next + AddEventSafe). Element-type
 // homes are #included above so each EventT is a complete type.
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::ActivateRaceCarEvent>(const BrnAI::AIModuleIO::ActivateRaceCarEvent*, s32);
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::AddCarToCurrentModeEvent>(const BrnAI::AIModuleIO::AddCarToCurrentModeEvent*, s32);
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::DeactivateRaceCarEvent>(const BrnAI::AIModuleIO::DeactivateRaceCarEvent*, s32);
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::DetachAIControlEvent>(const BrnAI::AIModuleIO::DetachAIControlEvent*, s32);
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::PlayerControlChangedEvent>(const BrnAI::AIModuleIO::PlayerControlChangedEvent*, s32);
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::RemoveCarFromCurrentModeEvent>(const BrnAI::AIModuleIO::RemoveCarFromCurrentModeEvent*, s32);
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::SetUpOutOfRangeRaceCarEvent>(const BrnAI::AIModuleIO::SetUpOutOfRangeRaceCarEvent*, s32);
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::AttachAIControlEvent>(const BrnAI::AIModuleIO::AttachAIControlEvent*, s32);            // 0x822FCC90, size 0x18
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<CgsSceneManager::SceneManagerIO::InEventFrustumTestVp>(const CgsSceneManager::SceneManagerIO::InEventFrustumTestVp*, s32);
-template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<CgsSceneManager::SceneManagerIO::InEventSphereTest>(const CgsSceneManager::SceneManagerIO::InEventSphereTest*, s32); // 0x8273F9D8, size 0x20
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::ActivateRaceCarEvent>(const BrnAI::AIModuleIO::ActivateRaceCarEvent&, s32);
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::AddCarToCurrentModeEvent>(const BrnAI::AIModuleIO::AddCarToCurrentModeEvent&, s32);
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::DeactivateRaceCarEvent>(const BrnAI::AIModuleIO::DeactivateRaceCarEvent&, s32);
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::DetachAIControlEvent>(const BrnAI::AIModuleIO::DetachAIControlEvent&, s32);
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::PlayerControlChangedEvent>(const BrnAI::AIModuleIO::PlayerControlChangedEvent&, s32);
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::RemoveCarFromCurrentModeEvent>(const BrnAI::AIModuleIO::RemoveCarFromCurrentModeEvent&, s32);
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::SetUpOutOfRangeRaceCarEvent>(const BrnAI::AIModuleIO::SetUpOutOfRangeRaceCarEvent&, s32);
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<BrnAI::AIModuleIO::AttachAIControlEvent>(const BrnAI::AIModuleIO::AttachAIControlEvent&, s32);            // 0x822FCC90, size 0x18
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<CgsSceneManager::SceneManagerIO::InEventFrustumTestVp>(const CgsSceneManager::SceneManagerIO::InEventFrustumTestVp&, s32);
+template bool CgsModule::VariableEventQueue<16384, 16>::AddEvent<CgsSceneManager::SceneManagerIO::InEventSphereTest>(const CgsSceneManager::SceneManagerIO::InEventSphereTest&, s32); // 0x8273F9D8, size 0x20
 template bool CgsModule::VariableEventQueue<16384, 16>::Append<16384, 16>(const CgsModule::VariableEventQueue<16384, 16>&);
 template bool CgsModule::VariableEventQueue<16384, 16>::Append<512, 16>(const CgsModule::VariableEventQueue<512, 16>&);
 

@@ -274,7 +274,7 @@ namespace Logic
                 lRequest.miEventId = 2;
                 lRequest.miPoolId = mBundleId;
                 lRequest.mResourceId = mResourceId;
-                lrOwner.mResourceRequestInterface.mRequestQueue.AddEvent(&lRequest, 4);
+                lrOwner.mResourceRequestInterface.mRequestQueue.AddEvent(lRequest, 4);
             }
             // fall through: wait for the resource module's response.
         case 3:

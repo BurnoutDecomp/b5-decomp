@@ -50,7 +50,7 @@ namespace AttribSysIO
         lEvent.mpSchemaBinData      = lpSchemaBinData;       // +0x0C (var_54)
         lEvent.miSchemaBinDataSize  = liSchemaBinDataSize;   // +0x10 (var_50)
 
-        return mRequestQueue.AddEvent(&lEvent, 1);
+        return mRequestQueue.AddEvent(lEvent, 1);
     }
 
     // -------- RegisterVault @ X360 0x8229D6C8 (<2048>) --------
@@ -82,7 +82,7 @@ namespace AttribSysIO
         lEvent.miEventId            = liEventId;             // +0x0C (var_54)
         lEvent.meVaultType          = leVaultType;           // +0x10 (var_50)
 
-        return mRequestQueue.AddEvent(&lEvent, 0);
+        return mRequestQueue.AddEvent(lEvent, 0);
     }
 
     // -------- UnregisterVault @ X360 0x826731E8 (<2048>) --------
@@ -103,7 +103,7 @@ namespace AttribSysIO
         lEvent.mVaultResourceHandle = lVaultResourceHandle;  // +0x04 (var_3C, 8 bytes)
         lEvent.miEventId            = liEventId;             // +0x0C
 
-        return mRequestQueue.AddEvent(&lEvent, 2);
+        return mRequestQueue.AddEvent(lEvent, 2);
     }
 }
 }

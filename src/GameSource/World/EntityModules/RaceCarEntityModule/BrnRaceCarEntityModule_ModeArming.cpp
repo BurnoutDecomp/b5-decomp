@@ -193,7 +193,7 @@ void RaceCarEntityModule::HandlePrepareForModeAction(
         BrnAI::AIModuleIO::PlayerControlChangedEvent lChanged;
         lChanged.mbPlayerIsInControl = false;
         lpOutput->GetRaceCarAIInterface()->mManagementQueue.AddEvent(
-            &lChanged, BrnAI::AIModuleIO::E_EVENT_PLAYER_TAKEN_OVER);
+            lChanged, BrnAI::AIModuleIO::E_EVENT_PLAYER_TAKEN_OVER);
     }
     mbIsInGameMode = true;
     // The two stores/asserts the console runs straight after the in-game byte: the rival range
@@ -883,7 +883,7 @@ void RaceCarEntityModule::SetUpPlayerCarForMode(
 
         lpOutput->GetRaceCarAIInterface()->mManagementQueue
             .AddEvent<BrnAI::AIModuleIO::AddCarToCurrentModeEvent>(
-                &lAddCarEvent, BrnAI::AIModuleIO::E_EVENT_ADD_CAR_TO_MODE);
+                lAddCarEvent, BrnAI::AIModuleIO::E_EVENT_ADD_CAR_TO_MODE);
     }
 
     // ---- 0x82305DBC..0x82305DD4 : the mapping store, OUTSIDE the start-grid gate ------------
@@ -1125,7 +1125,7 @@ void RaceCarEntityModule::AddRaceCarToStartingGridOrFreeburnLobby(
     lAddCarEvent.mfProgressionRankAsRatio = 0.0f;
     lAddCarEvent.mfOvertakingDifficulty   = 0.0f;
     lpRaceCarAIInterface->mManagementQueue.AddEvent<BrnAI::AIModuleIO::AddCarToCurrentModeEvent>(
-        &lAddCarEvent, BrnAI::AIModuleIO::E_EVENT_ADD_CAR_TO_MODE);
+        lAddCarEvent, BrnAI::AIModuleIO::E_EVENT_ADD_CAR_TO_MODE);
 
     if (lbIsLocal)
     {

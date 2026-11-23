@@ -223,7 +223,7 @@ namespace BrnWorld
             lEvent.meType          = BrnResource::E_ASSETSET_GRAPHICS;
             lEvent.mbFailFlag      = false;
 
-            return lpRequestInterface->mRequestQueue.AddEvent( &lEvent, KI_GET_GAME_DATA_EVENT_TYPE );
+            return lpRequestInterface->mRequestQueue.AddEvent( lEvent, KI_GET_GAME_DATA_EVENT_TYPE );
         }
 
         // ---- receiver-queue reply types (the two `cmpwi r3, 0x3E / 0x3F` arms) --------

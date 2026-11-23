@@ -89,7 +89,7 @@ namespace AttribSysIO
         lRequest.miEventId            = liEventId;
         lRequest.meVaultType          = leVaultType;
 
-        mRequestQueue.AddEvent<RegisterVaultRequest>(&lRequest, 0);
+        mRequestQueue.AddEvent<RegisterVaultRequest>(lRequest, 0);
         return true;
     }
 

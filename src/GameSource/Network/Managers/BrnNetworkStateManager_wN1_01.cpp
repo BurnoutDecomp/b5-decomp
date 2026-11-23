@@ -360,7 +360,7 @@ namespace BrnNetwork
 
         BrnNetworkModuleIO::NetworkOutInstantFreeburnEvent lInstantFreeburnEvent;
         lInstantFreeburnEvent.mbIsDoingInstantFreeburn = false;
-        mpNetworkModule->GetNetworkEventQueue()->AddEvent(&lInstantFreeburnEvent,
+        mpNetworkModule->GetNetworkEventQueue()->AddEvent(lInstantFreeburnEvent,
                                                           lInstantFreeburnEvent.GetEventType());
     }
 
@@ -380,7 +380,7 @@ namespace BrnNetwork
 
             BrnGameState::GameStateModuleIO::FinishedSyncingPlayersEvent lEvent;
             mpNetworkModule->GetGameEventQueue()->AddEvent(
-                &lEvent, BrnGameState::GameStateModuleIO::E_EVENT_FINISHED_SYNCING_PLAYERS);
+                lEvent, BrnGameState::GameStateModuleIO::E_EVENT_FINISHED_SYNCING_PLAYERS);
 
             const bool lbDoingFreeBurnLobby = mpNetworkManager->IsDoingFreeBurnLobby();
             mpNetworkManager->GetVoIPManager()->SetGameSendingHeadsetStatus(true);
@@ -508,7 +508,7 @@ namespace BrnNetwork
             if (HaveAllSelectedACar())
             {
                 BrnNetworkModuleIO::NetworkOutShowLoadingScreen lShowLoadingScreen;
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(&lShowLoadingScreen,
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lShowLoadingScreen,
                                                                   lShowLoadingScreen.GetEventType());
                 meState = E_STATE_WAIT_FOR_LOADING_SCREEN;
 
@@ -622,7 +622,7 @@ namespace BrnNetwork
         case E_STATE_WAIT_FOR_LOADING_SCREEN:
         {
             BrnNetworkModuleIO::NetworkOutShowLoadingScreen lShowLoadingScreen;
-            mpNetworkModule->GetNetworkEventQueue()->AddEvent(&lShowLoadingScreen,
+            mpNetworkModule->GetNetworkEventQueue()->AddEvent(lShowLoadingScreen,
                                                               lShowLoadingScreen.GetEventType());
             break;
         }
@@ -644,7 +644,7 @@ namespace BrnNetwork
             case CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR:
             {
                 BrnNetworkModuleIO::NetworkOutAccountUpdateComplete lNetworkUpdateAccountCompleteEvent;
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(&lNetworkUpdateAccountCompleteEvent,
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkUpdateAccountCompleteEvent,
                                                                   lNetworkUpdateAccountCompleteEvent.GetEventType());
                 mpNetworkManager->GetServerInterface()->GetPlayerInfoComponent()->ClearLastError();
                 meState = E_STATE_COUNT;
@@ -654,7 +654,7 @@ namespace BrnNetwork
             case CgsNetwork::ServerInterfaceDirtySock::E_STATUS_IDLE:
             {
                 BrnNetworkModuleIO::NetworkOutAccountUpdateComplete lNetworkUpdateAccountCompleteEvent;
-                mpNetworkModule->GetNetworkEventQueue()->AddEvent(&lNetworkUpdateAccountCompleteEvent,
+                mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkUpdateAccountCompleteEvent,
                                                                   lNetworkUpdateAccountCompleteEvent.GetEventType());
 
                 bool lbAgreeToShareInfoEA;
@@ -844,7 +844,7 @@ namespace BrnNetwork
                     lNetworkLaunchEvent.meGameModeType =
                         static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(lGameParams.GameMode());
                     lNetworkLaunchEvent.mHostPlayerID = mpNetworkManager->GetPlayerManager()->GetHostPlayerID();
-                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(&lNetworkLaunchEvent,
+                    mpNetworkModule->GetNetworkEventQueue()->AddEvent(lNetworkLaunchEvent,
                                                                       lNetworkLaunchEvent.GetEventType());
 
                     mpNetworkManager->GetLaunchManager()->Start();

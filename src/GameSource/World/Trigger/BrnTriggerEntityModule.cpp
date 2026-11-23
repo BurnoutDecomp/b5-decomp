@@ -434,7 +434,7 @@ void TriggerEntityModule::ProcessTriggerQueryEvents(const InputBuffer_PostScene*
             lFine.mxVolumeTypeFlags   = lpEvent->GetVolumeTypeFlags();
 
             // event type 5 == InEventLineTestFine's queue id.
-            lpFineQueue->AddEvent<CgsSceneManager::SceneManagerIO::InEventLineTestFine>(&lFine, 5);
+            lpFineQueue->AddEvent<CgsSceneManager::SceneManagerIO::InEventLineTestFine>(lFine, 5);
         }
         else
         {

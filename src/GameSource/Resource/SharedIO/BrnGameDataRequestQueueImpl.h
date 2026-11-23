@@ -50,7 +50,7 @@ namespace GameDataIO
         lEvent.meType          = E_ASSETSET_ATTRIBS;        // +0x18 (4)
         lEvent.mbFailFlag      = false;                     // +0x1C
 
-        return mRequestQueue.AddEvent(&lEvent, 26);
+        return mRequestQueue.AddEvent(lEvent, 26);
     }
 
     // -------- GetVehicleList @ 0x82746928 (<4096>), 0x822562F0 (<512>),
@@ -68,7 +68,7 @@ namespace GameDataIO
         lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
         lEvent.mbFailFlag      = false;                     // +0x1C
 
-        return mRequestQueue.AddEvent(&lEvent, 49);
+        return mRequestQueue.AddEvent(lEvent, 49);
     }
 
     // -------- LoadBundle @ 0x8229B500 (<4096>), 0x822FD2B8 (<8192>), 0x823CE558 (<32768>) --------
@@ -134,7 +134,7 @@ namespace GameDataIO
         lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
         lEvent.mbFailFlag      = false;                     // +0x1C
 
-        return mRequestQueue.AddEvent(&lEvent, 26);
+        return mRequestQueue.AddEvent(lEvent, 26);
     }
 
     // -------- LoadWorldCollision @ 0x822F1E88 (<4096>) --------
@@ -151,7 +151,7 @@ namespace GameDataIO
         lEvent.meType          = E_ASSETSET_PHYSICS;        // +0x18 (1)
         lEvent.mbFailFlag      = false;                     // +0x1C
 
-        return mRequestQueue.AddEvent(&lEvent, 26);
+        return mRequestQueue.AddEvent(lEvent, 26);
     }
 
     // -------- LoadVehicle --------
@@ -174,7 +174,7 @@ namespace GameDataIO
         lEvent.meType          = leAssetSet;                         // +0x18
         lEvent.mbFailFlag      = false;                              // +0x1C
 
-        return mRequestQueue.AddEvent(&lEvent, 26);
+        return mRequestQueue.AddEvent(lEvent, 26);
     }
 
     // -------- GetAILanes @ 0x822563C0 (<512>) --------
@@ -193,7 +193,7 @@ namespace GameDataIO
         lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
         lEvent.mbFailFlag      = false;                     // +0x1C
 
-        return mRequestQueue.AddEvent(&lEvent, 49);
+        return mRequestQueue.AddEvent(lEvent, 49);
     }
 
     // -------- LoadAILanes @ 0x82396980 (<3072>) --------
@@ -216,7 +216,7 @@ namespace GameDataIO
         lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
         lEvent.mbFailFlag      = false;                     // +0x1C
 
-        return mRequestQueue.AddEvent(&lEvent, 26);
+        return mRequestQueue.AddEvent(lEvent, 26);
     }
 
     // -------- GetICEList @ 0x82256358 (<512>) --------
@@ -235,7 +235,7 @@ namespace GameDataIO
         lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
         lEvent.mbFailFlag      = false;                     // +0x1C
 
-        return mRequestQueue.AddEvent(&lEvent, 49);
+        return mRequestQueue.AddEvent(lEvent, 49);
     }
 
     // -------- LoadPVS @ 0x822FD250 (<512>) --------
@@ -254,7 +254,7 @@ namespace GameDataIO
         lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
         lEvent.mbFailFlag      = false;                     // +0x1C
 
-        return mRequestQueue.AddEvent(&lEvent, 26);
+        return mRequestQueue.AddEvent(lEvent, 26);
     }
 
     // -------- GetPropInstances @ 0x82303E08 (<1024>) --------
@@ -283,7 +283,7 @@ namespace GameDataIO
         lEvent.meType          = E_ASSETSET_PHYSICS;        // +0x18 (1)
         lEvent.mbFailFlag      = false;                     // +0x1C
 
-        return mRequestQueue.AddEvent(&lEvent, 49);
+        return mRequestQueue.AddEvent(lEvent, 49);
     }
 
     // -------- LoadPropPhysics @ 0x82303DA0 (<1024>) --------
@@ -302,7 +302,7 @@ namespace GameDataIO
         lEvent.meType          = E_ASSETSET_PHYSICS;        // +0x18 (1)
         lEvent.mbFailFlag      = false;                     // +0x1C
 
-        return mRequestQueue.AddEvent(&lEvent, 26);
+        return mRequestQueue.AddEvent(lEvent, 26);
     }
 
     // -------- GetWheelList @ 0x822FD380 (<8192>) --------
@@ -321,7 +321,7 @@ namespace GameDataIO
         lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
         lEvent.mbFailFlag      = false;                     // +0x1C
 
-        return mRequestQueue.AddEvent(&lEvent, 49);
+        return mRequestQueue.AddEvent(lEvent, 49);
     }
 
     // -------- GetFreeburnChallengeList @ 0x8250BBE0 (<32768>) --------
@@ -340,7 +340,7 @@ namespace GameDataIO
         lEvent.meType          = E_ASSETSET_DATA;           // +0x18 (3)
         lEvent.mbFailFlag      = false;                     // +0x1C
 
-        return mRequestQueue.AddEvent(&lEvent, 49);
+        return mRequestQueue.AddEvent(lEvent, 49);
     }
 
     // -------- AcquireResource (inlined into ColourCalibrationScreen::Update @0x8246AA28,
@@ -373,7 +373,7 @@ namespace GameDataIO
             static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(
                 reinterpret_cast<const u8*>(lpcResourceName)))));
 
-        return mRequestQueue.AddEvent(&lEvent, 4);
+        return mRequestQueue.AddEvent(lEvent, 4);
     }
 
     // -------- AcquireZoneCollision (DWARF :234; inlined into
@@ -401,7 +401,7 @@ namespace GameDataIO
         lEvent.mpHandles    = lpaHandles;
         lEvent.miMaxHandles = liMaxHandles;
 
-        return mRequestQueue.AddEvent(&lEvent, 5);
+        return mRequestQueue.AddEvent(lEvent, 5);
     }
 
     // -------- SwapInCollisionWorld / SwapOutCollisionWorld (DWARF :240/:237;
@@ -417,7 +417,7 @@ namespace GameDataIO
         lEvent.miEventId       = liEventId;
         lEvent.mpReceiverQueue = lpReceiverQueue;
 
-        return mRequestQueue.AddEvent(&lEvent, 68);
+        return mRequestQueue.AddEvent(lEvent, 68);
     }
 
     template <s32 N>
@@ -428,7 +428,7 @@ namespace GameDataIO
         lEvent.miEventId       = liEventId;
         lEvent.mpReceiverQueue = lpReceiverQueue;
 
-        return mRequestQueue.AddEvent(&lEvent, 67);
+        return mRequestQueue.AddEvent(lEvent, 67);
     }
 }
 }

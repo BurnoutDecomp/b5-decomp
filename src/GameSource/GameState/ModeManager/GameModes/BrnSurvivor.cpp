@@ -145,7 +145,7 @@ void SurvivorMode::UpdateOpponents(GameStateModuleIO::OutputBuffer* lpOutput, s3
         lAction.mbAllowedInRoadRage = leIndex < liOpponentCount + 1;
         if (CgsDev::Message::gxMessageFilterFlags & 1)
             *CgsDev::Log::gpDebugPrint << (lAction.mbAllowedInRoadRage ? "Yes," : "No,");
-        lpOutput->GetGameActionQueue()->AddEvent(&lAction, GameStateModuleIO::E_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE);
+        lpOutput->GetGameActionQueue()->AddEvent(lAction, GameStateModuleIO::E_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE);
     }
     if (CgsDev::Message::gxMessageFilterFlags & 1)
         *CgsDev::Log::gpDebugPrint << "\n";

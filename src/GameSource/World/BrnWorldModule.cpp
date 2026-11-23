@@ -616,7 +616,7 @@ WorldModule::LoadAttribSysVault( BrnWorldIO::UpdateOutputBuffer* lpOutput )
                     reinterpret_cast<const u8*>( "WorldVault" ) ) ) ) );
 
             lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(
-                &lRequest, 4 );
+                lRequest, 4 );
 
             mReceiverQueue.Clear();
             meVaultResourceStage = E_RESOURCESTAGE_ACQUIRING_VAULT;

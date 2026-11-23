@@ -2150,7 +2150,7 @@ EGlobalRaceCarIndex RaceCarEntityModule::SpawnRaceCar(
     lAttachEvent.mePersonalityType    = lePersonalityType;
     lAttachEvent.mbKeepResetSection   = lbKeepResetSection;
     lpRaceCarAIInterface->mManagementQueue
-        .AddEvent<BrnAI::AIModuleIO::AttachAIControlEvent>( &lAttachEvent, 0 );
+        .AddEvent<BrnAI::AIModuleIO::AttachAIControlEvent>( lAttachEvent, 0 );
 
     return leGlobal;
 }
@@ -2745,7 +2745,7 @@ void RaceCarEntityModule::HandleGameActions(
             BrnAI::AIModuleIO::PlayerControlChangedEvent lChanged;
             lChanged.mbPlayerIsInControl = lpAction->meCarControl == E_CAR_CONTROL_ENTITY_MODULE;
             lpOutput->GetRaceCarAIInterface()->mManagementQueue.AddEvent(
-                &lChanged, BrnAI::AIModuleIO::E_EVENT_PLAYER_TAKEN_OVER);
+                lChanged, BrnAI::AIModuleIO::E_EVENT_PLAYER_TAKEN_OVER);
             if (mePlayerActiveRaceCarIndex == E_ACTIVE_RACE_CAR_INDEX_INVALID) break;
             ActiveRaceCar* lpCar = GetActiveRaceCar(mePlayerActiveRaceCarIndex);
             if (!lpCar->IsActive()) break;
@@ -7625,7 +7625,7 @@ void RaceCarEntityModule::ProcessPlayerVehicleInput(
     {
     }
 
-    lpOutput->GetVehicleDriverInterface()->GetUpdateDriverQueue()->AddEvent( &lControls, 0 );
+    lpOutput->GetVehicleDriverInterface()->GetUpdateDriverQueue()->AddEvent( lControls, 0 );
 }
 
 // ============================================================================

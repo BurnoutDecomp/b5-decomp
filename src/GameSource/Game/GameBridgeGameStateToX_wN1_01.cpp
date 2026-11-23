@@ -111,7 +111,7 @@ namespace BrnGame
                     char lacCarID[KI_CGSID_STRING_LEN];
                     CgsIDConvertToString(lpCarUpdateAction->mPlayerCarID, lacCarID);
                     lTeleEvent.mEventData.AddParameter(lacCarID);
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lTeleEvent, lTeleEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lTeleEvent, lTeleEvent.GetEventType());
                     break;
                 }
 
@@ -139,7 +139,7 @@ namespace BrnGame
                             lTeleEvent.mEventData.AddParameter(liGameModeType);
                             lTeleEvent.mEventData.AddParameter(lpGameParams->mfProgressionRankAsRatio);
                         }
-                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lTeleEvent, lTeleEvent.GetEventType());
+                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(lTeleEvent, lTeleEvent.GetEventType());
                     }
                     break;
                 }
@@ -161,7 +161,7 @@ namespace BrnGame
                         lTeleEvent.mEventData.Construct(BrnNetwork::E_TELEMETRY_GAME_FINISH_TIME);
                         lTeleEvent.mEventData.AddParameter(lpModeResultsAction->mFinishTime);
                     }
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lTeleEvent, lTeleEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lTeleEvent, lTeleEvent.GetEventType());
                     break;
                 }
 
@@ -189,7 +189,7 @@ namespace BrnGame
                     NetIO::NetworkInTelemetryEvent lTeleEvent;
                     lTeleEvent.mEventData.Construct(leHook);
                     lTeleEvent.mEventData.AddParameter(static_cast<s32>(lpStopAction->meGameModeType));
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lTeleEvent, lTeleEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lTeleEvent, lTeleEvent.GetEventType());
                     break;
                 }
 
@@ -197,7 +197,7 @@ namespace BrnGame
                 {
                     NetIO::NetworkInTelemetryEvent lTelemeteryEvent;
                     lTelemeteryEvent.mEventData.Construct(BrnNetwork::E_TELEMETRY_DRIVE_THRU_BODY_SHOP);
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lTelemeteryEvent, lTelemeteryEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lTelemeteryEvent, lTelemeteryEvent.GetEventType());
                     break;
                 }
 
@@ -205,7 +205,7 @@ namespace BrnGame
                 {
                     NetIO::NetworkInTelemetryEvent lTelemeteryEvent;
                     lTelemeteryEvent.mEventData.Construct(BrnNetwork::E_TELEMETRY_DRIVE_THRU_PAINT_SHOP);
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lTelemeteryEvent, lTelemeteryEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lTelemeteryEvent, lTelemeteryEvent.GetEventType());
                     break;
                 }
 
@@ -217,7 +217,7 @@ namespace BrnGame
                     {
                         NetIO::NetworkInTelemetryEvent lTelemeteryEvent;
                         lTelemeteryEvent.mEventData.Construct(BrnNetwork::E_TELEMETRY_DRIVE_THRU_JUNK_YARD);
-                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lTelemeteryEvent, lTelemeteryEvent.GetEventType());
+                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(lTelemeteryEvent, lTelemeteryEvent.GetEventType());
                     }
                     break;
                 }
@@ -226,7 +226,7 @@ namespace BrnGame
                 {
                     NetIO::NetworkInTelemetryEvent lTelemeteryEvent;
                     lTelemeteryEvent.mEventData.Construct(BrnNetwork::E_TELEMETRY_DRIVE_THRU_GAS_STATION);
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lTelemeteryEvent, lTelemeteryEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lTelemeteryEvent, lTelemeteryEvent.GetEventType());
                     break;
                 }
 
@@ -237,7 +237,7 @@ namespace BrnGame
 
                     NetIO::NetworkInChangeDistrictEvent lChangeDistrict;
                     lChangeDistrict.mNewWorldRegion = lpWorldRegionChangeAction->mNewWorldRegion;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lChangeDistrict, lChangeDistrict.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lChangeDistrict, lChangeDistrict.GetEventType());
                     break;
                 }
 
@@ -251,7 +251,7 @@ namespace BrnGame
                     {
                         NetIO::NetworkInLocalPlayerReachesCheckpoint lCheckpointEvent;
                         lCheckpointEvent.miCheckpointIndex = lpCheckpointAction->miCheckPointIndex;
-                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lCheckpointEvent, lCheckpointEvent.GetEventType());
+                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(lCheckpointEvent, lCheckpointEvent.GetEventType());
                     }
                     break;
                 }
@@ -265,7 +265,7 @@ namespace BrnGame
                     NetIO::NetworkInShowtimeUpdateEvent lNetworkShowtimeUpdateEvent;
                     lNetworkShowtimeUpdateEvent.mPlayerID       = lpShowtimeUpdateAction->mNetworkPlayerID;
                     lNetworkShowtimeUpdateEvent.miShowtimeScore = lpShowtimeUpdateAction->miShowtimeScore;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lNetworkShowtimeUpdateEvent,
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lNetworkShowtimeUpdateEvent,
                                                                      lNetworkShowtimeUpdateEvent.GetEventType());
                     break;
                 }
@@ -280,7 +280,7 @@ namespace BrnGame
                     lNetworkShowtimeModeSwitchEvent.mPlayerID             = lpShowtimeModeSwitchAction->mNetworkPlayerID;
                     lNetworkShowtimeModeSwitchEvent.miFinalShowtimeScore = lpShowtimeModeSwitchAction->miFinalShowtimeScore;
                     lNetworkShowtimeModeSwitchEvent.mbEnteringShowtime   = lpShowtimeModeSwitchAction->mbEnteringShowtime;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lNetworkShowtimeModeSwitchEvent,
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lNetworkShowtimeModeSwitchEvent,
                                                                      lNetworkShowtimeModeSwitchEvent.GetEventType());
                     break;
                 }
@@ -302,7 +302,7 @@ namespace BrnGame
                         lChallengeEvent.meChallengeStatus              = lpChallengeAction->meChallengeStatus;
                         lChallengeEvent.miActionIndex                  = lpChallengeAction->miActionIndex;
                         lChallengeEvent.miNumberOfCompletedChallenges  = lpChallengeAction->miNumChallengesComplete;
-                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lChallengeEvent, lChallengeEvent.GetEventType());
+                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(lChallengeEvent, lChallengeEvent.GetEventType());
                     }
 
                     if (lpChallengeAction->meEventType == NetIO::E_CHALLENGE_EVENT_TRIGGERED)
@@ -310,7 +310,7 @@ namespace BrnGame
                         NetIO::NetworkInTelemetryEvent lTelemeteryEvent;
                         lTelemeteryEvent.mEventData.Construct(BrnNetwork::E_TELEMETRY_NETWORK_CHALLENGE_STARTED);
                         lTelemeteryEvent.mEventData.AddParameter(lpChallengeAction->mChallengeID);
-                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lTelemeteryEvent, lTelemeteryEvent.GetEventType());
+                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(lTelemeteryEvent, lTelemeteryEvent.GetEventType());
                     }
                     else if (lpChallengeAction->meEventType == NetIO::E_CHALLENGE_EVENT_ENDED)
                     {
@@ -318,7 +318,7 @@ namespace BrnGame
                         lTelemeteryEvent.mEventData.Construct(BrnNetwork::E_TELEMETRY_NETWORK_CHALLENGE_FINISHED);
                         lTelemeteryEvent.mEventData.AddParameter(lpChallengeAction->mChallengeID);
                         lTelemeteryEvent.mEventData.AddParameter(static_cast<s32>(lpChallengeAction->meChallengeStatus));
-                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lTelemeteryEvent, lTelemeteryEvent.GetEventType());
+                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(lTelemeteryEvent, lTelemeteryEvent.GetEventType());
                     }
                     break;
                 }
@@ -332,7 +332,7 @@ namespace BrnGame
                     NetIO::NetworkInFburnChallengeStatusEvent lFburnChallengeStatusEvent;
                     lFburnChallengeStatusEvent.mCompletedChallenges = lpFburnChallengeStatusAction->mCompletedChallenges;
                     lFburnChallengeStatusEvent.mPlayerID            = lpFburnChallengeStatusAction->mPlayerID;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lFburnChallengeStatusEvent,
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lFburnChallengeStatusEvent,
                                                                      lFburnChallengeStatusEvent.GetEventType());
                     break;
                 }
@@ -347,7 +347,7 @@ namespace BrnGame
                     lFburnChallengeSuccessUpdateEvent.mChallengeSuccessUpdate =
                         lpFburnChallengeSuccessUpdateAction->mChallengeSuccessUpdate;
                     lFburnChallengeSuccessUpdateEvent.miActionIndex = lpFburnChallengeSuccessUpdateAction->miActionIndex;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lFburnChallengeSuccessUpdateEvent,
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lFburnChallengeSuccessUpdateEvent,
                                                                      lFburnChallengeSuccessUpdateEvent.GetEventType());
                     break;
                 }
@@ -368,7 +368,7 @@ namespace BrnGame
                     std::memcpy(lFburnChallengeSuccessEvent.mabAccumulationThisFrame,
                                 lpFburnChallengeSuccessAction->mabAccumulationThisFrame,
                                 sizeof(lFburnChallengeSuccessEvent.mabAccumulationThisFrame));
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lFburnChallengeSuccessEvent,
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lFburnChallengeSuccessEvent,
                                                                      lFburnChallengeSuccessEvent.GetEventType());
                     break;
                 }
@@ -386,7 +386,7 @@ namespace BrnGame
                     std::memcpy(lActiveFburnChallengeEvent.maePlayersInChallengeARCI,
                                 lpActiveFburnChallengeAction->maePlayersInChallengeARCI,
                                 sizeof(lActiveFburnChallengeEvent.maePlayersInChallengeARCI));
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lActiveFburnChallengeEvent,
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lActiveFburnChallengeEvent,
                                                                      lActiveFburnChallengeEvent.GetEventType());
                     break;
                 }
@@ -399,7 +399,7 @@ namespace BrnGame
 
                     NetIO::NetworkInSwitchBurningHomeRunRunner lNetworkSwitchEvent;
                     lNetworkSwitchEvent.mNewRunnerID = lpSwitchAction->mNewRunnerPlayerID;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lNetworkSwitchEvent, lNetworkSwitchEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lNetworkSwitchEvent, lNetworkSwitchEvent.GetEventType());
                     break;
                 }
 
@@ -419,14 +419,14 @@ namespace BrnGame
                     {
                         lNetworkSkillzEvent.meEventType =
                             NetIO::NetworkInBurnoutSkillzEvent::E_EVENT_TYPE_SEND_TO_A_SPECIFIC_PLAYER;
-                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lNetworkSkillzEvent, lNetworkSkillzEvent.GetEventType());
+                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(lNetworkSkillzEvent, lNetworkSkillzEvent.GetEventType());
                     }
                     else if ((liActionFlags & GsmIO::BurnoutSkillzAction::KI_ACTION_TYPE_SEND_TO_ALL_PLAYERS) ==
                              GsmIO::BurnoutSkillzAction::KI_ACTION_TYPE_SEND_TO_ALL_PLAYERS)
                     {
                         lNetworkSkillzEvent.meEventType =
                             NetIO::NetworkInBurnoutSkillzEvent::E_EVENT_TYPE_SEND_TO_ALL_PLAYERS;
-                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lNetworkSkillzEvent, lNetworkSkillzEvent.GetEventType());
+                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(lNetworkSkillzEvent, lNetworkSkillzEvent.GetEventType());
                     }
                     break;
                 }
@@ -457,7 +457,7 @@ namespace BrnGame
                     lNetworkProgressionEvent.miFreeburnChallengeSuccessCount =
                         lpGameStats->GetValue(GS::E_INT_VALUE_TYPE_FREEBURN_CHALLENGES_COMPLETE);
 
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lNetworkProgressionEvent,
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lNetworkProgressionEvent,
                                                                      lNetworkProgressionEvent.GetEventType());
                     break;
                 }
@@ -476,7 +476,7 @@ namespace BrnGame
                     lPaybackMugshotEvent.mRoadRuleBeatenRoadID            = lpPaybackMugshotAction->mRoadRuleBeatenRoadID;
                     lPaybackMugshotEvent.mbIsTakedownAggressorLocalPlayer = lpPaybackMugshotAction->mbIsTakedownAggressorLocalPlayer;
                     lPaybackMugshotEvent.mbMugshotRequiresBroadcast       = lpPaybackMugshotAction->mbMugshotRequiresBroadcast;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lPaybackMugshotEvent, lPaybackMugshotEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lPaybackMugshotEvent, lPaybackMugshotEvent.GetEventType());
                     break;
                 }
 
@@ -484,7 +484,7 @@ namespace BrnGame
                 {
                     // An empty signal event; its single byte is never written.
                     NetIO::NetworkInAbortMugshotCaptureEvent lAbortCaptureEvent;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lAbortCaptureEvent, lAbortCaptureEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lAbortCaptureEvent, lAbortCaptureEvent.GetEventType());
                     break;
                 }
 
@@ -497,7 +497,7 @@ namespace BrnGame
                     NetIO::NetworkInPaybackIntialised lNetworkPaybackEvent;
                     lNetworkPaybackEvent.mePaybackAggressorIndex = lpPaybackAction->mePaybackAggressorIndex;
                     lNetworkPaybackEvent.mePaybackVictimIndex    = lpPaybackAction->mePaybackVictimIndex;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lNetworkPaybackEvent, lNetworkPaybackEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lNetworkPaybackEvent, lNetworkPaybackEvent.GetEventType());
                     break;
                 }
 
@@ -510,7 +510,7 @@ namespace BrnGame
                     NetIO::NetworkInPaybackSucceeded lPaybackSucceededEvent;
                     lPaybackSucceededEvent.mePaybackAggressorIndex = lpPaybackAction->mePaybackAggressorIndex;
                     lPaybackSucceededEvent.mePaybackVictimIndex    = lpPaybackAction->mePaybackVictimIndex;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lPaybackSucceededEvent, lPaybackSucceededEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lPaybackSucceededEvent, lPaybackSucceededEvent.GetEventType());
                     break;
                 }
 
@@ -523,7 +523,7 @@ namespace BrnGame
                     CgsCore::StrCpy(lEvent.macRichPresenceString,
                                     static_cast<u32>(sizeof(lEvent.macRichPresenceString)),
                                     lpRichPresenceAction->macNewPresenceData);
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lEvent, lEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lEvent, lEvent.GetEventType());
                     break;
                 }
 
@@ -534,7 +534,7 @@ namespace BrnGame
 
                     NetIO::NetworkInTelemetryEvent lTeleEvent;
                     lTeleEvent.mEventData = lpTeleAction->mEventData;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lTeleEvent, lTeleEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lTeleEvent, lTeleEvent.GetEventType());
                     break;
                 }
 
@@ -548,7 +548,7 @@ namespace BrnGame
                     lRoadRulesScoresEvent.Construct(lpRoadRulesScoresAction->GetRoadRulesID(),
                                                     luTimestamp,
                                                     lpRoadRulesScoresAction->GetStreetManager());
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lRoadRulesScoresEvent, lRoadRulesScoresEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lRoadRulesScoresEvent, lRoadRulesScoresEvent.GetEventType());
                     break;
                 }
 
@@ -561,7 +561,7 @@ namespace BrnGame
                     lRoadRulesPersonalBestEvent.mPersonalBestScore.Copy(&lpRoadRulesPersonalBestAction->mPersonalBestScore);
                     lRoadRulesPersonalBestEvent.mChallengeIndex      = lpRoadRulesPersonalBestAction->mChallengeIndex;
                     lRoadRulesPersonalBestEvent.mbLobbyPersonalBest  = lpRoadRulesPersonalBestAction->mbLobbyPersonalBest;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lRoadRulesPersonalBestEvent,
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lRoadRulesPersonalBestEvent,
                                                                      lRoadRulesPersonalBestEvent.GetEventType());
 
                     // One telemetry record per score type the new personal best carries.
@@ -590,7 +590,7 @@ namespace BrnGame
                         lTelemetryEvent.mEventData.AddParameter(static_cast<s32>(lpRoadRulesPersonalBestAction->mChallengeIndex));
                         lTelemetryEvent.mEventData.AddParameter(
                             lRoadRulesPersonalBestEvent.mPersonalBestScore.GetScore(leScoreType));
-                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lTelemetryEvent, lTelemetryEvent.GetEventType());
+                        lpNetworkInput->GetNetworkEventQueue()->AddEvent(lTelemetryEvent, lTelemetryEvent.GetEventType());
                     }
                     break;
                 }
@@ -599,7 +599,7 @@ namespace BrnGame
                 {
                     // An empty signal event; its single byte is never written.
                     NetIO::NetworkInRoadRulesOverwriteServerRecord lOverwriteServerRoadRulesEvent;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lOverwriteServerRoadRulesEvent,
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lOverwriteServerRoadRulesEvent,
                                                                      lOverwriteServerRoadRulesEvent.GetEventType());
                     break;
                 }
@@ -612,7 +612,7 @@ namespace BrnGame
 
                     NetIO::NetworkInShowGamerCard lShowGamerCardEvent;
                     lShowGamerCardEvent.mPlayerName = lpGamerCardAction->mPlayerName;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lShowGamerCardEvent, lShowGamerCardEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lShowGamerCardEvent, lShowGamerCardEvent.GetEventType());
                     break;
                 }
 
@@ -625,7 +625,7 @@ namespace BrnGame
                     NetIO::NetworkInDxtDecodeImageEvent lDxtDecodeImageEvent;
                     lDxtDecodeImageEvent.mpTextureToDecode = lpDxtDecodeImageAction->mpTextureToDecode;
                     lDxtDecodeImageEvent.mPlayerName       = lpDxtDecodeImageAction->mPlayerName;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lDxtDecodeImageEvent, lDxtDecodeImageEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lDxtDecodeImageEvent, lDxtDecodeImageEvent.GetEventType());
                     break;
                 }
 
@@ -639,7 +639,7 @@ namespace BrnGame
                     lScoreLeaderboardEvent.mEventID       = lpModeScoreLeaderboardAction->mEventID;
                     lScoreLeaderboardEvent.meGameModeType = static_cast<s32>(lpModeScoreLeaderboardAction->meGameModeType);
                     lScoreLeaderboardEvent.miScore        = lpModeScoreLeaderboardAction->miScore;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lScoreLeaderboardEvent,
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lScoreLeaderboardEvent,
                                                                      lScoreLeaderboardEvent.GetEventType());
                     break;
                 }
@@ -652,7 +652,7 @@ namespace BrnGame
 
                     NetIO::NetworkInNonUploadedScoresEvent lNonUploadedScoresEvent;
                     lNonUploadedScoresEvent.mpNonUploadedScores = lpNonUploadedModeScoresAction->mpNonUploadedScores;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lNonUploadedScoresEvent,
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lNonUploadedScoresEvent,
                                                                      lNonUploadedScoresEvent.GetEventType());
                     break;
                 }
@@ -665,7 +665,7 @@ namespace BrnGame
 
                     NetIO::NetworkInStuntScoreUpdatedEvent lStuntScoreUpdatedEvent;
                     lStuntScoreUpdatedEvent.miStuntScore = lpStuntScoreAction->miStuntScore;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lStuntScoreUpdatedEvent,
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lStuntScoreUpdatedEvent,
                                                                      lStuntScoreUpdatedEvent.GetEventType());
                     break;
                 }
@@ -681,7 +681,7 @@ namespace BrnGame
                     lStuntMultiplierEvent.muStuntTypes    = lpStuntMultiplierAction->muStuntTypes;
                     lStuntMultiplierEvent.mu16FlatSpins   = lpStuntMultiplierAction->mu16FlatSpins;
                     lStuntMultiplierEvent.mu16BarrelRolls = lpStuntMultiplierAction->mu16BarrelRolls;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lStuntMultiplierEvent,
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lStuntMultiplierEvent,
                                                                      lStuntMultiplierEvent.GetEventType());
                     break;
                 }
@@ -694,7 +694,7 @@ namespace BrnGame
 
                     NetIO::NetworkInShowGamerCardForXuidEvent lShowGamerCardEvent;
                     lShowGamerCardEvent.mu64Xuid = lpGamerCardAction->mu64Xuid;
-                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(&lShowGamerCardEvent, lShowGamerCardEvent.GetEventType());
+                    lpNetworkInput->GetNetworkEventQueue()->AddEvent(lShowGamerCardEvent, lShowGamerCardEvent.GetEventType());
                     break;
                 }
 

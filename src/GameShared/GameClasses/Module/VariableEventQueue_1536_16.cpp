@@ -36,7 +36,7 @@ template bool CgsModule::VariableEventQueue<1536, 16>::Append<1536, 16>(const Cg
 
 // Typed AddEvent<EventT> @ 0x82566168 -- assert-then-forward with sizeof(EventT)==1 (li r6,1 @ 0x82566204).
 // Element home BrnGameEvents.h (1-byte marker, FLAG minimal-home). Called by BrnNetwork::StateManager::UpdateSyncTime.
-template bool CgsModule::VariableEventQueue<1536, 16>::AddEvent<BrnGameState::GameStateModuleIO::FinishedSyncingPlayersEvent>(const BrnGameState::GameStateModuleIO::FinishedSyncingPlayersEvent*, s32);
+template bool CgsModule::VariableEventQueue<1536, 16>::AddEvent<BrnGameState::GameStateModuleIO::FinishedSyncingPlayersEvent>(const BrnGameState::GameStateModuleIO::FinishedSyncingPlayersEvent&, s32);
 
 // Typed per-event Append<EventT,SRCN> from a fixed-stride EventQueue source (walk 0..GetLength(), AddEvent each with
 // sizeof(EventT)). Both @ WorldModule::BridgeEntityModulesToOutput_PostPhysics.

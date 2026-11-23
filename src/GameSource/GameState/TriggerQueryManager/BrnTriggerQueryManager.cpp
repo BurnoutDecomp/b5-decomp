@@ -698,7 +698,7 @@ void TriggerQueryManager::SubmitTriggerQueries(
         lEvent.mTriggerTypeFlags = 4;
         lEvent.mLineStart = lrCar.mPreviousPosition;
         lEvent.mLineEnd = lrCar.mPosition;
-        lpTriggerInterface->AddEvent(&lEvent, 3);
+        lpTriggerInterface->AddEvent(lEvent, 3);
 
         if (lrCar.mbIsPlayer)
         {
@@ -737,7 +737,7 @@ void TriggerQueryManager::SubmitTriggerQueries(
                 __stvx(__vmaddfp(__lvx(&lForward, 0), XMVectorReplicate(4.0f),
                                    __lvx(&mPlayerLookAheadPos, 0)), &lEvent.mLineEnd, 0);
 
-                lpTriggerInterface->AddEvent(&lEvent, 3);
+                lpTriggerInterface->AddEvent(lEvent, 3);
             }
         }
         mbDoSoundLookAheadThisFrame = !mbDoSoundLookAheadThisFrame;
@@ -763,7 +763,7 @@ void TriggerQueryManager::CacheSoundQueryPositions(const RCEntityActiveRaceCarOu
 void TriggerQueryManager::PostSoundActions(GameStateModuleIO::OutputBuffer* lpOutput)
 {
     for (u32 luAction = 0; luAction < maSoundActions.GetLength(); ++luAction)
-        lpOutput->GetGameActionQueue()->AddEvent(&maSoundActions[luAction], 218);
+        lpOutput->GetGameActionQueue()->AddEvent(maSoundActions[luAction], 218);
     maSoundActions.Clear();
 }
 

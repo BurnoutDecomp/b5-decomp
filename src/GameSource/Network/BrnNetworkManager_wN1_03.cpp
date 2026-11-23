@@ -115,7 +115,7 @@ namespace BrnNetwork
             lChangedCarEvent.SetModelID(lpPlayerMenuData->mFreeBurnCarId);
             lChangedCarEvent.SetWheelID(lpPlayerMenuData->mFreeBurnWheelId);
             lChangedCarEvent.mf10 = lpPlayerMenuData->mfUnknown4C;
-            GetNetworkModule()->GetNetworkEventQueue()->AddEvent(&lChangedCarEvent,
+            GetNetworkModule()->GetNetworkEventQueue()->AddEvent(lChangedCarEvent,
                                                                  lChangedCarEvent.GetEventType());
 
             BrnNetworkModuleIO::NetworkOutPlayerChangedCarColourEvent lCarColourEvent;
@@ -124,7 +124,7 @@ namespace BrnNetwork
                 GetNetworkModule()->GetActiveRaceCarIndex(lPlayerParams.GetID()));
             lCarColourEvent.SetCarColourIndex(lpPlayerMenuData->mu16FreeburnCarColourIndex);
             lCarColourEvent.SetPaintFinishIndex(lpPlayerMenuData->mu16FreeburnPaintFinishIndex);
-            GetNetworkModule()->GetNetworkEventQueue()->AddEvent(&lCarColourEvent,
+            GetNetworkModule()->GetNetworkEventQueue()->AddEvent(lCarColourEvent,
                                                                  lCarColourEvent.GetEventType());
         }
     }
@@ -424,7 +424,7 @@ namespace BrnNetwork
         lEvent.meVehicleChoice     = lGameParams.VehicleChoice();
         lEvent.miTimeLimit         = lGameParams.TimeLimit();
 
-        GetNetworkModule()->GetNetworkEventQueue()->AddEvent(&lEvent, lEvent.GetEventType());
+        GetNetworkModule()->GetNetworkEventQueue()->AddEvent(lEvent, lEvent.GetEventType());
     }
 
     // ----------------------------------------------------------------------------------------
@@ -491,11 +491,11 @@ namespace BrnNetwork
                 GetNetworkModule()->AddOutputGuiEvent(lDisconnectedEvent);
 
                 BrnGameState::GameStateModuleIO::LocalPlayerDisconnectedEvent lLocalPlayerDisconnectedEvent;
-                GetNetworkModule()->GetGameEventQueue()->AddEvent(&lLocalPlayerDisconnectedEvent,
+                GetNetworkModule()->GetGameEventQueue()->AddEvent(lLocalPlayerDisconnectedEvent,
                                                                   BrnGameState::GameStateModuleIO::E_EVENT_LOCAL_PLAYER_DISCONNECTED);
 
                 BrnNetworkModuleIO::NetworkOutLocalPlayerDisconnected lNwDisconnectedEvent;
-                GetNetworkModule()->GetNetworkEventQueue()->AddEvent(&lNwDisconnectedEvent,
+                GetNetworkModule()->GetNetworkEventQueue()->AddEvent(lNwDisconnectedEvent,
                                                                      lNwDisconnectedEvent.GetEventType());
             }
 
@@ -739,7 +739,7 @@ namespace BrnNetwork
             lPlayerAdded.SetLocalPlayer(lbIsLocalPlayer);
             lPlayerAdded.SetCarColourIndex(lpMenuData->mu16FreeburnCarColourIndex);
             lPlayerAdded.SetCarPaintFinishIndex(lpMenuData->mu16FreeburnPaintFinishIndex);
-            lpNetworkManager->GetNetworkModule()->GetNetworkEventQueue()->AddEvent(&lPlayerAdded,
+            lpNetworkManager->GetNetworkModule()->GetNetworkEventQueue()->AddEvent(lPlayerAdded,
                                                                                    lPlayerAdded.GetEventType());
 
             lpNetworkManager->GetStateManager()->PlayerAdded();
@@ -783,7 +783,7 @@ namespace BrnNetwork
                 lPlayerRemoved.SetIsLocalPlayerInGame(lpGamesComponent->IsLocalPlayerInGame());
                 lPlayerRemoved.SetIsLocalPlayerLeavingGame(lpGamesComponent->IsLocalPlayerLeavingGame());
                 lPlayerRemoved.SetPlayerName(&lPlayerName);
-                lpNetworkManager->GetNetworkModule()->GetNetworkEventQueue()->AddEvent(&lPlayerRemoved,
+                lpNetworkManager->GetNetworkModule()->GetNetworkEventQueue()->AddEvent(lPlayerRemoved,
                                                                                        lPlayerRemoved.GetEventType());
             }
 
@@ -801,7 +801,7 @@ namespace BrnNetwork
 
             BrnNetworkModuleIO::NetworkOutPlayerFinalisedEvent lPlayerFinalised;
             lPlayerFinalised.SetNetworkPlayerID(lPlayerID);
-            lpNetworkManager->GetNetworkModule()->GetNetworkEventQueue()->AddEvent(&lPlayerFinalised,
+            lpNetworkManager->GetNetworkModule()->GetNetworkEventQueue()->AddEvent(lPlayerFinalised,
                                                                                    lPlayerFinalised.GetEventType());
             break;
         }
@@ -829,7 +829,7 @@ namespace BrnNetwork
                         lPlayerID, leActiveRaceCarIndex,
                         BrnNetworkModuleIO::NetworkPlayerDisconnectedEvent::E_DISCONNECT_STATUS_LOST_CONTACT);
                     lpNetworkManager->GetNetworkModule()->GetNetworkEventQueue()->AddEvent(
-                        &lPlayerDisconnectEvent, lPlayerDisconnectEvent.GetEventType());
+                        lPlayerDisconnectEvent, lPlayerDisconnectEvent.GetEventType());
                 }
             }
             break;
@@ -858,7 +858,7 @@ namespace BrnNetwork
                         lPlayerID, leActiveRaceCarIndex,
                         BrnNetworkModuleIO::NetworkPlayerDisconnectedEvent::E_DISCONNECT_STATUS_CONNECTED);
                     lpNetworkManager->GetNetworkModule()->GetNetworkEventQueue()->AddEvent(
-                        &lPlayerDisconnectEvent, lPlayerDisconnectEvent.GetEventType());
+                        lPlayerDisconnectEvent, lPlayerDisconnectEvent.GetEventType());
                 }
             }
             break;
@@ -878,7 +878,7 @@ namespace BrnNetwork
                     lPlayerID, lpNetworkManager->GetNetworkModule()->GetActiveRaceCarIndex(lPlayerID),
                     BrnNetworkModuleIO::NetworkPlayerDisconnectedEvent::E_DISCONNECT_STATUS_DISCONNECTED);
                 lpNetworkManager->GetNetworkModule()->GetNetworkEventQueue()->AddEvent(
-                    &lPlayerDisconnectEvent, lPlayerDisconnectEvent.GetEventType());
+                    lPlayerDisconnectEvent, lPlayerDisconnectEvent.GetEventType());
             }
             break;
         }

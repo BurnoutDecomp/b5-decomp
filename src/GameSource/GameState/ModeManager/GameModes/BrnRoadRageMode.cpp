@@ -648,7 +648,7 @@ void RoadRageMode::BroadcastEventsToRivals(GameStateModuleIO::OutputBuffer* lpOu
                                                (liRival < miNumberOfAllowedRoadRageRivals);
             // +0x05..+0x07 deliberately left unwritten (console posts stack residue there).
 
-            lpOutput->GetGameActionQueue()->AddEvent(&lAllowAction, KI_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE); // li r5,0x81 ; li r6,8
+            lpOutput->GetGameActionQueue()->AddEvent(lAllowAction, KI_ACTION_ALLOW_CAR_TO_JOIN_ROAD_RAGE); // li r5,0x81 ; li r6,8
         }
         mbUpdateRivals = false;
     }
@@ -660,7 +660,7 @@ void RoadRageMode::BroadcastEventsToRivals(GameStateModuleIO::OutputBuffer* lpOu
             lMadnessAction.mActiveRaceCarID  = static_cast<::EActiveRaceCarIndex>(liRival);
             lMadnessAction.mRoadRageMadnesss = mfRoadRageMadness;
 
-            lpOutput->GetGameActionQueue()->AddEvent(&lMadnessAction, KI_ACTION_UPDATE_ROAD_RAGE_MADNESS); // li r5,0x83 ; li r6,8
+            lpOutput->GetGameActionQueue()->AddEvent(lMadnessAction, KI_ACTION_UPDATE_ROAD_RAGE_MADNESS); // li r5,0x83 ; li r6,8
         }
         mfMadnessBroadcastLevel = mfRoadRageMadness;
         mbUpdateMadnessLevel    = false;

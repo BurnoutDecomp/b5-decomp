@@ -1033,7 +1033,7 @@ void ModeManager::HandleOnlineTeamTakedowns(const BrnNetwork::BrnNetworkModuleIO
         {
             GameStateModuleIO::TraitorousTakedownAction lTraitorousAction;
             lTraitorousAction.meAggrActiveRaceCarIndex = leAggressorIndex;
-            lpActionQueue->AddEvent(&lTraitorousAction, GameStateModuleIO::E_ACTION_TRAITOROUS_TAKEDOWN);
+            lpActionQueue->AddEvent(lTraitorousAction, GameStateModuleIO::E_ACTION_TRAITOROUS_TAKEDOWN);
         }
         else if (leAggressorTeam == GameStateModuleIO::E_PLAYER_TEAM_RED_TEAM &&
                  leVictimTeam == GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM)
@@ -1048,13 +1048,13 @@ void ModeManager::HandleOnlineTeamTakedowns(const BrnNetwork::BrnNetworkModuleIO
                 lEliminatedAction.mbLastBlueTeamMember    = (liNumBlueTeamPlayersLeft == 1);
                 lEliminatedAction.mbLocalPlayerEliminated =
                     (leVictimIndex == mpGameStateModule->GetPlayerActiveRaceCarIndex());
-                lpActionQueue->AddEvent(&lEliminatedAction, GameStateModuleIO::E_ACTION_PLAYER_ELIMINATED);
+                lpActionQueue->AddEvent(lEliminatedAction, GameStateModuleIO::E_ACTION_PLAYER_ELIMINATED);
             }
             else if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN)
             {
                 GameStateModuleIO::SwitchBurningHomeRunRunnerAction lSwitchAction;
                 lSwitchAction.mNewRunnerPlayerID = mpGameStateModule->GetNetworkPlayerID(leAggressorIndex);
-                lpActionQueue->AddEvent(&lSwitchAction, GameStateModuleIO::E_ACTION_SWITCH_BURNING_HOME_RUN_RUNNER);
+                lpActionQueue->AddEvent(lSwitchAction, GameStateModuleIO::E_ACTION_SWITCH_BURNING_HOME_RUN_RUNNER);
             }
         }
 

@@ -31,13 +31,13 @@ template const char* CgsModule::VariableEventQueue<32768, 16>::GetFirstWritePoin
 // (typed AddEvent = assert-then-forward with sizeof(EventT); Append = bulk
 // memcpy; AppendSafe = per-event GetFirst/Next + AddEventSafe). Element-type
 // homes are #included above so each EventT is a complete type.
-template bool CgsModule::VariableEventQueue<32768, 16>::AddEvent<BrnResource::GameDataIO::GetFreeburnChallengeListRequest>(const BrnResource::GameDataIO::GetFreeburnChallengeListRequest*, s32);
-template bool CgsModule::VariableEventQueue<32768, 16>::AddEvent<BrnResource::GameDataIO::GetVehicleListRequest>(const BrnResource::GameDataIO::GetVehicleListRequest*, s32);
-template bool CgsModule::VariableEventQueue<32768, 16>::AddEvent<CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult>(const CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult*, s32);
+template bool CgsModule::VariableEventQueue<32768, 16>::AddEvent<BrnResource::GameDataIO::GetFreeburnChallengeListRequest>(const BrnResource::GameDataIO::GetFreeburnChallengeListRequest&, s32);
+template bool CgsModule::VariableEventQueue<32768, 16>::AddEvent<BrnResource::GameDataIO::GetVehicleListRequest>(const BrnResource::GameDataIO::GetVehicleListRequest&, s32);
+template bool CgsModule::VariableEventQueue<32768, 16>::AddEvent<CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult>(const CgsSceneManager::SceneManagerIO::OutEventLineTestNearestResult&, s32);
 // AddEvent<OutEventLineTestFastDoubleSidedResult> @ X360 0x828D0780 -- assert-then-forward
 // with sizeof(EventT) == 8 (asm r6=8). Produced by SceneManagerModule::ProcessLineTestFastDoubleSided
 // / ProcessSphereTestFast. Element home: CgsSceneManagerModuleIO.h (included above).
-template bool CgsModule::VariableEventQueue<32768, 16>::AddEvent<CgsSceneManager::SceneManagerIO::OutEventLineTestFastDoubleSidedResult>(const CgsSceneManager::SceneManagerIO::OutEventLineTestFastDoubleSidedResult*, s32);
+template bool CgsModule::VariableEventQueue<32768, 16>::AddEvent<CgsSceneManager::SceneManagerIO::OutEventLineTestFastDoubleSidedResult>(const CgsSceneManager::SceneManagerIO::OutEventLineTestFastDoubleSidedResult&, s32);
 template bool CgsModule::VariableEventQueue<32768, 16>::Append<1024, 16>(const CgsModule::VariableEventQueue<1024, 16>&);
 template bool CgsModule::VariableEventQueue<32768, 16>::Append<18432, 16>(const CgsModule::VariableEventQueue<18432, 16>&);
 template bool CgsModule::VariableEventQueue<32768, 16>::Append<2048, 16>(const CgsModule::VariableEventQueue<2048, 16>&);

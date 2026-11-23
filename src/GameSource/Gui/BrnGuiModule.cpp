@@ -590,7 +590,7 @@ namespace BrnGui
         lRequest.miPoolId = 11;
         lRequest.mResourceId = lResourceId;
         lpGuiOutput->LockForWrite();
-        lpGuiOutput->GetGuiResourceRequestQueue()->AddEvent(&lRequest, 4);
+        lpGuiOutput->GetGuiResourceRequestQueue()->AddEvent(lRequest, 4);
         lpGuiOutput->UnlockForWrite();
     }
 
@@ -650,7 +650,7 @@ namespace BrnGui
                     BrnResource::GameDataIO::SwapOutCollisionWorldRequest lRequest;
                     lRequest.miEventId = 0;
                     lRequest.mpReceiverQueue = &mCollisonPoolValidationReceiverQueue;
-                    lpOutput->GetGuiResourceRequestQueue()->AddEvent(&lRequest, 67);
+                    lpOutput->GetGuiResourceRequestQueue()->AddEvent(lRequest, 67);
                 }
                     meCollisionWorldStateValidationState = lbMovie
                         ? E_COLLISIONWORLDSTATEVALIDATIONSTATE_INVALIDATING_FOR_BOOT
@@ -700,7 +700,7 @@ namespace BrnGui
                     BrnResource::GameDataIO::SwapInCollisionWorldRequest lRequest;
                     lRequest.miEventId = 0;
                     lRequest.mpReceiverQueue = &mCollisonPoolValidationReceiverQueue;
-                    lpOutput->GetGuiResourceRequestQueue()->AddEvent(&lRequest, 68);
+                    lpOutput->GetGuiResourceRequestQueue()->AddEvent(lRequest, 68);
                 }
                 mCollisonPoolValidationReceiverQueue.Clear();
                 meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_BOOT;
@@ -755,7 +755,7 @@ namespace BrnGui
                     BrnResource::GameDataIO::SwapInCollisionWorldRequest lRequest;
                     lRequest.miEventId = 0;
                     lRequest.mpReceiverQueue = &mCollisonPoolValidationReceiverQueue;
-                    lpOutput->GetGuiResourceRequestQueue()->AddEvent(&lRequest, 68);
+                    lpOutput->GetGuiResourceRequestQueue()->AddEvent(lRequest, 68);
                 }
                 mCollisonPoolValidationReceiverQueue.Clear();
                 meCollisionWorldStateValidationState = E_COLLISIONWORLDSTATEVALIDATIONSTATE_VALIDATING_FOR_SAVELOAD;
@@ -904,7 +904,7 @@ namespace BrnGui
                 lRequest.mpUser = &mEventReceiverQueue;
                 lRequest.miEventId = BrnResource::E_POOL_TRAFFIC;
                 lRequest.miPoolId = BrnResource::E_POOL_TRAFFIC;
-                lpOutput->GetGuiResourceRequestQueue()->AddEvent(&lRequest, 7);
+                lpOutput->GetGuiResourceRequestQueue()->AddEvent(lRequest, 7);
                 meCarPoolStateValidationState = E_CARPOOLSTATEVALIDATIONSTATE_INVALIDATING_FOR_MOVIE;
             }
             break;
@@ -936,7 +936,7 @@ namespace BrnGui
                 lRequest.mpUser = &mEventReceiverQueue;
                 lRequest.miEventId = BrnResource::E_POOL_TRAFFIC;
                 lRequest.miPoolId = BrnResource::E_POOL_TRAFFIC;
-                lpOutput->GetGuiResourceRequestQueue()->AddEvent(&lRequest, 8);
+                lpOutput->GetGuiResourceRequestQueue()->AddEvent(lRequest, 8);
                 meCarPoolStateValidationState = E_CARPOOLSTATEVALIDATIONSTATE_VALIDATING_FOR_MOVIE;
             }
             break;

@@ -319,7 +319,7 @@ namespace BrnResource
                 lRequest.Construct(&mReceiverQueue, liEventId);
                 CgsMemory::MemoryBank::Params lParams = *mpMemoryMap->GetBank(liBank)->GetParams();
                 lRequest.SetParams(&lParams);
-                lRequests.AddEvent(&lRequest, 9);
+                lRequests.AddEvent(lRequest, 9);
             }
             lpResourceInput->LockForWrite();
             lpResourceInput->AppendResourceQueue(&lRequests);
@@ -357,7 +357,7 @@ namespace BrnResource
                     lRequest.mbAllowDefragmentation = true;
                 lRequest.mpUser = &mReceiverQueue;
                 lRequest.miEventId = miNumPoolCreationRequests++;
-                lRequests.AddEvent(&lRequest, 0);
+                lRequests.AddEvent(lRequest, 0);
             }
             lpResourceInput->LockForWrite();
             lpResourceInput->AppendResourceQueue(&lRequests);
@@ -390,7 +390,7 @@ namespace BrnResource
                 CgsMemory::MemoryIO::CreateResourceRequest lRequest = *mpMemoryMap->GetRawResource(li)->GetRequest();
                 lRequest.SetReceiverQueue(&mReceiverQueue);
                 lRequest.SetEventId(li);
-                lRequests.AddEvent(&lRequest, 10);
+                lRequests.AddEvent(lRequest, 10);
                 ++miNumAllocatorCreationRequests;
                 mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
                 mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RAW;
@@ -404,7 +404,7 @@ namespace BrnResource
                 lRequest.SetEventId(li);
                 lRequest.SetHeapAllocator(0);
                 lRequest.SetLinearAllocator(&maGeneratedLinearAllocators[li]);
-                lRequests.AddEvent(&lRequest, 14);
+                lRequests.AddEvent(lRequest, 14);
                 ++miNumAllocatorCreationRequests;
                 mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
                 mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_LINEAR;
@@ -417,7 +417,7 @@ namespace BrnResource
                 lRequest.SetEventId(li);
                 lRequest.SetHeapAllocator(&maGeneratedHeapAllocators[li]);
                 lRequest.SetLinearAllocator(0);
-                lRequests.AddEvent(&lRequest, 14);
+                lRequests.AddEvent(lRequest, 14);
                 ++miNumAllocatorCreationRequests;
                 mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
                 mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_HEAP;
@@ -428,7 +428,7 @@ namespace BrnResource
                 CgsMemory::MemoryIO::CreateLinearAllocatorRequest lRequest = *mpMemoryMap->GetRWLinearAllocator(li)->GetRequest();
                 lRequest.SetReceiverQueue(&mReceiverQueue);
                 lRequest.SetEventId(li);
-                lRequests.AddEvent(&lRequest, 11);
+                lRequests.AddEvent(lRequest, 11);
                 ++miNumAllocatorCreationRequests;
                 mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
                 mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWLINEAR;
@@ -438,7 +438,7 @@ namespace BrnResource
                 CgsMemory::MemoryIO::CreateGeneralAllocatorRequest lRequest = *mpMemoryMap->GetRWGeneralAllocator(li)->GetRequest();
                 lRequest.SetReceiverQueue(&mReceiverQueue);
                 lRequest.SetEventId(li);
-                lRequests.AddEvent(&lRequest, 12);
+                lRequests.AddEvent(lRequest, 12);
                 ++miNumAllocatorCreationRequests;
                 mAllocatorList.maiAllocatorMap[lRequest.GetBankId()] = li;
                 mAllocatorList.maeAllocatorType[lRequest.GetBankId()] = CgsMemory::MemoryMap::E_ALLOCATORTYPE_RWHEAP;
@@ -1616,7 +1616,7 @@ void GameDataModule::ProcessSwapOutCollisionWorldRequest(
         lRequest.SetFileName(KPC_WORLD_COLLISION_FILE_NAME);
         lRequest.miPoolId = 2;
         lRequest.mbLiveUpdateReplace = false;
-        lpResourceInput->GetResourceQueue()->AddEvent(&lRequest, 3);
+        lpResourceInput->GetResourceQueue()->AddEvent(lRequest, 3);
     }
     else
     {
@@ -1625,7 +1625,7 @@ void GameDataModule::ProcessSwapOutCollisionWorldRequest(
         lRequest.mpUser = &mReceiverQueue;
         lRequest.miEventId = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
         lRequest.miPoolId = 2;
-        lpResourceInput->GetResourceQueue()->AddEvent(&lRequest, 7);
+        lpResourceInput->GetResourceQueue()->AddEvent(lRequest, 7);
     }
 }
 
@@ -1652,7 +1652,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
     lRequest.mpUser = &mReceiverQueue;
     lRequest.miEventId = mGameDataEventSlotPool.GetObjectIndex(lpSlot);
     lRequest.miPoolId = 2;
-    lpResourceInput->GetResourceQueue()->AddEvent(&lRequest, 8);
+    lpResourceInput->GetResourceQueue()->AddEvent(lRequest, 8);
 }
 
     // @ 0x8266F5C8 -- service a LOAD world-unit request: post the LoadBundle for the unit's

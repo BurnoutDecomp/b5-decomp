@@ -779,7 +779,7 @@ namespace BrnGameState
         lActivated.mePaybackType           = meActiveDirtyTrickType;
         lActivated.mePaybackAggressorIndex = mePaybackAggressorRaceCarIndex;
         lActivated.mePaybackVictimIndex    = mpGameStateModule->GetPlayerActiveRaceCarIndex();
-        lpOutput->GetGuiOutputQueue()->AddEvent(&lActivated, GameStateModuleIO::E_ACTION_PAYBACK_ACTIVATED);
+        lpOutput->GetGuiOutputQueue()->AddEvent(lActivated, GameStateModuleIO::E_ACTION_PAYBACK_ACTIVATED);
 
         StartCountdown();                            // +0x248 = 10.0
         ChangeState(E_PAYBACK_VICTIM_STATE_ACTIVE);  // +0x260 = 2

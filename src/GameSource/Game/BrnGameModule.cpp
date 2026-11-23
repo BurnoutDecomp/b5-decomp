@@ -905,7 +905,7 @@ namespace BrnGame
                     lEvent.mbActivated = false;
                     lEvent.mbStalled = false;
                     lEvent.mbWasStalled = lbWasStalled;
-                    lpInput->GetGameEventQueue()->AddEvent(&lEvent,
+                    lpInput->GetGameEventQueue()->AddEvent(lEvent,
                         E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
                 }
                 mbStopStepping = false;
@@ -920,7 +920,7 @@ namespace BrnGame
                 lEvent.mbWasStalled = lbWasStalled;
                 if (!mbSimPaused)
                     mbDoStep = false;
-                lpInput->GetGameEventQueue()->AddEvent(&lEvent,
+                lpInput->GetGameEventQueue()->AddEvent(lEvent,
                     E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
             }
         }
@@ -935,7 +935,7 @@ namespace BrnGame
                     lEvent.mbActivated = true;
                     lEvent.mbStalled = true;
                     lEvent.mbWasStalled = lbWasStalled;
-                    lpInput->GetGameEventQueue()->AddEvent(&lEvent,
+                    lpInput->GetGameEventQueue()->AddEvent(lEvent,
                         E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
                 }
                 mbStreamingStalled = true;
@@ -949,7 +949,7 @@ namespace BrnGame
                 lEvent.mbActivated = false;
                 lEvent.mbStalled = false;
                 lEvent.mbWasStalled = lbWasStalled;
-                lpInput->GetGameEventQueue()->AddEvent(&lEvent,
+                lpInput->GetGameEventQueue()->AddEvent(lEvent,
                     E_EVENT_PLAYER_PAUSE_STATE_CHANGED);
             }
             mbStreamingStalled = false;
@@ -980,7 +980,7 @@ namespace BrnGame
                 mbRequestStreamingWait = false;
                 // The original empty game-start tag copies one unspecified byte.
                 GameEvent<E_EVENT_GAME_START> lEvent;
-                lpInput->GetGameEventQueue()->AddEvent(&lEvent, E_EVENT_GAME_START);
+                lpInput->GetGameEventQueue()->AddEvent(lEvent, E_EVENT_GAME_START);
             }
             lpInput->SetTimerStatusInterface(&mTimerStatusInterface);
             CgsModule::UnlockBuffersForIO(lpInput, lpInputModuleOutput);
@@ -1273,7 +1273,7 @@ namespace BrnGame
             BrnGameState::GameStateModuleIO::TrainingPauseStateChangedEvent lPauseEvent;
             lPauseEvent.mbActivated = lpDirectorOutputBuffer->GetDirectorOutputInterface()->GetPauseRequestState();
             lpPostWorldInput->GetGameEventQueue()->AddEvent(
-                &lPauseEvent,
+                lPauseEvent,
                 BrnGameState::GameStateModuleIO::E_EVENT_TRAINING_PAUSE_STATE_CHANGED);
         }
 
@@ -1291,7 +1291,7 @@ namespace BrnGame
             BrnGameState::GameStateModuleIO::ControllerDisconnectedEvent lDisconnectEvent;
             lDisconnectEvent.mbDisconnected = lbControllerDisconnected;
             lpPostWorldInput->GetGameEventQueue()->AddEvent(
-                &lDisconnectEvent,
+                lDisconnectEvent,
                 BrnGameState::GameStateModuleIO::E_EVENT_CONTROLLER_DISCONNECTED);
         }
 

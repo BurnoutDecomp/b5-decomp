@@ -76,18 +76,12 @@ namespace CgsModule
         bool AddEventSafe(const Event* lpEvent, s32 liType, s32 liSize);
 
 
-        // ADDITIVE GROW (FLAG): typed event-size convenience overload. The X360 emits
-        // this as a distinct templated member of VariableEventQueue<BUFSIZE,ALIGN>
-        // (mangled ??$AddEvent@V<EventT>...@?$VariableEventQueue@$0BAAA@$0BA@@CgsModule@@):
-        // it asserts the queue is constructed (CgsVariableEventQueue.h:688 inline), then
-        // forwards to the three-arg AddEvent with liSize == sizeof(EventT). Used by the
-        // resource request-builder interfaces (e.g. BrnResource::GameDataIO::
-        // RequestInterface<N>::Load*/Get*) which call queue.AddEvent<LoadGameDataEvent>(
-        // &event, type). Recovered from 0x82296320 (LoadGameDataEvent) and 0x8273FB48
-        // (GetVehicleListRequest). DWARF declares only the three-arg AddEvent; this typed
-        // form is an X360-attested additional member, added here additively.
+        // DecFIGS CgsVariableEventQueue.h:686 (assert h:688): queue one typed event by
+        // reference, `bool AddEvent<T>(const T& lEvent, int32_t liEventId)`; ARTIST decorates
+        // every instance `QAA_NABV<T>...H` (e.g. 0x82252EB8 AddEvent<LoadGameDataEvent> on
+        // VariableEventQueue<512,16>). Forwards to the three-arg AddEvent with sizeof(T).
         template <typename EventT>
-        bool AddEvent(const EventT* lpEvent, s32 liType);
+        bool AddEvent(const EventT& lEvent, s32 liEventId);
 
         // ADDITIVE GROW (FLAG): typed-size convenience form of AddEventSafe -- the
         // non-asserting, overflow-guarded sibling of the typed AddEvent<EventT> above. The
@@ -452,26 +446,22 @@ namespace CgsModule
         return true;
     }
 
-    // -------- AddEvent<EventT> (typed convenience) --------
-    // X360: 0x82296320 (EventT = BrnResource::GameDataIO::LoadGameDataEvent),
-    //       0x8273FB48 (EventT = BrnResource::GameDataIO::GetVehicleListRequest).
-    // Asserts constructed (inline at CgsVariableEventQueue.h:688) then forwards to the
-    // three-arg AddEvent with the compile-time event size.
+    // -------- AddEvent<EventT> (typed) --------
+    // DecFIGS CgsVariableEventQueue.h:686; X360 e.g. 0x82252EB8 (<512,16>, LoadGameDataEvent),
+    // 0x82296320 (<4096,16>, LoadGameDataEvent), 0x8273FB48 (<4096,16>, GetVehicleListRequest):
+    // the "Not Constructed" assert (h:688), then the three-arg AddEvent with sizeof(EventT).
     template <s32 BUFSIZE, s32 ALIGN>
     template <typename EventT>
-    bool VariableEventQueue<BUFSIZE, ALIGN>::AddEvent(const EventT* lpEvent, s32 liType)
+    bool VariableEventQueue<BUFSIZE, ALIGN>::AddEvent(const EventT& lEvent, s32 liEventId)
     {
-        if (!mbIsConstructed)
-        {
-            char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lStrStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
-            lStrStream << "Not Constructed\n";
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lStrStream.GetBuffer(), detail::KAC_VEQ_FILE, 688);
-            CgsDev::Assert::EndAssert();
-        }
+        CGS_ASSERT(mbIsConstructed, CgsDev::Assert::StreamMessageAt(
+            "Not Constructed\n", detail::KAC_VEQ_FILE, 688));
 
-        return AddEvent(reinterpret_cast<const Event*>(lpEvent), liType, (s32)sizeof(EventT));
+        // DWARF derives every record from CgsModule::Event and ARTIST converts implicitly (for
+        // CgsSound::Io::Message<T>, whose Event base follows MessageHeader's vptr, 0x826DDF28 adds
+        // 4 with a null check). The tree's GameEvent<N>, SceneManagerIO line-test records and
+        // Message<T> do not derive from Event yet, so the record pointer is converted explicitly.
+        return AddEvent(reinterpret_cast<const Event*>(&lEvent), liEventId, (s32)sizeof(EventT));
     }
 
     // -------- Append<SRCBUF,SRCALIGN> @ X360 0x82504F68 (dest <18432,16>, src <4096,16>) --------

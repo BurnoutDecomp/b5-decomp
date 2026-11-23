@@ -329,7 +329,7 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
             CGS_ASSERT(lpOutputBuffer->GetGameActionQueue() != NULL, "lpOutput->GetGameActionQueue()");
             ModeLoadingScreenAction lLoadingScreenAction;
             lLoadingScreenAction.muTag = 0;   // console leaves the slot UNWRITTEN (see struct banner)
-            lpOutputBuffer->GetGameActionQueue()->AddEvent(&lLoadingScreenAction, GameStateModuleIO::E_ACTION_CHECK_FOR_LOADING_SCREEN);
+            lpOutputBuffer->GetGameActionQueue()->AddEvent(lLoadingScreenAction, GameStateModuleIO::E_ACTION_CHECK_FOR_LOADING_SCREEN);
         }
         else
         {
@@ -485,7 +485,7 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         CGS_ASSERT(lpOutputBuffer->GetGameActionQueue() != NULL, "lpOutput->GetGameActionQueue()");
         ModeLoadingScreenAction lLoadingScreenAction;
         lLoadingScreenAction.muTag = 0;
-        lpOutputBuffer->GetGameActionQueue()->AddEvent(&lLoadingScreenAction, GameStateModuleIO::E_ACTION_CHECK_FOR_LOADING_SCREEN);
+        lpOutputBuffer->GetGameActionQueue()->AddEvent(lLoadingScreenAction, GameStateModuleIO::E_ACTION_CHECK_FOR_LOADING_SCREEN);
     }
     else
     {
@@ -717,7 +717,7 @@ void ModeManager::PrepareForMode(GameStateModuleIO::GameActionQueue* lpGameActio
         mfPFMSecondPhaseTimer   = 0.0f;    // +0x94F0  (flt_82001CC0, image-dumped == 0.0f)
     }
 
-    lpGameActionQueue->AddEvent(&lAction, GameStateModuleIO::E_ACTION_PREPARE_FOR_MODE);
+    lpGameActionQueue->AddEvent(lAction, GameStateModuleIO::E_ACTION_PREPARE_FOR_MODE);
 
     // `std r20(=0), this+0x8C00` -- a 64-bit ZERO. The Hex-Rays `*(a1 + 35840) = v5` is the H9
     // register-pair artefact (v5's high word still holds a string pointer from the loop above); the
@@ -741,7 +741,7 @@ void ModeManager::PrepareForMode(GameStateModuleIO::GameActionQueue* lpGameActio
         lFinishLinesAction.mBoxRegion    = *lpLandmark->GetBoxRegion();   // the 9-dword copy
         lFinishLinesAction.mFinishLineID = lpLandmark->GetId();           // lwz 0x24 / extsw / std +40
 
-        lpGameActionQueue->AddEvent(&lFinishLinesAction, GameStateModuleIO::E_ACTION_BROADCAST_MODE_FINISH_LINES);
+        lpGameActionQueue->AddEvent(lFinishLinesAction, GameStateModuleIO::E_ACTION_BROADCAST_MODE_FINISH_LINES);
     }
 
     // Showtime (offline 2 / online 16) delays its mode-switch action by thirty frames; the countdown

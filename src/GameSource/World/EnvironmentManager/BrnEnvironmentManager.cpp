@@ -1778,7 +1778,7 @@ bool EnvironmentManager::StreamIn(BrnWorldIO::UpdateOutputBuffer* lpOutput)
             lRequest.miEventId = miResourceCnt++;
             lRequest.miPoolId = KI_POOL_ENVIRONMENT;
             lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(reinterpret_cast<const u8*>(lrSeason.macResourceName)))));
-            lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(&lRequest, KI_REQUEST_ACQUIRE_RESOURCE);
+            lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(lRequest, KI_REQUEST_ACQUIRE_RESOURCE);
         }
         mReceiverQueue.Clear();
         lpOutput->UnlockForWrite();
@@ -1833,7 +1833,7 @@ bool EnvironmentManager::Prepare(BrnWorldIO::UpdateOutputBuffer* lpOutput)
             lRequest.miEventId = 0;
             lRequest.miPoolId = KI_POOL_POSTFX;
             lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(reinterpret_cast<const u8*>(KAC_DEFAULT_COLOUR_CUBE_RESOURCE)))));
-            lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(&lRequest, KI_REQUEST_ACQUIRE_RESOURCE);
+            lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(lRequest, KI_REQUEST_ACQUIRE_RESOURCE);
         }
         mReceiverQueue.Clear();
         lpOutput->UnlockForWrite();
@@ -1875,7 +1875,7 @@ bool EnvironmentManager::Prepare(BrnWorldIO::UpdateOutputBuffer* lpOutput)
             lRequest.miEventId = 0;
             lRequest.miPoolId = KI_POOL_ENVIRONMENT;
             lRequest.mResourceId.SetHash(static_cast<u64>(static_cast<u32>(CgsResource::ID::HashString(reinterpret_cast<const u8*>(lacResourceName)))));
-            lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(&lRequest, KI_REQUEST_ACQUIRE_RESOURCE);
+            lpOutput->GetResourceRequestResourceInterface()->mRequestQueue.AddEvent(lRequest, KI_REQUEST_ACQUIRE_RESOURCE);
         }
         mReceiverQueue.Clear();
         lpOutput->UnlockForWrite();

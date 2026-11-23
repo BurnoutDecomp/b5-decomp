@@ -317,7 +317,7 @@ void GuiDebugComponent::UpdateWorstCaseHUD(CgsGui::CgsGuiModuleIO::InputBuffer* 
             lRunFsm.mInitialStateId = 0;
             lRunFsm.meFsmToRun = E_GUI_HUD_EVENT;
             lRunFsm.meFlowToUse = E_GUIFLOW_HUD;
-            lpEventQueue->AddEvent(&lRunFsm, 144);
+            lpEventQueue->AddEvent(lRunFsm, 144);
 
             lSharedPayload.mPrepareForModeStart.mPursuedCarId = 0;
             lSharedPayload.mPrepareForModeStart.miCurrentRound = 0;
@@ -335,7 +335,7 @@ void GuiDebugComponent::UpdateWorstCaseHUD(CgsGui::CgsGuiModuleIO::InputBuffer* 
             lSharedPayload.mPrepareForModeStart.mu8CarCount = 8;
             lSharedPayload.mPrepareForModeStart.mbIsOnline = 1;
             lSharedPayload.mPrepareForModeStart.mbOnlineLobbyTransition = 0;
-            lpEventQueue->AddEvent(&lSharedPayload.mPrepareForModeStart, 93);
+            lpEventQueue->AddEvent(lSharedPayload.mPrepareForModeStart, 93);
 
             GuiEventUpdateSatNav::msbForceWorstCase = true;
             GuiEventNetworkPlayerList::msbWorstCaseHudActive = true;
@@ -357,7 +357,7 @@ void GuiDebugComponent::UpdateWorstCaseHUD(CgsGui::CgsGuiModuleIO::InputBuffer* 
                 {
                     WorstCaseControllerInputPayload lButton;
                     lButton.miButtonId = 40;
-                    lpEventQueue->AddEvent(&lButton, 6);
+                    lpEventQueue->AddEvent(lButton, 6);
                     lrSchedule.mfThreshold = FLT_MAX;
                     break;
                 }
@@ -372,7 +372,7 @@ void GuiDebugComponent::UpdateWorstCaseHUD(CgsGui::CgsGuiModuleIO::InputBuffer* 
                         static_cast<BrnStreetData::RoadIndex>(1);
                     lSharedPayload.mRoadRuleEnter.maFriendLeader[0].Construct("sk8trMhole");
                     lSharedPayload.mRoadRuleEnter.mabChallenge[0] = false;
-                    lpEventQueue->AddEvent(&lSharedPayload.mRoadRuleEnter, 333);
+                    lpEventQueue->AddEvent(lSharedPayload.mRoadRuleEnter, 333);
                     break;
                 }
                 case 343:
@@ -380,7 +380,7 @@ void GuiDebugComponent::UpdateWorstCaseHUD(CgsGui::CgsGuiModuleIO::InputBuffer* 
                     BrnGui::GuiEventRoadRuleChangeMode lChangeMode;
                     lChangeMode.meScoreType =
                         BrnGameState::E_ACTIVE_ROAD_RULE_OFFLINE_TIME;
-                    lpEventQueue->AddEvent(&lChangeMode, 343);
+                    lpEventQueue->AddEvent(lChangeMode, 343);
                     lrSchedule.mfThreshold = FLT_MAX;
                     break;
                 }
@@ -388,7 +388,7 @@ void GuiDebugComponent::UpdateWorstCaseHUD(CgsGui::CgsGuiModuleIO::InputBuffer* 
                 {
                     BrnGui::GuiEventRoadRuleBegin lRoadRuleBegin;
                     lRoadRuleBegin.meRuleType = BrnStreetData::E_SCORE_TYPE_TIME;
-                    lpEventQueue->AddEvent(&lRoadRuleBegin, 335);
+                    lpEventQueue->AddEvent(lRoadRuleBegin, 335);
                     lrSchedule.mfThreshold = FLT_MAX;
                     break;
                 }
@@ -423,7 +423,7 @@ void GuiDebugComponent::UpdateWorstCaseHUD(CgsGui::CgsGuiModuleIO::InputBuffer* 
             lRunFsm.mInitialStateId = 0;
             lRunFsm.meFsmToRun = E_GUI_HUD_EVENT;
             lRunFsm.meFlowToUse = E_GUIFLOW_HUD;
-            lpEventQueue->AddEvent(&lRunFsm, 144);
+            lpEventQueue->AddEvent(lRunFsm, 144);
 
             GuiEventUpdateSatNav::msbForceWorstCase = false;
             GuiEventRoadRuleUpdate::msfWorstCaseTimeElapsed = 0.0f;

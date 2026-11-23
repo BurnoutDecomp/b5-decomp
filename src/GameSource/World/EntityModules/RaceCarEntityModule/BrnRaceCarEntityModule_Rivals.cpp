@@ -182,7 +182,7 @@ void RaceCarEntityModule::SetUpAIForMode(
 
         lpOutput->GetRaceCarAIInterface()->mManagementQueue
             .AddEvent<BrnAI::AIModuleIO::AddCarToCurrentModeEvent>(
-                &lAddCarEvent, BrnAI::AIModuleIO::E_EVENT_ADD_CAR_TO_MODE);   // li r5, 6
+                lAddCarEvent, BrnAI::AIModuleIO::E_EVENT_ADD_CAR_TO_MODE);   // li r5, 6
 
         // 0x823019B8..0x82301A14: the :1203/:1205 asserts are SetActiveRaceCarForPlayerScoringIndex's
         // own inline body, and the store lands in maActiveRaceCarForPlayerScoringIndex[i]

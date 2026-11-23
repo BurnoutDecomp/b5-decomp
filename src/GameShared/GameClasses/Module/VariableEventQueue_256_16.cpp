@@ -31,5 +31,5 @@ template const char* CgsModule::VariableEventQueue<256, 16>::GetFirstWritePointe
 // (typed AddEvent = assert-then-forward with sizeof(EventT); Append = bulk
 // memcpy; AppendSafe = per-event GetFirst/Next + AddEventSafe). Element-type
 // homes are #included above so each EventT is a complete type.
-template bool CgsModule::VariableEventQueue<256, 16>::AddEvent<BrnResource::GameDataIO::GetVehicleListRequest>(const BrnResource::GameDataIO::GetVehicleListRequest*, s32);
-template bool CgsModule::VariableEventQueue<256, 16>::AddEvent<BrnResource::GameDataIO::GetWheelListRequest>(const BrnResource::GameDataIO::GetWheelListRequest*, s32);
+template bool CgsModule::VariableEventQueue<256, 16>::AddEvent<BrnResource::GameDataIO::GetVehicleListRequest>(const BrnResource::GameDataIO::GetVehicleListRequest&, s32);
+template bool CgsModule::VariableEventQueue<256, 16>::AddEvent<BrnResource::GameDataIO::GetWheelListRequest>(const BrnResource::GameDataIO::GetWheelListRequest&, s32);

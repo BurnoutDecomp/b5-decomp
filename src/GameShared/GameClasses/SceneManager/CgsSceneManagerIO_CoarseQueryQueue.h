@@ -154,7 +154,7 @@ namespace SceneManagerIO
         lEvent.mx32EntityTypeFlags = lx32EntityTypeFlags;
         lEvent.mxQueryFlags        = lxQueryFlags;
 
-        this->template AddEvent<InEventFrustumTestVp>(&lEvent, E_IN_EVENT_FRUSTUM_TEST_VP);
+        this->template AddEvent<InEventFrustumTestVp>(lEvent, E_IN_EVENT_FRUSTUM_TEST_VP);
     }
 }
 }

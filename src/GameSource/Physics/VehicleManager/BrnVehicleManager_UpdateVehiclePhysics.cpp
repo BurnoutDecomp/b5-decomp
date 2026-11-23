@@ -242,7 +242,7 @@ namespace Vehicle
 
             lpRequestInterface->GetRequestFineLineQueue()
                 ->AddEvent<CgsSceneManager::SceneManagerIO::InEventLineTestNearest>(
-                    &lEvent, KI_SCENE_QUERY_EVENT_LINE_TEST_NEAREST);
+                    lEvent, KI_SCENE_QUERY_EVENT_LINE_TEST_NEAREST);
         }
     }
 

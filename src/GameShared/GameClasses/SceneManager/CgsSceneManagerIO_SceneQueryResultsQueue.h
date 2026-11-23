@@ -126,7 +126,7 @@ namespace SceneManagerIO
 
         // Typed convenience overload: liSize == sizeof(OutEventLineTestNearestResult),
         // event-type id == 2.
-        return this->template AddEvent<OutEventLineTestNearestResult>(&lEvent, 2);
+        return this->template AddEvent<OutEventLineTestNearestResult>(lEvent, 2);
     }
 
     // -------- AddLineTestFineResult  @ X360 0x828C4A08 --------
