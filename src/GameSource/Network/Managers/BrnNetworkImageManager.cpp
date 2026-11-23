@@ -42,7 +42,9 @@
 #include "GameShared/GameClasses/Network/Players/X360/CgsUniquePlayerIDX360.h" // NetworkOutMugshotToSaveEvent::mUniquePlayerID
 #include "GameSource/Network/Parameters/BrnNetworkPlayerParamsClass.h"           // PlayerParams (GetUniqueIDByPlayerID)
 
-#include <cstring>                                                      // std::memcpy
+// XMemCpy (xapilibi, ARTIST 0x82926BA0) is declared by <xtl.h> above; every copy in
+// this file calls it, not the CRT memcpy (SendNextSegment, ReceiveImageMessage and both
+// compressed-picture callbacks branch to 0x82926BA0).
 
 // Vendor XDK privilege query used by CheckMugshotPrivilege. Declared extern "C" at file
 // scope (the real prototype lives in the Xbox 360 XDK), mirroring the corpus convention.
@@ -1081,7 +1083,7 @@ namespace BrnNetwork
                    "liBytesToWrite <= ImageMessage::KI_PHOTO_SEGMENT_SIZE");
 
         const char* lpcReadPosition = lpAggressorMugshotData->mPicture.GetTexture() + liBytesSent;
-        std::memcpy(lacBuffer, lpcReadPosition, liBytesToWrite);
+        XMemCpy(lacBuffer, lpcReadPosition, liBytesToWrite);
 
         CGS_ASSERT(lpAggressorMugshotData->mTakedownAggressorPlayerID != -1,
                    "lpAggressorMugshotData->mTakedownAggressorPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
@@ -1267,7 +1269,7 @@ namespace BrnNetwork
 
             char* lpcWritePosition = lpMugshotData->mPicture.GetTexture()
                                    + lu16PhotoPacketNumber * ImageMessage::KI_PHOTO_SEGMENT_SIZE;
-            std::memcpy(lpcWritePosition, lacPhotoBuffer, lu16PhotoBytes);
+            XMemCpy(lpcWritePosition, lacPhotoBuffer, lu16PhotoBytes);
 
             lpMugshotData->mReceivedPhotoPackets.SetBit(lu16PhotoPacketNumber);
 
@@ -1468,7 +1470,7 @@ namespace BrnNetwork
         MugshotData* lpMugshotData = lpImageManager->GetMugshotDataEntry(lpImageManager->mTakedownAggressorPlayerID);
         CGS_ASSERT(lpMugshotData, "lpMugshotData");
 
-        std::memcpy(lpMugshotData->mPicture.GetTexture(), lpPixels, lpMugshotData->mPicture.GetTextureSize());
+        XMemCpy(lpMugshotData->mPicture.GetTexture(), lpPixels, lpMugshotData->mPicture.GetTextureSize());
         lpMugshotData->mbPictureValid = true;
         if ( lpImageManager->meImageTypeToSend == BrnGameState::GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT )
         {
@@ -1527,7 +1529,7 @@ namespace BrnNetwork
             CGS_ASSERT(lpMugshotData,
                 CgsDev::Assert::MessageAt("lpMugshotData", KAC_ARTIST_ASSERT_FILE, 2320 /* ARTIST 0x8256FE10 */));
 
-            std::memcpy(lpMugshotData->mPicture.GetTexture(), lpPixels, lpMugshotData->mPicture.GetTextureSize());
+            XMemCpy(lpMugshotData->mPicture.GetTexture(), lpPixels, lpMugshotData->mPicture.GetTextureSize());
             lpImageManager->RequestMugshotSave(lpMugshotData, lpMugshotData->mTakedownVictimPlayerID,
                                                lpImageManager->meImageTypeOfGamerPicToSave);
         }
