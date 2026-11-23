@@ -24,7 +24,7 @@ namespace CgsContainers
     // FastBitArray<tuNumBits>: used by-pointer only (ChallengeHighScoreEntry::UpdateEntry /
     // AreAnyScoresEqual take FastBitArray<2>*). Forward-declared here; its real home is the
     // CgsContainers TU. No definition needed for the pointer-only params.
-    template <u32 tuNumBits> class FastBitArray;
+    template <int NUMBITS> class FastBitArray;   // CgsFastBitArray.h: an int parameter (DecFIGS FastBitArray<int N>)
 }
 
 namespace BrnStreetData

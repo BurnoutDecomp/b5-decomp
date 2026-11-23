@@ -1,322 +1,625 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT_STREAM
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // the streamed assert messages
 
-// ---------------------------------------------------------------------------
-// CgsContainers::FastBitArray<tuNumBits>
+#include <ppcintrinsics.h>   // _CountLeadingZeros64 (Iterator::operator++)
+
+// CgsContainers::FastBitArray<NUMBITS> -- a fixed-capacity bit set stored as an array of
+// 64-bit fields, with an iterator over its set bits. Member set, names, types and lines from
+// the DecFIGS DWARF (references/DecFIGS/dwarfdump/GameShared/GameClasses/Containers/
+// CgsFastBitArray.h); the template parameter is an int (DecFIGS mangles every instance
+// FastBitArray<int N>, e.g. ._ZN13CgsContainers12FastBitArrayILi601EE6SetBitEi @0x9702B4);
+// the file's shape and the bodies from the LegacySrc copy of the header, checked against
+// ARTIST, which inlines every member into its callers (no out-of-line copy exists).
 //
-// DWARF home: GameShared/GameClasses/Containers/CgsFastBitArray.h. A fixed-capacity
-// bit set stored as an array of 64-bit fields, one per 64 bits rounded up. It differs
-// from CgsContainers::BitArray (CgsBitArray.h) by adding the next-set-bit helpers
-// GetFirstBitSet / GetNextBitSet and a SetAll the X360 inlines as a shift-or loop.
-//
-// The X360 inlines every instantiation at its call site, out-of-range CgsDev::StrStream
-// assert machinery included. That scaffolding belongs to the callers, which own the
-// CgsDev::Assert API, so this header stays free of the assert-system dependency; the
-// bit math here is value-identical to the folded sites.
-//
-// The storage member fixes the type's size so the container can be embedded by value
-// (BurnoutSkillzManager::mabDirtyFlags is a FastBitArray<8> @ +0x90, one u64 field).
+// SOURCE LINES: ARTIST bakes this header's assert lines into every inlined copy (file string
+// @0x820184D0): 235, 250/251, 282/284, 314/316, 374, 396, 415, 431, 442, 452, 463, 494 (629
+// sites in 115 functions). Each is its DecFIGS DWARF definition line + 3 + the assert's offset
+// inside the body, the offsets of the LegacySrc/DecFIGS bodies (the PS3 out-of-line
+// Iterator::operator++ @0x96CA74 passes 247/248/279/281/311/313 for ARTIST's 250/251/282/284/
+// 314/316). So every definition below sits on its DWARF line + 3. Notes on the evidence for
+// each body follow the namespace.
+
+
+
 namespace CgsContainers
 {
-template <u32 tuNumBits>
-class FastBitArray
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<int NUMBITS> class FastBitArray
 {
 public:
-    static const u32 KU_NUMBER_OF_BITS_IN_BIT_FIELD = 64;
-    static const u32 KU_NUMBER_OF_BIT_FIELDS =
-        (tuNumBits + KU_NUMBER_OF_BITS_IN_BIT_FIELD - 1) / KU_NUMBER_OF_BITS_IN_BIT_FIELD;
-    static const u32 KU_BITS_IN_BIT_FIELD_MASK = KU_NUMBER_OF_BITS_IN_BIT_FIELD - 1;
-    static const s32 KI_INVALID_BIT_INDEX = -1;
+    static const uint64_t KU_PADDEDBYTES = (NUMBITS + 7) / 8;
+    static const uint64_t KU_NUMBEROFBITFIELDS = (KU_PADDEDBYTES + (sizeof(uint64_t) - 1)) / sizeof(uint64_t);
+    static const uint64_t KU_NUMBEROFBITSINBITFIELD = sizeof( uint64_t ) * 8;
+    static const uint64_t KU_BITSINBITFIELDMASK = KU_NUMBEROFBITSINBITFIELD - 1;
 
-    // Zero every field (the X360 ctor / Construct path leaves a zeroed array).
-    void Construct()
-    {
-        for (u32 luField = 0; luField < KU_NUMBER_OF_BIT_FIELDS; ++luField)
-        {
-            maxBits[luField] = 0;
-        }
-    }
 
-    bool IsBitSet(u32 luIndex) const
-    {
-        const u32 luField = luIndex / KU_NUMBER_OF_BITS_IN_BIT_FIELD;
-        const u64 lu64Mask = (u64)1 << (luIndex & KU_BITS_IN_BIT_FIELD_MASK);
-        return (maxBits[luField] & lu64Mask) != 0;
-    }
-
-    void SetBit(u32 luIndex)
-    {
-        const u32 luField = luIndex / KU_NUMBER_OF_BITS_IN_BIT_FIELD;
-        const u64 lu64Mask = (u64)1 << (luIndex & KU_BITS_IN_BIT_FIELD_MASK);
-        maxBits[luField] |= lu64Mask;
-    }
-
-    void UnSetBit(u32 luIndex)
-    {
-        const u32 luField = luIndex / KU_NUMBER_OF_BITS_IN_BIT_FIELD;
-        const u64 lu64Mask = (u64)1 << (luIndex & KU_BITS_IN_BIT_FIELD_MASK);
-        maxBits[luField] &= ~lu64Mask;
-    }
-
-    // Set every bit in [0, tuNumBits) (the X360 OnEnterRoad shift-or loop that ORs each
-    // 1<<i into the single field, i in [0, 8)).
-    void SetAll()
-    {
-        for (u32 luIndex = 0; luIndex < tuNumBits; ++luIndex)
-        {
-            SetBit(luIndex);
-        }
-    }
-
-    void UnSetAll()
-    {
-        for (u32 luField = 0; luField < KU_NUMBER_OF_BIT_FIELDS; ++luField)
-        {
-            maxBits[luField] = 0;
-        }
-    }
-
-    // Index of the lowest set bit, or KI_INVALID_BIT_INDEX(-1) if none / out of range.
-    s32 GetFirstBitSet() const
-    {
-        for (u32 luIndex = 0; luIndex < tuNumBits; ++luIndex)
-        {
-            if (IsBitSet(luIndex))
-            {
-                return static_cast<s32>(luIndex);
-            }
-        }
-        return KI_INVALID_BIT_INDEX;
-    }
-
-    // Index of the lowest set bit strictly after liAfter, or -1 if none. Matches the
-    // X360 "scan forward from liAfter+1" iteration the manager inlines after handling a
-    // dirty player.
-    s32 GetNextBitSet(s32 liAfter) const
-    {
-        for (s32 liBit = liAfter + 1; static_cast<u32>(liBit) < tuNumBits; ++liBit)
-        {
-            if (IsBitSet(static_cast<u32>(liBit)))
-            {
-                return liBit;
-            }
-        }
-        return KI_INVALID_BIT_INDEX;
-    }
-
-    u32 GetCapacity() const
-    {
-        return tuNumBits;
-    }
-
-    // DWARF CgsFastBitArray.h:519 -- true when every bit field is zero (the X360 inlines
-    // it as a field scan, e.g. HudMessageAnalyzer::HandleDeveloperChallengeMessageDEBUG
-    // @0x824F9D88..A4 ldx/cmpldi over the fields).
-    bool IsZero() const
-    {
-        for (u32 luField = 0; luField < KU_NUMBER_OF_BIT_FIELDS; ++luField)
-        {
-            if (maxBits[luField] != 0)
-            {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    // SetInverse / SetAnd sit either side of SetOr in the DWARF method list
-    // (:534 / :545 / :556). TrafficEntityModule::CreateNewVehicleEntities @0x8272FA30
-    // opens with both over a 10-field local (X360: two 10-iteration ld/nor-or-and/std
-    // loops at 0x8272FA84..0x8272FAE4), and the DecFIGS scope tree for that function
-    // names them against its locals lVehicles_NoEntity / lVehicles_Alive_And_NoEntity.
-    //
-    // SetInverse TAIL BITS: both operate on whole 64-bit fields, so when tuNumBits is
-    // not a multiple of 64 SetInverse also sets the padding bits above tuNumBits. That
-    // is the console's behaviour. It is harmless there for the same reason it is here:
-    // every consumer either ANDs the result with a real set or iterates with Iterator,
-    // which stops at tuNumBits. Masking the tail would be a fix the binary does not have.
-
-    // DWARF CgsFastBitArray.h:534 -- this = ~a, field-wise.
-    void SetInverse(const FastBitArray<tuNumBits>& lrA)
-    {
-        for (u32 luField = 0; luField < KU_NUMBER_OF_BIT_FIELDS; ++luField)
-        {
-            maxBits[luField] = ~lrA.maxBits[luField];
-        }
-    }
-
-    // DWARF CgsFastBitArray.h:545 -- this = a & b, field-wise.
-    void SetAnd(const FastBitArray<tuNumBits>& lrA, const FastBitArray<tuNumBits>& lrB)
-    {
-        for (u32 luField = 0; luField < KU_NUMBER_OF_BIT_FIELDS; ++luField)
-        {
-            maxBits[luField] = lrA.maxBits[luField] & lrB.maxBits[luField];
-        }
-    }
-
-    // DWARF CgsFastBitArray.h:556 -- this = a | b, field-wise (X360 inline: ld/or/std per
-    // field, e.g. @0x824F9DDC..E8 for the 1-field <15> instantiation).
-    void SetOr(const FastBitArray<tuNumBits>& lrA, const FastBitArray<tuNumBits>& lrB)
-    {
-        for (u32 luField = 0; luField < KU_NUMBER_OF_BIT_FIELDS; ++luField)
-        {
-            maxBits[luField] = lrA.maxBits[luField] | lrB.maxBits[luField];
-        }
-    }
-
-    // DWARF CgsFastBitArray.h:60 -- the next-set-bit iterator (members h:91-93). The X360
-    // folds every instantiation inline; the <15> fold in
-    // HudMessageAnalyzer::TriggerDeveloperChallengeMessageDEBUG (@0x825204EC..0x82520660)
-    // pins the contract: construction positions at the lowest set bit, an empty array
-    // positions at tuNumBits (== End()), and GetIndex() returns the raw index either way.
-    // Its asserts (h:235, h:282, h:284, h:314, h:316, h:374, h:396, h:415, h:431) are
-    // caller-owned per this header's policy.
-    //
-    // ⭐ FLAG RETIRED 2026-08-29 (jam-valve wave). It read: "the single-field scan and the
-    // empty-array result are MEASURED; the multi-field advance (the miIndex/64 field walk) is
-    // INFERRED, since no multi-field instantiation of Begin() is inlined anywhere in the X360
-    // spine decoded so far." That instantiation has now been decoded:
-    // TrafficEntityModule::NukeTrafficJams @0x827353E8 folds the whole <600> (== ten field)
-    // Iterator inline, both the constructor (0x82735424..0x827357EC) and operator++
-    // (0x827362CC..0x82736508). Advance() below is that measurement, and it is a DIFFERENT
-    // SHAPE from the inferred one -- which the console's own baked assert LINE NUMBERS prove
-    // independently of the disassembly: the "Internal mask has wrapped" assert is emitted at
-    // CgsFastBitArray.h:282 from one loop and at :314 from a second, and "Index has gone out of
-    // range" at :284 and :316 respectively. One source loop cannot bake two line numbers, so
-    // the source has TWO loops -- a within-field scan and a next-non-empty-field walk -- not
-    // the single bit-at-a-time loop that was inferred here.
-    //
-    // The two forms are behaviourally identical (they select the same next set bit), so no
-    // committed consumer changes meaning; the measured one skips empty fields wholesale
-    // instead of stepping 64 dead bits at a time. One observable-in-principle difference,
-    // recorded rather than "fixed": on exhaustion the console sets miIndex = tuNumBits and
-    // LEAVES mxMask at its last value, where the inferred version also zeroed mxMask. Nothing
-    // reads the mask at End(), and zeroing it is behaviour the binary does not have.
     class Iterator
     {
     public:
-        // DWARF h:189 -- position at the first set bit of lpxSourceMasks.
-        explicit Iterator(const u64* lpxSourceMasks)
-            : miIndex(0)
-            , mpxSourceMasks(lpxSourceMasks)
-            , mxMask(1)
-        {
-            if ((mpxSourceMasks[0] & mxMask) == 0)
-            {
-                Advance();
-            }
-        }
 
-        // DWARF h:174 -- the default constructor, paired with ConstructOrphan below. It leaves
-        // the three members as the console leaves its stack record before ConstructOrphan fills
-        // them, so both are spelled here rather than one delegating to the other.
-        Iterator()
-            : miIndex(0)
-            , mpxSourceMasks(0)
-            , mxMask(1)
-        {
-        }
+        inline Iterator( );
 
-        // DWARF h:211 `void ConstructOrphan(int)`. ADDITIVE 2026-09-06 (traffic-demotion wave).
-        // An ORPHAN iterator has NO source array: it carries only an index and that index's
-        // mask, so it can be handed to the container's iterator-taking Set/UnSet/IsBitSet
-        // overloads (and to consumers like Vehicle::SetCollidable, which take an Iterator&
-        // purely to name a bit). The X360 builds exactly this record inline, on the stack, at
-        // TrafficEntityModule::GenerateCrashedVehicleEvents @0x82720674..0x82720698:
-        //     stw  r31, var_160(r1)          ; miIndex        = luVehicle
-        //     stw  r20, var_15C(r1)          ; mpxSourceMasks = 0   (r20 == 0)
-        //     clrldi r11, r31, 58            ; luVehicle & 63
-        //     sld  r11, r21, r11             ; r21 == 1
-        //     std  r11, var_158(r1)          ; mxMask         = 1 << (luVehicle & 63)
-        //     addi r5, r1, var_160           ; -> Vehicle::SetCollidable's iterator argument
-        // ⚠️ An orphan cannot be advanced or compared against End(): mpxSourceMasks is null and
-        // Advance() would dereference it. That is the console's own contract, not a host
-        // limitation -- the record it builds has a zero there too.
-        void ConstructOrphan(s32 liIndex)
-        {
-            miIndex        = liIndex;
-            mpxSourceMasks = 0;
-            mxMask         = (u64)1 << (static_cast<u32>(liIndex) & KU_BITS_IN_BIT_FIELD_MASK);
-        }
+        inline Iterator( const uint64_t* lpxSourceMasks );
 
-        s32 GetIndex() const { return miIndex; }                            // DWARF h:230
-        Iterator& operator++() { Advance(); return *this; }                 // DWARF h:245
-        bool operator==(s32 liIndex) const { return miIndex == liIndex; }   // DWARF h:340
-        bool operator!=(s32 liIndex) const { return miIndex != liIndex; }   // DWARF h:354
-        u64 GetMask() const { return mxMask; }                              // DWARF h:369
+        inline void
+        ConstructOrphan( int32_t liIndex );
+
+        inline int32_t
+        GetIndex() const;
+
+        inline Iterator&
+        operator++();
+
+        inline bool
+        operator==(int32_t liIndex) const;
+
+        inline bool
+        operator!=(int32_t liIndex) const;
+
+        inline uint64_t
+        GetMask() const;
+
+
+
+
 
     private:
-        // Advance to the next set bit, or to tuNumBits (== End()) when there is none.
-        // MEASURED off NukeTrafficJams' inlined <600> operator++ (X360 0x827362CC..0x82736508).
-        void Advance()
-        {
-            const u32 luField = static_cast<u32>(miIndex) / KU_NUMBER_OF_BITS_IN_BIT_FIELD;
-            const u64 lxWord  = mpxSourceMasks[luField];
+        int32_t miIndex;
+        const uint64_t* mpxSourceMasks;
+        uint64_t mxMask;
 
-            // 0x827362F4..0x82736300. "Is there anything left in THIS field above me?" The
-            // console spells it `(63 - bitPosition) > cntlzd(word)` -- cntlzd counts the zeros
-            // above the field's highest set bit, so that compares "highest set bit" against
-            // "where I am". De-optimised to the exact equivalent: shift my own position out
-            // and see if anything survives. (Written as two shifts, not `>> (luBit + 1)`,
-            // because luBit can be 63 and a 64-bit shift by 64 is undefined in C++.)
-            const u32 luBit = static_cast<u32>(miIndex)
-                            - luField * KU_NUMBER_OF_BITS_IN_BIT_FIELD;
-
-            if (((lxWord >> luBit) >> 1) != 0)
-            {
-                // 0x82736308..0x82736374. Scan within the current field. Caller-owned asserts:
-                // h:282 on a wrapped mask, h:284 on an out-of-range index.
-                do
-                {
-                    mxMask <<= 1;
-                    ++miIndex;
-                }
-                while ((mxMask & lxWord) == 0);
-                return;
-            }
-
-            // 0x827363DC..0x8273640C. This field is done: walk to the next non-empty one,
-            // skipping empty fields 64 bits at a time.
-            mxMask  = 1;
-            miIndex = static_cast<s32>((luField + 1) * KU_NUMBER_OF_BITS_IN_BIT_FIELD);
-
-            for (u32 luNextField = luField + 1;
-                 luNextField < KU_NUMBER_OF_BIT_FIELDS;
-                 ++luNextField)
-            {
-                const u64 lxNextWord = mpxSourceMasks[luNextField];
-
-                if (lxNextWord != 0)
-                {
-                    // 0x8273642C..0x827364A8. Same within-field scan; asserts h:314 / h:316.
-                    while ((mxMask & lxNextWord) == 0)
-                    {
-                        mxMask <<= 1;
-                        ++miIndex;
-                    }
-                    return;
-                }
-
-                miIndex += static_cast<s32>(KU_NUMBER_OF_BITS_IN_BIT_FIELD);
-            }
-
-            // Exhausted. The console parks at tuNumBits (`li r10, 0x258` in the constructor's
-            // twin of this walk, 0x8273553C) -- which is what End() compares against. It does
-            // NOT clear mxMask.
-            miIndex = static_cast<s32>(tuNumBits);
-        }
-
-        s32        miIndex;          // DWARF h:91
-        const u64* mpxSourceMasks;   // DWARF h:92
-        u64        mxMask;           // DWARF h:93
     };
 
-    // DWARF h:134/h:138.
-    Iterator Begin() const { return Iterator(maxBits); }
-    s32 End() const { return static_cast<s32>(tuNumBits); }
+    inline void Construct( void );
+    inline void Destruct( void );
+
+    inline const bool IsBitSet( const int32_t liIndex ) const;
+    inline const bool IsBitSet( const Iterator& lrIterator ) const;
+
+    inline void SetBit( const int32_t liIndex );
+    inline void SetBit( const Iterator& lrIterator );
+
+    inline void UnSetBit( const int32_t liIndex );
+    inline void UnSetBit( const Iterator& lrIterator );
+
+    inline void SetBitTo( const int32_t liIndex, bool lValue );
+
+    inline void SetAll( void );
+    inline void UnSetAll( void );
+
+    inline bool IsZero( void ) const;
+
+    inline void SetInverse( const FastBitArray<NUMBITS>& lrSource );
+    inline void SetAnd( const FastBitArray<NUMBITS>& lrA, const FastBitArray<NUMBITS>& lrB );
+    inline void SetOr( const FastBitArray<NUMBITS>& lrA, const FastBitArray<NUMBITS>& lrB );
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    inline Iterator
+    Begin() const
+    { return Iterator(maxBits); };
+
+    inline int32_t
+    End() const
+    { return NUMBITS; };
+
+    // Not in the DWARF: scan helpers the tree's callers still use where ARTIST inlines the
+    // Iterator (CgsReliableMessageManager, ChallengeManager, ...). Defined after SetOr, so
+    // they move no original line; they keep the raw bit test (no assert) they had.
+    static const int32_t KI_INVALID_BIT_INDEX = -1;
+    inline int32_t GetFirstBitSet() const;
+    inline int32_t GetNextBitSet( int32_t liAfter ) const;
+    uint32_t GetCapacity() const { return static_cast<uint32_t>(NUMBITS); }
+
+
+
+
+
 
 private:
-    u64 maxBits[KU_NUMBER_OF_BIT_FIELDS];
+    uint64_t maxBits[KU_NUMBEROFBITFIELDS];
 };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<int NUMBITS>
+inline FastBitArray<NUMBITS>::Iterator::Iterator()
+{
+    mpxSourceMasks = 0;
+    miIndex = 0;
+    mxMask = 0;
 }
+
+
+
+
+
+
+
+
+template<int NUMBITS>
+inline FastBitArray<NUMBITS>::Iterator::Iterator(const uint64_t* lpxSourceMasks)
+{
+    mpxSourceMasks = lpxSourceMasks;
+    miIndex = 0;
+    mxMask = 0x1ULL;
+
+    if( (mpxSourceMasks[0] & mxMask) == 0 )
+    {
+        ++(*this);
+    }
+}
+
+
+
+
+
+
+
+
+
+template<int NUMBITS>
+inline void
+FastBitArray<NUMBITS>::Iterator::ConstructOrphan(int32_t liIndex)
+{
+    miIndex = liIndex;
+    mpxSourceMasks = 0;
+    mxMask = 0x1ULL << (static_cast<uint64_t>(liIndex) & KU_BITSINBITFIELDMASK);
+}
+
+
+
+
+
+
+
+
+
+
+
+template<int NUMBITS>
+inline int32_t
+FastBitArray<NUMBITS>::Iterator::GetIndex() const
+{
+    CGS_ASSERT_STREAM((miIndex >= 0) && (miIndex < NUMBITS), "Attempt to get index when out of range\n");
+    return miIndex;
+}
+
+
+
+
+
+
+
+
+template<int NUMBITS>
+inline typename FastBitArray<NUMBITS>::Iterator&
+FastBitArray<NUMBITS>::Iterator::operator++()
+{
+    CGS_ASSERT_STREAM((miIndex >= 0) && (miIndex < NUMBITS), "Attempt to get index when out of range\n");
+    CGS_ASSERT_STREAM(mpxSourceMasks, "No source mask\n");
+
+    uint64_t luTempSourceMask;
+    uint64_t luStartMaskIndex;
+    uint64_t luStartMaskMod;
+    uint64_t luMaskIndex;
+    const uint64_t* lpxSourceMasks;
+
+    int32_t liCurrIndex;
+    uint64_t lxCurrMask;
+
+
+    luStartMaskIndex = static_cast<uint64_t>(miIndex) >> 0x6ULL;
+    luStartMaskMod = static_cast<uint64_t>(miIndex) - (luStartMaskIndex << 0x6ULL);
+
+
+    lpxSourceMasks = mpxSourceMasks;
+    luTempSourceMask = lpxSourceMasks[luStartMaskIndex];
+
+
+    liCurrIndex = miIndex;
+    lxCurrMask = mxMask;
+
+
+    if( static_cast<int32_t>(63ULL-luStartMaskMod) > _CountLeadingZeros64(luTempSourceMask) )
+    {
+
+        do
+        {
+            lxCurrMask = lxCurrMask << 0x1ULL;
+            liCurrIndex = liCurrIndex + 0x1L;
+            CGS_ASSERT_STREAM(lxCurrMask != 0, "Internal mask has wrapped - expected to find valid bit\n");
+        } while( (luTempSourceMask & lxCurrMask) == 0 );
+        CGS_ASSERT_STREAM(miIndex < NUMBITS, "Index has gone out of range\n");
+
+
+        miIndex = liCurrIndex;
+        mxMask = lxCurrMask;
+
+
+        return *this;
+    }
+    else
+    {
+
+        luStartMaskIndex++;
+        lxCurrMask = 0x1ULL;
+        liCurrIndex = static_cast<int32_t>(luStartMaskIndex) << 0x6ULL;
+    }
+
+
+    for(luMaskIndex = luStartMaskIndex; luMaskIndex < FastBitArray<NUMBITS>::KU_NUMBEROFBITFIELDS; luMaskIndex++, liCurrIndex+=64L)
+    {
+        if(lpxSourceMasks[luMaskIndex] != 0)
+        {
+
+            luTempSourceMask = lpxSourceMasks[luMaskIndex];
+
+
+            while( (luTempSourceMask & lxCurrMask) == 0 )
+            {
+                lxCurrMask = lxCurrMask << 0x1ULL;
+                liCurrIndex++;
+                CGS_ASSERT_STREAM(lxCurrMask != 0, "Internal mask has wrapped - expected to find valid bit\n");
+            }
+            CGS_ASSERT_STREAM(miIndex < NUMBITS, "Index has gone out of range\n");
+
+
+            miIndex = liCurrIndex;
+            mxMask = lxCurrMask;
+
+
+            return *this;
+        }
+    }
+
+
+    miIndex = NUMBITS;
+
+
+    return *this;
+}
+
+
+
+
+
+
+
+
+template<int NUMBITS>
+inline bool
+FastBitArray<NUMBITS>::Iterator::operator==(int32_t liIndex) const
+{
+    return (miIndex == liIndex);
+}
+
+
+
+
+
+
+
+
+template<int NUMBITS>
+inline bool
+FastBitArray<NUMBITS>::Iterator::operator!=(int32_t liIndex) const
+{
+    return (miIndex != liIndex);
+}
+
+
+
+
+
+
+
+
+
+template<int NUMBITS>
+inline uint64_t
+FastBitArray<NUMBITS>::Iterator::GetMask() const
+{
+    CGS_ASSERT_STREAM((miIndex >= 0) && (miIndex < NUMBITS), "Attempt to get mask when out of range\n");
+    return mxMask;
+}
+
+
+template<int NUMBITS>
+inline void
+FastBitArray<NUMBITS>::Construct( void )
+{
+    UnSetAll();
+}
+
+template<int NUMBITS>
+inline void
+FastBitArray<NUMBITS>::Destruct( void )
+{
+}
+
+template<int NUMBITS>
+inline const bool
+FastBitArray<NUMBITS>::IsBitSet( const int32_t liIndex ) const
+{
+    CGS_ASSERT_STREAM(liIndex < NUMBITS, "Index " << liIndex << " is out of range (max bits: " << NUMBITS << "\n");
+
+    int32_t liMaskIndex = liIndex >> 6;
+    int32_t liBitIndex = liIndex - (liMaskIndex << 6);
+
+    if( (maxBits[liMaskIndex] != 0) && ( (maxBits[liMaskIndex] & (0x1ULL << static_cast<uint64_t>(liBitIndex))) != 0 ) )
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+template<int NUMBITS>
+inline const bool
+FastBitArray<NUMBITS>::IsBitSet( const Iterator& lrIterator ) const
+{
+    CGS_ASSERT_STREAM(lrIterator.GetIndex() < NUMBITS, "Index " << lrIterator.GetIndex() << " is out of range (max bits: " << NUMBITS << "\n");
+    int32_t liMaskIndex = lrIterator.GetIndex() >> 6;
+    if( (maxBits[liMaskIndex] & lrIterator.GetMask()) != 0 )
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+template<int NUMBITS>
+inline void
+FastBitArray<NUMBITS>::SetBit( const int32_t liIndex )
+{
+    CGS_ASSERT_STREAM(liIndex < NUMBITS, "Index " << liIndex << " is out of range (max bits: " << NUMBITS << "\n");
+
+    int32_t liMaskIndex = liIndex >> 6;
+    int32_t liBitIndex = liIndex - (liMaskIndex << 6);
+    maxBits[liMaskIndex] = maxBits[liMaskIndex] | (0x1ULL << static_cast<uint64_t>(liBitIndex));
+}
+
+template<int NUMBITS>
+inline void
+FastBitArray<NUMBITS>::SetBit( const Iterator& lrIterator )
+{
+    CGS_ASSERT_STREAM(lrIterator.GetIndex() < NUMBITS, "Index " << lrIterator.GetIndex() << " is out of range (max bits: " << NUMBITS << "\n");
+    int32_t liMaskIndex = lrIterator.GetIndex() >> 6;
+    maxBits[liMaskIndex] = maxBits[liMaskIndex] | lrIterator.GetMask();
+}
+
+
+template<int NUMBITS>
+inline void
+FastBitArray<NUMBITS>::UnSetBit( const int32_t liIndex )
+{
+    CGS_ASSERT_STREAM(liIndex < NUMBITS, "Index " << liIndex << " is out of range (max bits: " << NUMBITS << "\n");
+
+    int32_t liMaskIndex = liIndex >> 6;
+    int32_t liBitIndex = liIndex - (liMaskIndex << 6);
+    maxBits[liMaskIndex] = maxBits[liMaskIndex] & ~(0x1ULL << static_cast<uint64_t>(liBitIndex));
+}
+
+template<int NUMBITS>
+inline void
+FastBitArray<NUMBITS>::UnSetBit( const Iterator& lrIterator )
+{
+    CGS_ASSERT_STREAM(lrIterator.GetIndex() < NUMBITS, "Index " << lrIterator.GetIndex() << " is out of range (max bits: " << NUMBITS << "\n");
+    int32_t liMaskIndex = lrIterator.GetIndex() >> 6;
+    maxBits[liMaskIndex] = maxBits[liMaskIndex] & ~lrIterator.GetMask();
+}
+
+
+template<int NUMBITS>
+inline void
+FastBitArray<NUMBITS>::SetBitTo( const int32_t liIndex, bool lValue )
+{
+    if(lValue)
+    {
+        SetBit( liIndex);
+    }
+    else
+    {
+        UnSetBit(liIndex);
+    }
+}
+
+template<int NUMBITS>
+inline void
+FastBitArray<NUMBITS>::SetAll( void )
+{
+    int32_t liIndex;
+    int32_t liMaskCount = NUMBITS >> 6;
+    int32_t liBitCount = NUMBITS - (liMaskCount << 6);
+
+
+    for(liIndex = 0; liIndex < liMaskCount; liIndex++)
+    {
+        CGS_ASSERT_STREAM(static_cast<uint64_t>(liIndex) < KU_NUMBEROFBITFIELDS, "Bit field index out of range\n");
+        maxBits[liIndex] = static_cast<uint64_t>(-1);
+    }
+
+
+    if(liBitCount > 0)
+    {
+        CGS_ASSERT_STREAM(liMaskCount < KU_NUMBEROFBITFIELDS, "For none-64 bit multiple, mask count at this stage should be less than the number of bit fields\n");
+        for(liIndex = 0; liIndex < liBitCount; liIndex++)
+        {
+            maxBits[liMaskCount] |= ( 0x1ULL << static_cast<uint64_t>(liIndex) );
+        }
+    }
+}
+
+
+template<int NUMBITS>
+inline void
+FastBitArray<NUMBITS>::UnSetAll( void )
+{
+    for(uint64_t luIndex = 0; luIndex < KU_NUMBEROFBITFIELDS; luIndex++)
+    {
+        maxBits[luIndex] = 0;
+    }
+}
+
+template<int NUMBITS>
+inline bool
+FastBitArray<NUMBITS>::IsZero( void ) const
+{
+    for(uint64_t luIndex = 0; luIndex < KU_NUMBEROFBITFIELDS; luIndex++)
+    {
+        if(maxBits[luIndex] != 0)
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+
+template<int NUMBITS>
+inline void
+FastBitArray<NUMBITS>::SetInverse( const FastBitArray<NUMBITS>& lrSource )
+{
+    for(uint64_t luIndex = 0; luIndex < KU_NUMBEROFBITFIELDS; luIndex++)
+    {
+        maxBits[luIndex] = ~lrSource.maxBits[luIndex];
+    }
+}
+
+
+template<int NUMBITS>
+inline void
+FastBitArray<NUMBITS>::SetAnd( const FastBitArray<NUMBITS>& lrA, const FastBitArray<NUMBITS>& lrB )
+{
+    for(uint64_t luIndex = 0; luIndex < KU_NUMBEROFBITFIELDS; luIndex++)
+    {
+        maxBits[luIndex] = lrA.maxBits[luIndex] & lrB.maxBits[luIndex];
+    }
+}
+
+
+template<int NUMBITS>
+inline void
+FastBitArray<NUMBITS>::SetOr( const FastBitArray<NUMBITS>& lrA, const FastBitArray<NUMBITS>& lrB )
+{
+    for(uint64_t luIndex = 0; luIndex < KU_NUMBEROFBITFIELDS; luIndex++)
+    {
+        maxBits[luIndex] = lrA.maxBits[luIndex] | lrB.maxBits[luIndex];
+    }
+}
+
+// ===== Not in the DWARF: the tree's scan helpers (declared after End above) =====
+// Lowest set bit, or KI_INVALID_BIT_INDEX. A raw field test, no assert: these replace an
+// inlined Iterator walk in their callers, which keep their own record of that.
+template<int NUMBITS>
+inline int32_t
+FastBitArray<NUMBITS>::GetFirstBitSet() const
+{
+    for (uint32_t luIndex = 0; luIndex < static_cast<uint32_t>(NUMBITS); ++luIndex)
+    {
+        if ((maxBits[luIndex / 64] & (static_cast<uint64_t>(1) << (luIndex & 63))) != 0)
+        {
+            return static_cast<int32_t>(luIndex);
+        }
+    }
+    return KI_INVALID_BIT_INDEX;
+}
+
+// Lowest set bit strictly after liAfter, or KI_INVALID_BIT_INDEX.
+template<int NUMBITS>
+inline int32_t
+FastBitArray<NUMBITS>::GetNextBitSet(int32_t liAfter) const
+{
+    for (int32_t liBit = liAfter + 1; static_cast<uint32_t>(liBit) < static_cast<uint32_t>(NUMBITS); ++liBit)
+    {
+        const uint32_t luIndex = static_cast<uint32_t>(liBit);
+        if ((maxBits[luIndex / 64] & (static_cast<uint64_t>(1) << (luIndex & 63))) != 0)
+        {
+            return liBit;
+        }
+    }
+    return KI_INVALID_BIT_INDEX;
+}
+
+} // namespace CgsContainers
+
+// EVIDENCE NOTES (kept below the original lines).
+// - Iterator::operator++ is the LegacySrc body line for line (its asserts at +2/+3/+34/+36/
+//   +66/+68 are ARTIST's 250/251/282/284/314/316), with two changes ARTIST and DecFIGS share:
+//   the source masks are const (DWARF h:92) and the field walk advances liCurrIndex, not
+//   miIndex (ARTIST ChallengeManager::CountCompletedChallenges @0x8233E908 `addi r21,r21,0x40`
+//   on the value later stored to miIndex, while the 316 assert @0x8233E9A4 still compares the
+//   unchanged member; DecFIGS operator++ @0x96CA74 `v13 += 64`). The PS3 __builtin_clzll is
+//   the XDK's _CountLeadingZeros64 (unsigned result: ARTIST compares with cmplw @0x8233E788).
+// - The checks: GetIndex 235 and operator++ 250 "Attempt to get index when out of range\n"
+//   (@0x82023FE0, both bounds: e.g. 0x8273F318/0x8273F320), 251 "No source mask\n"
+//   (@0x82024060), 282/314 "Internal mask has wrapped - expected to find valid bit\n"
+//   (@0x82024028), 284/316 "Index has gone out of range\n" (@0x82024008), GetMask 374
+//   "Attempt to get mask when out of range\n" (@0x8202D640), SetAll 494 "Bit field index out
+//   of range\n" (@0x82072998, OptionsDataProfile::Construct @0x824FF650). IsBitSet 396,
+//   SetBit 431, UnSetBit 452 stream "Index " << i << " is out of range (max bits: " <<
+//   NUMBITS << "\n" (@0x82018530, @0x82018510, @0x82001CC4; both ints through
+//   operator<<(int32_t) 0x821F0E50: BurnoutSkillzManager::SendUpdatePlayerSkillsEvent
+//   @0x82322A64/0x82322A8C), as the iterator overloads do at 415/442/463, reading the index
+//   through GetIndex() each time (Vehicle::SetCollidable @0x8271BB30: three inlined 235
+//   checks around the 415 assert, then GetMask's 374).
+// - The loops count fields in uint64_t (ARTIST cmpldi, e.g. IsZero @0x824F9DA0, SetInverse/
+//   SetAnd @0x8272FAAC/0x8272FAE4); ConstructOrphan masks with KU_BITSINBITFIELDMASK
+//   (TrafficEntityModule::GenerateCrashedVehicleEvents @0x82720674 `clrldi r11,r31,58`).
+// - Iterator() follows LegacySrc (all three members zeroed); no ARTIST site observes it.
