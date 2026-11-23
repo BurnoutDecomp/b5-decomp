@@ -20,7 +20,10 @@
 namespace rw
 {
 
-// FNV-1a 32-bit string hash over a NUL-terminated byte string. The X360 body
+// The shared 32-bit FNV offset basis loaded by ARTIST callers at 0x82180F38.
+extern const uint32_t KU_FNV_OFFSET_BASIS;
+
+// FNV-1 32-bit string hash over a NUL-terminated byte string. The X360 body
 // @ 0x82BBC458 seeds with the caller-supplied accumulator and, for each byte,
 // folds: hash = (hash * 0x01000193) ^ byte. The 0x01000193 multiplier is the
 // 32-bit FNV prime (mullw r4,r4,0x1000193 then xor with the byte). Returns the

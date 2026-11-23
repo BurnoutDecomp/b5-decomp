@@ -16,8 +16,10 @@
 namespace rw
 {
 
+const uint32_t KU_FNV_OFFSET_BASIS = 0x811C9DC5u;
+
 // --- rw::RwHash32String @ 0x82BBC458 ---------------------------------------
-// FNV-1a 32-bit over a NUL-terminated string. The X360 loop:
+// FNV-1 32-bit over a NUL-terminated string. The X360 loop:
 //     loc: lbz r10,0(r11); if r10==0 break;            ; byte = *p; stop at NUL
 //          r11++; r9 = 0x01000193; r9 = r4*r9; r4 = r9 ^ r10
 // i.e. for each non-zero byte: acc = (acc * 0x01000193) ^ byte. 0x01000193 is

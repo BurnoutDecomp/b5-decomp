@@ -23,21 +23,17 @@ namespace core
 namespace atom
 {
 
-// FNV-1a 32-bit offset basis, the seed the X360 loads from dword_82180F38 and
-// passes to RwHash32String (-2128831035 == 0x811C9DC5).
-static const uint32_t KU_FNV_OFFSET_BASIS = 0x811C9DC5u;
-
 // ---------------------------------------------------------------------------
 // HashIDArrayIndex @ 0x82C478A8
-//   v3 = RwHash32String(key, 0x811C9DC5)        ; FNV-1a over the name
+//   v3 = RwHash32String(key, 0x811C9DC5)        ; FNV-1 over the name
 //   v4 = mpData->muHashSlotCount  (lhz +0x10)
 //   return (v3 % v4)                              ; divwu, result masked to 16 bits
 // ---------------------------------------------------------------------------
-uint32_t StaticAtomTable::HashIDArrayIndex(const char* lpcKey) const
+uint16_t StaticAtomTable::HashIDArrayIndex(const char* lpcKey) const
 {
     const uint32_t luHash = rw::RwHash32String(lpcKey, KU_FNV_OFFSET_BASIS);
     const uint32_t luSlotCount = mpData->muHashSlotCount;
-    return luHash % luSlotCount;
+    return static_cast<uint16_t>(luHash % luSlotCount);
 }
 
 // ---------------------------------------------------------------------------

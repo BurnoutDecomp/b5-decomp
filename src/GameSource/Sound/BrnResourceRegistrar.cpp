@@ -1,4 +1,5 @@
 #include "GameSource/Sound/BrnResourceRegistrar.h"
+#include "rw/RwHash32String.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
 
@@ -21,9 +22,6 @@ namespace Logic
     static const char* const KAC_RR_FILE =
         "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/BrnResourceRegistrar.cpp";
 
-    // The FNV offset basis the registrar seeds every name hash with (0x811C9DC5 == -2128831035).
-    static const u32 KU_FNV_OFFSET_BASIS = 0x811C9DC5u;
-
     // =========================================================================
     // RequestedResource
     // =========================================================================
@@ -37,7 +35,7 @@ namespace Logic
         // muBundleNameHash (+0x44) <- RwHash32String(src bundle name, basis); 0 when the name is empty.
         if (lrSource.macBundleName[0] != 0)
         {
-            muBundleNameHash = rw::RwHash32String(lrSource.macBundleName, KU_FNV_OFFSET_BASIS);
+            muBundleNameHash = rw::RwHash32String(lrSource.macBundleName, rw::KU_FNV_OFFSET_BASIS);
         }
         else
         {
@@ -189,7 +187,7 @@ namespace Logic
         {
             mResourceId.SetHash(static_cast<u64>(static_cast<u32>(
                 CgsResource::ID::HashString(reinterpret_cast<const u8*>(lpcResourceName)))));
-            muResourceNameHash = rw::RwHash32String(lpcResourceName, KU_FNV_OFFSET_BASIS);
+            muResourceNameHash = rw::RwHash32String(lpcResourceName, rw::KU_FNV_OFFSET_BASIS);
         }
         else
         {
@@ -510,11 +508,11 @@ namespace Logic
     CgsResource::ResourceHandle* ResourceRegistrar::GetResource(const char* lpcBundleName,
                                                                 const char* lpcResourceName)
     {
-        const u32 luResourceHash = rw::RwHash32String(lpcResourceName, KU_FNV_OFFSET_BASIS);
+        const u32 luResourceHash = rw::RwHash32String(lpcResourceName, rw::KU_FNV_OFFSET_BASIS);
         u32 luBundleHash = 0;
         if (lpcBundleName)
         {
-            luBundleHash = rw::RwHash32String(lpcBundleName, KU_FNV_OFFSET_BASIS);
+            luBundleHash = rw::RwHash32String(lpcBundleName, rw::KU_FNV_OFFSET_BASIS);
         }
 
         // Walk the loading requested LIVE list. The X360 reads the NODE (Head); the RequestedResource
@@ -587,7 +585,7 @@ namespace Logic
                                                   const char* lpcResourceName)
     {
         const u32 lu32NameHash =
-            rw::RwHash32String(lpcResourceName, KU_FNV_OFFSET_BASIS);
+            rw::RwHash32String(lpcResourceName, rw::KU_FNV_OFFSET_BASIS);
 
         for (QueuedNode* lpQueuedIterator = mLoadingQueuedResourceList.GetHead();
              lpQueuedIterator;
@@ -655,7 +653,7 @@ namespace Logic
             u32 luBundleHash = 0;
             if (lpQueued->mData.macBundleName[0] != 0)
             {
-                luBundleHash = rw::RwHash32String(lpQueued->mData.macBundleName, KU_FNV_OFFSET_BASIS);
+                luBundleHash = rw::RwHash32String(lpQueued->mData.macBundleName, rw::KU_FNV_OFFSET_BASIS);
             }
             const s32 liResType = static_cast<s32>(lpQueued->mData.muResourceNameHash); // data +0x128
 
@@ -887,7 +885,7 @@ namespace Logic
         QueuedResource lRequest;
         lRequest = lrRequest;
         const u32 luBundleHash = lRequest.macBundleName[0]
-            ? rw::RwHash32String(lRequest.macBundleName, KU_FNV_OFFSET_BASIS)
+            ? rw::RwHash32String(lRequest.macBundleName, rw::KU_FNV_OFFSET_BASIS)
             : 0;
 
         for (QueuedNode* lpNode = mLoadingQueuedResourceList.GetHead();
@@ -895,7 +893,7 @@ namespace Logic
              lpNode = static_cast<QueuedNode*>(lpNode->GetNextNode()))
         {
             const u32 luExistingBundleHash = lpNode->mData.macBundleName[0]
-                ? rw::RwHash32String(lpNode->mData.macBundleName, KU_FNV_OFFSET_BASIS)
+                ? rw::RwHash32String(lpNode->mData.macBundleName, rw::KU_FNV_OFFSET_BASIS)
                 : 0;
             if (luBundleHash == luExistingBundleHash &&
                 lRequest.muResourceNameHash == lpNode->mData.muResourceNameHash)

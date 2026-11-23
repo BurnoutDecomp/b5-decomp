@@ -36,7 +36,7 @@
 //     +0x14  uint16_t  muNextAvailableID   ; auto-id Register probe start
 //
 // All four members are integer/byte code (lwz/lhz/lbz/sth/stb/stw + divwu); no
-// VMX. The hash is rw::RwHash32String seeded with the 32-bit FNV-1a offset basis
+// VMX. The hash is rw::RwHash32String seeded with the 32-bit FNV-1 offset basis
 // (0x811C9DC5), reduced modulo muHashSlotCount to a starting slot.
 // ===========================================================================
 
@@ -65,12 +65,6 @@ public:
 
     // Empty-slot sentinel stored in mpHashSlots (the X360 0xFFFF compare).
     static const uint16_t KU_EMPTY_SLOT = 0xFFFFu;
-
-    // Reduce a string key to its starting hash slot: FNV-1a(key) % slotCount.
-    // (X360 @ 0x82C478A8.) The unsigned modulo matches the X360 divwu; the
-    // `__twllei(slotCount, 0)` trap-if-zero is a divide-by-zero guard and is not
-    // reproduced (it is undefined behaviour to call with an unsized table).
-    uint32_t HashIDArrayIndex(const char* lpcKey) const;
 
     // Intern a key under the explicit atom id `luAtomId`: linear-probe from the
     // hash slot; if the key is already present return its (matching) string ptr,
@@ -105,6 +99,9 @@ public:
     uint16_t At(const char* lpcKey) const;
 
 private:
+    // @ 0x82C478A8. The modulo result is a 16-bit slot index, as in DecFIGS.
+    uint16_t HashIDArrayIndex(const char* lpcKey) const;
+
     Data* mpData;  // +0
 };
 
