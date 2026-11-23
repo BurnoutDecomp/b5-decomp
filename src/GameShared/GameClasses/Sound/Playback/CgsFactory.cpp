@@ -33,11 +33,11 @@ Factory::Factory(Name aName, Environment& arEnvironment)
 }
 
 // @ 0x826AD3C8. The scalar-deleting thunk reinstalls the Object base vtable, asserts
-// a zero refcount, then frees on (flag & 1). The source ~Factory() body is the one
-// assert; MSVC re-synthesises the deleting thunk from this out-of-line virtual dtor.
+// a zero refcount (Object's own destructor, CgsObject.h:104), then frees on
+// (flag & 1). ~Factory itself has nothing to tear down: the only assert in the thunk
+// is the inlined base one, at the base's own header line.
 Factory::~Factory()
 {
-    CGS_ASSERT(mu32RefCount == 0, "0 == mu32RefCount");
 }
 
 // @ 0x826AD4D0. The Hex-Rays view shows an "arg-less bool virtual at vtable slot 3";
@@ -54,10 +54,10 @@ u32 Factory::CreateContent(const ContentSpec& akrSpec, Handle<Content>& arHandle
         return static_cast<u32>(-1);
     }
 
-    // The out-handle must own the produced Content (CgsHandle.h:305).
-    CGS_ASSERT(arHandleOut.GetObject() != 0, "mpObject");
-
-    u32 luResult = Environment::AddContent(mEnvironment, arHandleOut.GetObject());
+    // DWARF CgsEnvironment.h: AddContent(Content&) is handed *arHandleOut, so Handle's
+    // operator* asserts the out-handle owns the produced Content (CgsHandle.h:305, ARTIST
+    // 0x826AD508..0x826AD534). The tree's static AddContent takes that Content by address.
+    u32 luResult = Environment::AddContent(mEnvironment, &*arHandleOut);
     if (luResult == static_cast<u32>(-1))
     {
         // AddContent rejected the content: clear the out-handle (X360 assigns a

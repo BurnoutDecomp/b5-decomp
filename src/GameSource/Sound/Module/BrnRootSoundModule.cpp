@@ -1,7 +1,7 @@
 #include "GameSource/Sound/Module/BrnRootSoundModule.h"
 #include "GameShared/GameClasses/System/CgsHardwareSku.h"
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"              // CGS_ASSERT + ARTIST locations
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor (START stage)
 #include "GameShared/GameClasses/Sound/CgsTestBedAllocator.h"            // CgsSound::TestBed::Allocator (the four carve globals)
 #include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h"         // CgsSound::Playback::K_DefaultSendName
@@ -692,8 +692,14 @@ namespace Module
     void RootSoundModule::PreUpdate(CgsModule::IOBufferStack* lpOutputBufferStack,
                                     Io::RootPreUpdateOutputBuffer* lpRootPreUpdateOutput)
     {
-        CGS_ASSERT(lpOutputBufferStack != 0, "0 != lpOutputBufferStack");
-        CGS_ASSERT(lpRootPreUpdateOutput != 0, "0 != lpRootPreUpdateOutput");
+        CGS_ASSERT(lpOutputBufferStack != 0,
+            CgsDev::Assert::MessageAt("0 != lpOutputBufferStack",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../Sound/Module/BrnRootSoundModule.cpp", 829 /* ARTIST 0x826EB958 */));
+        CGS_ASSERT(lpRootPreUpdateOutput != 0,
+            CgsDev::Assert::MessageAt("0 != lpRootPreUpdateOutput",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+                "../Sound/Module/BrnRootSoundModule.cpp", 830 /* ARTIST 0x826EB97C */));
 
         Io::LogicPreUpdateOutputBuffer* lpLogicPreUpdateOutput = 0;
         lpOutputBufferStack->CreateIOBuffer<Io::LogicPreUpdateOutputBuffer>(

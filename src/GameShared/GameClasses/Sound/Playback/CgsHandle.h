@@ -3,7 +3,7 @@
 
 #include "types.hpp"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"  // Object::Acquire / Release
 
 // =============================================================================
@@ -104,9 +104,11 @@ public:
 
     // CgsHandle.h / 294. Member-access: assert "mpObject" (the non-const
     // form fires at CgsHandle.h) and return the pointer.
+    // DWARF CgsHandle.h:285; ARTIST asserts at line 287 (e.g. 0x826C4DEC, file 0x820AE018).
     T* operator->()
     {
-        CGS_ASSERT(mpObject, "mpObject");
+        CGS_ASSERT(mpObject, CgsDev::Assert::MessageAt("mpObject",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsHandle.h", 287));
         return mpObject;
     }
     const T* operator->() const
@@ -117,9 +119,11 @@ public:
 
     // CgsHandle.h. Dereference: assert "mpObject" (fires CgsHandle.h)
     // and return *mpObject.
+    // DWARF CgsHandle.h:303; ARTIST asserts at line 305 (e.g. Factory::CreateContent 0x826AD51C).
     T& operator*()
     {
-        CGS_ASSERT(mpObject, "mpObject");
+        CGS_ASSERT(mpObject, CgsDev::Assert::MessageAt("mpObject",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsHandle.h", 305));
         return *mpObject;
     }
 

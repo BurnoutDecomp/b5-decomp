@@ -38,6 +38,10 @@
 #include "rw/audio/core/plugins/SndPlayer1.h"
 #include "rw/audio/core/Voice.h"
 
+// The audio-core System singleton (PS3 rw::audio::core::System::spInstance), declared in each
+// user as the vendor tree does (System.cpp defines it).
+extern "C" rw::audio::core::System* off_83271928;
+
 #include <algorithm>
 #include <cstring>
 #include <new>
@@ -119,9 +123,12 @@ namespace Playback
     AemsRWSampleFactory::AemsRWSampleFactory(Name aName, Environment& arEnvironment)
         : Factory(aName, arEnvironment)
     {
-        rw::audio::core::System* lpSystem = GetDefaultRwacSystem();  // off_83271928, loaded directly
+        // ARTIST 0x826C2708..0x826C2710: the System singleton is read directly and locked with
+        // System::Lock; System::Unlock follows the decoder registrations (0x826C27FC). No
+        // RwacLock guard and no GetDefaultRwacSystem call appear in this body.
+        rw::audio::core::System* lpSystem = off_83271928;
+        rw::audio::core::System::Lock(lpSystem);
         {
-            RwacLock lLock(lpSystem);   // console System::Lock before the registry work
 
             mpPlugInRegistry = rw::audio::core::System::GetPlugInRegistry(lpSystem);
 
@@ -177,7 +184,8 @@ namespace Playback
                 lpDecoderRegistry, rw::audio::core::XasDec::GetDecoderDesc());
             rw::audio::core::DecoderRegistry::RegisterDecoder(
                 lpDecoderRegistry, rw::audio::core::Xas1Dec::GetDecoderDesc());
-        }   // ~RwacLock == the console unlock
+        }
+        rw::audio::core::System::Unlock(lpSystem);
 
         // Orders 17-25: the three plug-in config records, exact console store
         // values -- {0, SubMix handle, 1ch}, {0, Pan2D handle, 6ch},
@@ -422,20 +430,32 @@ namespace Playback
     // They stay unbodied only because nothing constructs a player yet; body them
     // with the AEMS sample-player creation slice, when SndPlayer1 lands.
     // ------------------------------------------------------------------------
+    // ARTIST 0x826A2EC8 (and the PS3 body): each released handle is cleared, the panner
+    // voices are only walked when there is more than one (signed index, the count re-read
+    // after every release), and the memory goes back to the audio-core System singleton
+    // (PS3 rw::audio::core::System::spInstance, this tree's off_83271928), not mpRwacSystem.
     void AemsRWSamplePlayer::Release()
     {
         if (mpPlayerVoice)
-            mpPlayerVoice->RemoveSamplePlayer(this);
-        if (mpVoice)
-            rw::audio::core::Voice::Release(mpVoice);
-        for (u32 luVoice = 0; luVoice < mNumPannerVoices; ++luVoice)
         {
-            if (mpPannerVoice[luVoice])
-                rw::audio::core::Voice::Release(mpPannerVoice[luVoice]);
+            mpPlayerVoice->RemoveSamplePlayer(this);
+            mpPlayerVoice = 0;
         }
-        rw::audio::core::System* lpSystem = mpRwacSystem;
+        if (mpVoice)
+        {
+            rw::audio::core::Voice::Release(mpVoice);
+            mpVoice = 0;
+        }
+        if (mNumPannerVoices > 1)
+        {
+            for (s32 liVoice = 0; liVoice < mNumPannerVoices; ++liVoice)
+            {
+                if (mpPannerVoice[liVoice])
+                    rw::audio::core::Voice::Release(mpPannerVoice[liVoice]);
+            }
+        }
         this->~AemsRWSamplePlayer();
-        lpSystem->Free(this, 0);
+        off_83271928->Free(this, 0);
     }
 
     void AemsRWSamplePlayer::Pause()
@@ -453,7 +473,12 @@ namespace Playback
 
     void AemsRWSamplePlayer::Unpause()
     {
-        CGS_ASSERT(mPauseState == PAUSESTATE_PAUSED, "PAUSED == mPauseState");
+        // ARTIST 0x8268AA30 tests UNPAUSED here too (`cmpwi 0`, message 0x820AD98C): the
+        // original asserts the same condition as Pause, kept as the console has it.
+        CGS_ASSERT(mPauseState == PAUSESTATE_UNPAUSED,
+            CgsDev::Assert::MessageAt("mPauseState == PAUSESTATE_UNPAUSED",
+                "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/AEMS/CgsAemsInterfaceImplementation.cpp",
+                371 /* ARTIST 0x8268AA40 */));
         rw::audio::core::PlugIn::SetAttribute(mpGain, 0, mDryLevel * mVol);
         if (mpSendWet)
             rw::audio::core::PlugIn::SetAttribute(mpSendWet, 0, mWetLevel * mVol);

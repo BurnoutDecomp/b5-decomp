@@ -7,7 +7,12 @@
 #include "GameShared/GameClasses/Sound/Playback/AEMS/CgsAemsFactory.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h" // K_DefaultSendName
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+// ARTIST 0x820AF0A8: the assert file (__FILE__) of this unity member, a literal.
+#define KAC_ARTIST_ASSERT_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\" \
+    "../Sound/Vehicles/Traffic/BrnTrafficSkid.cpp"
 #include "SDKs/EATech/include/Nicotine/DMixIO.hpp"
 #include "rw/math/vpu/vector3_operation.h"
 
@@ -263,7 +268,9 @@ s32 TrafficSkid::FindPhysicalTrafficState(
     const BrnSound::Module::Io::RootInputBuffer::PhysicalTrafficStateQueue* lpPhysicalTrafficStates,
     EntityId lEntityId )
 {
-    CGS_ASSERT( lpPhysicalTrafficStates != 0, "lpPhysicalTrafficStates" );
+    CGS_ASSERT( lpPhysicalTrafficStates != 0,
+        CgsDev::Assert::MessageAt("lpPhysicalTrafficStates", KAC_ARTIST_ASSERT_FILE,
+            413 /* ARTIST 0x826989E4 */) );
     s32 liFound = -1;
     for ( s32 liIndex = 0; liIndex < lpPhysicalTrafficStates->GetLength(); ++liIndex )
     {

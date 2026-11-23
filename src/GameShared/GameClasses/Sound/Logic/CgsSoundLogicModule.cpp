@@ -26,6 +26,10 @@
 static const char KAC_ARTIST_ASSERT_FILE[] =
     "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsSoundLogicModule.h";
 
+// ARTIST 0x820B3168: this unit's own __FILE__, a literal.
+#define KAC_ARTIST_ASSERT_CPP_FILE \
+    "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsSoundLogicModule.cpp"
+
 namespace CgsSound
 {
 namespace Logic
@@ -117,7 +121,7 @@ bool Module::Release()
         mePrepareStage = eModulePrepareStart;
         return true;
     default:
-        CGS_ASSERT(false, "Invalid Release Stage");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Release Stage", KAC_ARTIST_ASSERT_CPP_FILE, 260 /* ARTIST 0x826C4574 */));
         return false;
     }
 }
@@ -144,14 +148,14 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
                      CgsModule::IOBuffer* apOutputBuffer,
                      const ModuleParams& akrModuleParams)
 {
-    CGS_ASSERT(apAllocator != 0, "lpAllocator");
+    CGS_ASSERT(apAllocator != 0, CgsDev::Assert::MessageAt("lpAllocator", KAC_ARTIST_ASSERT_CPP_FILE, 107 /* ARTIST 0x826C42E0 */));
     mpAllocator       = apAllocator;
     CgsSound::MemBase::SetAllocator(apAllocator);
 
     mMessageQueue.Prepare();
 
-    CGS_ASSERT(apInputBuffer != 0, "lpInputBuffer");
-    CGS_ASSERT(apOutputBuffer != 0, "lpOutputBuffer");
+    CGS_ASSERT(apInputBuffer != 0, CgsDev::Assert::MessageAt("lpInputBuffer", KAC_ARTIST_ASSERT_CPP_FILE, 114 /* ARTIST 0x826C4318 */));
+    CGS_ASSERT(apOutputBuffer != 0, CgsDev::Assert::MessageAt("lpOutputBuffer", KAC_ARTIST_ASSERT_CPP_FILE, 115 /* ARTIST 0x826C433C */));
     AttachBuffers(apInputBuffer, apOutputBuffer);
 
     switch (mePrepareStage)
@@ -194,7 +198,7 @@ bool Module::Prepare(rw::IResourceAllocator* apAllocator,
         mpLogicOutputBuffer = 0;
         return true;
     default:
-        CGS_ASSERT(false, "Invalid Prepare Stage");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid Prepare Stage", KAC_ARTIST_ASSERT_CPP_FILE, 184 /* ARTIST 0x826C4474 */));
         DetachBuffers();
         return false;
     }
@@ -207,8 +211,8 @@ void Module::Update(f32 af32GameDt, f32 af32SimDt,
                     CgsModule::IOBuffer* apInputBuffer,
                     CgsModule::IOBuffer* apOutputBuffer)
 {
-    CGS_ASSERT(apInputBuffer != 0, "lpInputBuffer");
-    CGS_ASSERT(apOutputBuffer != 0, "lpOutputBuffer");
+    CGS_ASSERT(apInputBuffer != 0, CgsDev::Assert::MessageAt("lpInputBuffer", KAC_ARTIST_ASSERT_CPP_FILE, 308 /* ARTIST 0x826EAA90 */));
+    CGS_ASSERT(apOutputBuffer != 0, CgsDev::Assert::MessageAt("lpOutputBuffer", KAC_ARTIST_ASSERT_CPP_FILE, 309 /* ARTIST 0x826EAAB4 */));
 
     AttachBuffers(apInputBuffer, apOutputBuffer);
     mpLogicInputBuffer->LockForRead();
@@ -219,8 +223,9 @@ void Module::Update(f32 af32GameDt, f32 af32SimDt,
 
     mEnvironment.Update(af32GameDt, af32SimDt);
 
-    mpLogicOutputBuffer->UnlockForWrite();
+    // ARTIST 0x826EAB1C: the input is released before the output.
     mpLogicInputBuffer->UnlockForRead();
+    mpLogicOutputBuffer->UnlockForWrite();
     DetachBuffers();
 }
 

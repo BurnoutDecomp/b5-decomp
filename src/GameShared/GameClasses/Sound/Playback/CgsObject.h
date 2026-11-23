@@ -3,7 +3,7 @@
 
 #include "types.hpp"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // CgsSound::Playback::Object - the reference-counted base for sound-playback
 // objects (the canonical DWARF home is CgsObject.h:42).
@@ -26,13 +26,16 @@ public:
     // CgsObject.h:94. Construct with a zero reference count.
     Object() : mu32RefCount(0) {}
 
-    // CgsObject.h:102. Virtual destructor. The X360 vector-deleting-destructor at
-    // 0x826916F0 (a) installs the Object vtable, (b) asserts the object is no
-    // longer referenced, then (c) optionally frees the storage. The non-deleting
-    // ~Object() body is just the assert; the install + free are emitted by the
-    // compiler's destructor thunk. Defined out-of-line in CgsObject.cpp so the
-    // assert (CgsObject.h:104) is bodied store-for-store against the X360.
-    virtual ~Object();
+    // CgsObject.h:102. Virtual destructor: asserts the object is no longer referenced.
+    // Its assert names CgsObject.h:104, so the body is this header's inline one; ARTIST
+    // inlines it into every derived destructor (Factory's deleting destructor 0x826AD3C8
+    // asserts at line 104 itself, with no call) and emits the Object deleting destructor
+    // (0x826916F0) as a COMDAT.
+    virtual ~Object()
+    {
+        CGS_ASSERT(mu32RefCount == 0, CgsDev::Assert::MessageAt("0 == mu32RefCount",
+            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsObject.h", 104));
+    }
 
     // CgsObject.h:108. Take a reference. FLAG: shape-only -- Acquire is not in
     // this TU's function set (no recon'd asm), modelled as the obvious ++ so
