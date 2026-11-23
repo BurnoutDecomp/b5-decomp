@@ -210,20 +210,37 @@ namespace
     const s32 KI_HLB_BUDDY_MEMID = 0x62756464; // 'budd'
     const s32 KI_HLB_BUDDY_COPY_SIZE = 0xc4;
     const s32 KI_HLB_NAME_NOT_FOUND = -8;
+}
 
-    s32 HLBApiConnect(HLBApiRefT* pApi);
+// The roster helpers carry ARTIST's own symbol names (_RosterDestroy 0x82B27C98,
+// _updateFriendInRoster 0x82B27FF0, _reloadFriends 0x82B280E0, _HLBListGetIndexByName
+// 0x82B28288, _HLBApiInit 0x82B28518) as file-static C functions, and HLBApiConnect
+// (0x82B284C0) is an external C function of the library. ARTIST keeps every one of them
+// out of line even at single call sites (HLBApiCreate -> _HLBApiInit 0x82B28668,
+// HLBApiDestroy -> _RosterDestroy 0x82B27DA0, HLBListGetBuddyByName ->
+// _HLBListGetIndexByName); as internal-linkage C++ functions the XDK inliner folds the
+// single-call ones into their callers, so they keep external linkage here.
+// HLBApiConnect's server/port/key/resource arguments come from the shared DirtySDK API
+// (DWARF hlbudapips3.c:373); the X360 body ignores them, _HLBApiInit passes "", 0, "", "".
+extern "C" s32 HLBApiConnect(HLBApiRefT* pApi, const char* strServer, s32 iPort,
+                             const char* strKey, const char* strRsrc);
+
+namespace
+{
     void HLBApiFriendsChanged(XnFriendsRef* pFriendRef, s32 iChangeCount,
                               s32 iInitialised, const void* pChanges,
                               void* pUserData);
-    void* HLBUpdateFriendInRoster(HLBApiRefT* pApi, const void* pFriend);
-    void HLBReloadFriends(HLBApiRefT* pApi);
-    void HLBRosterDestroy(HLBApiRefT* pApi);
     s32 HLBRosterSort(void* pSortRef, s32 iSortContext,
                       void* pRecord1, void* pRecord2);
+}
 
+void* _updateFriendInRoster(HLBApiRefT* pApi, const void* pFriend);
+void _reloadFriends(HLBApiRefT* pApi);
+void _RosterDestroy(HLBApiRefT* pApi);
+s32 _HLBListGetIndexByName(HLBApiRefT* pApi, const char* pName);
 
-    s32 HLBListGetIndexByName(HLBApiRefT* pApi, const char* pName);
-
+namespace
+{
     s32 HLBStateFromFlags(u32 uFlags)
     {
         if ((uFlags & HLB_BUDFLAG_PASSIVE) != 0)
@@ -237,150 +254,149 @@ namespace
         return 0;
     }
 
-    s32 HLBApiConnect(HLBApiRefT* pApi)
-    {
-        if ((pApi == 0) || (pApi->pXnFriends == 0))
-        {
-            return -3;
-        }
+}
 
-        pApi->iConnectState = 1;
-        XnFriendsConnect(pApi->pXnFriends, 0, HLBApiFriendsChanged, pApi);
-        return 0;
+extern "C" s32 HLBApiConnect(HLBApiRefT* pApi, const char* /*strServer*/, s32 /*iPort*/,
+                             const char* /*strKey*/, const char* /*strRsrc*/)
+{
+    if ((pApi == 0) || (pApi->pXnFriends == 0))
+    {
+        return -3;
     }
 
-    void* HLBUpdateFriendInRoster(HLBApiRefT* pApi, const void* pFriend)
+    pApi->iConnectState = 1;
+    XnFriendsConnect(pApi->pXnFriends, 0, HLBApiFriendsChanged, pApi);
+    return 0;
+}
+
+void* _updateFriendInRoster(HLBApiRefT* pApi, const void* pFriend)
+{
+    char lacName[32];   // ARTIST frame 0xB0 at 0x82B27FF8: a 32-byte name buffer
+    DispListT* pItem;
+    void* pBuddy;
+
+    ds_strnzcpy(lacName, static_cast<const char*>(pFriend) + 8, sizeof(lacName));
+    pItem = static_cast<DispListT*>(HashStrFind(pApi->pHasher, lacName));
+    if (pItem == 0)
     {
-        char lacName[64];
+        HLBApiDebugPrintf(pApi, "HLBApi::New, adding bud %s ", lacName);
+        pBuddy = pApi->pMemAlloc(KI_HLB_BUDDY_COPY_SIZE, KI_HLB_API_MEMID, pApi->iMemGroup);
+        memset(pBuddy, 0, KI_HLB_BUDDY_COPY_SIZE);
+        memcpy(pBuddy, pFriend, KI_HLB_BUDDY_COPY_SIZE);
+        pItem = DispListAdd(pApi->pDispList, pBuddy);
+        HashStrAdd(pApi->pHasher, static_cast<HLBBudT*>(pBuddy)->strName, pItem);
+    }
+    else
+    {
+        pBuddy = DispListGet(pApi->pDispList, pItem);
+        if (pBuddy != 0)
+        {
+            HLBApiDebugPrintf(pApi, "HLBApi::Updated bud %s ",
+                              static_cast<HLBBudT*>(pBuddy)->strName);
+            memcpy(pBuddy, pFriend, KI_HLB_BUDDY_COPY_SIZE);
+        }
+    }
+    return pBuddy;
+}
+
+void _reloadFriends(HLBApiRefT* pApi)
+{
+    s32 iIndex;
+    void* pFriend;
+    s32 iBuddyIndex;
+    HLBBudT* pBuddy;
+    DispListT* pItem;
+
+    for (iIndex = 0; ; ++iIndex)
+    {
+        pFriend = XnFriendsGetFriend(pApi->pXnFriends, iIndex);
+        if (pFriend == 0)
+        {
+            break;
+        }
+        _updateFriendInRoster(pApi, pFriend);
+    }
+
+    for (iBuddyIndex = DispListCount(pApi->pDispList) - 1; iBuddyIndex >= 0; --iBuddyIndex)
+    {
+        pBuddy = HLBListGetBuddyByIndex(pApi, iBuddyIndex);
+        if ((pBuddy != 0) &&
+            (XnFriendsGetFriendByName(pApi->pXnFriends, pBuddy->strName) == 0))
+        {
+            HLBApiDebugPrintf(pApi, "HLBApi::Zap bud %s ", pBuddy->strName);
+            pItem = static_cast<DispListT*>(HashStrFind(pApi->pHasher, pBuddy->strName));
+            HashStrDel(pApi->pHasher, pBuddy->strName);
+            DispListDel(pApi->pDispList, pItem);
+            pApi->pMemFree(pBuddy, KI_HLB_BUDDY_MEMID, pApi->iMemGroup);
+        }
+    }
+}
+
+void _RosterDestroy(HLBApiRefT* pApi)
+{
+    if (pApi->pDispList != 0)
+    {
         DispListT* pItem;
         void* pBuddy;
-
-        ds_strnzcpy(lacName, static_cast<const char*>(pFriend) + 8, 0x20);
-        pItem = static_cast<DispListT*>(HashStrFind(pApi->pHasher, lacName));
-        if (pItem == 0)
+        while ((pItem = static_cast<DispListT*>(HasherFlush(pApi->pHasher))) != 0)
         {
-            HLBApiDebugPrintf(pApi, "HLBApi::New, adding bud %s ", lacName);
-            pBuddy = pApi->pMemAlloc(KI_HLB_BUDDY_COPY_SIZE, KI_HLB_API_MEMID, pApi->iMemGroup);
-            memset(pBuddy, 0, KI_HLB_BUDDY_COPY_SIZE);
-            memcpy(pBuddy, pFriend, KI_HLB_BUDDY_COPY_SIZE);
-            pItem = DispListAdd(pApi->pDispList, pBuddy);
-            HashStrAdd(pApi->pHasher, static_cast<HLBBudT*>(pBuddy)->strName, pItem);
+            pBuddy = DispListDel(pApi->pDispList, pItem);
+            pApi->pMemFree(pBuddy, KI_HLB_API_MEMID, pApi->iMemGroup);
         }
-        else
-        {
-            pBuddy = DispListGet(pApi->pDispList, pItem);
-            if (pBuddy != 0)
-            {
-                HLBApiDebugPrintf(pApi, "HLBApi::Updated bud %s ",
-                                  static_cast<HLBBudT*>(pBuddy)->strName);
-                memcpy(pBuddy, pFriend, KI_HLB_BUDDY_COPY_SIZE);
-            }
-        }
-        return pBuddy;
+        HasherDestroy(pApi->pHasher);
+        pApi->pHasher = 0;
+        DispListDestroy(pApi->pDispList);
+        pApi->pDispList = 0;
     }
+}
 
-    void HLBReloadFriends(HLBApiRefT* pApi)
+HLBApiRefT* _HLBApiInit(HLBApiRefT* pApi)
+{
+    if (pApi == 0)
     {
-        s32 iIndex;
-        void* pFriend;
-        s32 iBuddyIndex;
-        HLBBudT* pBuddy;
-        DispListT* pItem;
-
-        for (iIndex = 0; ; ++iIndex)
-        {
-            pFriend = XnFriendsGetFriend(pApi->pXnFriends, iIndex);
-            if (pFriend == 0)
-            {
-                break;
-            }
-            HLBUpdateFriendInRoster(pApi, pFriend);
-        }
-
-        for (iBuddyIndex = DispListCount(pApi->pDispList) - 1; iBuddyIndex >= 0; --iBuddyIndex)
-        {
-            pBuddy = HLBListGetBuddyByIndex(pApi, iBuddyIndex);
-            if ((pBuddy != 0) &&
-                (XnFriendsGetFriendByName(pApi->pXnFriends, pBuddy->strName) == 0))
-            {
-                HLBApiDebugPrintf(pApi, "HLBApi::Zap bud %s ", pBuddy->strName);
-                pItem = static_cast<DispListT*>(HashStrFind(pApi->pHasher, pBuddy->strName));
-                HashStrDel(pApi->pHasher, pBuddy->strName);
-                DispListDel(pApi->pDispList, pItem);
-                pApi->pMemFree(pBuddy, KI_HLB_BUDDY_MEMID, pApi->iMemGroup);
-            }
-        }
+        return 0;
     }
-
-    void HLBRosterDestroy(HLBApiRefT* pApi)
+    pApi->pSortCallback = HLBRosterSort;
+    if (pApi->pXnFriends == 0)
     {
-        if (pApi->pDispList != 0)
-        {
-            DispListT* pItem;
-            void* pBuddy;
-            while ((pItem = static_cast<DispListT*>(HasherFlush(pApi->pHasher))) != 0)
-            {
-                pBuddy = DispListDel(pApi->pDispList, pItem);
-                pApi->pMemFree(pBuddy, KI_HLB_API_MEMID, pApi->iMemGroup);
-            }
-            HasherDestroy(pApi->pHasher);
-            pApi->pHasher = 0;
-            DispListDestroy(pApi->pDispList);
-            pApi->pDispList = 0;
-        }
+        pApi->pXnFriends = XnFriendsCreate(0, 0);
     }
-
-    HLBApiRefT* HLBApiInit(HLBApiRefT* pApi)
+    if (pApi->pXnFriends == 0)
     {
-        if (pApi == 0)
-        {
-            return 0;
-        }
-        pApi->pSortCallback = HLBRosterSort;
-        if (pApi->pXnFriends == 0)
-        {
-            pApi->pXnFriends = XnFriendsCreate(0, 0);
-        }
-        if (pApi->pXnFriends == 0)
-        {
-            pApi->pMemFree(pApi, KI_HLB_API_MEMID, pApi->iMemGroup);
-            return 0;
-        }
-        pApi->pHasher = HasherCreate(1000, 2000);
-        pApi->pDispList = DispListCreate(100, 100, 0);
-        HLBApiConnect(pApi);
-        return pApi;
+        pApi->pMemFree(pApi, KI_HLB_API_MEMID, pApi->iMemGroup);
+        return 0;
     }
+    pApi->pHasher = HasherCreate(1000, 2000);
+    pApi->pDispList = DispListCreate(100, 100, 0);
+    // ARTIST 0x82B285B4..0x82B285CC passes three distinct "" literals (unpooled) and 0.
+    HLBApiConnect(pApi, "", 0, "", "");
+    return pApi;
+}
 
-    s32 HLBListGetIndexByName(HLBApiRefT* pApi, const char* pName)
+s32 _HLBListGetIndexByName(HLBApiRefT* pApi, const char* pName)
+{
+    // ARTIST 0x82B282A0..0x82B282C8 is HLBListGetBuddyCount inlined: the count is the
+    // display-list count of a live handle, else 0.
+    s32 iIndex = 0;
+    const s32 iCount = HLBListGetBuddyCount(pApi);
+
+    for (; iIndex < iCount; ++iIndex)
     {
-        s32 iCount = 0;
-        s32 iIndex = 0;
-
-        if ((pApi != 0) && (pApi->pDispList != 0))
+        HLBBudT* pBuddy = HLBListGetBuddyByIndex(pApi, iIndex);
+        if ((pBuddy != 0) && (ds_stricmp(pName, pBuddy->strName) == 0))
         {
-            iCount = DispListCount(pApi->pDispList);
+            break;
         }
-        if (iCount > 0)
-        {
-            do
-            {
-                HLBBudT* pBuddy = HLBListGetBuddyByIndex(pApi, iIndex);
-                if ((pBuddy != 0) && (ds_stricmp(pName, pBuddy->strName) == 0))
-                {
-                    break;
-                }
-                ++iIndex;
-            }
-            while (iIndex < iCount);
-            if (iIndex < iCount)
-            {
-                return iIndex;
-            }
-        }
-        return KI_HLB_NAME_NOT_FOUND;
     }
+    if (iIndex >= iCount)
+    {
+        iIndex = KI_HLB_NAME_NOT_FOUND;
+    }
+    return iIndex;
+}
 
+namespace
+{
     s32 HLBRosterSort(void* /*pSortRef*/, s32 /*iSortContext*/,
                       void* pRecord1, void* pRecord2)
     {
@@ -443,7 +459,7 @@ namespace
             {
                 pFriend = XnFriendsGetFriendByName(pApi->pXnFriends,
                                                    reinterpret_cast<const char*>(pChange));
-                iBuddy = HLBListGetIndexByName(pApi,
+                iBuddy = _HLBListGetIndexByName(pApi,
                                                reinterpret_cast<const char*>(pChange));
                 pOldBuddy = HLBListGetBuddyByIndex(pApi, iBuddy);
                 if ((pFriend == 0) || (pOldBuddy == 0))
@@ -451,7 +467,7 @@ namespace
                     return;
                 }
                 iOldState = HLBStateFromFlags(pOldBuddy->uFlags);
-                pUpdatedBuddy = HLBUpdateFriendInRoster(pApi, pFriend);
+                pUpdatedBuddy = _updateFriendInRoster(pApi, pFriend);
                 if (pApi->pPresenceCallback != 0)
                 {
                     pApi->pPresenceCallback(pApi, static_cast<HLBBudT*>(pUpdatedBuddy),
@@ -460,7 +476,7 @@ namespace
             }
         }
 
-        HLBReloadFriends(pApi);
+        _reloadFriends(pApi);
         if (iChangeCount > 0)
         {
             for (i = 0, pChange = static_cast<const u8*>(pChanges);
@@ -497,7 +513,7 @@ extern "C" HLBApiRefT* HLBApiCreate(void* /*pConfigA*/, void* /*pConfigB*/, s32 
         pApi->pMemFree = DirtyMemFree;
     }
 
-    return HLBApiInit(pApi);
+    return _HLBApiInit(pApi);
 
 }
 
@@ -509,10 +525,11 @@ extern "C" void HLBApiDestroy(HLBApiRefT* pApi)
         {
             XnFriendsDestroy(pApi->pXnFriends);
         }
-        HLBRosterDestroy(pApi);
+        _RosterDestroy(pApi);
         pApi->pChangeUserData = 0;
         pApi->pChangeCallback = 0;
-        pApi->pMemFree(pApi, KI_HLB_API_MEMID, pApi->iMemGroup);
+        // ARTIST 0x82B27DC0 frees the handle with a direct DirtyMemFree call.
+        DirtyMemFree(pApi, KI_HLB_API_MEMID, pApi->iMemGroup);
     }
 }
 
@@ -560,7 +577,7 @@ extern "C" HLBBudT* HLBListGetBuddyByIndex(HLBApiRefT* pApi, s32 iIndex)
 
 extern "C" HLBBudT* HLBListGetBuddyByName(HLBApiRefT* pApi, const char* pName)
 {
-    const s32 iIndex = HLBListGetIndexByName(pApi, pName);
+    const s32 iIndex = _HLBListGetIndexByName(pApi, pName);
     return HLBListGetBuddyByIndex(pApi, iIndex);
 }
 
