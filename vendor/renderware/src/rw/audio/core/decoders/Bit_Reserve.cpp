@@ -28,21 +28,19 @@ namespace core
 // (mCacheData >> 31), shift mCacheData left by one, and decrement mCached.
 // FLAG (rwaudio PDB reconcile): member names per NFS ProStreet 08 X360 PDB.
 // ---------------------------------------------------------------------------
-s32 Bit_Reserve::hget1bit()
+u32 Bit_Reserve::hget1bit()
 {
     if (mCached == 0)
     {
-        u32 idx = mOutPtr & 0x7FFu;
-        ++mOutPtr;
-        u32 byteVal = mBuffer[idx];
+        const u32 luRefill = static_cast<u32>(mBuffer[mOutPtr++ & (KU_BUFFER_BYTES - 1u)]) << 24;
         mCached = 8;
-        mCacheData = byteVal << 24; // rotrwi by 8 of a byte: seat it in the high 8 bits
+        mCacheData = luRefill;
     }
 
-    s32 result = static_cast<s32>(mCacheData >> 31);
+    const u32 luResult = mCacheData >> 31;
     mCached -= 1;
     mCacheData <<= 1;
-    return result;
+    return luResult;
 }
 
 // ---------------------------------------------------------------------------

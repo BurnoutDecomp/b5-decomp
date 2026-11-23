@@ -52,7 +52,7 @@ public:
 
     // @ 0x82B90408 -- read and return the next single bit (0 or 1), MSB-first,
     // refilling mCacheData a byte at a time as it drains.
-    s32 hget1bit();
+    u32 hget1bit();
 
     // @ 0x82B90460 -- rewind the read cursor by `nBits` bits. Returns `this`
     // (the asm returns r3 unchanged) so callers can chain.
