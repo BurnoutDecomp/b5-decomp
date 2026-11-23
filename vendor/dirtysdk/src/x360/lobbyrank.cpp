@@ -36,7 +36,8 @@ typedef char RankColumnCountOffset[(offsetof(LobbyRankListT,uColumnCount)==0x7c)
 
 extern "C" s32 LobbyRankCategoryCount(LobbyRankT* pRanker)
 {
- return (pRanker->eStatus & 1) ? pRanker->uCategoryCount : -5;
+ if (!(pRanker->eStatus & 1)) return -5;
+ return pRanker->uCategoryCount;
 }
 extern "C" s32 LobbyRankIndexCount(LobbyRankT* pRanker, s32 iCategory)
 {
@@ -54,19 +55,22 @@ extern "C" s32 LobbyRankVariationCount(LobbyRankT* pRanker, s32 iCategory, s32 i
 }
 extern "C" s32 LobbyRankColumnCount(LobbyRankT* pRanker)
 {
- if (!(pRanker->eStatus & 2) || pRanker->eDownloadStatus == 2) return -6;
+ if (!(pRanker->eStatus & 2)) return -6;
+ if (pRanker->eDownloadStatus == 2) return -6;
  return pRanker->pLists[pRanker->uListIndex % pRanker->uListCount].uColumnCount;
 }
 extern "C" s32 LobbyRankColumnWidth(LobbyRankT* pRanker, s32 iColumn)
 {
- if (!(pRanker->eStatus & 2) || pRanker->eDownloadStatus == 2) return -6;
+ if (!(pRanker->eStatus & 2)) return -6;
+ if (pRanker->eDownloadStatus == 2) return -6;
  const LobbyRankListT& List = pRanker->pLists[pRanker->uListIndex % pRanker->uListCount];
  if ((u32)iColumn >= List.uColumnCount) return -12;
  return List.pColumns[iColumn].uWidth;
 }
 extern "C" s32 LobbyRankColumnType(LobbyRankT* pRanker, s32 iColumn)
 {
- if (!(pRanker->eStatus & 2) || pRanker->eDownloadStatus == 2) return 0;
+ if (!(pRanker->eStatus & 2)) return 0;
+ if (pRanker->eDownloadStatus == 2) return 0;
  const LobbyRankListT& List = pRanker->pLists[pRanker->uListIndex % pRanker->uListCount];
  if ((u32)iColumn >= List.uColumnCount) return 0;
  return List.pColumns[iColumn].iType;
@@ -76,39 +80,45 @@ extern "C" s32 LobbyRankColumnType(LobbyRankT* pRanker, s32 iColumn)
 extern "C" char* ds_strnzcpy(char*, const char*, s32);
 extern "C" const char* LobbyRankCategoryName(LobbyRankT* r, s32 c, char* out, s32 len)
 {
+ LobbyRankCategoryT* pCategory;
  if (!(r->eStatus & 1)) return 0;
  if (c == -100) c = r->uCategoryIndex;
  else if (c < 0 || (u32)c >= r->uCategoryCount) return 0;
- const char* name = r->pCategories[c].pName;
- if (out) ds_strnzcpy(out, name, len);
- return name;
+ pCategory = &r->pCategories[c];
+ if (out) ds_strnzcpy(out, pCategory->pName, len);
+ return pCategory->pName;
 }
 extern "C" const char* LobbyRankIndexName(LobbyRankT* r, s32 c, s32 i, char* out, s32 len)
 {
+ LobbyRankCategoryT* pCategory;
+ LobbyRankIndexT* pIndex;
  if (!(r->eStatus & 1)) return 0;
  if (c == -100) c = r->uCategoryIndex;
  else if (c < 0 || (u32)c >= r->uCategoryCount) return 0;
- const LobbyRankCategoryT& category = r->pCategories[c];
+ pCategory = &r->pCategories[c];
  if (i == -100) i = r->uIndexIndex;
- else if (i < 0 || (u32)i >= category.uIndexCount) return 0;
- const char* name = category.pIndices[i].pName;
- if (out) ds_strnzcpy(out, name, len);
- return name;
+ else if (i < 0 || (u32)i >= pCategory->uIndexCount) return 0;
+ pIndex = &pCategory->pIndices[i];
+ if (out) ds_strnzcpy(out, pIndex->pName, len);
+ return pIndex->pName;
 }
 extern "C" const char* LobbyRankVariationName(LobbyRankT* r, s32 c, s32 i, s32 v, char* out, s32 len)
 {
+ LobbyRankCategoryT* pCategory;
+ LobbyRankIndexT* pIndex;
+ LobbyRankVariationT* pVariation;
  if (!(r->eStatus & 1)) return 0;
  if (c == -100) c = r->uCategoryIndex;
  else if (c < 0 || (u32)c >= r->uCategoryCount) return 0;
- const LobbyRankCategoryT& category = r->pCategories[c];
+ pCategory = &r->pCategories[c];
  if (i == -100) i = r->uIndexIndex;
- else if (i < 0 || (u32)i >= category.uIndexCount) return 0;
- const LobbyRankIndexT& index = category.pIndices[i];
+ else if (i < 0 || (u32)i >= pCategory->uIndexCount) return 0;
+ pIndex = &pCategory->pIndices[i];
  if (v == -100) v = r->uVariationIndex;
- else if (v < 0 || (u32)v >= index.uVariationCount) return 0;
- const char* name = index.pVariations[v].pName;
- if (out) ds_strnzcpy(out, name, len);
- return name;
+ else if (v < 0 || (u32)v >= pIndex->uVariationCount) return 0;
+ pVariation = &pIndex->pVariations[v];
+ if (out) ds_strnzcpy(out, pVariation->pName, len);
+ return pVariation->pName;
 }
 extern "C" s32 LobbyRankVariationUserType(LobbyRankT* r, s32 c, s32 i, s32 v)
 {
@@ -125,9 +135,11 @@ extern "C" s32 LobbyRankVariationUserType(LobbyRankT* r, s32 c, s32 i, s32 v)
 }
 extern "C" s32 LobbyRankColumnStyle(LobbyRankT* r, s32 col)
 {
- if (!(r->eStatus & 2) || r->eDownloadStatus == 2) return 0;
+ if (!(r->eStatus & 2)) return 0;
+ if (r->eDownloadStatus == 2) return 0;
  const LobbyRankListT& list = r->pLists[r->uListIndex % r->uListCount];
- return (u32)col < list.uColumnCount ? list.pColumns[col].iStyle : 0;
+ if ((u32)col >= list.uColumnCount) return 0;
+ return list.pColumns[col].iStyle;
 }
 extern "C" const char* LobbyRankColumnName(LobbyRankT* r, s32 col, char* out, s32 len)
 {
@@ -149,7 +161,8 @@ extern "C" s32 LobbyRankParm(LobbyRankT* r, s32 index, s32* data)
 }
 extern "C" s32 LobbyRankRowCount(LobbyRankT* r)
 {
- if (!(r->eStatus & 2) || r->eDownloadStatus == 2) return -6;
+ if (!(r->eStatus & 2)) return -6;
+ if (r->eDownloadStatus == 2) return -6;
  return DispListCount(r->pLists[r->uListIndex % r->uListCount].pList);
 }
 
@@ -177,13 +190,13 @@ static void RankFlushList(LobbyRankT* r, u32 index)
 extern "C" void LobbyRankFlush(LobbyRankT* r, s32 all)
 {
  if (!(r->eStatus & 2)) return;
- if (all) { for (u32 i=0; i<r->uListCount; ++i) RankFlushList(r, i); }
+ if (all) { for (u32 i=0; i!=r->uListCount; ++i) RankFlushList(r, i); }
  else RankFlushList(r, r->uListIndex);
 }
 extern "C" s32 LobbyRankCancelCB(LobbyRankT* r)
 {
  r->pCallback = 0; r->eDownloadStatus = 0; r->pUserData = 0;
- for (u32 i=0; i<r->uListCount; ++i) RankFlushList(r, i);
+ for (u32 i=0; i!=r->uListCount; ++i) RankFlushList(r, i);
  return LobbyApiCancelCB(r->pLobby, r->iLastCallbackId);
 }
 extern "C" void LobbyRankDestroy(LobbyRankT* r)
@@ -496,10 +509,11 @@ extern "C" s32 LobbyRankCategoryFetch(LobbyRankT* r, const char* view, LobbyRank
   if (strcmp(view,r->strView)==0) return 0;
   r->eStatus &= ~1; DirtyMemFree(r->pCategories,1819438699,r->iMemGroup); r->pCategories=0;
  }
- char request[80]; request[0]=0; TagFieldSetString(request,32,"VIEW",view);
+ // DWARF (lobbyrank.c:1028): `char strMsg[32]` (ARTIST frame 0xA0 at 0x82B26520).
+ char strMsg[32]; strMsg[0]=0; TagFieldSetString(strMsg,sizeof(strMsg),"VIEW",view);
  r->pCallback=callback; r->pUserData=user; r->eDownloadStatus=1;
  if (r->iLastCallbackId) LobbyApiCancelCB(r->pLobby,r->iLastCallbackId);
- r->iLastCallbackId=LobbyApiRequestCB(r->pLobby,0x63617465,request,RankCategoryCb,r);
+ r->iLastCallbackId=LobbyApiRequestCB(r->pLobby,0x63617465,strMsg,RankCategoryCb,r);
  if (r->iLastCallbackId < 0) { r->eDownloadStatus=0; return -10; }
  ds_strnzcpy(r->strView,view,11); r->iLastError=-5;
  return 0;
