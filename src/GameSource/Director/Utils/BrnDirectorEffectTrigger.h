@@ -5,6 +5,7 @@
 #include <cstring>                                        // strcpy / strcmp / strlen (Set + the comparisons)
 #include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<T,N> (the 100-slot hook table)
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (the current-effect tripwires)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Gui/PFX/BrnGuiPFXHooks.h"            // BrnGui::KI_MAX_PFX_ID_LENGTH (Set's tripwire)
 
 // ============================================================================
@@ -119,7 +120,7 @@ namespace BrnDirector
         // wrapper's address == its string; non-gating).
         const char* GetCurrentEffectName() const
         {
-            CGS_ASSERT(mbHasCurrentEffectName, "HasCurrentEffectName()");   // non-gating
+            CGS_ASSERT(mbHasCurrentEffectName, CgsDev::Assert::MessageAt("HasCurrentEffectName()", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h", 112));   // non-gating
             return mCurrentEffectName.mHookNameString;
         }
 

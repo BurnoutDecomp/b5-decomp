@@ -248,9 +248,9 @@ BehaviourInterpolate::Prepare(const BehaviourSharedPrepareReleaseInfo& lrInfo)
 bool
 BehaviourInterpolate::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
-    CGS_ASSERT(mpParameters != 0, "mpParameters");                                    // :101
-    CGS_ASSERT(mbSetup, "mbSetup");                                                   // :102
-    CGS_ASSERT(lrInfo.mpBehaviourManager != 0, "lrSharedInfo.mpBehaviourManager");    // :103
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.cpp", 101));                                    // :101
+    CGS_ASSERT(mbSetup, CgsDev::Assert::MessageAt("mbSetup", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.cpp", 102));                                                   // :102
+    CGS_ASSERT(lrInfo.mpBehaviourManager != 0, CgsDev::Assert::MessageAt("lrSharedInfo.mpBehaviourManager", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.cpp", 103));    // :103
 
     const Camera lFrom(mFromCamera.GetCamera(lrInfo.mpBehaviourManager));
     const Camera lTo(mToCamera.GetCamera(lrInfo.mpBehaviourManager));
@@ -308,14 +308,14 @@ BehaviourInterpolate::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo
 bool
 BehaviourInterpolate::PostCollisionUpdate(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
-    CGS_ASSERT(mpParameters != 0, "mpParameters");                                    // :137
-    CGS_ASSERT(mbSetup, "mbSetup");                                                   // :138
-    CGS_ASSERT(lrInfo.mpBehaviourManager != 0, "lrSharedInfo.mpBehaviourManager");    // :139
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.cpp", 137));                                    // :137
+    CGS_ASSERT(mbSetup, CgsDev::Assert::MessageAt("mbSetup", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.cpp", 138));                                                   // :138
+    CGS_ASSERT(lrInfo.mpBehaviourManager != 0, CgsDev::Assert::MessageAt("lrSharedInfo.mpBehaviourManager", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.cpp", 139));    // :139
 
     const Camera lFrom(mFromCamera.GetCamera(lrInfo.mpBehaviourManager));
     const Camera lTo(mToCamera.GetCamera(lrInfo.mpBehaviourManager));
 
-    CGS_ASSERT(!IsZero(mfDuration), "!rw::math::fpu::IsZero(mfDuration)");            // :145
+    CGS_ASSERT(!IsZero(mfDuration), CgsDev::Assert::MessageAt("!rw::math::fpu::IsZero(mfDuration)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.cpp", 145));            // :145
 
     f32 lfParametricTime = mfRunningTime / mfDuration;
     if (lfParametricTime >= KF_ONE)

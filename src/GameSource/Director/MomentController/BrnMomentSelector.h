@@ -39,6 +39,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Containers/CgsArray.h"                  // Array<T,N> (global ns; declaration spells it CgsContainers::Array)
 #include "GameSource/Director/MomentController/BrnMoment.h"              // Moment, Moment::EType
 #include "GameSource/Director/MomentController/BrnMomentParameterBank.h" // MomentParameterBank::EMomentParamID
@@ -140,7 +141,8 @@ public:
     // established MomentController::MomentHandle::GetMoment() pointer convention. Same read.
     Moment* GetSelectedMoment() const
     {
-        CGS_ASSERT(HasSelectedMoment(), "HasSelectedMoment()");
+        CGS_ASSERT(HasSelectedMoment(), CgsDev::Assert::MessageAt(
+            "HasSelectedMoment()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.h", 182 /* ARTIST 0x82219868 */));
         return mMomentHandleArray[static_cast<u32>(miSelectedMoment)].GetMoment();
     }
 
@@ -148,14 +150,16 @@ public:
     // ONLY -- the console does not touch miSelectedMoment here.
     void CancelSelection()
     {
-        CGS_ASSERT(HasSelectedMoment(), "HasSelectedMoment()");
+        CGS_ASSERT(HasSelectedMoment(), CgsDev::Assert::MessageAt(
+            "HasSelectedMoment()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.h", 185 /* ARTIST 0x821F5868 */));
         mbHasSelectedMoment = false;
     }
 
     // Pick with no exclusion (-1).
     bool SelectBestMoment(CgsNumeric::Random& lRandom)
     {
-        CGS_ASSERT(!HasSelectedMoment(), "!HasSelectedMoment()");
+        CGS_ASSERT(!HasSelectedMoment(), CgsDev::Assert::MessageAt(
+            "!HasSelectedMoment()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.h", 172 /* ARTIST 0x82254DA8 */));
         return SelectBestMomentWithExclusion(lRandom, -1);
     }
 
@@ -167,8 +171,9 @@ public:
     // The two compared constants are 0.0f and 1.0f, both named by the assert string itself.
     void SetRecencyFactor(f32 lfRecencyFactor01)
     {
-        CGS_ASSERT(lfRecencyFactor01 >= 0.0f && lfRecencyFactor01 < 1.0f,
-                   "lfRecencyFactor01 >= 0.0f && lfRecencyFactor01 < 1.0f");
+        CGS_ASSERT(lfRecencyFactor01 >= 0.0f && lfRecencyFactor01 < 1.0f, CgsDev::Assert::MessageAt(
+            "lfRecencyFactor01 >= 0.0f && lfRecencyFactor01 < 1.0f",
+            "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.h", 166 /* ARTIST 0x821F57F0 */));
         mfRecencyFactor = lfRecencyFactor01;
     }
 
@@ -176,9 +181,11 @@ public:
     // (console reads +0xA4+0xF0), not the description array's.
     void SetMaxActiveMoments(u32 luMaxMoments)
     {
-        CGS_ASSERT(!mbPrepared, "!mbPrepared");
-        CGS_ASSERT(luMaxMoments < mMomentHandleArray.GetLength(),
-                   "luMaxMoments < mMomentHandleArray.GetLength()");
+        // ARTIST 0x82208570 fires both at line 189.
+        CGS_ASSERT(!mbPrepared, CgsDev::Assert::MessageAt(
+            "!mbPrepared", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.h", 189));
+        CGS_ASSERT(luMaxMoments < mMomentHandleArray.GetLength(), CgsDev::Assert::MessageAt(
+            "luMaxMoments < mMomentHandleArray.GetLength()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.h", 189));
         muMaxActiveMomentLimit = luMaxMoments;
         mbHasMaxLimit          = true;
     }
@@ -279,7 +286,8 @@ private:
 // mbHasSelectedMoment, then re-picks excluding it -- preserve that order.
 inline bool MomentSelector::SelectNewBestMoment(CgsNumeric::Random& lRandom)
 {
-    CGS_ASSERT(HasSelectedMoment(), "HasSelectedMoment()");
+    CGS_ASSERT(HasSelectedMoment(), CgsDev::Assert::MessageAt(
+        "HasSelectedMoment()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.h", 364 /* ARTIST 0x82254E18 */));
 
     const s32 liExclusion = miSelectedMoment;
     mbHasSelectedMoment   = false;

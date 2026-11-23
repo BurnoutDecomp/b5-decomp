@@ -841,13 +841,14 @@ Vector3 GetSmallestDifferenceBetweenRadAngles(Vector3 lFromRads, Vector3 lToRads
 // ----------------------------------------------------------------------------
 f32 PositiveValueTendToLimit(f32 lrValueIn, f32 lrValueForHalfway, f32 lrLimit)
 {
-    CGS_ASSERT(lrValueIn >= 0.0f, "lrValueIn >= 0.0f");                    // .cpp:618
-    CGS_ASSERT(lrValueForHalfway > 0.0f, "lrValueForHalfway > 0.0f");      // .cpp:643
+    CGS_ASSERT(lrValueIn >= 0.0f, CgsDev::Assert::MessageAt("lrValueIn >= 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/CameraUtils.cpp", 618));                    // .cpp:618
+    CGS_ASSERT(lrValueForHalfway > 0.0f, CgsDev::Assert::MessageAt("lrValueForHalfway > 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/CameraUtils.cpp", 643));      // .cpp:643
 
     const f32 lrX = lrValueIn / lrValueForHalfway;
 
-    CGS_ASSERT(!rw::math::fpu::IsZero(lrX + 1.0f),                         // .cpp:645
-               "!rw::math::fpu::IsZero(lrX+1.0f)");
+    CGS_ASSERT(!rw::math::fpu::IsZero(lrX + 1.0f), CgsDev::Assert::MessageAt(  // .cpp:645
+               "!rw::math::fpu::IsZero(lrX+1.0f)",
+               "..\\..\\..\\GameSource\\Director/Camera/Utils/CameraUtils.cpp", 645));
 
     return (lrX / (lrX + 1.0f)) * lrLimit;
 }

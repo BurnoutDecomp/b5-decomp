@@ -7,6 +7,7 @@
 #include "GameSource/Director/Camera/Utils/BrnCameraShake.h"
 #include "GameSource/Director/Camera/Behaviours/BrnAttachmentTruck.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the SetParameters type assert + the rig asserts)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/types.h"                        // rw::math::vpu::Vector3 (SetWorldSpaceNormalizedVectorFromCar)
 #include "rw/math/vpu/vector3_operation.h"            // MagnitudeSquared (the IsSimilar magnitude assert)
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"   // THE canonical Camera::Behaviour base
@@ -337,7 +338,10 @@ BehaviourGyroCam::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 {
     SetNotPrepared();                                        // stb 0, 8(this)
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");
+    // DecFIGS homes Prepare in BrnBehaviourGyroCam.cpp; ARTIST fires this at its line 205
+    // (`li r5, 0xCD` @0x821FA168).
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL",
+        "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.cpp", 205));
 
     mfBlendFactor = mpParameters->mfMinimumBlendFactor;      // +0xB8 -> +0x62C
     mfHeight      = mpParameters->mfFastHeight;              // +0xA8 -> +0x620
@@ -389,8 +393,10 @@ BehaviourGyroCam::AttachToRaceCar(s32 meRaceCarIndex)
     mAttachedTo.mbSet          = true;                                  // stb r11(=1), 0x51C(this)
     mAttachedTo.meType         = BrnDirector::VehicleRef::E_RACE_CAR;   // stw r11(=1), 0x510(this)
     mAttachedTo.muRef          = 0;                                     // stw r10(=0), 0x518(this)
-    CGS_ASSERT(meRaceCarIndex < KU_MAX_NUM_RACE_CARS,
-               "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars");
+    // The inlined VehicleRef setter's assert (BrnVehicleRef.h:222, `li r5, 0xDE` @0x821F410C).
+    CGS_ASSERT(meRaceCarIndex < KU_MAX_NUM_RACE_CARS, CgsDev::Assert::MessageAt(
+               "meRaceCarIndex < BrnPhysics::Vehicle::ku8MaxNumRaceCars",
+               "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 222));
 }
 
 // ----------------------------------------------------------------------------

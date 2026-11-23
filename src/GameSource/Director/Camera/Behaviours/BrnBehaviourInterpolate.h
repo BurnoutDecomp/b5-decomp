@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT (the Setup asserts)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"       // THE canonical Camera::Behaviour base
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"         // VisibilityCollisionPolicy (mCollisionPolicy)
 #include "GameSource/Director/Camera/BrnCameraReference.h"         // THE real CameraReference (mFromCamera / mToCamera)
@@ -221,7 +222,7 @@ public:
 inline CameraReference&
 BehaviourInterpolate::GetCameraAForSetup()
 {
-    CGS_ASSERT(!mbSetup, "Can't setup camera A after Setup() has been called");
+    CGS_ASSERT(!mbSetup, CgsDev::Assert::MessageAt("Can't setup camera A after Setup() has been called", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 313));
     return mFromCamera;
 }
 
@@ -234,7 +235,7 @@ BehaviourInterpolate::GetCameraAForSetup()
 inline CameraReference&
 BehaviourInterpolate::GetCameraBForSetup()
 {
-    CGS_ASSERT(!mbSetup, "Can't setup camera B after Setup() has been called");
+    CGS_ASSERT(!mbSetup, CgsDev::Assert::MessageAt("Can't setup camera B after Setup() has been called", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 322));
     return mToCamera;
 }
 
@@ -274,7 +275,7 @@ BehaviourInterpolate::SetParameters(const Parameters* lpParams)
 inline void
 BehaviourInterpolate::SetupDuration(f32 lfDuration)
 {
-    CGS_ASSERT(!mbSetup, "Can't setup duration after Setup() has been called");
+    CGS_ASSERT(!mbSetup, CgsDev::Assert::MessageAt("Can't setup duration after Setup() has been called", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 304));
     mfDuration = lfDuration;
 }
 
@@ -360,9 +361,9 @@ BehaviourInterpolate::SetInterpolationMode(s32 liMode)
 inline void
 BehaviourInterpolate::Setup()
 {
-    CGS_ASSERT(!mbSetup, "Can't setup twice");
-    CGS_ASSERT(mFromCamera.IsValid(), "Can't setup twice");
-    CGS_ASSERT(mToCamera.IsValid(), "Can't setup twice");
+    CGS_ASSERT(!mbSetup, CgsDev::Assert::MessageAt("Can't setup twice", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 332));
+    CGS_ASSERT(mFromCamera.IsValid(), CgsDev::Assert::MessageAt("Can't setup twice", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 333));
+    CGS_ASSERT(mToCamera.IsValid(), CgsDev::Assert::MessageAt("Can't setup twice", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 334));
     mbSetup = true;
 }
 

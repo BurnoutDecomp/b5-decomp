@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "rw/math/vpu/types.h"                          // rw::math::vpu (the SIMD register type vocabulary)
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT (the Get bounds assert)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // ============================================================================
 // GameSource/Director/Utils/BrnDirectorTimestep.h
@@ -80,8 +81,9 @@ private:
 inline f32
 Timestep::Get(EType leType) const
 {
-    CGS_ASSERT(leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT,
-               "leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT");
+    CGS_ASSERT(leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT, CgsDev::Assert::MessageAt(
+        "leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT",
+        "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorTimestep.h", 78 /* ARTIST 0x821F2908 */));
     return mafTimestep[leType];
 }
 
@@ -90,8 +92,9 @@ Timestep::Get(EType leType) const
 inline VecFloat
 Timestep::GetVecFloat(EType leType) const
 {
-    CGS_ASSERT(leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT,
-               "leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT");
+    CGS_ASSERT(leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT, CgsDev::Assert::MessageAt(
+        "leType > E_TIMESTEP_INVALID && leType < E_TIMESTEP_COUNT",
+        "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorTimestep.h", 88 /* ARTIST 0x821F2978 */));
     return maVecFloatTimestep[leType];
 }
 

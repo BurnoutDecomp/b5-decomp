@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                    // Vector3 / Matrix44Affine
 #include "GameShared/GameClasses/Core/CgsAssert.h"             // CGS_ASSERT (SetParameters' tripwire)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Behaviours/Behaviour.h"   // ⭐ THE REAL Camera::Behaviour base
 #include "GameSource/Director/Camera/BrnCollisionPolicy.h"     // CollisionPolicyAttachedToVehicle (embedded @+0x50)
 #include "GameSource/Director/Camera/Utils/BrnCameraSphericalRotationController.h" // mRotationController (+0x20)
@@ -344,8 +345,9 @@ private:
 // ----------------------------------------------------------------------------
 inline void BehaviourRotateAboutVehicle::SetParameters(const Parameters* lpParameters)
 {
-    CGS_ASSERT(lpParameters->GetType() == 18u,
-               "lpParameters->GetType() == eBehaviourRotateAboutVehicle");   // .h:150
+    CGS_ASSERT(lpParameters->GetType() == 18u, CgsDev::Assert::MessageAt(
+               "lpParameters->GetType() == eBehaviourRotateAboutVehicle",
+               "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.h", 150));
 
     mpParameters = lpParameters;
 }

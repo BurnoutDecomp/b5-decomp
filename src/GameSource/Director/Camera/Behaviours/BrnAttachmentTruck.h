@@ -6,6 +6,7 @@
 #include "GameSource/Director/Utils/BrnDirectorTimestep.h"
 #include "rw/math/vpu/types.h"                        // rw::math::vpu::Vector3 (the 16-byte position)
 #include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT (the !mbFirstFrame guard)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // ============================================================================
 // GameSource/Director/Camera/Behaviours/BrnAttachmentTruck.h
@@ -97,7 +98,9 @@ private:
 inline rw::math::vpu::Vector3
 AttachmentTruck::GetPosition() const
 {
-    CGS_ASSERT(!mbFirstFrame, "!mbFirstFrame");
+    // ARTIST 0x821F4028 fires it at BrnBehaviourGyroCam.h:75, the truck's original home.
+    CGS_ASSERT(!mbFirstFrame, CgsDev::Assert::MessageAt("!mbFirstFrame",
+        "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.h", 75));
     return mPosition;                                  // lvx128 v0,(this=r4); stvx128 v0,(sret=r3)
 }
 
