@@ -712,20 +712,20 @@ int CRequestObject::WriteU8(unsigned int uValue, int bPrepend)
     return AppendToRequestBuffer(&lu8Value, 1);
 }
 
-int CRequestObject::WriteU16(short nValue, int bPrepend)
+void CRequestObject::WriteU16(unsigned short uValue, int bPrepend)
 {
-    short lnValue = nValue;  // sth r4 into the stack slot
     if (bPrepend)
-        return PrependToRequestBuffer(&lnValue, 2);
-    return AppendToRequestBuffer(&lnValue, 2);
+        PrependToRequestBuffer(&uValue, sizeof(uValue));
+    else
+        AppendToRequestBuffer(&uValue, sizeof(uValue));
 }
 
-int CRequestObject::WriteU32(int nValue, int bPrepend)
+void CRequestObject::WriteU32(unsigned int uValue, int bPrepend)
 {
-    int lnValue = nValue;  // stw r4 into the stack slot
     if (bPrepend)
-        return PrependToRequestBuffer(&lnValue, 4);
-    return AppendToRequestBuffer(&lnValue, 4);
+        PrependToRequestBuffer(&uValue, sizeof(uValue));
+    else
+        AppendToRequestBuffer(&uValue, sizeof(uValue));
 }
 
 // ---------------------------------------------------------------------------
@@ -733,12 +733,13 @@ int CRequestObject::WriteU32(int nValue, int bPrepend)
 // byte-order hook (bl STUB with the value in r3, result stored back) before the
 // 8-byte write.
 // ---------------------------------------------------------------------------
-int CRequestObject::WriteU64(unsigned long long nValue, int bPrepend)
+void CRequestObject::WriteU64(unsigned long long uValue, int bPrepend)
 {
-    unsigned long long lnValue = MassiveNetOrderU64(nValue);
+    uValue = MassiveNetOrderU64(uValue);
     if (bPrepend)
-        return PrependToRequestBuffer(&lnValue, 8);
-    return AppendToRequestBuffer(&lnValue, 8);
+        PrependToRequestBuffer(&uValue, sizeof(uValue));
+    else
+        AppendToRequestBuffer(&uValue, sizeof(uValue));
 }
 
 // ---------------------------------------------------------------------------
@@ -746,12 +747,13 @@ int CRequestObject::WriteU64(unsigned long long nValue, int bPrepend)
 // byte-order hook (bl STUB with the value in f1, result stored back) before the
 // 4-byte write.
 // ---------------------------------------------------------------------------
-int CRequestObject::WriteFloat(float fValue, int bPrepend)
+void CRequestObject::WriteFloat(float fValue, int bPrepend)
 {
-    float lfValue = MassiveNetOrderFloat(fValue);
+    fValue = MassiveNetOrderFloat(fValue);
     if (bPrepend)
-        return PrependToRequestBuffer(&lfValue, 4);
-    return AppendToRequestBuffer(&lfValue, 4);
+        PrependToRequestBuffer(&fValue, sizeof(fValue));
+    else
+        AppendToRequestBuffer(&fValue, sizeof(fValue));
 }
 
 // ---------------------------------------------------------------------------

@@ -364,17 +364,8 @@ public:
     // (mpSignature). Returns 1 on a match, 0 on a mismatch or failed digest.
     int VerifyHMACSignature();
 
-    // ----- request writers (bPrepend routes front/back) --------------------
-
-    // @ 0x82BD00F8 / 0x82BD0138 / 0x82BD0178. Fixed-width scalar writes.
+    // @ 0x82BD00F8. Byte writer for the existing request-report argument types.
     int WriteU8(unsigned int uValue, int bPrepend);
-    int WriteU16(short nValue, int bPrepend);
-    int WriteU32(int nValue, int bPrepend);
-
-    // @ 0x82BD01B8 / 0x82BD0220. 64-bit / float writes through the byte-order
-    // hooks.
-    int WriteU64(unsigned long long nValue, int bPrepend);
-    int WriteFloat(float fValue, int bPrepend);
 
     // @ 0x82BD0648. Length-prefixed string write: a u16 strlen then the bytes
     // (prepend order: bytes first, then the length in front of them).
@@ -422,6 +413,13 @@ public:
     static int SetPublicKey(const void* pKey);
 
 protected:
+    // Fixed-width writers from requestobject.obj. ARTIST writes the halfword and
+    // word argument slots at 0x82BD0144 and 0x82BD0184.
+    void WriteU16(unsigned short uValue, int bPrepend);
+    void WriteU32(unsigned int uValue, int bPrepend);
+    void WriteU64(unsigned long long uValue, int bPrepend);
+    void WriteFloat(float fValue, int bPrepend);
+
     // Protected statics in requestobject.obj, at ARTIST 0x8327F2C4 and 0x8327F2C8.
     static char* m_szThirdPartyID;
     static char* m_szThirdPartyService;

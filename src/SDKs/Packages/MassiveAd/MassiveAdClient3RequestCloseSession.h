@@ -77,15 +77,14 @@ public:
     // null builder (returns -1100); otherwise chains the base
     // CreateRequest(pBuilder, 256, 256), writes the close-session block, sets
     // status 2 (ready to submit), and returns 0.
-    int CreateRequest(CRequestBuilder* pBuilder);
-
-    // @ 0x82BD3B20. Builds the outgoing close-session block, PREPENDING (front-
-    // to-back on disk): the client session ID (tag 43) then the client player ID
-    // (tag 42). Seals it with FinishBaseBlock(209, timestamp, sign). Returns the
-    // FinishBaseBlock result.
-    int WriteCloseSessionRequest();
+    unsigned long CreateRequest(CRequestBuilder* pBuilder);
 
 private:
+    // @ 0x82BD3B20. Builds the outgoing close-session block, PREPENDING (front-
+    // to-back on disk): the client session ID (tag 43) then the client player ID
+    // (tag 42). The caller at 0x82BD3BD8 discards the result register.
+    void WriteCloseSessionRequest();
+
     static char* m_szRequestURL;
 };
 

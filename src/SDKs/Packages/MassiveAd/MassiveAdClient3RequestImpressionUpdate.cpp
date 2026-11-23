@@ -100,7 +100,7 @@ int CRequestImpressionUpdate::CreateRequest(CRequestBuilder* pBuilder)
 // Block: 223, U32 41, [54,u8][38,u32][21,u32][50,u32][51,u64][52,u64][53,u16]
 //        [70,u16]; then ++mnReportCount.
 // ---------------------------------------------------------------------------
-int CRequestImpressionUpdate::AddModelReport(unsigned char uTag54, unsigned int nTag38,
+unsigned long CRequestImpressionUpdate::AddModelReport(unsigned char uTag54, unsigned int nTag38,
                                              unsigned int nTag21, unsigned int nTag50,
                                              unsigned long long nTag51, unsigned long long nTag52,
                                              unsigned short sTag53, unsigned short sTag70)
@@ -133,7 +133,7 @@ int CRequestImpressionUpdate::AddModelReport(unsigned char uTag54, unsigned int 
 // Block: 223, U32 46, [54,u8][38,u32][21,u32][50,u32][51,u64][52,u64][53,u16]
 //        [48,float]; then [70,u16]; then ++mnReportCount.
 // ---------------------------------------------------------------------------
-int CRequestImpressionUpdate::AddTextureRepor(unsigned char uTag54, unsigned int nTag38,
+unsigned long CRequestImpressionUpdate::AddTextureRepor(unsigned char uTag54, unsigned int nTag38,
                                               unsigned int nTag21, unsigned int nTag50,
                                               unsigned long long nTag51, unsigned long long nTag52,
                                               unsigned short sTag53, float fTag48,
@@ -169,7 +169,7 @@ int CRequestImpressionUpdate::AddTextureRepor(unsigned char uTag54, unsigned int
 // Byte-identical wire shape to AddTextureRepor (block type 46, float under tag
 // 48); a separate X360 symbol, reconstructed store-for-store.
 // ---------------------------------------------------------------------------
-int CRequestImpressionUpdate::AddVideoReport(unsigned char uTag54, unsigned int nTag38,
+unsigned long CRequestImpressionUpdate::AddVideoReport(unsigned char uTag54, unsigned int nTag38,
                                              unsigned int nTag21, unsigned int nTag50,
                                              unsigned long long nTag51, unsigned long long nTag52,
                                              unsigned short sTag53, float fTag48,
@@ -206,7 +206,7 @@ int CRequestImpressionUpdate::AddVideoReport(unsigned char uTag54, unsigned int 
 //        [49,float][70,u16]; then ++mnReportCount. (No tag-53 field; the float
 //        rides tag 49 instead of tag 48.)
 // ---------------------------------------------------------------------------
-int CRequestImpressionUpdate::AddAudioReport(unsigned char uTag54, unsigned int nTag38,
+unsigned long CRequestImpressionUpdate::AddAudioReport(unsigned char uTag54, unsigned int nTag38,
                                              unsigned int nTag21, unsigned int nTag50,
                                              unsigned long long nTag51, unsigned long long nTag52,
                                              float fTag49, unsigned short sTag70)
@@ -239,7 +239,7 @@ int CRequestImpressionUpdate::AddAudioReport(unsigned char uTag54, unsigned int 
 // Block: 224, U32 24, [38,u32][21,u32][51,u64][31,u8][32,u16]; then
 //        ++mnInteractionCount.
 // ---------------------------------------------------------------------------
-int CRequestImpressionUpdate::AddInteractionR(unsigned char uTag31, unsigned int nTag38,
+unsigned long CRequestImpressionUpdate::AddInteractionR(unsigned char uTag31, unsigned int nTag38,
                                               unsigned int nTag21, unsigned long long nTag51,
                                               unsigned short sTag32)
 {
@@ -266,7 +266,7 @@ int CRequestImpressionUpdate::AddInteractionR(unsigned char uTag31, unsigned int
 //   WriteU8(41);  WriteU16(mnInteractionCount);
 //   FinishBaseBlock(211, 1, 1);   SetStatus(2);   return 0;
 // ---------------------------------------------------------------------------
-int CRequestImpressionUpdate::Finish()
+unsigned long CRequestImpressionUpdate::Finish()
 {
     WriteU8(33, 0);                 // li r4, 0x21
     WriteU16(mnReportCount, 0);     // lhz 0x50

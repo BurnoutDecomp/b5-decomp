@@ -83,14 +83,14 @@ public:
 
     // @ 0x82BD9AC8. Appends a model impression-report block (block type 41) and
     // bumps mnReportCount. Returns 0.
-    int AddModelReport(unsigned char uTag54, unsigned int nTag38,
+    unsigned long AddModelReport(unsigned char uTag54, unsigned int nTag38,
                        unsigned int nTag21, unsigned int nTag50,
                        unsigned long long nTag51, unsigned long long nTag52,
                        unsigned short sTag53, unsigned short sTag70);
 
     // @ 0x82BD9640. Appends a texture impression-report block (block type 46,
     // float field under tag 48) and bumps mnReportCount. Returns 0.
-    int AddTextureRepor(unsigned char uTag54, unsigned int nTag38,
+    unsigned long AddTextureRepor(unsigned char uTag54, unsigned int nTag38,
                         unsigned int nTag21, unsigned int nTag50,
                         unsigned long long nTag51, unsigned long long nTag52,
                         unsigned short sTag53, float fTag48,
@@ -99,7 +99,7 @@ public:
     // @ 0x82BD97D0. Appends a video impression-report block (byte-identical wire
     // shape to AddTextureRepor: block type 46, float under tag 48) and bumps
     // mnReportCount. Returns 0.
-    int AddVideoReport(unsigned char uTag54, unsigned int nTag38,
+    unsigned long AddVideoReport(unsigned char uTag54, unsigned int nTag38,
                        unsigned int nTag21, unsigned int nTag50,
                        unsigned long long nTag51, unsigned long long nTag52,
                        unsigned short sTag53, float fTag48,
@@ -108,21 +108,21 @@ public:
     // @ 0x82BD9960. Appends an audio impression-report block (block type 43,
     // float field under tag 49, no tag-53 field) and bumps mnReportCount.
     // Returns 0.
-    int AddAudioReport(unsigned char uTag54, unsigned int nTag38,
+    unsigned long AddAudioReport(unsigned char uTag54, unsigned int nTag38,
                        unsigned int nTag21, unsigned int nTag50,
                        unsigned long long nTag51, unsigned long long nTag52,
                        float fTag49, unsigned short sTag70);
 
     // @ 0x82BD9C28. Appends an interaction-report block (leading byte 224, block
     // type 24) and bumps mnInteractionCount. Returns 0.
-    int AddInteractionR(unsigned char uTag31, unsigned int nTag38,
+    unsigned long AddInteractionR(unsigned char uTag31, unsigned int nTag38,
                         unsigned int nTag21, unsigned long long nTag51,
                         unsigned short sTag32);
 
     // @ 0x82BD9D20. Seals the request: writes the report count (tag 33) and the
     // interaction count (tag 41), FinishBaseBlock(211, timestamp, sign), then
     // SetStatus(2). Returns 0.
-    int Finish();
+    unsigned long Finish();
 
 private:
     static char* m_szRequestURL;

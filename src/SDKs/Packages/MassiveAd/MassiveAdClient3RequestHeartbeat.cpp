@@ -145,15 +145,15 @@ int CRequestHeartbeat::Parse()
 // All writes bPrepend=1:
 //   WriteU32(m_u32MassiveSessionID);  WriteU8(43);
 //   WriteU32(m_u32MassivePlayerID);   WriteU8(42);
-//   return FinishBaseBlock(214, 1, 1);
+//   FinishBaseBlock(214, 1, 1);
 // ---------------------------------------------------------------------------
-int CRequestHeartbeat::WriteHeartbeatRequest()
+void CRequestHeartbeat::WriteHeartbeatRequest()
 {
     WriteU32(GetMassiveSessionID(), 1); // dword_8327F2CC ; li r5, 1
     WriteU8(43, 1);                  // li r4, 0x2B    ; li r5, 1
     WriteU32(GetMassivePlayerID(), 1);  // dword_8327F2D0 ; li r5, 1
     WriteU8(42, 1);                  // li r4, 0x2A    ; li r5, 1
-    return FinishBaseBlock(214, 1, 1); // li r4, 0xD6 ; li r5, 1 ; li r6, 1
+    FinishBaseBlock(214, 1, 1);       // li r4, 0xD6 ; li r5, 1 ; li r6, 1
 }
 
 // ---------------------------------------------------------------------------
@@ -163,15 +163,17 @@ int CRequestHeartbeat::WriteHeartbeatRequest()
 // pBuilder, 256, 256), writes the block, marks the request ready to submit
 // (SetStatus 2), and returns 0.
 // ---------------------------------------------------------------------------
-int CRequestHeartbeat::CreateRequest(CRequestBuilder* pBuilder)
+unsigned long CRequestHeartbeat::CreateRequest(CRequestBuilder* pBuilder)
 {
-    if (!pBuilder)
-        return -1100;                // li r3, -0x44C
-
-    CRequestObject::CreateRequest(pBuilder, 256, 256); // li r5, 0x100 ; li r6, 0x100
-    WriteHeartbeatRequest();
-    SetStatus(2);                    // li r4, 2
-    return 0;
+    unsigned long uResult = static_cast<unsigned long>(-1100); // li r3, -0x44C
+    if (pBuilder)
+    {
+        CRequestObject::CreateRequest(pBuilder, 256, 256);
+        WriteHeartbeatRequest();
+        SetStatus(2);
+        uResult = 0;
+    }
+    return uResult;
 }
 
 } // namespace MassiveAdClient3

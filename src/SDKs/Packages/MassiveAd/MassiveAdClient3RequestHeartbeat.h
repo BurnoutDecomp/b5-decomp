@@ -76,17 +76,17 @@ public:
     // passes itself). Rejects a null builder (returns -1100); otherwise chains
     // the base CreateRequest(pBuilder, 256, 256), writes the heartbeat block,
     // sets status 2 (ready to submit), and returns 0.
-    int CreateRequest(CRequestBuilder* pBuilder);
+    unsigned long CreateRequest(CRequestBuilder* pBuilder);
 
+private:
     // @ 0x82BD8798. Builds the outgoing heartbeat block. Write order (each
     // write PREPENDS, so the wire order is the reverse): session ID u32, tag
     // 43, player ID u32, tag 42 -- landing front-to-back on the wire as
     // [42][player ID u32][43][session ID u32]. Seals it with
-    // FinishBaseBlock(214, timestamp, sign). Returns the FinishBaseBlock
-    // result.
-    int WriteHeartbeatRequest();
+    // FinishBaseBlock(214, timestamp, sign). The caller at 0x82BD8850
+    // discards the result register.
+    void WriteHeartbeatRequest();
 
-private:
     static char* m_szRequestURL;
 };
 
