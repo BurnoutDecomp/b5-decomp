@@ -48,12 +48,6 @@ namespace BrnGui
 
 namespace
 {
-    // Construct's tail (X360 flt_820DB5B4 / flt_820DB5AC, read out of the image
-    // 2026-08-27). DWARF names the metric one KF_DISTANCE_WARNING_THRESHOLD
-    // (BrnEventInfo.h:198); the imperial sibling is the same distance in metres.
-    const f32 KF_DISTANCE_WARNING_THRESHOLD_METRIC   = 1000.0f;      // 0x447A0000
-    const f32 KF_DISTANCE_WARNING_THRESHOLD_IMPERIAL = 1609.344f;    // 0x44C92B02 (one mile)
-
     // ClearEventSpecificData's landmark sentinel. The X360 loads the 16-bit constant
     // word_82F25440, which the image holds as 0xFFFF -- the invalid LandmarkIndex.
     const s32 KI_INVALID_LANDMARK = -1;                              // word_82F25440 == 0xFFFF
@@ -132,6 +126,13 @@ void EventInfoComponent::Construct(const char* lacName,
     mpEventInfoComponentName   = 0;      // stw 0, 0x14
     mHUDFileRef.mpFileInstance = 0;      // stw 0, 0x18
 
+    // Construct's tail: ARTIST loads both values from the shared float literal pool
+    // (1000.0 @0x820DB5B4, 1609.344 @0x820DB5AC; the latter is also loaded by
+    // HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage @0x823956A8), each branch with
+    // its own lis, as for compiler literals; a named file-scope const is loaded from its
+    // own symbol instead. PS3 DecFIGS @0x3ABFC4 assigns the same two literals.
+    const f32 KF_DISTANCE_WARNING_THRESHOLD_METRIC   = 1000.0f;      // one kilometre
+    const f32 KF_DISTANCE_WARNING_THRESHOLD_IMPERIAL = 1609.344f;    // one mile, in metres
     mfDistanceWarningThreshold = mpStateInterface->IsUsingMetricUnits()
                                ? KF_DISTANCE_WARNING_THRESHOLD_METRIC
                                : KF_DISTANCE_WARNING_THRESHOLD_IMPERIAL;

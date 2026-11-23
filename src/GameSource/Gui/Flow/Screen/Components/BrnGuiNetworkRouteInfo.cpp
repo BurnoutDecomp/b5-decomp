@@ -299,8 +299,10 @@ namespace BrnGui
     void GuiNetworkRouteInfo::Update(InputBuffer::GuiEventQueue* lpInGuiEventQueue)
     {
         StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(lpInGuiEventQueue);
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
+        // Both out-parameters start uninitialised: ARTIST @0x824301C0 passes their stack
+        // slots straight to GetFirstEvent with no prior store.
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
 
         for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != 0;

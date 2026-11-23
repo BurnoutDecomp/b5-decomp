@@ -203,10 +203,13 @@ namespace BrnGui
                    meSubState == E_SUBSTATE_SECURITY_OPTIONS ||
                    meSubState == E_SUBSTATE_VIEW_EVENT ||
                    meSubState == E_SUBSTATE_SETTINGS,
-                   "( meSubState == E_SUBSTATE_FREE_BURNING ) || ( meSubState == E_SUBSTATE_MAIN ) || "
-                   "( meSubState == E_SUBSTATE_MAP ) || ( meSubState == E_SUBSTATE_CHALLENGES) || "
-                   "( meSubState == E_SUBSTATE_SECURITY_OPTIONS) || ( meSubState == E_SUBSTATE_VIEW_EVENT) || "
-                   "( meSubState == E_SUBSTATE_SETTINGS)");
+                   CgsDev::Assert::MessageAt(
+                       "( meSubState == E_SUBSTATE_FREE_BURNING ) || ( meSubState == E_SUBSTATE_MAIN ) || "
+                       "( meSubState == E_SUBSTATE_MAP ) || ( meSubState == E_SUBSTATE_CHALLENGES) || "
+                       "( meSubState == E_SUBSTATE_SECURITY_OPTIONS) || ( meSubState == E_SUBSTATE_VIEW_EVENT) || "
+                       "( meSubState == E_SUBSTATE_SETTINGS)",
+                       "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp",
+                       3826 /* ARTIST 0x82484E44 */));
 
         meSubState = E_SUBSTATE_LOADING_PAUSE_SCREEN;
     }
