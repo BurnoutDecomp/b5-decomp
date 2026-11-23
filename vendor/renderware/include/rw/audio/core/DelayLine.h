@@ -123,7 +123,8 @@ private:
     s32  ReadData(const ChannelPointers *pPtrs, f32 *pDest, s32 backOffset, s32 count) const;  // @0x82B6CC78
     void WriteData(const ChannelPointers *pPtrs, const f32 *pSrc, s32 backOffset, s32 count) const; // @0x82B6CD30
     f32 *LoadTaps(const ChannelPointers *pPtrs, TapRecord *pTaps, s32 tapCount) const;          // @0x82B6CDD8
-    void IncrementalClean(s32 count, s32 offset, TapContext *pCtx) const;             // @0x82B67F88
+    void IncrementalClean(s32 numMarshaled, s32 numProcessed,
+                          IFilter::LocationParams *pParams); // @0x82B67F88
     s32  MarshalDelayData(s32 channel, s32 count, s32 offset, TapContext *pCtx);      // @0x82B6CF10
     void UnmarshalDelayData(s32 channel, s32 count, TapContext *pCtx);                // @0x82B6CFE8
 

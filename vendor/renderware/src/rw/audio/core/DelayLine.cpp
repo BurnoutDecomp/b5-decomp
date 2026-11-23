@@ -305,36 +305,40 @@ f32 *DelayLine::LoadTaps(const ChannelPointers *pPtrs, TapRecord *pTaps, s32 tap
 
 // -------------------------------------------------------------------------------------
 // DelayLine::IncrementalClean @0x82B67F88 -- zero the not-yet-written head-room of the
-// freshly marshalled tap buffers (mpTap, and mpTap2 when a crossfade is in flight) so a
+// freshly marshalled tap buffers (pDelayFull and, during a crossfade, pDelayCross) so a
 // partially-filled ring reads as silence rather than stale data.
 // -------------------------------------------------------------------------------------
-void DelayLine::IncrementalClean(s32 count, s32 offset, TapContext *pCtx) const
+void DelayLine::IncrementalClean(s32 numMarshaled, s32 numProcessed, IFilter::LocationParams *pParams)
 {
-    if (miCleanCursor >= miCapacity) // +0x24 vs +0x14
+    if (miCleanCursor >= miCapacity)
         return;
 
-    s32 n = miReadPosition - miCleanCursor - offset; // +0x28 - +0x24 - offset
-    const s32 limit = count + miReadLength - 1;      // count + +0x10 - 1
-    if (n >= limit)
-        n = limit;
-    if (n < 0)
-        n = 0;
-    for (s32 k = 0; k < n; ++k)
-        pCtx->pDelayFull[k] = KF_ZERO;
-
-    if (pCtx->pDelayCross)
+    s32 numToClean = miReadPosition - miCleanCursor - numProcessed;
+    const s32 maxClean = numMarshaled + miReadLength - 1;
+    if (numToClean >= maxClean)
+        numToClean = maxClean;
+    if (numToClean <= 0)
+        numToClean = 0;
+    for (s32 sample = 0; sample < numToClean; ++sample)
     {
-        const s32 base = miReadLength;                                     // +0x10
-        s32 m = miFilterReadPosition - offset - miCleanCursor;             // +0x2C - offset - +0x24
-        if (m >= base + 127)
-            m = base + 127;
-        const s32 cap2 = base + count - 1;
-        if (m >= cap2)
-            m = cap2;
-        if (m < 0)
-            m = 0;
-        for (s32 k = 0; k < m; ++k)
-            pCtx->pDelayCross[k] = KF_ZERO;
+        // ARTIST reloads the tap pointer each iteration at 0x82B67FDC.
+        f32 *pDelayFull = pParams->pDelayFull;
+        pDelayFull[sample] = KF_ZERO;
+    }
+
+    if (pParams->pDelayCross)
+    {
+        const s32 readLength = miReadLength;
+        s32 numCrossToClean = miFilterReadPosition - numProcessed - miCleanCursor;
+        if (numCrossToClean >= readLength + KI_RAMP_LEN - 1)
+            numCrossToClean = readLength + KI_RAMP_LEN - 1;
+        const s32 maxCrossClean = readLength + numMarshaled - 1;
+        if (numCrossToClean >= maxCrossClean)
+            numCrossToClean = maxCrossClean;
+        if (numCrossToClean <= 0)
+            numCrossToClean = 0;
+        for (s32 sample = 0; sample < numCrossToClean; ++sample)
+            pParams->pDelayCross[sample] = KF_ZERO;
     }
 }
 
