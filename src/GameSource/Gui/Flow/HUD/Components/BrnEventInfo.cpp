@@ -1191,7 +1191,7 @@ void EventInfoComponent::UpdateStuntAttack(GuiCache* lpCache, bool lbOnline)
             for (s32 liPlayer = 0; liPlayer < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liPlayer)
             {
                 const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpCandidate =
-                    lpCache->GetOnlinePlayerInfo(liPlayer);
+                    lpCache->GetOnlinePlayerInfoByIndex(liPlayer);
 
                 if (lpCandidate->meActiveRaceCarIndex == lePlayerActiveRaceCarIndex)
                 {
@@ -1796,7 +1796,7 @@ void EventInfoComponent::ShowFreeburnWithTitleText(GuiCache* lpCache)
     for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
     {
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpCandidate =
-            lpCache->GetOnlinePlayerInfo(liPlayer);
+            lpCache->GetOnlinePlayerInfoByIndex(liPlayer);
         if (lpCandidate != 0 && lpCandidate->mbIsHost)
         {
             lpHost = lpCandidate;

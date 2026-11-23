@@ -34,8 +34,7 @@
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h" // LanguageManager::FormatAndAddText, ParameterFormatType
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SnPrintf
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnChallengeSelector.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnChallengeSelector.cpp".
 
 namespace BrnGui
 {
@@ -85,11 +84,11 @@ s32 ChallengeSelector::GetChallengeIndex(s32 liAvailableChallengeIndex)
     CGS_ASSERT(liAvailableChallengeIndex >= 0,
         CgsDev::Assert::MessageAt(
             "liAvailableChallengeIndex >= 0",
-            KAC_ARTIST_ASSERT_FILE, 121 /* ARTIST 0x8241598C */));
+            __FILE__, 121 /* ARTIST 0x8241598C */));
     CGS_ASSERT(liAvailableChallengeIndex < miAvailableChallenges,
         CgsDev::Assert::MessageAt(
             "liAvailableChallengeIndex < miAvailableChallenges",
-            KAC_ARTIST_ASSERT_FILE, 122 /* ARTIST 0x824159B4 */));
+            __FILE__, 122 /* ARTIST 0x824159B4 */));
 
     return mau16AvailableChallengeIndexToChallengeIndexMapping[liAvailableChallengeIndex];
 }

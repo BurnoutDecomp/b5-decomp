@@ -1582,7 +1582,7 @@ void GuiModule::Destruct()
                 for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
                 {
                     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpCandidate =
-                        mGuiCache.GetOnlinePlayerInfo(liPlayer);
+                        mGuiCache.GetOnlinePlayerInfoByIndex(liPlayer);
                     if (lpCandidate->meActiveRaceCarIndex == liCar)
                     {
                         lpPlayer = lpCandidate;

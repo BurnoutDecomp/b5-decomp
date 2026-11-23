@@ -53,8 +53,7 @@
 
 #include <cstring>   // strcmp (HandleAptTriggers' component-name matching)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.cpp".
 
 namespace BrnGui
 {
@@ -410,7 +409,7 @@ namespace BrnGui
     void ShowtimeInstantResultsState::AppendExpectedComponents()
     {
         CGS_ASSERT(mpGuiCache,
-            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 305 /* ARTIST 0x824B49BC */));                          // cpp:305
+            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 305 /* ARTIST 0x824B49BC */));                          // cpp:305
 
         for (s32 liHelpItem = 0; liHelpItem < KI_HELPITEMS; ++liHelpItem)
         {
@@ -449,7 +448,7 @@ namespace BrnGui
                        == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME,
             CgsDev::Assert::MessageAt(
                 "mResults.meFinishedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME || mResults.meFinishedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME",
-                KAC_ARTIST_ASSERT_FILE, 527 /* ARTIST 0x824B4B78 */));   // cpp:527
+                __FILE__, 527 /* ARTIST 0x824B4B78 */));   // cpp:527
 
         mResultsIcon.SetState(KAC_ICON_STATE_SCORING);
         SetMultiplierText();

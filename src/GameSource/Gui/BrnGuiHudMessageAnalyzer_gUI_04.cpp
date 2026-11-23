@@ -43,7 +43,7 @@
 // SECT-External `Handle*` rows. No row means the file went dark again.
 // =====================================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.cpp".
 
 namespace BrnGui
 {
@@ -83,11 +83,11 @@ void HudMessageAnalyzer::HandleBurningHomeRunCheckpointReached(
         const GuiBHRCheckpointReachedEvent* lpEvent)
 {
     // Non-gating tripwires (cpp:1829-1832, in the console's order).
-    CGS_ASSERT(lpEvent != NULL, CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 1829 /* ARTIST 0x8251B208 */));
-    CGS_ASSERT(lpEvent->meActiveRaceCarIndex >= 0, CgsDev::Assert::MessageAt("lpEvent->meActiveRaceCarIndex >= 0", KAC_ARTIST_ASSERT_FILE, 1830 /* ARTIST 0x8251B230 */));
+    CGS_ASSERT(lpEvent != NULL, CgsDev::Assert::MessageAt("lpEvent", __FILE__, 1829 /* ARTIST 0x8251B208 */));
+    CGS_ASSERT(lpEvent->meActiveRaceCarIndex >= 0, CgsDev::Assert::MessageAt("lpEvent->meActiveRaceCarIndex >= 0", __FILE__, 1830 /* ARTIST 0x8251B230 */));
     CGS_ASSERT(lpEvent->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               CgsDev::Assert::MessageAt("lpEvent->meActiveRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", KAC_ARTIST_ASSERT_FILE, 1831 /* ARTIST 0x8251B258 */));
-    CGS_ASSERT(mpGuiCache != NULL, CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 1832 /* ARTIST 0x8251B280 */));
+               CgsDev::Assert::MessageAt("lpEvent->meActiveRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", __FILE__, 1831 /* ARTIST 0x8251B258 */));
+    CGS_ASSERT(mpGuiCache != NULL, CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 1832 /* ARTIST 0x8251B280 */));
 
     GuiHudMessage lMessage;
 
@@ -133,17 +133,17 @@ void HudMessageAnalyzer::HandleBurningHomeRunRunnerCrashes(
 {
     // Non-gating tripwires (cpp:1925-1928).
     CGS_ASSERT(lpEvent != NULL,
-        CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 1925 /* ARTIST 0x8251B46C */));
+        CgsDev::Assert::MessageAt("lpEvent", __FILE__, 1925 /* ARTIST 0x8251B46C */));
     CGS_ASSERT(lpEvent->meActiveRaceCarIndex >= 0,
         CgsDev::Assert::MessageAt(
             "lpEvent->meActiveRaceCarIndex >= 0",
-            KAC_ARTIST_ASSERT_FILE, 1926 /* ARTIST 0x8251B494 */));
+            __FILE__, 1926 /* ARTIST 0x8251B494 */));
     CGS_ASSERT(lpEvent->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
         CgsDev::Assert::MessageAt(
             "lpEvent->meActiveRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS",
-            KAC_ARTIST_ASSERT_FILE, 1927 /* ARTIST 0x8251B4BC */));
+            __FILE__, 1927 /* ARTIST 0x8251B4BC */));
     CGS_ASSERT(mpGuiCache != NULL,
-        CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 1928 /* ARTIST 0x8251B4E4 */));
+        CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 1928 /* ARTIST 0x8251B4E4 */));
 
     GuiHudMessage lMessage;   // FLAG: deliberately left unconstructed on the <= 0 arms
 
@@ -303,12 +303,12 @@ void HudMessageAnalyzer::HandleEventDistanceToFinish(const GuiInEventDistanceToF
     // Non-gating tripwires (cpp:3758/3759; the second is a single combined assert on the
     // console, message text verbatim including its spacing).
     CGS_ASSERT(lpEvent != NULL,
-        CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 3758 /* ARTIST 0x8251E57C */));
+        CgsDev::Assert::MessageAt("lpEvent", __FILE__, 3758 /* ARTIST 0x8251E57C */));
     CGS_ASSERT((0 < lpEvent->miPlayerPosition) &&
                (E_ACTIVE_RACE_CAR_INDEX_COUNT >= lpEvent->miPlayerPosition),
         CgsDev::Assert::MessageAt(
             "(0 < lpEvent->miPlayerPosition) && ( E_ACTIVE_RACE_CAR_INDEX_COUNT >= lpEvent->miPlayerPosition)",
-            KAC_ARTIST_ASSERT_FILE, 3759 /* ARTIST 0x8251E5AC */));
+            __FILE__, 3759 /* ARTIST 0x8251E5AC */));
 
     GuiHudMessage lMessage;
     lMessage.Construct("EventDistFin");
@@ -342,9 +342,9 @@ void HudMessageAnalyzer::HandleRaceCheckpointReached(const GuiRaceCheckpointReac
     // Non-gating tripwires (cpp:1882/1883 -- note the cache assert comes FIRST here,
     // the reverse of every other handler in this partfile).
     CGS_ASSERT(mpGuiCache != NULL,
-        CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 1882 /* ARTIST 0x8251B380 */));
+        CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 1882 /* ARTIST 0x8251B380 */));
     CGS_ASSERT(lpEvent != NULL,
-        CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 1883 /* ARTIST 0x8251B3A4 */));
+        CgsDev::Assert::MessageAt("lpEvent", __FILE__, 1883 /* ARTIST 0x8251B3A4 */));
 
     if (!mpGuiCache->IsOnlineStartInProgress())
         return;

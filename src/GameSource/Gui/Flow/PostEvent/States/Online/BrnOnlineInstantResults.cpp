@@ -139,17 +139,17 @@ namespace BrnGui
         struct PostEventTag294 : CgsModule::Event { s32 GetEventType() const { return 294; } };
 
         typedef BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData OnlinePlayerStatus;
-        const OnlinePlayerStatus* FindOnlinePlayerStatus(const GuiCache* lpCache, s32 liActiveIndex)
-        {
-            // The original inlined lookup always searches all eight cache slots.
-            for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
-            {
-                const OnlinePlayerStatus* lpStatus = lpCache->GetOnlinePlayerInfo(liPlayer);
-                if (static_cast<s32>(lpStatus->meActiveRaceCarIndex) == liActiveIndex)
-                    return lpStatus;
-            }
-            return 0;
-        }
+        // (FindOnlinePlayerStatus re-built GuiCache::GetOnlinePlayerInfo(EActiveRaceCarIndex), the
+        // DWARF h:775 header-inline scan; the callers use it directly.)
+
+
+
+
+
+
+
+
+
 
         void OutputRaceResultAudio(CgsGui::StateInterface* lpInterface)
         {
@@ -258,7 +258,7 @@ namespace BrnGui
                 for (s32 liPlayer = 0; liPlayer < KI_MAX_ONLINE_PLAYERS; ++liPlayer)
                 {
                     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo =
-                        mpGuiCache->GetOnlinePlayerInfo(liPlayer);
+                        mpGuiCache->GetOnlinePlayerInfoByIndex(liPlayer);
                     if (static_cast<s32>(lpPlayerInfo->meActiveRaceCarIndex) == lrAward.mePlayerActiveRaceCarIndex)
                     {
                         lpPlayerStatusData = lpPlayerInfo;
@@ -308,7 +308,7 @@ namespace BrnGui
                     for (s32 liPlayer = 0; liPlayer < KI_MAX_ONLINE_PLAYERS; ++liPlayer)
                     {
                         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpCandidate =
-                            mpGuiCache->GetOnlinePlayerInfo(liPlayer);
+                            mpGuiCache->GetOnlinePlayerInfoByIndex(liPlayer);
                         if (static_cast<s32>(lpCandidate->meActiveRaceCarIndex) == lrRecord.meActiveRaceCarIndex)
                         {
                             lpPlayerInfo = lpCandidate;
@@ -957,7 +957,7 @@ namespace BrnGui
             CGS_ASSERT(mpGuiCache, "mpGuiCache");
             CGS_ASSERT(lpPlayer->meActiveRaceCarIndex >= 0, "lpOnlinePlayer->meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
             CGS_ASSERT(lpPlayer->meActiveRaceCarIndex < 8, "lpOnlinePlayer->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-            const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpPlayer->meActiveRaceCarIndex);
+            const OnlinePlayerStatus* lpStatus = mpGuiCache->GetOnlinePlayerInfo(static_cast<EActiveRaceCarIndex>(lpPlayer->meActiveRaceCarIndex));
             CGS_ASSERT(lpStatus, "lpInGamePlayerStatusData");
             GuiEventNetworkOutputPlayerTexture lPicture =
                 { GuiEventNetworkOutputPlayerTexture::E_OUTPUT_WINNER_IMAGE, lpStatus->mNetworkPlayerID };
@@ -995,7 +995,7 @@ namespace BrnGui
                 }
             }
             const GuiEventOnlinePostEvent::Record* lpWinner = GetOnlinePlayerFromTablePosition(0);
-            const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpWinner->meActiveRaceCarIndex);
+            const OnlinePlayerStatus* lpStatus = mpGuiCache->GetOnlinePlayerInfo(static_cast<EActiveRaceCarIndex>(lpWinner->meActiveRaceCarIndex));
             mWinnerGamertag.SetText(lpStatus->mPlayerName.GetPlayerName());
             if (IsStuntRunResultsMode(meCurrentGameMode))
                 UpdateStuntRunColoursAndScores();
@@ -1013,7 +1013,7 @@ namespace BrnGui
         CGS_ASSERT(lpPlayer, "lpPostEventOnlinePlayer");
         CGS_ASSERT(lpPlayer->meActiveRaceCarIndex >= 0, "lpPostEventOnlinePlayer->meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
         CGS_ASSERT(lpPlayer->meActiveRaceCarIndex < 8, "lpPostEventOnlinePlayer->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-        const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpPlayer->meActiveRaceCarIndex);
+        const OnlinePlayerStatus* lpStatus = mpGuiCache->GetOnlinePlayerInfo(static_cast<EActiveRaceCarIndex>(lpPlayer->meActiveRaceCarIndex));
         CGS_ASSERT(lpStatus, "lpInGamePlayerStatusData");
         CGS_ASSERT(mTable.HasData(), "mTable.HasData() == true");
         mTable.GetSelectable(liRow)->SetActive(true);
@@ -1163,7 +1163,7 @@ namespace BrnGui
                         {
                             const GuiEventOnlinePostEvent::Record* lpPlayer = GetOnlinePlayerFromSortedTablePosition(liRow);
                             CGS_ASSERT(lpPlayer, "lpPostEventOnlinePlayer");
-                            const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpPlayer->meActiveRaceCarIndex);
+                            const OnlinePlayerStatus* lpStatus = mpGuiCache->GetOnlinePlayerInfo(static_cast<EActiveRaceCarIndex>(lpPlayer->meActiveRaceCarIndex));
                             CGS_ASSERT(lpStatus, "lpInGamePlayerStatusData");
                             const s32 liRevenge = lpStatus->mLiveRevengeRelationship.GetCurrentScoreForLocalPlayer();
                             char lacRevenge[8];
@@ -1216,7 +1216,7 @@ namespace BrnGui
                 }
                 SetAptData(liRow, lpPlayer, false, lbHideRepeatedTeam, lbTeamResults);
                 CGS_ASSERT(mpGuiCache, "mpGuiCache");
-                const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpPlayer->meActiveRaceCarIndex);
+                const OnlinePlayerStatus* lpStatus = mpGuiCache->GetOnlinePlayerInfo(static_cast<EActiveRaceCarIndex>(lpPlayer->meActiveRaceCarIndex));
                 CGS_ASSERT(lpStatus, "lpInGamePlayerStatusData");
                 if (liRow == 0)
                 {

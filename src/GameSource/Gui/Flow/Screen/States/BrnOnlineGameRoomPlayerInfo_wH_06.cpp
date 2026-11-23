@@ -271,7 +271,7 @@ namespace BrnGui
         lapcOptionStrings[2] = KAC_SUBMIT_FEEBDACK_STRING_ID;
         lapcOptionStrings[3] = KAC_KICK_PLAYER_STRING_ID;
 
-        if (mpGuiCache->GetOnlinePlayerInfo(mPlayerNameComponent.miHighlightedIndex)->mbMarkedMan)
+        if (mpGuiCache->GetOnlinePlayerInfoByIndex(mPlayerNameComponent.miHighlightedIndex)->mbMarkedMan)
         {
             lapcOptionStrings[0] = KAC_UNMARK_PLAYER_STRING_ID;
         }

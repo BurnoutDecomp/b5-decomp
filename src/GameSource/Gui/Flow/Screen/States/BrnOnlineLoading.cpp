@@ -529,7 +529,7 @@ namespace BrnGui
         for (s32 liPlayerInfoIndex = 0; liPlayerInfoIndex < KI_MAX_PLAYERS; ++liPlayerInfoIndex)
         {
             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo =
-                mpGuiCache->GetOnlinePlayerInfo(liPlayerInfoIndex);
+                mpGuiCache->GetOnlinePlayerInfoByIndex(liPlayerInfoIndex);
             CGS_ASSERT(lpPlayerInfo != 0, "lpPlayerInfo");
 
             if (lpPlayerInfo->mNetworkPlayerID == -1)

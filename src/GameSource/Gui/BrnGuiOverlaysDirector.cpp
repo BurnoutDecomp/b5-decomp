@@ -26,7 +26,7 @@
 // and on the output queue: 185 = start an overlay (the popup style word), 187 = full info,
 // 188 = wait finished.
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiOverlaysDirector.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/BrnGuiOverlaysDirector.cpp".
 
 namespace BrnGui
 {
@@ -188,7 +188,7 @@ void GuiOverlaysDirector::HandleShowFreeBurnIntroRequest(const GuiEventNetworkSh
 
         for (s32 liOnlinePlayerIndex = 0; liOnlinePlayerIndex < liOnlinePlayerCount; ++liOnlinePlayerIndex)
         {
-            const InGamePlayerStatusData* lpPlayerInfo = mpGuiCache->GetOnlinePlayerInfo(liOnlinePlayerIndex);
+            const InGamePlayerStatusData* lpPlayerInfo = mpGuiCache->GetOnlinePlayerInfoByIndex(liOnlinePlayerIndex);
             CGS_ASSERT(lpPlayerInfo != NULL, "lpPlayerInfo");
 
             if (lpPlayerInfo->mbIsHost)
@@ -363,10 +363,10 @@ void GuiOverlaysDirector::BridgeOutEvents(CgsGui::ModelIO::InputBuffer* lpGuiMod
         return;
 
     CGS_ASSERT(lpGuiModelInput != NULL,
-        CgsDev::Assert::MessageAt("lpGuiModelInput", KAC_ARTIST_ASSERT_FILE, 229 /* ARTIST 0x82501200 */));
+        CgsDev::Assert::MessageAt("lpGuiModelInput", __FILE__, 229 /* ARTIST 0x82501200 */));
 
     CGS_ASSERT(mpModelModule != NULL,
-        CgsDev::Assert::MessageAt("mpModelModule", KAC_ARTIST_ASSERT_FILE, 230 /* ARTIST 0x82501228 */));
+        CgsDev::Assert::MessageAt("mpModelModule", __FILE__, 230 /* ARTIST 0x82501228 */));
 
     lpGuiModelInput->LockForWrite();
     mpModelModule->AddGuiEvents(&mOutputQueue, lpGuiModelInput);

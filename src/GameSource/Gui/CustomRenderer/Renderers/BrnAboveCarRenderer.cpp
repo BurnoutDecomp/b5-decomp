@@ -39,17 +39,17 @@ const CgsGraphics::RGBA KAU_ONLINE_COLOURS[12] = {
     0xFFFF75FDu, 0xFF24E960u, 0xFF187FF4u, 0xFFFF3A97u,
     0xFFE2F91Bu, 0xFFFFFFFFu, 0xFF404040u, 0xFF000000u}; //82F25BE4; entry0 fixed by CRT82C51C20
 
-const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* FindOnlinePlayer(
-    const GuiCache* lpCache, EActiveRaceCarIndex leCar)
-{
-    for (s32 liIndex = 0; liIndex < 8; ++liIndex)
-    {
-        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = lpCache->GetOnlinePlayerInfo(liIndex);
-        if (lpPlayer->meActiveRaceCarIndex == leCar)
-            return lpPlayer;
-    }
-    return 0;
-}
+// (FindOnlinePlayer was a local re-build of GuiCache::GetOnlinePlayerInfo(EActiveRaceCarIndex),
+// the DWARF h:775 header-inline scan; the callers use it directly.)
+
+
+
+
+
+
+
+
+
 
 f32 ClampAboveCarUnit(f32 lfValue)
 {
@@ -90,7 +90,7 @@ void AboveCarRenderer::UpdateCachedInfoForRival(EActiveRaceCarIndex leIndex)
     char lacName[KI_RIVALNAME_LENGTH] = {0};
     CgsGraphics::RGBA luColour = 0xFF3070FFu;
     const u32 luPosition = mpGuiCache->GetEventPositionOfRaceCar(leIndex);
-    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = FindOnlinePlayer(mpGuiCache, leIndex);
+    const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = mpGuiCache->GetOnlinePlayerInfo(leIndex);
     if (lpPlayer)
     {
         const char* lpcName = lpPlayer->mPlayerName.GetPlayerName();
@@ -555,7 +555,7 @@ void AboveCarRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
                 const Vector4& lrPosition = mpGuiCache->GetRaceCarPosition(leCar);
                 Vector3 lvPosition(lrPosition.mV); lvPosition.mV.y += 1.0f;
                 const f32 lfDistance = SetTransformMatrixForCar(lpRendererSet, lvPosition);
-                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = FindOnlinePlayer(mpGuiCache, leCar);
+                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayer = mpGuiCache->GetOnlinePlayerInfo(leCar);
                 if (!lpPlayer) lrInfo.mbUsed = false;
                 else if (!lrInfo.mbUsed || lrInfo.muRivalPosition != mpGuiCache->GetEventPositionOfRaceCar(leCar) ||
                          _stricmp(lpPlayer->mPlayerName.GetPlayerName(), lrInfo.macRivalName))

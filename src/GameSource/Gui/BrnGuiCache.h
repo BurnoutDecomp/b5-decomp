@@ -1164,10 +1164,27 @@ namespace BrnGui
         // corroborated by DecFIGS BrnGuiCache.h:1815.
         bool GetRoadRuleShotCapturedLineGate() const;
 
-        // One online player record (DWARF h:1836 maPlayerInfo[8]; X360
-        // +0xAC80/44160, the committed 312-byte InGamePlayerStatusData stride).
+        // One online player record by slot (DWARF h:788 GetOnlinePlayerInfoByIndex(int32_t),
+        // non-const; maPlayerInfo[8] at X360 +0xAC80, 312-byte stride). ARTIST keeps an
+        // out-of-line copy (0x8240F890, asserts h:3645/3646) and its callers branch to it.
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
-             GetOnlinePlayerInfo(s32 liIndex) const;
+             GetOnlinePlayerInfoByIndex(s32 liPlayerInfoIndex);
+
+        // DWARF h:775 -- the record whose active race car is leActiveRaceCarIndex, or NULL.
+        // Header-inline: ARTIST inlines the eight-slot scan at every caller (e.g.
+        // HudMessageAnalyzer::GetOnlineName @0x824ECEA0, stride 0x138 on +0xAD94).
+        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
+             GetOnlinePlayerInfo(EActiveRaceCarIndex leActiveRaceCarIndex) const
+        {
+            for (s32 liIndex = 0; liIndex < 8; ++liIndex)
+            {
+                if (maPlayerInfo[liIndex].meActiveRaceCarIndex == leActiveRaceCarIndex)
+                {
+                    return &maPlayerInfo[liIndex];
+                }
+            }
+            return 0;
+        }
 
         // ADDITIVE GROW (BrnGuiHudMessageAnalyzer online-stunt-run TU): resolve a network
         // player id to its in-game online-player record (X360 @0x82482738). The analyzer's

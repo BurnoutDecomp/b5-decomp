@@ -25,8 +25,7 @@
 
 #include <cmath>   // sqrtf (the candidate distance test)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnSelectRoutes.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnSelectRoutes.h".
 
 namespace BrnGui
 {
@@ -45,15 +44,15 @@ namespace BrnGui
                                                                     s32 liCheckpointIndex) const
     {
         CGS_ASSERT(liCheckpointIndex > 0,
-            CgsDev::Assert::MessageAt("liCheckpointIndex > 0", KAC_ARTIST_ASSERT_FILE, 288 /* ARTIST 0x824837EC */));
+            CgsDev::Assert::MessageAt("liCheckpointIndex > 0", __FILE__, 288 /* ARTIST 0x824837EC */));
         CGS_ASSERT(liCheckpointIndex < KI_MAX_CHECKPOINTS,
             CgsDev::Assert::MessageAt(
                 "liCheckpointIndex < KI_MAX_CHECKPOINTS",
-                KAC_ARTIST_ASSERT_FILE, 289 /* ARTIST 0x82483810 */));
+                __FILE__, 289 /* ARTIST 0x82483810 */));
         CGS_ASSERT(liCheckpointIndex < maiNumCheckpoints[liRoundNumber],
             CgsDev::Assert::MessageAt(
                 "liCheckpointIndex < maiNumCheckpoints[ liRoundNumber ]",
-                KAC_ARTIST_ASSERT_FILE, 290 /* ARTIST 0x82483840 */));
+                __FILE__, 290 /* ARTIST 0x82483840 */));
 
         return maCheckpointData[liCheckpointIndex].maLandmarkIndex[liRoundNumber];
     }

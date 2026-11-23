@@ -13,7 +13,7 @@
 // every editable to the debug menu; the change callbacks re-publish the state / rectangle to the
 // renderer; RenderHUD draws the rect outline when its toggle is on. See the header for the layout.
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiSatNavDebugComponent.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/BrnGuiSatNavDebugComponent.cpp".
 
 namespace BrnGui
 {
@@ -220,7 +220,7 @@ namespace BrnGui
     void SatNavDebugComponent::SatNavStateCallback(void* /*lpValue*/, void* lpUserData)
     {
         CGS_ASSERT(lpUserData != 0,
-            CgsDev::Assert::MessageAt("lpUserData", KAC_ARTIST_ASSERT_FILE, 247 /* ARTIST 0x8250D9EC */));   // BrnGuiSatNavDebugComponent.cpp:247
+            CgsDev::Assert::MessageAt("lpUserData", __FILE__, 247 /* ARTIST 0x8250D9EC */));   // BrnGuiSatNavDebugComponent.cpp:247
 
         SatNavDebugComponent* lpThis = static_cast<SatNavDebugComponent*>(lpUserData);
 
@@ -245,7 +245,7 @@ namespace BrnGui
     void SatNavDebugComponent::SatNavPositionCallback(void* /*lpValue*/, void* lpUserData)
     {
         CGS_ASSERT( lpUserData != 0,
-            CgsDev::Assert::MessageAt("lpUserData", KAC_ARTIST_ASSERT_FILE, 281 /* ARTIST 0x8250DB64 */));   // BrnGuiSatNavDebugComponent.cpp:281
+            CgsDev::Assert::MessageAt("lpUserData", __FILE__, 281 /* ARTIST 0x8250DB64 */));   // BrnGuiSatNavDebugComponent.cpp:281
 
         static_cast<SatNavDebugComponent*>(lpUserData)->TriggerSatNavPositionUpdate();
     }

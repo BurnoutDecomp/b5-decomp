@@ -44,8 +44,7 @@
 
 #include <cmath>   // std::floor
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnEventPanel.h";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gui\\flow\\screen\\components\\BrnEventPanel.h".
 
 namespace BrnGui
 {
@@ -640,7 +639,7 @@ namespace BrnGui
     void EventPanel::SetPlayerRank(s32 iRank)
     {
         CGS_ASSERT(iRank >= 0,
-            CgsDev::Assert::MessageAt("0<=liCurrentRank", KAC_ARTIST_ASSERT_FILE, 258 /* ARTIST 0x82417A3C */));   // @0x82417A4C  h:258
+            CgsDev::Assert::MessageAt("0<=liCurrentRank", __FILE__, 258 /* ARTIST 0x82417A3C */));   // @0x82417A4C  h:258
 
         miPlayerRank = iRank;   // +0x8B4
     }
@@ -650,16 +649,16 @@ namespace BrnGui
                                   s32 iStuntAttackRank, s32 iMarkedManRank)
     {
         CGS_ASSERT(iRaceRank >= 0,
-            CgsDev::Assert::MessageAt("0<=liCurrentRaceRank", KAC_ARTIST_ASSERT_FILE, 279 /* ARTIST 0x82417AA8 */));        // @0x82417AB4  h:279
+            CgsDev::Assert::MessageAt("0<=liCurrentRaceRank", __FILE__, 279 /* ARTIST 0x82417AA8 */));        // @0x82417AB4  h:279
         CGS_ASSERT(iRoadRageRank >= 0,
             CgsDev::Assert::MessageAt(
-                "0<=liCurrentRoadRageRank", KAC_ARTIST_ASSERT_FILE, 280 /* ARTIST 0x82417ACC */));    // @0x82417AD8  h:280
+                "0<=liCurrentRoadRageRank", __FILE__, 280 /* ARTIST 0x82417ACC */));    // @0x82417AD8  h:280
         CGS_ASSERT(iStuntAttackRank >= 0,
             CgsDev::Assert::MessageAt(
-                "0<=liCurrentStuntAttackRank", KAC_ARTIST_ASSERT_FILE, 281 /* ARTIST 0x82417AF0 */)); // @0x82417AFC  h:281
+                "0<=liCurrentStuntAttackRank", __FILE__, 281 /* ARTIST 0x82417AF0 */)); // @0x82417AFC  h:281
         CGS_ASSERT(iMarkedManRank >= 0,
             CgsDev::Assert::MessageAt(
-                "0<=liCurrentMarkedManRank", KAC_ARTIST_ASSERT_FILE, 282 /* ARTIST 0x82417B14 */));   // @0x82417B20  h:282
+                "0<=liCurrentMarkedManRank", __FILE__, 282 /* ARTIST 0x82417B14 */));   // @0x82417B20  h:282
 
         miCurrentRaceRank        = iRaceRank;        // +0x8B8
         miCurrentRoadRageRank    = iRoadRageRank;    // +0x8BC

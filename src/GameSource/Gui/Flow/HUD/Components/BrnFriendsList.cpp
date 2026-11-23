@@ -1532,7 +1532,7 @@ void FriendsListComponent::SortFullList()
         if (record.mbIsOnline)
             for (s32 player = 0; player < 8; ++player)
             {
-                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* info = mpGuiCache->GetOnlinePlayerInfo(player);
+                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* info = mpGuiCache->GetOnlinePlayerInfoByIndex(player);
                 if (info->mNetworkPlayerID != -1 && LobbyNameCmp(info->mPlayerName.macName, record.mPlayerName.macName) == 0)
                 { record.mbIsInSameLobby = true; break; }
             }

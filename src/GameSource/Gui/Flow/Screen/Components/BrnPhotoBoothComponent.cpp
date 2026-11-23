@@ -41,8 +41,7 @@
 
 #include <cstddef>   // offsetof (the x64 payload-offset words of the wire records)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnPhotoBoothComponent.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnPhotoBoothComponent.h".
 static const char KAC_ARTIST_ASSERT_SOURCE[] =
     "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnPhotoBoothComponent.cpp";
 
@@ -224,9 +223,9 @@ namespace BrnGui
         CGS_ASSERT(mPhotoResourceToLoad.muId != KU_GUI_RESOURCEID_NUM,
             CgsDev::Assert::MessageAt(
                 "E_GUI_RESOURCEID_NUM != mPhotoResourceToLoad.muId",
-                KAC_ARTIST_ASSERT_FILE, 341 /* ARTIST 0x824B3520 */));
+                __FILE__, 341 /* ARTIST 0x824B3520 */));
         CGS_ASSERT(mpGuiCache,
-            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 342 /* ARTIST 0x824B3548 */));
+            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 342 /* ARTIST 0x824B3548 */));
 
         mbResourceLoaded = mpGuiCache->EnsureResourceIsLoaded(mPhotoResourceToLoad);
         return mbResourceLoaded;
@@ -240,9 +239,9 @@ namespace BrnGui
         CGS_ASSERT(mPhotoResourceToLoad.muId != KU_GUI_RESOURCEID_NUM,
             CgsDev::Assert::MessageAt(
                 "E_GUI_RESOURCEID_NUM != mPhotoResourceToLoad.muId",
-                KAC_ARTIST_ASSERT_FILE, 361 /* ARTIST 0x824B35A8 */));
+                __FILE__, 361 /* ARTIST 0x824B35A8 */));
         CGS_ASSERT(mpGuiCache,
-            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 362 /* ARTIST 0x824B35D0 */));
+            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 362 /* ARTIST 0x824B35D0 */));
 
         GuiCache* lpGuiCache = mpGuiCache;
         mbResourceLoaded = false;

@@ -321,7 +321,7 @@ void PaybackComponent::TriggerAptAnimation(EPaybackComponentAnimations lePayback
             for (s32 liPlayer = 0; liPlayer < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liPlayer)
             {
                 const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpRecord =
-                    mpGuiCache->GetOnlinePlayerInfo(liPlayer);
+                    mpGuiCache->GetOnlinePlayerInfoByIndex(liPlayer);
                 if (lpRecord->meActiveRaceCarIndex == meVictimRaceCarIndex)
                 {
                     lpacPersonName = lpRecord->mPlayerName.macName;

@@ -42,7 +42,7 @@
 // those named lanes; with semantic-parity-by-named-members the constants drop out.
 // ============================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptMovieClipRef.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptMovieClipRef.cpp".
 
 namespace BrnFlapt
 {
@@ -115,9 +115,9 @@ TextFieldRef* MovieClipRef::FindChildTextField(TextFieldRef* lpOutRef,
 bool MovieClipRef::TryFindChildComponentRecursively(const char* lpcName,
                                                     MovieClipRef* lpOutMovieClipRef) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, CgsDev::Assert::MessageAt("mpMovieClipInst", KAC_ARTIST_ASSERT_FILE, 115 /* ARTIST 0x8246C9A8 */));
-    CGS_ASSERT(lpOutMovieClipRef != 0, CgsDev::Assert::MessageAt("lpOutMovieClipRef", KAC_ARTIST_ASSERT_FILE, 116 /* ARTIST 0x8246C9CC */));
-    CGS_ASSERT(lpcName != 0, CgsDev::Assert::MessageAt("lpcName", KAC_ARTIST_ASSERT_FILE, 117 /* ARTIST 0x8246C9F0 */));
+    CGS_ASSERT(mpMovieClipInst != 0, CgsDev::Assert::MessageAt("mpMovieClipInst", __FILE__, 115 /* ARTIST 0x8246C9A8 */));
+    CGS_ASSERT(lpOutMovieClipRef != 0, CgsDev::Assert::MessageAt("lpOutMovieClipRef", __FILE__, 116 /* ARTIST 0x8246C9CC */));
+    CGS_ASSERT(lpcName != 0, CgsDev::Assert::MessageAt("lpcName", __FILE__, 117 /* ARTIST 0x8246C9F0 */));
 
     u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcName),
                                                        FlaptNameLength(lpcName));
@@ -142,7 +142,7 @@ MovieClipRef* MovieClipRef::GetParent(MovieClipRef* lpOutRef) const
 void MovieClipRef::GotoAndPlayLabel(u32 luLabelHash, const char* lpcDEBUGName) const
 {
     CGS_ASSERT(mpMovieClipInst != 0,
-        CgsDev::Assert::MessageAt("mpMovieClipInst", KAC_ARTIST_ASSERT_FILE, 149 /* ARTIST 0x8246F3B4 */));
+        CgsDev::Assert::MessageAt("mpMovieClipInst", __FILE__, 149 /* ARTIST 0x8246F3B4 */));
 
     mpMovieClipInst->GotoAndPlayLabel(luLabelHash, lpcDEBUGName);
 }
@@ -167,8 +167,8 @@ void MovieClipRef::GotoAndPlayLabel(const char* lpcLabel) const
 // (which receives both the hash and the original string).
 void MovieClipRef::GotoAndStopLabel(const char* lpcLabel) const
 {
-    CGS_ASSERT(mpMovieClipInst != 0, CgsDev::Assert::MessageAt("mpMovieClipInst", KAC_ARTIST_ASSERT_FILE, 182 /* ARTIST 0x8246F4D4 */));
-    CGS_ASSERT(lpcLabel != 0, CgsDev::Assert::MessageAt("lpcLabel", KAC_ARTIST_ASSERT_FILE, 183 /* ARTIST 0x8246F4F8 */));
+    CGS_ASSERT(mpMovieClipInst != 0, CgsDev::Assert::MessageAt("mpMovieClipInst", __FILE__, 182 /* ARTIST 0x8246F4D4 */));
+    CGS_ASSERT(lpcLabel != 0, CgsDev::Assert::MessageAt("lpcLabel", __FILE__, 183 /* ARTIST 0x8246F4F8 */));
 
     u32 luHash = CgsContainers::CgsHash::CalculateHash(const_cast<char*>(lpcLabel),
                                                        FlaptNameLength(lpcLabel));
@@ -183,9 +183,9 @@ void MovieClipRef::GotoAndStopLabel(const char* lpcLabel) const
 void MovieClipRef::SetFrameTriggerCallback(void* lpCallback, void* lpUserData) const
 {
     CGS_ASSERT(mpMovieClipInst != 0,
-        CgsDev::Assert::MessageAt("mpMovieClipInst", KAC_ARTIST_ASSERT_FILE, 229 /* ARTIST 0x8246CAEC */));
+        CgsDev::Assert::MessageAt("mpMovieClipInst", __FILE__, 229 /* ARTIST 0x8246CAEC */));
     CGS_ASSERT(lpCallback != 0,
-        CgsDev::Assert::MessageAt("lpCallback", KAC_ARTIST_ASSERT_FILE, 230 /* ARTIST 0x8246CB10 */));
+        CgsDev::Assert::MessageAt("lpCallback", __FILE__, 230 /* ARTIST 0x8246CB10 */));
 
     mpMovieClipInst->SetFrameTriggerCallback(
         reinterpret_cast<MovieClipInstance::FrameTriggerCallback>(lpCallback),

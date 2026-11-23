@@ -17,8 +17,7 @@
 
 #include <cstring>   // memset / strcmp
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLargeCarComponent.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnLargeCarComponent.cpp".
 
 namespace BrnGui
 {
@@ -41,7 +40,7 @@ namespace BrnGui
     void LargeCarComponent::SetCarInfo(CgsID lCarId, BrnGuiResourceId luResourceIdType)
     {
         CGS_ASSERT(lCarId != 0,
-            CgsDev::Assert::MessageAt("kCGSID_NULL != lCarId", KAC_ARTIST_ASSERT_FILE, 78 /* ARTIST 0x8241B6D8 */));
+            CgsDev::Assert::MessageAt("kCGSID_NULL != lCarId", __FILE__, 78 /* ARTIST 0x8241B6D8 */));
 
         muResourceIdType = static_cast<u32>(luResourceIdType);   // this+0xBC
         mCurrentCarId    = lCarId;                                // this+0xC0 (full 64-bit CgsID)
@@ -60,7 +59,7 @@ namespace BrnGui
         CGS_ASSERT(meCurrentState >= E_INTERNAL_STATE_READY,
             CgsDev::Assert::MessageAt(
                 "E_INTERNAL_STATE_READY <= meCurrentState",
-                KAC_ARTIST_ASSERT_FILE, 180 /* ARTIST 0x8241B760 */));
+                __FILE__, 180 /* ARTIST 0x8241B760 */));
 
         SetState("transIn");
         meCurrentState = E_INTERNAL_STATE_SHOWING;
@@ -70,7 +69,7 @@ namespace BrnGui
     void LargeCarComponent::HandleLoadNotification(const CgsGui::GuiEventLoadNotification* lpLoadEvent)
     {
         CGS_ASSERT(lpLoadEvent != 0,
-            CgsDev::Assert::MessageAt("lpLoadEvent", KAC_ARTIST_ASSERT_FILE, 222 /* ARTIST 0x8241B7D4 */));
+            CgsDev::Assert::MessageAt("lpLoadEvent", __FILE__, 222 /* ARTIST 0x8241B7D4 */));
 
         if (lpLoadEvent->meRequestType == CgsGui::E_GUI_RESOURCETYPE_APT &&
             muResourceIdType == lpLoadEvent->muLoadRequestId)
@@ -78,11 +77,11 @@ namespace BrnGui
             CGS_ASSERT(E_INTERNAL_STATE_RESOURCES_REQUESTED == meCurrentState,
                 CgsDev::Assert::MessageAt(
                     "E_INTERNAL_STATE_RESOURCES_REQUESTED == meCurrentState",
-                    KAC_ARTIST_ASSERT_FILE, 227 /* ARTIST 0x8241B818 */));
+                    __FILE__, 227 /* ARTIST 0x8241B818 */));
             CGS_ASSERT(muResourceIdType != 0,
                 CgsDev::Assert::MessageAt(
                     "muResourceIdType != 0",
-                    KAC_ARTIST_ASSERT_FILE, 228 /* ARTIST 0x8241B840 */));
+                    __FILE__, 228 /* ARTIST 0x8241B840 */));
             meCurrentState = E_INTERNAL_STATE_READY;
         }
     }
@@ -91,7 +90,7 @@ namespace BrnGui
     void LargeCarComponent::HandleUnloadNotification(const CgsGui::GuiEventUnloadNotification* lpUnloadEvent)
     {
         CGS_ASSERT(lpUnloadEvent != 0,
-            CgsDev::Assert::MessageAt("lpUnloadEvent", KAC_ARTIST_ASSERT_FILE, 247 /* ARTIST 0x8241B894 */));
+            CgsDev::Assert::MessageAt("lpUnloadEvent", __FILE__, 247 /* ARTIST 0x8241B894 */));
 
         if (lpUnloadEvent->meRequestType == CgsGui::E_GUI_RESOURCETYPE_APT &&
             muResourceIdType == lpUnloadEvent->muLoadRequestId)
@@ -99,11 +98,11 @@ namespace BrnGui
             CGS_ASSERT(E_INTERNAL_STATE_UNLOAD_REQUESTED == meCurrentState,
                 CgsDev::Assert::MessageAt(
                     "E_INTERNAL_STATE_UNLOAD_REQUESTED == meCurrentState",
-                    KAC_ARTIST_ASSERT_FILE, 252 /* ARTIST 0x8241B8D8 */));
+                    __FILE__, 252 /* ARTIST 0x8241B8D8 */));
             CGS_ASSERT(muResourceIdType != 0,
                 CgsDev::Assert::MessageAt(
                     "muResourceIdType != 0",
-                    KAC_ARTIST_ASSERT_FILE, 253 /* ARTIST 0x8241B900 */));
+                    __FILE__, 253 /* ARTIST 0x8241B900 */));
             meCurrentState = E_INTERNAL_STATE_DATA_SUPPLIED;
         }
     }
@@ -164,14 +163,14 @@ namespace BrnGui
     void LargeCarComponent::ReleaseResources()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 146 /* ARTIST 0x8243DBCC */));
+            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 146 /* ARTIST 0x8243DBCC */));
 
         if (meCurrentState >= E_INTERNAL_STATE_RESOURCES_REQUESTED &&
             meCurrentState <  E_INTERNAL_STATE_UNLOAD_REQUESTED)
         {
             CGS_ASSERT(muResourceIdType != 0,
                 CgsDev::Assert::MessageAt(
-                    "muResourceIdType != 0", KAC_ARTIST_ASSERT_FILE, 151 /* ARTIST 0x8243DC08 */));
+                    "muResourceIdType != 0", __FILE__, 151 /* ARTIST 0x8243DC08 */));
 
             mpStateInterface->PlayAptMovie("", 4);
             mpStateInterface->RequestResource(

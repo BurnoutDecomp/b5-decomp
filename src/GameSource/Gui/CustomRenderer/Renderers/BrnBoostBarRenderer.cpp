@@ -40,8 +40,7 @@
 // boost colours cross-validate exactly against the PS3 __static_initialization literals); each
 // constant's X360 BSS address is noted where its using body attests it.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/CustomRenderer/Renderers/BrnBoostBarRenderer.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/CustomRenderer/Renderers/BrnBoostBarRenderer.h".
 
 namespace BrnGui
 {
@@ -527,7 +526,7 @@ Vector3 BoostBarRenderer::GetInnerBoostBarColour()
                meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE,
         CgsDev::Assert::MessageAt(
             "( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT ) && ( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE )",
-            KAC_ARTIST_ASSERT_FILE, 641 /* ARTIST 0x824EC788 */));
+            __FILE__, 641 /* ARTIST 0x824EC788 */));
     return mav3BoostInnerColours[meCurrentBoostType];
 }
 
@@ -537,7 +536,7 @@ Vector3 BoostBarRenderer::GetOuterBoostBarColour()
                meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE,
         CgsDev::Assert::MessageAt(
             "( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_COUNT ) && ( meCurrentBoostType != BrnWorld::E_BOOST_TYPE_NONE )",
-            KAC_ARTIST_ASSERT_FILE, 658 /* ARTIST 0x824EC808 */));
+            __FILE__, 658 /* ARTIST 0x824EC808 */));
     return mav3BoostOuterColours[meCurrentBoostType];
 }
 

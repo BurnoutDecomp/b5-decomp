@@ -28,7 +28,7 @@
 // The X360-baked BrnFlaptTextFieldRef.h file/line cites are discarded per project
 // convention.
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptTextFieldRef.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptTextFieldRef.cpp".
 
 namespace BrnFlapt
 {
@@ -56,9 +56,9 @@ void TextFieldRef::Construct(void* lpTextFieldInstance,
 void TextFieldRef::SetText(const char* lpacNewText, bool lbAlreadyLocalised)
 {
     CGS_ASSERT(lpacNewText != 0,
-        CgsDev::Assert::MessageAt("lpacNewText", KAC_ARTIST_ASSERT_FILE, 76 /* ARTIST 0x8246CC84 */));
+        CgsDev::Assert::MessageAt("lpacNewText", __FILE__, 76 /* ARTIST 0x8246CC84 */));
     CGS_ASSERT(mpTextFieldInstance != 0,
-        CgsDev::Assert::MessageAt("mpTextFieldInst", KAC_ARTIST_ASSERT_FILE, 77 /* ARTIST 0x8246CCAC */));
+        CgsDev::Assert::MessageAt("mpTextFieldInst", __FILE__, 77 /* ARTIST 0x8246CCAC */));
 
     static_cast<TextFieldInstance*>(mpTextFieldInstance)->ChangeText(
         reinterpret_cast<const CgsUnicode::CgsUtf8*>(lpacNewText), lbAlreadyLocalised);
@@ -81,7 +81,7 @@ void TextFieldRef::SetAutoSize(bool lbAutoSize)
 void TextFieldRef::ClearText()
 {
     CGS_ASSERT(mpTextFieldInstance != 0,
-        CgsDev::Assert::MessageAt("mpTextFieldInst", KAC_ARTIST_ASSERT_FILE, 61 /* ARTIST 0x8246CC00 */));
+        CgsDev::Assert::MessageAt("mpTextFieldInst", __FILE__, 61 /* ARTIST 0x8246CC00 */));
     static_cast<TextFieldInstance*>(mpTextFieldInstance)->ChangeText(
         reinterpret_cast<const CgsUnicode::CgsUtf8*>(""), false);
 }
@@ -298,7 +298,7 @@ void TextFieldRef::SetColour(Vector4 lv4Colour)
 const char* TextFieldRef::GetText() const
 {
     CGS_ASSERT(mpTextFieldInstance != 0,
-        CgsDev::Assert::MessageAt("mpTextFieldInst", KAC_ARTIST_ASSERT_FILE, 408 /* ARTIST 0x8246E0E8 */));   // cpp:408 (non-gating)
+        CgsDev::Assert::MessageAt("mpTextFieldInst", __FILE__, 408 /* ARTIST 0x8246E0E8 */));   // cpp:408 (non-gating)
 
     return reinterpret_cast<const char*>(
         static_cast<const TextFieldInstance*>(mpTextFieldInstance)->GetAptString().GetText());

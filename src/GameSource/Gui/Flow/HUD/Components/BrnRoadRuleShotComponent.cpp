@@ -175,7 +175,7 @@ void RoadRuleShotComponent::Snap(bool lbShowing)
         for (s32 liPlayer = 0; ; )
         {
             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpInfo =
-                lpGuiCache->GetOnlinePlayerInfo(liPlayer);
+                lpGuiCache->GetOnlinePlayerInfoByIndex(liPlayer);
             if (lpInfo->meActiveRaceCarIndex == liOpponentCar)
             {
                 lpRulerRecord = lpInfo;

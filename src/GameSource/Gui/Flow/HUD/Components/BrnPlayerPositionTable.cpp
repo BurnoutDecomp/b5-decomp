@@ -549,7 +549,7 @@ namespace BrnGui
         for (s32 liPlayer = 0; liPlayer < 8; ++liPlayer)
         {
             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpCandidate =
-                mpCache->GetOnlinePlayerInfo(liPlayer);
+                mpCache->GetOnlinePlayerInfoByIndex(liPlayer);
             if (lpCandidate->meActiveRaceCarIndex == leCurrentActiveRaceCar)
             {
                 lpPlayerInfo = lpCandidate;

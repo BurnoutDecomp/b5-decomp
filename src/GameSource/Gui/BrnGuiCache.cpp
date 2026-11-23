@@ -3224,12 +3224,12 @@ namespace BrnGui
 
     // @ 0x8240F890  ( maPlayerInfo @+0xAC80, stride 312 == sizeof(InGamePlayerStatusData) )
     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
-        GuiCache::GetOnlinePlayerInfo(s32 liIndex) const
+        GuiCache::GetOnlinePlayerInfoByIndex(s32 liPlayerInfoIndex)
     {
-        CGS_ASSERT(liIndex >= 0, "liPlayerInfoIndex >= 0");
-        CGS_ASSERT(liIndex < 8, "liPlayerInfoIndex < KI_MAX_PLAYERS");
+        CGS_ASSERT(liPlayerInfoIndex >= 0, CgsDev::Assert::MessageAt("liPlayerInfoIndex >= 0", KAC_ARTIST_ASSERT_FILE, 3645 /* ARTIST 0x8240F8C8 */));
+        CGS_ASSERT(liPlayerInfoIndex < 8, CgsDev::Assert::MessageAt("liPlayerInfoIndex < KI_MAX_PLAYERS", KAC_ARTIST_ASSERT_FILE, 3646 /* ARTIST 0x8240F8EC */));
 
-        return &maPlayerInfo[liIndex];
+        return &maPlayerInfo[liPlayerInfoIndex];
     }
 
     // @ 0x8240F910  ( maCurrentPlayerTeam @+0xB808, 4*(idx+11778)+this )

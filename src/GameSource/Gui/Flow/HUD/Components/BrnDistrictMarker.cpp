@@ -15,8 +15,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"      // CgsCore::SnPrintf
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"           // CGS_ASSERT
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnDistrictMarker.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/hud/Components/BrnDistrictMarker.cpp".
 
 namespace BrnGui
 {
@@ -304,7 +303,7 @@ namespace BrnGui
     void DistrictMarkerComponent::CountyTransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
     {
         CGS_ASSERT(lpUserData != 0,
-            CgsDev::Assert::MessageAt("lpUserData", KAC_ARTIST_ASSERT_FILE, 471 /* ARTIST 0x82412B64 */));
+            CgsDev::Assert::MessageAt("lpUserData", __FILE__, 471 /* ARTIST 0x82412B64 */));
 
         DistrictMarkerComponent* const lpThis = static_cast<DistrictMarkerComponent*>(lpUserData);
         lpThis->ProcessCountyTransitionComplete(0);
@@ -314,7 +313,7 @@ namespace BrnGui
     void DistrictMarkerComponent::DistrictTransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
     {
         CGS_ASSERT(lpUserData != 0,
-            CgsDev::Assert::MessageAt("lpUserData", KAC_ARTIST_ASSERT_FILE, 492 /* ARTIST 0x82412BC4 */));
+            CgsDev::Assert::MessageAt("lpUserData", __FILE__, 492 /* ARTIST 0x82412BC4 */));
 
         DistrictMarkerComponent* const lpThis = static_cast<DistrictMarkerComponent*>(lpUserData);
         lpThis->ProcessDistrictTransitionComplete(0);

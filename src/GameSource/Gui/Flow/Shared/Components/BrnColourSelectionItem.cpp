@@ -9,8 +9,7 @@
 #include "GameSource/Gui/Flow/Shared/Components/BrnColourSelectionItem.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnColourSelectionItem.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnColourSelectionItem.h".
 
 namespace BrnGui
 {
@@ -31,13 +30,13 @@ namespace BrnGui
                                           const rw::math::vpu::Vector4** lppv4OutColour2) const
     {
         CGS_ASSERT(lppv4OutColour1 != 0,
-            CgsDev::Assert::MessageAt("lppv4OutColour1", KAC_ARTIST_ASSERT_FILE, 118 /* ARTIST 0x824E5530 */));   // @0x824E551C
+            CgsDev::Assert::MessageAt("lppv4OutColour1", __FILE__, 118 /* ARTIST 0x824E5530 */));   // @0x824E551C
         CGS_ASSERT(lppv4OutColour2 != 0,
-            CgsDev::Assert::MessageAt("lppv4OutColour2", KAC_ARTIST_ASSERT_FILE, 119 /* ARTIST 0x824E5554 */));   // @0x824E5544
+            CgsDev::Assert::MessageAt("lppv4OutColour2", __FILE__, 119 /* ARTIST 0x824E5554 */));   // @0x824E5544
         CGS_ASSERT(mpcSelectionColour1 != 0,
-            CgsDev::Assert::MessageAt("mpcSelectionColour1", KAC_ARTIST_ASSERT_FILE, 120 /* ARTIST 0x824E557C */));   // @0x824E5568
+            CgsDev::Assert::MessageAt("mpcSelectionColour1", __FILE__, 120 /* ARTIST 0x824E557C */));   // @0x824E5568
         CGS_ASSERT(mpcSelectionColour2 != 0,
-            CgsDev::Assert::MessageAt("mpcSelectionColour2", KAC_ARTIST_ASSERT_FILE, 121 /* ARTIST 0x824E55A4 */));   // @0x824E5590
+            CgsDev::Assert::MessageAt("mpcSelectionColour2", __FILE__, 121 /* ARTIST 0x824E55A4 */));   // @0x824E5590
 
         *lppv4OutColour1 = mpcSelectionColour1;   // stw @0x824E55BC
         *lppv4OutColour2 = mpcSelectionColour2;   // stw @0x824E55C4

@@ -43,8 +43,7 @@
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"            // GuiTracker::Get{,Num}ActivelyTrackedLandmarks (Update's online arm)
 
 // The game-mode enum Update switches on; BrnGuiCache.h already pulls the owning header in.
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnCompassComponent.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnCompassComponent.h".
 
 namespace GsmIO = BrnGameState::GameStateModuleIO;
 
@@ -171,7 +170,7 @@ namespace BrnGui
         CGS_ASSERT((E_PLAYER_ROUTE_ON_COURSE <= lePlayerOnTrack) && (E_PLAYER_ROUTE_COUNT > lePlayerOnTrack),
             CgsDev::Assert::MessageAt(
                 "(E_PLAYER_ROUTE_ON_COURSE <= lePlayerOnTrack) && (E_PLAYER_ROUTE_COUNT > lePlayerOnTrack)",
-                KAC_ARTIST_ASSERT_FILE, 255 /* ARTIST 0x8241EBDC */));
+                __FILE__, 255 /* ARTIST 0x8241EBDC */));
 
         if (lePlayerOnTrack != mePlayerOnTrack)
         {
@@ -187,9 +186,9 @@ namespace BrnGui
     void CompassComponent::SetBearing(f32 lfBearing)
     {
         CGS_ASSERT(lfBearing >= -0.1,
-            CgsDev::Assert::MessageAt("lfBearing >= -0.1", KAC_ARTIST_ASSERT_FILE, 298 /* ARTIST 0x8241EC78 */));            // BrnCompassComponent.h:298
+            CgsDev::Assert::MessageAt("lfBearing >= -0.1", __FILE__, 298 /* ARTIST 0x8241EC78 */));            // BrnCompassComponent.h:298
         CGS_ASSERT(lfBearing <= 360.1f,
-            CgsDev::Assert::MessageAt("lfBearing <= 360.1f", KAC_ARTIST_ASSERT_FILE, 299 /* ARTIST 0x8241ECA4 */));        // BrnCompassComponent.h:299
+            CgsDev::Assert::MessageAt("lfBearing <= 360.1f", __FILE__, 299 /* ARTIST 0x8241ECA4 */));        // BrnCompassComponent.h:299
 
         // flt_82004920 == 0.0027777778 == 1/360 (degrees -> [0,1] strip fraction).
         Vector2 lPos = mv2InitialViewPos;
@@ -204,10 +203,10 @@ namespace BrnGui
     {
         CGS_ASSERT(lfMarkerBearing >= -180.1,
             CgsDev::Assert::MessageAt(
-                "lfMarkerBearing >= -180.1", KAC_ARTIST_ASSERT_FILE, 335 /* ARTIST 0x8241ED4C */));     // BrnCompassComponent.h:335
+                "lfMarkerBearing >= -180.1", __FILE__, 335 /* ARTIST 0x8241ED4C */));     // BrnCompassComponent.h:335
         CGS_ASSERT(lfMarkerBearing <= 180.1f,
             CgsDev::Assert::MessageAt(
-                "lfMarkerBearing <= 180.1f", KAC_ARTIST_ASSERT_FILE, 336 /* ARTIST 0x8241ED78 */));     // BrnCompassComponent.h:336
+                "lfMarkerBearing <= 180.1f", __FILE__, 336 /* ARTIST 0x8241ED78 */));     // BrnCompassComponent.h:336
 
         if (lbShowMarker)
         {

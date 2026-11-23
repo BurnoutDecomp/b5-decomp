@@ -56,8 +56,7 @@
 
 #include <cstring>   // std::strstr / std::strcmp
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnCrashNavPanel.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnCrashNavPanel.cpp".
 
 namespace BrnGui
 {
@@ -252,7 +251,7 @@ namespace BrnGui
     void CrashNavPanel::AppendExpectedAptComponents(GuiFlow leFlow, GuiCache* lpGuiCache)
     {
         CGS_ASSERT(lpGuiCache != 0,
-            CgsDev::Assert::MessageAt("lpGuiCache", KAC_ARTIST_ASSERT_FILE, 250 /* ARTIST 0x82425EF0 */));   // cpp:250
+            CgsDev::Assert::MessageAt("lpGuiCache", __FILE__, 250 /* ARTIST 0x82425EF0 */));   // cpp:250
 
         mFilterToggles.AppendExpectedAptComponent(leFlow, lpGuiCache, true);   // `li r6, 1`
         mEventPanel.AppendExpectedAptComponents(leFlow, lpGuiCache);
@@ -362,7 +361,7 @@ namespace BrnGui
     void CrashNavPanel::RestoreSettings()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 190 /* ARTIST 0x8244027C */));   // cpp:190
+            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 190 /* ARTIST 0x8244027C */));   // cpp:190
 
         // The live road rule decides which of the two score types the panel comes back on:
         // rules 1/2 map to score type 0, rules 3/4 to score type 1. Any other value leaves
@@ -560,7 +559,7 @@ namespace BrnGui
     {
         CGS_ASSERT(mePanelType == E_PANEL_EVENT,
             CgsDev::Assert::MessageAt(
-                "E_PANEL_EVENT == mePanelType", KAC_ARTIST_ASSERT_FILE, 637 /* ARTIST 0x8243A8A8 */));   // cpp:637
+                "E_PANEL_EVENT == mePanelType", __FILE__, 637 /* ARTIST 0x8243A8A8 */));   // cpp:637
 
         ChangeVisiblePanelState(E_PANEL_EVENT, RivalMapPanel::E_RIVAL_TYPE_COUNT);
         mEventPanel.SetEventData(luEventId, lpScores, mpGuiCache, lbShowPanel);
@@ -757,7 +756,7 @@ namespace BrnGui
     void CrashNavPanel::HandleAptEvents(const CgsGui::GuiEventAptTriggerPayload* lpAptEvent)
     {
         CGS_ASSERT(lpAptEvent != 0,
-            CgsDev::Assert::MessageAt("lpAptEvent", KAC_ARTIST_ASSERT_FILE, 807 /* ARTIST 0x82418854 */));   // cpp:807
+            CgsDev::Assert::MessageAt("lpAptEvent", __FILE__, 807 /* ARTIST 0x82418854 */));   // cpp:807
 
         if (lpAptEvent->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
         {

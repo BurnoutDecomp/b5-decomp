@@ -26,8 +26,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                   // GuiCache::IsMultiplayerAllowed
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiAudioTriggerEvent
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameOptions.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameOptions.cpp".
 
 namespace BrnGui
 {
@@ -96,7 +95,7 @@ namespace BrnGui
         // cpp:1920 -- non-fatal on the X360; the cache pointer is reloaded and used either
         // way (the assert only reports it).
         CGS_ASSERT(mpGuiCache,
-            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 1920 /* ARTIST 0x82485C44 */));
+            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 1920 /* ARTIST 0x82485C44 */));
 
         return mpGuiCache->IsMultiplayerAllowed();
     }
@@ -161,7 +160,7 @@ namespace BrnGui
                 // cpp:1841 -- non-fatal; the X360 leaves the stored mode as it was.
                 CGS_ASSERT(false,
                     CgsDev::Assert::MessageAt(
-                        "Invalid game mode option", KAC_ARTIST_ASSERT_FILE, 1841 /* ARTIST 0x82490DB8 */));
+                        "Invalid game mode option", __FILE__, 1841 /* ARTIST 0x82490DB8 */));
                 break;
         }
     }

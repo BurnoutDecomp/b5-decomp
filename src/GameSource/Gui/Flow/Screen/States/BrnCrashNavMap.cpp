@@ -192,34 +192,34 @@ namespace BrnGui
 
         CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
 
-        // Walk the cache's eight online-player records looking for the one driving the given
-        // active-race-car index. Same helper (and the same known divergence) as
-        // BrnCrashNavMap_wJ_08.cpp's: the X360 inlines the walk, striding maPlayerInfo by 312
-        // (`addi r10,r10,0x138` @0x824BF994) and comparing the index word at record+276
-        // WITHOUT touching the record pointer, then re-deriving &maPlayerInfo[i] and
-        // null-checking THAT once. The committed accessor is the only handle on a record, so
-        // the compare has to go through a non-null pointer, which makes a null record CONTINUE
-        // the search where the X360 ENDS it. The two differ only if two slots carry the same
-        // active-race-car index and the first one's record is null. (Duplicated rather than
-        // shared because wJ_08 keeps its copy in an anonymous namespace; fold the two together
-        // if the partfiles are ever concatenated.)
-        const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
-        FindOnlinePlayerByActiveRaceCarIndex(const GuiCache* lpGuiCache,
-                                             s32 liActiveRaceCarIndex)
-        {
-            for (s32 liSlot = 0; liSlot < KI_MAX_ONLINE_PLAYERS; ++liSlot)
-            {
-                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo =
-                    lpGuiCache->GetOnlinePlayerInfo(liSlot);
+        // The online-player lookups below are GuiCache::GetOnlinePlayerInfo(EActiveRaceCarIndex),
+        // the DWARF h:775 header-inline scan ARTIST inlines (stride 0x138 @0x824BF994, the index
+        // word at record+276, one null check of &maPlayerInfo[i] afterwards).
 
-                if (lpPlayerInfo != 0 &&
-                    static_cast<s32>(lpPlayerInfo->meActiveRaceCarIndex) == liActiveRaceCarIndex)
-                {
-                    return lpPlayerInfo;
-                }
-            }
-            return 0;
-        }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     }
 
     // ================================================================================
@@ -517,8 +517,8 @@ namespace BrnGui
                 // the one already latched, or -- on the no-row path -- a non-empty latched
                 // name is being cleared.
                 const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpRosterRow =
-                    FindOnlinePlayerByActiveRaceCarIndex(
-                        mpGuiCache, mpGuiCache->GetPlayerActiveRaceCarIndex());
+                    mpGuiCache->GetOnlinePlayerInfo(
+                         static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex()));
 
                 bool lbPlayerNameChanged = false;
                 if (lpRosterRow != 0)
@@ -3556,8 +3556,8 @@ namespace BrnGui
                         // Name the player from the online roster, matched on the local
                         // player's active-race-car index.
                         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
-                            lpPlayerInfo = FindOnlinePlayerByActiveRaceCarIndex(
-                                mpGuiCache, mpGuiCache->GetPlayerActiveRaceCarIndex());
+                            lpPlayerInfo = mpGuiCache->GetOnlinePlayerInfo(
+                                 static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex()));
 
                         if (lpPlayerInfo != 0)
                             mPlayerName.Construct(lpPlayerInfo->mPlayerName.macName);
@@ -3584,8 +3584,8 @@ namespace BrnGui
                             CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:1252
 
                             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData*
-                                lpPlayerInfo = FindOnlinePlayerByActiveRaceCarIndex(
-                                    mpGuiCache, lpRivalIcon->GetActiveRaceCarIndex());
+                                lpPlayerInfo = mpGuiCache->GetOnlinePlayerInfo(
+                                     static_cast<EActiveRaceCarIndex>(lpRivalIcon->GetActiveRaceCarIndex()));
 
                             if (lpPlayerInfo != 0)
                             {

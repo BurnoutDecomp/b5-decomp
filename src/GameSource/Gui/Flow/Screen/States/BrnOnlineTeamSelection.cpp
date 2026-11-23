@@ -14,8 +14,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h"   // InGamePlayerStatusData
 #include "GameSource/Network/SharedIO/BrnNetworkModuleOnlineLobbyPlayerStatusInterface.h" // LobbyPlayerStatusData
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineTeamSelection.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineTeamSelection.cpp".
 
 namespace BrnGui
 {
@@ -82,7 +81,7 @@ OnlineTeamSelection::OnlineTeamSelection()
 void OnlineTeamSelection::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
 {
     CGS_ASSERT(lpFsm != 0,
-        CgsDev::Assert::MessageAt("lpFsm", KAC_ARTIST_ASSERT_FILE, 90 /* ARTIST 0x82487850 */));
+        CgsDev::Assert::MessageAt("lpFsm", __FILE__, 90 /* ARTIST 0x82487850 */));
     CgsGui::State::Construct(liId, lpFsm);
 }
 
@@ -186,7 +185,7 @@ void OnlineTeamSelection::HandleGuiCacheEvent(const CgsModule::Event* lpEvent)
 void OnlineTeamSelection::CheckForCompletedLoads()
 {
     CGS_ASSERT(mpGuiCache != 0,
-        CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 273 /* ARTIST 0x824A1B08 */));
+        CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 273 /* ARTIST 0x824A1B08 */));
 
     switch (meSubState)
     {
@@ -206,7 +205,7 @@ void OnlineTeamSelection::CheckForCompletedLoads()
             mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
             meSubState = E_SUBSTATE_MAIN;
             CGS_ASSERT(mpGuiCache != 0,
-                CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 305 /* ARTIST 0x824A1B70 */));
+                CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 305 /* ARTIST 0x824A1B70 */));
             mSelectedPlayerID           = -1;
             mbHighlightOnSelectedPlayer = false;
         }
@@ -220,7 +219,7 @@ void OnlineTeamSelection::CheckForCompletedLoads()
 void OnlineTeamSelection::SetExpectedLobbyComponents()
 {
     CGS_ASSERT(mpGuiCache != 0,
-        CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 538 /* ARTIST 0x824879E8 */));
+        CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 538 /* ARTIST 0x824879E8 */));
     mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
     mPlayerNameComponent.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache);
 }
@@ -248,7 +247,7 @@ void OnlineTeamSelection::ShowPlayerList(s32 liSelectedPlayerID)
          liPlayerIndex < static_cast<s32>(mpGuiCache->muNumActivePlayers);
          ++liPlayerIndex)
     {
-        const InGamePlayerStatusData* lpPlayerInfo = mpGuiCache->GetOnlinePlayerInfo(liPlayerIndex);
+        const InGamePlayerStatusData* lpPlayerInfo = mpGuiCache->GetOnlinePlayerInfoByIndex(liPlayerIndex);
         mPlayerNameComponent.SetText(liPlayerIndex, lpPlayerInfo->mPlayerName.macName);
     }
 

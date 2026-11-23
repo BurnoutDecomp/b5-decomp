@@ -19,7 +19,7 @@
 // the TextField + FontStyle + initial text into the apt allocate-string descriptor.
 // The X360-baked file/line cites in the asserts are discarded per project convention.
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptTextFieldInstance.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptTextFieldInstance.cpp".
 
 namespace BrnFlapt
 {
@@ -37,11 +37,11 @@ void TextFieldInstance::Construct(const MovieClip* lpMovieClip,
                                   s32 liNumAlternateColours)
 {
     CGS_ASSERT(lpMovieClip != 0,
-        CgsDev::Assert::MessageAt("lpMovieClip", KAC_ARTIST_ASSERT_FILE, 48 /* ARTIST 0x8246F584 */));
+        CgsDev::Assert::MessageAt("lpMovieClip", __FILE__, 48 /* ARTIST 0x8246F584 */));
     CGS_ASSERT(luTextFieldIndex < lpMovieClip->muNumTextFields,
         CgsDev::Assert::MessageAt(
             "luTextFieldIndex < lpMovieClip->muNumTextFields",
-            KAC_ARTIST_ASSERT_FILE, 49 /* ARTIST 0x8246F5AC */));
+            __FILE__, 49 /* ARTIST 0x8246F5AC */));
 
     // Cache the alternate-text-colour table + construct the embedded text object.
     mAptString.Construct(lpAlternateTextColours, liNumAlternateColours);
@@ -79,13 +79,13 @@ void TextFieldInstance::SetUpAptStringParams(const TextField* lpTextField,
                                              AptAllocateStringParameters* lpOutAptStringParams)
 {
     CGS_ASSERT(lpTextField != 0,
-        CgsDev::Assert::MessageAt("lpTextField", KAC_ARTIST_ASSERT_FILE, 81 /* ARTIST 0x8246DF8C */));
+        CgsDev::Assert::MessageAt("lpTextField", __FILE__, 81 /* ARTIST 0x8246DF8C */));
     CGS_ASSERT(lpFontStyle != 0,
-        CgsDev::Assert::MessageAt("lpFontStyle", KAC_ARTIST_ASSERT_FILE, 82 /* ARTIST 0x8246DFB0 */));
+        CgsDev::Assert::MessageAt("lpFontStyle", __FILE__, 82 /* ARTIST 0x8246DFB0 */));
     CGS_ASSERT(lpInitialText != 0,
-        CgsDev::Assert::MessageAt("lpInitialText", KAC_ARTIST_ASSERT_FILE, 83 /* ARTIST 0x8246DFD4 */));
+        CgsDev::Assert::MessageAt("lpInitialText", __FILE__, 83 /* ARTIST 0x8246DFD4 */));
     CGS_ASSERT(lpOutAptStringParams != 0,
-        CgsDev::Assert::MessageAt("lpOutAptStringParams", KAC_ARTIST_ASSERT_FILE, 84 /* ARTIST 0x8246DFF8 */));
+        CgsDev::Assert::MessageAt("lpOutAptStringParams", __FILE__, 84 /* ARTIST 0x8246DFF8 */));
 
     // Flags byte (TextField+0x0B): bit0 -> word-wrap, bit1 -> multiline.
     lpOutAptStringParams->bWordWrap  = lpTextField->mxFlags & 1;

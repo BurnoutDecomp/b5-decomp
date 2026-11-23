@@ -299,7 +299,7 @@ namespace BrnGui
             const s32 liHighlightedIndex = mPlayerNameComponent.miHighlightedIndex;
 
             const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo =
-                mpGuiCache->GetOnlinePlayerInfo(liHighlightedIndex);
+                mpGuiCache->GetOnlinePlayerInfoByIndex(liHighlightedIndex);
 
             // Name from the in-game record (+256), the event's value and its stats block,
             // the highlighted row as the player image index, and the world-rank column

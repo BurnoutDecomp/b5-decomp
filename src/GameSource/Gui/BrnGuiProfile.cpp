@@ -36,7 +36,7 @@
 // machine able to complete on PC (no real storage yet).
 // ===========================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.cpp".
 static const char KAC_ARTIST_ASSERT_HEADER[] = "..\\..\\..\\GameSource\\Gui/BrnGuiProfile.h";
 
 namespace BrnGui
@@ -475,7 +475,7 @@ void ProfileManager::Construct(GuiCache& lrGuiCache, CgsGui::SystemUserProfile& 
 bool ProfileManager::Prepare(CgsMemory::HeapMalloc* lpHeapMalloc, CgsMemory::LinearMalloc* lpLinearMalloc)
 {
     CGS_ASSERT(lpHeapMalloc != 0,
-        CgsDev::Assert::MessageAt("lpHeapMalloc != NULL", KAC_ARTIST_ASSERT_FILE, 231 /* ARTIST 0x824F8D08 */));
+        CgsDev::Assert::MessageAt("lpHeapMalloc != NULL", __FILE__, 231 /* ARTIST 0x824F8D08 */));
 
     mpHeapMalloc = lpHeapMalloc;
 
@@ -649,7 +649,7 @@ void ProfileManager::HandleOption(u32 luOption)
     HideMessage();   // X360: virtual dispatch through the MessageDisplay base
 
     CGS_ASSERT(mpOptionFunc != 0,
-        CgsDev::Assert::MessageAt("mpOptionFunc", KAC_ARTIST_ASSERT_FILE, 1312 /* ARTIST 0x824EF834 */));
+        CgsDev::Assert::MessageAt("mpOptionFunc", __FILE__, 1312 /* ARTIST 0x824EF834 */));
     (this->*mpOptionFunc)(luOption);
 }
 
@@ -862,16 +862,16 @@ void ProfileManager::CheckDiskSpace(ProfileTaskResultHandler* lpTaskResultHandle
 {
     CGS_ASSERT(lpTaskResultHandler != 0,
         CgsDev::Assert::MessageAt(
-            "lpTaskResultHandler != NULL", KAC_ARTIST_ASSERT_FILE, 371 /* ARTIST 0x82523CCC */));
+            "lpTaskResultHandler != NULL", __FILE__, 371 /* ARTIST 0x82523CCC */));
     CGS_ASSERT(!TaskIsRunning(),
-        CgsDev::Assert::MessageAt("!TaskIsRunning()", KAC_ARTIST_ASSERT_FILE, 372 /* ARTIST 0x82523CFC */));
+        CgsDev::Assert::MessageAt("!TaskIsRunning()", __FILE__, 372 /* ARTIST 0x82523CFC */));
 
     mpTaskResultHandler   = lpTaskResultHandler;
     mpTaskResultFunc      = &ProfileManager::CheckDiskSpaceResult;
     mMetadata.mStoredData = CgsGui::MakeOpaqueBuffer(mStoredData);
 
     CGS_ASSERT(false,
-        CgsDev::Assert::MessageAt("Should never get here", KAC_ARTIST_ASSERT_FILE, 382 /* ARTIST 0x82523D58 */));
+        CgsDev::Assert::MessageAt("Should never get here", __FILE__, 382 /* ARTIST 0x82523D58 */));
 }
 
 // ---------------------------------------------------------------------------
@@ -890,7 +890,7 @@ void ProfileManager::CheckDiskSpaceResult(CgsGui::ESaveLoadTaskResult /*leResult
 // ---------------------------------------------------------------------------
 void ProfileManager::Bootup(ProfileTaskResultHandler& lrTaskResultHandler, bool lbAutoLoad)
 {
-    CGS_ASSERT(!TaskIsRunning(), CgsDev::Assert::MessageAt("!TaskIsRunning()", KAC_ARTIST_ASSERT_FILE, 405 /* ARTIST 0x825138B4 */));
+    CGS_ASSERT(!TaskIsRunning(), CgsDev::Assert::MessageAt("!TaskIsRunning()", __FILE__, 405 /* ARTIST 0x825138B4 */));
 
     mbAutoLoad        = lbAutoLoad;
     mbAutosaveEnabled = false;
@@ -911,7 +911,7 @@ void ProfileManager::Bootup(ProfileTaskResultHandler& lrTaskResultHandler, bool 
 // ---------------------------------------------------------------------------
 void ProfileManager::BootupResult(CgsGui::ESaveLoadTaskResult leResult)
 {
-    CGS_ASSERT(!mbAutosaveEnabled, CgsDev::Assert::MessageAt("!mbAutosaveEnabled", KAC_ARTIST_ASSERT_FILE, 428 /* ARTIST 0x82510FC0 */));
+    CGS_ASSERT(!mbAutosaveEnabled, CgsDev::Assert::MessageAt("!mbAutosaveEnabled", __FILE__, 428 /* ARTIST 0x82510FC0 */));
 
     if (leResult == CgsGui::E_SAVELOADTASKRESULT_SUCCESS)
     {
@@ -1110,9 +1110,9 @@ void ProfileManager::LoadImageFiles(ProfileTaskResultHandler* lpTaskResultHandle
                                     const CgsGui::ImageFileInfo* laImageFileInfo)
 {
     CGS_ASSERT(lpTaskResultHandler != 0, CgsDev::Assert::MessageAt("lpTaskResultHandler != NULL",
-                KAC_ARTIST_ASSERT_FILE, 720 /* ARTIST 0x82513C3C */));
+                __FILE__, 720 /* ARTIST 0x82513C3C */));
     CGS_ASSERT(laImageFileInfo != 0, CgsDev::Assert::MessageAt("laImageFileInfo != NULL",
-                KAC_ARTIST_ASSERT_FILE, 721 /* ARTIST 0x82513C60 */));
+                __FILE__, 721 /* ARTIST 0x82513C60 */));
 
     s32 liNumberOfImageFiles = 0;
     for (s32 liIndex = 0; liIndex < CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION; ++liIndex)
@@ -1121,13 +1121,13 @@ void ProfileManager::LoadImageFiles(ProfileTaskResultHandler* lpTaskResultHandle
         {
             ++liNumberOfImageFiles;
             CGS_ASSERT(laImageFileInfo[liIndex].miSize > 0, CgsDev::Assert::MessageAt("laImageFileInfo[liIndex].miSize > 0",
-                KAC_ARTIST_ASSERT_FILE, 734 /* ARTIST 0x82513CC8 */));
+                __FILE__, 734 /* ARTIST 0x82513CC8 */));
             CGS_ASSERT(laImageFileInfo[liIndex].mpBuffer != 0, CgsDev::Assert::MessageAt("laImageFileInfo[liIndex].mpBuffer != NULL",
-                KAC_ARTIST_ASSERT_FILE, 735 /* ARTIST 0x82513CEC */));
+                __FILE__, 735 /* ARTIST 0x82513CEC */));
         }
     }
     CGS_ASSERT(liNumberOfImageFiles > 0, CgsDev::Assert::MessageAt("liNumberOfImageFiles > 0",
-                KAC_ARTIST_ASSERT_FILE, 739 /* ARTIST 0x82513D20 */));
+                __FILE__, 739 /* ARTIST 0x82513D20 */));
 
     if (TaskIsRunning())
     {
@@ -1184,10 +1184,10 @@ void ProfileManager::BufferProfileOperation(EProfileOperation leProfileOperation
                                             const CgsGui::ImageFileInfo* laImageFileInfoArray)
 {
     CGS_ASSERT(TaskIsRunning() == true, CgsDev::Assert::MessageAt("TaskIsRunning() == true",
-                KAC_ARTIST_ASSERT_FILE, 1081 /* ARTIST 0x824F8F40 */));
+                __FILE__, 1081 /* ARTIST 0x824F8F40 */));
     CGS_ASSERT(meBufferedOperation == leProfileOperation || meBufferedOperation == E_PROFILEOPERATION_NONE,
                CgsDev::Assert::MessageAt("meBufferedOperation == leProfileOperation || meBufferedOperation == E_PROFILEOPERATION_NONE",
-                KAC_ARTIST_ASSERT_FILE, 1083 /* ARTIST 0x824F8F78 */));
+                __FILE__, 1083 /* ARTIST 0x824F8F78 */));
 
     if (meBufferedOperation == E_PROFILEOPERATION_NONE)
     {
@@ -1203,10 +1203,10 @@ void ProfileManager::BufferProfileOperation(EProfileOperation leProfileOperation
     if (liNumberOfImageFiles > 0)
     {
         CGS_ASSERT(laImageFileInfoArray != 0, CgsDev::Assert::MessageAt("laImageFileInfoArray != NULL",
-                KAC_ARTIST_ASSERT_FILE, 1099 /* ARTIST 0x824F9008 */));
+                __FILE__, 1099 /* ARTIST 0x824F9008 */));
         CGS_ASSERT(miBufferedNumberOfImageFiles + liNumberOfImageFiles <= CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION,
                    CgsDev::Assert::MessageAt("miBufferedNumberOfImageFiles + liNumberOfImageFiles <= CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION",
-                KAC_ARTIST_ASSERT_FILE, 1100 /* ARTIST 0x824F9038 */));
+                __FILE__, 1100 /* ARTIST 0x824F9038 */));
 
         std::memcpy(&maBufferedImageFileInfo[miBufferedNumberOfImageFiles], laImageFileInfoArray,
                     static_cast<usize>(liNumberOfImageFiles) * sizeof(CgsGui::ImageFileInfo));
@@ -1479,7 +1479,7 @@ void ProfileManager::SetMugshotBufferFromCircularBuffer(CgsGui::ImageFileInfo* l
                                                         const CgsGui::ImageFileInfo* lpSourceImageFileInfo)
 {
     CGS_ASSERT(lpDestImageFileInfo != 0,
-        CgsDev::Assert::MessageAt("lpDestImageFileInfo != NULL", KAC_ARTIST_ASSERT_FILE, 1458 /* ARTIST 0x824EFC64 */));
+        CgsDev::Assert::MessageAt("lpDestImageFileInfo != NULL", __FILE__, 1458 /* ARTIST 0x824EFC64 */));
 
     // An unsigned compare (cmplwi @0x824EFC70): the record size is sizeof the slot.
     if (lpDestImageFileInfo->miSize == sizeof(MugshotSaveBuffer))
@@ -1496,7 +1496,7 @@ void ProfileManager::SetMugshotBufferFromCircularBuffer(CgsGui::ImageFileInfo* l
     {
         CGS_ASSERT(lpSourceImageFileInfo->miSize == KI_MUGSHOT_PICTURE_SIZE_BYTES,
             CgsDev::Assert::MessageAt("lpSourceImageFileInfo->miSize == KI_MUGSHOT_PICTURE_SIZE_BYTES",
-                                      KAC_ARTIST_ASSERT_FILE, 1475 /* ARTIST 0x824EFCCC */));
+                                      __FILE__, 1475 /* ARTIST 0x824EFCCC */));
         lpSlot->Construct(lpSourceImageFileInfo->mpBuffer, KI_MUGSHOT_PICTURE_SIZE_BYTES);
     }
     else

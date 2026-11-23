@@ -24,8 +24,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"              // BrnGui::GuiCache (Clear/AppendExpectedAptComponent)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"      // BrnGui::GuiFlow (E_GUIFLOW_SCREEN)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp".
 
 namespace BrnGui
 {
@@ -36,7 +35,7 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::SetExpectedChallengesComponents()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 3962 /* ARTIST 0x824850AC */));   // cpp:3962
+            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 3962 /* ARTIST 0x824850AC */));   // cpp:3962
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -55,7 +54,7 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::SetExpectedSettingsComponents()
     {
         CGS_ASSERT(mpGuiCache != 0,
-            CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 4354 /* ARTIST 0x8248C65C */));   // cpp:4354
+            CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 4354 /* ARTIST 0x8248C65C */));   // cpp:4354
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 

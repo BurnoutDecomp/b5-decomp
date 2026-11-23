@@ -49,8 +49,7 @@
 // BrnHudFlow.cpp -- which IS on the build -- placement-news the state, so its definition
 // has to be visible whether or not this TU is mounted. See the header for the citation.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnRaceMainHudState.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnRaceMainHudState.cpp".
 
 namespace BrnGui
 {
@@ -808,7 +807,7 @@ namespace BrnGui
         CGS_ASSERT(muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM,
             CgsDev::Assert::MessageAt(
                 "muNumExpectedComponents <= KU_MAX_INIT_COMPONENTS_NUM",
-                KAC_ARTIST_ASSERT_FILE, 3527 /* ARTIST 0x82474A18 */));   // cpp:3527
+                __FILE__, 3527 /* ARTIST 0x82474A18 */));   // cpp:3527
 
         mpCache->SetExpectedAptComponentList(E_GUIFLOW_HUD, mauExpectedComponentIds,
                                              muNumExpectedComponents);
@@ -2628,9 +2627,9 @@ namespace BrnGui
     void RaceMainHudState::SetupEventInfo()
     {
         CGS_ASSERT(mpCache != 0,
-            CgsDev::Assert::MessageAt("mpCache", KAC_ARTIST_ASSERT_FILE, 3804 /* ARTIST 0x82474A94 */));           // cpp:3804 (non-gating)
+            CgsDev::Assert::MessageAt("mpCache", __FILE__, 3804 /* ARTIST 0x82474A94 */));           // cpp:3804 (non-gating)
         CGS_ASSERT(mbEventInfo,
-            CgsDev::Assert::MessageAt("mbEventInfo", KAC_ARTIST_ASSERT_FILE, 3805 /* ARTIST 0x82474ABC */));        // cpp:3805 (non-gating)
+            CgsDev::Assert::MessageAt("mbEventInfo", __FILE__, 3805 /* ARTIST 0x82474ABC */));        // cpp:3805 (non-gating)
 
         const s32 liGameMode = mpCache->GetGameMode();
         mEventInfoComponent.SetEventType(
@@ -2737,7 +2736,7 @@ namespace BrnGui
         if (mbPreRaceCountdown && meCurrentEventCountdownState == E_EVENT_COUNTDOWN_STATE_GO)
         {
             CGS_ASSERT(mpCache != 0,
-                CgsDev::Assert::MessageAt("mpCache", KAC_ARTIST_ASSERT_FILE, 3423 /* ARTIST 0x82474930 */));   // cpp:3423 (non-gating)
+                CgsDev::Assert::MessageAt("mpCache", __FILE__, 3423 /* ARTIST 0x82474930 */));   // cpp:3423 (non-gating)
             if (mpCache->GetTime() >= mfEventCountdownTimer)
             {
                 const bool lbRenders = mbPreRaceCountdownRenders;

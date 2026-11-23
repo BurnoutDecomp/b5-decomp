@@ -28,7 +28,7 @@
 // 4-byte-pointer ABI (mpObserver +0, mpAccessPointers +4, mpAllocator +8); on the host it is
 // reached BY NAME through the two template methods, which is the same thing.
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/SatNav/BrnEventIconManager.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/SatNav/BrnEventIconManager.cpp".
 
 namespace BrnGui
 {
@@ -110,7 +110,7 @@ namespace BrnGui
     void EventIconManager::ReleaseResources(CgsGui::StateInterface* lpStateInterface,
                                             f32 lfOptionalFadeDuration)
     {
-        CGS_ASSERT(lpStateInterface != NULL, CgsDev::Assert::MessageAt("lpStateInterface", KAC_ARTIST_ASSERT_FILE, 173 /* ARTIST 0x825174FC */));   // cpp:173
+        CGS_ASSERT(lpStateInterface != NULL, CgsDev::Assert::MessageAt("lpStateInterface", __FILE__, 173 /* ARTIST 0x825174FC */));   // cpp:173
 
         // `*(this + 2100) = 0` -- the count only; the console leaves the table itself alone.
         miNumEventIcons = 0;
@@ -131,9 +131,9 @@ namespace BrnGui
     {
         CGS_ASSERT(liNumIcons <= KI_MAX_2DEVENTICONS,
             CgsDev::Assert::MessageAt(
-                "liNumIcons <= KI_MAX_2DEVENTICONS", KAC_ARTIST_ASSERT_FILE, 101 /* ARTIST 0x824F5968 */));
+                "liNumIcons <= KI_MAX_2DEVENTICONS", __FILE__, 101 /* ARTIST 0x824F5968 */));
         CGS_ASSERT(lpaEventIcons != NULL,
-            CgsDev::Assert::MessageAt("lpaEventIcons", KAC_ARTIST_ASSERT_FILE, 102 /* ARTIST 0x824F598C */));
+            CgsDev::Assert::MessageAt("lpaEventIcons", __FILE__, 102 /* ARTIST 0x824F598C */));
 
         std::memcpy(ma2DEventIcons, lpaEventIcons, sizeof(EventIcon2D) * liNumIcons);
         miNumEventIcons = liNumIcons;
@@ -142,7 +142,7 @@ namespace BrnGui
     // @ 0x824F59C8
     void EventIconManager::GetEventIconPositions(Vector2* lv2IconPositions, s32* lpiNumIcons)
     {
-        CGS_ASSERT(lpiNumIcons != NULL, CgsDev::Assert::MessageAt("lpiNumIcons", KAC_ARTIST_ASSERT_FILE, 122 /* ARTIST 0x824F5A00 */));
+        CGS_ASSERT(lpiNumIcons != NULL, CgsDev::Assert::MessageAt("lpiNumIcons", __FILE__, 122 /* ARTIST 0x824F5A00 */));
 
         // One 16-byte lane store per icon: {x, y, 0, 0} (the X360 zeroes the zw pair
         // before the lvx/stvx copy -- Vector2::Set semantics).
@@ -165,10 +165,10 @@ namespace BrnGui
     u32 EventIconManager::GetEventIDForIconIndex(s32 liIconIndex) const
     {
         CGS_ASSERT(liIconIndex >= 0,
-            CgsDev::Assert::MessageAt("liIconIndex >= 0", KAC_ARTIST_ASSERT_FILE, 153 /* ARTIST 0x824F5AA4 */));
+            CgsDev::Assert::MessageAt("liIconIndex >= 0", __FILE__, 153 /* ARTIST 0x824F5AA4 */));
         CGS_ASSERT(liIconIndex < miNumEventIcons,
             CgsDev::Assert::MessageAt(
-                "liIconIndex < miNumEventIcons", KAC_ARTIST_ASSERT_FILE, 154 /* ARTIST 0x824F5ACC */));
+                "liIconIndex < miNumEventIcons", __FILE__, 154 /* ARTIST 0x824F5ACC */));
 
         return ma2DEventIcons[liIconIndex].muEventID;
     }

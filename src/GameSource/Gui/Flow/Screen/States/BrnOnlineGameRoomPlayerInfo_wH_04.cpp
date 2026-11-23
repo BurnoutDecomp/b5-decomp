@@ -169,7 +169,7 @@ namespace BrnGui
             // asserts survive verbatim (file "..\\GameSource\\Gui/BrnGuiCache.h",
             // lines 3645 / 3646).
             const InGamePlayerStatusData* lpPlayerInfo =
-                mpGuiCache->GetOnlinePlayerInfo(liPlayerIndex);
+                mpGuiCache->GetOnlinePlayerInfoByIndex(liPlayerIndex);
 
             // The parallel lobby mirror row (cache +0xB640, 56-byte stride). No accessor
             // exists for it; the screen is a friend of GuiCache and reads the named
@@ -353,7 +353,7 @@ namespace BrnGui
         // the row index as the player image index, and the world-rank column gated on the
         // cached game params' "ranked" flag.
         const InGamePlayerStatusData* lpPlayerInfo =
-            mpGuiCache->GetOnlinePlayerInfo(liHighlightedIndex);
+            mpGuiCache->GetOnlinePlayerInfoByIndex(liHighlightedIndex);
 
         mPlayerStatsDisplay.SetInfo(lpPlayerInfo->mPlayerName.macName,
                                     0,
@@ -389,7 +389,7 @@ namespace BrnGui
 
         // The highlighted row's online record (mbIsLocalPlayer at +302).
         const InGamePlayerStatusData* lpPlayerInfo =
-            mpGuiCache->GetOnlinePlayerInfo(mPlayerNameComponent.miHighlightedIndex);
+            mpGuiCache->GetOnlinePlayerInfoByIndex(mPlayerNameComponent.miHighlightedIndex);
 
         // Marking and feedback only apply to OTHER players.
         if (!lpPlayerInfo->mbIsLocalPlayer)
@@ -406,7 +406,7 @@ namespace BrnGui
         // the record above.
         if (mpGuiCache->mbIsOnlineHost)
         {
-            if (!mpGuiCache->GetOnlinePlayerInfo(mPlayerNameComponent.miHighlightedIndex)
+            if (!mpGuiCache->GetOnlinePlayerInfoByIndex(mPlayerNameComponent.miHighlightedIndex)
                      ->mbIsLocalPlayer)
             {
                 lpau64OptionIds[liOptionIndex++] = KU64_PLAYER_OPTION_KICK_PLAYER;

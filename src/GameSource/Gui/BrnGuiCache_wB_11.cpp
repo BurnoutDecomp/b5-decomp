@@ -13,7 +13,7 @@
 // A not-yet-homed callee is satisfied by its declaration under cl /c; no body needed.
 extern "C" s32 LobbyNameCmp(const char* pNameA, const char* pNameB);
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp".
 
 namespace BrnGui
 {
@@ -80,9 +80,9 @@ namespace BrnGui
     {
         CGS_ASSERT(mbReplayHasBeenSorted == true,
             CgsDev::Assert::MessageAt(
-                "mbReplayHasBeenSorted == true", KAC_ARTIST_ASSERT_FILE, 4516 /* ARTIST 0x824EEFD8 */));
+                "mbReplayHasBeenSorted == true", __FILE__, 4516 /* ARTIST 0x824EEFD8 */));
         CGS_ASSERT(luIndex < 16,
-            CgsDev::Assert::MessageAt("luIndex < 16", KAC_ARTIST_ASSERT_FILE, 4517 /* ARTIST 0x824EEFFC */));
+            CgsDev::Assert::MessageAt("luIndex < 16", __FILE__, 4517 /* ARTIST 0x824EEFFC */));
         return &maReplayPlayersActive[luIndex];
     }
 }
