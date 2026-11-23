@@ -79,21 +79,30 @@ void DelayFilterCrossFadeFunc(s32 count, f32 feedback, f32 prevFeedback,
                              f32 *base, f32 *primary, f32 *secondary,
                              f32 *weight, f32 *accum, f32 *feedforward)
 {
-    for (s32 i = 0; i < count; ++i)
-    {
-        const f32 blend = weight[i];
-        const f32 inverse = 1.0f - blend;
-        volatile f32 oldTerm = secondary[i] * blend;
-        volatile f32 newTerm = inverse * primary[i];
-        volatile f32 weightedOld = oldTerm * prevFeedback;
-        const f32 combined = newTerm * feedback + weightedOld;
-        accum[i] = combined + base[i];
+    if (count <= 0)
+        return;
 
-        const f32 blendAgain = weight[i];
+    do
+    {
+        const f32 blend = *weight;
+        const f32 inverse = 1.0f - blend;
+        const f32 oldTerm = *secondary * blend;
+        const f32 newTerm = inverse * *primary;
+        const f32 weightedOld = oldTerm * prevFeedback;
+        const f32 combined = newTerm * feedback + weightedOld;
+        *accum = combined + *base;
+
+        const f32 blendAgain = *weight;
         const f32 inverseAgain = 1.0f - blendAgain;
-        volatile f32 oldAgain = secondary[i] * blendAgain;
-        feedforward[i] = inverseAgain * primary[i] + oldAgain;
-    }
+        const f32 oldAgain = *secondary * blendAgain;
+        *feedforward = inverseAgain * *primary + oldAgain;
+        ++weight;
+        ++secondary;
+        ++primary;
+        ++base;
+        ++accum;
+        ++feedforward;
+    } while (--count);
 }
 
 // -------------------------------------------------------------------------------------

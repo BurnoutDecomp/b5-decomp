@@ -96,15 +96,16 @@ void AllPassFilterFunc(s32 count, f32 g1, f32 g2, f32 *base, f32 *work,
 void AllPassFilter::AllPassFilterApplyFunc(IFilter *filter, s32 count, FilterOutputMode mode,
                                          s32, LocationParams *ctx)
 {
-    if (ctx->pDelayCross)
+    if (!ctx->pDelayCross)
+    {
+        AllPassFilter *self = static_cast<AllPassFilter *>(filter);
+        AllPassFilterFunc(count, self->mfGain1, self->mfGain2,
+                          ctx->pInput, ctx->pDelayFull, ctx->pDelayZero, ctx->pOutput, mode);
+    }
+    else
     {
         std::memset(ctx->pOutput, 0, static_cast<usize>(count) * sizeof(f32));
-        return;
     }
-
-    AllPassFilter *self = static_cast<AllPassFilter *>(filter);
-    AllPassFilterFunc(count, self->mfGain1, self->mfGain2,
-                      ctx->pInput, ctx->pDelayFull, ctx->pDelayZero, ctx->pOutput, mode);
 }
 
 // -------------------------------------------------------------------------------------

@@ -385,7 +385,8 @@ public:
     // tag 30, then prepends the total length dword (+22 when signed) and the
     // request-type byte, appends the 20-byte SHA1-HMAC (u16 length 20 + digest)
     // when signing, and finally prepends the protocol-version byte 4.
-    int FinishBaseBlock(char bRequestType, int bWriteTimestamp, int bSign);
+    // ARTIST passes the request byte zero-extended (0x82BD9D78) and stores it at 0x82BD0594.
+    int FinishBaseBlock(unsigned char bRequestType, int bWriteTimestamp, int bSign);
 
     // ----- client-wide protocol state -------------------------------------
 

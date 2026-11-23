@@ -790,7 +790,7 @@ int CRequestObject::WriteString(const char* pcString, int bPrepend)
 // (The asm's tail `if (mpDataBuffer) store mnBufferSize into the dead stack
 //  slot` is a dead store to a local -- dropped.)
 // ---------------------------------------------------------------------------
-int CRequestObject::FinishBaseBlock(char bRequestType, int bWriteTimestamp, int bSign)
+int CRequestObject::FinishBaseBlock(unsigned char bRequestType, int bWriteTimestamp, int bSign)
 {
     if (bWriteTimestamp)
     {
@@ -818,7 +818,7 @@ int CRequestObject::FinishBaseBlock(char bRequestType, int bWriteTimestamp, int 
         lnLength += 22;  // addi 0x16 (tag byte + u16 length + 20-byte digest + version)
     PrependToRequestBuffer(&lnLength, 4);
 
-    char lbRequestType = bRequestType;  // stb r29 into the stack slot
+    unsigned char lbRequestType = bRequestType;  // stb r29 into the stack slot
     PrependToRequestBuffer(&lbRequestType, 1);
 
     if (bSign)
