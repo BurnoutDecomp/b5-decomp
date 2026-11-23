@@ -84,14 +84,14 @@ namespace BrnNetwork
     {
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
         CgsNetwork::PackOrUnpackResult lxResult =
-            CgsNetwork::PackOrUnpackInt(this, &miFramesSinceStart, 0, 0x7FFFFFFF) | lxBase;
+            CgsNetwork::Message::PackOrUnpack(&miFramesSinceStart, 0, 0x7FFFFFFF) | lxBase;
 
         for (s32 liAction = 0; liAction < KI_NUM_ACTIONS; ++liAction)
         {
             const CgsNetwork::PackOrUnpackResult lxSuccess =
-                CgsNetwork::PackOrUnpackBool(this, &mabSuccessfulActions[liAction]) | lxResult;
+                CgsNetwork::Message::PackOrUnpack(&mabSuccessfulActions[liAction]) | lxResult;
             const CgsNetwork::PackOrUnpackResult lxAccum =
-                CgsNetwork::PackOrUnpackBool(this, &mabAccumulationThisFrame[liAction]) | lxSuccess;
+                CgsNetwork::Message::PackOrUnpack(&mabAccumulationThisFrame[liAction]) | lxSuccess;
             const CgsNetwork::PackOrUnpackResult lxScore =
                 CgsNetwork::PackOrUnpackFloat(this, &mafActionScores[liAction],
                                               KF_SUCCESS_SCORE_MIN, KF_SUCCESS_SCORE_MAX,

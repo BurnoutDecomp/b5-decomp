@@ -12,6 +12,11 @@
 //     from the virtual dtor + the class operator delete in the header)
 // ===========================================================================
 
+// XDK size optimization matches the ARTIST bodies at 0x82B551C0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/Realmc/RealmcIfaceCheckCardTask.h"
 
 namespace RealmcIface

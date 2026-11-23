@@ -80,8 +80,8 @@ namespace BrnNetwork
         CommonRelationship     lOverallStats    = *mLiveRevengeRelationship.GetOverallStats();
 
         lxResult |= CgsNetwork::PackOrUnpackDateAndTime(this, &lLastTimeChanged);
-        lxResult |= CgsNetwork::PackOrUnpackInt(this, &liTotalEvents, 0, 0x7FFFFF);
-        lxResult |= CgsNetwork::PackOrUnpackInt(this, &liCurrentScore, -0x7FFF, 0x7FFF);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&liTotalEvents, 0, 0x7FFFFF);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&liCurrentScore, -0x7FFF, 0x7FFF);
         lxResult |= PackOrUnpack(&lOverallStats);
 
         mLiveRevengeRelationship.SetLastTimeChanged(lLastTimeChanged);
@@ -104,12 +104,12 @@ namespace BrnNetwork
     CgsNetwork::PackOrUnpackResult LiveRevengeSyncMessage::PackOrUnpack(CommonRelationshipStats* lpCommonRelationshipStats)
     {
         CgsNetwork::PackOrUnpackResult lxResult =
-            CgsNetwork::PackOrUnpackInt(this, &lpCommonRelationshipStats->miWins, 0, 0x7FFFFFFF);
-        lxResult |= CgsNetwork::PackOrUnpackInt(this, &lpCommonRelationshipStats->miLongestStreak, 0, 0x7FFFFFFF);
-        lxResult |= CgsNetwork::PackOrUnpackInt(this, &lpCommonRelationshipStats->miMarks, 0, 0x7FFFFFFF);
-        lxResult |= CgsNetwork::PackOrUnpackInt(this, &lpCommonRelationshipStats->miScalps, 0, 0x7FFFFFFF);
-        lxResult |= CgsNetwork::PackOrUnpackInt(this, &lpCommonRelationshipStats->miScoresSettled, 0, 0x7FFFFFFF);
-        lxResult |= CgsNetwork::PackOrUnpackInt(this, &lpCommonRelationshipStats->miTakedowns, 0, 0x7FFFFFFF);
+            CgsNetwork::Message::PackOrUnpack(&lpCommonRelationshipStats->miWins, 0, 0x7FFFFFFF);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&lpCommonRelationshipStats->miLongestStreak, 0, 0x7FFFFFFF);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&lpCommonRelationshipStats->miMarks, 0, 0x7FFFFFFF);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&lpCommonRelationshipStats->miScalps, 0, 0x7FFFFFFF);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&lpCommonRelationshipStats->miScoresSettled, 0, 0x7FFFFFFF);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&lpCommonRelationshipStats->miTakedowns, 0, 0x7FFFFFFF);
         return lxResult;
     }
 }

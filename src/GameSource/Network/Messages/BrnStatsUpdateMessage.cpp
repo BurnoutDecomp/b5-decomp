@@ -68,12 +68,12 @@ namespace BrnNetwork
     {
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::Message::PackOrUnpack();
         const CgsNetwork::PackOrUnpackResult lxChallenges =
-            CgsNetwork::PackOrUnpackInt(this, &miNumberOfChallenges, 0, 2000) | lxBase;
+            CgsNetwork::Message::PackOrUnpack(&miNumberOfChallenges, 0, 2000) | lxBase;
         const CgsNetwork::PackOrUnpackResult lxRivals =
-            CgsNetwork::PackOrUnpackInt(this, &miNumberOfRivals, 0, 250) | lxChallenges;
+            CgsNetwork::Message::PackOrUnpack(&miNumberOfRivals, 0, 250) | lxChallenges;
         const CgsNetwork::PackOrUnpackResult lxAchievements =
-            CgsNetwork::PackOrUnpackInt(this, &miNumberOfAchievements, 0, 50);
-        return CgsNetwork::PackOrUnpackInt(this, &miNumberOfTakedowns, 0, 0x7FFFFFFF)
+            CgsNetwork::Message::PackOrUnpack(&miNumberOfAchievements, 0, 50);
+        return CgsNetwork::Message::PackOrUnpack(&miNumberOfTakedowns, 0, 0x7FFFFFFF)
                | (lxAchievements | lxRivals);
     }
 

@@ -67,11 +67,11 @@ namespace BrnNetwork
     CgsNetwork::PackOrUnpackResult ActiveFburnChallengeMessage::PackOrUnpack()
     {
         CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::ReliableMessage::PackOrUnpack();
-        lxResult |= CgsNetwork::PackOrUnpackCgsID(this, &mChallengeID);
-        lxResult |= CgsNetwork::PackOrUnpackInt(this, &miNumPlayersInChallenge, 0, KI_MAX_NETWORK_PLAYERS);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mChallengeID);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&miNumPlayersInChallenge, 0, KI_MAX_NETWORK_PLAYERS);
 
         for (s32 liPlayer = 0; liPlayer < miNumPlayersInChallenge; ++liPlayer)
-            lxResult |= CgsNetwork::Message::PackOrUnpack(&maPlayersInChallengeIDs[liPlayer]);
+            lxResult |= BrnNetworkManager::PackOrUnpack(this,&maPlayersInChallengeIDs[liPlayer]);
 
         return lxResult;
     }

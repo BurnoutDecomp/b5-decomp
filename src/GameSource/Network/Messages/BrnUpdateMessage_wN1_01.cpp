@@ -84,17 +84,17 @@ namespace BrnNetwork
         lxResult = CgsNetwork::PackOrUnpackU16(this, &mUpdateData.mu16SentFrame, 0, KI_UPDATE_MAX_FRAME) | lxResult;
         lxResult = CgsNetwork::PackOrUnpackU16(this, &mUpdateData.mu16FramesSinceStart, 0, KI_UPDATE_MAX_FRAME) | lxResult;
 
-        lxResult = CgsNetwork::PackOrUnpackInt(this, &liCameraStatus, 0, KI_UPDATE_MAX_CAMERA_STATUS) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackInt(this, &liHeadsetStatus, 0, KI_UPDATE_MAX_HEADSET_STATUS) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&liCameraStatus, 0, KI_UPDATE_MAX_CAMERA_STATUS) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&liHeadsetStatus, 0, KI_UPDATE_MAX_HEADSET_STATUS) | lxResult;
 
-        lxResult = CgsNetwork::PackOrUnpackBool(this, &mUpdateData.mbIsBoosting) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackBool(this, &mUpdateData.mbIsCrashing) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackBool(this, &mUpdateData.mbSnap) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackBool(this, &mUpdateData.mbIsRoundNumberOdd) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackBool(this, &mUpdateData.mbIsFreeBurnLobby) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackBool(this, &mUpdateData.mbIsEliminated) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackBool(this, &mUpdateData.mbIsInCarSelect) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackBool(this, &mUpdateData.mbReceivingPlayerCrashedUs) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbIsBoosting) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbIsCrashing) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbSnap) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbIsRoundNumberOdd) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbIsFreeBurnLobby) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbIsEliminated) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbIsInCarSelect) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbReceivingPlayerCrashedUs) | lxResult;
 
         mUpdateData.meCameraStatus  = static_cast<ECameraStatus>(liCameraStatus);
         mUpdateData.meHeadsetStatus = liHeadsetStatus;

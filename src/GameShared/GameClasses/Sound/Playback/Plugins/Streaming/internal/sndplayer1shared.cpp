@@ -265,20 +265,22 @@ int SndPlayer1_CgsStreamMod::PreProcess(SndPlayer1_CgsStreamMod* self, Mixer* /*
 // this frame (emit that many silent samples first); or it is still a full frame or more
 // away (report false, and the caller reports the buffer unavailable).
 // -------------------------------------------------------------------------------------
-bool SndPlayer1_CgsStreamMod::WaitForStartTime(Mixer* ctx, f64 adStartTime, u32* apuSilence)
+bool SndPlayer1_CgsStreamMod::WaitForStartTime(Mixer *ctx, f64 adStartTime, u32 *apuSilence)
 {
     const f64 ldDelta = adStartTime - ctx->mdStreamTime;
-    if (ldDelta <= 0.0)
+    if (ldDelta > 0.0)
     {
-        *apuSilence = 0;
+        const f32 lfFrames = static_cast<f32>(ctx->mpFormat->mfSampleRate * ldDelta);
+        if (!(lfFrames < 256.0f))
+            return false;
+
+        // ARTIST converts toward zero at 0x8268CB58 and stores the low word at 0x8268CB5C.
+        __stfiwx(__fctidz(ctx->mfResampleGain * lfFrames), 0, apuSilence);
         return true;
     }
-    const f32 lfFrames = static_cast<f32>(ctx->mpFormat->mfSampleRate * ldDelta);
-    if (!(lfFrames < 256.0f))
-        return false;
-    // The resample gain scales the frame count into this stage's own sample domain.
-    *apuSilence = PpcFctidzLowU32(
-        static_cast<f64>(ctx->mfResampleGain * lfFrames));
+
+    // The branch at 0x8268CB10 also selects this zero-silence path for unordered time.
+    *apuSilence = 0;
     return true;
 }
 
@@ -321,13 +323,17 @@ int SndPlayer1_CgsStreamMod::Declick(Mixer* ctx)
 // -------------------------------------------------------------------------------------
 // GetFeedSlot @0x826A4348 -- claim the next feed-ring slot, if it is free.
 // -------------------------------------------------------------------------------------
-bool SndPlayer1_CgsStreamMod::GetFeedSlot(s32* apiSlot)
+bool SndPlayer1_CgsStreamMod::GetFeedSlot(s32 *apiSlot)
 {
-    if (mFeedDesc[mNextFeedSlotToFill].feedState)
-        return false;   // the ring has caught up with itself
-    *apiSlot = mNextFeedSlotToFill;
-    mNextFeedSlotToFill = static_cast<u8>((mNextFeedSlotToFill + 1) % KU_MAX_DECODERFEEDS);
-    return true;
+    if (mFeedDesc[mNextFeedSlotToFill].feedState == 0)
+    {
+        *apiSlot = mNextFeedSlotToFill;
+        // ARTIST narrows the increment to a byte before testing the ring limit at 0x826A437C.
+        const u8 luNext = static_cast<u8>(mNextFeedSlotToFill + 1);
+        mNextFeedSlotToFill = luNext == KU_MAX_DECODERFEEDS ? 0 : luNext;
+        return true;
+    }
+    return false;
 }
 
 // -------------------------------------------------------------------------------------

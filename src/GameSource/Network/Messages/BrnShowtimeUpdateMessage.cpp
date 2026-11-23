@@ -38,7 +38,7 @@ namespace BrnNetwork
 
     CgsNetwork::PackOrUnpackResult ShowtimeUpdateMessage::PackOrUnpack()
     {
-        return CgsNetwork::PackOrUnpackInt(this, &miShowtimeScore, 0, 0x7FFFFFFF);
+        return CgsNetwork::Message::PackOrUnpack(&miShowtimeScore, 0, 0x7FFFFFFF);
     }
 
     void ShowtimeUpdateMessage::PrepareForSend(u16 lu16FrameCount, s32 liShowtimeScore)

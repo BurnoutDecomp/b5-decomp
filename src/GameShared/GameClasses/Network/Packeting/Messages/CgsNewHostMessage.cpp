@@ -50,10 +50,10 @@ namespace CgsNetwork
     // per-field statuses are OR-accumulated.
     PackOrUnpackResult NewHostMessage::PackOrUnpack()
     {
-        PackOrUnpackResult lxResult = PackOrUnpackInt(this, &mNewHostID, -1, 0x7FFFFFFF);
+        PackOrUnpackResult lxResult = CgsNetwork::Message::PackOrUnpack(&mNewHostID, -1, 0x7FFFFFFF);
         for (s32 liIndex = 0; liIndex < KI_MAX_RECEIVED_CLIENTS; ++liIndex)
         {
-            lxResult = PackOrUnpackInt(this, &maReceivedClientsIDs[liIndex], -1, 0x7FFFFFFF)
+            lxResult = CgsNetwork::Message::PackOrUnpack(&maReceivedClientsIDs[liIndex], -1, 0x7FFFFFFF)
                        | lxResult;
         }
         return lxResult;

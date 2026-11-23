@@ -1,3 +1,8 @@
+// XDK size optimization matches the ARTIST bodies at 0x82B53250 and 0x82B531E8.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/Realmc/RealmcCardData.h"
 
 #include <cstring>  // std::memset / std::memcpy -- the X360 bodies are literally

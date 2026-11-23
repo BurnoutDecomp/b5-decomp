@@ -251,20 +251,20 @@ namespace CgsNetwork
     }
 
     // uint8_t field.
-    PackOrUnpackResult PackOrUnpackU8(Message* lpMessage, u8* lpu8Field, s32 liMin, s32 liMax)
+    PackOrUnpackResult Message::PackOrUnpack(u8* lpu8Field, s32 liMin, s32 liMax)
     {
-        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)
         {
             u32 luPacked  = 0;
             s32 liNumBits = 0;
             IntQuantiser::Pack(static_cast<s32>(*lpu8Field), liMin, liMax, &luPacked, &liNumBits);
-            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
+            return mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
                                                                       : KX_PACK_FAILED_NO_SPACE;
         }
 
-        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)
         {
-            *lpu8Field = static_cast<u8>(UnPackQuantisedInt(&lpMessage->mBitstream, liMin, liMax));
+            *lpu8Field = static_cast<u8>(UnPackQuantisedInt(&mBitstream, liMin, liMax));
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
@@ -322,20 +322,20 @@ namespace CgsNetwork
     }
 
     // int32_t field.
-    PackOrUnpackResult PackOrUnpackInt(Message* lpMessage, s32* lpiField, s32 liMin, s32 liMax)
+    PackOrUnpackResult Message::PackOrUnpack(s32* lpiField, s32 liMin, s32 liMax)
     {
-        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)
         {
             u32 luPacked  = 0;
             s32 liNumBits = 0;
             IntQuantiser::Pack(*lpiField, liMin, liMax, &luPacked, &liNumBits);
-            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
+            return mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
                                                                       : KX_PACK_FAILED_NO_SPACE;
         }
 
-        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)
         {
-            *lpiField = UnPackQuantisedInt(&lpMessage->mBitstream, liMin, liMax);
+            *lpiField = UnPackQuantisedInt(&mBitstream, liMin, liMax);
             return KX_PACK_OR_UNPACK_SUCCESS;
         }
 
@@ -345,14 +345,10 @@ namespace CgsNetwork
         return KX_PACK_OR_UNPACK_SUCCESS;
     }
 
-    // NetworkPlayerID field: copied into a local, routed through the int32_t primitive over
-    // the full signed 32-bit range, and written back.
+    // ARTIST 0x82881BF0. This overload also admits the invalid ID sentinel.
     PackOrUnpackResult Message::PackOrUnpack(NetworkPlayerID* lpNetworkPlayerID)
     {
-        s32 liValue = *lpNetworkPlayerID;
-        const PackOrUnpackResult lxResult = PackOrUnpackInt(this, &liValue, -0x7FFFFFFF - 1, 0x7FFFFFFF);
-        *lpNetworkPlayerID = liValue;
-        return lxResult;
+        return PackOrUnpack(lpNetworkPlayerID, K_INVALID_PLAYER_ID, 0x7FFFFFFF);
     }
 
     // uint32_t field (the word goes to the quantiser unchanged).
@@ -382,17 +378,17 @@ namespace CgsNetwork
     // bool field: travels as a u8 in [0, 1]. When packing, the flag is normalised into
     // the temporary first; when unpacking, the field becomes (value == 1). The
     // lifecycle word is re-read after the u8 call.
-    PackOrUnpackResult PackOrUnpackBool(Message* lpMessage, bool* lpbField)
+    PackOrUnpackResult Message::PackOrUnpack(bool* lpbField)
     {
         u8 lu8Value = 0;   // left unset by the console when the lifecycle word is invalid
-        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)
         {
             lu8Value = (*lpbField != false) ? 1 : 0;
         }
 
-        const PackOrUnpackResult lxResult = PackOrUnpackU8(lpMessage, &lu8Value, 0, 1);
+        const PackOrUnpackResult lxResult = PackOrUnpack(&lu8Value, 0, 1);
 
-        if (lpMessage->mePackOrUnpack != Message::E_PACK_INTO_BITSTREAM)
+        if (mePackOrUnpack != E_PACK_INTO_BITSTREAM)
         {
             *lpbField = (lu8Value == 1);
         }
@@ -403,13 +399,13 @@ namespace CgsNetwork
     // A CgsID travels as its low then its high 32-bit half, each a full-range int. Both
     // directions also render the id to text (the result is unused); packing first checks
     // the halves recombine to the id.
-    PackOrUnpackResult PackOrUnpackCgsID(Message* lpMessage, u64* lpu64Field)
+    PackOrUnpackResult Message::PackOrUnpack(CgsID* lpu64Field)
     {
         const s32 KI_MIN_INT32 = -0x7FFFFFFF - 1;
         const s32 KI_MAX_INT32 = 0x7FFFFFFF;
         char lacIDString[KI_CGSID_STRING_LEN];
 
-        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        if (mePackOrUnpack == E_PACK_INTO_BITSTREAM)
         {
             CgsIDConvertToString(*lpu64Field, lacIDString);
 
@@ -421,20 +417,20 @@ namespace CgsNetwork
             u32 luPacked  = 0;
             s32 liNumBits = 0;
             IntQuantiser::Pack(static_cast<s32>(liLow), KI_MIN_INT32, KI_MAX_INT32, &luPacked, &liNumBits);
-            if (!lpMessage->mBitstream.AddBits(luPacked, liNumBits))
+            if (!mBitstream.AddBits(luPacked, liNumBits))
             {
                 return KX_PACK_FAILED_NO_SPACE;
             }
 
             IntQuantiser::Pack(static_cast<s32>(liHigh), KI_MIN_INT32, KI_MAX_INT32, &luPacked, &liNumBits);
-            return lpMessage->mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
+            return mBitstream.AddBits(luPacked, liNumBits) ? KX_PACK_OR_UNPACK_SUCCESS
                                                                       : KX_PACK_FAILED_NO_SPACE;
         }
 
-        if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        if (mePackOrUnpack == E_UNPACK_FROM_BITSTREAM)
         {
-            const s32 liLow  = UnPackQuantisedInt(&lpMessage->mBitstream, KI_MIN_INT32, KI_MAX_INT32);
-            const s32 liHigh = UnPackQuantisedInt(&lpMessage->mBitstream, KI_MIN_INT32, KI_MAX_INT32);
+            const s32 liLow  = UnPackQuantisedInt(&mBitstream, KI_MIN_INT32, KI_MAX_INT32);
+            const s32 liHigh = UnPackQuantisedInt(&mBitstream, KI_MIN_INT32, KI_MAX_INT32);
             *lpu64Field = (static_cast<u64>(static_cast<u32>(liHigh)) << 32) | static_cast<u32>(liLow);
             CgsIDConvertToString(*lpu64Field, lacIDString);
             return KX_PACK_OR_UNPACK_SUCCESS;

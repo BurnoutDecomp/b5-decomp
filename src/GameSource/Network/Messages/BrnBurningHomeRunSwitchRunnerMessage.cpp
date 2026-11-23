@@ -47,8 +47,8 @@ namespace BrnNetwork
 
     // BrnNetwork::BurningHomeRunSwitchRunnerMessage::PackOrUnpack @ 0x8257C238
     // ORs the reliable base id status with the NetworkPlayerID field status (both u8,
-    // 0 == success). BrnNetworkManager::PackOrUnpack is the committed static NetworkPlayerID
-    // field primitive (message + field pointer; == X360 sub_82881BF0).
+    // 0 == success). ARTIST 0x82881BF0 uses the Message player-ID overload,
+    // whose bounds include the invalid ID sentinel.
     CgsNetwork::PackOrUnpackResult BurningHomeRunSwitchRunnerMessage::PackOrUnpack()
     {
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();

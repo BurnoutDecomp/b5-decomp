@@ -1,3 +1,8 @@
+// XDK size optimization matches the ARTIST bodies at 0x82C45000 and 0x82C44C50.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/Realmc/RealmcMessageQueue.h"
 
 // ===========================================================================

@@ -60,8 +60,8 @@ namespace BrnNetwork
                                            reinterpret_cast<char*>(&mSuccessBitArray),
                                            8) | lxBase;
         const CgsNetwork::PackOrUnpackResult lxFrames =
-            CgsNetwork::PackOrUnpackInt(this, &miFramesSinceStart, 0, 0x7FFFFFFF);
-        return CgsNetwork::PackOrUnpackInt(this, &miActionIndex, 0, 2) | (lxFrames | lxBuffer);
+            CgsNetwork::Message::PackOrUnpack(&miFramesSinceStart, 0, 0x7FFFFFFF);
+        return CgsNetwork::Message::PackOrUnpack(&miActionIndex, 0, 2) | (lxFrames | lxBuffer);
     }
 
     void FburnSuccessUpdateMessage::PrepareForSend(u16 lu16FrameCount,

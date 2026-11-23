@@ -42,8 +42,8 @@ namespace BrnNetwork
     {
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
         const CgsNetwork::PackOrUnpackResult lxEntering =
-            CgsNetwork::PackOrUnpackBool(this, &mbEnteringShowtime);
-        return CgsNetwork::PackOrUnpackInt(this, &miFinalShowtimeScore, 0, 0x7FFFFFFF)
+            CgsNetwork::Message::PackOrUnpack(&mbEnteringShowtime);
+        return CgsNetwork::Message::PackOrUnpack(&miFinalShowtimeScore, 0, 0x7FFFFFFF)
              | (lxEntering | lxBase);
     }
 

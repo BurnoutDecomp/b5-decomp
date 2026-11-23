@@ -33,7 +33,7 @@ namespace BrnNetwork
         // The enum travels through the int primitive via a stack temporary.
         s32 liCameraStatus = static_cast<s32>(meCameraStatus);
         const CgsNetwork::PackOrUnpackResult lxStatus =
-            CgsNetwork::PackOrUnpackInt(this, &liCameraStatus, 0, E_CAMERA_STATUS_COUNT);
+            CgsNetwork::Message::PackOrUnpack(&liCameraStatus, 0, E_CAMERA_STATUS_COUNT);
         meCameraStatus = static_cast<ECameraStatus>(liCameraStatus);
 
         return lxStatus | lxBase;

@@ -30,7 +30,7 @@ namespace BrnNetwork
 
         s32 liResponse = meCameraRequestResponse;
         const CgsNetwork::PackOrUnpackResult lxResult =
-            CgsNetwork::PackOrUnpackInt(this, &liResponse, 0, E_RESPONSE_COUNT) | lxBase;
+            CgsNetwork::Message::PackOrUnpack(&liResponse, 0, E_RESPONSE_COUNT) | lxBase;
         meCameraRequestResponse = static_cast<EResponse>(liResponse);
         return lxResult;
     }

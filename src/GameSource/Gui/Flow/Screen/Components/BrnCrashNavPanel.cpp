@@ -392,7 +392,7 @@ namespace BrnGui
         // Re-highlight the top-level option for the restored panel; dirty the row when the
         // highlight actually moved (`*(row + 0xC) |= 0x10` == Selectable::SetDirty).
         const PanelType leSelected = mePanelType;
-        MenuToggle* const lpTopRow = mFilterToggles.GetSelectable(KI_TOGGLE_TOP_LEVEL);
+        MenuToggle* const lpTopRow = static_cast<MenuToggle*>(mFilterToggles.SelectableGroup::GetSelectable(KI_TOGGLE_TOP_LEVEL));
         if (lpTopRow->mItemText.HighlightIndex(leSelected))
         {
             lpTopRow->SetDirty();

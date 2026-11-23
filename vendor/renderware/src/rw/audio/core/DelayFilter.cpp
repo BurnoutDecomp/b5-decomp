@@ -11,6 +11,11 @@
 // See DelayFilter.h for the byte-exact layout.
 // =====================================================================================
 
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces the ARTIST apply and feedback bodies.
+#pragma optimize("s", on)
+#endif
+
 #include "rw/audio/core/DelayFilter.h"
 
 #include <cmath> // std::fabs (the fabs the feedback clamp uses)
@@ -25,9 +30,6 @@ namespace core
 // flt_82001CC0 == 0.0f (the float-zero immediate the ctor / reset store, and the
 // clamp's sign test comparand).
 static const f32 KF_ZERO = 0.0f;
-// flt_8214AF4C == 0.99000001f -- the feedback magnitude clamp (a runaway feedback loop
-// >= 1.0 would be unstable); flt_820CC338 == -0.99000001f is its negated form.
-static const f32 KF_FEEDBACK_CLAMP = 0.99000001f;
 
 // -------------------------------------------------------------------------------------
 // DelayFilter::DelayFilter @0x82B67D10 -- clear the record, mark the read-length slot.
@@ -57,19 +59,24 @@ void DelayFilter::DelayFilterApplyFunc(IFilter *filter, s32 count, FilterOutputM
                                        s32, LocationParams *ctx)
 {
     DelayFilter *self = static_cast<DelayFilter *>(filter);
-    if (ctx->pDelayCross)
+    if (!ctx->pDelayCross)
+    {
+        f32 *output = ctx->pOutput;
+        const f32 feedback = self->mfFeedback;
+        f32 *delay = ctx->pDelayZero;
+        const f32 *full = ctx->pDelayFull;
+        const f32 *input = ctx->pInput;
+        for (s32 n = 0; n < count; ++n)
+        {
+            delay[n] = full[n] * feedback + input[n];
+            output[n] = full[n];
+        }
+    }
+    else
     {
         DelayFilterCrossFadeFunc(count, self->mfFeedback, self->mfPrevFeedback,
                                  ctx->pInput, ctx->pDelayFull, ctx->pDelayCross,
                                  ctx->pCrossFadeCoeff, ctx->pDelayZero, ctx->pOutput);
-        return;
-    }
-
-    const f32 feedback = self->mfFeedback;
-    for (s32 n = 0; n < count; ++n)
-    {
-        ctx->pDelayZero[n] = (ctx->pDelayFull[n] * feedback) + ctx->pInput[n];
-        ctx->pOutput[n] = ctx->pDelayFull[n];
     }
 }
 
@@ -120,14 +127,19 @@ void DelayFilter::DelayFilterResetFunc(IFilter *filter)
 // magnitude >= 1.0 makes the feedback loop unstable), latch the outgoing gain into the
 // "previous" slot so the apply func can cross-fade, then install the new gain.
 // -------------------------------------------------------------------------------------
-DelayFilter *DelayFilter::SetFeedback(DelayFilter *self, f32 feedback)
+void DelayFilter::SetFeedback(f32 feedback)
 {
-    if (std::fabs(feedback) > KF_FEEDBACK_CLAMP)
-        feedback = (feedback <= KF_ZERO) ? -KF_FEEDBACK_CLAMP : KF_FEEDBACK_CLAMP;
+    // ARTIST loads the upper bound from 0x8214AF4C and the lower from 0x820CC338.
+    if (std::fabs(feedback) > 0.99f)
+    {
+        if (feedback > 0.0f)
+            feedback = 0.99f;
+        else
+            feedback = -0.99f;
+    }
 
-    self->mfPrevFeedback = self->mfFeedback; // stfs (old +0x10) -> +0x14
-    self->mfFeedback = feedback;             // stfs (clamped)  -> +0x10
-    return self;
+    mfPrevFeedback = mfFeedback;
+    mfFeedback = feedback;
 }
 
 } // namespace core

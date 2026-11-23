@@ -131,7 +131,7 @@ namespace BrnNetwork
     {
         CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::ReliableMessage::PackOrUnpack();
 
-        lxResult = CgsNetwork::PackOrUnpackInt(this, &miNumRoadRulesScores,
+        lxResult = CgsNetwork::Message::PackOrUnpack(&miNumRoadRulesScores,
                                                KI_MIN_ROAD_RULES_MESSAGE_ENTRIES,
                                                KI_MAX_ROAD_RULES_MESSAGE_ENTRIES) | lxResult;
 
@@ -141,17 +141,17 @@ namespace BrnNetwork
 
             for (s32 liScoreType = 0; liScoreType < BrnStreetData::E_SCORE_TYPE_COUNT; ++liScoreType)
             {
-                lxResult = CgsNetwork::PackOrUnpackInt(this, &lrRecord.maScores[liScoreType],
+                lxResult = CgsNetwork::Message::PackOrUnpack(&lrRecord.maScores[liScoreType],
                                                        BrnStreetData::ScoreList::KAI_MIN_SCORES[liScoreType],
                                                        BrnStreetData::ScoreList::KAI_MAX_SCORES[liScoreType]) | lxResult;
             }
 
-            lxResult = CgsNetwork::PackOrUnpackInt(this, &lrRecord.mChallengeIndex,
+            lxResult = CgsNetwork::Message::PackOrUnpack(&lrRecord.mChallengeIndex,
                                                    KI_MIN_ROAD_RULES_ROAD_INDEX,
                                                    KI_MAX_ROAD_RULES_ROAD_INDEX) | lxResult;
         }
 
-        lxResult = CgsNetwork::PackOrUnpackInt(this, &miStreetDataVersion,
+        lxResult = CgsNetwork::Message::PackOrUnpack(&miStreetDataVersion,
                                                KI_MIN_STREET_DATA_VERSION,
                                                KI_MAX_STREET_DATA_VERSION) | lxResult;
 

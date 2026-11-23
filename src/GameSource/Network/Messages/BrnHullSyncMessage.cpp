@@ -73,7 +73,7 @@ namespace BrnNetwork
         CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::ReliableMessage::PackOrUnpack();
 
         s32 liNumHulls = static_cast<s32>(mBufferedHullActivates.GetLength());
-        lxResult = CgsNetwork::PackOrUnpackInt(this, &liNumHulls, 0, 7) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&liNumHulls, 0, 7) | lxResult;
 
         if (mePackOrUnpack != E_PACK_INTO_BITSTREAM)
         {

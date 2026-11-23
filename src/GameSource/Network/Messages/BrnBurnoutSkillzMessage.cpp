@@ -64,7 +64,7 @@ namespace BrnNetwork
             mSkillzData.SetBurnoutSkill(leSkillType, lfSkillValue);
         }
 
-        lxResult = CgsNetwork::PackOrUnpackBool(this, &mbInitialData) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mbInitialData) | lxResult;
         return lxResult;
     }
 

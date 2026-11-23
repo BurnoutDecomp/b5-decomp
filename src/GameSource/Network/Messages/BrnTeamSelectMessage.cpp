@@ -138,21 +138,21 @@ namespace BrnNetwork
     CgsNetwork::PackOrUnpackResult TeamSelectMessage::PackOrUnpack()
     {
         CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::ReliableMessage::PackOrUnpack();
-        lxResult = CgsNetwork::PackOrUnpackBool(this, &mbFinalSelection) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackBool(this, &mbAutobalance) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackInt(this, &miNumTeams, KI_MIN_NUM_TEAMS, KI_MAX_NUM_TEAMS) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackInt(this, &miNumPlayers, KI_MIN_NUM_PLAYERS, KI_MAX_NUM_PLAYERS) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mbFinalSelection) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mbAutobalance) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&miNumTeams, KI_MIN_NUM_TEAMS, KI_MAX_NUM_TEAMS) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&miNumPlayers, KI_MIN_NUM_PLAYERS, KI_MAX_NUM_PLAYERS) | lxResult;
 
         for (s32 liPlayer = 0; liPlayer < miNumPlayers; ++liPlayer)
         {
             PlayerTeamInfo& lInfo = maPlayerTeamInfo[liPlayer];
 
-            lxResult = CgsNetwork::Message::PackOrUnpack(&lInfo.mPlayerID) | lxResult;
+            lxResult = BrnNetworkManager::PackOrUnpack(this,&lInfo.mPlayerID) | lxResult;
 
             // The X360 stages the team id through a stack temp (lwz +0x04 -> [sp], pack,
             // [sp] -> +0x04); de-staged here to the member by name.
             s32 liTeam = lInfo.miTeam;
-            lxResult = CgsNetwork::PackOrUnpackInt(this, &liTeam, KI_MIN_TEAM_ID, KI_MAX_TEAM_ID) | lxResult;
+            lxResult = CgsNetwork::Message::PackOrUnpack(&liTeam, KI_MIN_TEAM_ID, KI_MAX_TEAM_ID) | lxResult;
             lInfo.miTeam = liTeam;
         }
 

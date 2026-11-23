@@ -36,7 +36,7 @@ namespace BrnNetwork
                 "..\\..\\..\\GameSource\\Network/Messages/BrnCheckpointTriggeredMessage.cpp", 91 /* ARTIST 0x8257CE78 */));
 
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
-        return CgsNetwork::PackOrUnpackInt(this, &miCheckpointIndex, 0, 16) | lxBase;
+        return CgsNetwork::Message::PackOrUnpack(&miCheckpointIndex, 0, 16) | lxBase;
     }
 
     void CheckpointTriggeredMessage::PrepareForSend(u16 lu16FrameCount, s32 liCheckpointIndex)

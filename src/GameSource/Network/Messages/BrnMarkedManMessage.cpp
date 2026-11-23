@@ -53,9 +53,9 @@ namespace BrnNetwork
     CgsNetwork::PackOrUnpackResult MarkedManMessage::PackOrUnpack()
     {
         const CgsNetwork::PackOrUnpackResult lxMarkedMan =
-            CgsNetwork::PackOrUnpackInt(this, &mMarkedMan, -1, 0x7FFFFFFF);
+            CgsNetwork::Message::PackOrUnpack(&mMarkedMan, -1, 0x7FFFFFFF);
         const CgsNetwork::PackOrUnpackResult lxFinalAnswer =
-            CgsNetwork::PackOrUnpackBool(this, &mbFinalAnswer);
+            CgsNetwork::Message::PackOrUnpack(&mbFinalAnswer);
         return CgsNetwork::ReliableMessage::PackOrUnpack() | (lxFinalAnswer | lxMarkedMan);
     }
 

@@ -5,6 +5,7 @@
 #include "types.hpp"
 #include <vectorintrinsics.h> // native VMX-register parameter below
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsID.h"
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"                    // NetworkPlayerID
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsSmartBitStream.h"
 #include "rw/math/vpu/types.h"
@@ -133,8 +134,11 @@ namespace CgsNetwork
         // KX_PACK_OR_UNPACK_SUCCESS on success.
         PackOrUnpackResult PackOrUnpack(s8* lpi8Field, s32 liMin, s32 liMax);
 
-        // (De)serialise one NetworkPlayerID field over the full s32 range.
+        PackOrUnpackResult PackOrUnpack(u8* lpu8Field, s32 liMin, s32 liMax);
+        PackOrUnpackResult PackOrUnpack(s32* lpiField, s32 liMin, s32 liMax);
+        PackOrUnpackResult PackOrUnpack(bool* lpbField);
         PackOrUnpackResult PackOrUnpack(NetworkPlayerID* lpNetworkPlayerID);
+        PackOrUnpackResult PackOrUnpack(CgsID* lpID);
 
         // Build a scaled direction vector from two angles: the X360 build computes
         // (cos(B)*cos(A), sin(B), cos(B)*sin(A), 0) and scales it by lfMagnitude.
@@ -208,13 +212,9 @@ namespace CgsNetwork
     //   DateAndTime -- second, minute, hour, day, month and year as bounded ints.
     //   Matrix / Vector -- the Euler-angle and direction-angle quantisers; declaration
     //            only (their angle helpers are vector code not reconstructed yet).
-    PackOrUnpackResult PackOrUnpackInt(Message* lpMessage, s32* lpiField, s32 liMin, s32 liMax);
-    PackOrUnpackResult PackOrUnpackU8(Message* lpMessage, u8* lpu8Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackS16(Message* lpMessage, s16* lps16Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackU16(Message* lpMessage, u16* lpu16Field, s32 liMin, s32 liMax);
     PackOrUnpackResult PackOrUnpackUInt(Message* lpMessage, u32* lpu32Field, s32 liMin, s32 liMax);
-    PackOrUnpackResult PackOrUnpackBool(Message* lpMessage, bool* lpbField);
-    PackOrUnpackResult PackOrUnpackCgsID(Message* lpMessage, u64* lpu64Field);
     PackOrUnpackResult PackOrUnpackFloat(Message* lpMessage, f32* lpfField, f32 lfMin, f32 lfMax, f32 lfResolution);
     PackOrUnpackResult PackOrUnpackFloat(Message* lpMessage, f32* lpfField, f32 lfMin, f32 lfMax, s32 liNumBits);
     PackOrUnpackResult PackOrUnpackTime(Message* lpMessage, CgsSystem::Time* lpTimeField,

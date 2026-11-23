@@ -1,3 +1,8 @@
+// XDK size optimization matches the ARTIST bodies at 0x82C476F0 and 0x82C460A0.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/Realmc/RealmcCore.h"
 #include "SDKs/Realmc/RealmcMemcardState.h"  // RealmcCore::MemcardState -- IRunnableTask's
                                              // Start/Stop dispatch target (minimal home)

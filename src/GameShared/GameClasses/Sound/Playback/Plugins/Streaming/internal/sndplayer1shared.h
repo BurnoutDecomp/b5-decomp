@@ -206,9 +206,7 @@ public:
     static int GetSize(const PlugInConfig *config);                 // @0x826A4210
     static int PreProcess(SndPlayer1_CgsStreamMod *self, Mixer *ctx,
                           bool discontinuity, int outputSamplesRequested); // @0x8268CD10
-    bool WaitForStartTime(Mixer *ctx, f64 adStartTime, u32 *apuSilence); // @0x8268CAF8
     int  Declick(Mixer *ctx);                                            // @0x8268CB78
-    bool GetFeedSlot(s32 *apiSlot);                                      // @0x826A4348
     void UnpackHeader(u32 auRequestIndex, void *apPacked);               // @0x8268C990
 
     static s32 PlayHandler(Command *apCommand);
@@ -299,6 +297,10 @@ public:
     u8               mNextFeedSlotToFill;                    // +0x185
     u8               mNextFeedSlotToFree;                    // +0x186
     u8               mTimerAdded;                            // +0x187
+
+private:
+    bool WaitForStartTime(Mixer *ctx, f64 adStartTime, u32 *apuSilence); // @0x8268CAF8
+    bool GetFeedSlot(s32 *apiSlot);                                      // @0x826A4348
 };
 
 #if defined(D_PLATFORM_X360)

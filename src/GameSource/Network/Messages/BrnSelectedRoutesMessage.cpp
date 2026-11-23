@@ -188,11 +188,11 @@ namespace BrnNetwork
         }
 
         CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::ReliableMessage::PackOrUnpack();
-        lxResult = CgsNetwork::PackOrUnpackInt(this, &miRoundNumber, KI_MIN_ROUND_NUM, KI_MAX_ROUND_NUM) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackU8(this, &lu8NumLandmarks, 0, 255) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackInt(this, &liEventID, 0, 0x7FFFFFFF) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackInt(this, &liHull, 0, 0x7FFFFFFF) | lxResult;
-        lxResult = CgsNetwork::PackOrUnpackInt(this, &liLightTrigger, 0, 0x7FFFFFFF) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&miRoundNumber, KI_MIN_ROUND_NUM, KI_MAX_ROUND_NUM) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&lu8NumLandmarks, 0, 255) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&liEventID, 0, 0x7FFFFFFF) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&liHull, 0, 0x7FFFFFFF) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&liLightTrigger, 0, 0x7FFFFFFF) | lxResult;
 
         // The Event rebuild buffer (LandmarkIndex wrappers over the s16 wire values).
         BrnGameState::LandmarkIndex laLandmarkIndex[KI_MAX_NUM_LANDMARKS];

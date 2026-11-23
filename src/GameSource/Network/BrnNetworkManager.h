@@ -208,6 +208,8 @@ namespace BrnNetwork
 
         // Per-field (de)serialise status; 0 == success, OR-ed together by the callers.
         typedef u8 PackOrUnpackResult;
+        static PackOrUnpackResult PackOrUnpack(CgsNetwork::Message* lpMessage,
+                                               NetworkPlayerID* lpNetworkPlayerID);
 
         // ---- lifecycle -------------------------------------------------------------------
         BrnNetworkManager();

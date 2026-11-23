@@ -34,7 +34,7 @@ namespace BrnNetwork
                 "..\\..\\..\\GameSource\\Network/Messages/BrnStuntScoreUpdatedMessage.cpp", 91 /* ARTIST 0x8257D108 */));
 
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
-        return CgsNetwork::PackOrUnpackInt(this, &miStuntScore, 0, 0x7FFFFFFF) | lxBase;
+        return CgsNetwork::Message::PackOrUnpack(&miStuntScore, 0, 0x7FFFFFFF) | lxBase;
     }
 
     void StuntScoreUpdatedMessage::PrepareForSend(u16 lu16FrameCount, s32 liStuntScore)

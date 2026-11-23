@@ -120,9 +120,9 @@ namespace BrnNetwork
     {
         CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::ReliableMessage::PackOrUnpack();
 
-        lxResult |= CgsNetwork::PackOrUnpackU8(this, &mu8RoundNumber,
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mu8RoundNumber,
                                                KU8_MIN_NUM_ROUNDS, KU8_MAX_NUM_ROUNDS);
-        lxResult |= CgsNetwork::Message::PackOrUnpack(&mEliminatorNetworkPlayerID);
+        lxResult |= BrnNetworkManager::PackOrUnpack(this,&mEliminatorNetworkPlayerID);
         lxResult |= CgsNetwork::PackOrUnpackTime(this, &mFinishTime, KF_FINISH_TIME_RESOLUTION);
 
         // A valid distance must never equal the in-range invalid sentinel.
@@ -141,10 +141,10 @@ namespace BrnNetwork
         if (mfDistanceFromFinish == KF_INVALID_NETWORK_DISTANCE)
             mfDistanceFromFinish = KF_UNSET_DISTANCE;
 
-        lxResult |= CgsNetwork::PackOrUnpackInt(this, &miEliminations,
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&miEliminations,
                                                 KI_MIN_ELIMINATIONS, KI_MAX_ELIMINATIONS);
-        lxResult |= CgsNetwork::PackOrUnpackBool(this, &mbTimedOut);
-        lxResult |= CgsNetwork::PackOrUnpackBool(this, &mbWonRound);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mbTimedOut);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mbWonRound);
 
         return lxResult;
     }

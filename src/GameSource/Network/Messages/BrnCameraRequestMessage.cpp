@@ -34,7 +34,7 @@ namespace BrnNetwork
     CgsNetwork::PackOrUnpackResult CameraRequestMessage::PackOrUnpack()
     {
         const CgsNetwork::PackOrUnpackResult lxReleaseFeed =
-            CgsNetwork::PackOrUnpackBool(this, &mbReleaseFeed);
+            CgsNetwork::Message::PackOrUnpack(&mbReleaseFeed);
         return CgsNetwork::ReliableMessage::PackOrUnpack() | lxReleaseFeed;
     }
 

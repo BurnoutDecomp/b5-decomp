@@ -208,7 +208,7 @@ int Delay::Process(Delay *self, AudioProcessContext *ctx)
         if (requestedDelay > 0)
         {
             pFilter->mpResetFunc(pFilter);
-            DelayFilter::SetFeedback(pFilter, feedback);
+            pFilter->SetFeedback(feedback);
             pDelayLine->Reset(requestedDelay);
             self->mState = 1;
         }
@@ -219,7 +219,7 @@ int Delay::Process(Delay *self, AudioProcessContext *ctx)
         {
             if (pDelayLine->GetValidDelaySamples() >= requestedDelay)
             {
-                DelayFilter::SetFeedback(pFilter, feedback);
+                pFilter->SetFeedback(feedback);
                 pDelayLine->SetDelay(requestedDelay);
                 // (no state change; the re-delay took effect immediately)
             }
@@ -239,7 +239,7 @@ int Delay::Process(Delay *self, AudioProcessContext *ctx)
         {
             if (requestedDelay <= pDelayLine->GetValidDelaySamples())
             {
-                DelayFilter::SetFeedback(pFilter, feedback);
+                pFilter->SetFeedback(feedback);
                 pDelayLine->SetDelay(requestedDelay);
                 self->mState = 1;
             }

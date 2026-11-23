@@ -106,13 +106,13 @@ namespace BrnNetwork
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
 
         const CgsNetwork::PackOrUnpackResult lxAggressor =
-            CgsNetwork::Message::PackOrUnpack(&mAggressorNetworkPlayerID) | lxBase;
+            BrnNetworkManager::PackOrUnpack(this,&mAggressorNetworkPlayerID) | lxBase;
         const CgsNetwork::PackOrUnpackResult lxVictim =
-            CgsNetwork::Message::PackOrUnpack(&mVictimNetworkPlayerID) | lxAggressor;
+            BrnNetworkManager::PackOrUnpack(this,&mVictimNetworkPlayerID) | lxAggressor;
         const CgsNetwork::PackOrUnpackResult lxType =
-            CgsNetwork::PackOrUnpackU8(this, &mu8DirtyTrickType,
+            CgsNetwork::Message::PackOrUnpack(&mu8DirtyTrickType,
                                        KU8_MIN_DIRTY_TRICK_TYPE, KI_DIRTY_TRICK_TYPE_WIRE_MAX) | lxVictim;
-        return CgsNetwork::PackOrUnpackU8(this, &mu8DirtyTrickStatus,
+        return CgsNetwork::Message::PackOrUnpack(&mu8DirtyTrickStatus,
                                           KU8_MIN_DIRTY_TRICK_STATUS, KU8_MAX_DIRTY_TRICK_STATUS) | lxType;
     }
 

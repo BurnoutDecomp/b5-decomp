@@ -74,10 +74,10 @@ namespace BrnNetwork
     {
         CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::ReliableMessage::PackOrUnpack();
 
-        (void)CgsNetwork::PackOrUnpackCgsID(this, &mCollectableID);
+        (void)CgsNetwork::Message::PackOrUnpack(&mCollectableID);
 
         s32 liType = meType;
-        lxResult = CgsNetwork::PackOrUnpackInt(this, &liType,
+        lxResult = CgsNetwork::Message::PackOrUnpack(&liType,
                                                E_COLLECTABLE_TYPE_JUMP, E_COLLECTABLE_TYPE_MAX) | lxResult;
         meType = static_cast<ECollectableType>(liType);
 

@@ -63,6 +63,6 @@ namespace CgsNetwork
     // The status byte travels as a u8 in [0, 3].
     PackOrUnpackResult HeadsetStatusMessage::PackOrUnpack()
     {
-        return PackOrUnpackU8(this, &mu8HeadsetStatus, 0, 3);
+        return CgsNetwork::Message::PackOrUnpack(&mu8HeadsetStatus, 0, 3);
     }
 }

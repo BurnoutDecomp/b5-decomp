@@ -84,7 +84,7 @@ namespace BrnNetwork
         // Record count [0, KI_MAX_AGGRESSIVE_MOVES]; each per-field status is OR-accumulated
         // (0 == KX_PACK_OR_UNPACK_SUCCESS == all succeeded).
         CgsNetwork::PackOrUnpackResult lxResult =
-            CgsNetwork::PackOrUnpackInt(this, &miNumberOfAggressiveMoves,
+            CgsNetwork::Message::PackOrUnpack(&miNumberOfAggressiveMoves,
                                         KI_MIN_AGGRESSIVE_MOVES, KI_MAX_AGGRESSIVE_MOVES) | lxBase;
 
         for (s32 liIndex = 0; liIndex < miNumberOfAggressiveMoves; ++liIndex)
@@ -95,24 +95,24 @@ namespace BrnNetwork
             // the enum to a stack slot, packs, and writes it back).
             s32 liMoveType = lrRecord.meAggressiveMoveType;
             const CgsNetwork::PackOrUnpackResult lxMoveType =
-                CgsNetwork::PackOrUnpackInt(this, &liMoveType,
+                CgsNetwork::Message::PackOrUnpack(&liMoveType,
                                             KI_MIN_AGGRESSIVE_MOVE_TYPE, KI_MAX_AGGRESSIVE_MOVE_TYPE);
             lrRecord.meAggressiveMoveType = static_cast<EAggressiveMoveType>(liMoveType);
 
             s32 liTakedownType = lrRecord.meTakedownType;
             lxResult =
-                CgsNetwork::PackOrUnpackInt(this, &liTakedownType,
+                CgsNetwork::Message::PackOrUnpack(&liTakedownType,
                                             BrnGameState::E_TAKEDOWN_NONE,
                                             BrnGameState::E_TAKEDOWN_INTO_BUS) | lxMoveType | lxResult;
             lrRecord.meTakedownType = static_cast<BrnGameState::ETakedownType>(liTakedownType);
 
             // Aggressor / victim player ids through the NetworkPlayerID primitive.
-            lxResult = CgsNetwork::Message::PackOrUnpack(&lrRecord.mAggressorNetworkPlayerID) | lxResult;
-            lxResult = CgsNetwork::Message::PackOrUnpack(&lrRecord.mVictimNetworkPlayerID)    | lxResult;
+            lxResult = BrnNetworkManager::PackOrUnpack(this,&lrRecord.mAggressorNetworkPlayerID) | lxResult;
+            lxResult = BrnNetworkManager::PackOrUnpack(this,&lrRecord.mVictimNetworkPlayerID)    | lxResult;
 
             // Two boolean flags.
-            lxResult = CgsNetwork::PackOrUnpackBool(this, &lrRecord.mbMarkedMan)    | lxResult;
-            lxResult = CgsNetwork::PackOrUnpackBool(this, &lrRecord.mbSettledScore) | lxResult;
+            lxResult = CgsNetwork::Message::PackOrUnpack(&lrRecord.mbMarkedMan)    | lxResult;
+            lxResult = CgsNetwork::Message::PackOrUnpack(&lrRecord.mbSettledScore) | lxResult;
 
             // Impact direction (8 bits/axis, magnitude bound 1.01).
             lxResult = CgsNetwork::PackOrUnpackVector(this, &lrRecord.mDirection,
@@ -132,7 +132,7 @@ namespace BrnNetwork
                                                      KF_RECOVERY_MIN, KF_RECOVERY_MAX, KF_RECOVERY_RES) | lxResult;
 
             // Impact score (full byte range).
-            lxResult = CgsNetwork::PackOrUnpackU8(this, &lrRecord.muImpactScore,
+            lxResult = CgsNetwork::Message::PackOrUnpack(&lrRecord.muImpactScore,
                                                   KI_MIN_IMPACT_SCORE, KI_MAX_IMPACT_SCORE) | lxResult;
         }
 

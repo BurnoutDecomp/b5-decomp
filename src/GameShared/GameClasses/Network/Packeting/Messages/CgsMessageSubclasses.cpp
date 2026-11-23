@@ -101,8 +101,8 @@ namespace CgsNetwork
         for (s32 liSlot = 0; liSlot < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liSlot)
         {
             PlayerConnectionData& lrData = maConnectionData[liSlot];
-            lxResult = PackOrUnpackInt(this, &lrData.mPlayerID, -1, 0x7FFFFFFF) | lxResult;
-            lxResult = PackOrUnpackInt(this, reinterpret_cast<s32*>(&lrData.meConnectionStatus),
+            lxResult = CgsNetwork::Message::PackOrUnpack(&lrData.mPlayerID, -1, 0x7FFFFFFF) | lxResult;
+            lxResult = CgsNetwork::Message::PackOrUnpack(reinterpret_cast<s32*>(&lrData.meConnectionStatus),
                                        0, E_CONNECTION_STATUS_COUNT) | lxResult;
         }
         return lxResult;

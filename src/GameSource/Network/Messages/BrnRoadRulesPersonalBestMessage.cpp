@@ -134,14 +134,14 @@ namespace BrnNetwork
     {
         CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::ReliableMessage::PackOrUnpack();
 
-        lxResult |= CgsNetwork::PackOrUnpackInt(this, &mChallengeIndex, 0, 64);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mChallengeIndex, 0, 64);
 
         s32 liEnumIndex = 0;
         for (s32 liScoreType = 0;
              liScoreType < BrnStreetData::E_SCORE_TYPE_COUNT;
              ++liScoreType)
         {
-            lxResult |= CgsNetwork::PackOrUnpackInt(this, &maiScores[liScoreType],
+            lxResult |= CgsNetwork::Message::PackOrUnpack(&maiScores[liScoreType],
                                                     BrnStreetData::ScoreList::KAI_MIN_SCORES[liScoreType],
                                                     BrnStreetData::ScoreList::KAI_MAX_SCORES[liScoreType]);
             ++liEnumIndex;
@@ -149,7 +149,7 @@ namespace BrnNetwork
                        "leEnumIndex <= E_SCORE_TYPE_COUNT");
         }
 
-        lxResult |= CgsNetwork::PackOrUnpackInt(this, &miStreetDataVersion, 0, 50);
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&miStreetDataVersion, 0, 50);
 
         CGS_ASSERT(miStreetDataVersion == 5,
                    "Received street data from player with different street data version. You need to play the same versions of the game!\n");

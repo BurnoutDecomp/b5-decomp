@@ -1,3 +1,8 @@
+// XDK size optimization matches the ARTIST bodies at 0x82B56038.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/Realmc/RealmcIfaceSaveCheckTask.h"
 
 namespace RealmcIface

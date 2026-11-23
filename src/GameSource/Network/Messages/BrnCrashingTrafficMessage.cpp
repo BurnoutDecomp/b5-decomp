@@ -65,7 +65,7 @@ namespace BrnNetwork
         // Record count [KI_MIN, KI_MAX], then the frame counter [0, 0xFFFF]. Each per-field
         // status is OR-accumulated (0 == KX_PACK_OR_UNPACK_SUCCESS == all succeeded).
         CgsNetwork::PackOrUnpackResult lxResult =
-            CgsNetwork::PackOrUnpackInt(this, &miCrashingTrafficDataCount,
+            CgsNetwork::Message::PackOrUnpack(&miCrashingTrafficDataCount,
                                         KI_MIN_CRASHING_TRAFFIC_IN_MESSAGE,
                                         KI_MAX_CRASHING_TRAFFIC_IN_MESSAGE) | lxBase;
         lxResult =

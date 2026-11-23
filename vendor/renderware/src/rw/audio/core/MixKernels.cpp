@@ -202,24 +202,28 @@ void ScaleSamples(f32 *pData, f32 scale, s32 numSamples)
 // ClipFloats @0x82B64B68 -- clamp into [minValue, maxValue]; only out-of-range samples
 // are stored back (the in-range path never rewrites, exactly as the asm branches).
 // -------------------------------------------------------------------------------------
+#if defined(_XBOX) && defined(_MSC_VER)
+// Size optimization reproduces the ARTIST clip loop at 0x82B64B68.
+#pragma optimize("s", on)
+#endif
+
 void ClipFloats(f32 *pData, f32 minValue, f32 maxValue, s32 numSamples)
 {
-    f32 *p = pData;                 // r11
-    f32 *const end = pData + numSamples; // r10 = r3 + (count << 2)
-    for (; p < end; ++p)            // unsigned pointer compare (cmplw)
+    f32 *const end = pData + numSamples;
+    for (f32 *sample = pData; sample < end; ++sample)
     {
-        const f32 v = *p;
-        if (v >= minValue)          // fcmpu f0,f1 ; bge
-        {
-            if (v > maxValue)       // fcmpu f0,f2 ; ble skips
-                *p = maxValue;
-        }
-        else
-        {
-            *p = minValue;
-        }
+        const f32 value = *sample;
+        // Both comparisons are ordered, so unordered samples are untouched.
+        if (value < minValue)
+            *sample = minValue;
+        else if (value > maxValue)
+            *sample = maxValue;
     }
 }
+
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("", on)
+#endif
 
 // -------------------------------------------------------------------------------------
 // DeClick @0x82B676F8 -- fold each channel's residual click value into the first 16

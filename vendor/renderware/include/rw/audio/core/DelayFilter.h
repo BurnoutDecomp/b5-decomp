@@ -40,7 +40,7 @@ public:
     static void DelayFilterApplyFunc(IFilter *filter, s32 count, FilterOutputMode mode,
                                      s32 channel, LocationParams *ctx);      // @0x82B67DD0
     static void DelayFilterResetFunc(IFilter *filter);                      // @0x82B67E88
-    static DelayFilter *SetFeedback(DelayFilter *self, f32 feedback);       // @0x82B67EA0
+    void SetFeedback(f32 feedback);       // @0x82B67EA0
 
     f32 mfFeedback;     // +0x10
     f32 mfPrevFeedback; // +0x14

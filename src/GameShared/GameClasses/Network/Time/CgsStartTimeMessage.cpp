@@ -44,11 +44,11 @@ namespace CgsNetwork
                                       KF_MIN_START_TIME, KF_MAX_START_TIME, KF_MAX_START_TIME_ERROR);
         mStartTime.mStartTime.SetFloatVal(lfStartTime);
 
-        lxResult |= PackOrUnpackInt(this, &mStartTime.mHostID,
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mStartTime.mHostID,
                                     -1, 0x7FFFFFFF);
         for (s32 liClient = 0; liClient < KI_START_TIME_CLIENT_COUNT; ++liClient)
         {
-            lxResult |= PackOrUnpackInt(this, &maReceivedClientsIDs[liClient],
+            lxResult |= CgsNetwork::Message::PackOrUnpack(&maReceivedClientsIDs[liClient],
                                         -1, 0x7FFFFFFF);
         }
         return lxResult;

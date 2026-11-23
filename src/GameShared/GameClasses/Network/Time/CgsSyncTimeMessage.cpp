@@ -40,9 +40,9 @@ namespace CgsNetwork
                                                        KI_MIN_SYNC_TIME, KI_MAX_SYNC_TIME, KF_MAX_SYNC_TIME_ERROR);
         lxResult |= PackOrUnpackTime(this, &mHostTime,
                                      KI_MIN_SYNC_TIME, KI_MAX_SYNC_TIME, KF_MAX_SYNC_TIME_ERROR);
-        lxResult |= PackOrUnpackInt(this, &mHostPlayerID,
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mHostPlayerID,
                                     KI_MIN_SYNC_TIME_PLAYER_ID, KI_MAX_SYNC_TIME_PLAYER_ID);
-        lxResult |= PackOrUnpackInt(this, &mClientPlayerID,
+        lxResult |= CgsNetwork::Message::PackOrUnpack(&mClientPlayerID,
                                     KI_MIN_SYNC_TIME_PLAYER_ID, KI_MAX_SYNC_TIME_PLAYER_ID);
         return lxResult;
     }

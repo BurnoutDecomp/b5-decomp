@@ -95,13 +95,13 @@ namespace CgsNetwork
     // [-1, 0x7FFFFFFF]. Each field's status is OR-accumulated.
     PackOrUnpackResult SignalMessage::PackOrUnpack()
     {
-        PackOrUnpackResult lxResult = PackOrUnpackU8(this, &mu8GameID, 0, 0xFF);
-        lxResult = PackOrUnpackU8(this, &mx8Flags, 0, 0xFF) | lxResult;
+        PackOrUnpackResult lxResult = CgsNetwork::Message::PackOrUnpack(&mu8GameID, 0, 0xFF);
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mx8Flags, 0, 0xFF) | lxResult;
         lxResult = static_cast<PackOrUnpackResult>(
                        Message::PackOrUnpack(&mi8Type, 0, KI_E_MESSAGE_TYPE_COUNT)) | lxResult;
         lxResult = PackOrUnpackU16(this, &mu16Frame, 0, 0xFFFE) | lxResult;
-        lxResult = PackOrUnpackInt(this, &mSendingPlayerID, -1, 0x7FFFFFFF) | lxResult;
-        return PackOrUnpackInt(this, &mRecvingPlayerID, -1, 0x7FFFFFFF) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mSendingPlayerID, -1, 0x7FFFFFFF) | lxResult;
+        return CgsNetwork::Message::PackOrUnpack(&mRecvingPlayerID, -1, 0x7FFFFFFF) | lxResult;
     }
 
     // The packed size of a signal: every header field it carries is zeroed first (the

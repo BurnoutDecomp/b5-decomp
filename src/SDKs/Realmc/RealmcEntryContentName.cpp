@@ -1,3 +1,8 @@
+// XDK size optimization matches the ARTIST bodies at 0x82B51C10.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/Realmc/RealmcEntryContentName.h"
 
 #include <cstring>  // std::memcpy / std::memset / std::strncpy

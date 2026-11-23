@@ -57,18 +57,18 @@ namespace BrnNetwork
     {
         const CgsNetwork::PackOrUnpackResult lxBase = CgsNetwork::ReliableMessage::PackOrUnpack();
         const CgsNetwork::PackOrUnpackResult lxId =
-            CgsNetwork::PackOrUnpackCgsID(this, &mChallengeID) | lxBase;
+            CgsNetwork::Message::PackOrUnpack(&mChallengeID) | lxBase;
         const CgsNetwork::PackOrUnpackResult lxAction =
-            CgsNetwork::PackOrUnpackInt(this, &miActionIndex, 0, 2) | lxId;
+            CgsNetwork::Message::PackOrUnpack(&miActionIndex, 0, 2) | lxId;
 
         s32 liEventType = meEventType;
         const CgsNetwork::PackOrUnpackResult lxEvent =
-            CgsNetwork::PackOrUnpackInt(this, &liEventType, 0, 7) | lxAction;
+            CgsNetwork::Message::PackOrUnpack(&liEventType, 0, 7) | lxAction;
         meEventType = static_cast<BrnNetworkModuleIO::EChallengeEventType>(liEventType);
 
         s32 liStatus = meChallengeStatus;
         const CgsNetwork::PackOrUnpackResult lxResult =
-            CgsNetwork::PackOrUnpackInt(this, &liStatus, 0, 7) | lxEvent;
+            CgsNetwork::Message::PackOrUnpack(&liStatus, 0, 7) | lxEvent;
         meChallengeStatus = static_cast<BrnGameState::EChallengeStatus>(liStatus);
         return lxResult;
     }

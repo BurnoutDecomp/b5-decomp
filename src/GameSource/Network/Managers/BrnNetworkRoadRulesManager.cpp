@@ -396,7 +396,7 @@ namespace BrnNetwork
                 KAC_ARTIST_ASSERT_FILE, 1410 /* ARTIST 0x8254A46C */));
 
         mIndexOfNextLocalChallengeToDownload = 0;
-        mTimeUntilNextResultDownload.SetFloatVal( 0.0f );
+        mTimeUntilNextResultDownload = 0.0f;
     }
 
     // -----------------------------------------------------------------------------
@@ -425,7 +425,7 @@ namespace BrnNetwork
                 KAC_ARTIST_ASSERT_FILE, 1385 /* ARTIST 0x8254A31C */));
 
         mIndexOfNextChallengeToDownload = 0;
-        mTimeUntilNextResultDownload.SetFloatVal( 0.0f );
+        mTimeUntilNextResultDownload = 0.0f;
     }
 
     // -----------------------------------------------------------------------------

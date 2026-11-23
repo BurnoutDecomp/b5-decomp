@@ -1,3 +1,8 @@
+// XDK size optimization matches the ARTIST bodies at 0x82B51A78.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/Realmc/RealmcLoadEntryInfo.h"
 #include "SDKs/Realmc/RealmcDataBuffer.h"  // DataBuffer { mpData, muSize } (the ctor's two pairs)
 

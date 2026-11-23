@@ -44,7 +44,7 @@ namespace BrnNetwork
             CgsNetwork::PackOrUnpackU16(this, &mMultiplierInfo.mu16BarrelRolls, 0, 8) | lxTypes;
         const CgsNetwork::PackOrUnpackResult lxFlatSpins =
             CgsNetwork::PackOrUnpackU16(this, &mMultiplierInfo.mu16FlatSpins, 0, 16);
-        return CgsNetwork::PackOrUnpackInt(this, &miFramesSinceStart, 0, 0x7FFFFFFF)
+        return CgsNetwork::Message::PackOrUnpack(&miFramesSinceStart, 0, 0x7FFFFFFF)
              | (lxFlatSpins | lxBarrelRolls);
     }
 
