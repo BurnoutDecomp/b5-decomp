@@ -22,10 +22,10 @@ namespace BrnGui
     // @0x824FFEF8 -- the console ctor only seeds vtables: the group's primary + GuiComponent
     // branch, and each of the 16 MenuItem sub-objects' Selectable + GuiComponent vtables. All
     // of those are the compiler's own vptr stores here (base and member construction).
-    MenuComponent::MenuComponent()
-    {
-        miNumMenuItems = 0;
-    }
+    // MenuComponent::MenuComponent is the implicit constructor (see the header); it
+    // does not touch miNumMenuItems. These four lines stand where the reconstructed
+    // body stood, so the __LINE__ of every assert below keeps its value.
+    //
 
     // @0x824E9320 -- build the menu: name the group, record the row count, then create + name
     // each row.

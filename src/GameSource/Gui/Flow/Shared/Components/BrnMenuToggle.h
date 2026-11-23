@@ -108,8 +108,8 @@ namespace BrnGui
         void SetupMenuToggle(s32 liNumOptions, bool lbWrapped, const char* lpacText,
                              const char** lppacOptions, u64* lpu64Ids);
 
-        // @ 0x824E55E0 -- component slot 6: clear the option selection.
-        void Clear();
+        // @ 0x824E55E0 -- vtable slot 6 (ARTIST vftable 0x8207306C+0x18); callers dispatch it.
+        virtual void Clear();
         // @ 0x824E55D0 -- release the row's loaded items.
         void Unloaded();
         // @ 0x824E55F8 -- component slot 4 (Selectable::Select): forward to the selection.

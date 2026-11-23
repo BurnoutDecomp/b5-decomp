@@ -34,8 +34,8 @@ namespace BrnGui
         static const s32 KI_MAX_MENU_ITEMS = 16;   // GetSelectable's fixed index bound
         static const s32 KU_MAX_ITEM_NAME  = 64;   // "<name>_<i>" build buffer
 
-        // @0x824FFEF8 -- vtable-init-only ctor (the group + 16 rows establish their vtables).
-        MenuComponent();
+        // Implicit ctor (DecFIGS: on the class line, h:54). ARTIST's copy @0x824FFEF8 only
+        // stores the vptrs of the group and its 16 rows; miNumMenuItems is left alone.
 
         // @0x824E9320 -- name the group, record the row count, build + name each of liCount
         // MenuItem rows ("<name>_<i>"). liArgParent/luAptId feed SelectableGroup::Construct.
