@@ -97,7 +97,7 @@ namespace
 
     // unk_8327EE6C -- the static CPU-load governor (Init at create, Reset at start,
     // Balance at mix/stop).
-    CpuLoadBalancer sCpuLoadBalancer = { 0, 0, 0, 0, 0.0f, { 0.0f, 0.0f }, 0 };
+    CpuLoadBalancer sCpuLoadBalancer;
 
     // unk_8327D600 -- the interleaved output frame (256 frames x 6 channels of f32 ==
     // 0x1800 bytes): XenonDownMix's destination, the external fill's source.
@@ -287,8 +287,8 @@ int Dac::CreateInstance(Dac *self)
     self->mpMixer = 0;                        // stw 0 -> +0x24
     self->mpAttribute = self->maAttributes;   // stw a1+0x28 -> +0x0C (the inline table)
 
-    sCpuLoadBalancer.muHistoryIndex = 0;      // dword_8327EE88 = 0
-    CpuLoadBalancer::Init(&sCpuLoadBalancer, self->mpSystemUseGetSystemAccessor);
+    sCpuLoadBalancer.mOverheadAverager.mSlotSwitcher = 0;      // dword_8327EE88 = 0
+    sCpuLoadBalancer.Init(self->mpSystemUseGetSystemAccessor);
 
     spProfiler = System::GetProfiler(self->mpSystemUseGetSystemAccessor);
     if (!spProfiler)
@@ -479,8 +479,8 @@ int Dac::StartHandler(void *apCommand)   // @0x82B9DCF0 (raw-XEX recovery)
     if (!sStarted)
     {
         StartImmediate(lpCommand->mpDac);
-        CpuLoadBalancer::Reset(&sCpuLoadBalancer);
-        sCpuLoadBalancer.muLastStamp = GetCpuCycle();
+        sCpuLoadBalancer.Reset();
+        sCpuLoadBalancer.mOverheadCounter.mCpuCycleStart = GetCpuCycle();
     }
     return static_cast<int>(sizeof(DacStartStopCommand));   // console li r3, 8
 }
@@ -491,7 +491,7 @@ int Dac::StopHandler(void *apCommand)    // @0x82B9DD48
     if (sStarted)
     {
         StopImmediate(lpCommand->mpDac);
-        CpuLoadBalancer::Balance(&sCpuLoadBalancer);
+        sCpuLoadBalancer.Balance();
     }
     return static_cast<int>(sizeof(DacStartStopCommand));   // console li r3, 8
 }
@@ -614,7 +614,7 @@ int Dac::Process(Dac *self)
 // =====================================================================================
 int Dac::Mix(Dac *self)
 {
-    CpuLoadBalancer::Balance(&sCpuLoadBalancer);
+    sCpuLoadBalancer.Balance();
 
     System *lpSystem = self->mpSystemUseGetSystemAccessor;
     sMixerExecuteParams.mfSystemTime = lpSystem->mfSystemTime;         // lfd +0x08
@@ -629,7 +629,7 @@ int Dac::Mix(Dac *self)
 
     lpSystem->muMixerCpuTicks = self->mpMixer->muMixerCpuCycles;       // +0x3001C -> +0x10D0
     lpSystem->mfSystemTime = lpSystem->mfSystemTimerPeriod + lpSystem->mfSystemTime;
-    sCpuLoadBalancer.muLastStamp = GetCpuCycle();
+    sCpuLoadBalancer.mOverheadCounter.mCpuCycleStart = GetCpuCycle();
     return liStatus;
 }
 
@@ -691,7 +691,7 @@ void Dac::XenonThread()
             spProfiler->muBeginCycle = GetCpuCycle();
             const bool wasStarted = sStarted != 0;
             if (wasStarted)
-                sCpuLoadBalancer.muLastStamp = GetCpuCycle();
+                sCpuLoadBalancer.mOverheadCounter.mCpuCycleStart = GetCpuCycle();
             System::ExecuteCommands(system);
             if (!sThreadRunning)
                 goto unlock;
@@ -725,7 +725,7 @@ void Dac::XenonThread()
                 break;
             }
             const u32 now = GetCpuCycle();
-            sCpuLoadBalancer.muFrameCycles += now - sCpuLoadBalancer.muLastStamp;
+            sCpuLoadBalancer.mOverheadCounter.mCpuCycles += now - sCpuLoadBalancer.mOverheadCounter.mCpuCycleStart;
             Profiler::End(spProfiler);
         }
     }

@@ -2,9 +2,8 @@
 // rw::audio::core::CpuLoadBalancer bodies -- the audio-core CPU-load governor.
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX; the PowerPC asm is
-// authoritative for every offset, store width and branch. No LegacySrc source, no DecFIGS
-// DWARF, and no ProStreet08 rwaudio PDB entry exist for these bodies. See CpuLoadBalancer.h
-// for the byte layout and the per-function X360 addresses.
+// authoritative for every offset, store width and branch. The Xbox 360 audio PDB
+// identifies the nested timing objects and the member APIs.
 //   Init                    @0x82B6C6F0
 //   Reset                   @0x82B67638
 //   Balance                 @0x82B6EF00
@@ -23,14 +22,10 @@ namespace audio
 namespace core
 {
 
-// Free-running CPU cycle counter (rw::audio::core::GetCpuCycle @todo). Its body lives in a
-// platform timing TU that is not yet reconstructed; only the declaration is needed for the
-// per-TU compile gate. Returns a monotonically increasing cycle count (r3). Profiler.cpp /
-// TimerManager.cpp declare the same free function.
+// Shared platform cycle counter at 0x82B64558.
 u32 GetCpuCycle();
 
 // Numeric rodata immediates from the balancer's asm.
-static const f32 KF_ONE_THIRD           = 0.33333334f;    // flt_820065E0 -- 1/3 averaging weight
 static const f32 KF_MAX_LOAD            = 100.0f;         // flt_8214AED0 -- load ceiling / priority floor
 static const f32 KF_VOICE_COST_SCALE    = 64.0f;         // flt_8214AED8 -- per-voice cost multiplier
 static const f32 KF_BUDGET_SCALE        = 170666.67f;    // flt_8214B280 -- load% -> cycle-budget scale
@@ -42,27 +37,20 @@ static const f32 KF_FLT_MAX             = FLT_MAX; // ARTIST flt_8204F664: 0x7F7
 // Init @0x82B6C6F0 -- bind the balancer to its owning System, clear the frame accumulator
 // and moving-average state, and publish the CPU clock rate into the System.
 // -------------------------------------------------------------------------------------
-CpuLoadBalancer *CpuLoadBalancer::Init(CpuLoadBalancer *self, System *system)
+void CpuLoadBalancer::Init(System *system)
 {
-    self->mpSystem = system;         // +0x00
-    self->muFrameCycles = 0;         // +0x04
-    self->mfAverageLoad = KF_ZERO;   // +0x10
-    self->mafHistory[0] = KF_ZERO;   // +0x14
-    self->mafHistory[1] = KF_ZERO;   // +0x18
-    system->mfCpuClockRate = KF_CPU_CLOCK_RATE; // System +0x10C8
-    return self;
+    mpSystem = system;
+    Reset();
+    mpSystem->mfCpuClockRate = KF_CPU_CLOCK_RATE;
 }
 
 // -------------------------------------------------------------------------------------
 // Reset @0x82B67638 -- clear the frame accumulator + moving-average state (mpSystem intact).
 // -------------------------------------------------------------------------------------
-CpuLoadBalancer *CpuLoadBalancer::Reset(CpuLoadBalancer *self)
+void CpuLoadBalancer::Reset()
 {
-    self->muFrameCycles = 0;       // +0x04
-    self->mfAverageLoad = KF_ZERO; // +0x10
-    self->mafHistory[0] = KF_ZERO; // +0x14
-    self->mafHistory[1] = KF_ZERO; // +0x18
-    return self;
+    mOverheadCounter.Reset();
+    mOverheadAverager.OverRide(KF_ZERO);
 }
 
 // -------------------------------------------------------------------------------------
@@ -73,34 +61,29 @@ CpuLoadBalancer *CpuLoadBalancer::Reset(CpuLoadBalancer *self)
 // by the alternating index), then -- while the System still reports CPU headroom -- project
 // the total active-voice cost against the CPU budget and cull if it overruns. Finally fold
 // this routine's own overhead back into the accumulator and publish the balance duration.
-// Returns the final CPU-cycle snapshot.
 // -------------------------------------------------------------------------------------
-u32 CpuLoadBalancer::Balance(CpuLoadBalancer *self)
+void CpuLoadBalancer::Balance()
 {
     u32 luStartCycle = GetCpuCycle();
 
     // Close the frame's useful span: (now + accumulator) - last stamp.
     u32 luNow = GetCpuCycle();
-    u32 luFrameCycles = luNow + self->muFrameCycles - self->muLastStamp;
-    self->muFrameCycles = luFrameCycles;
+    u32 luFrameCycles = luNow + mOverheadCounter.mCpuCycles - mOverheadCounter.mCpuCycleStart;
+    mOverheadCounter.mCpuCycles = luFrameCycles;
 
     // Roll into the moving average, then overwrite the current history slot with this frame.
-    f32 lfSample = static_cast<f32>(luFrameCycles);
-    self->mfAverageLoad =
-        (self->mafHistory[1] + self->mafHistory[0] + lfSample) * KF_ONE_THIRD;
-    self->mafHistory[self->muHistoryIndex] = lfSample;
-    self->muHistoryIndex = (self->muHistoryIndex == 0) ? 1 : 0;
-    self->muFrameCycles = 0;
+    mOverheadAverager.Average(static_cast<f32>(luFrameCycles));
+    mOverheadCounter.Reset();
 
     // Re-anchor the span for the culling work below.
     u32 luStamp = GetCpuCycle();
-    System *system = self->mpSystem;
-    self->muLastStamp = luStamp;
+    System *system = mpSystem;
+    mOverheadCounter.mCpuCycleStart = luStamp;
 
     if (system->mfCpuLoadPercent < KF_MAX_LOAD)
     {
         f32 lfBudget = system->mfCpuLoadPercent * KF_BUDGET_SCALE;
-        f32 lfProjected = self->mfAverageLoad * KF_VOICE_COST_SCALE;
+        f32 lfProjected = mOverheadAverager.mAverage * KF_VOICE_COST_SCALE;
 
         u32 luVoiceCount = system->muActiveVoiceCount;
         if (luVoiceCount != 0)
@@ -115,16 +98,15 @@ u32 CpuLoadBalancer::Balance(CpuLoadBalancer *self)
         }
 
         if (lfProjected - lfBudget > KF_ZERO)
-            CullVoices(self, lfProjected - lfBudget);
+            CullVoices(lfProjected - lfBudget);
     }
 
     // Fold the culling overhead back in, then publish this frame's total balance duration.
     u32 luEndSpan = GetCpuCycle();
-    self->muFrameCycles = luEndSpan + self->muFrameCycles - self->muLastStamp;
+    mOverheadCounter.mCpuCycles = luEndSpan + mOverheadCounter.mCpuCycles - mOverheadCounter.mCpuCycleStart;
 
     u32 luFinal = GetCpuCycle();
-    self->mpSystem->muBalanceCycles = luFinal - luStartCycle;
-    return luFinal;
+    mpSystem->muBalanceCycles = luFinal - luStartCycle;
 }
 
 // -------------------------------------------------------------------------------------
@@ -136,9 +118,9 @@ u32 CpuLoadBalancer::Balance(CpuLoadBalancer *self)
 // mfPriority are broken by the lower priority-class index. Returns the selected voice, or 0
 // when none qualifies or the lowest priority is at/above the 100.0 floor.
 // -------------------------------------------------------------------------------------
-Voice *CpuLoadBalancer::FindLowestPriorityVoice(CpuLoadBalancer *self)
+Voice *CpuLoadBalancer::FindLowestPriorityVoice()
 {
-    System *system = self->mpSystem;
+    System *system = mpSystem;
     u32 luCount = system->muActiveVoiceCount;
     if (luCount == 0)
         return 0;
@@ -185,11 +167,11 @@ Voice *CpuLoadBalancer::FindLowestPriorityVoice(CpuLoadBalancer *self)
 // f1 carries the excess cost, each victim subtracts its average cost * 64,
 // and ExpelImmediate receives reason 2. Balance @0x82B6EFFC supplies f1.
 // -------------------------------------------------------------------------------------
-void CpuLoadBalancer::CullVoices(CpuLoadBalancer *self, f32 afExcessCycles)
+void CpuLoadBalancer::CullVoices(f32 afExcessCycles)
 {
     while (afExcessCycles > KF_ZERO)
     {
-        Voice* lpVoice = FindLowestPriorityVoice(self);
+        Voice* lpVoice = FindLowestPriorityVoice();
         if (!lpVoice)
             break;
         afExcessCycles -= lpVoice->mfAverageCpuTicks * KF_VOICE_COST_SCALE;

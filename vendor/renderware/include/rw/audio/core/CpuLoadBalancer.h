@@ -11,14 +11,13 @@
 // call Balance.
 //
 // EARenderWare "rwaudio". Reconstructed from BURNOUT_X360_ARTIST.XEX (PowerPC); the asm is
-// authoritative for every member offset and store. No LegacySrc reference source and no DecFIGS
-// DWARF exist for this TU, and it is absent from the ProStreet08 rwaudio PDB, so each
-// offset below is grounded directly in the disassembly of the bodied members:
+// authoritative for member offsets and stores. The Xbox 360 audio PDB and MAP identify
+// the counter, averager and their member methods.
 //   CpuLoadBalancer::Init                    @0x82B6C6F0
 //   CpuLoadBalancer::Reset                   @0x82B67638
 //   CpuLoadBalancer::Balance                 @0x82B6EF00
 //   CpuLoadBalancer::FindLowestPriorityVoice @0x82B67658
-//   CpuLoadBalancer::CullVoices              (separate ledger TU -- declared here only)
+//   CpuLoadBalancer::CullVoices              @0x82B6E410
 //
 // X360 offsets are 4-byte-word; the PC layout widens the pointer member to x64 (only the
 // member ORDER is load-bearing -- every access in the .cpp is by name, and the +0xNN
@@ -40,45 +39,69 @@ namespace core
 class System;
 class Voice;
 
+struct CpuCycleCounter
+{
+    void Reset() { mCpuCycles = 0; }
+
+    u32 mCpuCycles;
+    u32 mCpuCycleStart;
+    bool mStarted;
+};
+
+struct CpuCycleAverager
+{
+    void OverRide(f32 value)
+    {
+        mAverage = value;
+        mHistory[0] = value;
+        mHistory[1] = value;
+    }
+
+    void Average(f32 value)
+    {
+        mAverage = (mHistory[1] + mHistory[0] + value) * 0.33333334f; // ARTIST 0x820065E0
+        mHistory[mSlotSwitcher] = value;
+        mSlotSwitcher = (mSlotSwitcher == 0) ? 1 : 0;
+    }
+
+    f32 mAverage;
+    f32 mHistory[2];
+    s32 mSlotSwitcher;
+};
+
 class CpuLoadBalancer
 {
 public:
     // Seed the balancer against its owning `system`: clear the frame accumulator + the
     // moving-average state and publish the CPU clock rate (3.2 GHz) into the System's
-    // load-tracking field. Returns `self`. @0x82B6C6F0.
-    static CpuLoadBalancer *Init(CpuLoadBalancer *self, System *system);
+    // load-tracking field. @0x82B6C6F0.
+    void Init(System *system);
 
     // Clear the frame accumulator + the moving-average state (leaves mpSystem intact).
-    // Returns `self`. @0x82B67638.
-    static CpuLoadBalancer *Reset(CpuLoadBalancer *self);
+    // @0x82B67638.
+    void Reset();
 
     // Per-frame governor step: fold the elapsed CPU-cycle span into the frame accumulator,
     // update the three-sample moving average, then -- while the System reports headroom --
     // project the active-voice cost against the CPU budget and cull if it overruns. Records
     // its own overhead back into the accumulator and publishes the balance duration into the
-    // System. Returns the final CPU-cycle snapshot. @0x82B6EF00.
-    static u32 Balance(CpuLoadBalancer *self);
+    // System. @0x82B6EF00.
+    void Balance();
+
+    System *mpSystem;                     // +0x00
+    CpuCycleCounter mOverheadCounter;     // +0x04
+    CpuCycleAverager mOverheadAverager;    // +0x10
+
+private:
 
     // Scan the System's active-voice array for the culling victim: the still-active voice
     // with the lowest priority (freshly-created voices deprioritised, ties broken by the
     // lower priority-class index). Returns 0 when no voice qualifies or the lowest priority
     // is at/above the 100.0 floor. @0x82B67658.
-    static Voice *FindLowestPriorityVoice(CpuLoadBalancer *self);
+    Voice *FindLowestPriorityVoice();
 
-    // Cull the lowest-priority voices until the frame cost fits the CPU budget. Its body is a
-    // separate ledger TU; declared here because Balance calls it (r3 = self).
-    static void CullVoices(CpuLoadBalancer *self, f32 afExcessCycles);
-
-    // ----------------------------------------------------------------------------------
-    // Layout. X360 (4-byte-word) offsets in the +0xNN comments; access is by name.
-    // ----------------------------------------------------------------------------------
-    System *mpSystem;      // +0x00  the owning audio-core System
-    u32 muFrameCycles;     // +0x04  CPU cycles accumulated for the current audio frame
-    u32 muLastStamp;       // +0x08  last GetCpuCycle() snapshot (span anchor)
-    u32 mUnk0C;            // +0x0C  (untouched by the reconstructed bodies)
-    f32 mfAverageLoad;     // +0x10  three-sample moving average of muFrameCycles
-    f32 mafHistory[2];     // +0x14  the two alternating history samples
-    u32 muHistoryIndex;    // +0x1C  toggles 0<->1: which history slot Balance overwrites
+    // Cull the lowest-priority voices until the frame cost fits the CPU budget.
+    void CullVoices(f32 afExcessCycles);
 };
 
 } // namespace core
