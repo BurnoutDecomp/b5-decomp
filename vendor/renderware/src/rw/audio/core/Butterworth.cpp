@@ -19,7 +19,7 @@
 
 #include "rw/audio/core/Butterworth.h"
 
-#include <cstring> // memset (the X360 XMemSet)
+#include <xtl.h>   // XMemSet
 #include <cmath>   // std::tan / std::pow (the design maths)
 
 namespace rw
@@ -28,15 +28,6 @@ namespace audio
 {
 namespace core
 {
-
-namespace
-{
-// XMemSet @ the X360 build = byte-wise memset; reproduced with std::memset.
-inline void XMemSet(void *dst, int value, u32 bytes)
-{
-    std::memset(dst, value, bytes);
-}
-} // namespace
 
 // -------------------------------------------------------------------------------------
 // GetSize @0x82B6C408

@@ -46,7 +46,7 @@ public:
 
     // Attach a free node to the handle and push it onto the used list.
     // Returns true if the pool could not grow.
-    static bool AddItem(Collection *self, ItemHandle *handle);
+    bool AddItem(ItemHandle *handle);
 
     // Release every in-use Node back to the free list (clears each owner back-pointer).
     static void Clear(Collection *self);

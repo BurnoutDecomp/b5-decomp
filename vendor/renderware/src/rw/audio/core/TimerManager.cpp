@@ -76,7 +76,7 @@ bool TimerManager::AddTimer(TimerHandle *handle, TimerCallback const callback, v
     if (pCollection->mCapacity == 0)
         Collection::AddCapacity(pCollection, 74);
 
-    const bool failed = Collection::AddItem(pCollection, &handle->mItemHandle);
+    const bool failed = pCollection->AddItem(&handle->mItemHandle);
     if (!failed)
     {
         handle->mpCallback = callback;

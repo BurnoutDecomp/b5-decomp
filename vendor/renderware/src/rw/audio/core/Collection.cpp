@@ -45,19 +45,19 @@ bool Collection::AddCapacity(Collection *self, int count)
     return false;
 }
 
-bool Collection::AddItem(Collection *self, ItemHandle *handle)
+bool Collection::AddItem(ItemHandle *handle)
 {
     bool failed = false;
-    if (!self->mFree.GetHead())
-        failed = AddCapacity(self, self->mSize + 1);
+    if (mFree.IsEmpty())
+        failed = AddCapacity(this, mSize + 1);
 
     if (!failed)
     {
-        ItemNode *item = reinterpret_cast<ItemNode *>(self->mFree.Pop());
+        ItemNode *item = reinterpret_cast<ItemNode *>(mFree.Pop());
         item->pHandle = handle;
         handle->pNode = item;
-        self->mUsed.Push(&item->node);
-        ++self->mSize;
+        mUsed.Push(&item->node);
+        ++mSize;
     }
     return failed;
 }
@@ -111,7 +111,7 @@ bool Collection::Defragment(Collection *self)
             stored->pHandle = 0;
             RemoveNode(self, stored);
             self->mFree.Remove(&item->node);
-            AddItem(self, handle);
+            self->AddItem(handle);
         }
     }
 

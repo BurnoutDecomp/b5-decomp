@@ -32,10 +32,17 @@ struct ListDStack
         return phead;
     }
 
+    bool IsEmpty()
+    {
+        return phead == 0;
+    }
+
     void Push(ListDNode *node)
     {
+        // The inlined push reads the old head before touching either link (0x82B6E228).
+        ListDNode *const previousHead = phead;
         node->pprev = 0;
-        node->pnext = phead;
+        node->pnext = previousHead;
         if (phead)
             phead->pprev = node;
         phead = node;
