@@ -343,7 +343,8 @@ namespace BrnGui
             mMenuComponent.DisableSelectable(KI_MENU_ROW_CREDITS);
         }
 
-        for (s32 liRow = 0; liRow < KI_NUM_MENU_ITEMS; ++liRow)
+        // An equality exit test: ARTIST closes the loop with `cmpw ; bne` (@0x824BCE7C).
+        for (s32 liRow = 0; liRow != KI_NUM_MENU_ITEMS; ++liRow)
         {
             mMenuComponent.SetText(liRow, KAPC_MENU_TEXT[liRow]);
         }

@@ -49,12 +49,12 @@ namespace BrnGui
                                        CgsGui::StateInterface* lpStateInterface,
                                        const void* /*lpcParentName*/)
     {
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
-
-        mpStateInterface = lpStateInterface;
-        mAptRef.mpMovieClipInst = 0;
-        mAptRef.mpTransform     = 0;
-        muCurrentStateHash      = 0;
+        // The header-inline base Construct (its BrnGuiFlaptComponent.h:113 assert,
+        // li r5,0x71 @0x8241C218) binds the state channel and invalidates the clip
+        // handle. (This comment keeps the original line count: the asserts below use
+        // this file's __LINE__, e.g. Prepare's cpp:65.)
+        BrnFlaptComponent::Construct(lpStateInterface);
+        muCurrentStateHash = 0;
     }
 
     // @ 0x8241C250 -- bind the named clip through the base, then reset the state hash.
@@ -120,18 +120,18 @@ namespace BrnGui
                                            CgsGui::StateInterface* lpStateInterface,
                                            const void* /*lpcParentName*/)
     {
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
-
-        mpStateInterface = lpStateInterface;
-        mAptRef.mpMovieClipInst = 0;
-        mAptRef.mpTransform     = 0;
-        muCurrentStateHash      = 0;
+        // The header-inline base Construct (its BrnGuiFlaptComponent.h:113 assert,
+        // li r5,0x71) binds the state channel and invalidates the clip handle.
+        // (These comments keep the original line count for the __LINE__ of the
+        // asserts below.)
+        BrnFlaptComponent::Construct(lpStateInterface);
+        muCurrentStateHash = 0;
 
         miNumChildMovieClips = 0;
         for (int liClip = 0; liClip < KI_MAX_ANIMATOR_CHILD_MOVIE_CLIPS; ++liClip)
         {
-            maChildMovieClips[liClip].mpMovieClipInst = 0;
-            maChildMovieClips[liClip].mpTransform     = 0;
+            // MovieClipRef::SetInvalid (header-inline); ARTIST unrolls the four.
+            maChildMovieClips[liClip].SetInvalid();
         }
     }
 

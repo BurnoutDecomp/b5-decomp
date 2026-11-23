@@ -101,12 +101,9 @@ namespace BrnGui
                                           CgsGui::StateInterface* lpStateInterface,
                                           s32 /*liFlags*/)
     {
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
-
-        // Inlined base init: bind the state channel and invalidate the apt clip handle.
-        mpStateInterface        = lpStateInterface;
-        mAptRef.mpMovieClipInst = 0;
-        mAptRef.mpTransform     = 0;
+        // The base Construct, header-inline (its BrnGuiFlaptComponent.h:113 assert, li r5,0x71
+        // @0x82424A24): bind the state channel and invalidate the apt clip handle.
+        BrnFlaptComponent::Construct(lpStateInterface);
 
         // Idle runtime state (mfAnimOutTime_Seconds is left armed by Display..., not
         // cleared here -- the X360 Construct does not store +0x14).

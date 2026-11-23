@@ -69,23 +69,23 @@ namespace BrnGui
                                             CgsGui::StateInterface* lpStateInterface,
                                             const char* /*lacParentName*/)
     {
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
-
-        // Inlined base BrnFlaptComponent::Construct: adopt the channel, invalidate mAptRef.
-        mpStateInterface = lpStateInterface;
-        mAptRef.SetInvalid();
+        // The header-inline base Construct (BrnGuiFlaptComponent.h:113 assert, li r5,0x71
+        // @0x82412574): adopt the channel, invalidate mAptRef.
+        BrnFlaptComponent::Construct(lpStateInterface);
 
         mCountyContainerMovie.Construct(0, lpStateInterface, 0);
         mDistrictContainerMovie.Construct(0, lpStateInterface, 0);
         mCountyIcon.Construct(0, lpStateInterface, 0);
         mDistrictIcon.Construct(0, lpStateInterface, 0);
 
+        // In DWARF member order (BrnDistrictMarker.h:175-187); ARTIST materialises the
+        // LOADED value first (li r11,1 @0x8241261C).
+        meCurrentCountyState   = E_MARKERSTATE_LOADED;
+        meCurrentDistrictState = E_MARKERSTATE_LOADED;
+
         mbCountyChangePending   = false;
         mbDistrictChangePending = false;
         mbOnline                = false;
-
-        meCurrentCountyState   = E_MARKERSTATE_LOADED;
-        meCurrentDistrictState = E_MARKERSTATE_LOADED;
 
         meCurrentCounty  = BrnWorld::E_COUNTY_INVALID;
         mePendingCounty  = BrnWorld::E_COUNTY_INVALID;

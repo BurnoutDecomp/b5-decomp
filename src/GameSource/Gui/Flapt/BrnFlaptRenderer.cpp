@@ -3,9 +3,11 @@
 
 #include "GameShared/GameClasses/Graphics/ImmediateMode/CgsIm2d.h"   // CgsGraphics::Im2d (full def) + ImRenderer<V>::SetProgram + the batch/transform command API
 #include "GameShared/GameClasses/Graphics/Font/CgsFontRenderer.h"     // CgsGraphics::TextRenderer / TextObject (RenderTextField submission)
-#include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"           // CGS_ASSERT, CgsDev::Assert::MessageAt
 #include "SharedClasses/Gui/Flapt/BrnFlaptFile.h"                     // BrnFlapt::Mesh / FlaptFile / FlaptFile::GuiTexture / GuiVertex
 #include <cmath>
+
+static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flapt/BrnFlaptRenderer.cpp";
 
 // BrnFlapt::FlaptRenderer member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
 // This TU bodies the constructor, the shader-state accessor, the per-object render entry
@@ -190,9 +192,11 @@ void FlaptRenderer::RenderMesh(const Mesh* lpMesh, const FlaptFile* lpFile)
 // the text object to the bitmap-font TextRenderer, which batches its glyph quads.
 void FlaptRenderer::RenderTextField(const CgsGraphics::TextObject* lpTextObject)
 {
-    CGS_ASSERT(lpTextObject != 0, "lpTextObject");
-    CGS_ASSERT(mpImRenderSet->mpIm2dRenderBuffer != 0, "mpImRenderSet->mpIm2dRenderBuffer");
-    CGS_ASSERT(mpTextRenderer != 0, "mpTextRenderer");
+    // The original BrnFlaptRenderer.cpp lines 363-365 (ARTIST 0x82470A48 / A74 / A9C).
+    CGS_ASSERT(lpTextObject != 0, CgsDev::Assert::MessageAt("lpTextObject", KAC_ARTIST_ASSERT_FILE, 363));
+    CGS_ASSERT(mpImRenderSet->mpIm2dRenderBuffer != 0,
+               CgsDev::Assert::MessageAt("mpImRenderSet->mpIm2dRenderBuffer", KAC_ARTIST_ASSERT_FILE, 364));
+    CGS_ASSERT(mpTextRenderer != 0, CgsDev::Assert::MessageAt("mpTextRenderer", KAC_ARTIST_ASSERT_FILE, 365));
 
     const CgsGraphics::Im2dTransform& lrTransform = maTransformStack.Peek();
     mpImRenderSet->mpIm2dRenderBuffer->SetTransform(lrTransform);
@@ -203,9 +207,6 @@ void FlaptRenderer::RenderTextField(const CgsGraphics::TextObject* lpTextObject)
     // screen pixels -- which is why the HUD-message banner's two strings both drew on top
     // of each other in the screen's top-left corner (both boxes author top-left (-2,-2)).
     // Printed in NDC, so a non-degenerate basis and an origin away from (-1,+1) is proof.
-    {
-        static s32        siDiagPrinted = 0;
-    }
 
     if (miShaderProgram != 0)
     {

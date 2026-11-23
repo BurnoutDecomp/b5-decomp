@@ -834,7 +834,8 @@ bool CrashNavDriverDetails::UpdatePermanent()
 void CrashNavDriverDetails::ShowMenu()
 {
     mMenuComponent.SetupMenu(KI_NUM_MENU_ROWS, /*lbWrap*/ true);
-    for (s32 liRow = 0; liRow < KI_NUM_MENU_ROWS; ++liRow)
+    // An equality exit test: ARTIST closes the loop with `cmpw ; bne` (@0x824BD0F0).
+    for (s32 liRow = 0; liRow != KI_NUM_MENU_ROWS; ++liRow)
         mMenuComponent.SetText(liRow, KAPC_MENU_TEXT[liRow]);
 }
 

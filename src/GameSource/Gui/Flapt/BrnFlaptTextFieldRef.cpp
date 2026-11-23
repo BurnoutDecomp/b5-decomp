@@ -55,10 +55,12 @@ TextFieldRef* TextFieldRef::Construct(void* lpTextFieldInstance,
 // instance's own persistent buffer).
 void TextFieldRef::SetText(const char* lpacNewText, bool lbAlreadyLocalised)
 {
-    CGS_ASSERT(lpacNewText != 0, "lpacNewText");
-    CGS_ASSERT(mpTextFieldInstance != 0, "mpTextFieldInst");
+    CGS_ASSERT(lpacNewText != 0,
+        CgsDev::Assert::MessageAt("lpacNewText", KAC_ARTIST_ASSERT_FILE, 76 /* ARTIST 0x8246CC84 */));
+    CGS_ASSERT(mpTextFieldInstance != 0,
+        CgsDev::Assert::MessageAt("mpTextFieldInst", KAC_ARTIST_ASSERT_FILE, 77 /* ARTIST 0x8246CCAC */));
 
-    static_cast<TextFieldInstance*>(mpTextFieldInstance)->SetText(
+    static_cast<TextFieldInstance*>(mpTextFieldInstance)->ChangeText(
         reinterpret_cast<const CgsUnicode::CgsUtf8*>(lpacNewText), lbAlreadyLocalised);
 }
 
@@ -80,7 +82,7 @@ void TextFieldRef::ClearText()
 {
     CGS_ASSERT(mpTextFieldInstance != 0,
         CgsDev::Assert::MessageAt("mpTextFieldInst", KAC_ARTIST_ASSERT_FILE, 61 /* ARTIST 0x8246CC00 */));
-    static_cast<TextFieldInstance*>(mpTextFieldInstance)->SetText(
+    static_cast<TextFieldInstance*>(mpTextFieldInstance)->ChangeText(
         reinterpret_cast<const CgsUnicode::CgsUtf8*>(""), false);
 }
 

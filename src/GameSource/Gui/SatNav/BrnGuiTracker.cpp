@@ -8,7 +8,7 @@
 // the accessor returns a pointer to the named record element.
 // ===================================================================================
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT, CgsDev::Assert::MessageAt
 #include "GameSource/Gui/BrnGuiCache.h"              // [FIX1] GuiCache::GetWorldCameraPosition
 
 #include <cstring>   // [FIX1] std::memcpy (the three register/record copies)
@@ -486,12 +486,18 @@ const BrnGameState::LandmarkIndex* GuiTracker::GetActivelyTrackedLandmarks()
 {
     if (miCurrentlyTrackedIndex != -1)
     {
-        s32 liActive = 0;
+        // The assert texts are the stringised conditions (ARTIST 0x82072338 / 0x82072370) and
+        // carry the original BrnGuiTracker.cpp lines 347/348 (li r5 @0x824F43D8 / @0x824F4400).
+        s32 liActiveTrackedCount = 0;
         for (s32 liIndex = miCurrentlyTrackedIndex; liIndex < miTrackerCount; ++liIndex)
         {
-            CGS_ASSERT(liIndex >= 0 && liIndex < KI_TRACKER_STACK_SIZE, "Invalid tracker index");
-            CGS_ASSERT(liActive >= 0 && liActive < KI_TRACKER_STACK_SIZE, "Invalid active tracker count");
-            maActivelyTrackedLandmarks[liActive++] =
+            CGS_ASSERT((liIndex >= 0) && (liIndex < KI_TRACKER_STACK_SIZE),
+                       CgsDev::Assert::MessageAt("(liIndex >= 0) && (liIndex < KI_TRACKER_STACK_SIZE)",
+                                                 "..\\..\\..\\GameSource\\Gui/SatNav/BrnGuiTracker.cpp", 347));
+            CGS_ASSERT((liActiveTrackedCount >= 0) && (liActiveTrackedCount < KI_TRACKER_STACK_SIZE),
+                       CgsDev::Assert::MessageAt("(liActiveTrackedCount >= 0) && (liActiveTrackedCount < KI_TRACKER_STACK_SIZE)",
+                                                 "..\\..\\..\\GameSource\\Gui/SatNav/BrnGuiTracker.cpp", 348));
+            maActivelyTrackedLandmarks[liActiveTrackedCount++] =
                 BrnGameState::LandmarkIndex(maTrackerRecords[liIndex].mTargetLandmarkIndex);
         }
     }

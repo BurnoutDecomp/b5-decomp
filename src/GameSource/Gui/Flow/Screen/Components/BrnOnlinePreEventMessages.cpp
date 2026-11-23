@@ -160,7 +160,7 @@ bool OnlinePreEventMessages::HandleLoadNotification(const char* lpacComponentNam
     {
         if (std::strcmp(maString[liIndex].GetName(), lpacComponentName) == 0)
         {
-            maString[liIndex].SetText(maString[liIndex].GetText());
+            maString[liIndex].RefreshText();
             break;
         }
     }

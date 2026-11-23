@@ -993,13 +993,16 @@ namespace BrnGui
     void ShowtimeInstantResultsState::HandleAptTriggers(
         const CgsGui::GuiEventAptTriggerPayload* lpEvent)
     {
-        CGS_ASSERT(lpEvent, "lpEvent");                                       // cpp:484
+        CGS_ASSERT(lpEvent,
+                   CgsDev::Assert::MessageAt("lpEvent",
+                       "..\\..\\..\\GameSource\\Gui/Flow/PostEvent/States/Showtime/BrnShowtimeInstantResults.cpp",
+                       484 /* ARTIST 0x824B4A84 */));
 
         if (lpEvent->meEventType != CgsGui::GuiEventAptTrigger::E_APT_EVENT_ONLOAD)
             return;
 
         if (std::strcmp(mFinishedText.GetName(), lpEvent->mpacComponentName) == 0)
-            mFinishedText.SetText(mFinishedText.GetText());
+            mFinishedText.RefreshText();
     }
 
     // =======================================================================================

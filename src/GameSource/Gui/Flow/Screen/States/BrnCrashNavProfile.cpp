@@ -314,7 +314,9 @@ namespace BrnGui
     {
         mProfileMenuComponent.SetupMenu(KI_NUM_MENU_ITEMS, true);
 
-        for (s32 liRow = 0; liRow < KI_NUM_MENU_ITEMS; ++liRow)
+        // An equality exit test: ARTIST closes the loop with `cmpw ; bne` on the row
+        // pointer (@0x824BCED8), as the PS3 build does on the index (cmpwi 2 ; bne).
+        for (s32 liRow = 0; liRow != KI_NUM_MENU_ITEMS; ++liRow)
         {
             mProfileMenuComponent.SetText(liRow, KAPC_PROFILE_MENU_TEXT[liRow]);
         }

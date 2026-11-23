@@ -2830,13 +2830,21 @@ namespace BrnGui
     s32 GuiCache::GetEventDestinationDistrict() const
     {
         // asm @0x82472DD8..E08 skips the assert (beq) for meGameModeType in {0,1,10,6,8,5}.
+        // Header-inline on the console: both asserts carry BrnGuiCache.h lines 4078/4080
+        // (li r5 @0x82472E14 / @0x82472E44); the texts are the stringised conditions
+        // (ARTIST 0x8204DAD8 / 0x8205B470).
         CGS_ASSERT(
             (meGameModeType == 0) || (meGameModeType == 1) || (meGameModeType == 10)
                 || (meGameModeType == 6) || (meGameModeType == 8) || (meGameModeType == 5),
-            "race-style game mode required for GetEventDestinationDistrict");
+            CgsDev::Assert::MessageAt(
+                "( meGameModeType == GsmIO::E_MODE_OFFLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_FACE_OFF ) || "
+                "( meGameModeType == GsmIO::E_MODE_ONLINE_RACE ) || ( meGameModeType == GsmIO::E_MODE_ELIMINATOR ) || "
+                "( meGameModeType == GsmIO::E_MODE_MARKED_MAN ) || ( meGameModeType == GsmIO::E_MODE_BURNING_ROUTE )",
+                KAC_ARTIST_ASSERT_FILE, 4078 /* ARTIST 0x82472E14 */));
         // BrnWorld::E_DISTRICT_INVALID == 18 (asm immediate).
         CGS_ASSERT(mEventDestinationDistrict != 18,
-                   "mEventDestinationDistrict != BrnWorld::E_DISTRICT_INVALID");
+                   CgsDev::Assert::MessageAt("mEventDestinationDistrict != BrnWorld::E_DISTRICT_INVALID",
+                                             KAC_ARTIST_ASSERT_FILE, 4080 /* ARTIST 0x82472E44 */));
         return mEventDestinationDistrict;
     }
 

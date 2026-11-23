@@ -170,6 +170,13 @@ namespace BrnGui
         // notification; exposed by name so that caller stays off the raw offset.
         const char* GetText() const { return macText; }
 
+        // DWARF BrnTextField.h:215 -- re-push the stored text. Header-inline: no ARTIST or
+        // PS3 out-of-line copy; inlined callers take the text from the field's own address
+        // (`addi r3, this, <field>` then `addi r4, r3, 0xA4` before SetText, e.g.
+        // ShowtimeInstantResultsState::HandleAptTriggers @0x824B4ADC and
+        // OnlinePreEventMessages::HandleLoadNotification @0x8241A490).
+        void RefreshText() { SetText(GetText()); }
+
         // ADDITIVE GROW (ReplayHudMessageComponent::HideMessage @0x8241C078): blank the
         // field's displayed text. The X360 caller writes macText[0] = 0 inline (the
         // stb 0,0xA4(field) store) before re-outputting; exposed by name so that caller

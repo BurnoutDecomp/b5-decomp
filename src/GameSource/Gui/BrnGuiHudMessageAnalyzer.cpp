@@ -1066,12 +1066,13 @@ namespace BrnGui
 void HudMessageAnalyzer::HandleStartPursuitEvent()
 {
     CGS_ASSERT(mpGuiCache->GetGameMode() == 4,
-               "GsmIO::E_MODE_PURSUIT == mpGuiCache->GetGameMode()");
+               CgsDev::Assert::MessageAt("GsmIO::E_MODE_PURSUIT == mpGuiCache->GetGameMode()",
+                                         KAC_ARTIST_ASSERT_FILE, 3272 /* ARTIST 0x8251D4E8 */));
 
-    const CgsID lPursuitCarID = mpGuiCache->GetPursuitCarID();
-
+    // The id is passed straight through: ARTIST forms the buffer address before the
+    // GetPursuitCarID call (addi r31, r1, 0x50 @0x8251D4F4) and hands it over after.
     char lCarIdBuffer[16];
-    CgsIDConvertToString(lPursuitCarID, lCarIdBuffer);
+    CgsIDConvertToString(mpGuiCache->GetPursuitCarID(), lCarIdBuffer);
     lCarIdBuffer[12] = '\0';                              // asm @0x8251D51C
 
     char lCarNameBuffer[32];

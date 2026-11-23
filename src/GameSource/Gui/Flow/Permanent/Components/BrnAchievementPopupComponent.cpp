@@ -57,18 +57,15 @@ namespace BrnGui
                                               CgsGui::StateInterface* lpStateInterface,
                                               s32 /*liFlags*/)
     {
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
+        // The header-inline base Construct (BrnGuiFlaptComponent.h:113 assert, li r5,0x71):
+        // bind the state channel and invalidate the apt clip handle.
+        BrnFlaptComponent::Construct(lpStateInterface);
 
-        // Inlined base init: bind the state channel and invalidate the apt clip handle.
-        mpStateInterface        = lpStateInterface;
-        mAptRef.mpMovieClipInst = 0;
-        mAptRef.mpTransform     = 0;
-
-        // Idle runtime state.
-        mAchievementsToShow.UnSetAll();
-        miCurrentAchievementShowing = KI_NO_ACHIEVEMENT_SHOWING;
+        // Idle runtime state (ARTIST stores +0x20, +0x1C, then +0x10, +0x18 @0x82430178..8C).
         meComponentState            = E_CS_INVISIBLE;
         mfCurrentGameTime_Seconds   = 0.0f;
+        mAchievementsToShow.UnSetAll();
+        miCurrentAchievementShowing = KI_NO_ACHIEVEMENT_SHOWING;
 
         // Build the embedded icon (X360 inlined its base init through the vtable call).
         mAchievementIcon.Construct(KAC_ACHIEVEMENTICON_NAME, lpStateInterface, 0);

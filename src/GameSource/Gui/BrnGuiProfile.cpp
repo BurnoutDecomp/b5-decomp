@@ -15,6 +15,7 @@
 #include "GameSource/Network/Managers/BrnNetworkLiveRevengeManager.h" // BrnNetwork::LiveRevengeProfile::ValidateProfile (stored-segment validate)
 
 #include <cstring>   // std::memcpy / std::strncpy
+#include <xtl.h>     // XMemCpy
 
 // ===========================================================================
 // BrnGui::ProfileManager  (GameSource/Gui/BrnGuiProfile.{h,cpp})
@@ -316,7 +317,9 @@ void MugshotSaveBuffer::Construct()
 // CopyImageToBuffer @0x824EFD40: copy, hash, stamp).
 void MugshotSaveBuffer::Construct(const char* lpSourceBuffer, s32 liLength)
 {
-    std::memcpy(macBuffer, lpSourceBuffer, static_cast<usize>(liLength));
+    // XMemCpy (xapilibi, ARTIST 0x82926BA0), as the inlined copy in
+    // SetMugshotBufferFromCircularBuffer calls it (@0x824EFCE4).
+    XMemCpy(macBuffer, lpSourceBuffer, static_cast<usize>(liLength));
     muHash        = CgsContainers::CgsHash::CalculateHash(macBuffer, liLength);
     muMagicNumber = muCorrectMagicNumber;
 }
@@ -1106,8 +1109,10 @@ void ProfileManager::LoadResult(CgsGui::ESaveLoadTaskResult leResult)
 void ProfileManager::LoadImageFiles(ProfileTaskResultHandler* lpTaskResultHandler,
                                     const CgsGui::ImageFileInfo* laImageFileInfo)
 {
-    CGS_ASSERT(lpTaskResultHandler != 0, "lpTaskResultHandler != NULL");
-    CGS_ASSERT(laImageFileInfo != 0, "laImageFileInfo != NULL");
+    CGS_ASSERT(lpTaskResultHandler != 0, CgsDev::Assert::MessageAt("lpTaskResultHandler != NULL",
+                KAC_ARTIST_ASSERT_FILE, 720 /* ARTIST 0x82513C3C */));
+    CGS_ASSERT(laImageFileInfo != 0, CgsDev::Assert::MessageAt("laImageFileInfo != NULL",
+                KAC_ARTIST_ASSERT_FILE, 721 /* ARTIST 0x82513C60 */));
 
     s32 liNumberOfImageFiles = 0;
     for (s32 liIndex = 0; liIndex < CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION; ++liIndex)
@@ -1115,11 +1120,14 @@ void ProfileManager::LoadImageFiles(ProfileTaskResultHandler* lpTaskResultHandle
         if (laImageFileInfo[liIndex].IsValid())
         {
             ++liNumberOfImageFiles;
-            CGS_ASSERT(laImageFileInfo[liIndex].miSize > 0, "laImageFileInfo[liIndex].miSize > 0");
-            CGS_ASSERT(laImageFileInfo[liIndex].mpBuffer != 0, "laImageFileInfo[liIndex].mpBuffer != NULL");
+            CGS_ASSERT(laImageFileInfo[liIndex].miSize > 0, CgsDev::Assert::MessageAt("laImageFileInfo[liIndex].miSize > 0",
+                KAC_ARTIST_ASSERT_FILE, 734 /* ARTIST 0x82513CC8 */));
+            CGS_ASSERT(laImageFileInfo[liIndex].mpBuffer != 0, CgsDev::Assert::MessageAt("laImageFileInfo[liIndex].mpBuffer != NULL",
+                KAC_ARTIST_ASSERT_FILE, 735 /* ARTIST 0x82513CEC */));
         }
     }
-    CGS_ASSERT(liNumberOfImageFiles > 0, "liNumberOfImageFiles > 0");
+    CGS_ASSERT(liNumberOfImageFiles > 0, CgsDev::Assert::MessageAt("liNumberOfImageFiles > 0",
+                KAC_ARTIST_ASSERT_FILE, 739 /* ARTIST 0x82513D20 */));
 
     if (TaskIsRunning())
     {
@@ -1129,7 +1137,7 @@ void ProfileManager::LoadImageFiles(ProfileTaskResultHandler* lpTaskResultHandle
     }
 
     miNumberOfImageFiles = liNumberOfImageFiles;
-    std::memcpy(maImageFileInfo, laImageFileInfo, sizeof(maImageFileInfo));
+    XMemCpy(maImageFileInfo, laImageFileInfo, sizeof(maImageFileInfo));   // xapilibi, ARTIST @0x82513D7C
 
     // Give each record a (cleared) circular-buffer slot to load into.
     for (s32 liIndex = 0; liIndex < miNumberOfImageFiles; ++liIndex)
@@ -1175,9 +1183,11 @@ void ProfileManager::BufferProfileOperation(EProfileOperation leProfileOperation
                                             s32 liNumberOfImageFiles,
                                             const CgsGui::ImageFileInfo* laImageFileInfoArray)
 {
-    CGS_ASSERT(TaskIsRunning() == true, "TaskIsRunning() == true");
+    CGS_ASSERT(TaskIsRunning() == true, CgsDev::Assert::MessageAt("TaskIsRunning() == true",
+                KAC_ARTIST_ASSERT_FILE, 1081 /* ARTIST 0x824F8F40 */));
     CGS_ASSERT(meBufferedOperation == leProfileOperation || meBufferedOperation == E_PROFILEOPERATION_NONE,
-               "meBufferedOperation == leProfileOperation || meBufferedOperation == E_PROFILEOPERATION_NONE");
+               CgsDev::Assert::MessageAt("meBufferedOperation == leProfileOperation || meBufferedOperation == E_PROFILEOPERATION_NONE",
+                KAC_ARTIST_ASSERT_FILE, 1083 /* ARTIST 0x824F8F78 */));
 
     if (meBufferedOperation == E_PROFILEOPERATION_NONE)
     {
@@ -1192,9 +1202,11 @@ void ProfileManager::BufferProfileOperation(EProfileOperation leProfileOperation
 
     if (liNumberOfImageFiles > 0)
     {
-        CGS_ASSERT(laImageFileInfoArray != 0, "laImageFileInfoArray != NULL");
+        CGS_ASSERT(laImageFileInfoArray != 0, CgsDev::Assert::MessageAt("laImageFileInfoArray != NULL",
+                KAC_ARTIST_ASSERT_FILE, 1099 /* ARTIST 0x824F9008 */));
         CGS_ASSERT(miBufferedNumberOfImageFiles + liNumberOfImageFiles <= CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION,
-                   "miBufferedNumberOfImageFiles + liNumberOfImageFiles <= CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION");
+                   CgsDev::Assert::MessageAt("miBufferedNumberOfImageFiles + liNumberOfImageFiles <= CgsGui::KI_MAX_IMAGE_FILES_PER_OPERATION",
+                KAC_ARTIST_ASSERT_FILE, 1100 /* ARTIST 0x824F9038 */));
 
         std::memcpy(&maBufferedImageFileInfo[miBufferedNumberOfImageFiles], laImageFileInfoArray,
                     static_cast<usize>(liNumberOfImageFiles) * sizeof(CgsGui::ImageFileInfo));
@@ -1466,22 +1478,25 @@ bool ProfileManager::ValidateProfiles()
 void ProfileManager::SetMugshotBufferFromCircularBuffer(CgsGui::ImageFileInfo* lpDestImageFileInfo,
                                                         const CgsGui::ImageFileInfo* lpSourceImageFileInfo)
 {
-    CGS_ASSERT(lpDestImageFileInfo != 0, "lpDestImageFileInfo != NULL");
+    CGS_ASSERT(lpDestImageFileInfo != 0,
+        CgsDev::Assert::MessageAt("lpDestImageFileInfo != NULL", KAC_ARTIST_ASSERT_FILE, 1458 /* ARTIST 0x824EFC64 */));
 
-    if (lpDestImageFileInfo->miSize == KI_MUGSHOT_REQUEST_SIZE_BYTES)
+    // An unsigned compare (cmplwi @0x824EFC70): the record size is sizeof the slot.
+    if (lpDestImageFileInfo->miSize == sizeof(MugshotSaveBuffer))
     {
         return;   // already framed into a slot
     }
 
     MugshotSaveBuffer* lpSlot = &mpaMugshotCircularBuffer[miNextMugshotInCircularBuffer];
 
-    lpDestImageFileInfo->miSize   = KI_MUGSHOT_REQUEST_SIZE_BYTES;
+    lpDestImageFileInfo->miSize   = sizeof(MugshotSaveBuffer);
     lpDestImageFileInfo->mpBuffer = reinterpret_cast<char*>(lpSlot);
 
     if (lpSourceImageFileInfo != 0)
     {
         CGS_ASSERT(lpSourceImageFileInfo->miSize == KI_MUGSHOT_PICTURE_SIZE_BYTES,
-                   "lpSourceImageFileInfo->miSize == KI_MUGSHOT_PICTURE_SIZE_BYTES");
+            CgsDev::Assert::MessageAt("lpSourceImageFileInfo->miSize == KI_MUGSHOT_PICTURE_SIZE_BYTES",
+                                      KAC_ARTIST_ASSERT_FILE, 1475 /* ARTIST 0x824EFCCC */));
         lpSlot->Construct(lpSourceImageFileInfo->mpBuffer, KI_MUGSHOT_PICTURE_SIZE_BYTES);
     }
     else

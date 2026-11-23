@@ -68,9 +68,10 @@ void IdleHudState::OnEnter()
 {
     mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
-    meCurrentState = E_IDLE_HUD_RESOURCES;   // this+0x38 = 0
+    // ARTIST stores these in this order (+0x164, +0x168, +0x38 @0x82475A08..0x82475A10).
     mpGuiCache     = 0;                       // this+0x164 = 0
     mbIsLoaded     = false;                   // this+0x168 = 0
+    meCurrentState = E_IDLE_HUD_RESOURCES;   // this+0x38 = 0
 
     mTextField.Construct("text_txt", mpStateInterface, 0);
 }

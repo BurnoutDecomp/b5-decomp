@@ -49,14 +49,11 @@ namespace BrnGui
                                                 CgsGui::StateInterface* lpStateInterface,
                                                 const void* /*lpcParentName*/)
     {
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");
-
-        // Inlined FlaptIconComponent::Construct: bind the state channel, invalidate the
-        // apt clip handle, and clear the current-state hash.
-        mpStateInterface        = lpStateInterface;
-        mAptRef.mpMovieClipInst = 0;
-        mAptRef.mpTransform     = 0;
-        muCurrentStateHash      = 0;
+        // The header-inline BrnFlaptComponent::Construct (BrnGuiFlaptComponent.h:113 assert,
+        // li r5,0x71 @0x82424F50) binds the state channel and invalidates the apt clip
+        // handle; then the current-state hash is cleared.
+        BrnFlaptComponent::Construct(lpStateInterface);
+        muCurrentStateHash = 0;
 
         // The X360 leaves +0x14 as 0 here (E_CS_INVALID); Prepare sets it to INVISIBLE.
         meComponentState = E_CS_INVALID;
