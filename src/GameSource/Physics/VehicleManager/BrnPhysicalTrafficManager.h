@@ -275,6 +275,10 @@ namespace Vehicle
 // PhysicalTrafficVehicle::Update. The debug component binds the same bool cell.
 extern bool gbAllowTrafficFreezing;
 
+// BrnPhysicalTrafficManager.cpp:46 (DWARF), defined there: RemoveTrafficVehicle's last argument
+// from SendTrafficVehicleRecycledEvents and CheckForTrafficHittingWater.
+extern bool KB_DO_NOT_FAIL_IF_RIGID_BODY_NOT_FOUND;
+
 // Forward decls for the PhysicalTrafficVehicle wave-8 method params (real homes elsewhere; only
 // pointers/refs are taken here so incomplete types suffice).
 // CLASS-KEYS CORRECTED 2026-08-03 with the TrafficPhysics de-fork: including the real
@@ -416,6 +420,10 @@ struct PhysicalTrafficVehicle
     // X360 0x825B3358: range-checked read of meArticulatedVehicleType (+36). One of
     // PhysicalTrafficVehicle's own methods (FLAG above): bodied against the named +36 member.
     EArticulatedVehicleType GetArticulatedVehicleType() const;
+
+    // BrnPhysicalTrafficVehicle.h:108 (DWARF). ARTIST inlines it as the bare `lwz 0x2C`
+    // (RecycleTrafficVehicle 0x8262DA98); the PS3 copy's joint-state asserts are not in it.
+    s32 GetArticulatedJointIndex() const { return miJointIndex; }
 
     // ---- wave-7 methods (bodied in BrnPhysicalTrafficManager.cpp) ----------------------------
     // @0x825C0148: assert fully-physical and return mpVehicleBody as the concrete full-physics body.
@@ -985,6 +993,11 @@ private:
 
     // @0x8262DA10 (112) DWARF :312 / @0x8261CC98 (570) DWARF :291.
     void RecycleTrafficVehicle(s32 liIndexToRecycle,
+                               VehicleManagerOutputInterface* lpManagerOutputInterface,
+                               VehicleOutputRequestInterface* lpOutputRequestInterface,
+                               BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);
+    // DWARF BrnPhysicalTrafficManager.h:540; ARTIST inlines both calls into RecycleTrafficVehicle.
+    void SendTrafficVehicleRecycledEvents(s32 liIndexToRecycle,
                                VehicleManagerOutputInterface* lpManagerOutputInterface,
                                VehicleOutputRequestInterface* lpOutputRequestInterface,
                                BrnPhysics::Deformation::DeformationInputInterface* lpDeformationInterface);

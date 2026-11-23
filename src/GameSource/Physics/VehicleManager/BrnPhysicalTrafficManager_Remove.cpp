@@ -41,11 +41,18 @@
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationInputInterface.h"
 #include "GameShared/GameClasses/Physics/CgsRigidBody.h"                             // CgsPhysics::RigidBodyId
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h"            // InAddRigidBody / InRemoveRigidBody
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                          // CGS_ASSERT + ARTIST locations
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                           // the named gates
 #include "rw/physics/inertia.h"                                                      // rw::physics::Inertia
 
 #include <cstdlib>   // getenv (the BRN_TRAFFIC_DIAG witness below)
+
+// ARTIST 0x820945F0: the assert file (__FILE__) of the BrnPhysicalTrafficManager.cpp unity
+// member. A literal, as __FILE__ is: ARTIST addresses it as its own string, not off a
+// neighbouring static array.
+#define KAC_ARTIST_ASSERT_CPP_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\" \
+    "../Physics/VehicleManager/BrnPhysicalTrafficManager.cpp"
 
 namespace
 {
@@ -298,9 +305,12 @@ namespace Vehicle
             VehicleOutputRequestInterface* lpOutputInterface,
             Deformation::DeformationInputInterface* lpDeformationInterface)
     {
-        CGS_ASSERT(lpRemoveTrafficQueue   != 0, "lpRemoveTrafficQueue != NULL");             // :600
-        CGS_ASSERT(lpOutputInterface      != 0, "lpOutputInterface != NULL");                // :601
-        CGS_ASSERT(lpDeformationInterface != 0, "lpDeformationInterface != NULL");           // :602
+        CGS_ASSERT(lpRemoveTrafficQueue != 0,
+            CgsDev::Assert::MessageAt("lpRemoveTrafficQueue != NULL", KAC_ARTIST_ASSERT_CPP_FILE, 600 /* ARTIST 0x8262D0F4 */));
+        CGS_ASSERT(lpOutputInterface != 0,
+            CgsDev::Assert::MessageAt("lpOutputInterface != NULL", KAC_ARTIST_ASSERT_CPP_FILE, 601 /* ARTIST 0x8262D118 */));
+        CGS_ASSERT(lpDeformationInterface != 0,
+            CgsDev::Assert::MessageAt("lpDeformationInterface != NULL", KAC_ARTIST_ASSERT_CPP_FILE, 602 /* ARTIST 0x8262D13C */));
 
         for (s32 liEvent = 0; liEvent < lpRemoveTrafficQueue->GetLength(); ++liEvent)
         {
@@ -361,49 +371,66 @@ namespace Vehicle
             Deformation::DeformationInputInterface* lpDeformationInterface)
     {
         CGS_ASSERT(liIndexToRecycle >= 0 && liIndexToRecycle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
-                   "liIndexToRecycle >= 0 && liIndexToRecycle < ku8TotalMaxNumPhysicalTraffic"); // :3426
+            CgsDev::Assert::MessageAt(
+                "liIndexToRecycle >= 0 && liIndexToRecycle < static_cast<int32_t>( ku8TotalMaxNumPhysicalTraffic )",
+                KAC_ARTIST_ASSERT_CPP_FILE, 3426 /* ARTIST 0x8262DA50 */));
 
-        PhysicalTrafficVehicle* lpVehicle = GetTrafficVehicle(liIndexToRecycle);
-        if (lpVehicle->HasNonBrokenJoint())
+        // BrnPhysicalTrafficManager.cpp:3429/3437/3440 (DWARF): lpTrafficVehicle, liJointIndex,
+        // liOtherHalfIndex. The joint index is read before GetArticulatedVehicleType is called
+        // (ARTIST 0x8262DA98 `lwz r29, 0x2C(r29)` precedes the `bl`).
+        PhysicalTrafficVehicle* lpTrafficVehicle = GetTrafficVehicle(liIndexToRecycle);
+        if (lpTrafficVehicle->HasNonBrokenJoint())
         {
-            const s32 liOtherHalfIndex = mArticulatedJointPool.GetIndexOfOtherHalf(
-                lpVehicle->miJointIndex, lpVehicle->GetArticulatedVehicleType());
-            lpManagerOutputInterface->AddTrafficRemovedEvent(
-                maTrafficEntityIDs[liOtherHalfIndex],
-                static_cast<ETrafficType>(GetTrafficVehicle(liOtherHalfIndex)->mePhysicalTrafficState));
-            RemoveTrafficVehicle(static_cast<u8>(liOtherHalfIndex), lpOutputRequestInterface,
-                                 lpDeformationInterface, false);
-            const u32 luOtherEntityIndex = (maTrafficEntityIDs[liOtherHalfIndex].muValue >> 10) & 0x3FFFu;
-            CGS_ASSERT(mu8GlobalToPhysicalEntityIndexMap[luOtherEntityIndex] != KU8_INVALID_MAP,
-                       "mu8GlobalToPhysicalEntityIndexMap[maTrafficEntityIDs[liOtherHalfIndex].GetEntityIndex()] != KU8_INVALID_MAP");
+            s32 liJointIndex = lpTrafficVehicle->GetArticulatedJointIndex();
+            s32 liOtherHalfIndex = mArticulatedJointPool.GetIndexOfOtherHalf(
+                liJointIndex, lpTrafficVehicle->GetArticulatedVehicleType());
+            SendTrafficVehicleRecycledEvents(liOtherHalfIndex, lpManagerOutputInterface,
+                                             lpOutputRequestInterface, lpDeformationInterface);
+            CGS_ASSERT(mu8GlobalToPhysicalEntityIndexMap[
+                           (maTrafficEntityIDs[liOtherHalfIndex].muValue >> 10) & 0x3FFFu] != KU8_INVALID_MAP,
+                CgsDev::Assert::MessageAt(
+                    "mu8GlobalToPhysicalEntityIndexMap[maTrafficEntityIDs[liOtherHalfIndex].GetEntityIndex()] != KU8_INVALID_MAP",
+                    KAC_ARTIST_ASSERT_CPP_FILE, 3455 /* ARTIST 0x8262DB1C */));
             mu8GlobalToPhysicalEntityIndexMap[
                 (maTrafficEntityIDs[liOtherHalfIndex].muValue >> 10) & 0x3FFFu] = KU8_INVALID_MAP;
         }
 
-        // `lwzx r28, r29, r31` then `lwz r5, 0x20(vehicle)` -- the removed car's own global id and
-        // its lifecycle state, into the world-facing "a physical traffic car went away" event.
-        lpManagerOutputInterface->AddTrafficRemovedEvent(
-                maTrafficEntityIDs[liIndexToRecycle],
-                static_cast<ETrafficType>(GetTrafficVehicle(liIndexToRecycle)->mePhysicalTrafficState));
-
-        // `lbz r7, byte_82FB7DF1` -- a .data bool that is 0 in the shipped image. The parameter it
-        // feeds is never read inside RemoveTrafficVehicle (r7 is dead after the prologue), so the
-        // value is not load-bearing; passed as the image's own false.
-        RemoveTrafficVehicle(static_cast<u8>(liIndexToRecycle), lpOutputRequestInterface,
-                             lpDeformationInterface, false);
+        SendTrafficVehicleRecycledEvents(liIndexToRecycle, lpManagerOutputInterface,
+                                         lpOutputRequestInterface, lpDeformationInterface);
 
         // Re-read AFTER RemoveTrafficVehicle, so this is 0xFFFFFFFF >> 10 & 0x3FFF == 16383 every
         // time (see banner). The original reads the map at that index.
-        const u32 luEntityIndex =
-            (maTrafficEntityIDs[liIndexToRecycle].muValue >> 10) & 0x3FFFu;   // `extrwi r11,r11,14,8`
-        CGS_ASSERT(mu8GlobalToPhysicalEntityIndexMap[luEntityIndex] != KU8_INVALID_MAP,
-                   "mu8GlobalToPhysicalEntityIndexMap[maTrafficEntityIDs[liIndexToRecycle]."
-                   "GetEntityIndex()] != KU8_INVALID_MAP");                                  // :3466
+        CGS_ASSERT(mu8GlobalToPhysicalEntityIndexMap[
+                       (maTrafficEntityIDs[liIndexToRecycle].muValue >> 10) & 0x3FFFu] != KU8_INVALID_MAP,
+            CgsDev::Assert::MessageAt(
+                "mu8GlobalToPhysicalEntityIndexMap[maTrafficEntityIDs[liIndexToRecycle].GetEntityIndex()] != KU8_INVALID_MAP",
+                KAC_ARTIST_ASSERT_CPP_FILE, 3466 /* ARTIST 0x8262DBA4 */));
 
         // THE DEFECT ABOVE, VERBATIM: the console indexes the map WITH THE MAP, not with the
         // entity index the assert on the line above just read.
         mu8GlobalToPhysicalEntityIndexMap[mu8GlobalToPhysicalEntityIndexMap[liIndexToRecycle]] =
             KU8_INVALID_MAP;
+    }
+
+    // =============================================================================================
+    // SendTrafficVehicleRecycledEvents (DWARF BrnPhysicalTrafficManager.h:540, cpp:3492/3495
+    // lRecycledTrafficEntityId / leTrafficType). No out-of-line ARTIST copy: both calls are inlined
+    // into RecycleTrafficVehicle (0x8262DAC8..0x8262DAF8 and 0x8262DB50..0x8262DB80). The entity id
+    // is loaded before GetTrafficVehicle is called, as the local declared first.
+    // =============================================================================================
+    void PhysicalTrafficManager::SendTrafficVehicleRecycledEvents(
+            s32 liIndexToRecycle,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            VehicleOutputRequestInterface* lpOutputRequestInterface,
+            Deformation::DeformationInputInterface* lpDeformationInterface)
+    {
+        EntityId lRecycledTrafficEntityId = maTrafficEntityIDs[liIndexToRecycle];
+        ETrafficType leTrafficType =
+            static_cast<ETrafficType>(GetTrafficVehicle(liIndexToRecycle)->mePhysicalTrafficState);
+        lpManagerOutputInterface->AddTrafficRemovedEvent(lRecycledTrafficEntityId, leTrafficType);
+
+        RemoveTrafficVehicle(static_cast<u8>(liIndexToRecycle), lpOutputRequestInterface,
+                             lpDeformationInterface, KB_DO_NOT_FAIL_IF_RIGID_BODY_NOT_FOUND);
     }
 
     // =============================================================================================

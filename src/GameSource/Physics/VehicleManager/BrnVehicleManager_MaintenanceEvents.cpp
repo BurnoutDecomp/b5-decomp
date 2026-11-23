@@ -836,9 +836,10 @@ namespace Vehicle
     //   0x8261E118..0x8261E15C  AddTrafficRemovedEvent(maTrafficEntityIDs[i] (this+4*(i+0x64F0)),
     //                           mePhysicalTrafficState (lwz 0x20))
     //   0x8261E160..0x8261E174  RemoveTrafficVehicle((u8)i, outReq, deform, byte_82FB7DF1) --
-    //                           a .data bool that is 0 in the image with no writer (findinit), and
-    //                           r7 is dead in the callee; passed as the image's false, as the
-    //                           sibling RecycleTrafficVehicle does.
+    //                           KB_DO_NOT_FAIL_IF_RIGID_BODY_NOT_FOUND (DWARF cpp:46), 0 in the
+    //                           image with no writer (findinit); r7 is dead in the callee. The
+    //                           AddTrafficRemovedEvent + RemoveTrafficVehicle pair is the inlined
+    //                           SendTrafficVehicleRecycledEvents (BrnPhysicalTrafficManager_Remove.cpp).
     //   then GetNextNonZeroBit on the LIVE bit array (RemoveTrafficVehicle clears the bit).
     // =============================================================================================
     void PhysicalTrafficManager::CheckForTrafficHittingWater(
@@ -909,7 +910,7 @@ namespace Vehicle
                     maTrafficEntityIDs[liTraffic],
                     static_cast<ETrafficType>(GetTrafficVehicle(liTraffic)->mePhysicalTrafficState));
                 RemoveTrafficVehicle(static_cast<u8>(liTraffic), lpOutputRequestInterface,
-                                     lpDeformationInterface, false);
+                                     lpDeformationInterface, KB_DO_NOT_FAIL_IF_RIGID_BODY_NOT_FOUND);
             }
         }
     }

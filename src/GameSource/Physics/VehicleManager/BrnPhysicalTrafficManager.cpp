@@ -50,23 +50,34 @@ const VecFloat KVF_RESET_ON_WATER_HEIGHT(0.25f);
 // that function.
 bool gbAllowTrafficFreezing = true;
 
+// BrnPhysicalTrafficManager.cpp:46 (DWARF): a non-const bool, so ARTIST loads it
+// (`lbz r7, 0x7DF1(0x82FB0000)`, 0x8262DAE8 and 0x8261E160) as RemoveTrafficVehicle's last
+// argument. 0 in the image, no writer (findinit).
+bool KB_DO_NOT_FAIL_IF_RIGID_BODY_NOT_FOUND = false;
+
 // ---------------------------------------------------------------------------------------
-// GetTrafficVehicle (non-const)   @ 0x825B4800   (the unnamed body shares this with
-// GetTrafficInterest_0 @ 0x825B4880; both return &mpaTrafficVehicles[idx], stride 0x40)
-// X360: result = *(this+103604) + (liVehicle << 6)
+// GetTrafficVehicle (non-const)   @ 0x825B4880   (IDA names it GetTrafficInterest_0)
+// GetTrafficVehicle (const)       @ 0x825B4800   (IDA truncates it to "PhysicalTrafficManager::")
+// Which is which: the const IsTrafficVehicleSimple (DWARF h:281) calls 0x825B4800; the
+// non-const RecycleTrafficVehicle calls 0x825B4880 on its non-const lpTrafficVehicle.
+// Both return &mpaTrafficVehicles[idx] (stride 0x40, X360 *(this+103604) + (liVehicle << 6)).
+// Assert lines: const h:729/730, non-const h:740/741 (ARTIST li r5).
 // ---------------------------------------------------------------------------------------
 PhysicalTrafficVehicle* PhysicalTrafficManager::GetTrafficVehicle(s32 liVehicle)
 {
-    CGS_ASSERT(liVehicle >= 0, "liVehicle >= 0");
-    CGS_ASSERT(liVehicle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC, "liVehicle < ku8TotalMaxNumPhysicalTraffic");
+    CGS_ASSERT(liVehicle >= 0,
+        CgsDev::Assert::MessageAt("liVehicle >= 0", KAC_ARTIST_ASSERT_FILE, 740 /* ARTIST 0x825B48AC */));
+    CGS_ASSERT(liVehicle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+        CgsDev::Assert::MessageAt("liVehicle < ku8TotalMaxNumPhysicalTraffic", KAC_ARTIST_ASSERT_FILE, 741 /* ARTIST 0x825B48D0 */));
     return &mpaTrafficVehicles[liVehicle];
 }
 
-// GetTrafficVehicle (const)   @ 0x825B4880  (the X360 const accessor; same stride-0x40 math)
 const PhysicalTrafficVehicle* PhysicalTrafficManager::GetTrafficVehicle(s32 liVehicle) const
 {
-    CGS_ASSERT(liVehicle >= 0, "liVehicle >= 0");
-    CGS_ASSERT(liVehicle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC, "liVehicle < ku8TotalMaxNumPhysicalTraffic");
+    CGS_ASSERT(liVehicle >= 0,
+        CgsDev::Assert::MessageAt("liVehicle >= 0", KAC_ARTIST_ASSERT_FILE, 729 /* ARTIST 0x825B482C */));
+    CGS_ASSERT(liVehicle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+        CgsDev::Assert::MessageAt("liVehicle < ku8TotalMaxNumPhysicalTraffic", KAC_ARTIST_ASSERT_FILE, 730 /* ARTIST 0x825B4850 */));
     return &mpaTrafficVehicles[liVehicle];
 }
 
@@ -81,7 +92,9 @@ PhysicalTrafficVehicle::EArticulatedVehicleType PhysicalTrafficVehicle::GetArtic
 {
     CGS_ASSERT(meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE
                    && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT,
-               "meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT");
+        CgsDev::Assert::MessageAt(
+            "meArticulatedVehicleType >= E_ARTICULATE_VEHICLE_NONE && meArticulatedVehicleType < E_ARTICULATE_VEHICLE_COUNT",
+            "..\\..\\..\\GameSource\\Physics/VehicleManager/BrnPhysicalTrafficVehicle.h", 506 /* ARTIST 0x825B3388 */));
     return meArticulatedVehicleType;
 }
 
