@@ -912,8 +912,9 @@ f32 SineLerp(f32 lfFrom, f32 lfTo, f32 lfParameter)
 {
     const f32 KF_PI = 3.1415927f;   // flt_8200174C == rw::math::PI
 
-    CGS_ASSERT(lfParameter >= 0.0f && lfParameter <= 1.0f,                 // .cpp:810
-               "lfParameter >= 0.0f && lfParameter <= 1.0f");
+    CGS_ASSERT(lfParameter >= 0.0f && lfParameter <= 1.0f,
+        CgsDev::Assert::MessageAt("lfParameter >= 0.0f && lfParameter <= 1.0f",
+            KAC_ARTIST_ASSERT_SOURCE, 810 /* ARTIST 0x8220CCF8 */));               // .cpp:810
 
     const f32 lfEased = 1.0f - (std::cos(lfParameter * KF_PI) + 1.0f) * 0.5f;
 

@@ -5,15 +5,13 @@
 // Call @ 0x823AA320
 //   Reconstructed store-for-store from the X360 pseudocode/asm.
 //
-// FLAGGED SUBSTITUTION: on a Lua error the X360 fetches the error text via
-// lua_tolstring and routes it through CgsDev::Assert::BeginAssert / FireAssert /
-// EndAssert. Per the project rule that substitutes that machinery, the failure path is
-// reconstructed with the committed CGS_ASSERT macro (the X360 d:\p4 file/line cite at
-// BrnLUACall.cpp:60 is supplied by the macro's __FILE__/__LINE__).
+// On a Lua error the X360 fetches the error text via lua_tolstring and routes it through
+// CgsDev::Assert::BeginAssert / FireAssert / EndAssert with the d:\p4 file/line cite
+// BrnLUACall.cpp:60, written out below.
 // ===================================================================================
 #include "GameSource/Game/BrnLUACall.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h" // committed CGS_ASSERT (flagged substitute)
+#include "GameShared/GameClasses/Core/CgsAssert.h" // CgsDev::Assert::BeginAssert / FireAssert / EndAssert
 
 namespace BrnGame
 {
@@ -28,7 +26,16 @@ namespace BrnGame
         mbCalledFunction = true;
 
         // if (v2) { ...assert with the Lua error string... }
-        CGS_ASSERT(liResult == 0, lua_tolstring(mpLuaHandle, -1, 0));
+        // The CGS_ASSERT expansion with ARTIST's own file and line (BrnLUACall.cpp:60, unity path,
+        // `li r5, 0x3C` @0x823AA37C): the file is loaded before the message call, as for any
+        // __FILE__ argument, so it is passed directly rather than through MessageAt.
+        if (liResult != 0)
+        {
+            CgsDev::Assert::BeginAssert();
+            CgsDev::Assert::FireAssert(lua_tolstring(mpLuaHandle, -1, 0),
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/BrnLUACall.cpp", 60);
+            CgsDev::Assert::EndAssert();
+        }
 
         // stw r11(0), 0(r31) -- reset the pushed-parameter count.
         miNumParams = 0;

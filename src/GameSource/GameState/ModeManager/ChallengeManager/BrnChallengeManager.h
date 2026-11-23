@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h"     // CgsContainers::ObjectPool<T,N,TIndex>
 #include "GameShared/GameClasses/Containers/CgsArray.h"          // Array<T,N> (global scope)
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT (EFreeburnSkill operator++)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"      // BrnNetwork::NetworkPlayerID (s32)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"           // GameStateModuleIO::{EFreeburnChallengeSuccess, CompletedFburnChallengesData}
 #include "GameSource/GameState/BrnGameEvents.h"                  // GameStateModuleIO::{EGameEventType, FburnChallengeSuccessUpdateEvent, FburnChallengeSuccessEvent}
@@ -141,8 +142,11 @@ namespace BrnGameState
     {
         const EFreeburnSkill leOld = lreSkill;
         lreSkill = static_cast<EFreeburnSkill>(static_cast<s32>(lreSkill) + 1);
-        CGS_ASSERT(static_cast<s32>(lreSkill) <= KI_FREEBURN_SKILL_COUNT_X360,
-                   "leEnumIndex <= E_FREEBURN_SKILL_COUNT");
+        // ARTIST fires it at line 113 of the header (`li r5, 0x71`, e.g.
+        // UpdateLocationOKStatusChange 0x8232408C), path string @0x82022300.
+        CGS_ASSERT(static_cast<s32>(lreSkill) <= KI_FREEBURN_SKILL_COUNT_X360, CgsDev::Assert::MessageAt(
+                   "leEnumIndex <= E_FREEBURN_SKILL_COUNT",
+                   "..\\..\\..\\GameSource\\GameState/ModeManager/ChallengeManager/BrnChallengeManager.h", 113));
         return leOld;
     }
 

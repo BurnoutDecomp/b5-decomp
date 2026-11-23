@@ -778,10 +778,11 @@ namespace BrnGameState
         if ( lbIsLocationOk )
         {
             CGS_ASSERT( liActionIndex < mpCurrentChallenge->GetNumActions(),
-                        "liActionIndex < mpCurrentChallenge->GetNumActions()" );
+                        CgsDev::Assert::MessageAt(
+                            "liActionIndex < mpCurrentChallenge->GetNumActions()",
+                            KAC_CHALLENGE_ASSERT_FILE, 2883 ) );  // ARTIST 0x8233B2EC
 
-            const f32 lfScaleFactor = GetScaleFactor();
-            return lfScaleFactor * mafCumulativeActionScores[ liActionIndex ] * lfTimeStep;
+            return mafCumulativeActionScores[ liActionIndex ] * GetScaleFactor() * lfTimeStep;
         }
 
         const BrnResource::ChallengeListEntryAction* lpAction =

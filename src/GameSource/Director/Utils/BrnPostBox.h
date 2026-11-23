@@ -36,6 +36,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnDirector
 {
@@ -80,7 +81,12 @@ namespace BrnDirector
         // (BrnPostBox.h:108); returns &mPackage.
         const Type& GetPackage() const
         {
-            CGS_ASSERT(meState == E_STATE_GOT_PACKAGE, "meState == E_STATE_GOT_PACKAGE");
+            // ARTIST's every inlined copy fires at BrnPostBox.h line 110 (`li r5, 0x6E`, e.g.
+            // ResolveCollisions 0x822249AC, VisibilityTest::ProcessSceneQueryResults), path string
+            // aDP4B5MainBurno_11 @0x82005790.
+            CGS_ASSERT(meState == E_STATE_GOT_PACKAGE, CgsDev::Assert::MessageAt(
+                "meState == E_STATE_GOT_PACKAGE",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\utils\\BrnPostBox.h", 110));
             return mPackage;
         }
 
