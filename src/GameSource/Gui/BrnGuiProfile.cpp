@@ -890,7 +890,7 @@ void ProfileManager::CheckDiskSpaceResult(CgsGui::ESaveLoadTaskResult /*leResult
 // ---------------------------------------------------------------------------
 void ProfileManager::Bootup(ProfileTaskResultHandler& lrTaskResultHandler, bool lbAutoLoad)
 {
-    CGS_ASSERT(!TaskIsRunning(), "!TaskIsRunning()");
+    CGS_ASSERT(!TaskIsRunning(), CgsDev::Assert::MessageAt("!TaskIsRunning()", KAC_ARTIST_ASSERT_FILE, 405 /* ARTIST 0x825138B4 */));
 
     mbAutoLoad        = lbAutoLoad;
     mbAutosaveEnabled = false;
@@ -911,7 +911,7 @@ void ProfileManager::Bootup(ProfileTaskResultHandler& lrTaskResultHandler, bool 
 // ---------------------------------------------------------------------------
 void ProfileManager::BootupResult(CgsGui::ESaveLoadTaskResult leResult)
 {
-    CGS_ASSERT(!mbAutosaveEnabled, "!mbAutosaveEnabled");
+    CGS_ASSERT(!mbAutosaveEnabled, CgsDev::Assert::MessageAt("!mbAutosaveEnabled", KAC_ARTIST_ASSERT_FILE, 428 /* ARTIST 0x82510FC0 */));
 
     if (leResult == CgsGui::E_SAVELOADTASKRESULT_SUCCESS)
     {

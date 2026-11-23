@@ -49,8 +49,8 @@ namespace
     void RoadSignIcon::Construct(const char* lacName, CgsGui::StateInterface* lpStateInterface,
                                  const char* lpacParentName, bool lbCommunicateWithApt)
     {
-        CGS_ASSERT(lacName != 0, "lacName");                     // assert line 73
-        CGS_ASSERT(lpStateInterface != 0, "lpStateInterface");   // assert line 74
+        CGS_ASSERT(lacName != 0, CgsDev::Assert::MessageAt("lacName", KAC_ARTIST_ASSERT_FILE, 73 /* ARTIST 0x824F51B4 */));                     // assert line 73
+        CGS_ASSERT(lpStateInterface != 0, CgsDev::Assert::MessageAt("lpStateInterface", KAC_ARTIST_ASSERT_FILE, 74 /* ARTIST 0x824F51D8 */));   // assert line 74
 
         CgsGui::GuiComponent::Construct(lacName, lpStateInterface, lpacParentName);
 

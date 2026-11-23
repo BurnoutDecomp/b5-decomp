@@ -7,7 +7,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineScoreboards.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                   // CgsCore::SPrintf
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface::GetLanguageManager
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // FormatText / E_FORMAT_ID_LOOKUP
@@ -43,8 +43,8 @@ namespace BrnGui
     int OnlineScoreboards::_RoadQSortFunction(const void* lpRoadData1, const void* lpRoadData2)
     {
         // cpp:173 / cpp:174 -- both non-fatal on the X360: the compare runs regardless.
-        CGS_ASSERT(lpRoadData1 != 0, "lpRoadData1");
-        CGS_ASSERT(lpRoadData2 != 0, "lpRoadData2");
+        CGS_ASSERT(lpRoadData1 != 0, CgsDev::Assert::MessageAt("lpRoadData1", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineScoreboards.cpp", 173 /* ARTIST 0x82486800 */));
+        CGS_ASSERT(lpRoadData2 != 0, CgsDev::Assert::MessageAt("lpRoadData2", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineScoreboards.cpp", 174 /* ARTIST 0x82486824 */));
 
         // X360 `addi rN, rN, 4`: the compared field is the record's name, not the record.
         // Reached through the named member so the host's own offset is used.

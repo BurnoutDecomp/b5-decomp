@@ -191,7 +191,7 @@ void FriendsListEntry::Update()
         return;
     ClearFlag(E_FLAG_DIRTY);
 
-    const EFriendListBarState leBarState = IsHighlighted()
+    const EFriendListBarState leBarState = (IsHighlighted() == true)   // ARTIST 0x82423B88 `cmplwi r10, 8`: compared with true (the original's `== true` style, cf. its assert texts)
         ? KAE_FRIEND_LIST_SELECTED_BAR_STATES[meEntryStatus]
         : KAE_FRIEND_LIST_UNSELECTED_BAR_STATES[meEntryStatus];
     if (leBarState != meFriendListBarState)

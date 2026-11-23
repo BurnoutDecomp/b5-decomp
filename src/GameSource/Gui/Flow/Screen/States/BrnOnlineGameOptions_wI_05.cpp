@@ -1,7 +1,7 @@
 // wave-I partfile
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface::PlayAptMovie
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache / GuiFlow
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
@@ -51,7 +51,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptions::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:413 (non-fatal)
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameOptions.cpp", 413 /* ARTIST 0x824A779C */));   // cpp:413 (non-fatal)
 
         switch (meSubState)
         {

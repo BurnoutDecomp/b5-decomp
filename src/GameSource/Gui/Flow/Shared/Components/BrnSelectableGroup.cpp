@@ -339,7 +339,7 @@ namespace BrnGui
         for (s32 li = 0; li < miSelectableCount; ++li)
         {
             Selectable* lpSel = GetSelectable(li);
-            CGS_ASSERT(lpSel != 0, "lpSelectable");
+            CGS_ASSERT(lpSel != 0, CgsDev::Assert::MessageAt("lpSelectable", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.cpp", 133 /* ARTIST 0x824E32AC */));
             const u64 luId = (lpaIds != 0) ? lpaIds[li] : static_cast<u64>(li);
             lpSel->SetDirty();
             lpSel->SetId(luId);

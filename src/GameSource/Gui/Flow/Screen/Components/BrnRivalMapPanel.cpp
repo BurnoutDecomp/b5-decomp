@@ -393,7 +393,7 @@ namespace BrnGui
     void RivalMapPanel::TransitionIn(ERivalType leRivalType)
     {
         CGS_ASSERT(static_cast<s32>(leRivalType) >= 0 && leRivalType < E_RIVAL_TYPE_COUNT,
-                   "(0 <= leRivalType) && (E_RIVAL_TYPE_COUNT > leRivalType)");   // cpp:325
+                   CgsDev::Assert::MessageAt("(0 <= leRivalType) && (E_RIVAL_TYPE_COUNT > leRivalType)", "..\\..\\..\\GameSource\\Gui/Flow/Screen/Components/BrnRivalMapPanel.cpp", 325 /* ARTIST 0x82417944 */));   // cpp:325
 
         // Already showing this exact rival type -> nothing to animate.
         if (mbActive && meCurrentRivalType == static_cast<s32>(leRivalType))

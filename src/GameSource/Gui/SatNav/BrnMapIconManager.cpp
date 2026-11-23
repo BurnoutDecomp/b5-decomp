@@ -795,7 +795,7 @@ void MapIconManager::UpdateSatNavInfo(const GuiEventUpdateSatNav* lpSatNavEvent)
 // the flag tail (+0xAA19..+0xAA1D).
 void MapIconManager::UpdateSatNavParams(const CgsModule::Event* lpParamsEvent)
 {
-    CGS_ASSERT(lpParamsEvent != 0, "lpParams");   // :766 (non-gating)
+    CGS_ASSERT(lpParamsEvent != 0, CgsDev::Assert::MessageAt("lpParams", KAC_ARTIST_ASSERT_FILE, 766 /* ARTIST 0x824F4494 */));   // :766 (non-gating)
     const u8* lpuPayload = reinterpret_cast<const u8*>(lpParamsEvent);
     mbRivalFovFreeburn          = (lpuPayload[0] != 0);   // +0xAA19
     mbRivalFovRace              = (lpuPayload[1] != 0);   // +0xAA1A
@@ -1113,13 +1113,13 @@ bool MapIconManager::IsTrackedIcon(const SatNavIconInfo* lpIcon)
 // ARTIST 0x824F4BC0.
 bool MapIconManager::IsStartIcon(const SatNavIconInfo* lpIcon)
 {
-    CGS_ASSERT(lpIcon != 0, "lpSatNavIconInfo");
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+    CGS_ASSERT(lpIcon != 0, CgsDev::Assert::MessageAt("lpSatNavIconInfo", KAC_ARTIST_ASSERT_FILE, 2835 /* ARTIST 0x824F4BF8 */));
+    CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", KAC_ARTIST_ASSERT_FILE, 2836 /* ARTIST 0x824F4C28 */));
     if ((mbIsDisplayingEventInfo || mpGuiCache->GetInEventColouringGate()) && mpGuiCache->GetNumPresetRaces() > 0)
     {
-        CGS_ASSERT(mi8CurrentEventIndex >= 0 && mi8CurrentEventIndex < mpGuiCache->GetNumPresetRaces(), "Invalid preset race index");
+        CGS_ASSERT(mi8CurrentEventIndex >= 0 && mi8CurrentEventIndex < mpGuiCache->GetNumPresetRaces(), CgsDev::Assert::MessageAt("mi8CurrentEventIndex >= 0 && mi8CurrentEventIndex < mpGuiCache->GetNumPresetRaces()", KAC_ARTIST_ASSERT_FILE, 2842 /* ARTIST 0x824F4C90 */));
         const PresetRace* lpRace = mpGuiCache->GetPresetRace(mi8CurrentEventIndex);
-        CGS_ASSERT(lpRace != 0, "lpPresetRace");
+        CGS_ASSERT(lpRace != 0, CgsDev::Assert::MessageAt("lpPresetRace", KAC_ARTIST_ASSERT_FILE, 2844 /* ARTIST 0x824F4CC8 */));
         return static_cast<s32>(lpRace->GetStartLandmarkIndex()) == static_cast<u16>(lpIcon->GetLandmarkIndexHalf());
     }
     return false;

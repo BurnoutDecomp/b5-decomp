@@ -1,5 +1,5 @@
 #include "GameSource/Gui/BrnGuiWorldDataController.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT + BeginAssert/FireAssert/EndAssert
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourcePtr.h"    // ResourcePtr<T>::operator->
 #include "GameShared/GameClasses/Development/CgsStrStream.h"          // CgsDev::StrStream (not-found diagnostics)
 #include "SharedClasses/Graphics/BrnGlobalColourPalette.h"            // BrnWorld::GlobalColourPalette / PlayerCarColourPalette
@@ -435,7 +435,7 @@ bool WorldDataController::Prepare2(BrnResource::GameDataIO::InputBuffer* lpGameD
 s32 WorldDataController::GetTotalNumberOfLandmarks() const
 {
     CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        "E_WORLDDATACONTROLLERSTATE_READY <= meState");
+        CgsDev::Assert::MessageAt("E_WORLDDATACONTROLLERSTATE_READY <= meState", "..\\..\\..\\GameSource\\Gui/BrnGuiWorldDataController.h", 229 /* ARTIST 0x8248E710 */));
     return mpTriggerData->GetNumLandmarks();
 }
 
@@ -445,7 +445,7 @@ s32 WorldDataController::GetTotalNumberOfLandmarks() const
 s32 WorldDataController::GetTotalNumberOfOnlineLandmarks() const
 {
     CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        "E_WORLDDATACONTROLLERSTATE_READY <= meState");
+        CgsDev::Assert::MessageAt("E_WORLDDATACONTROLLERSTATE_READY <= meState", "..\\..\\..\\GameSource\\Gui/BrnGuiWorldDataController.h", 246 /* ARTIST 0x82428718 */));
     return mpTriggerData->GetOnlineLandmarkCount();
 }
 
@@ -482,7 +482,7 @@ s32 WorldDataController::GetRequiredWinsInRank(s32 liRank) const
 const BrnProgression::ProgressionData* WorldDataController::GetProgressionData() const
 {
     CGS_ASSERT(meState >= E_WORLDDATACONTROLLERSTATE_WFPLAYERCARCOLOURS,
-        "E_WORLDDATACONTROLLERSTATE_READY <= meState");
+        CgsDev::Assert::MessageAt("E_WORLDDATACONTROLLERSTATE_READY <= meState", "..\\..\\..\\GameSource\\Gui/BrnGuiWorldDataController.h", 306 /* ARTIST 0x82428850 */));
     return mpProgressionData.operator->();
 }
 

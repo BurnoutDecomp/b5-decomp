@@ -1908,6 +1908,20 @@ struct RankInfoResponseAction : public GameAction<E_ACTION_RANK_INFO_RESPONSE>
     s32 miStuntAttackRankWins;   // 0x1C
     s32 miMarkedManRankWins;     // 0x20
 
+    // DWARF BrnGameActions.h:2519-2549, header-inline: the BrnGuiUnity CU instantiates each one,
+    // and GuiEventRankProgressResponse::Construct (ARTIST 0x824F62F8) inlines
+    // PlayerHasFinishedLastRank (its `cmpwi r11,-1` against KI_PLAYER_HAS_FINISHED_LAST_RANK).
+    bool PlayerHasFinishedLastRank() const { return miPlayerRank == KI_PLAYER_HAS_FINISHED_LAST_RANK; }
+    s32  GetPlayerRank() const             { return miPlayerRank; }
+    s32  GetOfflineRaceRank() const        { return miOfflineRace; }
+    s32  GetRoadRageRank() const           { return miRoadRage; }
+    s32  GetStuntAttackRank() const        { return miStuntAttack; }
+    s32  GetMarkedManRank() const          { return miMarkedMan; }
+    s32  GetOfflineRaceRankWins() const    { return miOfflineRaceRankWins; }
+    s32  GetRoadRageRankWins() const       { return miRoadRageRankWins; }
+    s32  GetStuntAttackRankWins() const    { return miStuntAttackRankWins; }
+    s32  GetMarkedManRankWins() const      { return miMarkedManRankWins; }
+
     void SetProgressionRanks(s32 liPlayerRank, s32 liRankCount, s32 liOfflineRace,
                              s32 liRoadRage, s32 liStuntAttack, s32 liMarkedMan);
     void SetProgressionRankEventWins(s32 liOfflineRaceRankWins, s32 liRoadRageRankWins,

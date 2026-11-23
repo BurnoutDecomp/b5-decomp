@@ -153,16 +153,12 @@ u8 VehicleListEntry::GetDefaultPaintFinish() const
 
 u64 VehicleListEntry::GetExhaustKey() const
 {
-    CgsAttribSys::AttribSysCollectionKey lKey;
-    std::memcpy(&lKey, mExhaustEntityKey.maStorage, sizeof(lKey));
-    return lKey.GetHashKey();
+    return mExhaustEntityKey.GetHashKey();
 }
 
 u64 VehicleListEntry::GetEngineKey() const
 {
-    CgsAttribSys::AttribSysCollectionKey lKey;
-    std::memcpy(&lKey, mEngineEntityKey.maStorage, sizeof(lKey));
-    return lKey.GetHashKey();
+    return mEngineEntityKey.GetHashKey();
 }
 
 
@@ -173,23 +169,17 @@ u64 VehicleListEntry::GetEngineKey() const
 // BaseCollisionGenerator forward shape (FixUp destructs it under that name).
 u64 VehicleListEntry::GetRivalReleasedVoiceOverKeyHash() const
 {
-    CgsAttribSys::AttribSysCollectionKey lKey;
-    std::memcpy(&lKey, &mRivalReleasedVoiceOverKey, sizeof(lKey));
-    return lKey.GetHashKey();
+    return mRivalReleasedVoiceOverKey.GetHashKey();
 }
 
 u64 VehicleListEntry::GetAttribCollectionKeyHash() const
 {
-    CgsAttribSys::AttribSysCollectionKey lKey;
-    std::memcpy(&lKey, &mAttribCollectionKey, sizeof(lKey));
-    return lKey.GetHashKey();
+    return mAttribCollectionKey.GetHashKey();
 }
 
 u64 VehicleListEntry::GetWonCarVoiceOverKeyHash() const
 {
-    CgsAttribSys::AttribSysCollectionKey lKey;
-    std::memcpy(&lKey, &mWonCarVoiceOverKey, sizeof(lKey));
-    return lKey.GetHashKey();
+    return mWonCarVoiceOverKey.GetHashKey();
 }
 
 } // namespace BrnResource

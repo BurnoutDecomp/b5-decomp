@@ -272,13 +272,13 @@ namespace BrnGui
     // OnEnter's own `std` (EIGHT-byte) zero stores, which is also why they are CgsID (u64)
     // and not s32. 0x22E8 and 0x2310 land INSIDE mResults, at record-relative +112 and +152,
     // and both are CgsArray "used before Construct" sentinels: +112 is
-    // maCarsToUnlockFromSpecialEvent's count word, +152 an un-homed second sub-array's.
-    // The whole X360 body is otherwise inlined member default-construction (one vtable store
-    // per embedded component, in address order), which the host does implicitly.
+    // maCarsToUnlockFromSpecialEvent's count word, +152 its maLiveryTypes count (the DWARF
+    // DerivedCarArray). The whole X360 body is inlined member default-construction (one
+    // vtable store per embedded component, in address order), which the compiler emits.
     InstantResultsState::InstantResultsState()
     {
-        mResults.maCarsToUnlockFromSpecialEvent.MarkUnconstructed();  // +0x22E8
-        mResults.miCtorSentinel98 = -1;                               // +0x2310
+        // +0x22E8 / +0x2310: DerivedCarArray's two Array ctors (implicit).
+        // (nothing else: ARTIST 0x825006D8 is member construction only)
     }
 
     // @0x824B3820 -- return the next active sub-state whose enable flag is raised, scanning

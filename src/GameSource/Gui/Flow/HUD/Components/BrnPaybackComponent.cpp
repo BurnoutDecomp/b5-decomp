@@ -26,7 +26,7 @@
 
 #include "GameSource/Gui/Flow/HUD/Components/BrnPaybackComponent.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"        // CgsDev::Log::gpDebugPrint (the [p0-payback] witness)
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h" // CgsGui::StateInterface::GetOutputEventQueue
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEventWrapper
@@ -163,8 +163,8 @@ void PaybackComponent::ShowAvailableInstantly(BrnNetwork::EPaybackType lePayback
                                               ::EActiveRaceCarIndex leVictimRaceCarIndex)
 {
     CGS_ASSERT(lePaybackType >= BrnNetwork::E_PAYBACK_TYPE_START,
-               "lePaybackType >= BrnNetwork::E_PAYBACK_TYPE_START");
-    CGS_ASSERT(lePaybackType < 3, "lePaybackType < BrnNetwork::E_PAYBACK_TYPE_COUNT");
+               CgsDev::Assert::MessageAt("lePaybackType >= BrnNetwork::E_PAYBACK_TYPE_START", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnPaybackComponent.cpp", 442 /* ARTIST 0x8241FF7C */));
+    CGS_ASSERT(lePaybackType < 3, CgsDev::Assert::MessageAt("lePaybackType < BrnNetwork::E_PAYBACK_TYPE_COUNT", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnPaybackComponent.cpp", 443 /* ARTIST 0x8241FFA0 */));
 
     const EAwardTypes leAwardType = KAE_PAYBACKS_TO_AWARD_TYPE[lePaybackType];
     meVictimRaceCarIndex    = leVictimRaceCarIndex;   // +0xE0
@@ -265,8 +265,8 @@ void PaybackComponent::SendAwardTriggerableEvent()
 // @0x824116C8
 void PaybackComponent::SetDisplayedIcon(EAwardTypes leAwardType)
 {
-    CGS_ASSERT(leAwardType >= E_AT_START, "leAwardType >= E_AT_START");   // cpp:337
-    CGS_ASSERT(leAwardType < 3, "leAwardType < E_AT_COUNT");              // cpp:338 (asm bound == 3)
+    CGS_ASSERT(leAwardType >= E_AT_START, CgsDev::Assert::MessageAt("leAwardType >= E_AT_START", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnPaybackComponent.cpp", 337 /* ARTIST 0x82411700 */));   // cpp:337
+    CGS_ASSERT(leAwardType < 3, CgsDev::Assert::MessageAt("leAwardType < E_AT_COUNT", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnPaybackComponent.cpp", 338 /* ARTIST 0x82411724 */));              // cpp:338 (asm bound == 3)
     AddOutputAptViewState("TargetIconType", KAPC_AWARD_STRINGS[leAwardType], false);
 }
 

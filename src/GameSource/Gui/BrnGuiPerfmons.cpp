@@ -65,6 +65,29 @@ int32_t GuiPerfmons::miCgsAptFlashRender;
 int32_t GuiPerfmons::miCgsAptStringRender;
 int32_t GuiPerfmons::miCgsAptDrawRenderingUnit;
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnGuiPerfmons.cpp:91)
 void GuiPerfmons::Initialise()
 {
     // --- Root: GUI MODULE PRE-WORLD UPDATE ---

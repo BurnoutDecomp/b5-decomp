@@ -43,6 +43,36 @@ namespace BrnGui
         "invisible",   // E_PADBUTTON_INVISIBLE
     };
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // (layout: the next definition sits on its DecFIGS line, BrnFlaptButtonIcon.cpp:79)
     // X360 header-inline (no standalone symbol; the base init is carried inlined at
     // e.g. FlaptHelpItem::Construct @0x8241D198): bind the state interface and
     // invalidate the movie-clip handle. The name/parent args are unused by the body.
@@ -53,6 +83,46 @@ namespace BrnGui
         BrnFlaptComponent::Construct(lpStateInterface);
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // (layout: the next definition sits on its DecFIGS line, BrnFlaptButtonIcon.cpp:127)
     // @ 0x8241C788 -- initialise the button-icon apt clips.
     void FlaptButtonIconComponent::Setup()
     {

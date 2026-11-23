@@ -26,6 +26,71 @@ namespace
     const char* const KAC_PLAYER_NAME_COMPONENT_NAME = "PlayerName_mc";
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnOnlineInviteMessageComponent.cpp:94)
 void OnlineInviteMessageComponent::Construct(
     const char* lpcMovieClipName, CgsGui::StateInterface* lpStateInterface,
     const char* lpcParentName)
@@ -48,6 +113,25 @@ void OnlineInviteMessageComponent::Construct(
     // The matching ShowMessage writer owns each before its queued type can read it.
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnOnlineInviteMessageComponent.cpp:135)
 void OnlineInviteMessageComponent::Prepare(
     const char* lpcMovieClipName, const BrnFlapt::FileRef& lFile)
 {
@@ -70,6 +154,7 @@ extern const char gacOnlineInviteArgument820046A7[];
 const f32 OnlineInviteMessageComponent::KF_MESSAGE_DURATION = 5.0f;
 const f32 OnlineInviteMessageComponent::KF_TIME_DELAY_BEFORE_ALLOWING_MESSAGES = 1.0f;
 
+// (layout: the next definition sits on its DecFIGS line, BrnOnlineInviteMessageComponent.cpp:158)
 void OnlineInviteMessageComponent::Update()
 {
     if (mbOutputFinishEvent == true)
@@ -126,6 +211,42 @@ void OnlineInviteMessageComponent::Update()
         RemoveMessage();
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnOnlineInviteMessageComponent.cpp:250)
 void OnlineInviteMessageComponent::ShowMessage(const char* lpcName,
     EOnlineNotificationChyronType leType)
 {
@@ -171,6 +292,50 @@ void OnlineInviteMessageComponent::ShowMessage(const char* lpcName,
     }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnOnlineInviteMessageComponent.cpp:339)
 void OnlineInviteMessageComponent::ShowMessage(s32 liCount,
     EOnlineNotificationChyronType leType)
 {
@@ -203,6 +368,114 @@ void OnlineInviteMessageComponent::ShowMessage(s32 liCount,
     }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnOnlineInviteMessageComponent.cpp:479)
 bool OnlineInviteMessageComponent::IsMessageAllowed() const
 {
     if (!mpGuiCache)
@@ -217,6 +490,16 @@ bool OnlineInviteMessageComponent::IsMessageAllowed() const
         !mpGuiCache->IsReplayExporting();
 }
 
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnOnlineInviteMessageComponent.cpp:503)
 void OnlineInviteMessageComponent::AllowMessages()
 {
     meMessagesAvailable = E_MESSAGING_AVAILABLE_STATE_AVAILABLE;
@@ -239,6 +522,41 @@ void OnlineInviteMessageComponent::AllowMessages()
     meQueuedType = E_ONLINENOTIFICATIONCHYRONTYPE_NONE;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnOnlineInviteMessageComponent.cpp:560)
 void OnlineInviteMessageComponent::DisallowMessages()
 {
     if (meMessagesAvailable != E_MESSAGING_AVAILABLE_STATE_AVAILABLE)
@@ -254,6 +572,14 @@ void OnlineInviteMessageComponent::DisallowMessages()
         RemoveMessage();
 }
 
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnOnlineInviteMessageComponent.cpp:583)
 void OnlineInviteMessageComponent::RemoveMessage()
 {
     if (meShowingState != E_SHOWINGSTATE_SHOWING)
@@ -268,6 +594,30 @@ void OnlineInviteMessageComponent::RemoveMessage()
     meShowingState = E_SHOWINGSTATE_TRANSITIONING_OUT;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnOnlineInviteMessageComponent.cpp:621)
 void OnlineInviteMessageComponent::DoTransitionComplete()
 {
     // Guest: lwz r11, 0x30(this); cmpwi r11, 2 -- must be transitioning out.
@@ -291,6 +641,9 @@ void OnlineInviteMessageComponent::DoTransitionComplete()
     // DecFIGS void shape; no output is produced by the original r3 residue.
 }
 
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnOnlineInviteMessageComponent.cpp:647)
 void OnlineInviteMessageComponent::TransitionCompleteCallback(void* lpUserData,
                                                               u16 luFrame)
 {

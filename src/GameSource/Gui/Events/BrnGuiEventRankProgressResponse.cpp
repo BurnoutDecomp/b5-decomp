@@ -33,16 +33,22 @@ namespace BrnGui
 void GuiEventRankProgressResponse::Construct(
         const BrnGameState::GameStateModuleIO::RankInfoResponseAction* lpAction)
 {
-    miCurrentRank = lpAction->miPlayerRank;          // action +0x00 -> event +0x20
+    // DWARF (BrnGuiEventTypeDefs.cpp:29) lists the inlined PlayerHasFinishedLastRank; both arms
+    // store the same word (-1 == miPlayerRank on the taken path), which is the dead
+    // `cmpwi r11,-1 ; bne next` ARTIST keeps at 0x824F62FC.
+    if (lpAction->PlayerHasFinishedLastRank())
+        miCurrentRank = KI_PLAYER_HAS_FINISHED_LAST_RANK;
+    else
+        miCurrentRank = lpAction->GetPlayerRank();     // action +0x00 -> event +0x20
 
-    miRaceRank            = lpAction->miOfflineRace;           // +0x04 -> +0x00
-    miRoadRageRank        = lpAction->miRoadRage;              // +0x08 -> +0x04
-    miStuntAttackRank     = lpAction->miStuntAttack;           // +0x0C -> +0x08
-    miMarkedManRank       = lpAction->miMarkedMan;             // +0x10 -> +0x0C
-    miOfflineRaceRankWins = lpAction->miOfflineRaceRankWins;   // +0x14 -> +0x10
-    miRoadRageRankWins    = lpAction->miRoadRageRankWins;      // +0x18 -> +0x14
-    miStuntAttackRankWins = lpAction->miStuntAttackRankWins;   // +0x1C -> +0x18
-    miMarkedManRankWins   = lpAction->miMarkedManRankWins;     // +0x20 -> +0x1C
+    miRaceRank            = lpAction->GetOfflineRaceRank();       // +0x04 -> +0x00
+    miRoadRageRank        = lpAction->GetRoadRageRank();          // +0x08 -> +0x04
+    miStuntAttackRank     = lpAction->GetStuntAttackRank();       // +0x0C -> +0x08
+    miMarkedManRank       = lpAction->GetMarkedManRank();         // +0x10 -> +0x0C
+    miOfflineRaceRankWins = lpAction->GetOfflineRaceRankWins();   // +0x14 -> +0x10
+    miRoadRageRankWins    = lpAction->GetRoadRageRankWins();      // +0x18 -> +0x14
+    miStuntAttackRankWins = lpAction->GetStuntAttackRankWins();   // +0x1C -> +0x18
+    miMarkedManRankWins   = lpAction->GetMarkedManRankWins();     // +0x20 -> +0x1C
 }
 
 // @ 0x8240EA28

@@ -22,17 +22,11 @@
 // livery versions a car supports (X360 Append @0x8235C6A8 stores a 4-byte enum value).
 // The enum is 4 bytes (the Append stores with stwx / a word).
 
-namespace CgsSceneManager { namespace CgsCollision
-{
-    // The embedded attrib/voice-over key handle (8-byte storage + Destruct). Declared here
-    // so VehicleListEntry can hold its keys by name; the full collision-generator type lands
-    // with its own TU (GROW this forward shape then, do not fork it).
-    struct BaseCollisionGenerator
-    {
-        void Destruct();
-        u8   maStorage[8];
-    };
-}}
+// The five embedded keys are DWARF CgsAttribSys::AttribSysCollectionKey (VehicleListEntry.h:83-98,
+// AttribSysCollectionKey mExhaustEntityKey ...). The 8-byte BaseCollisionGenerator stand-in that
+// used to be declared here forked the real CgsCollisionGenerator.h type (C2011 in any TU that saw
+// both); it took its name from the ICF-folded blr (0x8284CB38) FixUp calls per key.
+#include "GameShared/GameClasses/System/AttribSys/CgsAttribSysCollectionKey.h"
 
 namespace BrnResource
 {
@@ -223,7 +217,7 @@ struct VehicleListEntry
     u8 maPad0[0x9B];                                                      // +0x00
     u8 mu8StrengthRating;                                                 // +0x9B
     u8 maPad9C[0xA0 - 0x9C];                                              // +0x9C (padding)
-    CgsSceneManager::CgsCollision::BaseCollisionGenerator mAttribCollectionKey;        // +0xA0
+    CgsAttribSys::AttribSysCollectionKey mAttribCollectionKey;                           // +0xA0
     // +0xA8 / +0xC0: the first and fourth members of the 0x40-byte mAudioData block
     // (BrnResource::VehicleListEntryAudioData). Both are CgsIDs that decode to an engine
     // asset name -- e.g. the Hunter Cavalry's "DRAG2_EX" and "DRAG2_ENG". Named from two
@@ -233,13 +227,13 @@ struct VehicleListEntry
     // Vehicle List page anchors mAudioData at +0xA8 with mExhaustName@+0x00 /
     // mEngineName@+0x18. NAME-ONLY adoption: the surrounding widths stay as recovered.
     CgsID mExhaustName;                                                   // +0xA8
-    CgsSceneManager::CgsCollision::BaseCollisionGenerator mExhaustEntityKey;           // +0xB0
-    CgsSceneManager::CgsCollision::BaseCollisionGenerator mEngineEntityKey;            // +0xB8
+    CgsAttribSys::AttribSysCollectionKey mExhaustEntityKey;           // +0xB0
+    CgsAttribSys::AttribSysCollectionKey mEngineEntityKey;            // +0xB8
     CgsID mEngineName;                                                    // +0xC0
     u32 mRivalUnlockName;                                                 // +0xC8 (Playback::Name hash)
     u8 maPadCC[4];
-    CgsSceneManager::CgsCollision::BaseCollisionGenerator mWonCarVoiceOverKey;         // +0xD0
-    CgsSceneManager::CgsCollision::BaseCollisionGenerator mRivalReleasedVoiceOverKey;  // +0xD8
+    CgsAttribSys::AttribSysCollectionKey mWonCarVoiceOverKey;         // +0xD0
+    CgsAttribSys::AttribSysCollectionKey mRivalReleasedVoiceOverKey;  // +0xD8
     u32 muiMusicLoopContentSpec;                                          // +0xE0
     u8  muiAIExhaustIndex;                                                // +0xE4
     u8  muiAIExhaustIndex2ndPick;                                         // +0xE5

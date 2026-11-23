@@ -349,7 +349,7 @@ namespace BrnGui
 //    the array holds KI_MAX_LINES_DESCRIPTION_TEXT == 5. 0x128 == 296 is the CONSOLE
 //    sizeof(TextField) and is deliberately not reproduced -- the host's is 312 (measured
 //    with a compile probe), so the walk is written as ordinary array indexing by name.
-//  * The SPrintf capacity is 63 (`li r4, 0x3F`) into a 128-byte stack buffer, and the
+//  * The SPrintf capacity is 63 (`li r4, 0x3F`) into a 64-byte stack buffer, and the
 //    terminator store `stb r26, var_41(r1)` lands at buffer + 63 -- the belt-and-braces
 //    clear of the capacity byte, done AFTER the format call and BEFORE the registration.
 //  * Hex-Rays mangles the varargs (it pairs "SatNavIcon" with the loop counter in a
@@ -362,29 +362,33 @@ namespace BrnGui
     // its 16 sat-nav icon slots.
     void PreRaceFlyByState::AppendExpectedComponents()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:750 (non-fatal)
+        // DWARF (BrnGuiScreenUnity CU): lacSatNavIconName char[64] cpp:744, i cpp:745,
+        // liEventDescription cpp:752 -- one 64-byte buffer, the ARTIST frame 0xD0.
+        char lacSatNavIconName[64];
+        s32  i;
+
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\..\..\GameSource\Gui/Flow/PreEvent/States/BrnPreRaceFlyBy.cpp", 750 /* ARTIST li r5,0x2EE */));
 
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mEventName.GetName());
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mModeType.GetName());
 
         // Only the first THREE description lines are expected -- see the asm note above.
-        for (s32 liLine = 0; liLine < 3; ++liLine)
+        for (s32 liEventDescription = 0; liEventDescription < 3; ++liEventDescription)
         {
             mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD,
-                                                   maEventDescriptionText[liLine].GetName());
+                                                   maEventDescriptionText[liEventDescription].GetName());
         }
 
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mLargeEventIcon.GetName());
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mStateAnimator.GetName());
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, KAC_STATE_COMPONENT_NAME);
 
-        for (s32 liIcon = 0; liIcon < KI_PRERACEMAP_NUMICONS; ++liIcon)
+        for (i = 0; i < KI_PRERACEMAP_NUMICONS; ++i)
         {
-            char lacIconComponentName[128];
-            CgsCore::SPrintf(lacIconComponentName, 63, "%s_%s%d",
-                             KAC_STATE_COMPONENT_NAME, macSatNavIconBaseName, liIcon);
-            lacIconComponentName[63] = 0;
-            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, lacIconComponentName);
+            CgsCore::SPrintf(lacSatNavIconName, 63, "%s_%s%d",
+                             KAC_STATE_COMPONENT_NAME, macSatNavIconBaseName, i);
+            lacSatNavIconName[63] = 0;
+            mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, lacSatNavIconName);
         }
     }
 

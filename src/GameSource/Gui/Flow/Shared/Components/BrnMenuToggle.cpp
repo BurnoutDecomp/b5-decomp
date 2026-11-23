@@ -17,7 +17,7 @@
 // ===================================================================================
 #include "GameSource/Gui/Flow/Shared/Components/BrnMenuToggle.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Gui/BrnGuiCache.h"              // BrnGui::GuiCache
 
 namespace BrnGui
@@ -161,7 +161,7 @@ namespace BrnGui
     // The X360 calls GetHighlighted() twice: once for the assert, once for the id read.
     u64 MenuToggle::GetHighlightedId()
     {
-        CGS_ASSERT(mItemText.GetHighlighted() != 0, "GetHighlighted()");   // BrnSelectableGroup.h:218
+        CGS_ASSERT(mItemText.GetHighlighted() != 0, CgsDev::Assert::MessageAt("GetHighlighted()", "..\\..\\..\\GameSource\\Gui/Flow/Shared/Components/BrnSelectableGroup.h", 218 /* ARTIST 0x824890BC */));   // BrnSelectableGroup.h:218
         return mItemText.GetHighlightedId();
     }
 

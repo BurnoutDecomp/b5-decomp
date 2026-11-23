@@ -52,7 +52,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface out-queue
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // CgsModule::Event / AddEvent
@@ -383,7 +383,7 @@ namespace BrnGui
     {
         typedef BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData InGamePlayerStatusData;
 
-        CGS_ASSERT(lpiNumOptions != 0, "lpiNumOptions");   // cpp:3279
+        CGS_ASSERT(lpiNumOptions != 0, CgsDev::Assert::MessageAt("lpiNumOptions", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 3279 /* ARTIST 0x82484CFC */));   // cpp:3279
 
         s32 liOptionIndex = 0;
 
@@ -414,9 +414,9 @@ namespace BrnGui
         }
 
         CGS_ASSERT(liOptionIndex <= KI_MAX_PLAYER_OPTIONS,
-                   "liOptionIndex <= KI_MAX_PLAYER_OPTIONS");         // cpp:3302
+                   CgsDev::Assert::MessageAt("liOptionIndex <= KI_MAX_PLAYER_OPTIONS", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 3302 /* ARTIST 0x82484DAC */));         // cpp:3302
         CGS_ASSERT(liOptionIndex <= KI_MAX_DISPLAYABLE_OPTIONS,
-                   "liOptionIndex <= KI_MAX_DISPLAYABLE_OPTIONS");    // cpp:3303
+                   CgsDev::Assert::MessageAt("liOptionIndex <= KI_MAX_DISPLAYABLE_OPTIONS", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp", 3303 /* ARTIST 0x82484DD0 */));    // cpp:3303
 
         *lpiNumOptions = liOptionIndex;
     }

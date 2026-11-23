@@ -21,6 +21,20 @@
 namespace BrnGui
 {
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnOverlayComponent.cpp:43)
 // @ 0x8241C120 -- bind the state channel (the base Construct inline, with its
 // h:113 "lpStateInterface" tripwire + mAptRef invalidate), then clear the
 // transition clip handle and the transition-complete flag (the X360 zeroes
@@ -36,6 +50,11 @@ void OverlayComponent::Construct(const char* /*lacName*/,
     mbTransitionComplete = false;
 }
 
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnOverlayComponent.cpp:64)
 // @ 0x82427BF0 -- bind the named overlay clip through the base Prepare with NO
 // parent prefix (the X360 body carries the base inline const-propped with a null
 // parent: the h:133 "lacName != NULL" tripwire, the bare-name FindComponent, the
@@ -53,6 +72,15 @@ void OverlayComponent::Prepare(const char* lacName, const BrnFlapt::FileRef& lFi
     mbTransitionComplete = false;
 }
 
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnOverlayComponent.cpp:85)
 // @ 0x8241C198
 void OverlayComponent::TransitionCompleteCallback(void* lpUserData, u16 /*luArg*/)
 {
@@ -69,7 +97,7 @@ void OverlayComponent::TransitionCompleteCallback(void* lpUserData, u16 /*luArg*
 void OverlayComponent::RunOverlay(const char* lpcOverlayFlashId, const char* lpcFrameLabel)
 {
     // Non-gating tripwire (h:115): the popup family must have filled in its flash id.
-    CGS_ASSERT(NULL != lpcOverlayFlashId, "NULL != lpcOverlayFlashId");
+    CGS_ASSERT(NULL != lpcOverlayFlashId, CgsDev::Assert::MessageAt("NULL != lpcOverlayFlashId", "..\\..\\..\\GameSource\\Gui/Flow/Overlay/Components/BrnOverlayComponent.h", 115 /* ARTIST 0x824B14D0 */));
 
     mAptRef.GotoAndPlayLabel(lpcOverlayFlashId);
 

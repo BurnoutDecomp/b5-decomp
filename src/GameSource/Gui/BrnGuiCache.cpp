@@ -153,7 +153,7 @@ namespace BrnGui
     {
         miEventStartsCount = -1;
         mEventsCtorSentinel = -1;
-        mOfflinePostEventData.miCtorSentinel98 = -1;
+        // mOfflinePostEventData: its DerivedCarArray's two Array ctors (implicit).
         miProfileEventsCount = -1;
     }
 
@@ -3685,8 +3685,8 @@ namespace BrnGui
         const u32 luUserIndex = static_cast<u32>(miActiveControllerIndex);   // +0x4B38
 
         bool lbAllowed = true;
-        BOOL lbPrivilegeResult = FALSE;
-        if (XUserGetSigninState(luUserIndex) == KU_SIGNIN_STATE_LIVE
+        BOOL lbPrivilegeResult;   // ARTIST 0x824EEB74: passed uninitialised (no store before the call)
+        if (XUserGetSigninState(luUserIndex) == eXUserSigninState_SignedInToLive   // XDK enum: cmpwi
             && XUserCheckPrivilege(luUserIndex, XPRIVILEGE_MULTIPLAYER_SESSIONS,
                                    &lbPrivilegeResult) == 0)
         {

@@ -1,6 +1,6 @@
 #include "GameSource/Gui/Flow/HUD/Components/BrnPlayerPositionTable.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"    // CgsDev::StrStream (SetupGameMode's streamed assert)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"      // CgsDev::Log (the [p0-postable] witness)
 #include "lobbyname.h"                                           // LobbyNameCmp
@@ -406,8 +406,8 @@ namespace BrnGui
     {
         CgsDev::PerfMonCpu::StartMonitor(GuiPerfmons::miPlayerPosTableUpdate);
 
-        CGS_ASSERT(lpDistanceEvent != NULL, "lpDistanceEvent");
-        CGS_ASSERT(mpCache != NULL, "mpCache != NULL");
+        CGS_ASSERT(lpDistanceEvent != NULL, CgsDev::Assert::MessageAt("lpDistanceEvent", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnPlayerPositionTable.cpp", 281 /* ARTIST 0x824412A4 */));
+        CGS_ASSERT(mpCache != NULL, CgsDev::Assert::MessageAt("mpCache != NULL", "..\\..\\..\\GameSource\\Gui/Flow/HUD/Components/BrnPlayerPositionTable.cpp", 283 /* ARTIST 0x824412CC */));
 
         if (IsOnlineFreeBurnLobby(mpCache->GetGameMode()))
             ProcessOnlineFreeburnTable();

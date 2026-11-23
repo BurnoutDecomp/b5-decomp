@@ -677,7 +677,7 @@ void OptionsDataProfile::NotifyOtherModulesLoadComplete(GuiEventQueueSmall* lpQu
         lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(laiVolumes), 463, 8);
     }
 
-    CGS_ASSERT(false == mbIsLocked, "false == mbIsLocked");   // cpp:640
+    CGS_ASSERT(false == mbIsLocked, CgsDev::Assert::MessageAt("false == mbIsLocked", KAC_ARTIST_ASSERT_FILE, 640 /* ARTIST 0x82511174 */));   // cpp:640
 
     // The scalar settings, one event each (X360 wire sizes).
     {

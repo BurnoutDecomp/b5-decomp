@@ -52,26 +52,31 @@ namespace BrnGui
         s32 GetEventType() const { return 318; }
 
         // One per-result record (56 bytes; X360 stride 0x38). Offsets are relative to the
-        // record base. Clear seeds miIndex = -1, mfValue04 = 0, mTime = 0 and mfValue10 = 0
+        // record base. Clear seeds meActiveRaceCarIndex = -1, mfFinishingTime = 0, mFinishingTime = 0 and mfDistanceFromFinish = 0
         // plus the trailing scalar/byte fields; the copy proves the full 0x37-byte extent.
         struct Record
         {
-            s32             miIndex;        // +0x00  result index/id sentinel (Clear -> -1)
-            f32             mfValue04;      // +0x04  (Clear -> 0.0f)
-            CgsSystem::Time mTime;          // +0x08  result time (Clear -> SetFloatVal(0.0f))
-            f32             mfValue10;      // +0x10  (Clear -> 0.0f)
-            u32             muValue14;      // +0x14  (copied by operator=; Clear leaves it)
-            u32             muValue18;      // +0x18  (Clear -> 0)
-            u32             muValue1C;      // +0x1C  (Clear -> 0)
-            u32             muValue20;      // +0x20  (Clear -> 0)
-            u32             muValue24;      // +0x24  (Clear -> 0)
-            u32             muValue28;      // +0x28  (Clear -> 0)
-            u32             muValue2C;      // +0x2C  (copied by operator=; Clear leaves it)
-            u32             muValue30;      // +0x30  (copied by operator=; Clear leaves it)
-            u8              mbFlag34;       // +0x34  (Clear -> 0)
-            u8              mbFlag35;       // +0x35  (Clear -> 0)
-            u8              mbFlag36;       // +0x36  (Clear -> 0)
-            u8              mPad37;         // +0x37  pad to the 0x38 stride
+            // Names/types: DWARF GuiEventOnlinePostEvent::OnlinePlayer (BrnGuiEventTypeDefs.h:2276-
+            // 2291), each corroborated by the producer's getter (GameBridgeGameStateToX) and the
+            // consumers' assert texts ("lpOnlinePlayer->meActiveRaceCarIndex >= ..."). +0x14 has no
+            // PS3 counterpart (the producer stores GetOnlineStuntScore there); the +0x28..+0x30 roles
+            // are not pinned one-to-one, so those keep their offset names.
+            s32             meActiveRaceCarIndex;   // +0x00  DWARF :2278 (Clear -> -1)
+            f32             mfFinishingTime;        // +0x04  DWARF :2279 (Clear -> 0.0f)
+            CgsSystem::Time mFinishingTime;         // +0x08  DWARF :2280 (Clear -> SetFloatVal(0.0f))
+            f32             mfDistanceFromFinish;   // +0x10  DWARF :2281 (Clear -> 0.0f)
+            u32             muValue14;              // +0x14  X360-only (copied by operator=; Clear leaves it)
+            s32             miPointsFromThisRound;  // +0x18  DWARF :2282 (Clear -> 0)
+            s32             miResultsTablePosition; // +0x1C  DWARF :2283 (Clear -> 0; signed: cmpw @0x82483DB8)
+            s32             miTotalPoints;          // +0x20  DWARF :2284 (Clear -> 0)
+            s32             miEliminations;         // +0x24  DWARF :2285 (Clear -> 0)
+            u32             muValue28;              // +0x28  (Clear -> 0)
+            u32             muValue2C;              // +0x2C  (copied by operator=; Clear leaves it)
+            u32             muValue30;              // +0x30  (copied by operator=; Clear leaves it)
+            bool            mbHasTimedOut;          // +0x34  DWARF :2289 (Clear -> 0)
+            bool            mbHasDisconnected;      // +0x35  DWARF :2290 (Clear -> 0)
+            bool            mbWasEliminated;        // +0x36  DWARF :2291 (Clear -> 0)
+            u8              mPad37;                 // +0x37  pad to the 0x38 stride
         };
 
         // One award (OnlineAward, BrnGuiEventTypeDefs.h; the six +0x1E4.. blocks

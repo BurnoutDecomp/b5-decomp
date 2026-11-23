@@ -87,6 +87,7 @@ namespace BrnGui
         mfEnteredStateTime = 0.0f;
     }
 
+    // (layout: the next definition sits on its DecFIGS line, BrnOdometerComponent.cpp:95)
     // @0x82423F88 -- bind this readout's root apt clip out of lFile (inlined base Prepare:
     // resolve+bind mAptRef and reset its timeline), prepare the three animators, resolve the
     // three found-message text fields under this readout's own parent, and seed the state to
@@ -111,6 +112,9 @@ namespace BrnGui
         mfEnteredStateTime = 0.0f;
     }
 
+
+
+    // (layout: the next definition sits on its DecFIGS line, BrnOdometerComponent.cpp:122)
     // @0x8242BEB0 -- a newly-discovered junction/event of a game mode: format the player's
     // "X of Y" event tally for that mode into the events-found field, transition out whatever
     // text is currently showing, animate the events-found message in, and enter the
@@ -147,6 +151,21 @@ namespace BrnGui
         }
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // (layout: the next definition sits on its DecFIGS line, BrnOdometerComponent.cpp:173)
     // @0x8242C000 -- a newly-discovered drive-thru of a given type: pick the type's "plural"
     // localised name, then either flash "all of type found" (once the discovered count reaches
     // the total) or the "X of Y <type> found" tally; transition out the current text, animate
@@ -210,6 +229,42 @@ namespace BrnGui
         mfEnteredStateTime = mpGuiCache->GetTime();
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // (layout: the next definition sits on its DecFIGS line, BrnOdometerComponent.cpp:272)
     // @0x82424160 -- per-frame tick. In MILEAGE state, refresh the offline-distance readout;
     // in either found-message state, once the hold time elapses transition the message out,
     // animate the mileage readout back in, and return to MILEAGE. An unhandled state trips a
@@ -270,6 +325,16 @@ namespace BrnGui
         }
     }
 
+
+
+
+
+
+
+
+
+
+    // (layout: the next definition sits on its DecFIGS line, BrnOdometerComponent.cpp:340)
     // @0x82424388 -- kick off the mileage readout: assert we are idle, animate the mileage
     // message in, enter MILEAGE state and stamp the entered-state time.
     void OdometerComponent::TransIn()
@@ -282,6 +347,13 @@ namespace BrnGui
         mfEnteredStateTime = mpGuiCache->GetTime();
     }
 
+
+
+
+
+
+
+    // (layout: the next definition sits on its DecFIGS line, BrnOdometerComponent.cpp:360)
     // @0x82424468 -- transition out whichever message is currently showing (the animator for
     // the active state plays its "transout"), then reset to NONE and stamp the entered-state
     // time. An unhandled state trips a streamed assert.

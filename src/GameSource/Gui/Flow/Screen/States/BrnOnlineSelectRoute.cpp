@@ -882,7 +882,7 @@ namespace
             mSelectRoutes.Show();
 
         meSubState = E_SUBSTATE_SELECTING_CHECKPOINT;
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineSelectRoute.cpp", 1830 /* ARTIST 0x824931F8 */));
         mMenuOptions.Clear();
         mCursor.SetActive();
         mbEditingNewCheckpoint = false;
@@ -919,7 +919,7 @@ namespace
     void OnlineSelectRoute::ShowPresetEvents()
     {
         meSubState = E_SUBSTATE_SELECTING_PRESET_EVENT;
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineSelectRoute.cpp", 1872 /* ARTIST 0x82493344 */));
 
         mpIconManager->SetUseEventIcons(
             GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_ONLINE_EVENT_PRESETS,

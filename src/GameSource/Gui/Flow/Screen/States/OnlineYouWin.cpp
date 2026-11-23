@@ -8,7 +8,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/OnlineYouWin.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                          // CgsGui::GuiEventWrapper
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"     // StateInterface
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // GuiEventAptTriggerPayload
@@ -204,9 +204,9 @@ bool OnlineYouWin::UpdateWFWinResult()
     for (; liIndex < lpPostEventData->miNumPlayersFinishedEvent; ++liIndex)
     {
         const GuiEventOnlinePostEvent::Record& lrRecord = lpPostEventData->maRecords[liIndex];
-        if (lrRecord.miIndex == liPlayerActiveRaceCarIndex)
+        if (lrRecord.meActiveRaceCarIndex == liPlayerActiveRaceCarIndex)
         {
-            if (static_cast<s32>(lrRecord.muValue1C) > 0)
+            if (static_cast<s32>(lrRecord.miResultsTablePosition) > 0)
             {
                 SendStateEvent("ADVANCE");
             }
@@ -244,7 +244,7 @@ bool OnlineYouWin::UpdateLoadResources()
 // the photo finish.
 bool OnlineYouWin::UpdateWFInit()
 {
-    CGS_ASSERT(mpGuiCache, "mpGuiCache");
+    CGS_ASSERT(mpGuiCache, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/OnlineYouWin.cpp", 330 /* ARTIST 0x824A24A0 */));
 
     if (!mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
     {
@@ -359,7 +359,7 @@ bool OnlineYouWin::HasAnyoneTimedOut()
     const GuiEventOnlinePostEvent* lpPostEventData = mpGuiCache->GetOnlinePostEventData();
     for (s32 liIndex = 0; liIndex < lpPostEventData->miNumPlayersInEvent; ++liIndex)
     {
-        if (lpPostEventData->maRecords[liIndex].mbFlag34 != 0)
+        if (lpPostEventData->maRecords[liIndex].mbHasTimedOut != 0)
         {
             return true;
         }

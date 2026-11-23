@@ -277,6 +277,18 @@ namespace BrnGui
         SetDirty();
     }
 
+
+
+
+
+
+
+
+
+
+
+
+    // (layout: the next definition sits on its DecFIGS line, BrnTableRow.cpp:294)
     // @0x824E4F68 -----------------------------------------------------------------------
     // DWARF declares this void (BrnTableRow.h:198); the X360 r3=this is incidental.
     void TableRowDataSet::Clear()

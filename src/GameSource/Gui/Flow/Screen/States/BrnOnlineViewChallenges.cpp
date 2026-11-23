@@ -76,7 +76,7 @@ void OnlineViewChallenges::HandleGuiCacheEvent(const CgsModule::Event* event)
 // ARTIST 0x824A1F98.
 void OnlineViewChallenges::CheckForCompletedLoads()
 {
-    CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+    CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineViewChallenges.cpp", 227 /* ARTIST 0x824A1FD0 */));
     if (meSubState == E_SUBSTATE_LOADING_SCREEN)
     {
         if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad, miNumResourcesToLoad))

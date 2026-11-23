@@ -15,7 +15,7 @@ namespace BrnGui
     // @0x82481EA0
     void GuiEventOnlinePostEvent::Clear()
     {
-        // X360 record loop: r3+0x28 anchor (== maRecords[0].mfValue04), stride 0x38, 8 reps.
+        // X360 record loop: r3+0x28 anchor (== maRecords[0].mfFinishingTime), stride 0x38, 8 reps.
         // Per record the binary writes index@+0x00 = -1, f32@+0x04 = 0, the CgsSystem::Time
         // @+0x08 via Time::SetFloatVal(0.0f), f32@+0x10 = 0, the words @+0x18/+0x1C/+0x20/
         // +0x24/+0x28 = 0 and the bytes @+0x34/+0x35/+0x36 = 0. It leaves +0x14/+0x2C/+0x30
@@ -24,17 +24,17 @@ namespace BrnGui
         {
             Record& lrRecord = maRecords[li];
 
-            lrRecord.miIndex   = -1;     // +0x00  (stw r28=-1)
-            lrRecord.mfValue04 = 0.0f;   // +0x04  (stfs f31=0.0)
-            lrRecord.mTime.SetFloatVal(0.0f); // +0x08 (CgsSystem::Time::SetFloatVal)
-            lrRecord.mfValue10 = 0.0f;   // +0x10  (stfs f31=0.0)
-            lrRecord.muValue18 = 0;      // +0x18  (stw r30=0)
-            lrRecord.muValue1C = 0;      // +0x1C  (stw r30=0)
-            lrRecord.muValue20 = 0;      // +0x20  (stw r30=0)
-            lrRecord.mbFlag34  = 0;      // +0x34  (stb r30=0)
-            lrRecord.mbFlag35  = 0;      // +0x35  (stb r30=0)
-            lrRecord.muValue24 = 0;      // +0x24  (stw r30=0)
-            lrRecord.mbFlag36  = 0;      // +0x36  (stb r30=0)
+            lrRecord.meActiveRaceCarIndex   = -1;     // +0x00  (stw r28=-1)
+            lrRecord.mfFinishingTime = 0.0f;   // +0x04  (stfs f31=0.0)
+            lrRecord.mFinishingTime.SetFloatVal(0.0f); // +0x08 (CgsSystem::Time::SetFloatVal)
+            lrRecord.mfDistanceFromFinish = 0.0f;   // +0x10  (stfs f31=0.0)
+            lrRecord.miPointsFromThisRound = 0;      // +0x18  (stw r30=0)
+            lrRecord.miResultsTablePosition = 0;      // +0x1C  (stw r30=0)
+            lrRecord.miTotalPoints = 0;      // +0x20  (stw r30=0)
+            lrRecord.mbHasTimedOut  = 0;      // +0x34  (stb r30=0)
+            lrRecord.mbHasDisconnected  = 0;      // +0x35  (stb r30=0)
+            lrRecord.miEliminations = 0;      // +0x24  (stw r30=0)
+            lrRecord.mbWasEliminated  = 0;      // +0x36  (stb r30=0)
             lrRecord.muValue28 = 0;      // +0x28  (stw r30=0)
         }
 

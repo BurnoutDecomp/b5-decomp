@@ -382,7 +382,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptionsSummary::CheckForCompletedLoads()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameOptionsSummary.cpp", 286 /* ARTIST 0x824A8938 */));
 
         if (meSubState == E_SUBSTATE_LOADING_SCREEN)
         {
@@ -433,7 +433,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptionsSummary::SetupHelpBar(bool /*lbUnused*/)
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameOptionsSummary.cpp", 714 /* ARTIST 0x82485F2C */));
 
         const ButtonIconComponent::EPadButton laeButtons[KI_MAX_HELP_BAR_ITEMS] =
         {

@@ -413,7 +413,7 @@ bool OnlinePlay::CheckPrivileges(EMainMenuOptions leOption)
             return true;
 
         default:
-            CGS_ASSERT(false, "Invalid menu option");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid menu option", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlinePlay.cpp", 872 /* ARTIST 0x824859F0 */));
             return false;
     }
 }

@@ -206,21 +206,21 @@ void BridgeGameStateToGui_EventStatus(
             {
                 lCarScoreData = lpScoringOutputInterface->maCarScoreData[leCar];
                 const CgsSystem::Time lFinishTime = lCarScoreData.GetFinishTime();
-                lpRecord->miIndex = leCar;
-                lpRecord->mfValue04 = static_cast<f32>(lFinishTime.GetSeconds()) + lFinishTime.GetFraction();
-                lpRecord->mTime = lFinishTime;
-                lpRecord->mfValue10 = lCarScoreData.GetDistanceToFinish();
+                lpRecord->meActiveRaceCarIndex = leCar;
+                lpRecord->mfFinishingTime = static_cast<f32>(lFinishTime.GetSeconds()) + lFinishTime.GetFraction();
+                lpRecord->mFinishingTime = lFinishTime;
+                lpRecord->mfDistanceFromFinish = lCarScoreData.GetDistanceToFinish();
                 lpRecord->muValue14 = static_cast<u32>(lCarScoreData.GetOnlineStuntScore());
-                lpRecord->muValue18 = static_cast<u32>(lCarScoreData.GetOnlineFinishPositionScore());
-                lpRecord->muValue1C = static_cast<u32>(lCarScoreData.GetOnlineStandingsPosition());
-                lpRecord->muValue20 = static_cast<u32>(lpScoringOutputInterface->maiCumulativeScoreData[leCar]);
-                lpRecord->mbFlag34 = lCarScoreData.GetTimedOut();
-                lpRecord->mbFlag35 = lCarScoreData.GetDisconnected();
-                lpRecord->mbFlag36 = lCarScoreData.GetEliminatorRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID;
-                lpRecord->muValue24 = static_cast<u32>(lCarScoreData.GetNumEliminations());
+                lpRecord->miPointsFromThisRound = static_cast<s32>(lCarScoreData.GetOnlineFinishPositionScore());
+                lpRecord->miResultsTablePosition = static_cast<s32>(lCarScoreData.GetOnlineStandingsPosition());
+                lpRecord->miTotalPoints = static_cast<s32>(lpScoringOutputInterface->maiCumulativeScoreData[leCar]);
+                lpRecord->mbHasTimedOut = lCarScoreData.GetTimedOut();
+                lpRecord->mbHasDisconnected = lCarScoreData.GetDisconnected();
+                lpRecord->mbWasEliminated = lCarScoreData.GetEliminatorRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID;
+                lpRecord->miEliminations = static_cast<s32>(lCarScoreData.GetNumEliminations());
                 lpRecord->muValue28 = lCarScoreData.GetOnlinePostEventValueC0();
                 lpRecord->muValue30 = static_cast<u32>(lCarScoreData.GetCumulativeCheckpoints());
-                if (lpRecord->mfValue04 > 0.0f || lpRecord->mbFlag34 || lpRecord->mbFlag35)
+                if (lpRecord->mfFinishingTime > 0.0f || lpRecord->mbHasTimedOut || lpRecord->mbHasDisconnected)
                     ++lPostEvent.miNumPlayersFinishedEvent;
                 if (static_cast<s32>(lpOnlineScoringOutputInterface->maOnlineAwards[leCar]) != -1)
                 {

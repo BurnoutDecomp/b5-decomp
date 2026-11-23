@@ -302,14 +302,14 @@ namespace BrnGui
             {
                 const GuiEventOnlinePostEvent::Record& lrRecord =
                     mOnlinePostEvent.maRecords[liRecord];
-                if (lrRecord.miIndex != -1)
+                if (lrRecord.meActiveRaceCarIndex != -1)
                 {
                     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo = 0;
                     for (s32 liPlayer = 0; liPlayer < KI_MAX_ONLINE_PLAYERS; ++liPlayer)
                     {
                         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpCandidate =
                             mpGuiCache->GetOnlinePlayerInfo(liPlayer);
-                        if (static_cast<s32>(lpCandidate->meActiveRaceCarIndex) == lrRecord.miIndex)
+                        if (static_cast<s32>(lpCandidate->meActiveRaceCarIndex) == lrRecord.meActiveRaceCarIndex)
                         {
                             lpPlayerInfo = lpCandidate;
                             break;
@@ -320,22 +320,22 @@ namespace BrnGui
                     {
                         CgsCore::SPrintf(lacText, 1024,
                                          "NO PLAYER INFO FOR ACTIVE RACE CAR %d",
-                                         lrRecord.miIndex);
+                                         lrRecord.meActiveRaceCarIndex);
                     }
                     else
                     {
                         const char* lpcStatus;
-                        if (lrRecord.mbFlag35)
+                        if (lrRecord.mbHasDisconnected)
                         {
                             lpcStatus = "DISCONNECTED";
                         }
-                        else if (lrRecord.mbFlag34)
+                        else if (lrRecord.mbHasTimedOut)
                         {
                             lpcStatus = "TIMED OUT";
                         }
                         else
                         {
-                            const f32 lfTime = lrRecord.mTime.GetFloatVal();
+                            const f32 lfTime = lrRecord.mFinishingTime.GetFloatVal();
                             if (lfTime <= 0.0f)
                             {
                                 lpcStatus = "PLAYING";
@@ -349,7 +349,7 @@ namespace BrnGui
 
                         CgsCore::SPrintf(lacText, 1024, "Name=%s %s TABLEPOS=%d",
                                          lpPlayerInfo->mPlayerName.GetPlayerName(),
-                                         lpcStatus, static_cast<s32>(lrRecord.muValue1C));
+                                         lpcStatus, static_cast<s32>(lrRecord.miResultsTablePosition));
                     }
                     lpDisplay->DrawText(lacText, 80.0f, lfRowY, 20.0f,
                                   static_cast<CgsDev::RGBA>(-1));
@@ -557,7 +557,7 @@ namespace BrnGui
     s32 OnlineInstantResultsState::GetOnlinePlayerIndexFromTablePosition(s32 liTablePosition)
     {
         for (s32 liPlayer = 0; liPlayer < mOnlinePostEvent.miNumPlayersInEvent; ++liPlayer)
-            if (static_cast<s32>(mOnlinePostEvent.maRecords[liPlayer].muValue1C) == liTablePosition)
+            if (static_cast<s32>(mOnlinePostEvent.maRecords[liPlayer].miResultsTablePosition) == liTablePosition)
                 return liPlayer;
         CGS_ASSERT(false, "Could not find results for table position");
         return 0;
@@ -578,7 +578,7 @@ namespace BrnGui
     {
         s32 liPlayer = 0;
         for (; liPlayer < mOnlinePostEvent.miNumPlayersInEvent && liPlayer < lpEvent->miNumPlayersInEvent; ++liPlayer)
-            if (mOnlinePostEvent.maRecords[liPlayer].muValue1C != lpEvent->maRecords[liPlayer].muValue1C)
+            if (mOnlinePostEvent.maRecords[liPlayer].miResultsTablePosition != lpEvent->maRecords[liPlayer].miResultsTablePosition)
                 mabDirty[liPlayer] = true;
         for (; liPlayer < lpEvent->miNumPlayersInEvent; ++liPlayer)
             mabDirty[liPlayer] = true;
@@ -738,9 +738,9 @@ namespace BrnGui
         s32 liEventId = lpQueue->GetFirstEvent(&lpEvent, &liSize);
         for (s32 liPlayer = 0; liPlayer < mOnlinePostEvent.miNumPlayersInEvent; ++liPlayer)
         {
-            CGS_ASSERT(static_cast<s32>(mOnlinePostEvent.maRecords[liPlayer].muValue1C) >= 0,
+            CGS_ASSERT(static_cast<s32>(mOnlinePostEvent.maRecords[liPlayer].miResultsTablePosition) >= 0,
                        "mOnlinePostEvent.maOnlinePlayers[liPositionIndex].miResultsTablePosition >= 0");
-            CGS_ASSERT(static_cast<s32>(mOnlinePostEvent.maRecords[liPlayer].muValue1C) < mOnlinePostEvent.miNumPlayersInEvent,
+            CGS_ASSERT(static_cast<s32>(mOnlinePostEvent.maRecords[liPlayer].miResultsTablePosition) < mOnlinePostEvent.miNumPlayersInEvent,
                        "mOnlinePostEvent.maOnlinePlayers[liPositionIndex].miResultsTablePosition < mOnlinePostEvent.miNumPlayersInEvent");
         }
         mTable.Update();
@@ -955,9 +955,9 @@ namespace BrnGui
             const GuiEventOnlinePostEvent::Record* lpPlayer = GetOnlinePlayerFromTablePosition(0);
             CGS_ASSERT(lpPlayer, "lpOnlinePlayer");
             CGS_ASSERT(mpGuiCache, "mpGuiCache");
-            CGS_ASSERT(lpPlayer->miIndex >= 0, "lpOnlinePlayer->meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-            CGS_ASSERT(lpPlayer->miIndex < 8, "lpOnlinePlayer->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-            const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpPlayer->miIndex);
+            CGS_ASSERT(lpPlayer->meActiveRaceCarIndex >= 0, "lpOnlinePlayer->meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+            CGS_ASSERT(lpPlayer->meActiveRaceCarIndex < 8, "lpOnlinePlayer->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpPlayer->meActiveRaceCarIndex);
             CGS_ASSERT(lpStatus, "lpInGamePlayerStatusData");
             GuiEventNetworkOutputPlayerTexture lPicture =
                 { GuiEventNetworkOutputPlayerTexture::E_OUTPUT_WINNER_IMAGE, lpStatus->mNetworkPlayerID };
@@ -973,8 +973,8 @@ namespace BrnGui
             {
                 const GuiEventOnlinePostEvent::Record* lpPlayer = GetOnlinePlayerFromTablePosition(liPosition);
                 CGS_ASSERT(lpPlayer, "lpOnlinePlayer");
-                if (lpPlayer->mTime > CgsSystem::Time(0.0f) || lpPlayer->mbFlag35 ||
-                    lpPlayer->mbFlag34 || lpPlayer->mbFlag36)
+                if (lpPlayer->mFinishingTime > CgsSystem::Time(0.0f) || lpPlayer->mbHasDisconnected ||
+                    lpPlayer->mbHasTimedOut || lpPlayer->mbWasEliminated)
                 {
                     ++liFinishedPlayers;
                     CGS_ASSERT(liUnfinishedPlayers == 0, "liUnfinishedPlayers == 0");
@@ -995,7 +995,7 @@ namespace BrnGui
                 }
             }
             const GuiEventOnlinePostEvent::Record* lpWinner = GetOnlinePlayerFromTablePosition(0);
-            const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpWinner->miIndex);
+            const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpWinner->meActiveRaceCarIndex);
             mWinnerGamertag.SetText(lpStatus->mPlayerName.GetPlayerName());
             if (IsStuntRunResultsMode(meCurrentGameMode))
                 UpdateStuntRunColoursAndScores();
@@ -1011,13 +1011,13 @@ namespace BrnGui
     {
         CGS_ASSERT(mpGuiCache, "mpGuiCache");
         CGS_ASSERT(lpPlayer, "lpPostEventOnlinePlayer");
-        CGS_ASSERT(lpPlayer->miIndex >= 0, "lpPostEventOnlinePlayer->meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-        CGS_ASSERT(lpPlayer->miIndex < 8, "lpPostEventOnlinePlayer->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-        const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpPlayer->miIndex);
+        CGS_ASSERT(lpPlayer->meActiveRaceCarIndex >= 0, "lpPostEventOnlinePlayer->meActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+        CGS_ASSERT(lpPlayer->meActiveRaceCarIndex < 8, "lpPostEventOnlinePlayer->meActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpPlayer->meActiveRaceCarIndex);
         CGS_ASSERT(lpStatus, "lpInGamePlayerStatusData");
         CGS_ASSERT(mTable.HasData(), "mTable.HasData() == true");
         mTable.GetSelectable(liRow)->SetActive(true);
-        const s32 liTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(static_cast<EActiveRaceCarIndex>(lpPlayer->miIndex));
+        const s32 liTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(static_cast<EActiveRaceCarIndex>(lpPlayer->meActiveRaceCarIndex));
         if (IsStuntRunResultsMode(meCurrentGameMode))
             mTable.SetColourValue(liRow, 0, KAU_TEAM_COLOURS[liTeam]);
         mTable.SetText(liRow, 0, lpStatus->mPlayerName.GetPlayerName());
@@ -1025,7 +1025,7 @@ namespace BrnGui
         CgsLanguage::LanguageManager* lpLanguage = mpStateInterface->GetLanguageManager();
         const char* lpcStat = KAPC_FINISH_STAT_STRINGID[liRow];
         char lacValue[64];
-        if (lpPlayer->mbFlag35)
+        if (lpPlayer->mbHasDisconnected)
         {
             lpLanguage->AddString(lpcStat + 1, lpLanguage->FindString("EVENT_POSITION_DISCONNECTED"));
         }
@@ -1042,10 +1042,10 @@ namespace BrnGui
             }
         }
         else if (meCurrentGameMode == 11 &&
-                 mpGuiCache->GetCurrentOnlinePlayerTeam(static_cast<EActiveRaceCarIndex>(lpPlayer->miIndex)) == 1)
+                 mpGuiCache->GetCurrentOnlinePlayerTeam(static_cast<EActiveRaceCarIndex>(lpPlayer->meActiveRaceCarIndex)) == 1)
         {
-            const char* lpcSource = lpPlayer->muValue24 == 1 ? "ONLINE_RESULTS_NUM_ELIMINATION" : "ONLINE_RESULTS_NUM_ELIMINATIONS";
-            CgsCore::SPrintf(lacValue, 64, "%d", static_cast<s32>(lpPlayer->muValue24));
+            const char* lpcSource = lpPlayer->miEliminations == 1 ? "ONLINE_RESULTS_NUM_ELIMINATION" : "ONLINE_RESULTS_NUM_ELIMINATIONS";
+            CgsCore::SPrintf(lacValue, 64, "%d", static_cast<s32>(lpPlayer->miEliminations));
             lpLanguage->FormatAndAddText(lpcStat + 1, lpcSource,
                 CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 1, lacValue, CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
         }
@@ -1056,16 +1056,16 @@ namespace BrnGui
             lpLanguage->FormatAndAddText(lpcStat + 1, "%1", CgsLanguage::LanguageManager::E_FORMAT_TEXT,
                 1, lacValue, CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
         }
-        else if (lpPlayer->mbFlag36 || lpPlayer->mbFlag34)
+        else if (lpPlayer->mbWasEliminated || lpPlayer->mbHasTimedOut)
         {
-            CgsCore::SPrintf(lacValue, 64, "%f", static_cast<double>(lpPlayer->mfValue10));
+            CgsCore::SPrintf(lacValue, 64, "%f", static_cast<double>(lpPlayer->mfDistanceFromFinish));
             lpLanguage->FormatAndAddText(lpcStat + 1,
-                lpPlayer->mbFlag36 ? "ONLINE_RESULTS_ELIMINATED" : "ONLINE_RESULTS_DID_NOT_FINISH",
+                lpPlayer->mbWasEliminated ? "ONLINE_RESULTS_ELIMINATED" : "ONLINE_RESULTS_DID_NOT_FINISH",
                 CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 1, lacValue, CgsLanguage::LanguageManager::E_FORMAT_SMALL_DISTANCE);
         }
         else
         {
-            CgsCore::SPrintf(lacValue, 64, "%f", static_cast<double>(lpPlayer->mTime.GetFloatVal()));
+            CgsCore::SPrintf(lacValue, 64, "%f", static_cast<double>(lpPlayer->mFinishingTime.GetFloatVal()));
             lpLanguage->FormatAndAddText(lpcStat + 1, "%1", CgsLanguage::LanguageManager::E_FORMAT_TEXT,
                 1, lacValue, CgsLanguage::LanguageManager::E_FORMAT_MINUTES_SECONDS_HUNDREDTHS);
         }
@@ -1106,7 +1106,7 @@ namespace BrnGui
         }
         char lacPoints[8];
         CgsCore::SPrintf(lacPoints, 8, "%d", static_cast<s32>(
-            lbResultsForThisRoundOnly ? lpPlayer->muValue18 : lpPlayer->muValue20));
+            lbResultsForThisRoundOnly ? lpPlayer->miPointsFromThisRound : lpPlayer->miTotalPoints));
         lacPoints[7] = 0;
         const bool lbHidePoints = lbHideRepeatedTeam ||
             ((meCurrentGameMode == 12 || meCurrentGameMode == 17) && meCurrentState <= E_ONLINE_INSTANT_RESULTS_STANDINGSUPDATE);
@@ -1131,8 +1131,8 @@ namespace BrnGui
             maiOnlinePlayersIndexFromTablePosition[liPlayer] = liPlayer;
         for (s32 liRow = 0; liRow < mOnlinePostEvent.miNumPlayersInEvent; ++liRow)
             for (s32 liOther = liRow + 1; liOther < mOnlinePostEvent.miNumPlayersInEvent; ++liOther)
-                if (static_cast<s32>(GetOnlinePlayerFromSortedTablePosition(liRow)->muValue20) <
-                    static_cast<s32>(GetOnlinePlayerFromSortedTablePosition(liOther)->muValue20))
+                if (static_cast<s32>(GetOnlinePlayerFromSortedTablePosition(liRow)->miTotalPoints) <
+                    static_cast<s32>(GetOnlinePlayerFromSortedTablePosition(liOther)->miTotalPoints))
                 {
                     const s32 liIndex = maiOnlinePlayersIndexFromTablePosition[liRow];
                     maiOnlinePlayersIndexFromTablePosition[liRow] = maiOnlinePlayersIndexFromTablePosition[liOther];
@@ -1163,7 +1163,7 @@ namespace BrnGui
                         {
                             const GuiEventOnlinePostEvent::Record* lpPlayer = GetOnlinePlayerFromSortedTablePosition(liRow);
                             CGS_ASSERT(lpPlayer, "lpPostEventOnlinePlayer");
-                            const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpPlayer->miIndex);
+                            const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpPlayer->meActiveRaceCarIndex);
                             CGS_ASSERT(lpStatus, "lpInGamePlayerStatusData");
                             const s32 liRevenge = lpStatus->mLiveRevengeRelationship.GetCurrentScoreForLocalPlayer();
                             char lacRevenge[8];
@@ -1201,14 +1201,14 @@ namespace BrnGui
             for (s32 liRow = 0; liRow < mOnlinePostEvent.miNumPlayersInEvent; ++liRow)
             {
                 GuiEventOnlinePostEvent::Record* lpPlayer = GetOnlinePlayerFromSortedTablePosition(liRow);
-                if (!lpPlayer->mbFlag35 && !lpPlayer->mbFlag34 && lpPlayer->mTime.GetFloatVal() == 0.0f)
-                    lpPlayer->mbFlag34 = true;
+                if (!lpPlayer->mbHasDisconnected && !lpPlayer->mbHasTimedOut && lpPlayer->mFinishingTime.GetFloatVal() == 0.0f)
+                    lpPlayer->mbHasTimedOut = true;
                 bool lbHideRepeatedTeam = false;
                 bool lbTeamResults = false;
                 if (meCurrentGameMode == 12)
                 {
                     lbTeamResults = true;
-                    const s32 liTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(static_cast<EActiveRaceCarIndex>(lpPlayer->miIndex));
+                    const s32 liTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(static_cast<EActiveRaceCarIndex>(lpPlayer->meActiveRaceCarIndex));
                     if (liTeam == liPreviousTeam)
                         lbHideRepeatedTeam = true;
                     else
@@ -1216,14 +1216,14 @@ namespace BrnGui
                 }
                 SetAptData(liRow, lpPlayer, false, lbHideRepeatedTeam, lbTeamResults);
                 CGS_ASSERT(mpGuiCache, "mpGuiCache");
-                const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpPlayer->miIndex);
+                const OnlinePlayerStatus* lpStatus = FindOnlinePlayerStatus(mpGuiCache, lpPlayer->meActiveRaceCarIndex);
                 CGS_ASSERT(lpStatus, "lpInGamePlayerStatusData");
                 if (liRow == 0)
                 {
                     lpFirstPlayer = lpPlayer;
                     lpFirstStatus = lpStatus;
                 }
-                else if (liRow == 1 && lpPlayer->muValue20 == lpFirstPlayer->muValue20)
+                else if (liRow == 1 && lpPlayer->miTotalPoints == lpFirstPlayer->miTotalPoints)
                     lpFirstPlayer = 0;
                 mTable.GetSelectable(liRow)->SetHighlightable(true);
                 TableRow* lpRow = mTable.GetSelectable(liRow);
@@ -1262,7 +1262,7 @@ namespace BrnGui
             {
                 mPointsColumnHeading.SetText("");
                 const GuiEventOnlinePostEvent::Record* lpWinner = GetOnlinePlayerFromTablePosition(0);
-                const s32 liTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(static_cast<EActiveRaceCarIndex>(lpWinner->miIndex));
+                const s32 liTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(static_cast<EActiveRaceCarIndex>(lpWinner->meActiveRaceCarIndex));
                 mWinnerGamertag.SetColour(KAU_TEAM_COLOURS[liTeam]);
                 mYourTeamScore.SetLocalisedText(liScoreCurrent, CgsLanguage::LanguageManager::E_FORMAT_INTEGER);
                 mYourTeamScoreHeading.SetText("$RESULTS_YOURTEAM_POINTS_HEADING");
@@ -1277,8 +1277,8 @@ namespace BrnGui
             {
                 const GuiEventOnlinePostEvent::Record* lpPlayer = GetOnlinePlayerFromSortedTablePosition(liRow);
                 CGS_ASSERT(lpPlayer, "lpOnlinePlayer");
-                const s32 liTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(static_cast<EActiveRaceCarIndex>(lpPlayer->miIndex));
-                const s32 liTotal = static_cast<s32>(lpPlayer->muValue20);
+                const s32 liTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(static_cast<EActiveRaceCarIndex>(lpPlayer->meActiveRaceCarIndex));
+                const s32 liTotal = static_cast<s32>(lpPlayer->miTotalPoints);
                 const s32 liLocalTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(
                     static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex()));
                 if (liTeam == liLocalTeam)

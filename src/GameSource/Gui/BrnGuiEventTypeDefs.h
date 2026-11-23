@@ -41,6 +41,7 @@
 #include "GameShared/GameClasses/Containers/CgsFastBitArray.h"  // CgsContainers::FastBitArray
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"      // CgsContainers::BitArray<64u> (GuiEventRoadRuleNewRulers)
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N> (OfflinePostEventData's DerivedCarArray)
+#include "GameSource/GameState/Progression/BrnDerivedCars.h"  // BrnProgression::DerivedCarArray (OfflinePostEventData)
 #include "GameSource/BurnoutConstants.h"                // EActiveRaceCarIndex
 #include "SharedClasses/World/BrnWorldRegion.h"         // BrnWorld::ECounty / EDistrict
 #include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT
@@ -62,7 +63,6 @@
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h" // BrnNetwork::EPaybackType (dirty-trick payloads)
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficGuiInterface.h" // ScoringVehicleArray (GuiTrafficCarInfoEvent, DWARF BrnTrafficGuiInterface.h:54)
 #include "GameSource/GameState/SharedIO/BrnGameStateToGuiEvents.h" // BrnGui::EFinishType (GuiFinishRaceEvent)
-
 // Fixed-underlying-type opaque declaration (committed home BrnVehicleConstants.h:
 // `enum EImpactType : s32`); keeps the vehicle-constants header out of this GUI payload
 // home (same idiom as BrnScoringSystem.h).
@@ -3028,24 +3028,12 @@ public:
         s32   miBaseScore;                       // +0x24  DWARF :2393
         s32   miScoreMultiplier;                 // +0x28  DWARF :2394, ASSERT-ATTESTED
         f32   mfDistanceTravelled;               // +0x2C  DWARF :2395 (metres)
-        CgsContainers::Array<CgsID, 8> maCarsToUnlockFromSpecialEvent;  // +0x30  GetLength; miCount @0x22E8
-        u8    maReserved78[32];                  // +0x78  UNNAMED
-        s32   miCtorSentinel98;                  // +0x98  a SECOND -1 CgsArray sentinel. ITS
-                                                 //   OWNING ARRAY IS DELIBERATELY NOT NAMED:
-                                                 //   the element type and capacity are not
-                                                 //   attested anywhere, so declaring an
-                                                 //   Array<T,N> here would be a guess. What IS
-                                                 //   attested is the store -- and twice over,
-                                                 //   from both sides of the copy: this class's
-                                                 //   ctor @0x825007FC emits `stw -1, 0x2310`
-                                                 //   (== record + 0x98), and the PRODUCER's own
-                                                 //   reconstruction independently recorded the
-                                                 //   twin at GuiCache +0x9F00 (== record + 0x98
-                                                 //   again, with the record based at +0x9E68) as
-                                                 //   "ctor writes -1 (CgsArray sentinel;
-                                                 //   sub-array un-homed)". Two independent waves,
-                                                 //   two independent addresses, same slot.
-        u8    maReserved9C[4];                   // +0x9C  UNNAMED
+        // DWARF BrnGuiEventTypeDefs.h:2397 `DerivedCarArray maCarsToUnlockFromSpecialEvent`:
+        // Array<CgsID,8> (+0x30, count @+0x70) + its maLiveryTypes Array<ELiveryType,8>
+        // (+0x78, count @+0x98) -- the two -1 count words every copy's ctor writes
+        // (InstantResultsState @0x825007F8/0x825007FC: 0x22E8 / 0x2310).
+        BrnProgression::DerivedCarArray maCarsToUnlockFromSpecialEvent;  // +0x30..+0xA0 (0x9C..0xA0
+                                                 //   is its 8-aligned tail padding)
         s32   miPlayerOldRank;                   // +0xA0  "( old = "
         s32   miPlayerNewRank;                   // +0xA4  ", new = "
         s32   miCarsRevealed;                    // +0xA8  "Results.Cars Revealed = "

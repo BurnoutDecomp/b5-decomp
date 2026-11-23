@@ -332,7 +332,7 @@ namespace BrnGui
         else
             DoMugshot(lpEvent);
 
-        CGS_ASSERT(mpCache != 0, "mpCache");
+        CGS_ASSERT(mpCache != 0, CgsDev::Assert::MessageAt("mpCache", "..\\..\\..\\GameSource\\Gui/Flow/HUD/States/BrnRaceMainHudState.cpp", 3844 /* ARTIST 0x82475D38 */));
         const s32 liGameMode = mpCache->GetGameMode();
         if ((liGameMode == 15 || liGameMode == 16) &&
             (lpEvent->meResponse == E_MUGSHOT_RESPONSE_STOP_MY_MUGSHOT ||

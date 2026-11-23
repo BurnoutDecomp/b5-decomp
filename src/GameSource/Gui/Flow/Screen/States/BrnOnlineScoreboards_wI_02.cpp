@@ -14,7 +14,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineScoreboards.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::Event / the in-queue
 #include "GameSource/Gui/BrnGuiCache.h"                           // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                   // BrnGui::GuiFlow / E_GUIFLOW_SCREEN
@@ -39,7 +39,7 @@ namespace BrnGui
     // pending-id bookkeeping.
     void OnlineScoreboards::ClearExpectedComponent()
     {
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");   // cpp:430 (non-fatal -- the call below runs regardless)
+        CGS_ASSERT(mpGuiCache, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineScoreboards.cpp", 430 /* ARTIST 0x82486960 */));   // cpp:430 (non-fatal -- the call below runs regardless)
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
@@ -68,7 +68,7 @@ namespace BrnGui
     // GuiCache event (type 64) and latch its carried cache pointer into mpGuiCache.
     void OnlineScoreboards::UpdateGetCache()
     {
-        CGS_ASSERT(mpGuiCache == NULL, "NULL == mpGuiCache");   // cpp:473 (the cache must still be unset here)
+        CGS_ASSERT(mpGuiCache == NULL, CgsDev::Assert::MessageAt("NULL == mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineScoreboards.cpp", 473 /* ARTIST 0x82491818 */));   // cpp:473 (the cache must still be unset here)
 
         StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
@@ -89,13 +89,13 @@ namespace BrnGui
             {
                 // The cache event carries the GuiCache pointer in its leading word.
                 GuiCache* lpCache = *reinterpret_cast<GuiCache* const*>(lpEvent);
-                CGS_ASSERT(lpCache != NULL, "NULL != lpCacheEvent->mpCachePointer");   // cpp:483
+                CGS_ASSERT(lpCache != NULL, CgsDev::Assert::MessageAt("NULL != lpCacheEvent->mpCachePointer", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineScoreboards.cpp", 483 /* ARTIST 0x82491888 */));   // cpp:483
 
                 // X360 stores unconditionally, after the (non-fatal) assert above.
                 mpGuiCache = lpCache;
             }
         }
 
-        CGS_ASSERT(mpGuiCache != NULL, "NULL != mpGuiCache");   // cpp:492
+        CGS_ASSERT(mpGuiCache != NULL, CgsDev::Assert::MessageAt("NULL != mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineScoreboards.cpp", 492 /* ARTIST 0x824918B8 */));   // cpp:492
     }
 }

@@ -1107,10 +1107,10 @@ void GuiDebugComponent::TriggerPostEvent()
     CgsGui::GuiEvent<291> lPostEventStart;
     mInputQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lPostEventStart), 291, 1);
 
+    // ARTIST 0x82512FB8..0x82512FC0: only the record's implicit ctor (the DerivedCarArray's
+    // two -1 counts at +0x70/+0x98); no memset.
     GuiEventOfflinePostEvent::OfflinePostEventData lResult;
-    std::memset(&lResult, 0, sizeof(lResult));
-    lResult.maCarsToUnlockFromSpecialEvent.MarkUnconstructed();
-    lResult.miCtorSentinel98 = -1;
+
 
     const s32 liGameMode = mpGuiModule->mGuiCache.GetGameMode();
     lResult.meFinishedGameModeType = (liGameMode == -1) ? 0 : liGameMode;

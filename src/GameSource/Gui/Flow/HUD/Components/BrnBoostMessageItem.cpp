@@ -32,6 +32,35 @@ const char* const BoostMessageItem::KAPC_BOOST_TYPE_FRAMES[3] =
     "danger", "aggression", "stunt",                      // XEX .data @0x82F24994
 };
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnBoostMessageItem.cpp:67)
 // @ 0x82411A18 -- cpp:69. The streamed "Invalid state interface" tripwire fires
 // ahead of the base Construct's own h:113 one (both non-gating on the X360);
 // then the field/backing invalidations and the latch seeds.
@@ -46,6 +75,26 @@ void BoostMessageItem::Construct(const char* /*lpacName*/, CgsGui::StateInterfac
     meCurrentBoostType     = -1;
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnBoostMessageItem.cpp:101)
 // @ 0x82420050 -- the base Prepare (find + bind + the MovieClipRef.h:272 tripwire
 // + timeline reset; no parent prefix), then the text field under
 // "MessageTextField" within this component's name and the "backing_mc" child.
@@ -61,6 +110,68 @@ void BoostMessageItem::Prepare(const char* lpacName, const BrnFlapt::FileRef& lr
     mBackingRef = *mAptRef.FindChildMovieClip(&lBacking, "backing_mc");
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnBoostMessageItem.cpp:177)
 // @ 0x82411B00 -- cpp:179. Localised text with the boost amount as the single
 // integer parameter when non-negative, else the plain id lookup.
 void BoostMessageItem::SetText(const char* lpcText, s32 liBoostAmount)
@@ -74,6 +185,23 @@ void BoostMessageItem::SetText(const char* lpcText, s32 liBoostAmount)
         mMessageText.SetLocalisedText(lpcText, KI_STRING_ID_LOOKUP);
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnBoostMessageItem.cpp:208)
 // @ 0x82420158 -- cpp:211/:213. Both tripwires streamed on the X360 (folded
 // static, non-gating -- the transition still plays); then the latch + the frame
 // + the backing refresh.
@@ -88,6 +216,51 @@ void BoostMessageItem::SetTransition(u32 luTransition, s32 leBoostType)
     UpdateBoostType(leBoostType);
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// (layout: the next definition sits on its DecFIGS line, BrnBoostMessageItem.cpp:266)
 // @ 0x82411BD0 -- cpp:268/:269. The bounds asserts keep the original BrnWorld
 // enum spelling; -1 leaves the backing untouched.
 void BoostMessageItem::UpdateBoostType(s32 leBoostType)

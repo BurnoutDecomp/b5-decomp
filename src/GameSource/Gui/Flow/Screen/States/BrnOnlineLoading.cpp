@@ -464,7 +464,7 @@ namespace BrnGui
     {
         const GuiEventNetworkGameParams* lpParams =
             reinterpret_cast<const GuiEventNetworkGameParams*>(mpGuiCache->maOnlineGameModeOptionsStorage);
-        CGS_ASSERT(lpParams != 0, "lpParams");
+        CGS_ASSERT(lpParams != 0, CgsDev::Assert::MessageAt("lpParams", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineLoading.cpp", 680 /* ARTIST 0x82485634 */));
 
         const char* lpacChevronsState = 0;
 
@@ -500,7 +500,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::SetupPlayerList()
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineLoading.cpp", 737 /* ARTIST 0x82485754 */));
 
         for (s32 liPlayer = 0; liPlayer < KI_MAX_PLAYERS; ++liPlayer)
         {
