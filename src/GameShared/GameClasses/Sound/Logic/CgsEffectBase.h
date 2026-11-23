@@ -133,10 +133,13 @@ struct EffectBase : public CgsSound::MemBase
     s32 GetEffectID() const { return (miObjectId >> 4) & 0x7F; }
     s32 GetId() const { return miObjectId; }
     void SetId(s32 aiId) { miObjectId = aiId; }
-    void UpdateTime(f32 af32RunningTime, f32 af32DeltaTime)
+    // CgsEffectBase.h:1036 (DWARF lfCurrentTime, lfTimeStep). The time step is stored first:
+    // every inlined copy in ARTIST (State::AttachEffect 0x8268D718, State::UpdateParams
+    // 0x826C49C8 ...) and in the PS3 build writes +0x1C before +0x18.
+    void UpdateTime(f32 lfCurrentTime, f32 lfTimeStep)
     {
-        mfRunningTime = af32RunningTime;
-        mfDeltaTime = af32DeltaTime;
+        mfDeltaTime = lfTimeStep;
+        mfRunningTime = lfCurrentTime;
     }
 
     // Recovered teardown reset shared by the EffectControl/EffectObject deleting
@@ -155,7 +158,13 @@ struct EffectBase : public CgsSound::MemBase
 
     EAttachState GetAttachState() const { return meAttachState; }
     void         SetAttachState(EAttachState aeState) { meAttachState = aeState; }
-    void         ClearLoadedData() { mbHasLoadedData = false; }
+    // CgsEffectBase.h:490 (DWARF), inlined at lines 492-493: ARTIST State::AttachEffect
+    // 0x8268D6A0..0x8268D6AC stores the attach state, then clears the loaded-data latch.
+    void         OnAttach()
+    {
+        meAttachState = E_ATTACH_STATE_WAITING_FOR_DATA;
+        mbHasLoadedData = false;
+    }
     State*       GetStateBase() const { return mpState; }
     void         SetStateBase(State* apState) { mpState = apState; }
     Module*      GetLogicModule() const { return mpLogicModule; }
@@ -167,6 +176,21 @@ struct EffectBase : public CgsSound::MemBase
     // input slots. Exposes the private mpDynamicMixIo BY NAME so dependents don't
     // reach past the access boundary; matches the raw load, no layout/behaviour change.
     Nicotine::DMixIO* GetDMixIOPtr() const { return mpDynamicMixIo; }
+
+    // DWARF CgsEffectBase.cpp:192 / :208 (PS3 bodies: a null-guarded DMixIO call). ARTIST
+    // keeps no out-of-line copy of either and inlines both into State::UpdateParams
+    // (0x826C4960 TurnOnMixOutput, 0x826C4A64 TurnOffMixOutput), another unit, so the
+    // bodies are given here where that unit can see them.
+    void TurnOffMixer()
+    {
+        if (mpDynamicMixIo)
+            mpDynamicMixIo->TurnOffMixOutput();
+    }
+    void TurnOnMixer()
+    {
+        if (mpDynamicMixIo)
+            mpDynamicMixIo->TurnOnMixOutput();
+    }
 
     // --- members (DWARF order; offsets are X360 32-bit, not asserted on host) ---
     EffectBase*  mpNextEffectBase;   // CgsEffectBase.h:681

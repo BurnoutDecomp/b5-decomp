@@ -17,9 +17,12 @@
 // ============================================================================
 
 #include "GameShared/GameClasses/Sound/Logic/CgsState.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsEffectBase.h"
 #include "GameShared/GameClasses/Sound/Logic/CgsStateManager.h"
+
+// ARTIST 0x820ADD50: the assert file (__FILE__) of this unit, a literal.
+#define KAC_ARTIST_ASSERT_FILE "..\\..\\..\\GameShared\\GameClasses\\Sound/Logic/CgsState.cpp"
 
 namespace CgsSound
 {
@@ -255,38 +258,44 @@ void State::SortSFXCtl()
     }
 }
 
+// ARTIST 0x826EAB50: a switch over the prepare stage whose stages fall through. The logic
+// module is not latched here: StateManager stamps State::mpLogicModule when it hands the
+// state out (CgsStateManager.cpp), and ARTIST stores nothing at +0x28 in this body.
 bool State::Prepare(s32 liSfxFlags, StateManager* apStateManager)
 {
-    if (mePrepareState == E_PREPARE_STATE_CREATE_OBJECTS)
+    switch (mePrepareState)
     {
+    case E_PREPARE_STATE_CREATE_OBJECTS:
         miSFXFlags = liSfxFlags;
         mpStateManager = apStateManager;
-        mpLogicModule = apStateManager->GetLogicModule();
         mpvAttachment = 0;
         mbIsAttached = false;
         CreateSFXObjs();
         CreateSFXCtrls();
         mpCurrentEffect = mpHeadEffectObject;
         mePrepareState = E_PREPARE_STATE_OBJECTS;
-    }
-
-    if (mePrepareState == E_PREPARE_STATE_OBJECTS)
-    {
-        while (mpCurrentEffect && mpCurrentEffect->Prepare(this))
+        // fall through
+    case E_PREPARE_STATE_OBJECTS:
+        while (mpCurrentEffect)
+        {
+            if (!mpCurrentEffect->Prepare(this))
+                return false;
             mpCurrentEffect = mpCurrentEffect->mpNextEffectBase;
-        if (mpCurrentEffect)
-            return false;
+        }
         mpCurrentEffect = mpHeadEffectControl;
         mePrepareState = E_PREPARE_STATE_CONTROLS;
-    }
-
-    if (mePrepareState == E_PREPARE_STATE_CONTROLS)
-    {
-        while (mpCurrentEffect && mpCurrentEffect->Prepare(this))
+        // fall through
+    case E_PREPARE_STATE_CONTROLS:
+        while (mpCurrentEffect)
+        {
+            if (!mpCurrentEffect->Prepare(this))
+                return false;
             mpCurrentEffect = mpCurrentEffect->mpNextEffectBase;
-        if (mpCurrentEffect)
-            return false;
+        }
         mePrepareState = E_PREPARE_STATE_DONE;
+        break;
+    default:
+        break;
     }
     return true;
 }
@@ -295,7 +304,9 @@ void State::Attach(void* apvAttachment)
 {
     CGS_ASSERT(meUpdateState.GetCurrent() == E_UPDATE_UNATTACHED ||
                meUpdateState.GetCurrent() == E_UPDATE_DETATCHING,
-               "meUpdateState == E_UPDATE_UNATTACHED || meUpdateState == E_UPDATE_DETATCHING");
+        CgsDev::Assert::MessageAt(
+            "meUpdateState == E_UPDATE_UNATTACHED || meUpdateState == E_UPDATE_DETATCHING",
+            KAC_ARTIST_ASSERT_FILE, 798 /* ARTIST 0x826C4BC0 */));
     mpvAttachment = apvAttachment;
     mbIsAttached = true;
     mpCurrentEffect = 0;
@@ -305,104 +316,125 @@ void State::Attach(void* apvAttachment)
 
 bool State::AttachEffect()
 {
-    CGS_ASSERT(mePrepareState == E_PREPARE_STATE_DONE, "E_PREPARE_STATE_DONE == mePrepareState");
-    if (!mpCurrentEffect)
-        return true;
+    CGS_ASSERT(mePrepareState == E_PREPARE_STATE_DONE,
+        CgsDev::Assert::MessageAt("E_PREPARE_STATE_DONE == mePrepareState",
+            KAC_ARTIST_ASSERT_FILE, 833 /* ARTIST 0x8268D654 */));
+    // No null test of mpCurrentEffect: ARTIST (0x8268D668) and the PS3 build read its
+    // attach state straight away. WAITING_FOR_DATA (jump-table slot 1 -> 0x8268D708) returns
+    // false; NONE falls into PREPARING once SetupLoadData has run; an invalid state asserts
+    // and returns true without advancing (0x8268D75C -> 0x8268D778).
     switch (mpCurrentEffect->GetAttachState())
     {
     case EffectBase::E_ATTACH_STATE_NONE:
-        mpCurrentEffect->SetAttachState(EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA);
-        // X360 0x8268D6A8/0x8268D6AC: a fresh attachment invalidates the
-        // previous data-ready latch before SetupLoadData is dispatched.
-        mpCurrentEffect->ClearLoadedData();
+        mpCurrentEffect->OnAttach();
         mpCurrentEffect->SetupLoadData();
         CGS_ASSERT(mpCurrentEffect->GetAttachState() ==
                        EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA ||
                    mpCurrentEffect->GetAttachState() ==
                        EffectBase::E_ATTACH_STATE_PREPARING,
-                   "mpCurrentEffect->GetAttachState() == EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA ||mpCurrentEffect->GetAttachState() == EffectBase::E_ATTACH_STATE_PREPARING");
+            CgsDev::Assert::MessageAt(
+                "mpCurrentEffect->GetAttachState() == EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA ||mpCurrentEffect->GetAttachState() == EffectBase::E_ATTACH_STATE_PREPARING",
+                KAC_ARTIST_ASSERT_FILE, 841 /* ARTIST 0x8268D6E4 */));
         if (mpCurrentEffect->GetAttachState() ==
             EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA)
             return false;
-        // SetupLoadData may synchronously advance a no-data effect to
-        // PREPARING. ARTIST falls directly into the Attach call in that case.
-        // fall through
-    case EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA:
-        if (mpCurrentEffect->GetAttachState() ==
-            EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA)
-            return false;
+        // SetupLoadData may synchronously advance a no-data effect to PREPARING.
         // fall through
     case EffectBase::E_ATTACH_STATE_PREPARING:
         mpCurrentEffect->UpdateTime(mfCurTime, mfDeltaTime);
         if (!mpCurrentEffect->Attach())
             return false;
-        break;
+        // fall through
     case EffectBase::E_ATTACH_STATE_FINISHED:
+        mpCurrentEffect->SetAttachState(EffectBase::E_ATTACH_STATE_FINISHED);
+        mpCurrentEffect = mpCurrentEffect->mpNextEffectBase;
         break;
+    case EffectBase::E_ATTACH_STATE_WAITING_FOR_DATA:
+        return false;
     default:
-        CGS_ASSERT(false, "Invalid State");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Invalid State",
+            KAC_ARTIST_ASSERT_FILE, 865 /* ARTIST 0x8268D764 */));
         break;
     }
-    mpCurrentEffect->SetAttachState(EffectBase::E_ATTACH_STATE_FINISHED);
-    mpCurrentEffect = mpCurrentEffect->mpNextEffectBase;
     return true;
 }
 
-void State::UpdateParams(f32 af32DeltaTime)
+// ARTIST 0x826C4850. One jump-table slot per update state (1..6): each initialise stage
+// records its own state and falls into the next; an attach that is still waiting returns.
+// Once the effects are attached their mixers are switched on (objects, then controls), and
+// switched off again while detaching. Locals follow DWARF (CgsState.cpp:576-637).
+void State::UpdateParams(f32 lfTimeStep)
 {
-    mfDeltaTime = af32DeltaTime;
+    mfDeltaTime = lfTimeStep;
     switch (meUpdateState.GetCurrent())
     {
     case E_INITIALIZE_CONTROLS:
         meUpdateState.Update(E_INITIALIZE_CONTROLS);
         mpCurrentEffect = mpHeadEffectControl;
-        meUpdateState.Update(E_INITIALIZE_CONTROLS_UPDATE);
         // fall through
     case E_INITIALIZE_CONTROLS_UPDATE:
-        while (mpCurrentEffect && AttachEffect()) {}
-        if (mpCurrentEffect)
-            return;
-        mpCurrentEffect = mpHeadEffectObject;
-        meUpdateState.Update(E_INITIALIZE_EFFECTS);
+        meUpdateState.Update(E_INITIALIZE_CONTROLS_UPDATE);
+        while (mpCurrentEffect)
+        {
+            if (!AttachEffect())
+                return;
+        }
         // fall through
     case E_INITIALIZE_EFFECTS:
+        meUpdateState.Update(E_INITIALIZE_EFFECTS);
+        mpCurrentEffect = mpHeadEffectObject;
+        // fall through
     case E_INITIALIZE_EFFECTS_UPDATE:
+    {
         meUpdateState.Update(E_INITIALIZE_EFFECTS_UPDATE);
-        while (mpCurrentEffect && AttachEffect()) {}
-        if (mpCurrentEffect)
-            return;
-        // ARTIST 0x826C4850 shares the transition with the attached case below.
-        // Updating twice would erase the transition before the caller reads it.
+        while (mpCurrentEffect)
+        {
+            if (!AttachEffect())
+                return;
+        }
+        for (EffectBase* CurSFXOBj = mpHeadEffectObject; CurSFXOBj;
+             CurSFXOBj = CurSFXOBj->mpNextEffectBase)
+        {
+            CurSFXOBj->TurnOnMixer();
+        }
+        for (EffectBase* CurSfxCtl = mpHeadEffectControl; CurSfxCtl;
+             CurSfxCtl = CurSfxCtl->mpNextEffectBase)
+        {
+            CurSfxCtl->TurnOnMixer();
+        }
+    }
         // fall through
     case E_UPDATE_ATTACHED:
         meUpdateState.Update(E_UPDATE_ATTACHED);
-        for (EffectBase* lpEffect = mpHeadEffectControl; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
+        for (EffectBase* CurSFXCtl = mpHeadEffectControl; CurSFXCtl; CurSFXCtl = CurSFXCtl->mpNextEffectBase)
         {
-            lpEffect->UpdateTime(mfCurTime, af32DeltaTime);
-            lpEffect->UpdateParams(af32DeltaTime);
+            CurSFXCtl->UpdateTime(mfCurTime, lfTimeStep);
+            CurSFXCtl->UpdateParams(lfTimeStep);
         }
-        for (EffectBase* lpEffect = mpHeadEffectObject; lpEffect; lpEffect = lpEffect->mpNextEffectBase)
+        for (EffectBase* CurSFXOBj = mpHeadEffectObject; CurSFXOBj; CurSFXOBj = CurSFXOBj->mpNextEffectBase)
         {
-            lpEffect->UpdateTime(mfCurTime, af32DeltaTime);
-            lpEffect->UpdateParams(af32DeltaTime);
+            CurSFXOBj->UpdateTime(mfCurTime, lfTimeStep);
+            CurSFXOBj->UpdateParams(lfTimeStep);
         }
         break;
     case E_UPDATE_DETATCHING:
     {
         meUpdateState.Update(E_UPDATE_DETATCHING);
         bool lbStillDetaching = false;
-        for (EffectBase* lpEffect = mpHeadEffectObject; lpEffect;
-             lpEffect = lpEffect->mpNextEffectBase)
+        for (EffectBase* CurSFXOBj = mpHeadEffectObject; CurSFXOBj;
+             CurSFXOBj = CurSFXOBj->mpNextEffectBase)
         {
-            lpEffect->UpdateTime(mfCurTime, af32DeltaTime);
-            if (!lpEffect->Detach())
+            CurSFXOBj->TurnOffMixer();
+            CurSFXOBj->UpdateTime(mfCurTime, lfTimeStep);
+            if (!CurSFXOBj->Detach())
                 lbStillDetaching = true;
         }
-        for (EffectBase* lpEffect = mpHeadEffectControl; lpEffect;
-             lpEffect = lpEffect->mpNextEffectBase)
+        for (EffectBase* CurSFXCtl = mpHeadEffectControl; CurSFXCtl;
+             CurSFXCtl = CurSFXCtl->mpNextEffectBase)
         {
-            lpEffect->UpdateTime(mfCurTime, af32DeltaTime);
-            if (!lpEffect->Detach())
+            CurSFXCtl->TurnOffMixer();
+            CurSFXCtl->UpdateTime(mfCurTime, lfTimeStep);
+            if (!CurSFXCtl->Detach())
                 lbStillDetaching = true;
         }
         if (!lbStillDetaching)
