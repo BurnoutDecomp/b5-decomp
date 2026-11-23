@@ -132,18 +132,11 @@ AllPassFilter *AllPassFilter::SetGains(AllPassFilter *self, f32 g1, f32 g2)
 // -------------------------------------------------------------------------------------
 // CombFilter::CombFilter @0x82B6C6B0
 // -------------------------------------------------------------------------------------
-CombFilter *CombFilter::CombFilter_ctor(CombFilter *self)
+CombFilter::CombFilter()
+    : mfGain1(KF_ZERO), mfGain2(KF_ZERO), mfGain3(KF_ZERO), mfGain4(KF_ZERO), mfState(KF_ZERO)
 {
-    self->mfGain1 = KF_ZERO;  // +0x10
-    self->mpApplyFunc = 0;      // +0x00
-    self->mfGain2 = KF_ZERO;  // +0x14
-    self->mpResetFunc = 0;      // +0x04
-    self->mfGain3 = KF_ZERO;  // +0x18
-    self->miReadLength = 2;         // +0x08 (li r9,2)
-    self->mfGain4 = KF_ZERO;  // +0x1C
-    self->mfState = KF_ZERO;  // +0x20
-    self->miChannels = 1;      // +0x0C (li r11,1)
-    return self;
+    miChannels = 1;
+    miReadLength = 2;
 }
 
 // -------------------------------------------------------------------------------------

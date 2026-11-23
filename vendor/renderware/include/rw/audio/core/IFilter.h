@@ -35,6 +35,13 @@ namespace core
 
 struct IFilter
 {
+    // The audio PDB's inline constructor clears these four slots. ARTIST
+    // folds that initialization into the concrete section constructors.
+    IFilter()
+        : mpApplyFunc(0), mpResetFunc(0), miReadLength(0), miChannels(0)
+    {
+    }
+
     enum FilterOutputMode
     {
         OVERWRITE = 0,

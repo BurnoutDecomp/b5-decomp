@@ -24,7 +24,7 @@ public:
 class CombFilter : public IFilter
 {
 public:
-    static CombFilter* CombFilter_ctor(CombFilter* self);
+    CombFilter();
     static void CombFilterApplyFunc(IFilter* filter, s32 count, FilterOutputMode mode,
                                    s32 channel, LocationParams* ctx);
     static void CombFilterResetFunc(IFilter* filter);
