@@ -439,7 +439,7 @@ void CrashNavDriverDetails::Update()
         UpdatePermanent();
 
     // The console clears its in-queue at the end of every Update, whatever the rung did.
-    reinterpret_cast<DriverDetailsInQueue*>(mpInGuiEventQueue)->Clear();
+    mpInGuiEventQueue->Clear();
 }
 
 // -------------------------------------------------------- UpdateInitSetup @0x824CF038
@@ -451,12 +451,12 @@ bool CrashNavDriverDetails::UpdateInitSetup()
 
     bool lbGotCache = false;
 
-    DriverDetailsInQueue* lpInQueue = reinterpret_cast<DriverDetailsInQueue*>(mpInGuiEventQueue);
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
+    for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
          lpEvent != 0;
-         liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+         liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
     {
         if (liEventId != KI_EVENT_GUI_CACHE)
             continue;
@@ -498,12 +498,12 @@ bool CrashNavDriverDetails::UpdateSetupLicense()
 
     bool lbSetUp = false;
 
-    DriverDetailsInQueue* lpInQueue = reinterpret_cast<DriverDetailsInQueue*>(mpInGuiEventQueue);
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
+    for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
          lpEvent != 0;
-         liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+         liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
     {
         if (liEventId != KI_EVENT_RANK_PROGRESS)
             continue;
@@ -775,13 +775,13 @@ bool CrashNavDriverDetails::UpdateRunning()
 // The per-frame event pass that runs under every rung of the ladder.
 bool CrashNavDriverDetails::UpdatePermanent()
 {
-    DriverDetailsInQueue* lpInQueue = reinterpret_cast<DriverDetailsInQueue*>(mpInGuiEventQueue);
 
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
+    for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
          lpEvent != 0;
-         liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+         liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
     {
         switch (liEventId)
         {

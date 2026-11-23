@@ -507,12 +507,12 @@ void OnlinePlay::ShowMainMenuScreen()
 // ------------------------------------------------ Update
 void OnlinePlay::Update()
 {
-    StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
-    const CgsModule::Event* lpEvent = 0;
-    s32 liEventSize = 0;
-    for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liEventSize); lpEvent != 0;
-         liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
+
+    const CgsModule::Event* lpEvent;
+    s32 liEventSize;
+    for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize); lpEvent != 0;
+         liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
     {
         switch (liEventId)
         {
@@ -561,7 +561,7 @@ void OnlinePlay::Update()
                 break;
         }
     }
-    lpInQueue->Clear();
+    mpInGuiEventQueue->Clear();
 
     CheckForCompletedLoads();
     mMainMenuComponent.Update();

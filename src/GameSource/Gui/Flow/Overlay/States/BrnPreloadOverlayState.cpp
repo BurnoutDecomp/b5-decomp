@@ -120,7 +120,7 @@ void PreloadOverlayState::Update()
         break;
     }
 
-    reinterpret_cast<GuiInEventQueue*>(mpInGuiEventQueue)->Clear();
+    mpInGuiEventQueue->Clear();
 }
 
 // @ 0x824B2070
@@ -133,11 +133,11 @@ bool PreloadOverlayState::GetCache()
     // VariableEventQueue<18432,16> -- proven by the recovered VariableEventQueue<18432,16>::
     // GetFirstEvent callee. Recover that real type to read the queue by its API.
     typedef CgsModule::VariableEventQueue<18432, 16> GuiInEventQueue;
-    GuiInEventQueue* lpQueue = reinterpret_cast<GuiInEventQueue*>(mpInGuiEventQueue);
 
-    const CgsModule::Event* lpEvent = NULL;
-    s32 liEventSize = 0;
-    s32 liEventType = lpQueue->GetFirstEvent(&lpEvent, &liEventSize);
+
+    const CgsModule::Event* lpEvent;
+    s32 liEventSize;
+    s32 liEventType = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
 
     if (lpEvent == NULL)
     {
@@ -146,7 +146,7 @@ bool PreloadOverlayState::GetCache()
 
     while (liEventType != KI_GUI_CACHE_EVENT)
     {
-        liEventType = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
+        liEventType = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
         if (lpEvent == NULL)
         {
             return false;

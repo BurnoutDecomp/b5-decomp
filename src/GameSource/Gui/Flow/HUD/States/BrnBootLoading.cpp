@@ -37,11 +37,11 @@ namespace BrnGui
     // loading-complete send the "BF_PROCEED" state event so the FSM advances out of BF_LOADING.
     void BootLoading::Update()
     {
-        BootInQueue* lpInQueue = reinterpret_cast<BootInQueue*>(mpInGuiEventQueue);
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+        s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
         while (lpEvent != 0)
         {
             if (liEventId == KI_EVENT_CACHE_READY)
@@ -58,10 +58,10 @@ namespace BrnGui
             }
 
             const CgsModule::Event* lpNext = 0;
-            liEventId = lpInQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
+            liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
             lpEvent = lpNext;
         }
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
     }
 
     // @ 0x82478E88

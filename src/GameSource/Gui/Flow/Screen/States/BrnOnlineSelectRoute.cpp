@@ -320,13 +320,13 @@ namespace
     // event is also passed through the embedded MainMapComponent before the frame update.
     void OnlineSelectRoute::Update()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        const CgsModule::Event* lpEvent = 0;
-        s32 liEventSize = 0;
 
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liEventSize);
+        const CgsModule::Event* lpEvent;
+        s32 liEventSize;
+
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
         {
             switch (liEventId)
             {
@@ -358,7 +358,7 @@ namespace
         }
 
         mv2WorldCenterPoint = mMainMapComponent.Update(mv2WorldCenterPoint);
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
         CheckForCompletedLoads();
         mSelectRoutes.Update();
         mMenuOptions.Update();

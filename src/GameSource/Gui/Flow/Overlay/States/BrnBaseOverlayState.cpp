@@ -237,19 +237,19 @@ void BaseOverlayState::Update()
     }
 
     UpdatePermanent();
-    reinterpret_cast<OverlayStateInQueue*>(mpInGuiEventQueue)->Clear();
+    mpInGuiEventQueue->Clear();
 }
 
 // @ 0x824B2670 -- walk (and discard) whatever is left on the state's in-queue.
 void BaseOverlayState::UpdatePermanent()
 {
-    OverlayStateInQueue* lpInQueue = reinterpret_cast<OverlayStateInQueue*>(mpInGuiEventQueue);
 
-    const CgsModule::Event* lpEvent = NULL;
-    s32 liSize = 0;
-    lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
+    mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
     while (lpEvent != NULL)
-        lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
 }
 
 // @ 0x824B2490
@@ -258,11 +258,11 @@ void BaseOverlayState::GetCache()
     // Non-gating tripwire: the cache must not already be latched (cpp:353).
     CGS_ASSERT(mpGuiCache == NULL, "mpGuiCache == NULL");
 
-    OverlayStateInQueue* lpInQueue = reinterpret_cast<OverlayStateInQueue*>(mpInGuiEventQueue);
 
-    const CgsModule::Event* lpEvent = NULL;
-    s32 liSize = 0;
-    s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
+    s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
     while (lpEvent != NULL)
     {
         if (liEventId == KI_EVENT_GUI_CACHE)
@@ -275,7 +275,7 @@ void BaseOverlayState::GetCache()
             mpGuiCache = lpCache;
         }
 
-        liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
     }
 
     // Non-gating tripwire: a cache must have arrived (cpp:374).
@@ -285,11 +285,11 @@ void BaseOverlayState::GetCache()
 // @ 0x824B25D0
 bool BaseOverlayState::UpdateWFInfo()
 {
-    OverlayStateInQueue* lpInQueue = reinterpret_cast<OverlayStateInQueue*>(mpInGuiEventQueue);
 
-    const CgsModule::Event* lpEvent = NULL;
-    s32 liSize = 0;
-    s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
+    s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
     while (lpEvent != NULL)
     {
         if (liEventId == KI_EVENT_OVERLAY_FULL_INFO)
@@ -302,7 +302,7 @@ bool BaseOverlayState::UpdateWFInfo()
             return true;
         }
 
-        liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
     }
 
     return false;

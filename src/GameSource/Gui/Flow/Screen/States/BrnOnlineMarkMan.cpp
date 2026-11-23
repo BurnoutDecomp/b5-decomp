@@ -230,7 +230,7 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
         }
 
         UpdatePermanent();
-        reinterpret_cast<MarkManInQueue*>(mpInGuiEventQueue)->Clear();
+        mpInGuiEventQueue->Clear();
     }
 
     // ---- UpdateGetCache --------------------------------------------------------
@@ -239,12 +239,12 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
     {
         CGS_ASSERT(mpGuiCache == 0, "NULL == mpGuiCache");
 
-        MarkManInQueue* lpInQueue = reinterpret_cast<MarkManInQueue*>(mpInGuiEventQueue);
-        const CgsModule::Event* lpEvent = 0;
-        s32 liEventSize = 0;
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liEventSize);
+
+        const CgsModule::Event* lpEvent;
+        s32 liEventSize;
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
         {
             if (liEventId == KI_EVENT_GUI_CACHE)
             {
@@ -321,12 +321,12 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
     // event advances.
     void OnlineMarkMan::UpdatePermanent()
     {
-        MarkManInQueue* lpInQueue = reinterpret_cast<MarkManInQueue*>(mpInGuiEventQueue);
-        const CgsModule::Event* lpEvent = 0;
-        s32 liEventSize = 0;
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liEventSize);
+
+        const CgsModule::Event* lpEvent;
+        s32 liEventSize;
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
         {
             if (liEventId == KI_EVENT_APT_TRIGGER)
             {

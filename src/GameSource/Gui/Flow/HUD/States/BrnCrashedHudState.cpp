@@ -214,18 +214,18 @@ void CrashedHudState::Update()
         break;
     }
     UpdatePermenant();
-    reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue)->Clear();
+    mpInGuiEventQueue->Clear();
 }
 
 // ARTIST 0x82476698.
 void CrashedHudState::UpdateGetCache()
 {
-    StateInputQueue* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
+
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
     CGS_ASSERT(mpCache == 0, "mpCache == NULL");
-    for (s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
-         liId = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+    for (s32 liId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
+         liId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
     {
         if (liId == 64)
         {
@@ -324,11 +324,11 @@ bool CrashedHudState::UpdateSetupState()
 // ARTIST 0x824767D8.
 void CrashedHudState::UpdateRunning()
 {
-    StateInputQueue* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    for (s32 liId = lpQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
-         liId = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
+    for (s32 liId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize); lpEvent;
+         liId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
     {
         const s32* lpiPayload = reinterpret_cast<const s32*>(lpEvent);
         switch (liId)
@@ -358,15 +358,15 @@ void CrashedHudState::UpdateRunning()
 
     void CrashedHudState::UpdatePermenant()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        if (lpInQueue == 0)
+
+        if (mpInGuiEventQueue == 0)
             return;
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             const s32* lpiPayload = reinterpret_cast<const s32*>(lpEvent);
             switch (liEventId)

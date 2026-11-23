@@ -337,13 +337,13 @@ namespace BrnGui
     {
         CrashNavMap::Update();
 
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liEventSize = 0;
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liEventSize);
+
+        const CgsModule::Event* lpEvent;
+        s32 liEventSize;
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
         {
             if (liEventId == KI_EVENT_MAP_PROMPTS_A || liEventId == KI_EVENT_MAP_PROMPTS_B)
             {
@@ -445,7 +445,7 @@ namespace BrnGui
             }
         }
 
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
     }
 
     // =================================================================================

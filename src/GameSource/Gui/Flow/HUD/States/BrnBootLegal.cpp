@@ -349,7 +349,7 @@ namespace BrnGui
     // ------------------------------------------------------------------ Update @ 0x82477270
     void BootLegal::Update()
     {
-        BootInQueue* lpInQueue = reinterpret_cast<BootInQueue*>(mpInGuiEventQueue);
+
 
         bool lbVideoFinished = false;   // v2:  a 510 (video-finished) event arrived this frame
         bool lbBackRequested = false;   // v39: a 45/49 (back/stop) action arrived this frame
@@ -357,9 +357,9 @@ namespace BrnGui
         bool lbStartPressed  = false;   // v38: a 143/45 (start) event arrived this frame
 
         // ---- Drain the in-queue, accumulating the per-frame flags. ----
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+        s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
         while (lpEvent != 0)
         {
             const u8* lpPayload = reinterpret_cast<const u8*>(lpEvent);
@@ -440,7 +440,7 @@ namespace BrnGui
             }
 
             const CgsModule::Event* lpNextEvent = 0;
-            liEventId = lpInQueue->GetNextEvent(lpEvent, &lpNextEvent, &liSize);
+            liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpNextEvent, &liSize);
             lpEvent   = lpNextEvent;
         }
 
@@ -451,7 +451,7 @@ namespace BrnGui
             if (lbCacheLoaded)
             {
                 meUpdateStage = E_STAGE_START_MOVIE;
-                lpInQueue->Clear();
+                mpInGuiEventQueue->Clear();
                 return;
             }
             break;
@@ -587,7 +587,7 @@ namespace BrnGui
                 BrnGui::GuiEventStopVideo lStop;
                 lStop.mVideo.Prepare();
                 mpStateInterface->OutputGuiEvent<BrnGui::GuiEventStopVideo>(lStop);
-                lpInQueue->Clear();
+                mpInGuiEventQueue->Clear();
                 return;
             }
             break;
@@ -601,7 +601,7 @@ namespace BrnGui
                 if (BrnResource::g_DLCFeatureAvailability.mBeatTheTeamGame.IsAvailable())
                 {
                     DisplaySelectionMenu();
-                    lpInQueue->Clear();
+                    mpInGuiEventQueue->Clear();
                     return;
                 }
             }
@@ -625,7 +625,7 @@ namespace BrnGui
                 mpStateInterface->GetOutputEventQueue()->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&lPortRecord), 40,
                     static_cast<s32>(sizeof(lPortRecord)));
-                lpInQueue->Clear();
+                mpInGuiEventQueue->Clear();
                 return;
             }
             // fall through to the shared accept handler.
@@ -650,10 +650,10 @@ namespace BrnGui
 
                 meUpdateStage = E_STAGE_ACCEPT_DWELL;
                 PostCommand16<71>(mpStateInterface, KI_CHANNEL_GUI_OUT);
-                lpInQueue->Clear();
+                mpInGuiEventQueue->Clear();
                 return;
             }
-            lpInQueue->Clear();
+            mpInGuiEventQueue->Clear();
             return;
 
         case E_STAGE_ACCEPT_DWELL:
@@ -668,6 +668,6 @@ namespace BrnGui
             break;
         }
 
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
     }
 }

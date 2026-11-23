@@ -112,7 +112,7 @@ void ReplayClips::OnLeave()
 
 void ReplayClips::Update()
 {
-    InGuiEventQueue* lpInQueue = reinterpret_cast<InGuiEventQueue*>(mpInGuiEventQueue);
+
 
     switch (meInternalState)
     {
@@ -141,7 +141,7 @@ void ReplayClips::Update()
         break;
     }
 
-    lpInQueue->Clear();
+    mpInGuiEventQueue->Clear();
 }
 
 bool ReplayClips::UpdateLoadResources()
@@ -177,13 +177,13 @@ bool ReplayClips::UpdateWFInit()
 
 void ReplayClips::UpdateRunning()
 {
-    InGuiEventQueue* lpInQueue = reinterpret_cast<InGuiEventQueue*>(mpInGuiEventQueue);
 
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
+    for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
          lpEvent != 0;
-         liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+         liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
     {
         if (liEventId == KI_EVENT_CONTROLLER_PRESSED && HandleControllerInputPressed(lpEvent))
             return;

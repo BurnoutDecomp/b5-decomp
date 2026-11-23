@@ -196,13 +196,13 @@ namespace BrnGui
     // Drain the in-queue, then update the menu and step the load sequencer.
     void OnlinePause::Update()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liEventSize = 0;
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liEventSize);
+
+        const CgsModule::Event* lpEvent;
+        s32 liEventSize;
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
         {
             switch (liEventId)
             {
@@ -257,7 +257,7 @@ namespace BrnGui
             }
         }
 
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
 
         mPauseOptions.Update();
         CheckForCompletedLoads();

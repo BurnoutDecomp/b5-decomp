@@ -388,7 +388,7 @@ namespace BrnGui
             UpdatePermanent();
         }
 
-        reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue)->Clear();
+        mpInGuiEventQueue->Clear();
     }
 
     // Once the gallery package is resident: register the four tabs as the expected apt
@@ -451,13 +451,13 @@ namespace BrnGui
     // groups, then run the delayed snapshot export when one is pending.
     void ImageGalleryState::UpdateRunning()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liEventSize = 0;
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liEventSize);
+
+        const CgsModule::Event* lpEvent;
+        s32 liEventSize;
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
              lpEvent != 0 && meInternalState != E_INTERNALSTATE_LEFT;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
         {
             switch (liEventId)
             {
@@ -522,13 +522,13 @@ namespace BrnGui
     // Every live frame: forward apt "loaded" triggers to the components.
     void ImageGalleryState::UpdatePermanent()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liEventSize = 0;
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liEventSize);
+
+        const CgsModule::Event* lpEvent;
+        s32 liEventSize;
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
         {
             if (liEventId == KI_EVENT_APT_TRIGGER)
             {

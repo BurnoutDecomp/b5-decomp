@@ -458,19 +458,19 @@ namespace BrnGui
     // @ 0x8247E500 -- the profile stage machine (see the header's InternalState).
     void BootProfile::Update()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        if (lpInQueue == 0)
+
+        if (mpInGuiEventQueue == 0)
             return;
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
 
         switch (meInternalState)
         {
         case E_INTERNALSTATE_GETCACHE:
-            for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+            for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
                  lpEvent != 0;
-                 liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+                 liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
             {
                 if (liEventId == KI_EVENT_GUI_CACHE)
                 {
@@ -482,21 +482,21 @@ namespace BrnGui
                     meInternalState = E_INTERNALSTATE_WAIT_RESOURCES;
                 }
             }
-            lpInQueue->Clear();
+            mpInGuiEventQueue->Clear();
             break;
 
         case E_INTERNALSTATE_WAIT_RESOURCES:
             CGS_ASSERT(mpGuiCache != 0, "mpGuiCache != NULL");   // cpp:376
             if (!mpGuiCache->EnsureResourcesAreLoaded(maResourcesToLoad, muNumResourcesToLoad))
             {
-                lpInQueue->Clear();
+                mpInGuiEventQueue->Clear();
                 break;
             }
             // X360 passes flow 0 to both watcher calls.
             mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
             mProfileMessage.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache);
             meInternalState = E_INTERNALSTATE_WAIT_FOR_MESSAGE;
-            lpInQueue->Clear();
+            mpInGuiEventQueue->Clear();
             break;
 
         case E_INTERNALSTATE_WAIT_FOR_MESSAGE:
@@ -505,7 +505,7 @@ namespace BrnGui
             // movie has a message to replay.
             if (mbCheckDiskSpace && !mProfileMessage.HasMessage())
             {
-                lpInQueue->Clear();
+                mpInGuiEventQueue->Clear();
                 break;
             }
             // Post the render-mode command 138 (the game bridges it to the dispatch
@@ -513,20 +513,20 @@ namespace BrnGui
             PostCommand16<138>(mpStateInterface, KI_CHANNEL_GUI_OUT);
             mpStateInterface->PlayAptMovie("SaveLoadComponent", 3);
             meInternalState = E_INTERNALSTATE_WAIT_INITIALISE;
-            lpInQueue->Clear();
+            mpInGuiEventQueue->Clear();
             break;
 
         case E_INTERNALSTATE_WAIT_INITIALISE:
             CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");   // cpp:410
             if (!CacheAreAllAptComponentsInitialised(mpGuiCache))
             {
-                lpInQueue->Clear();
+                mpInGuiEventQueue->Clear();
                 break;
             }
             if (!mbCheckDiskSpace && mpProfileManager != 0
                 && mpProfileManager->GetProgressionData() == 0)
             {
-                lpInQueue->Clear();
+                mpInGuiEventQueue->Clear();
                 break;
             }
             if (mbCheckDiskSpace)
@@ -540,30 +540,30 @@ namespace BrnGui
                 mpProfileManager->Bootup(*this, true);
             }
             meInternalState = E_INTERNALSTATE_RUNNING;
-            lpInQueue->Clear();
+            mpInGuiEventQueue->Clear();
             break;
 
         case E_INTERNALSTATE_RUNNING:
-            for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+            for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
                  lpEvent != 0;
-                 liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+                 liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
             {
                 if (liEventId == KI_EVENT_CONTROLLER)
                     HandleControllerInput(lpEvent);
             }
-            lpInQueue->Clear();
+            mpInGuiEventQueue->Clear();
             break;
 
         case E_INTERNALSTATE_LEAVING:
             if (!mbCheckDiskSpace)
                 mpStateInterface->PlayLoadingScreen();
             PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
-            lpInQueue->Clear();
+            mpInGuiEventQueue->Clear();
             break;
 
         default:
             CGS_ASSERT(false, "Invalid internal state");   // cpp:464
-            lpInQueue->Clear();
+            mpInGuiEventQueue->Clear();
             break;
         }
 

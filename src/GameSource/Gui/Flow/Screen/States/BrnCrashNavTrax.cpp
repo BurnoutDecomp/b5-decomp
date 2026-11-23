@@ -236,7 +236,7 @@ namespace BrnGui
         }
 
         // The in-queue is cleared unconditionally, so an event no rung consumed is dropped.
-        reinterpret_cast<CrashNavTraxInQueue*>(mpInGuiEventQueue)->Clear();
+        mpInGuiEventQueue->Clear();
     }
 
     // ---- UpdateInitSetup @0x824C1DE0 ------------------------------------------------
@@ -244,14 +244,14 @@ namespace BrnGui
     // "setup done" command -- it only latches the cache and reports true.
     bool CrashNavTrax::UpdateInitSetup()
     {
-        CrashNavTraxInQueue* lpInQueue =
-            reinterpret_cast<CrashNavTraxInQueue*>(mpInGuiEventQueue);
+
+
 
         bool lbSetupDone = false;
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+        s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
         while (lpEvent != 0)
         {
             if (liEventId == KI_EVENT_GUI_CACHE)
@@ -264,7 +264,7 @@ namespace BrnGui
                 mpGuiCache  = lpCache;
             }
 
-            liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+            liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
         }
 
         return lbSetupDone;
@@ -320,12 +320,12 @@ namespace BrnGui
     // ---- UpdatePermanent @0x824E03B8 ------------------------------------------------
     void CrashNavTrax::UpdatePermanent()
     {
-        CrashNavTraxInQueue* lpInQueue =
-            reinterpret_cast<CrashNavTraxInQueue*>(mpInGuiEventQueue);
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+        s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
         while (lpEvent != 0)
         {
             switch (liEventId)
@@ -343,7 +343,7 @@ namespace BrnGui
                 break;
             }
 
-            liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+            liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
         }
     }
 

@@ -950,13 +950,13 @@ namespace BrnGui
     // takes the FSM elsewhere), leaving the remaining events for the Clear() below.
     void CarSelectMain::ProcesssIncomingEvents()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
 
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             if (meCurrentState == E_CARSELECT_INVALID)
                 break;
@@ -1104,7 +1104,7 @@ namespace BrnGui
             }
         }
 
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
     }
 }
 

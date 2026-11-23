@@ -1,6 +1,7 @@
 #include "GameSource/Gui/Flow/Overlay/States/BrnBaseWaitOverlayState.h"
 
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // the 18432 in-queue view
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"   // InputBuffer::GuiEventQueue (the in-queue type)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"       // GuiOverlayWaitFinishRequest
 
 // BrnGui::BaseWaitOverlayState -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -11,14 +12,6 @@
 
 namespace BrnGui
 {
-namespace
-{
-    typedef CgsModule::VariableEventQueue<18432, 16> OverlayStateInQueue;
-
-    // The game's "this wait popup may finish now" request (the id the overlays
-    // director forwards; see BrnGuiOverlaysDirector).
-    const s32 KI_EVENT_OVERLAY_WAIT_FINISH = 188;
-}
 
 // @ 0x824B1B50
 void BaseWaitOverlayState::SetupOverlay(const GuiOverlayFullInfoResponse* lpResponse)
@@ -36,24 +29,27 @@ void BaseWaitOverlayState::SetupOverlay(const GuiOverlayFullInfoResponse* lpResp
 // @ 0x824B26D0
 bool BaseWaitOverlayState::UpdateRunning()
 {
-    OverlayStateInQueue* lpInQueue = reinterpret_cast<OverlayStateInQueue*>(mpInGuiEventQueue);
-
-    const CgsModule::Event* lpEvent = NULL;
-    s32 liSize = 0;
-    s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+    // DWARF locals (BrnGuiOverlayUnity CU): lpEvent cpp:43, liEventSize :44, liEventId :45,
+    // lpLeaveRequest :53. Neither out-param is initialised and the queue member is
+    // re-read for each call (ARTIST 0x824B26D0).
+    const CgsModule::Event* lpEvent;
+    s32 liEventSize;
+    s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
     while (lpEvent != NULL)
     {
-        // The wait-finish request's leading qword is the overlay id (asm: cmpld of
-        // the payload +0x00 against mCurrentOverlayId @+0x110 -- the Hex-Rays +4 is
-        // a decompiler artifact).
-        if (liEventId == KI_EVENT_OVERLAY_WAIT_FINISH &&
-            *reinterpret_cast<const CgsID*>(lpEvent) == mCurrentOverlayId)
+        // 188: GuiOverlayWaitFinishRequest's wire id (its GetEventType()).
+        if (liEventId == 188)
         {
-            meLeaveMethod = GuiOverlayCompleteEvent::E_LEAVEMETHOD_NONE;
-            return true;
+            const GuiOverlayWaitFinishRequest* lpLeaveRequest =
+                static_cast<const GuiOverlayWaitFinishRequest*>(static_cast<const void*>(lpEvent));
+            if (lpLeaveRequest->mOverlayId == mCurrentOverlayId)
+            {
+                meLeaveMethod = GuiOverlayCompleteEvent::E_LEAVEMETHOD_NONE;
+                return true;
+            }
         }
 
-        liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
     }
 
     return false;

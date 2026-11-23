@@ -732,10 +732,10 @@ namespace BrnGui
     // ARTIST824AB808. Process the registered original events, then loading/timer/leave work.
     void OnlineInstantResultsState::Update()
     {
-        StateInputQueue* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liEventId = lpQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+        s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
         for (s32 liPlayer = 0; liPlayer < mOnlinePostEvent.miNumPlayersInEvent; ++liPlayer)
         {
             CGS_ASSERT(static_cast<s32>(mOnlinePostEvent.maRecords[liPlayer].miResultsTablePosition) >= 0,
@@ -872,9 +872,9 @@ namespace BrnGui
                 CGS_ASSERT(false, "Unexpected event in OnlineInstantResultsState::Update");
                 break;
             }
-            liEventId = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+            liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
         }
-        lpQueue->Clear();
+        mpInGuiEventQueue->Clear();
         CheckForCompletedLoads();
 
         if (meCurrentState == E_ONLINE_INSTANT_RESULTS_STANDINGSUPDATE &&

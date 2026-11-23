@@ -230,14 +230,14 @@ namespace BrnGui
     // ---- UpdateInitSetup @ 0x824CA970 ---------------------------------------------
     bool CrashNavStats::UpdateInitSetup()
     {
-        CrashNavStatsInQueue* lpInQueue =
-            reinterpret_cast<CrashNavStatsInQueue*>(mpInGuiEventQueue);
+
+
 
         bool lbSetupDone = false;
 
-        const CgsModule::Event* lpEvent = NULL;
-        s32 liSize = 0;
-        s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+        s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
         while (lpEvent != NULL)
         {
             if (liEventId == 64)
@@ -254,7 +254,7 @@ namespace BrnGui
                 lbSetupDone = true;
             }
 
-            liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+            liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
         }
 
         return lbSetupDone;
@@ -358,17 +358,17 @@ namespace BrnGui
         }
 
         // The in-queue is cleared unconditionally, so an event no rung consumed is dropped.
-        reinterpret_cast<CrashNavStatsInQueue*>(mpInGuiEventQueue)->Clear();
+        mpInGuiEventQueue->Clear();
     }
 
     // ---- UpdatePermanent @ 0x824C1690 ---------------------------------------------
     void CrashNavStats::UpdatePermanent()
     {
-        CrashNavStatsInQueue* lpInQueue = reinterpret_cast<CrashNavStatsInQueue*>(mpInGuiEventQueue);
 
-        const CgsModule::Event* lpEvent = NULL;
-        s32 liSize = 0;
-        s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+        s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
         while (lpEvent != NULL)
         {
             switch (liEventId)
@@ -390,7 +390,7 @@ namespace BrnGui
                     break;
             }
 
-            liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+            liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
         }
     }
 }

@@ -288,13 +288,13 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::Update()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             switch (liEventId)
             {
@@ -391,7 +391,7 @@ namespace BrnGui
 
         mRouteInfoDisplay.Update(mpInGuiEventQueue);
 
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
 
         // The players have been up long enough: tell the game, then wait for the mode.
         if (mfUpdateTimer > KF_LOADING_SCREEN_UPDATE_TIMEOUT && meSubState == E_SUBSTATE_MAIN)

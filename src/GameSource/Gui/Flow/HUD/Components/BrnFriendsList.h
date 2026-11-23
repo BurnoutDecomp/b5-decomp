@@ -123,7 +123,7 @@ namespace BrnGui
         void WithdrawBranches();                                                        // 0x824234B8
         void ShowFriendsListBranch();                                                   // 0x82422E18
         void ShowShortcutsBranch();                                                     // 0x82423120
-        void Highlight(s32 liRow);                                                      // 0x82414960
+        void Highlight(s8 li8Row);                                                      // 0x82414960 (DWARF h: Highlight(int8_t))
         void SetEntryData(s32 liRow, const char* lpcText, s32 leStatus, bool lbLocalise); // 0x82422CB0
         void HandleNotConnected();                                                      // 0x8242B948
         void HandleNoFriends();                                                         // 0x8242BA40
@@ -151,59 +151,54 @@ namespace BrnGui
         friend struct RaceMainHudState;
         friend struct FBurnMainHudState;
 
-        // ---- current selection cursor (X360 +0x870..+0x894) ----
-        u32 muCachedCacheField;   // +0x870 -- cached GuiCache far field (set by SetGuiCachePointer)
-        s32 meListType;           // +0x874 -- 1 friends / 2 shortcuts / 3 challenges (SaveCurrentState switch @0x82414A10)
-        s32 mePanelState;         // +0x878 -- 0 closed / 1 opening / 2 open / 5 dismissed
-        s32 meBranchState;        // +0x87C -- EFriendListBranchState
-        s8  mi8FirstVisibleIndex; // +0x880 -- scroll-window top row
-        s8  mi8SelectedRowIndex;  // +0x881 -- highlighted row within window
-        s8  mi8SelectedIndex;     // +0x882 -- highlighted entry (signed); drives the scroll indicator
-        u32 muNumEntries;         // +0x894 -- total entries (scroll-indicator bound)
-
-        // ---- the GuiCache this component reads through (X360 +0x4100) ----
-        GuiCache* mpGuiCache;     // +0x4100 -- set by SetGuiCachePointer
-
-        // ---- dirty snapshot region the renderer picks up (X360 +0x4108..+0x411A) ----
-        u32 muSnapshotA;          // +0x4108 = muSelectionB
-        u32 muSnapshotB;          // +0x410C = muSelectionC
-        u32 muSnapshotC;          // +0x4110 = muSelectionA
-        u32 muScrollIndicator;    // +0x4114 -- 0..3, from selected index vs count
-        u8  mbDirty;              // +0x4118 -- raised to 1 by SetDirty
-        u8  mbSnapshotFlagA;      // +0x4119 = mbSelectionFlagA
-        u8  mbSnapshotFlagB;      // +0x411A = mbSelectionFlagB
         // ---- one online-friend record [friends wave]: stride 0x84, base +0xBEC ----
         typedef BrnNetwork::BrnNetworkModuleIO::BuddyInformation SFriendRecord;
 
+
     private:
-        // ---- [friends wave] asm-pinned additions (offsets in comments) ----
+        // ---- data members: DWARF BrnFriendsList.h:132 order and names (the X360 offsets each
+        // one lands on are the ones the ARTIST bodies use; widths follow the DWARF types) ----
+        s32   maeAvailableShortcutOptions[E_SHORTCUTOPTION_COUNT];  // +0x00C EShortcutOptions[21] (sentinel NONE)
+        s32   maeAvailableShortcutBranchOptions[3];                 // +0x060 EShortcutBranchOptions[3] (Construct seeds 15)
+        CgsID maChallengesAvailable[256];                           // +0x070 ((idx+14)*8 addressing)
+        s32   miPlayerCount;                                        // +0x870 (SetGuiCachePointer: cache +0xAC74)
+        s32   meListType;                                           // +0x874 EListType: 1 friends / 2 shortcuts / 3 challenges
+        s32   meCurrentState;                                       // +0x878 EFriendListState: 0 invisible / 1 transin / 2 idle / 5 transout
+        s32   meBranchState;                                        // +0x87C EFriendListBranchState
+        s8    miCurrentlyActiveSlots;                               // +0x880
+        s8    miCurrentlyHighlightedSlot;                           // +0x881
+        s8    miCurrentlyHighlightedOption;                         // +0x882 (signed; drives the scroll indicator)
+        s8    miCurrentlyHighlightedBranch;                         // +0x883
+        CgsNetwork::PlayerName mCurrentlySelectedName;              // +0x884
+        s32   miTotalOptions;                                       // +0x894
+        bool  mbVisible;                                            // +0x898
+        bool  mbCanSendInvites;                                     // +0x899 (poked inline by RaceMainHudState/FBurnMainHudState)
+        s32   meDataCollectionState;                                // +0x89C EDataCollection: 0 wait-number / 1 wait-data / 2 running
         FriendsListEntry maEntries[KI_VISIBLE_ROWS];                // +0x8A0 (stride 0x98)
-        s32  maeAvailableShortcutOptions[E_SHORTCUTOPTION_COUNT];   // +0x00C, sentinel NONE(21)
-        s32  mauNumBranches[3];                                     // +0x060 (Construct seeds 15)
-        CgsID mau64ChallengeIds[256];             // +0x070 ((idx+14)*8 addressing)
-        BrnFlapt::TextFieldRef  maBranchLabelFields[3];             // +0xB98 ("branchOptionOne_txt" chain)
-        BrnFlapt::TextFieldRef  mListTitleField;                    // +0xBBC ("listTitle_mc"/"listTitle_txt")
-        // CORRECTED [stuntrace F2] 2026-08-27 -- these three were named ONE SLOT OFF
-        // (mUpArrowClip/mDownArrowClip/mThirdClip at +0xBC8/+0xBD0/+0xBD8). Prepare
-        // @0x8242B188 binds them in this order, which pins each one by its apt name:
+        BrnFlapt::TextFieldRef mBranchTextfields[3];                // +0xB98 ("branchOptionOne_txt" chain)
+        BrnFlapt::TextFieldRef mListTitleTextfield;                 // +0xBBC ("listTitle_mc"/"listTitle_txt")
+        // Prepare @0x8242B188 binds these in this order, which pins each one by its apt name:
         //   @0x8242B3A0  mAptRef.FindChildMovieClip("branch_mc")                        -> +0xBC8
         //   @0x8242B3D4/E4 mAptRef["upArrow_mc"].FindChildMovieClip("arrow")            -> +0xBD0
         //   @0x8242B410/20 mAptRef["downArrow_mc"].FindChildMovieClip("arrow")          -> +0xBD8
-        // UpdateAptVariables @0x82423558 corroborates it independently: +0xBC8 takes the
-        // BRANCH-state frame label and the highlighted branch row's Y position, while
-        // +0xBD0/+0xBD8 are the two SetVisible targets of the 0..3 scroll indicator
-        // (SetDirty's base 2 == "can scroll up" -> +0xBD0, its +1 == "can scroll down"
-        // -> +0xBD8). No other TU referenced the old names.
-        BrnFlapt::MovieClipRef  mBranchClip;                        // +0xBC8 ("branch_mc")
-        BrnFlapt::MovieClipRef  mUpArrowClip;                       // +0xBD0 ("upArrow_mc"/"arrow")
-        BrnFlapt::MovieClipRef  mDownArrowClip;                     // +0xBD8 ("downArrow_mc"/"arrow")
-        SFriendRecord maRecords[KI_MAX_FRIEND_RECORDS];             // +0xBEC (memset span 0x3390)
-        s32  maeDisplayTypes[KI_MAX_FRIEND_RECORDS];                // +0x3F70 (EFriendListEntryState)
-        s8   mi8CurrentlyHighlightedBranch;                         // +0x883
-        CgsNetwork::PlayerName mHighlightedName;                    // +0x884
-        u8   mabEntryFlags[2];                                      // +0x898
-        s32  meDataState;                                           // +0x89C (0 none/1 requested/2 ready)
-        bool mbReopenAfterClose;                                    // +0x4104 (TransitionCompleteCallback)
+        // UpdateAptVariables @0x82423558 corroborates it: +0xBC8 takes the BRANCH-state frame
+        // label and the highlighted branch row's Y position, +0xBD0/+0xBD8 are the two
+        // SetVisible targets of the 0..3 arrow configuration.
+        BrnFlapt::MovieClipRef mBranchRef;                          // +0xBC8 ("branch_mc")
+        BrnFlapt::MovieClipRef mUpArrowRef;                         // +0xBD0 ("upArrow_mc"/"arrow")
+        BrnFlapt::MovieClipRef mDownArrowRef;                       // +0xBD8 ("downArrow_mc"/"arrow")
+        SFriendRecord maFullBuddyList[KI_MAX_FRIEND_RECORDS];       // +0xBE0 (stride 0x84; memset span 0x3390)
+        s32   maeFullBuddyEntryState[KI_MAX_FRIEND_RECORDS];        // +0x3F70 FriendsListEntry::EFriendListEntryState
+        GuiCache* mpGuiCache;                                       // +0x4100 (set by SetGuiCachePointer)
+        bool  mbTriggerHideFriendsList;                             // +0x4104 (TransitionCompleteCallback)
+        // ---- the dirty snapshot the renderer picks up (SetDirty) ----
+        s32   meDirtyCurrentState;                                  // +0x4108
+        s32   meDirtyBranchState;                                   // +0x410C
+        s32   meDirtyListType;                                      // +0x4110
+        s32   meDirtyArrowConfiguration;                            // +0x4114 EArrowConfigurations (0..3)
+        bool  mbDirty;                                              // +0x4118
+        s8    miDirtyCurrentlyActiveSlots;                          // +0x4119
+        s8    miDirtyCurrentlyHighlightedSlot;                      // +0x411A
     };
 
     // Free post-increment / post-decrement over the friends-list branch enum

@@ -177,7 +177,7 @@ void Credits::Update()
         break;
     }
 
-    reinterpret_cast<CreditsInQueue*>(mpInGuiEventQueue)->Clear();
+    mpInGuiEventQueue->Clear();
 }
 
 // @ 0x824CFBD8
@@ -206,11 +206,11 @@ bool Credits::UpdateLoadResources()
 // @ 0x824C1EE0
 void Credits::UpdateRunning()
 {
-    CreditsInQueue* lpInQueue = reinterpret_cast<CreditsInQueue*>(mpInGuiEventQueue);
 
-    const CgsModule::Event* lpEvent = NULL;
-    s32 liSize = 0;
-    s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
+    s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
     while (lpEvent != NULL)
     {
         if (liEventId == 6 && meInternalState == E_INTERNALSTATE_RUNNING)
@@ -221,7 +221,7 @@ void Credits::UpdateRunning()
                 SendStateEvent("ADVANCE");
         }
 
-        liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
     }
 }
 }

@@ -738,17 +738,17 @@ namespace BrnGui
     // the guide-forced pause.
     void InGame::Update()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
+
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
 
         // ---- pass 1: latch the GuiCache pointer (only while unset) and surface a
         //      pending lobby-disconnect overlay off the freshly-arrived cache ----------
         if (mpGuiCache == 0)
         {
-            for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+            for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
                  lpEvent != 0;
-                 liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+                 liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
             {
                 if (liEventId != KI_EVENT_GUI_CACHE)
                     continue;
@@ -773,9 +773,9 @@ namespace BrnGui
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:275
 
         // ---- pass 2: the full dispatch ---------------------------------------------
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             switch (liEventId)
             {
@@ -1048,6 +1048,6 @@ namespace BrnGui
         if (mbIsGuideVisible)
             PauseGame(false, false);
 
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
     }
 }

@@ -1309,7 +1309,7 @@ namespace BrnGui
         }
         if (mbFriendsListEnabled && mpGuiCache != 0)
         {
-            mFriendsList.mabEntryFlags[1] = GuiCache_GetGameModeType(mpGuiCache) == -1;
+            mFriendsList.mbCanSendInvites = GuiCache_GetGameModeType(mpGuiCache) == -1;
             mFriendsList.UpdateAptVariables();
         }
     }

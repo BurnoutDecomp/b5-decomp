@@ -110,13 +110,13 @@ void OnlineTeamSelection::OnLeave()
 
 void OnlineTeamSelection::Update()
 {
-    InGuiEventQueue* lpInQueue = reinterpret_cast<InGuiEventQueue*>(mpInGuiEventQueue);
 
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
+    for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
          lpEvent != 0;
-         liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+         liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
     {
         switch (liEventId)
         {
@@ -168,7 +168,7 @@ void OnlineTeamSelection::Update()
     if (meSubState == E_SUBSTATE_MAIN)
         mPlayerNameComponent.Update();
 
-    lpInQueue->Clear();
+    mpInGuiEventQueue->Clear();
 }
 
 void OnlineTeamSelection::HandleGuiCacheEvent(const CgsModule::Event* lpEvent)

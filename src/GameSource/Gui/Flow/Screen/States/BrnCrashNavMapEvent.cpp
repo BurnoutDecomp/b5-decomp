@@ -642,13 +642,13 @@ namespace BrnGui
         }
 
         // ---- the in-queue walk ------------------------------------------------------
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
 
-        const CgsModule::Event* lpEvent = 0;                               // cpp:140
-        s32 liEventSize = 0;                                               // cpp:141
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liEventSize);  // cpp:142
+
+        const CgsModule::Event* lpEvent;                               // cpp:140
+        s32 liEventSize;                                               // cpp:141
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);  // cpp:142
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
         {
             if (liEventId == KI_EVENT_KEYBOARD_RESPONSE)
             {
@@ -725,7 +725,7 @@ namespace BrnGui
             mbShouldUpdateRoute = false;
         }
 
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
 
 
     }

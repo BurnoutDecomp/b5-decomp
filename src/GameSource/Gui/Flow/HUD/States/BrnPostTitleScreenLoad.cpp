@@ -63,13 +63,13 @@ namespace BrnGui
 
     void PostTitleScreenLoad::HandleIncomingEvents()
     {
-        const CgsModule::Event* lpEvent = 0;
-        s32 liEventSize = 0;
-        StateInputQueue* lpQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+        const CgsModule::Event* lpEvent;
+        s32 liEventSize;
 
-        for (s32 liEventId = lpQueue->GetFirstEvent(&lpEvent, &liEventSize);
+
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
              lpEvent != 0;
-             liEventId = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize))
         {
             switch (liEventId)
             {
@@ -146,7 +146,7 @@ namespace BrnGui
     {
         HandleIncomingEvents();
 
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
+
 
         switch (meState)
         {
@@ -176,8 +176,8 @@ namespace BrnGui
                 mbVideoFinished = false;
                 mpStateInterface->OutputGuiEvent<BrnGui::GuiEventPlayVideo>(lPlayEvent);
                 meState = E_PLAYING_VIDEO;
-                if (lpInQueue != 0)
-                    lpInQueue->Clear();
+                if (mpInGuiEventQueue != 0)
+                    mpInGuiEventQueue->Clear();
                 return;
             }
             // No intro video: the phase completes immediately.
@@ -207,7 +207,7 @@ namespace BrnGui
             break;
         }
 
-        if (lpInQueue != 0)
-            lpInQueue->Clear();
+        if (mpInGuiEventQueue != 0)
+            mpInGuiEventQueue->Clear();
     }
 }

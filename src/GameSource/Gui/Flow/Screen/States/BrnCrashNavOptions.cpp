@@ -358,7 +358,7 @@ namespace BrnGui
             UpdatePermanent();
         }
 
-        reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue)->Clear();
+        mpInGuiEventQueue->Clear();
     }
 
     // ---- UpdateInitSetup @0x824C18B8 -----------------------------------------------
@@ -368,12 +368,12 @@ namespace BrnGui
     {
         bool lbGotCache = false;
 
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        const CgsModule::Event* lpEvent = 0;
-        s32                     liSize  = 0;
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        const CgsModule::Event* lpEvent;
+        s32                     liSize;
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             if (liEventId == KI_EVENT_GUI_CACHE)
             {
@@ -433,12 +433,12 @@ namespace BrnGui
     {
         mbInputHandled = false;
 
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        const CgsModule::Event* lpEvent = 0;
-        s32                     liSize  = 0;
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        const CgsModule::Event* lpEvent;
+        s32                     liSize;
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             switch (liEventId)
             {

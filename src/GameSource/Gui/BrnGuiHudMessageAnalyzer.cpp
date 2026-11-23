@@ -2,7 +2,7 @@
 
 #include <cstring>   // std::memcpy (the delayed-message adopt)
 
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h" // CGS_ASSERT + MessageAt/StreamMessageAt
 #include "GameSource/Gui/BrnGuiCache.h"                // GuiCache accessors
 #include "GameSource/Gui/BrnGuiFreeburnChallengeManager.h" // IsRunning/IsShowingResults
 #include "GameSource/Gui/BrnGuiHudMessageDirector.h"   // HudMessageDirector::AddMessage
@@ -48,25 +48,25 @@ namespace BrnGui
 // @ 0x825179E8 (const per DWARF h:203)
 void HudMessageAnalyzer::TriggerMessage(const char* lpcMessageId) const
 {
-    // Non-gating tripwires (h:737/738).
-    CGS_ASSERT(NULL != lpcMessageId, "NULL != lpcMessageId");
-    CGS_ASSERT('\0' != lpcMessageId[0], "'\\0' != lpcMessageId[0]");
+    // Non-gating tripwires: ARTIST bakes BrnGuiHudMessageAnalyzer.h:737/738/747 (a header body).
+    CGS_ASSERT(NULL != lpcMessageId, CgsDev::Assert::MessageAt("NULL != lpcMessageId", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.h", 737));
+    CGS_ASSERT('\0' != lpcMessageId[0], CgsDev::Assert::MessageAt("'\\0' != lpcMessageId[0]", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.h", 738));
 
     GuiHudMessage lMessage;
     lMessage.Construct(lpcMessageId);
 
-    // h:747 -- the X360 streams "Invalid HUD message director"; folded static.
-    CGS_ASSERT(mpHudMessageDirector != NULL, "Invalid HUD message director");
+    // h:747 -- streamed ("Invalid HUD message director").
+    CGS_ASSERT(mpHudMessageDirector != NULL, CgsDev::Assert::StreamMessageAt("Invalid HUD message director", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.h", 747));
     mpHudMessageDirector->AddMessage(&lMessage, false);
 }
 
 // @ 0x82517AF8 (const per DWARF h:208)
 void HudMessageAnalyzer::TriggerMessage(const GuiHudMessage* lpMessage) const
 {
-    // Non-gating tripwires (h:764 "Invalid HUD message" / h:~770 director check;
-    // both streamed on the X360, folded static).
-    CGS_ASSERT(NULL != lpMessage, "Invalid HUD message");
-    CGS_ASSERT(mpHudMessageDirector != NULL, "Invalid HUD message director");
+    // Non-gating tripwires, both streamed: BrnGuiHudMessageAnalyzer.h:764 / :772 (ARTIST
+    // 0x82517B7C / 0x82517BE0).
+    CGS_ASSERT(NULL != lpMessage, CgsDev::Assert::StreamMessageAt("Invalid HUD message", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.h", 764));
+    CGS_ASSERT(mpHudMessageDirector != NULL, CgsDev::Assert::StreamMessageAt("Invalid HUD message director", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.h", 772));
     mpHudMessageDirector->AddMessage(lpMessage, false);
 }
 

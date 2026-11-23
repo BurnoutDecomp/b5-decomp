@@ -560,11 +560,11 @@ namespace BrnGui
     // ================================================================================
     void Intro::HandleIncomingEvents()
     {
-        InGuiEventQueue* lpInQueue = reinterpret_cast<InGuiEventQueue*>(mpInGuiEventQueue);
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liEventType = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+        s32 liEventType = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
 
         while (lpEvent != 0)
         {
@@ -706,7 +706,7 @@ namespace BrnGui
             }
             }
 
-            liEventType = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+            liEventType = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
         }
     }
 

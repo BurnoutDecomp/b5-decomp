@@ -1860,13 +1860,13 @@ namespace BrnGui
             if (mpCache != 0)
             {
                 // @0x82480B40..0x82480B70: `stb r11, 0x25F1(r29)` -- +0x25F1 is mFriendsList
-                // (+0x1D58) + 0x899 == FriendsListComponent::mabEntryFlags[1], set for game
+                // (+0x1D58) + 0x899 == FriendsListComponent::mbCanSendInvites, set for game
                 // modes 15 and 16 only. No accessor exists for that byte in the ledger, so
                 // BrnFriendsList.h grants this state friendship (the same pattern
                 // BrnDistrictMarker.h and BrnRoadRuleComponent.h use for the freeburn state).
                 // FLAG: the byte's semantics are unrecovered -- it is set, not interpreted.
                 const s32 liGameMode = mpCache->GetGameMode();
-                mFriendsList.mabEntryFlags[1] =
+                mFriendsList.mbCanSendInvites =
                     static_cast<u8>((liGameMode == 15 || liGameMode == 16) ? 1 : 0);
             }
             mFriendsList.UpdateAptVariables();                              // @0x82480B78

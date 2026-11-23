@@ -146,13 +146,13 @@ bool ReplayOutro::UpdateLoadResources()
 // ------------------------------------------------ UpdateRunning @ 0x824D5118
 void ReplayOutro::UpdateRunning()
 {
-    ReplayInQueue* lpInQueue = reinterpret_cast<ReplayInQueue*>(mpInGuiEventQueue);
+
 
     // Drain the in-queue; on the controller-accept event (id 21) route the outro to
     // credits or advance, then post the { 8, 25, 12, 0, 1.0f } option command (ch 40).
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
+    s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
     while (lpEvent != 0)
     {
         if (liEventId == KI_EVENT_ACCEPT)   // 21
@@ -169,7 +169,7 @@ void ReplayOutro::UpdateRunning()
         }
 
         const CgsModule::Event* lpNextEvent = 0;
-        liEventId = lpInQueue->GetNextEvent(lpEvent, &lpNextEvent, &liSize);
+        liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpNextEvent, &liSize);
         lpEvent   = lpNextEvent;
     }
 }
@@ -177,7 +177,7 @@ void ReplayOutro::UpdateRunning()
 // ------------------------------------------------ Update @ 0x824DB868
 void ReplayOutro::Update()
 {
-    ReplayInQueue* lpInQueue = reinterpret_cast<ReplayInQueue*>(mpInGuiEventQueue);
+
 
     switch (meState)
     {
@@ -207,6 +207,6 @@ void ReplayOutro::Update()
         break;
     }
 
-    lpInQueue->Clear();   // shared tail: VariableEventQueue<18432,16>::Clear(mpInGuiEventQueue)
+    mpInGuiEventQueue->Clear();   // shared tail: VariableEventQueue<18432,16>::Clear(mpInGuiEventQueue)
 }
 }   // namespace BrnGui

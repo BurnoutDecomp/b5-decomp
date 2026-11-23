@@ -171,19 +171,19 @@ namespace BrnGui
     void BootVideos::Update()
     {
         // The in-queue holds the GUI events delivered to this state (cache-ready, video-finished, ...).
-        BootInQueue* lpInQueue = reinterpret_cast<BootInQueue*>(mpInGuiEventQueue);
-        if (lpInQueue == 0)
+
+        if (mpInGuiEventQueue == 0)
             return;
 
         // @0x824787A4-C8 -- THE PRE-PASS, before the stage switch and on EVERY call: any
         // video-tick event carrying sub-id 49 is a skip request, and it is answered with a
         // StopVideo regardless of which stage we are in.
         {
-            const CgsModule::Event* lpScan = 0;
-            s32 liScanSize = 0;
-            for (s32 liScanId = lpInQueue->GetFirstEvent(&lpScan, &liScanSize);
+            const CgsModule::Event* lpScan;
+            s32 liScanSize;
+            for (s32 liScanId = mpInGuiEventQueue->GetFirstEvent(&lpScan, &liScanSize);
                  lpScan != 0;
-                 liScanId = lpInQueue->GetNextEvent(lpScan, &lpScan, &liScanSize))
+                 liScanId = mpInGuiEventQueue->GetNextEvent(lpScan, &lpScan, &liScanSize))
             {
                 if (liScanId != KI_EVENT_VIDEO_TICK)
                     continue;
@@ -199,13 +199,13 @@ namespace BrnGui
         {
             PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
             meUpdateStage = E_UPDATE_STAGE_DONE;
-            lpInQueue->Clear();
+            mpInGuiEventQueue->Clear();
             return;
         }
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+        s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
         while (liEventId >= 0 && lpEvent != 0)
         {
             switch (meUpdateStage)
@@ -274,10 +274,10 @@ namespace BrnGui
             }
 
             const CgsModule::Event* lpNextEvent = 0;
-            liEventId = lpInQueue->GetNextEvent(lpEvent, &lpNextEvent, &liSize);
+            liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpNextEvent, &liSize);
             lpEvent = lpNextEvent;
         }
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
     }
 
     void BootVideos::GetResourcesToLoad(const CgsGui::sResourceTuple** lppResourceTuples,

@@ -218,14 +218,14 @@ namespace BrnGui
     // feedback (137): replay the options profile's settings and hand the flow on.
     void ScreenLoading::Update()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
+
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
 
         // ---- pass 1: the cache pointer -----------------------------------------------
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             if (liEventId == KI_EVENT_GUI_CACHE)
             {
@@ -246,9 +246,9 @@ namespace BrnGui
         }
 
         // ---- pass 2: the load-complete hand-off ---------------------------------------
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             if (liEventId == KI_EVENT_GUI_CACHE)
                 continue;   // consumed by pass 1
@@ -277,7 +277,7 @@ namespace BrnGui
             }
         }
 
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
     }
 
     // @ 0x824D0DC0 -- ask the loaded options profile to publish its "other modules"

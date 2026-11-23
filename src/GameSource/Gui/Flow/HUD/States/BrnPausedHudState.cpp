@@ -114,15 +114,15 @@ namespace
 // @ 0x8247CC58
 void PausedHudState::Update()
 {
-    StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-    if (lpInQueue == 0)
+
+    if (mpInGuiEventQueue == 0)
         return;
 
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+    const CgsModule::Event* lpEvent;
+    s32 liSize;
+    for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
          lpEvent != 0;
-         liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+         liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
     {
         const s32* lpiPayload = reinterpret_cast<const s32*>(lpEvent);
 
@@ -187,7 +187,7 @@ void PausedHudState::Update()
         CGS_ASSERT(false, "Unexpected event in IntroHudState::Update");
     }
 
-    lpInQueue->Clear();
+    mpInGuiEventQueue->Clear();
 }
 
 } // namespace BrnGui

@@ -2,7 +2,8 @@
 
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // GetLanguageManager
 #include "GameShared/GameClasses/Language/CgsLanguageManager.h"           // FormatAndAddText
-#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"          // the 18432 in-queue view
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // InputBuffer::GuiEventQueue (the in-queue type)
+#include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayWaitFinishRequest
 
 // BrnGui::BaseOkOverlayState -- reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -12,24 +13,11 @@
 //     misattributed to CgsGuiStateInterface.h, marked reviewed with no committed
 //     body; landed at its real home)
 
+// The dynamic loc-string key the button label is (re)published under ("TEMP_POPUP_STRING1",
+// @0x82064154) and its "$"-prefixed lookup form the help item consumes (@0x82064140) are
+// literals: ARTIST addresses both directly (lis/addi), with no file-scope pointer behind them.
 namespace BrnGui
 {
-namespace
-{
-    typedef CgsModule::VariableEventQueue<18432, 16> OverlayStateInQueue;
-
-    const s32 KI_EVENT_CONTROLLER_ACTION   = 6;
-    const s32 KI_EVENT_OVERLAY_WAIT_FINISH = 188;
-
-    // The controller-action sub-id that accepts a popup (the same id 49 the
-    // credits/boot states treat as their advance action).
-    const s32 KI_ACTION_POPUP_OK = 49;
-
-    // The dynamic loc-string key the button label is (re)published under, and its
-    // "$"-prefixed lookup form the help item consumes.
-    const char* KPC_TEMP_POPUP_STRING1        = "TEMP_POPUP_STRING1";
-    const char* KPC_TEMP_POPUP_STRING1_LOOKUP = "$TEMP_POPUP_STRING1";
-}
 
 // @ 0x824B1BC0
 void BaseOkOverlayState::SetupOverlay(const GuiOverlayFullInfoResponse* lpResponse)
@@ -45,24 +33,24 @@ void BaseOkOverlayState::SetupOverlay(const GuiOverlayFullInfoResponse* lpRespon
     // X360 passes the parameter's raw meParamType word as the vararg format type
     // (lwz 0xEC -> r9), NOT the KE_POPUP_PARAM_LOOKUP mapping the message path uses --
     // preserved as-is.
-    CgsLanguage::LanguageManager* lpLanguageManager = mpStateInterface->GetLanguageManager();
+    // DWARF (BrnGuiOverlayUnity CU) lists GetLanguageManager twice: one call per arm.
     if (lpResponse->mbButon1ParamUsed)
     {
-        lpLanguageManager->FormatAndAddText(
-            KPC_TEMP_POPUP_STRING1, lpResponse->macButton1Id,
+        mpStateInterface->GetLanguageManager()->FormatAndAddText(
+            "TEMP_POPUP_STRING1", lpResponse->macButton1Id,
             CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 1,
             lpResponse->mButton1Param.macParameter,
             static_cast<s32>(lpResponse->mButton1Param.meParamType));
     }
     else
     {
-        lpLanguageManager->FormatAndAddText(
-            KPC_TEMP_POPUP_STRING1, lpResponse->macButton1Id,
+        mpStateInterface->GetLanguageManager()->FormatAndAddText(
+            "TEMP_POPUP_STRING1", lpResponse->macButton1Id,
             CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
     }
 
     // Help item 2 carries the label with the SELECT (accept) glyph.
-    mHelpItem2Component.SetItem(KPC_TEMP_POPUP_STRING1_LOOKUP,
+    mHelpItem2Component.SetItem("$TEMP_POPUP_STRING1",
                                 FlaptButtonIconComponent::E_PADBUTTON_SELECT,
                                 FlaptButtonIconComponent::E_PADBUTTON_INVISIBLE, true);
 }
@@ -70,32 +58,37 @@ void BaseOkOverlayState::SetupOverlay(const GuiOverlayFullInfoResponse* lpRespon
 // @ 0x824B2770
 bool BaseOkOverlayState::UpdateRunning()
 {
-    OverlayStateInQueue* lpInQueue = reinterpret_cast<OverlayStateInQueue*>(mpInGuiEventQueue);
-
-    const CgsModule::Event* lpEvent = NULL;
-    s32 liSize = 0;
-    s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+    // DWARF locals (BrnGuiOverlayUnity CU): lpEvent cpp:43, liEventSize :44, liEventId :45,
+    // lpEventPressed :53 (a GuiEventControllerInputPressed). Neither out-param is initialised
+    // and the queue member is re-read for each call (ARTIST 0x824B2770).
+    const CgsModule::Event* lpEvent;
+    s32 liEventSize;
+    s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liEventSize);
     while (lpEvent != NULL)
     {
-        if (liEventId == KI_EVENT_CONTROLLER_ACTION)
+        // 6: GuiEventControllerInputPressed (GuiEvent<6>); 49: the accept button.
+        if (liEventId == 6)
         {
-            // The action sub-id rides the payload's second word.
-            const s32 liAction =
+            // FLAG: miButtonId is read at payload +4 (ARTIST `lwz r11, 4(r4)`); the tree's
+            // GuiEvent<N> base still carries a 12-byte header, so the DWARF member access
+            // (lpEventPressed->miButtonId) would read +0x10 until that base is emptied.
+            const s32 liButtonId =
                 *reinterpret_cast<const s32*>(reinterpret_cast<const u8*>(lpEvent) + 4);
-            if (liAction == KI_ACTION_POPUP_OK)
+            if (liButtonId == 49)
             {
                 meLeaveMethod = GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK;
                 return true;
             }
         }
-        else if (liEventId == KI_EVENT_OVERLAY_WAIT_FINISH &&
-                 *reinterpret_cast<const CgsID*>(lpEvent) == mCurrentOverlayId)
+        // 188: GuiOverlayWaitFinishRequest's wire id (its GetEventType()).
+        else if (liEventId == 188 &&
+                 reinterpret_cast<const GuiOverlayWaitFinishRequest*>(lpEvent)->mOverlayId == mCurrentOverlayId)
         {
             meLeaveMethod = GuiOverlayCompleteEvent::E_LEAVEMETHOD_NONE;
             return true;
         }
 
-        liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize);
+        liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
     }
 
     return false;

@@ -633,8 +633,8 @@ namespace BrnGui
 
         HandleIncomingEvents();
 
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        lpInQueue->Clear();
+
+        mpInGuiEventQueue->Clear();
     }
 
     // -----------------------------------------------------------------------------------
@@ -1445,13 +1445,13 @@ namespace BrnGui
     // -----------------------------------------------------------------------------------
     void InstantResultsState::HandleIncomingEvents()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
 
-        for (s32 liEventType = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+
+        for (s32 liEventType = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != 0;
-             liEventType = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+             liEventType = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             // The X360 re-reads meCurrentState at the top of every iteration and stops
             // dispatching once the state has been invalidated (OnLeave ran).

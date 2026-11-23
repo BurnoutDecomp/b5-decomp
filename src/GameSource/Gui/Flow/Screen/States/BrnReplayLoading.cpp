@@ -80,7 +80,7 @@ bool ReplayLoading::UpdateLoadResources()
 // ------------------------------------------------ Update @ 0x824DB5B0
 void ReplayLoading::Update()
 {
-    ReplayInQueue* lpInQueue = reinterpret_cast<ReplayInQueue*>(mpInGuiEventQueue);
+
 
     switch (meLoadState)
     {
@@ -114,6 +114,6 @@ void ReplayLoading::Update()
         break;
     }
 
-    lpInQueue->Clear();   // shared tail: VariableEventQueue<18432,16>::Clear(mpInGuiEventQueue)
+    mpInGuiEventQueue->Clear();   // shared tail: VariableEventQueue<18432,16>::Clear(mpInGuiEventQueue)
 }
 }

@@ -229,15 +229,15 @@ namespace BrnGui
     // @ 0x82477F28 -- consume the cache event, then walk the preload stage machine.
     void BootPreload::Update()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        if (lpInQueue == 0)
+
+        if (mpInGuiEventQueue == 0)
             return;
 
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             if (liEventId == KI_EVENT_GUI_CACHE)
             {
@@ -266,7 +266,7 @@ namespace BrnGui
             mpStateInterface->PlayAptMovie("main", 0);
             PreloadResourcesReady(mpGuiCache, KA_PRELOAD_FLAPTHUD, 1);
             meUpdateStage = E_PRELOAD_LOADING_SCREEN;
-            lpInQueue->Clear();
+            mpInGuiEventQueue->Clear();
             return;
 
         case E_PRELOAD_LOADING_SCREEN:
@@ -278,12 +278,12 @@ namespace BrnGui
             PreloadResourcesReady(mpGuiCache, maSecondPhaseResourcesToLoad,
                                   muSecondPhaseNumResourcesToLoad);
             meUpdateStage = E_PRELOAD_SETTLE;
-            lpInQueue->Clear();
+            mpInGuiEventQueue->Clear();
             return;
 
         case E_PRELOAD_SETTLE:
             meUpdateStage = E_PRELOAD_SIGNAL_DONE;
-            lpInQueue->Clear();
+            mpInGuiEventQueue->Clear();
             return;
 
         case E_PRELOAD_SIGNAL_DONE:
@@ -300,7 +300,7 @@ namespace BrnGui
             PostCommand16<72>(mpStateInterface, KI_CHANNEL_INTERNAL);
             PostCommand16<72>(mpStateInterface, KI_CHANNEL_GUI_OUT);
             meUpdateStage = E_PRELOAD_DRAIN;
-            lpInQueue->Clear();
+            mpInGuiEventQueue->Clear();
             return;
 
         case E_PRELOAD_DRAIN:
@@ -312,6 +312,6 @@ namespace BrnGui
             break;
         }
 
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
     }
 }

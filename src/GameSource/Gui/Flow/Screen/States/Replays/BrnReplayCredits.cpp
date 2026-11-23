@@ -176,7 +176,7 @@ void ReplayCredits::OnLeave()
 
 void ReplayCredits::Update()
 {
-    InGuiEventQueue* lpInQueue = reinterpret_cast<InGuiEventQueue*>(mpInGuiEventQueue);
+
 
     switch (meInternalState)
     {
@@ -203,7 +203,7 @@ void ReplayCredits::Update()
         break;
     }
 
-    lpInQueue->Clear();
+    mpInGuiEventQueue->Clear();
 }
 
 bool ReplayCredits::UpdateLoadResources()

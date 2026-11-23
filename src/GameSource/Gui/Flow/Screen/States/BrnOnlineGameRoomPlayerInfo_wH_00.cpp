@@ -196,13 +196,13 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameRoomPlayerInfo::Update()
     {
-        StateInputQueue* lpInQueue = reinterpret_cast<StateInputQueue*>(mpInGuiEventQueue);
-        const CgsModule::Event* lpEvent = 0;
-        s32 liSize = 0;
 
-        for (s32 liEventId = lpInQueue->GetFirstEvent(&lpEvent, &liSize);
+        const CgsModule::Event* lpEvent;
+        s32 liSize;
+
+        for (s32 liEventId = mpInGuiEventQueue->GetFirstEvent(&lpEvent, &liSize);
              lpEvent != 0;
-             liEventId = lpInQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+             liEventId = mpInGuiEventQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
         {
             switch (liEventId)
             {
@@ -528,7 +528,7 @@ namespace BrnGui
         }
 
         // Every X360 arm tails into this same Clear (the duplicated epilogues).
-        lpInQueue->Clear();
+        mpInGuiEventQueue->Clear();
     }
 
     // ================================================================================
