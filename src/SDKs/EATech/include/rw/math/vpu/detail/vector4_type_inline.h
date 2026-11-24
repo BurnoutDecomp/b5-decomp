@@ -168,11 +168,9 @@ inline void Vector4::SetW(VecFloatRef<INDEX> w)
 
 inline void Vector4::SetZero()
 {
-    // vspltisw(0).
-    mV.v[0] = 0.0f;
-    mV.v[1] = 0.0f;
-    mV.v[2] = 0.0f;
-    mV.v[3] = 0.0f;
+    // One splatted zero register for all four lanes: ARTIST materialises it once with
+    // vspltisw and stores it whole (BehaviourDebugFlyWorld::Prepare 0x821FB73C / 0x821FB784).
+    mV = __vspltisw(0);
 }
 
 // =====================================================================================
