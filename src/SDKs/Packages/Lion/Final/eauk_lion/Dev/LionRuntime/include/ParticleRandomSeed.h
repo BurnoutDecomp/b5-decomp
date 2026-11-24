@@ -1,81 +1,12 @@
 #pragma once
 
-// ============================================================================
-// SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRandomSeed.h
-//
-// cParticleRandomSeed -- the Lion (eauk_lion) particle runtime's tiny per-effect
-// random number generator. It keeps a 64-bit LCG state (the classic MMIX / Knuth
-// multiplier 6364136223846793005) and precomputes a small ring of 8 canonical
-// floats in the range [1.0, 2.0) that the particle simulation samples cheaply.
-// Init / Offset / Update each reseed the generator (from the shared static
-// mBaseSeed counter, an explicit offset, or a Park-Miller step of the current
-// seed respectively) and then refill the whole 8-entry cache. BuildLerp draws
-// ONE cached random t in [0,1) and returns avBase + avRange*t across all four
-// vector lanes (a lerp along the segment [base, base+range]).
-//
-// DECLARATION SHAPE (DecFIGS DWARF, found 2026-08-04 at
-// references/DecFIGS/dwarfdump/SDKs/Packages/Lion/Final/eauk_lion/Dev/
-// LionRuntime/include/ParticleRandomSeed.h -- the earlier "DWARF none found"
-// dossier line was the known class-keyed-TU false negative):
-//   struct cParticleRandomSeed {           // ParticleRandomSeed.h:27
-//     protected:
-//       Random mCgsRandom;                 // :167  == CgsNumeric::Random
-//       static U32 mBaseSeed;              // :168  (X360 dword_82F350FC)
-//       U32 mSeed;                         // :169
-//     public:
-//       void Init();                       // :35
-//       void Set(U32);                     // :38   PS3-only on the X360 ledger
-//       void Offset(U32);                  // :45
-//       U32 Get() const;                   // :52   PS3-only on the X360 ledger
-//       void Update();                     // :58
-//       FP32 Build(FP32, FP32);            // :71   X360 @0x8290A360 (OTHER TU, see below)
-//       S32 Build(S32, S32);               // :87   not in the X360 ledger
-//       void Build(Vector3&, Vector3, Vector3);        // :104  not in the X360 ledger
-//       Vector3Plus Build(Vector4, Vector4);           // :117  X360 unnamed sub_8290A648
-//       Vector3Plus BuildLerp(Vector4, Vector4);       // :130  X360 @0x8290A7A8
-//       void Build(cVector&, const cVector&, const cVector&); // :144  not in the X360 ledger
-//   };
-// Methods absent from the X360 ledger are NOT declared here (attestation rule).
-// ⭐ 2026-09-03: the two Build overloads present in the X360 binary ARE now declared and
-// bodied in this file -- FP32 Build @0x8290A360 (ledger-filed under CgsPerfMonCpuPS3.h, a
-// DecFIGS attribution quirk) and Vector3Plus Build(Vector4,Vector4) @0x8290A648 (unnamed
-// sub_8290A648, named by the DWARF at :117). cParticleEmitter::InitialiseParticle calls
-// BOTH fourteen times between them, so this is where they had to land.
-//
-// LAYOUT AUTHORITY: the member offsets are pinned by the X360 asm for the four
-// bodied methods (Init @0x82911BE0, Offset @0x8290E8B0, Update @0x8290EAB0,
-// BuildLerp @0x8290A7A8):
-//
-//   mafRandom[i]  @ 0x00 + 4*i   (stwx r,index*4,this ; stw r,0(this))
-//   mu64State     @ 0x20         (ld / std -- 64-bit LCG state)
-//   muIndex       @ 0x28         (lwz / stw)
-//   mSeed         @ 0x30         (lwz / stw ; the 32-bit reseed value)
-//
-// NOTE ON THE FIRST THREE MEMBERS: per the DWARF they are not loose members of
-// this class -- they are the embedded `Random mCgsRandom` sub-object, and
-// `Random` is CgsNumeric::Random (GameShared/GameClasses/Numeric/CgsRandom.h),
-// whose DWARF spine matches slot for slot:
-//   mafRandom  == mCgsRandom's union { mafFloatBuffer[8] / mauIntegerBuffer[8] }
-//   mu64State  == mCgsRandom.muSeed
-//   muIndex    == mCgsRandom.muOldestBufferIndex
-//   muReserved2C == mCgsRandom's tail padding (0x2C..0x2F, sizeof(Random)==0x30)
-// The flat modelling is kept FOR NOW because the draw/refill sequences the X360
-// inlines into this TU touch Random's PRIVATE spine directly (exactly like the
-// already-befriended BrnEffects::Utils randomisers); embedding the real
-// CgsNumeric::Random needs a `friend struct cParticleRandomSeed;` grant in
-// CgsRandom.h (a shared header this TU does not own -- requested, see the wave
-// spec). Behaviour is identical either way; this note is the guard against the
-// two spines drifting apart.
-//
-// The struct's console size (0x34 == 52 bytes) is corroborated independently by
-// cParticleBucket, whose DWARF places mRandomSeed at bucket+0x1C and the next
-// member (mnNextParticlePositionToFill) at bucket+0x50 -- a gap of exactly 0x34.
-// (On the 64-bit host the u64 forces 8-byte struct alignment, so sizeof rounds up
-// to 56; the load-bearing facts are the RELATIVE member offsets above, pinned by
-// the _AssertLayout static_asserts, not the padded tail.)
-// ============================================================================
+// Lion seed record (DecFIGS ParticleRandomSeed.h:27, :167-169). ARTIST's
+// integer draw reads the embedded Random state at +0x20, and Init writes the
+// Lion seed at +0x30. SubEmitterInit at 0x82911308 copies the full 0x40-byte
+// record from bucket+0x10. The embedded Random supplies the 16-byte alignment.
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Numeric/CgsRandom.h"
 
 #include "rw/math/vpu/types.h"   // rw::math::vpu::Vector4 / Vector3Plus (BuildLerp)
 #include "SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h"  // cVector -- Build(cVector&,...)
@@ -155,19 +86,9 @@ struct cParticleRandomSeed
     rw::math::vpu::Vector3Plus BuildLerp(rw::math::vpu::Vector4 avBase,
                                          rw::math::vpu::Vector4 avRange);
 
-private:
-    // Rebuild the 8-entry [1,2) float cache from the current mSeed: seed the 64-bit
-    // LCG with mSeed in the high dword, then step it once per entry. Shared body the
-    // X360 compiler inlined into Init / Offset / Update.
-    void RefillCache();
-
-    // ----- members (offsets pinned against the X360 asm; the first three are
-    // ----- the embedded CgsNumeric::Random spine -- see the banner) ----------
-    f32 mafRandom[8];   // 0x00  cache of 8 canonical floats in [1.0, 2.0)
-    u64 mu64State;      // 0x20  64-bit LCG state          (Random::muSeed)
-    u32 muIndex;        // 0x28  next cache slot to fill    (Random::muOldestBufferIndex)
-    u32 muReserved2C;   // 0x2C  tail padding of the embedded Random (never touched)
-    u32 mSeed;          // 0x30  32-bit reseed value (DWARF ParticleRandomSeed.h:169)
+protected:
+    CgsNumeric::Random mCgsRandom; // +0x00
+    u32 mSeed;                    // +0x30
 
     // DWARF ParticleRandomSeed.h:168 -- the shared reseed counter every Init
     // bumps by 42 (X360 dword_82F350FC). A static MEMBER per the DWARF, not a
@@ -175,12 +96,12 @@ private:
     // functions; modelled zero-initialised.
     static u32 mBaseSeed;
 
-    // Byte-layout pin: the relative member offsets are ground truth from the asm.
+private:
     static void _AssertLayout()
     {
-        CGS_STATIC_ASSERT((offsetof(cParticleRandomSeed, mafRandom) == 0x00), "mafRandom@0");
-        CGS_STATIC_ASSERT((offsetof(cParticleRandomSeed, mu64State) == 0x20), "mu64State@0x20");
-        CGS_STATIC_ASSERT((offsetof(cParticleRandomSeed, muIndex)   == 0x28), "muIndex@0x28");
-        CGS_STATIC_ASSERT((offsetof(cParticleRandomSeed, mSeed)     == 0x30), "mSeed@0x30");
+        CGS_STATIC_ASSERT((offsetof(cParticleRandomSeed, mCgsRandom) == 0x00), "Lion random at +0x00");
+        CGS_STATIC_ASSERT((offsetof(cParticleRandomSeed, mSeed) == 0x30), "Lion seed at +0x30");
+        CGS_STATIC_ASSERT((sizeof(cParticleRandomSeed) == 0x40), "Lion ARTIST seed record size");
+        CGS_STATIC_ASSERT((__alignof(cParticleRandomSeed) == 16), "Lion ARTIST seed alignment");
     }
 };

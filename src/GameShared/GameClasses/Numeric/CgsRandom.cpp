@@ -40,46 +40,6 @@ namespace CgsNumeric
     static const u64 KU_RANDOM_LCG_MULTIPLIER = 0x5851F42D4C957F2Dull;
 
     // ========================================================================
-    // SetSeed -- DWARF CgsRandom.h:58. REPAIRED 2026-09-23 (FX-GS2, crash-parity G12-D11).
-    //
-    // ⚠️ NO STANDALONE X360 SYMBOL: the console inlines it. Five expansions, read in full, agree
-    // instruction for instruction:
-    //   * PaybackManager::OnRoundStart @0x8236D290 (0x8236D308..0x8236D4C4) and OnRoundEnd
-    //     @0x8236D4D0 (0x8236D554..0x8236D710) -- seed = (s64)(s32) frame count (`extsw`)
-    //   * SelectionHistory<512,u16,u16,65536>::Randomize @0x826C5900 (0x826C5918..0x826C5AE8)
-    //     -- seed = (u64)(u32) argument (`clrldi r9, r4, 32`)
-    //   * BrnGui::PaybackComponent::Construct @0x8242E3A8 (0x8242E51C..0x8242E79C) and
-    //     OnlineStuntRunMode::Start @0x82339E70 (0x8233A19C..0x8233A354), each straight after an
-    //     inlined Construct()
-    // Every one of them does, in this order:
-    //     stw 0 -> muOldestBufferIndex ; std seed -> muSeed
-    //     ring[0] = 0x3F800000 | (hi32(seed) >> 9)        `inslwi rX, hi, 23, 9 ; stw rX, 0(ring)`
-    //     muSeed  = seed * 0x5851F42D4C957F2D + 1          `mulld ; addi 1 ; std`
-    //     7 x AddRandomFloatToBuffer                      (bump the cursor, then store the slot)
-    //     muOldestBufferIndex = (idx + 1) & 7              the final wrap, 7 -> 0
-    // so the ring holds the eight draws in order, the cursor is back at 0 and the seed is eight
-    // steps on. The PS3 DecFIGS OnRoundStart (0x244678) writes the same thing as one 8-pass
-    // store / step / bump loop.
-    // ⚠️ THE OLD BODY (`muSeed = (seed | 0x5851F42D00000000) * K + 1; idx = 0`) read the
-    //   `insrdi r10, r5, 32, 0` that BUILDS THE MULTIPLIER as an OR into the seed, and primed no
-    //   ring slot at all.
-    // Construct() is this with the DWARF default seed (CgsRandom.h:34, 2413850050) and the first
-    // step constant-folded: 2413850050 * K + 1 == 0xC87CD8C91AD0891B, ring[0] == F(0) == 1.0f.
-    // ========================================================================
-    void Random::SetSeed(u64 lu64Seed)
-    {
-        muSeed              = lu64Seed;
-        muOldestBufferIndex = 0;
-        mauIntegerBuffer[0] = ConvertUnsignedFixed32ToFloatRepresentation(static_cast<u32>(muSeed >> 32));
-        muSeed              = muSeed * KU_RANDOM_LCG_MULTIPLIER + 1u;
-
-        for (u32 luIndex = 1; luIndex < KU_FLOAT_BUFFER_SIZE; ++luIndex)
-            AddRandomFloatToBuffer();
-
-        muOldestBufferIndex = (muOldestBufferIndex + 1) & (KU_FLOAT_BUFFER_SIZE - 1);
-    }
-
-    // ========================================================================
     // THE BOUNDED UNSIGNED DRAW -- CORRECTED 2026-09-25 (crash parity FX-GATE).
     //
     // ⚠️ NO STANDALONE X360 SYMBOL: inlined at every call site, each carrying the one baked assert
@@ -107,26 +67,6 @@ namespace CgsNumeric
         CGS_ASSERT(luMod > 0u, "luMod > 0");
 
         return luMin + (RandomUInt() % luMod);
-    }
-
-    // Header-inline in the console. UpdateRoadNoise @0x825F69B4..0x825F6A20 and its second
-    // expansion @0x825F6A30..0x825F6A84 pin the complete operation: read the current ring slot,
-    // refill that same slot from the OLD seed's high word, step the 64-bit LCG, advance the cursor,
-    // and return the consumed [1,2) value minus 1.0. DecFIGS CgsRandom.h:90 names this overload
-    // RandomFloat() and its locals `lfRandomFractionPlusOne` / `lfRandomFraction`.
-    f32 Random::RandomFloat()
-    {
-        const u32 luIndex = muOldestBufferIndex;
-        const f32 lfRandomFractionPlusOne = mafFloatBuffer[luIndex];
-        const u64 luOldSeed = muSeed;
-
-        muSeed = luOldSeed * KU_RANDOM_LCG_MULTIPLIER + 1u;
-        mauIntegerBuffer[luIndex] =
-            ConvertUnsignedFixed32ToFloatRepresentation(static_cast<u32>(luOldSeed >> 32));
-        muOldestBufferIndex = (luIndex + 1u) & (KU_FLOAT_BUFFER_SIZE - 1u);
-
-        const f32 lfRandomFraction = lfRandomFractionPlusOne - 1.0f;
-        return lfRandomFraction;
     }
 
     // ========================================================================

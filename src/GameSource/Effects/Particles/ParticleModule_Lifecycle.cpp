@@ -37,6 +37,7 @@
 // ============================================================================
 
 #include "GameSource/Effects/Particles/ParticleModule.h"
+#include "GameSource/Effects/Particles/LionPerfMon.h"
 #include "GameSource/Effects/Particles/ParticleModuleIO.h"      // ParticleIO::PrepareOutputBuffer
 #include "GameSource/Effects/Particles/ParticleCpuMonitors.h"   // the Race / Crash monitor sets
 #include "GameSource/Resource/SharedIO/BrnGameDataAllocatorList.h" // AllocatorList::Get*Allocator
@@ -264,8 +265,7 @@ void ParticleModule::Construct()
     // an asm-sized placeholder only because nothing had a body at either end.
     mInterThreadEventQueue.Construct();   // +0x27784
 
-    // LionPerfMon::Construct(&dword_82FAB638, ...) -- the Lion perf-monitor set. Its class
-    // is TU-local to LionPerfMon.cpp (no header), so it is not reachable from here.
+    gLionPerfMon.Construct();   // ARTIST 0x82294728
 
     gaCpuMonitors[0].Construct("Race");
     gaCpuMonitors[1].Construct("Crash");

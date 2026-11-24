@@ -49,9 +49,7 @@
 #include "types.hpp"
 #include "SDKs/Packages/Lion/Final/eauk_common/Maths/Vector.h"   // cVector -- the real eauk_common home (fork retired 2026-09-03)
 
-// Real home for the per-bucket RNG seed snapshot (mRandomSeed). Its 0x34-byte size
-// exactly fills the DWARF-attested gap between mRandomSeed@0x1C and the next member
-// mnNextParticlePositionToFill@0x50 -- so this is the type's owning header, not a fork.
+// The embedded seed occupies the original 0x40-byte slot at +0x10.
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRandomSeed.h"
 
 // Real homes for the two types this record's arrays are made of (both were HONEST
@@ -197,7 +195,6 @@ private:
     cTime               mLatestBirthTime;             // 0x0C  ParticleBucket.h:229
     // SubEmitterInit copies the 0x40-byte seed slot from bucket+0x10 at 0x82911308.
     cParticleRandomSeed mRandomSeed;                  // 0x10  ParticleBucket.h:232
-    u8                  maPadSeed[0x40 - sizeof(cParticleRandomSeed)]; // Slot ends at 0x50.
     u32                 mnNextParticlePositionToFill; // 0x50  ParticleBucket.h:235
     u32                 mActiveBits;                  // 0x54  ParticleBucket.h:236
     sParticleNucleus    mParticles[KU_MAX_PARTICLES]; // 0x60  ParticleBucket.h:239

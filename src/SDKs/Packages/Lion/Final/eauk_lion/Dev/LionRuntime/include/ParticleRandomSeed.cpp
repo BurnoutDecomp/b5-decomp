@@ -2,8 +2,8 @@
 // ParticleRandomSeed.cpp -- cParticleRandomSeed runtime bodies.
 //
 // Bodied from the X360 asm: Init @0x82911BE0, Offset @0x8290E8B0,
-// Update @0x8290EAB0, BuildLerp @0x8290A7A8. The first three share one inlined
-// refill loop (RefillCache).
+// Update @0x8290EAB0, BuildLerp @0x8290A7A8. The first three seed the embedded
+// CgsNumeric::Random and refill its cache.
 //
 // The generator is a 64-bit LCG using the MMIX / Knuth multiplier
 // 6364136223846793005 (0x5851F42D4C957F2D, built on X360 from the two halves
@@ -16,7 +16,7 @@
 // DECLARATION SHAPE comes from the DecFIGS DWARF for this very header (see
 // ParticleRandomSeed.h's banner): mBaseSeed is the class's static member
 // (X360 dword_82F350FC), mSeed the 32-bit reseed value, and the ring/state/index
-// spine is the embedded CgsNumeric::Random (modelled flat here for now).
+// spine is the embedded CgsNumeric::Random.
 //
 // 2026-09-03: the two remaining Build overloads are BODIED HERE now -- FP32
 // Build(FP32,FP32) @0x8290A360 and Vector3Plus Build(Vector4,Vector4) @0x8290A648
@@ -29,85 +29,39 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleRandomSeed.h"
 
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // the two CgsRandom.h range asserts Build(s32,s32) fires
+#include "GameSource/Effects/Particles/LionPerfMon.h"
 
 #include "rw/math/vpu/vector4_operation.h"  // Vector4 operator+/operator*, Splat
 
 #include <cstring>   // memcpy
 
-// DWARF ParticleRandomSeed.h:168 (X360 dword_82F350FC): the shared reseed
-// counter, bumped by 42 on every Init and OR'd with 1 to keep the seed odd.
-// Initialised elsewhere at boot; its start value is not encoded in this TU's
-// functions, so it is modelled zero-initialised.
-u32 cParticleRandomSeed::mBaseSeed = 0u;
-
-namespace
-{
-    // MMIX / Knuth 64-bit LCG multiplier (0x5851F42D4C957F2D). On X360 it is
-    // assembled from lis/ori 0x4C957F2D (low) + lis/ori 0x5851F42D (high) folded
-    // in with insrdi r11,r9,32,0 -> the 0x5851F42D half lands in the HIGH dword.
-    const u64 KU64_LCG_MULTIPLIER = 0x5851F42D4C957F2DULL;
-
-    // CPU perf-monitor handle for Update (X360 dword_82FAB690); -1 == unregistered.
-    s32 guUpdateMonitor = -1;
-
-    // CPU perf-monitor handle shared by the Build family -- BuildLerp @0x8290A7A8,
-    // FP32 Build @0x8290A360 and the unnamed Vector3Plus Build @0x8290A648 all
-    // load the SAME global (X360 dword_82FAB68C); -1 == unregistered.
-    s32 guBuildMonitor = -1;
-
-    // Build a canonical float in [1.0, 2.0) from the current LCG state: take the
-    // high 32 bits, keep the top 23 (>> 9), and OR them into 0x3F800000.
-    inline f32 MakeCanonicalFloat(u64 au64State)
-    {
-        const u32 luBits = 0x3F800000u | (static_cast<u32>(au64State >> 32) >> 9);
-        f32 lfValue;
-        std::memcpy(&lfValue, &luBits, sizeof(lfValue));
-        return lfValue;
-    }
-}
-
-// Seed the 64-bit LCG with mSeed in the high dword and fill all 8 cache slots.
-// The X360 emits this as a fully unrolled 8x sequence inside each caller; it is
-// re-rolled here into the loop it started as. Each iteration writes the current
-// slot from the live state, advances the LCG one step, and bumps the wrapping
-// index -- leaving muIndex back at 0 after eight entries.
-void cParticleRandomSeed::RefillCache()
-{
-    muIndex   = 0;
-    mu64State = static_cast<u64>(mSeed) << 32;
-
-    for (u32 luEntry = 0; luEntry < 8; ++luEntry)
-    {
-        mafRandom[muIndex] = MakeCanonicalFloat(mu64State);
-        mu64State = mu64State * KU64_LCG_MULTIPLIER + 1;
-        muIndex   = (muIndex + 1) & 7;
-    }
-}
+// DecFIGS ParticleRandomSeed.h:168 declares the shared reseed counter.
+// ARTIST stores its initial value at 0x82F350FC.
+u32 cParticleRandomSeed::mBaseSeed = 0x12345678u;
 
 // cParticleRandomSeed::Init @ 0x82911BE0
 void cParticleRandomSeed::Init()
 {
     mBaseSeed += 42;              // dword_82F350FC += 42 (stored WITHOUT the |1)
     mSeed = mBaseSeed | 1u;       // force odd
-    RefillCache();
+    mCgsRandom.SetSeed(static_cast<u64>(mSeed) << 32);
 }
 
 // cParticleRandomSeed::Offset @ 0x8290E8B0
 void cParticleRandomSeed::Offset(u32 auOffset)
 {
     mSeed = auOffset + mSeed;
-    RefillCache();
+    mCgsRandom.SetSeed(static_cast<u64>(mSeed) << 32);
 }
 
 // cParticleRandomSeed::Update @ 0x8290EAB0
 void cParticleRandomSeed::Update()
 {
-    const s32 liMonitor = guUpdateMonitor;         // dword_82FAB690, loaded once
+    const s32 liMonitor = gLionPerfMon.miRandomSeedUpdate;         // dword_82FAB690, loaded once
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     mSeed = mSeed * kuSeedMultication;             // seed *= 69621 (mullw, 32-bit wrap)
-    RefillCache();
+    mCgsRandom.SetSeed(static_cast<u64>(mSeed) << 32);
 
     CgsDev::PerfMonCpu::StopMonitor(liMonitor);
 }
@@ -147,24 +101,18 @@ rw::math::vpu::Vector3Plus cParticleRandomSeed::BuildLerp(rw::math::vpu::Vector4
     using rw::math::vpu::Vector3Plus;
     using rw::math::vpu::Vector4;
 
-    const s32 liMonitor = guBuildMonitor;          // dword_82FAB68C, loaded once
+    const s32 liMonitor = gLionPerfMon.miRandomSeedBuild;
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
-    // Consume the Vector-slot random (the value CURRENTLY buffered there) ...
-    const u32 luSlot   = (muIndex + 3) & 4;
-    const f32 lfRandom = mafRandom[luSlot] - 1.0f; // [1,2) -> [0,1)
+    const u32 luSlot = (mCgsRandom.muOldestBufferIndex + 3) & 4;
+    const f32 lfRandom = mCgsRandom.mafFloatBuffer[luSlot] - 1.0f;
+    mCgsRandom.mauIntegerBuffer[luSlot] = CgsNumeric::Random::ConvertUnsignedFixed32ToFloatRepresentation(
+        static_cast<u32>(mCgsRandom.muSeed >> 32));
+    mCgsRandom.muSeed = mCgsRandom.muSeed * CgsNumeric::KU_RANDOM_MULTIPLIER + 1;
+    mCgsRandom.muOldestBufferIndex = luSlot + 1;
 
-    // ... then refill that one slot from the live state and park the index.
-    mafRandom[luSlot] = MakeCanonicalFloat(mu64State);
-    mu64State = mu64State * KU64_LCG_MULTIPLIER + 1;
-    muIndex   = luSlot + 1;
-
-    // vmaddfp128: result = avBase + avRange * splat(t), all four lanes (the
-    // Vector3Plus "plus" lane gets avBase.w + avRange.w*t like the others).
     const Vector4 lvResult = avBase + avRange * Splat(lfRandom);
-
     CgsDev::PerfMonCpu::StopMonitor(liMonitor);
-
     return Vector3Plus(lvResult.GetVector());
 }
 
@@ -194,21 +142,12 @@ rw::math::vpu::Vector3Plus cParticleRandomSeed::BuildLerp(rw::math::vpu::Vector4
 // ================================================================================================
 f32 cParticleRandomSeed::Build(f32 afBase, f32 afVariance)
 {
-    const s32 liMonitor = guBuildMonitor;          // dword_82FAB68C, loaded once
+    const s32 liMonitor = gLionPerfMon.miRandomSeedBuild;          // dword_82FAB68C, loaded once
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
-    // Consume the value CURRENTLY buffered at muIndex ...
-    const u32 luIndex  = muIndex;
-    const f32 lfRandom = mafRandom[luIndex];       // still in [1,2) here
-
-    // ... then refill that one slot from the live state and advance the ring.
-    mafRandom[luIndex] = MakeCanonicalFloat(mu64State);
-    mu64State = mu64State * KU64_LCG_MULTIPLIER + 1;
-    muIndex   = (luIndex + 1) & 7;
-
+    const f32 lfT = mCgsRandom.RandomFloat();
     CgsDev::PerfMonCpu::StopMonitor(liMonitor);
 
-    const f32 lfT = lfRandom - 1.0f;               // [1,2) -> [0,1)   (flt_82001C98 == 1.0)
     return ((afBase + afVariance) - afBase) * lfT + afBase;
 }
 
@@ -256,17 +195,17 @@ rw::math::vpu::Vector3Plus cParticleRandomSeed::Build(rw::math::vpu::Vector4 avB
 {
     using rw::math::vpu::Vector3Plus;
 
-    const s32 liMonitor = guBuildMonitor;          // dword_82FAB68C, loaded once
+    const s32 liMonitor = gLionPerfMon.miRandomSeedBuild;          // dword_82FAB68C, loaded once
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     // Consume the whole 16-byte cache half -- four independent randoms, one per lane.
-    const u32 luSlot = (muIndex + 3) & 4;
-    muIndex = luSlot;
+    const u32 luSlot = (mCgsRandom.muOldestBufferIndex + 3) & 4;
+    mCgsRandom.muOldestBufferIndex = luSlot;
 
-    const f32 lfT0 = mafRandom[luSlot + 0] - 1.0f;   // [1,2) -> [0,1), per lane
-    const f32 lfT1 = mafRandom[luSlot + 1] - 1.0f;
-    const f32 lfT2 = mafRandom[luSlot + 2] - 1.0f;
-    const f32 lfT3 = mafRandom[luSlot + 3] - 1.0f;
+    const f32 lfT0 = mCgsRandom.mafFloatBuffer[luSlot + 0] - 1.0f;   // [1,2) -> [0,1), per lane
+    const f32 lfT1 = mCgsRandom.mafFloatBuffer[luSlot + 1] - 1.0f;
+    const f32 lfT2 = mCgsRandom.mafFloatBuffer[luSlot + 2] - 1.0f;
+    const f32 lfT3 = mCgsRandom.mafFloatBuffer[luSlot + 3] - 1.0f;
 
     const Vector3Plus lvResult(
         static_cast<f32>(avBase.GetX()) + static_cast<f32>(avVariance.GetX()) * lfT0,
@@ -275,11 +214,11 @@ rw::math::vpu::Vector3Plus cParticleRandomSeed::Build(rw::math::vpu::Vector4 avB
         static_cast<f32>(avBase.GetW()) + static_cast<f32>(avVariance.GetW()) * lfT3);
 
     // Three LCG steps; their three high dwords are the 96-bit stream cut into four mantissas.
-    const u64 lu64S0 = mu64State;
-    const u64 lu64S1 = lu64S0 * KU64_LCG_MULTIPLIER + 1;
-    const u64 lu64S2 = lu64S1 * KU64_LCG_MULTIPLIER + 1;
-    const u64 lu64S3 = lu64S2 * KU64_LCG_MULTIPLIER + 1;
-    mu64State = lu64S3;
+    const u64 lu64S0 = mCgsRandom.muSeed;
+    const u64 lu64S1 = lu64S0 * CgsNumeric::KU_RANDOM_MULTIPLIER + 1;
+    const u64 lu64S2 = lu64S1 * CgsNumeric::KU_RANDOM_MULTIPLIER + 1;
+    const u64 lu64S3 = lu64S2 * CgsNumeric::KU_RANDOM_MULTIPLIER + 1;
+    mCgsRandom.muSeed = lu64S3;
 
     const u32 luHi0 = static_cast<u32>(lu64S0 >> 32);
     const u32 luHi1 = static_cast<u32>(lu64S1 >> 32);
@@ -294,10 +233,10 @@ rw::math::vpu::Vector3Plus cParticleRandomSeed::Build(rw::math::vpu::Vector4 avB
     };
     for (u32 luLane = 0; luLane < 4; ++luLane)
     {
-        std::memcpy(&mafRandom[luSlot + luLane], &lauBits[luLane], sizeof(f32));
+        std::memcpy(&mCgsRandom.mafFloatBuffer[luSlot + luLane], &lauBits[luLane], sizeof(f32));
     }
 
-    muIndex ^= 4u;
+    mCgsRandom.muOldestBufferIndex ^= 4u;
 
     CgsDev::PerfMonCpu::StopMonitor(liMonitor);
 
@@ -351,23 +290,12 @@ rw::math::vpu::Vector3Plus cParticleRandomSeed::Build(rw::math::vpu::Vector4 avB
 // ================================================================================================
 s32 cParticleRandomSeed::Build(s32 aiBase, s32 aiVariance)
 {
-    const s32 liMonitor = guBuildMonitor;          // dword_82FAB68C, loaded once
+    const s32 liMonitor = gLionPerfMon.miRandomSeedBuild;          // dword_82FAB68C, loaded once
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
-    const s32 liMax = aiBase + aiVariance;
-    CGS_ASSERT(liMax >= aiBase, "liMax >= liMin");
-
-    const u32 luMod = static_cast<u32>(liMax - aiBase) + 1u;
-    CGS_ASSERT(luMod > 0, "luMod > 0");
-
-    // The raw LCG high word -- this overload never touches mafRandom / muIndex.
-    const u64 lu64State = mu64State;
-    const u32 luHigh    = static_cast<u32>(lu64State >> 32);
-    mu64State = lu64State * KU64_LCG_MULTIPLIER + 1;
-
+    const s32 liValue = mCgsRandom.RandomInt(aiBase, aiBase + aiVariance);
     CgsDev::PerfMonCpu::StopMonitor(liMonitor);
-
-    return static_cast<s32>(luHigh % luMod) + aiBase;
+    return liValue;
 }
 
 // ================================================================================================
@@ -406,18 +334,18 @@ s32 cParticleRandomSeed::Build(s32 aiBase, s32 aiVariance)
 // ================================================================================================
 void cParticleRandomSeed::Build(cVector& arOut, const cVector& arBase, const cVector& arVariance)
 {
-    const s32 liMonitor = guBuildMonitor;          // dword_82FAB68C, loaded once
+    const s32 liMonitor = gLionPerfMon.miRandomSeedBuild;          // dword_82FAB68C, loaded once
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     // asm 0x8290A57C..0x8290A5A4 -- the same 16-byte cache half Build(Vector4,Vector4) uses.
-    const u64 lu64S0  = mu64State;
-    const u32 luSlot  = (muIndex + 3) & 4;
-    muIndex = luSlot;
+    const u64 lu64S0  = mCgsRandom.muSeed;
+    const u32 luSlot  = (mCgsRandom.muOldestBufferIndex + 3) & 4;
+    mCgsRandom.muOldestBufferIndex = luSlot;
 
-    const f32 lfT0 = mafRandom[luSlot + 0] - 1.0f;   // [1,2) -> [0,1), per lane
-    const f32 lfT1 = mafRandom[luSlot + 1] - 1.0f;
-    const f32 lfT2 = mafRandom[luSlot + 2] - 1.0f;
-    const f32 lfT3 = mafRandom[luSlot + 3] - 1.0f;
+    const f32 lfT0 = mCgsRandom.mafFloatBuffer[luSlot + 0] - 1.0f;   // [1,2) -> [0,1), per lane
+    const f32 lfT1 = mCgsRandom.mafFloatBuffer[luSlot + 1] - 1.0f;
+    const f32 lfT2 = mCgsRandom.mafFloatBuffer[luSlot + 2] - 1.0f;
+    const f32 lfT3 = mCgsRandom.mafFloatBuffer[luSlot + 3] - 1.0f;
 
     arOut.x = arBase.x + arVariance.x * lfT0;
     arOut.y = arBase.y + arVariance.y * lfT1;
@@ -425,9 +353,9 @@ void cParticleRandomSeed::Build(cVector& arOut, const cVector& arBase, const cVe
     arOut.w = arBase.w + arVariance.w * lfT3;
 
     // Two LCG steps; their two high dwords are the 64-bit stream cut into three mantissas.
-    const u64 lu64S1 = lu64S0 * KU64_LCG_MULTIPLIER + 1;
-    const u64 lu64S2 = lu64S1 * KU64_LCG_MULTIPLIER + 1;
-    mu64State = lu64S2;
+    const u64 lu64S1 = lu64S0 * CgsNumeric::KU_RANDOM_MULTIPLIER + 1;
+    const u64 lu64S2 = lu64S1 * CgsNumeric::KU_RANDOM_MULTIPLIER + 1;
+    mCgsRandom.muSeed = lu64S2;
 
     const u32 luHi0 = static_cast<u32>(lu64S0 >> 32);
     const u32 luHi1 = static_cast<u32>(lu64S1 >> 32);
@@ -440,9 +368,9 @@ void cParticleRandomSeed::Build(cVector& arOut, const cVector& arBase, const cVe
     };
     for (u32 luLane = 0; luLane < 3; ++luLane)
     {
-        std::memcpy(&mafRandom[muIndex + luLane], &lauBits[luLane], sizeof(f32));
+        std::memcpy(&mCgsRandom.mafFloatBuffer[mCgsRandom.muOldestBufferIndex + luLane], &lauBits[luLane], sizeof(f32));
     }
-    muIndex = muIndex + 3;
+    mCgsRandom.muOldestBufferIndex = mCgsRandom.muOldestBufferIndex + 3;
 
     CgsDev::PerfMonCpu::StopMonitor(liMonitor);
 }

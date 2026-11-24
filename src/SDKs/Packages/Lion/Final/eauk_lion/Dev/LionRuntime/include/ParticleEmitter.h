@@ -429,7 +429,6 @@ private:
     cVector              mForce;                    // 0x060
     sParticleNucleus     mParentEmitterNucleus;     // 0x070  DWARF ParticleEmitter.h:337
     cParticleRandomSeed  mParentRandomSeed;         // 0x150  (console span 0x40)
-    u8                   maPadParentSeed[0x40 - sizeof(cParticleRandomSeed)];   // Seed slot ends at 0x190.
     u32                  mParentIndex;              // 0x190
     cParticleEmitter*    mpParentEmitter;           // 0x194
     cTime                mParentTime;               // 0x198  DWARF ParticleEmitter.h:341
@@ -439,7 +438,6 @@ private:
     f32                  m_age;                     // 0x1A8
     f32                  mDt;                       // 0x1AC
     cParticleRandomSeed  mEmitterSeed;              // 0x1B0  (console span 0x40)
-    u8                   maPadEmitterSeed[0x40 - sizeof(cParticleRandomSeed)];  // Seed slot ends at 0x1F0.
     u32                  mFlags;                    // 0x1F0
     u32                  mEmissionCount;            // 0x1F4
     cParticleDescriptor* mpDescriptor;              // 0x1F8

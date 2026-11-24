@@ -42,6 +42,8 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
+struct cParticleRandomSeed;
+
 namespace CgsNumeric
 {
 // DWARF CgsRandom.h:34. The default LCG seed Construct installs.
@@ -119,6 +121,7 @@ class CGS_ALIGN(16) Random
     // semantics. The randomisers use their own Vector-slot indexing scheme
     // ((index + 3) & 4) over the same 8-slot ring; that scheme lives in the
     // randomiser bodies, not here.
+    friend struct ::cParticleRandomSeed;
     friend struct BrnEffects::Utils::Vector3Randomiser;
     friend struct BrnEffects::Utils::Vector4Randomiser;
     friend struct BrnEffects::Utils::DebrisColourRandomiser;
@@ -163,16 +166,17 @@ public:
         return ((luOldSeed >> 32) & 1u) != 0u;
     }
 
-    // ---- declared-only DWARF surface (bodies land with the full CgsRandom TU) ----
-    // ⭐ RandomFloat() and RandomFloat(f32,f32) ARE BODIED, in CgsRandom.cpp:121 and :182 (the
-    // rotate-helper wave, 2026-08-02), from CameraShake::Update's three inline expansions.
-    // The spark-producer wave (2026-09-06) re-derived both independently from a fourth and fifth
-    // site -- EffectsModule::HandleSparkContacts @0x8229089C and ParticleModule::
-    // HandleSpawnSparksAlongLineEvent @0x8229A574 -- and they agree instruction for instruction,
-    // including the load-refill-bump order that makes the value returned the one primed EIGHT
-    // calls ago. Do not re-inline them here; that is a duplicate-definition link error, which is
-    // how the re-derivation was caught.
-    void SetSeed(u64 lu64Seed);
+    // ARTIST 0x8236D308 and 0x82911BE0 expand the seed and ring refill in place.
+    __forceinline void SetSeed(u64 lu64Seed)
+    {
+        muSeed = lu64Seed;
+        muOldestBufferIndex = 0;
+        for (u32 luIndex = 0; luIndex < KU_FLOAT_BUFFER_SIZE; ++luIndex)
+        {
+            mauIntegerBuffer[muOldestBufferIndex] = ConvertUnsignedFixed32ToFloatRepresentation(RandomUInt());
+            muOldestBufferIndex = (muOldestBufferIndex + 1u) & (KU_FLOAT_BUFFER_SIZE - 1u);
+        }
+    }
     // ARTIST 0x827537D0 draws the old seed's high word before stepping the LCG.
     u32 RandomUInt()
     {
@@ -187,7 +191,16 @@ public:
     // Shuffle instances. An ordinary inline definition still calls out with the
     // XDK, so keep the draw and its bounds checks inline in native callers.
     __forceinline s32 RandomInt(s32 liMin, s32 liMax);
-    f32  RandomFloat();
+    // ARTIST 0x825F69B4 and 0x8290A3A8 draw the cached scalar before refilling its slot.
+    f32 RandomFloat()
+    {
+        const f32 lfRandomFractionPlusOne = mafFloatBuffer[muOldestBufferIndex];
+        mauIntegerBuffer[muOldestBufferIndex] = ConvertUnsignedFixed32ToFloatRepresentation(RandomUInt());
+        muOldestBufferIndex = (muOldestBufferIndex + 1u) & (KU_FLOAT_BUFFER_SIZE - 1u);
+
+        const f32 lfRandomFraction = lfRandomFractionPlusOne - 1.0f;
+        return lfRandomFraction;
+    }
     f32  RandomFloat(f32 lfMin, f32 lfMax);
     // DWARF CgsRandom.h:94. Header-inline on the console; the vector-slot draw
     // PlaceOnTrackManager::GetValuesForCarSelect @0x822D3470 expands (see CgsRandom.cpp).

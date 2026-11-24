@@ -94,9 +94,7 @@ private:
     cParticleLocator*  mpLocator;      // +0x0C  LionBindings.h:107
     cParticleScaler*   mpScaler;       // +0x10  LionBindings.h:108
     cParticleTrigger*  mpTrigger;      // +0x14  LionBindings.h:109
-    u8                 maPad18[0x08];  // +0x18  the seed's 16-byte alignment (console)
     cParticleRandomSeed mSeed;         // +0x20  LionBindings.h:110 (console span 0x40)
-    u8                 maPadSeed[0x40 - sizeof(cParticleRandomSeed)]; // Slot ends at 0x60.
     cLionBindings*     mpNext;         // +0x60  LionBindings.h:111
     cParticleEmitter*  mpEmitter;      // +0x64  LionBindings.h:115 (m_p_emitter) -- asm-pinned
                                        //        inside UnRegister @0x829146D0
