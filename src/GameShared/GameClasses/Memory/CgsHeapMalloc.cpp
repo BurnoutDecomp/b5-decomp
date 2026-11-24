@@ -8,8 +8,7 @@
 // fixed-memory-budget semantics.)
 //
 // HeapMallocCoreAllocator is the EA::Allocator::ICoreAllocator front-end onto a HeapMalloc.
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsHeapMalloc.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsHeapMalloc.cpp".
 
 namespace CgsMemory
 {
@@ -22,9 +21,9 @@ namespace CgsMemory
     void HeapMalloc::Construct(void* lpBuffer, s32 lnBufferSize)
     {
         CGS_ASSERT(lpBuffer,
-            CgsDev::Assert::MessageAt("lpBuffer", KAC_ARTIST_ASSERT_FILE, 52 /* ARTIST 0x828666B0 */));           // CgsHeapMalloc.cpp:52
+            CgsDev::Assert::MessageAt("lpBuffer", __FILE__, 52 /* ARTIST 0x828666B0 */));           // CgsHeapMalloc.cpp:52
         CGS_ASSERT(lnBufferSize > 0,
-            CgsDev::Assert::MessageAt("lnBufferSize>0", KAC_ARTIST_ASSERT_FILE, 53 /* ARTIST 0x828666D4 */)); // CgsHeapMalloc.cpp:53
+            CgsDev::Assert::MessageAt("lnBufferSize>0", __FILE__, 53 /* ARTIST 0x828666D4 */)); // CgsHeapMalloc.cpp:53
 
         mpBuffer     = lpBuffer;
         mnBufferSize = lnBufferSize;

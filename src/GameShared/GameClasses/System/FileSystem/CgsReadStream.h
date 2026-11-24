@@ -1,20 +1,43 @@
 #pragma once
 
-// CgsReadStream.h — canonical home for CgsFileSystem::ReadStream, the lightweight by-value
-// handle the resource layer holds onto a StreamDeviceDiskRead. It is a single-pointer wrapper
-// (so passing a ReadStream by value passes the underlying StreamDeviceDiskRead*), which is why
-// the X360 FileSystem::GetReadStreamIndex / Is{Open,Closed}(ReadStream) accessors receive the
-// raw device pointer in r4.
+// CgsFileSystem::ReadStream -- the by-value handle the resource layer holds onto a
+// StreamDeviceDiskRead: one pointer, so passing a ReadStream passes the device pointer (the X360
+// FileSystem::GetReadStreamIndex / IsReadStream{Open,Closed}(ReadStream) take it in r4).
 //
-// SOURCES: DecFIGS DWARF (CgsReadStream.h) for the single member + the public API shape.
-// MINIMAL SLICE: only the member + the API surface are declared; the forwarding bodies live in
-// CgsReadStream.cpp (a follow-on TU). FileSystem only needs the pointer.
+// The original is this header alone: DecFIGS has no CgsReadStream.cpp compile unit, the DWARF puts
+// every member on a line of this header (struct h:43, Construct h:49 .. IsBufferComplete h:89,
+// mpStreamDevice h:93), and ARTIST has no out-of-line copy of any of them -- its callers inline
+// them (e.g. FileSystem::OpenReadStreamInternal @0x82906A10 stores the null handle, @0x82906AB0
+// the device, @0x82906ABC tests it). So every member is defined here, inline, on its DWARF line.
+// LogAmountOfDataInBuffer (h:86) is declared by the DWARF, but no ARTIST code attests a body.
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/FileSystem/CgsStreamDeviceDiskRead.h"
 
 namespace CgsFileSystem
 {
-    struct StreamDeviceDiskRead;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // ---- DWARF CgsReadStream.h:43 ----
     struct ReadStream
@@ -23,22 +46,51 @@ namespace CgsFileSystem
         // The file system reads mpStreamDevice directly (the X360 accessors take it in r4).
         friend class FileSystem;
 
-        // ---- public API (DWARF CgsReadStream.h:49-89) ----
-        // DECLARE-ONLY: bodies forward to mpStreamDevice in CgsReadStream.cpp.
-        void        Construct(StreamDeviceDiskRead* lpStreamDevice); // :49
-        bool        StartAsyncRead(void** lppData, u32* lpuAmount);  // :55
-        void        StopAsyncRead(u32 luAmount);                     // :60
-        u32         Read(u32 luAmount, void* lpDest);                // :66
-        void        Seek(u64 luPosition);                            // :71
-        u64         Tell() const;                                    // :74
-        bool        IsValid() const;                                 // :77
-        ReadStream& operator=(StreamDeviceDiskRead* lpStreamDevice); // :80
-        u32         GetAmountOfDataInBuffer() const;                 // :83
-        void        LogAmountOfDataInBuffer() const;                 // :86
-        bool        IsBufferComplete() const;                        // :89
+        void Construct(StreamDeviceDiskRead* lpStreamDevice)
+        { mpStreamDevice = lpStreamDevice; }
+
+
+
+
+        bool StartAsyncRead(void** lppData, u32* lpuAmount)
+        { return mpStreamDevice->StartAsyncRead(lppData, lpuAmount); }
+
+
+
+        void StopAsyncRead(u32 luAmount)
+        { mpStreamDevice->StopAsyncRead(luAmount); }
+
+
+
+
+        u32 Read(u32 luAmount, void* lpDest)
+        { return mpStreamDevice->Read(luAmount, lpDest); }
+
+
+
+        void Seek(u64 luPosition)
+        { mpStreamDevice->Seek(luPosition); }
+
+        u64 Tell() const
+        { return mpStreamDevice->Tell(); }
+
+        bool IsValid() const
+        { return mpStreamDevice != 0; }
+
+        ReadStream& operator=(StreamDeviceDiskRead* lpStreamDevice)
+        { mpStreamDevice = lpStreamDevice; return *this; }
+
+        u32 GetAmountOfDataInBuffer() const
+        { return mpStreamDevice->GetAmountOfDataInBuffer(); }
+
+        void LogAmountOfDataInBuffer() const;
+
+
+        bool IsBufferComplete() const
+        { return mpStreamDevice->IsEndOfFile(); }
 
     private:
-        StreamDeviceDiskRead* mpStreamDevice; // :93
+        StreamDeviceDiskRead* mpStreamDevice;
     };
 
 } // namespace CgsFileSystem

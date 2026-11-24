@@ -1,28 +1,24 @@
-// CgsFileRW.cpp — CgsFileSystem::File, the concrete buffered file handle, driving the raw
-// rw::core::filesys::AsyncOp layer for async open/read/write/close.
-//
-// Reconstructed from BURNOUT_X360_ARTIST.XEX (the PowerPC asm is ground truth). Each public
-// entry point takes the inherited BaseFile::mFutex, asserts the file state, allocates one
-// AsyncOp through rw::core::filesys::Manager, submits the request with the matching static
-// *Callback trampoline (which recovers `this` from the op's user word and calls the On*
-// handler), then bumps the outstanding-operation count. The On* handlers run under the same
-// lock, fold the completed op's status (-2 fail / -1 cancel / 1 done) into meFileState,
-// decrement the count, and destroy+free the op.
-//
-// NOTE on the u64 request args: the Hex-Rays pseudocode split luPosition/luSize into 32-bit
-// pairs (__PAIR64__ / HIDWORD) — that is a PPC64 mis-read. The asm passes each as a single
-// 64-bit register (std this+0x68/+0x70; r6/r7 into AsyncOp::Read/Write), so they are modelled
-// here as plain u64 values.
+// CgsFileRW.cpp -- CgsFileSystem::File, the concrete buffered file handle, driving the raw
+// rw::core::filesys::AsyncOp layer for async open/read/write/close. ARTIST asm is ground truth.
+// Each entry point takes the inherited BaseFile::mFutex, asserts the file state, allocates one
+// AsyncOp, submits it with the matching static *Callback trampoline, then bumps the
+// outstanding-operation count; the On* handlers fold the op status into meFileState.
+// SOURCE LINES: every definition sits on its DecFIGS DWARF line (ARTIST's asserts, file string
+// @0x820F95E8, pass the DecFIGS lines unchanged: Open 131/132 .. OnClose 466/467/498).
+// STILL DIFFERENT from the original: the DWARF shows `new AsyncOp` / `delete lpOperator` through
+// AsyncOp's class operator new/delete (rw async.h:101-103: Manager::Allocate / Manager::Free,
+// inlined by ARTIST); our rw AsyncOp lacks them, so the two file-local helpers below spell the
+// same calls.
 
 #include "GameShared/GameClasses/System/FileSystem/CgsFileRW.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT / Assert::{Begin,Fire,End}Assert
-#include "GameShared/GameClasses/Development/CgsStrStream.h" // CgsDev::StrStream (formatted assert text)
-#include "SDKs/EATech/rwcore/filesys/asyncop.h"             // rw::core::filesys::AsyncOp / Handle
-#include "SDKs/EATech/rwcore/filesys/device.h"              // rw::core::filesys::Manager (Allocate/Free)
-#include "rw/core/stdc/stdc.h"                              // rw::core::stdc::StringnCopy
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
+#include "SDKs/EATech/rwcore/filesys/asyncop.h"
+#include "SDKs/EATech/rwcore/filesys/device.h"
+#include "rw/core/stdc/stdc.h"
 
-#include <new>       // placement new over the Manager-allocated op storage
+#include <new>
 
 namespace CgsFileSystem
 {
@@ -31,29 +27,12 @@ namespace CgsFileSystem
 
     namespace
     {
-        // The X360 read a completed op's status with the "want-wait" flag pointing at a rodata
-        // false (the op is already done inside a completion callback), so GetStatus never
-        // blocks: the immediate timeout.
-        const EA::Thread::ThreadTime KI_NO_WAIT = EA::Thread::kTimeoutImmediate;
-
-        // Build a formatted assert message via StrStream (as the X360 did with the shared assert
-        // buffer) and fire it. Used for the asserts whose text embeds a runtime value.
-        void FireFormattedAssert(const char* lpcMessage)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(lpcMessage, __FILE__, __LINE__);
-            CgsDev::Assert::EndAssert();
-        }
-
-        // Allocate one AsyncOp through the filesys Manager and construct it in place (asm:
-        // Manager::Allocate(0x48); if non-null, AsyncOp::AsyncOp(mem); else null).
         AsyncOp* AllocateAsyncOp()
         {
             void* lpMem = Manager::Allocate(static_cast<u32>(sizeof(AsyncOp)));
             return lpMem ? new (lpMem) AsyncOp() : 0;
         }
 
-        // Destroy + free a completed op (asm: ~AsyncOp(op); Manager::Free(op)).
         void FreeAsyncOp(AsyncOp* lpOp)
         {
             if (lpOp)
@@ -64,269 +43,524 @@ namespace CgsFileSystem
         }
     }
 
-    // Open @0x828F0090 — latch name/access/priority, mark the handle OPENING with one pending
-    // op, and queue the async device open (completion -> OpenCallback -> OnOpen). Write access
-    // opens with flags 7; read access with 0.
-    bool File::Open(const char* lpcFileName, FileAccess leFileAccess, s32 liPriority,
-                    bool lbUseHDCache)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // Open @0x828F0090. Write access opens with flags 7, read access with 0.
+    bool File::Open(const char* lpcFileName, FileAccess leFileAccessType, s32 liPriority, bool lbUseHDCache)
     {
+        FileFutexHelper lFutexHelper(mFutex, __FUNCTION__);
         (void)lbUseHDCache;   // accepted; the X360 open path ignores it here
 
-        FileFutexHelper lGuard(mFutex);
-
-        CGS_ASSERT(meFileState == E_FILESTATE_CLOSED, "Invalid state to perform operation\n");
-        CGS_ASSERT(muPendingOperationCount == 0,
-                   "Should only never have pending operations on open request\n");
+        CGS_ASSERT_STREAM(meFileState == E_FILESTATE_CLOSED, "Invalid state to perform operation\n");
+        CGS_ASSERT_STREAM(muPendingOperationCount == 0, "Should only never have pending operations on open request\n");
 
         mpHandle                = 0;
         mpcFileName             = lpcFileName;
-        meFileAccess            = leFileAccess;
+        meFileAccess            = leFileAccessType;
         muLastOperationSize     = 0;
         miPriority              = liPriority;
         meFileState             = E_FILESTATE_OPENING;
         muPendingOperationCount = 1;
         muCacheId               = 0xFFFFFFFFu;   // -1: no disk-cache entry
 
-        u32 luFlags = (leFileAccess == E_FILEACCESS_WRITE) ? 7u : 0u;
+        u32 luFileAccess = 0;
+        if (leFileAccessType == E_FILEACCESS_WRITE)
+        {
+            luFileAccess = 7;
+        }
 
-        AsyncOp* lpOp = AllocateAsyncOp();
-        lpOp->Open(lpcFileName, luFlags, &File::OpenCallback,
-                   reinterpret_cast<uintptr_t>(this), 0);
-        lpOp->SetPriority(miPriority);
+        AsyncOp* lpOperator = AllocateAsyncOp();
+        lpOperator->Open(lpcFileName, luFileAccess, &File::OpenCallback, reinterpret_cast<uintptr_t>(this), 0);
+        lpOperator->SetPriority(miPriority);
 
         rw::core::stdc::StringnCopy(macFileName, lpcFileName, 255);
         return true;
     }
 
-    // Read @0x828F0248 — record the pending read (position/size/dst) and queue the async device
-    // read (completion -> ReadCallback -> OnRead).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     bool File::Read(void* lpBuffer, u64 luPosition, u64 luSize)
     {
-        FileFutexHelper lGuard(mFutex);
+        FileFutexHelper lFutexHelper(mFutex, __FUNCTION__);
 
-        CGS_ASSERT(meFileState != E_FILESTATE_CLOSED, "Invalid state to perform operation\n");
-        CGS_ASSERT(mpHandle != 0, "No file handle to begin read\n");
+        // Read @0x828F0248 -- record the pending read and queue the async device read.
 
-        muAttemptedReadFilePos   = luPosition;
+        CGS_ASSERT_STREAM(meFileState != E_FILESTATE_CLOSED, "Invalid state to perform operation\n");
+        CGS_ASSERT_STREAM(mpHandle != 0, "No file handle to begin read\n");
+
         muAttemptedReadOpSize    = luSize;
+        muAttemptedReadFilePos   = luPosition;
         mpAttemptedReadOpAddress = lpBuffer;
 
-        AsyncOp* lpOp = AllocateAsyncOp();
-        lpOp->Read(mpHandle, lpBuffer, luPosition, luSize, &File::ReadCallback,
-                   reinterpret_cast<uintptr_t>(this), 0);
-        lpOp->SetPriority(miPriority);
+        AsyncOp* lpOperator = AllocateAsyncOp();
+        lpOperator->Read(mpHandle, lpBuffer, luPosition, luSize, &File::ReadCallback, reinterpret_cast<uintptr_t>(this), 0);
+        lpOperator->SetPriority(miPriority);
         ++muPendingOperationCount;
         return true;
     }
 
-    // Write @0x828E81F8 — queue the async device write (completion -> WriteCallback -> OnWrite).
-    // Only valid on a write-access handle.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     bool File::Write(const void* lpBuffer, u64 luPosition, u64 luSize)
     {
-        FileFutexHelper lGuard(mFutex);
+        FileFutexHelper lFutexHelper(mFutex, __FUNCTION__);
 
-        CGS_ASSERT(meFileState != E_FILESTATE_CLOSED, "Invalid state to perform operation\n");
-        CGS_ASSERT(meFileAccess == E_FILEACCESS_WRITE,
-                   "File has only read access. Cannot write to it\n");
-        CGS_ASSERT(mpHandle != 0, "No file handle to begin write\n");
+        CGS_ASSERT_STREAM(meFileState != E_FILESTATE_CLOSED, "Invalid state to perform operation\n");
+        CGS_ASSERT_STREAM(meFileAccess == E_FILEACCESS_WRITE, "File has only read access. Cannot write to it\n");
+        CGS_ASSERT_STREAM(mpHandle != 0, "No file handle to begin write\n");
 
-        AsyncOp* lpOp = AllocateAsyncOp();
-        lpOp->Write(mpHandle, const_cast<void*>(lpBuffer), luPosition, luSize,
-                    &File::WriteCallback, reinterpret_cast<uintptr_t>(this), 0);
-        lpOp->SetPriority(miPriority);
+        // Write @0x828E81F8 -- queue the async device write.
+        AsyncOp* lpOperator = AllocateAsyncOp();
+        lpOperator->Write(mpHandle, const_cast<void*>(lpBuffer), luPosition, luSize, &File::WriteCallback, reinterpret_cast<uintptr_t>(this), 0);
+        lpOperator->SetPriority(miPriority);
         ++muPendingOperationCount;
         return true;
     }
 
-    // Close @0x828F03E0 — queue the async device close (completion -> CloseCallback -> OnClose).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     bool File::Close()
     {
-        FileFutexHelper lGuard(mFutex);
+        FileFutexHelper lFutexHelper(mFutex, __FUNCTION__);
 
-        CGS_ASSERT(meFileState != E_FILESTATE_CLOSED, "Invalid state to perform operation\n");
+        CGS_ASSERT_STREAM(meFileState != E_FILESTATE_CLOSED, "Invalid state to perform operation\n");
 
-        AsyncOp* lpOp = AllocateAsyncOp();
-        lpOp->Close(mpHandle, &File::CloseCallback, reinterpret_cast<uintptr_t>(this), 0);
-        lpOp->SetPriority(miPriority);
+        // Close @0x828F03E0 -- queue the async device close.
+        AsyncOp* lpOperator = AllocateAsyncOp();
+        lpOperator->Close(mpHandle, &File::CloseCallback, reinterpret_cast<uintptr_t>(this), 0);
+        lpOperator->SetPriority(miPriority);
         ++muPendingOperationCount;
         return true;
     }
 
-    // OnOpen @0x828E83E0 — device open completion. Fold the op status into the handle state:
-    // -2 fail (ERROR + "Failed to open file" report), -1 cancel (back to CLOSED), 1 success
-    // (latch the result Handle, go OPEN); anything else is an unhandled-response assert.
-    void File::OnOpen(AsyncOp* lpOp)
+
+
+
+
+
+
+
+
+
+
+
+
+    void File::OnOpen(AsyncOp* lpOperator)
     {
-        FileFutexHelper lGuard(mFutex);
+        // OnOpen @0x828E83E0 -- device open completion: -2 fail, -1 cancel, 1 success.
 
-        CGS_ASSERT(meFileState == E_FILESTATE_OPENING, "Incorrect file state\n");
-        CGS_ASSERT(muPendingOperationCount != 0, "Received file event with 0 pending operations\n");
+        FileFutexHelper lFutexHelper(mFutex, __FUNCTION__);
 
-        s32 liStatus = lpOp->GetStatus(KI_NO_WAIT);
-        if (liStatus == -2)
-        {
-            mpHandle    = 0;
-            meFileState = E_FILESTATE_ERROR;
 
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
-            lMessage << "Failed to open file '"
-                     << (mpcFileName ? mpcFileName : "<NULLSTRING>") << "'";
-            FireFormattedAssert(lacMessage);
-        }
-        else if (liStatus == -1)
+        CGS_ASSERT_STREAM(meFileState == E_FILESTATE_OPENING, "Incorrect file state\n");
+        CGS_ASSERT_STREAM(muPendingOperationCount > 0, "Received file event with 0 pending operations\n");
+
+        switch (lpOperator->GetStatus(EA::Thread::kTimeoutImmediate))
         {
-            mpHandle    = 0;
-            meFileState = E_FILESTATE_CLOSED;
-        }
-        else if (liStatus == 1)
-        {
-            mpHandle    = static_cast<rw::core::filesys::Handle*>(lpOp->GetResultHandle());
-            meFileState = E_FILESTATE_OPEN;
-        }
-        else
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
-            lMessage << "Unhandled response: " << liStatus << "\n";
-            FireFormattedAssert(lacMessage);
+            case -2:
+                mpHandle    = 0;
+                meFileState = E_FILESTATE_ERROR;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                CGS_ASSERT_STREAM(false, "Failed to open file '" << mpcFileName << "'");
+                break;
+
+            default:
+
+
+                CGS_ASSERT_STREAM(false, "Unhandled response: " << lpOperator->GetStatus(EA::Thread::kTimeoutImmediate) << "\n");
+                break;
+            case -1:
+                mpHandle    = 0;
+                meFileState = E_FILESTATE_CLOSED;
+                break;
+            case 1:
+                mpHandle    = static_cast<rw::core::filesys::Handle*>(lpOperator->GetResultHandle());
+                meFileState = E_FILESTATE_OPEN;
+                break;
         }
 
         --muPendingOperationCount;
-        FreeAsyncOp(lpOp);
+        FreeAsyncOp(lpOperator);
     }
 
-    // OnRead @0x828E8670 — device read completion. -2 -> ERROR, -1 -> OPEN, 1 -> record the
-    // bytes read and go OPEN; unhandled response leaves the state untouched.
-    void File::OnRead(AsyncOp* lpOp)
+
+    void File::OnRead(AsyncOp* lpOperator)
     {
-        FileFutexHelper lGuard(mFutex);
+        // OnRead @0x828E8670 -- device read completion: -2 -> ERROR, -1 -> OPEN, 1 -> OPEN with
+        // the bytes read recorded.
+        FileFutexHelper lFutexHelper(mFutex, __FUNCTION__);
 
-        CGS_ASSERT(meFileState != E_FILESTATE_CLOSED, "Incorrect file state\n");
-        CGS_ASSERT(muPendingOperationCount != 0, "Received file event with 0 pending operations\n");
 
-        s32 liStatus = lpOp->GetStatus(KI_NO_WAIT);
-        if (liStatus == -2)
+        CGS_ASSERT_STREAM(meFileState != E_FILESTATE_CLOSED, "Incorrect file state\n");
+        CGS_ASSERT_STREAM(muPendingOperationCount > 0, "Received file event with 0 pending operations\n");
+
+        switch (lpOperator->GetStatus(EA::Thread::kTimeoutImmediate))
         {
-            meFileState = E_FILESTATE_ERROR;
-        }
-        else if (liStatus == -1)
-        {
-            meFileState = E_FILESTATE_OPEN;
-        }
-        else if (liStatus == 1)
-        {
-            muLastOperationSize = lpOp->GetResultSize();
-            meFileState         = E_FILESTATE_OPEN;
-        }
-        else
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
-            lMessage << "Unhandled response: " << liStatus << "\n";
-            FireFormattedAssert(lacMessage);
+            case -2:
+                meFileState = E_FILESTATE_ERROR;
+                break;
+            case -1:
+                meFileState = E_FILESTATE_OPEN;
+                break;
+            case 1:
+                muLastOperationSize = lpOperator->GetResultSize();
+                meFileState         = E_FILESTATE_OPEN;
+                break;
+            default:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                CGS_ASSERT_STREAM(false, "Unhandled response: " << lpOperator->GetStatus(EA::Thread::kTimeoutImmediate) << "\n");
+                break;
         }
 
         --muPendingOperationCount;
-        FreeAsyncOp(lpOp);
+        FreeAsyncOp(lpOperator);
     }
 
-    // OnWrite @0x828DCBA0 — device write completion (same status folding as OnRead).
-    void File::OnWrite(AsyncOp* lpOp)
+
+
+
+
+
+
+
+
+
+    void File::OnWrite(AsyncOp* lpOperator)
     {
-        FileFutexHelper lGuard(mFutex);
+        // OnWrite @0x828DCBA0 -- device write completion (same folding as OnRead).
+        FileFutexHelper lFutexHelper(mFutex, __FUNCTION__);
 
-        CGS_ASSERT(meFileState != E_FILESTATE_CLOSED, "Incorrect file state\n");
-        CGS_ASSERT(muPendingOperationCount != 0, "Received file event with 0 pending operations\n");
 
-        s32 liStatus = lpOp->GetStatus(KI_NO_WAIT);
-        if (liStatus == -2)
+        CGS_ASSERT_STREAM(meFileState != E_FILESTATE_CLOSED, "Incorrect file state\n");
+        CGS_ASSERT_STREAM(muPendingOperationCount > 0, "Received file event with 0 pending operations\n");
+
+        switch (lpOperator->GetStatus(EA::Thread::kTimeoutImmediate))
         {
-            meFileState = E_FILESTATE_ERROR;
-        }
-        else if (liStatus == -1)
-        {
-            meFileState = E_FILESTATE_OPEN;
-        }
-        else if (liStatus == 1)
-        {
-            muLastOperationSize = lpOp->GetResultSize();
-            meFileState         = E_FILESTATE_OPEN;
-        }
-        else
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
-            lMessage << "Unhandled response: " << liStatus << "\n";
-            FireFormattedAssert(lacMessage);
+            case -2:
+                meFileState = E_FILESTATE_ERROR;
+                break;
+            case -1:
+                meFileState = E_FILESTATE_OPEN;
+                break;
+            case 1:
+                muLastOperationSize = lpOperator->GetResultSize();
+                meFileState         = E_FILESTATE_OPEN;
+                break;
+            default:
+
+
+
+
+
+
+
+
+
+
+                CGS_ASSERT_STREAM(false, "Unhandled response: " << lpOperator->GetStatus(EA::Thread::kTimeoutImmediate) << "\n");
+                break;
         }
 
         --muPendingOperationCount;
-        FreeAsyncOp(lpOp);
+        FreeAsyncOp(lpOperator);
     }
 
-    // OnClose @0x828E8868 — device close completion. -2 -> ERROR, -1 -> OPEN, 1 -> fully closed
-    // (drop the access mode + handle, state CLOSED); unhandled response asserts.
-    void File::OnClose(AsyncOp* lpOp)
+
+
+
+
+
+
+
+
+
+    void File::OnClose(AsyncOp* lpOperator)
     {
-        FileFutexHelper lGuard(mFutex);
+        // OnClose @0x828E8868 -- -2 -> ERROR, -1 -> OPEN, 1 -> closed (no access mode, no handle).
+        FileFutexHelper lFutexHelper(mFutex, __FUNCTION__);
 
-        CGS_ASSERT(meFileState != E_FILESTATE_CLOSED, "Incorrect file state\n");
-        CGS_ASSERT(muPendingOperationCount != 0, "Received file event with 0 pending operations\n");
 
-        s32 liStatus = lpOp->GetStatus(KI_NO_WAIT);
-        if (liStatus == -2)
+        CGS_ASSERT_STREAM(meFileState != E_FILESTATE_CLOSED, "Incorrect file state\n");
+        CGS_ASSERT_STREAM(muPendingOperationCount > 0, "Received file event with 0 pending operations\n");
+
+        switch (lpOperator->GetStatus(EA::Thread::kTimeoutImmediate))
         {
-            meFileState = E_FILESTATE_ERROR;
-        }
-        else if (liStatus == -1)
-        {
-            meFileState = E_FILESTATE_OPEN;
-        }
-        else if (liStatus == 1)
-        {
-            meFileAccess = E_FILEACCESS_CLOSED;
-            mpHandle     = 0;
-            meFileState  = E_FILESTATE_CLOSED;
-        }
-        else
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
-            lMessage << "Unhandled response: " << liStatus << "\n";
-            FireFormattedAssert(lacMessage);
+            case -2:
+                meFileState = E_FILESTATE_ERROR;
+                break;
+            case -1:
+                meFileState = E_FILESTATE_OPEN;
+                break;
+            case 1:
+                meFileAccess = E_FILEACCESS_CLOSED;
+                mpHandle     = 0;
+                meFileState  = E_FILESTATE_CLOSED;
+                break;
+            default:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                CGS_ASSERT_STREAM(false, "Unhandled response: " << lpOperator->GetStatus(EA::Thread::kTimeoutImmediate) << "\n");
+                break;
         }
 
         --muPendingOperationCount;
-        FreeAsyncOp(lpOp);
+        FreeAsyncOp(lpOperator);
     }
 
-    // OpenCallback @0x828E8A58 — recover the owning File from the op's user word and dispatch.
-    void File::OpenCallback(AsyncOp* lpOp)
+
+
+
+
+
+
+
+
+
+    void File::OpenCallback(AsyncOp* lpOperator)
     {
-        File* lpFile = reinterpret_cast<File*>(lpOp->mUserData);
-        lpFile->OnOpen(lpOp);
+        File* lpFile = reinterpret_cast<File*>(lpOperator->mUserData);
+        lpFile->OnOpen(lpOperator);
     }
 
-    // ReadCallback @0x828E8A68.
-    void File::ReadCallback(AsyncOp* lpOp)
+
+
+
+
+
+
+
+
+
+    void File::ReadCallback(AsyncOp* lpOperator)
     {
-        File* lpFile = reinterpret_cast<File*>(lpOp->mUserData);
-        lpFile->OnRead(lpOp);
+        File* lpFile = reinterpret_cast<File*>(lpOperator->mUserData);
+        lpFile->OnRead(lpOperator);
     }
 
-    // WriteCallback @0x828DCD98.
-    void File::WriteCallback(AsyncOp* lpOp)
+
+
+
+
+
+
+
+
+
+    void File::WriteCallback(AsyncOp* lpOperator)
     {
-        File* lpFile = reinterpret_cast<File*>(lpOp->mUserData);
-        lpFile->OnWrite(lpOp);
+        File* lpFile = reinterpret_cast<File*>(lpOperator->mUserData);
+        lpFile->OnWrite(lpOperator);
     }
 
-    // CloseCallback @0x828E8A78.
-    void File::CloseCallback(AsyncOp* lpOp)
+
+
+
+
+
+
+
+
+
+    void File::CloseCallback(AsyncOp* lpOperator)
     {
-        File* lpFile = reinterpret_cast<File*>(lpOp->mUserData);
-        lpFile->OnClose(lpOp);
+        File* lpFile = reinterpret_cast<File*>(lpOperator->mUserData);
+        lpFile->OnClose(lpOperator);
     }
 
 } // namespace CgsFileSystem

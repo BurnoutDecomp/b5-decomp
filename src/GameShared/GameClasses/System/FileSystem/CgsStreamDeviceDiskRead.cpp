@@ -61,52 +61,101 @@ namespace CgsFileSystem
             CgsDev::Assert::EndAssert();
         }
     }
-
     // Construct @ 0x828DCDA8 — record the owner FileSystem/FileLog, mark the stream closed with no
     // log slot, and back-point every block at its owning stream (used by ReadCallback to recover
     // the stream from the block context). Note the loop runs the full KI_MAX_STREAM_BLOCKS, not
     // miNumBlocks (which Open sets later).
     void StreamDeviceDiskRead::Construct(FileSystem* lpFileSystem, FileLog* lpLog)
     {
+        miLogIndex   = -1;            // first: ARTIST materialises the -1 before any store (@0x828DCDA8)
         mpFileSystem = lpFileSystem;
         mpLog        = lpLog;
-        miLogIndex   = -1;
         meStatus     = E_STATUS_CLOSED;
 
         for (s32 liIndex = 0; liIndex < KI_MAX_STREAM_BLOCKS; ++liIndex)
             maBlocks[liIndex].mpOwner = this;
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // Open @ 0x82903F48 — configure the stream for luNumBlocks blocks over the caller buffer, reset
     // the ring, and kick off the async device open (completion -> OpenCallback -> OnOpen).
     void StreamDeviceDiskRead::Open(const char* lpcName, void* lpBuffer, u32 luBufferSize,
                                     u32 luNumBlocks, s32 liNormalPriority, s32 liHighPriority,
-                                    bool lbPrintToLog, s32 liLogIndex)
+                                    bool lbUseDiskCache, s32 liLogIndex)
     {
         miLogIndex = liLogIndex;
         rw::core::stdc::StringnCopy(macFileName, lpcName, 255);
 
         StreamLockGuard lGuard(mFutex.mCriticalSection);
 
-        CGS_ASSERT((luBufferSize % luNumBlocks) == 0,
-                   "Buffer size must be divisible by number of blocks\n");
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        CGS_ASSERT_STREAM((luBufferSize % luNumBlocks) == 0, "Buffer size must be divisible by number of blocks\n");
 
         mpBuffer         = static_cast<char*>(lpBuffer);
         miBufferSize     = static_cast<s32>(luBufferSize);
         miNumBlocks      = static_cast<s32>(luNumBlocks);
-        miBlockSize      = static_cast<s32>(luBufferSize / luNumBlocks);
+        miBlockSize      = miBufferSize / miNumBlocks;   // signed: ARTIST divw @0x82904028
         miNormalPriority = liNormalPriority;
         miHighPriority   = liHighPriority;
-        mbPrintToLog     = lbPrintToLog;
 
-        if (static_cast<s32>(luNumBlocks) > KI_MAX_STREAM_BLOCKS)
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
-            lMessage << "Maximum blocks per stream is " << KI_MAX_STREAM_BLOCKS
-                     << " but you chose " << miNumBlocks << "\n";
-            FireFormattedAssert(lacMessage);
-        }
+
+        CGS_ASSERT_STREAM(static_cast<s32>(luNumBlocks) <= KI_MAX_STREAM_BLOCKS, "Maximum blocks per stream is " << KI_MAX_STREAM_BLOCKS << " but you chose " << miNumBlocks << "\n");
 
         muOutputPosition        = 0;
         muInputPosition         = 0;
@@ -120,7 +169,17 @@ namespace CgsFileSystem
 
         ResetStreamBlocks();
 
-        if (lbPrintToLog)
+        if (lbUseDiskCache)
+
+
+
+
+
+
+
+
+
+
             CGS_ASSERT(mpFileSystem != 0, "mpFileSystem\n");
 
         GetDeviceManager()->Open(macFileName, 1, &StreamDeviceDiskRead::OpenCallback, this, miHighPriority);
@@ -131,220 +190,68 @@ namespace CgsFileSystem
         mbWaitingToSeek  = false;
     }
 
-    // Close @ 0x82900238 — request a close (serviced asynchronously); warn (gated by the message
-    // filter) if the stream is already closed or a close is already pending.
-    void StreamDeviceDiskRead::Close()
-    {
-        StreamLockGuard lGuard(mFutex.mCriticalSection);
 
-        if (meStatus == E_STATUS_CLOSED || mbWaitingToClose)
-        {
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-                *CgsDev::Log::gpDebugPrint
-                    << "WARNING: Attempt to close a stream that is already closed or closing - ignoring request\n";
-        }
-        else
-        {
-            mbWaitingToClose = true;
-            Service();
-        }
-    }
 
-    // Seek @ 0x829002D0 — reposition the input/output cursors and flag a pending reset; the actual
-    // ring reset happens in Service (only valid on an OPEN stream not currently locked for read).
-    void StreamDeviceDiskRead::Seek(u64 luPosition)
-    {
-        StreamLockGuard lGuard(mFutex.mCriticalSection);
 
-        CGS_ASSERT(meStatus == E_STATUS_OPEN, CgsDev::Assert::StreamMessageAt("Invalid state to do seek\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsStreamDeviceDiskRead.cpp", 558));
-        CGS_ASSERT(!mbIsOutputing, CgsDev::Assert::StreamMessageAt("Can not seek while locked for read\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsStreamDeviceDiskRead.cpp", 559));
 
-        mbWaitingToSeek  = true;
-        muInputPosition  = luPosition;
-        muOutputPosition = luPosition;
-        Service();
-    }
 
-    // OnOpen @0x82900740 — consume the device-open completion, retaining the compound
-    // logical-device/device-handle pair on success. Every arm matches ARTIST's state update;
-    // the handler always retires the pending open and re-enters Service.
-    void StreamDeviceDiskRead::OnOpen(s32 liResult, Handle lHandle, u64 luSize, void* lpContext)
-    {
-        (void)luSize;
-        (void)lpContext;
 
-        StreamLockGuard lGuard(mFutex.mCriticalSection);
 
-        CGS_ASSERT(meStatus == E_STATUS_OPENING, "Incorrect stream state\n");
-        CGS_ASSERT(miPendingOperationCount > 0,
-                   "Received stream event with 0 pending operations\n");
 
-        if (liResult == -2)
-        {
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-                *CgsDev::Log::gpDebugPrint << "WARNING: Open failed on: "
-                                           << macFileName << "\n";
-            meStatus = E_STATUS_CLOSED;
-            mbWaitingToClose = false;
-            miPendingOperationCount = 0;
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-                *CgsDev::Log::gpDebugPrint << "WARNING: Failed to open file '"
-                                           << macFileName << "'";
-        }
-        else if (liResult == -1)
-        {
-            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
-                *CgsDev::Log::gpDebugPrint << "WARNING: Open cancelled on: "
-                                           << macFileName << "\n";
-            meStatus = E_STATUS_CLOSED;
-        }
-        else if (liResult != 0)
-        {
-            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
-            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
-            lMessage << "Unhandled response: " << liResult << "\n";
-            FireFormattedAssert(lacMessage);
-        }
-        else
-        {
-            mHandle = lHandle;
-            meStatus = E_STATUS_OPEN;
-        }
 
-        --miPendingOperationCount;
-        Service();
-    }
 
-    // ARTIST8290112C-48 /8290132C-44: each operation locks independently;
-    // the ring's locked-block flags protect the exposed bytes between calls.
-    bool StreamDeviceDiskRead::StartAsyncRead(void** lppData, u32* lpuAmount)
-    {
-        StreamLockGuard lGuard(mFutex.mCriticalSection);
-        return StartAsyncReadInternal(lppData, lpuAmount);
-    }
 
-    void StreamDeviceDiskRead::StopAsyncRead(u32 luAmount)
-    {
-        StreamLockGuard lGuard(mFutex.mCriticalSection);
-        StopAsyncReadInternal(luAmount);
-    }
 
-    // Inlined at ARTIST82900FCC, before deciding whether to prefetch.
-    bool StreamDeviceDiskRead::IsEndOfFile() const
-    {
-        return mbIsEndOfFile;
-    }
 
-    // Read @ 0x829041B8 — synchronous read of luAmount bytes out of the streamed ring into lpDest
-    // (lpDest may be null to just consume). Loops draining loaded blocks until the request is
-    // satisfied or the stream runs dry; returns the number of bytes delivered (luAmount on full
-    // success, the partial count if the stream ended first).
-    u32 StreamDeviceDiskRead::Read(u32 luAmount, void* lpDest)
-    {
-        StreamLockGuard lGuard(mFutex.mCriticalSection);
 
-        u32   luBytesRead = 0;
-        u32   luRemaining = luAmount;
-        void* lpData      = 0;
-        u32   luAvailable = 0;
 
-        if (StartAsyncReadInternal(&lpData, &luAvailable))
-        {
-            bool lbComplete = true;
-            while (luAvailable < luRemaining)
-            {
-                if (lpDest)
-                    memcpy(static_cast<char*>(lpDest) + luBytesRead, lpData, luAvailable);
-                StopAsyncReadInternal(luAvailable);
-                luBytesRead += luAvailable;
-                luRemaining -= luAvailable;
-                if (!StartAsyncReadInternal(&lpData, &luAvailable))
-                {
-                    lbComplete = false;
-                    break;
-                }
-            }
 
-            if (lbComplete)
-            {
-                if (lpDest)
-                    memcpy(static_cast<char*>(lpDest) + luBytesRead, lpData, luRemaining);
-                StopAsyncReadInternal(luRemaining);
-                luBytesRead = luAmount;
-            }
-        }
 
-        return luBytesRead;
-    }
 
-    // GetAmountOfDataInBuffer @ 0x828DCDE0 — total contiguously-loaded, not-yet-consumed bytes,
-    // walking loaded blocks forward from the output cursor.
-    // Inlined by ARTIST StreamDataFunc at829046CC-D8: lock, read the
-    // 64-bit output position at+0x570, unlock, then return the snapshot.
-    u64 StreamDeviceDiskRead::Tell()
-    {
-        StreamLockGuard lGuard(mFutex.mCriticalSection);
-        return muOutputPosition;
-    }
 
-    u32 StreamDeviceDiskRead::GetAmountOfDataInBuffer() const
-    {
-        StreamLockGuard lGuard(mFutex.mCriticalSection);
 
-        s32 liTotalAvailable = 0;
-        s32 liBlockCount     = 0;
-        if (miBlocksUsed > 0)
-        {
-            do
-            {
-                s32 liIndex = (miOutputBlock + liBlockCount) % miNumBlocks;
-                const ReadStreamBlock& lrBlock = maBlocks[liIndex];
-                if ((lrBlock.muFlags & KU_RSBFLAG_LOADED) == 0)
-                    break;
-                ++liBlockCount;
-                liTotalAvailable += lrBlock.miWritten - lrBlock.miRead;
-            }
-            while (liBlockCount < miBlocksUsed);
-        }
 
-        return static_cast<u32>(liTotalAvailable);
-    }
 
-    // GetCurrentFilePriority @ 0x828E0F70 — pick the streaming priority for the next device read: at
-    // end-of-file (nothing more to fetch) run at normal priority; otherwise run at normal priority
-    // while the buffer is at least a quarter full, and escalate to the high priority once it drains
-    // below 25% so a starving consumer catches up. (ARTIST: mbIsEndOfFile byte-test @0x588, then the
-    // signed miBufferSize @0x130 as the denominator and the zero-extended GetAmountOfDataInBuffer
-    // result as the numerator, compared against 0.25.)
-    s32 StreamDeviceDiskRead::GetCurrentFilePriority()
-    {
-        if (mbIsEndOfFile)
-            return miNormalPriority;
 
-        f64 lfCapacity = static_cast<f64>(miBufferSize);
-        f64 lfInBuffer = static_cast<f64>(GetAmountOfDataInBuffer());
-        if (lfInBuffer / lfCapacity >= 0.25)
-            return miNormalPriority;
 
-        return miHighPriority;
-    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // ResetStreamBlocks @ 0x828E8D90 — clear the ring back to empty and re-seat each block's fixed
     // buffer slot (miStreamPos = index * blockSize). Only valid when nothing is in flight.
     void StreamDeviceDiskRead::ResetStreamBlocks()
     {
-        CGS_ASSERT(!mbIsOutputing, "Can not reset stream while locked for read\n");
-        CGS_ASSERT(miInputRequestsPending == 0, "Can not reset while input requests are occuring\n");
-        CGS_ASSERT(miPendingOperationCount == 0, "Can not reset while pending operations are occuring\n");
+
+
+        CGS_ASSERT_STREAM(!mbIsOutputing, "Can not reset stream while locked for read\n");
+        CGS_ASSERT_STREAM(miInputRequestsPending == 0, "Can not reset while input requests are occuring\n");
+        CGS_ASSERT_STREAM(miPendingOperationCount == 0, "Can not reset while pending operations are occuring\n");
+
 
         for (s32 liIndex = 0; liIndex < miNumBlocks; ++liIndex)
         {
-            ReadStreamBlock& lrBlock = maBlocks[liIndex];
-            lrBlock.muFilePos   = 0;
-            lrBlock.miWritten   = 0;
-            lrBlock.miRead      = 0;
-            lrBlock.muFlags     = KU_RSBFLAG_EMPTY;
-            lrBlock.miStreamPos = liIndex * miBlockSize;
+            // ARTIST's volatile stores run muFilePos, muFlags, miRead, miWritten, miStreamPos
+            // (@0x828E8F04..@0x828E8F20); DWARF has no block local, only liIndex (cpp:246).
+            maBlocks[liIndex].muFilePos   = 0;
+            maBlocks[liIndex].muFlags     = KU_RSBFLAG_EMPTY;
+            maBlocks[liIndex].miRead      = 0;
+            maBlocks[liIndex].miWritten   = 0;
+            maBlocks[liIndex].miStreamPos = liIndex * miBlockSize;
         }
 
         miBlocksUsed    = 0;
@@ -353,6 +260,24 @@ namespace CgsFileSystem
         miInputBlock    = 0;
         mbWaitingToSeek = false;
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // Service @ 0x82900100 — the ring pump. Runs when a seek/close is pending or the stream has not
     // hit EOF. Refreshes the current priority, then (as long as no more than one op is in flight)
@@ -398,6 +323,77 @@ namespace CgsFileSystem
         }
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // SubmitReadRequest @ 0x828F8CD0 — if a ring block is free, queue a block-sized device read to
     // fill the input block (completion -> ReadCallback -> OnRead) and advance the input cursor.
     // Returns whether a read was queued.
@@ -406,9 +402,15 @@ namespace CgsFileSystem
         if (miBlocksUsed >= miNumBlocks)
             return false;
 
-        CGS_ASSERT(meStatus == E_STATUS_OPEN, "Attempting to service a none-open stream\n");
-        CGS_ASSERT(maBlocks[miInputBlock].muFlags == KU_RSBFLAG_EMPTY,
-                   "Should never be loading into a none-empty block\n");
+
+
+
+
+
+        CGS_ASSERT_STREAM(meStatus == E_STATUS_OPEN, "Attempting to service a none-open stream\n");
+
+
+        CGS_ASSERT_STREAM(maBlocks[miInputBlock].muFlags == KU_RSBFLAG_EMPTY, "Should never be loading into a none-empty block\n");
 
         ReadStreamBlock& lrBlock = maBlocks[miInputBlock];
         lrBlock.muFilePos = muInputPosition;
@@ -429,6 +431,41 @@ namespace CgsFileSystem
         return true;
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // SubmitCloseRequest @ 0x828F8F00 — issue the async device close (completion -> CloseCallback
     // -> OnClose) and count the op. When a disk-cache entry is bound and EOF has not been reached,
     // instead just reset the ring and re-pump reads (no close needed). Returns whether a close was
@@ -447,91 +484,480 @@ namespace CgsFileSystem
         return true;
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // Close @ 0x82900238 — request a close (serviced asynchronously); warn (gated by the message
+    // filter) if the stream is already closed or a close is already pending.
+    void StreamDeviceDiskRead::Close()
+    {
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
+
+        if (meStatus == E_STATUS_CLOSED || mbWaitingToClose)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint
+                    << "WARNING: Attempt to close a stream that is already closed or closing - ignoring request\n";
+        }
+        else
+        {
+            mbWaitingToClose = true;
+            Service();
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // Seek @ 0x829002D0 — reposition the input/output cursors and flag a pending reset; the actual
+    // ring reset happens in Service (only valid on an OPEN stream not currently locked for read).
+    void StreamDeviceDiskRead::Seek(u64 luPosition)
+    {
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
+        CGS_ASSERT_STREAM(meStatus == E_STATUS_OPEN, "Invalid state to do seek\n");
+        CGS_ASSERT_STREAM(!mbIsOutputing, "Can not seek while locked for read\n");
+
+        mbWaitingToSeek  = true;
+        muInputPosition  = luPosition;
+        muOutputPosition = luPosition;
+        Service();
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // GetAmountOfDataInBuffer @ 0x828DCDE0 — total contiguously-loaded, not-yet-consumed bytes,
+    // walking loaded blocks forward from the output cursor.
+    // Inlined by ARTIST StreamDataFunc at829046CC-D8: lock, read the
+    // 64-bit output position at+0x570, unlock, then return the snapshot.
+    u64 StreamDeviceDiskRead::Tell()
+    {
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
+        return muOutputPosition;
+    }
+
+
+
+
+
+
+
+
+
+    // Read @ 0x829041B8 — synchronous read of luAmount bytes out of the streamed ring into lpDest
+    // (lpDest may be null to just consume). Loops draining loaded blocks until the request is
+    // satisfied or the stream runs dry; returns the number of bytes delivered (luAmount on full
+    // success, the partial count if the stream ended first).
+    u32 StreamDeviceDiskRead::Read(u32 luAmount, void* lpDest)
+    {
+        u32   luBytesRead = 0;
+        u32   luRemaining = luAmount;
+        void* lpData;
+        u32   luAvailable;
+
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
+
+        // ARTIST @0x829041B8 copies through the XDK's XMemCpy (bl 0x82926BA0).
+        while (StartAsyncReadInternal(&lpData, &luAvailable))
+        {
+            if (luAvailable >= luRemaining)
+            {
+                if (lpDest)
+                    XMemCpy(static_cast<char*>(lpDest) + luBytesRead, lpData, luRemaining);
+                StopAsyncReadInternal(luRemaining);
+                luBytesRead = luAmount;
+                break;
+            }
+            if (lpDest)
+                XMemCpy(static_cast<char*>(lpDest) + luBytesRead, lpData, luAvailable);
+            StopAsyncReadInternal(luAvailable);
+            luBytesRead += luAvailable;
+            luRemaining -= luAvailable;
+        }
+        return luBytesRead;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // StartAsyncReadInternal @ 0x828E8F50 — expose the current run of loaded, unconsumed data as a
     // (pointer, length) pair and lock the stream for reading. Returns false (and zeroes the outputs)
     // when nothing is available. The lock is released by StopAsyncReadInternal.
-    bool StreamDeviceDiskRead::StartAsyncReadInternal(void** lppData, u32* lpuAmount)
+    bool StreamDeviceDiskRead::StartAsyncReadInternal(void** lppBuffer, u32* lpuBufferSize)
     {
-        CGS_ASSERT(meStatus == E_STATUS_OPEN, "Can only start a read if open\n");
-        CGS_ASSERT(!mbIsOutputing, "Already reading data\n");
 
-        *lppData   = 0;
-        *lpuAmount = 0;
 
-        if (miBlocksUsed == 0 || mbWaitingToSeek)
+
+
+
+        s32 liIndex;    // DWARF: one function-scope index (cpp:677) walks both loops
+
+
+        CGS_ASSERT_STREAM(meStatus == E_STATUS_OPEN, "Can only start a read if open\n");
+        CGS_ASSERT_STREAM(!mbIsOutputing, "Already reading data\n");
+
+        *lppBuffer     = 0;
+        *lpuBufferSize = 0;
+
+        if (miBlocksUsed == 0)
+            return false;
+        if (mbWaitingToSeek)
             return false;
 
         // Scan forward from the output cursor over the contiguous run of loaded blocks.
-        s32 liBlock = miOutputBlock;
-        while (liBlock < miNumBlocks)
+        for (liIndex = miOutputBlock; liIndex < miNumBlocks; ++liIndex)
         {
-            if ((maBlocks[liBlock].muFlags & KU_RSBFLAG_LOADED) == 0)
+            if ((maBlocks[liIndex].muFlags & KU_RSBFLAG_LOADED) == 0)
                 break;
-            ++liBlock;
         }
-        if (liBlock == miOutputBlock)
+        if (liIndex == miOutputBlock)
             return false;
 
-        s32 liLastBlock = liBlock - 1;
-        if (miOutputBlock > liLastBlock)
-            return false;
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        s32 liLastBlock   = liIndex - 1;
         s32 liTotalToRead = 0;
-        for (s32 liIndex = miOutputBlock; liIndex <= liLastBlock; ++liIndex)
+        for (liIndex = miOutputBlock; liIndex <= liLastBlock; ++liIndex)
             liTotalToRead += maBlocks[liIndex].miWritten - maBlocks[liIndex].miRead;
 
         if (liTotalToRead == 0)
             return false;
 
-        ReadStreamBlock& lrBlock = maBlocks[miOutputBlock];
-        *lppData   = mpBuffer + lrBlock.miStreamPos + lrBlock.miRead;
-        *lpuAmount = static_cast<u32>(liTotalToRead);
-        mbIsOutputing = true;
+        // ARTIST reads the volatile miOutputBlock once per term (@0x828E911C, @0x828E9138).
+        *lppBuffer     = mpBuffer + maBlocks[miOutputBlock].miStreamPos + maBlocks[miOutputBlock].miRead;
+        *lpuBufferSize = static_cast<u32>(liTotalToRead);
+        mbIsOutputing  = true;
         return true;
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // StopAsyncReadInternal @ 0x82900400 — consume luAmount bytes previously exposed by
     // StartAsyncReadInternal: advance each fully-drained block's read cursor, empty it, and step
     // the output cursor; a partial final block just advances its read cursor. Unlocks reading,
     // advances the output position, and re-pumps via Service.
-    void StreamDeviceDiskRead::StopAsyncReadInternal(u32 luAmount)
+    void StreamDeviceDiskRead::StopAsyncReadInternal(u32 luAmountRead)
     {
-        CGS_ASSERT(meStatus == E_STATUS_OPEN, "Can only start a read if open\n");
-        CGS_ASSERT(mbIsOutputing, "Already reading data\n");
-        CGS_ASSERT(miBlocksUsed > 0, "No blocks used but somehow started a read operation?\n");
 
-        s32 liRemaining = static_cast<s32>(luAmount);
-        if (liRemaining > 0)
+
+
+        CGS_ASSERT_STREAM(meStatus == E_STATUS_OPEN, "Can only start a read if open\n");
+        CGS_ASSERT_STREAM(mbIsOutputing, "Already reading data\n");
+        CGS_ASSERT_STREAM(miBlocksUsed > 0, "No blocks used but somehow started a read operation?\n");
+
+
+        s32 liTotalRead = static_cast<s32>(luAmountRead);
+        while (liTotalRead > 0)
         {
-            for (;;)
+
+
+
+            CGS_ASSERT_STREAM(miOutputBlock < miNumBlocks, "Gone past end of buffer\n");
+            CGS_ASSERT_STREAM((maBlocks[miOutputBlock].muFlags & KU_RSBFLAG_LOADED) != 0, "Block not loaded\n");
+
+            // ARTIST re-indexes maBlocks[miOutputBlock] for every access (@0x82900654..@0x829006B8).
+            s32 liRemainingInCurrentBlock = maBlocks[miOutputBlock].miWritten - maBlocks[miOutputBlock].miRead;
+            if (liRemainingInCurrentBlock > liTotalRead)
             {
-                CGS_ASSERT(miOutputBlock < miNumBlocks, "Gone past end of buffer\n");
-                CGS_ASSERT((maBlocks[miOutputBlock].muFlags & KU_RSBFLAG_LOADED) != 0,
-                           "Block not loaded\n");
-
-                ReadStreamBlock& lrBlock = maBlocks[miOutputBlock];
-                s32 liBlockRemaining = lrBlock.miWritten - lrBlock.miRead;
-                if (liBlockRemaining > liRemaining)
-                {
-                    lrBlock.miRead += liRemaining;
-                    break;
-                }
-
-                liRemaining -= liBlockRemaining;
-                lrBlock.miRead  = lrBlock.miWritten;
-                lrBlock.muFlags = KU_RSBFLAG_EMPTY;
-                ++miOutputBlock;
-                --miBlocksUsed;
-                if (liRemaining <= 0)
-                    break;
+                maBlocks[miOutputBlock].miRead += liTotalRead;
+                break;
             }
+
+            liTotalRead -= liRemainingInCurrentBlock;
+            maBlocks[miOutputBlock].miRead  = maBlocks[miOutputBlock].miWritten;
+            maBlocks[miOutputBlock].muFlags = KU_RSBFLAG_EMPTY;
+            ++miOutputBlock;
+            --miBlocksUsed;
         }
+
+
+
 
         miOutputBlock    = miOutputBlock % miNumBlocks;
         mbIsOutputing    = false;
-        muOutputPosition += static_cast<u64>(luAmount);
+        muOutputPosition += static_cast<u64>(luAmountRead);
         Service();
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    u32 StreamDeviceDiskRead::GetAmountOfDataInBuffer() const
+    {
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
+
+        s32 liTotalAvailable = 0;
+        s32 liBlockCount     = 0;
+        if (miBlocksUsed > 0)
+        {
+            do
+            {
+                s32 liIndex = (miOutputBlock + liBlockCount) % miNumBlocks;
+                const ReadStreamBlock& lrBlock = maBlocks[liIndex];
+                if ((lrBlock.muFlags & KU_RSBFLAG_LOADED) == 0)
+                    break;
+                ++liBlockCount;
+                liTotalAvailable += lrBlock.miWritten - lrBlock.miRead;
+            }
+            while (liBlockCount < miBlocksUsed);
+        }
+
+        return static_cast<u32>(liTotalAvailable);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // OnOpen @0x82900740 — consume the device-open completion, retaining the compound
+    // logical-device/device-handle pair on success. Every arm matches ARTIST's state update;
+    // the handler always retires the pending open and re-enters Service.
+    void StreamDeviceDiskRead::OnOpen(s32 liResult, Handle lHandle, u64 luSize, void* lpContext)
+    {
+        (void)luSize;
+        (void)lpContext;
+
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
+
+
+
+
+        CGS_ASSERT_STREAM(meStatus == E_STATUS_OPENING, "Incorrect stream state\n");
+        CGS_ASSERT_STREAM(miPendingOperationCount > 0, "Received stream event with 0 pending operations\n");
+
+        if (liResult == -2)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "WARNING: Open failed on: "
+                                           << macFileName << "\n";
+            meStatus = E_STATUS_CLOSED;
+            mbWaitingToClose = false;
+            miPendingOperationCount = 0;
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "WARNING: Failed to open file '"
+                                           << macFileName << "'";
+        }
+        else if (liResult == -1)
+        {
+            if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
+                *CgsDev::Log::gpDebugPrint << "WARNING: Open cancelled on: "
+                                           << macFileName << "\n";
+            meStatus = E_STATUS_CLOSED;
+        }
+        else if (liResult != 0)
+        {
+            char lacMessage[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+            CgsDev::StrStream lMessage(lacMessage, sizeof(lacMessage));
+            lMessage << "Unhandled response: " << liResult << "\n";
+            FireFormattedAssert(lacMessage);
+        }
+        else
+        {
+            mHandle = lHandle;
+            meStatus = E_STATUS_OPEN;
+        }
+
+        --miPendingOperationCount;
+        Service();
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // OnRead @ 0x829009C0 — device read-completion handler (from ReadCallback). Validates state and
     // the block, then: on failure (-2) flags the stream ERROR, on cancel (-1) returns it to OPEN,
@@ -545,8 +971,17 @@ namespace CgsFileSystem
 
         ReadStreamBlock* lpBlock = static_cast<ReadStreamBlock*>(lpContext);
 
-        CGS_ASSERT(meStatus != E_STATUS_CLOSED, "Incorrect stream state\n");
-        CGS_ASSERT(miPendingOperationCount > 0, "Received file event with 0 pending operations\n");
+
+
+
+
+
+
+
+
+
+        CGS_ASSERT_STREAM(meStatus != E_STATUS_CLOSED, "Incorrect stream state\n");
+        CGS_ASSERT_STREAM(miPendingOperationCount > 0, "Received file event with 0 pending operations\n");
 
         s32 liBlockIndex = static_cast<s32>(lpBlock - maBlocks);
         if (liBlockIndex < 0 || liBlockIndex >= KI_MAX_STREAM_BLOCKS)
@@ -591,6 +1026,7 @@ namespace CgsFileSystem
 
             if (muCacheId != 0xFFFFFFFFu)
             {
+
                 CGS_ASSERT(mpFileSystem != 0, "mpFileSystem\n");
                 // (X360 debug disk-cache-entry bookkeeping here compiled to dead loads with no
                 // observable store in ARTIST — nothing to reproduce.)
@@ -601,6 +1037,46 @@ namespace CgsFileSystem
         --miInputRequestsPending;
         Service();
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // OnClose @0x828E9168 — retire the queued close and return the stream to CLOSED on
     // success/failure, or OPEN when the operation was cancelled. The cache-end side effect in
@@ -613,9 +1089,11 @@ namespace CgsFileSystem
 
         StreamLockGuard lGuard(mFutex.mCriticalSection);
 
-        CGS_ASSERT(meStatus != E_STATUS_CLOSED, "Incorrect stream state\n");
-        CGS_ASSERT(miPendingOperationCount > 0,
-                   "Received stream event with 0 pending operations\n");
+
+
+
+        CGS_ASSERT_STREAM(meStatus != E_STATUS_CLOSED, "Incorrect stream state\n");
+        CGS_ASSERT_STREAM(miPendingOperationCount > 0, "Received stream event with 0 pending operations\n");
 
         if (liResult == -2)
         {
@@ -648,14 +1126,43 @@ namespace CgsFileSystem
         --miPendingOperationCount;
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // OpenCallback @ 0x82900CF8 — device open-completion trampoline: forward to OnOpen on the owning
     // stream (the context), then assert the context was valid (matching ARTIST's call order).
     void StreamDeviceDiskRead::OpenCallback(s32 liResult, Handle lHandle, u64 luSize, void* lpContext)
     {
         StreamDeviceDiskRead* lpStream = static_cast<StreamDeviceDiskRead*>(lpContext);
         lpStream->OnOpen(liResult, lHandle, luSize, lpContext);
-        CGS_ASSERT(lpContext != 0, CgsDev::Assert::StreamMessageAt("Invalid stream\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsStreamDeviceDiskRead.cpp", 1158));
+
+        CGS_ASSERT_STREAM(lpContext != 0, "Invalid stream\n");
     }
+
+
+
+
+
+
 
     // ReadCallback @ 0x82900DA8 — device read-completion trampoline: the context is the block; its
     // mpOwner is the stream OnRead is dispatched on.
@@ -663,11 +1170,16 @@ namespace CgsFileSystem
     {
         ReadStreamBlock* lpBlock = static_cast<ReadStreamBlock*>(lpContext);
 
-        CGS_ASSERT(lpContext != 0, "Invalid stream block\n");
-        CGS_ASSERT(lpBlock->mpOwner != 0, "Invalid stream\n");
+        CGS_ASSERT_STREAM(lpContext != 0, "Invalid stream block\n");
+        CGS_ASSERT_STREAM(lpBlock->mpOwner != 0, "Invalid stream\n");
 
         lpBlock->mpOwner->OnRead(liResult, lHandle, luSize, lpContext);
     }
+
+
+
+
+
 
     // CloseCallback @ 0x828E93C8 — device close-completion trampoline: assert the context is valid,
     // then forward to OnClose on the owning stream.
@@ -675,8 +1187,52 @@ namespace CgsFileSystem
     {
         StreamDeviceDiskRead* lpStream = static_cast<StreamDeviceDiskRead*>(lpContext);
 
-        CGS_ASSERT(lpContext != 0, CgsDev::Assert::StreamMessageAt("Invalid stream\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsStreamDeviceDiskRead.cpp", 1190));
+        CGS_ASSERT_STREAM(lpContext != 0, "Invalid stream\n");
         lpStream->OnClose(liResult, lHandle, luSize, lpContext);
     }
 
+
+    // ARTIST8290112C-48 /8290132C-44: each operation locks independently;
+    // the ring's locked-block flags protect the exposed bytes between calls.
+    bool StreamDeviceDiskRead::StartAsyncRead(void** lppData, u32* lpuAmount)
+    {
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
+        return StartAsyncReadInternal(lppData, lpuAmount);
+    }
+
+
+    void StreamDeviceDiskRead::StopAsyncRead(u32 luAmount)
+    {
+        StreamLockGuard lGuard(mFutex.mCriticalSection);
+        StopAsyncReadInternal(luAmount);
+    }
+
+
+    // Inlined at ARTIST82900FCC, before deciding whether to prefetch.
+    bool StreamDeviceDiskRead::IsEndOfFile() const
+    {
+        return mbIsEndOfFile;
+    }
+
+
+    // GetCurrentFilePriority @ 0x828E0F70 — pick the streaming priority for the next device read: at
+    // end-of-file (nothing more to fetch) run at normal priority; otherwise run at normal priority
+    // while the buffer is at least a quarter full, and escalate to the high priority once it drains
+    // below 25% so a starving consumer catches up. (ARTIST: mbIsEndOfFile byte-test @0x588, then the
+    // signed miBufferSize @0x130 as the denominator and the zero-extended GetAmountOfDataInBuffer
+    // result as the numerator, compared against 0.25.)
+    s32 StreamDeviceDiskRead::GetCurrentFilePriority()
+    {
+        // ARTIST @0x828E0F70 keeps one exit: the normal-priority load closes the function.
+        if (!mbIsEndOfFile)
+        {
+            f64 lfCapacity = static_cast<f64>(miBufferSize);
+            f64 lfInBuffer = static_cast<f64>(GetAmountOfDataInBuffer());
+            if (lfInBuffer / lfCapacity < 0.25)
+                return miHighPriority;
+        }
+        return miNormalPriority;
+    }
+
 } // namespace CgsFileSystem
+

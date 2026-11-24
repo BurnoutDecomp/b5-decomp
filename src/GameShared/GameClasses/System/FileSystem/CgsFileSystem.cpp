@@ -8,6 +8,14 @@
 #include <cstddef>
 
 // Native filesystem lifetime and stream dispatch; ARTIST assembly is authoritative.
+//
+// SOURCE LINES: ARTIST bakes this file's lines into its asserts (file string @0x820F9640):
+// OpenInternal 455, ReadInternal 481, WriteInternal 500, CloseInternal 520,
+// OpenReadStreamInternal 578/608, RegisterMemFileInternal 663, UnregisterMemFileInternal 681.
+// The PS3 DecFIGS copies pass 452/478/497/517/575/601/656/674 (e.g. CloseInternal @0xD013B8): the
+// file is DecFIGS + 3 up to OpenReadStreamInternal, whose ARTIST body is four lines longer (the
+// patch-manager remap, PS3 has none), and DecFIGS + 7 after it. Each definition sits on its DWARF
+// line plus that offset; the functions with no line in the DWARF follow the last one.
 namespace CgsFileSystem
 {
 
@@ -26,6 +34,664 @@ namespace CgsFileSystem
     {
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST829033C0: native per-instance DVD/HDD devices and their logical remaps.
+    void FileSystem::Construct(rw::IResourceAllocator* lpAllocator, rw::IResourceAllocator* lpDebugAllocator, const char* lpcSearchPath, DiskLayout* lpDiskLayout, const char* /*lpcDiskCacheDrive*/)
+    {
+        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu)
+            maFiles[lu].Construct(this, &mLog, static_cast<s32>(lu));
+        for (u32 lu = 0; lu < KU_MAX_READ_STREAMS; ++lu)
+            maReadStreams[lu].Construct(this, &mLog);
+        mpFileSystemAllocator = lpAllocator;
+        mpDebugAllocator = lpDebugAllocator;
+        mPatchManager.Construct(lpAllocator);
+        DeviceManager::InitializeDeviceManager(lpAllocator);
+        mX360DVDDrive.Construct(0);
+        mX360HardDrive.Construct(1);
+        GetDeviceManager()->AddPhysicalDevice(&mX360DVDDrive, "p_dvd", RWDiskErrorHandler);
+        GetDeviceManager()->AddPhysicalDevice(&mX360HardDrive, "p_hdd", 0);
+        mX360RemapDVDDrive.Construct("/d");
+        mX360RemapHardDrive.Construct("/e");
+        GetDeviceManager()->AddVirtualDevice(&mX360RemapDVDDrive, "d", "p_dvd", 0);
+        GetDeviceManager()->AddVirtualDevice(&mX360RemapHardDrive, "e", "p_hdd", 0);
+        mbPrepared = false;
+        mpDiskLayout = lpDiskLayout;
+        CgsCore::StrCpy(maFilePrefix, sizeof(maFilePrefix), lpcSearchPath);
+        mDiskCache.Construct();
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST828F04E8: allocator-backed RenderWare manager, native memory driver,
+    bool FileSystem::Prepare()
+    {
+        // and the original search path. Construction does not report prepared early.
+        if (mbPrepared) return true;
+        if (!mpFileSystemAllocator) return false;
+        rw::core::filesys::FileSystemConfig lOptions;
+        lOptions.muMaxSearchPaths = 2;
+        lOptions.muScratchSize = 1024;
+        lOptions.mpAllocator = mpFileSystemAllocator;
+        rw::core::filesys::Manager::CreateInstance(&lOptions);
+        rw::core::filesys::Manager* lpManager =
+            static_cast<rw::core::filesys::Manager*>(rw::core::filesys::Manager::GetInstance());
+        EA::Thread::ThreadParameters lParameters = lpManager->mThreadParameters;
+        lParameters.mnPriority = 350;
+        lParameters.mpName = "RwFileSystem";
+        lpManager->mThreadParameters = lParameters;
+        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu) maFiles[lu].Prepare();
+        lpManager->SetSearchPath(maFilePrefix);
+        GetDeviceManager()->SetDefaultPath(maFilePrefix);
+        rw::ResourceDescriptor lDescriptor;
+        lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(DeviceMemFileSystem);
+        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
+        void* lpMemory = mpFileSystemAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0];
+        mpMemFileSystem = lpMemory ? ::new (lpMemory) DeviceMemFileSystem("MEM:") : 0;
+        mpMemFileSystem->Construct();
+        lpManager->RegisterDevice(mpMemFileSystem, 0);
+        lpManager->mpErrorHandler = RWDiskErrorHandler;
+        mbPrepared = true;
+        muNumUsedReadStreams = 0;
+        mReleasing.SetValue(0);
+        return true;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST82903880: start closes, retry while anything remains pending, then
+    bool FileSystem::Release()
+    {
+        // release files before retiring the RW manager and device workers.
+        mReleasing.SetValue(1);
+        if (!mbPrepared) return true;
+        bool lbClosed = true;
+        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu)
+        {
+            if (maFiles[lu].GetStatus() == E_FILESTATE_CLOSED) continue;
+            if (maFiles[lu].GetStatus() == E_FILESTATE_OPEN) maFiles[lu].Close();
+            lbClosed = false;
+        }
+        for (u32 lu = 0; lu < KU_MAX_READ_STREAMS; ++lu)
+        {
+            if (GetEffectiveStreamStatus(&maReadStreams[lu]) == StreamDeviceDiskRead::E_STATUS_CLOSED) continue;
+            maReadStreams[lu].Close();
+            lbClosed = false;
+        }
+        if (!lbClosed) return false;
+        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu) maFiles[lu].Release();
+        rw::core::filesys::Manager::DestroyInstance();
+        GetDeviceManager()->Shutdown();
+        mbPrepared = false;
+        return true;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST828E8A88: only the sixteen file records are destructed here.
+    void FileSystem::Destruct()
+    {
+        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu) maFiles[lu].Destruct();
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST828F0718 selects the first effectively closed file.
+    s32 FileSystem::OpenInternal(const char* lpcFileName, FileAccess leFileAccessType, s32 liPriority, bool lbUseHDCache)
+    {
+        u32 itter;
+
+        for (itter = 0; itter < KU_MAXNOOFFILES; ++itter)
+        {
+            if (maFiles[itter].GetStatus() == E_FILESTATE_CLOSED)
+            {
+                break;
+            }
+        }
+
+
+        if (itter == KU_MAXNOOFFILES)
+        {
+            CGS_ASSERT(false, "No more files available to open.\n");
+            return -1;
+        }
+
+        maFiles[itter].Open(lpcFileName, leFileAccessType, liPriority, lbUseHDCache);
+        return static_cast<s32>(itter);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST @0x828F07F8. The native bounds assertion is non-terminal; execution then indexes maFiles.
+    bool FileSystem::ReadInternal(u32 luFileID, void* lpOutputBuffer, u64 luFilePosition, u64 luSizeToRead)
+    {
+        CGS_ASSERT_STREAM(luFileID < KU_MAXNOOFFILES, "Invalid file id\n");
+        maFiles[luFileID].Read(lpOutputBuffer, luFilePosition, luSizeToRead);
+        return true;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST @0x828E8B50. As above, keep the assertion non-terminal and return the native constant 1.
+    bool FileSystem::WriteInternal(u32 luFileID, const void* lpInputBuffer, u64 luFilePosition, u64 luSizeToWrite)
+    {
+        CGS_ASSERT_STREAM(luFileID < KU_MAXNOOFFILES, "Invalid file id\n");
+        maFiles[luFileID].Write(lpInputBuffer, luFilePosition, luSizeToWrite);
+        return true;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST @0x828F08C8.
+    bool FileSystem::CloseInternal(u32 luFileID)
+    {
+        CGS_ASSERT_STREAM(luFileID < KU_MAXNOOFFILES, "Invalid file id\n");
+        maFiles[luFileID].Close();
+        return true;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST @0x82906950. Apply the patch overlay before choosing a stream slot.
+    ReadStream FileSystem::OpenReadStreamInternal(const char* lpcFileName, void* lpBuffer, u32 luBufferSize, u32 luNumBlocks,
+        s32 liNormalPriority, s32 liHighPrioirty, bool lbUseHDCache)
+    {
+        ReadStream lNewStream;
+
+        CGS_ASSERT_STREAM(muNumUsedReadStreams < KU_MAX_READ_STREAMS, "Out of read streams\n");
+
+        lNewStream.Construct(0);
+        char lacFileName[256];
+        const bool lbRemapped = mPatchManager.RemapFilename(lpcFileName, lacFileName, sizeof(lacFileName));
+        for (u32 i = 0; i < KU_MAX_READ_STREAMS; ++i)
+        {
+            if (GetEffectiveStreamStatus(&maReadStreams[i]) != StreamDeviceDiskRead::E_STATUS_CLOSED)
+            {
+                continue;
+            }
+
+            maReadStreams[i].Open(lacFileName, lpBuffer, luBufferSize, luNumBlocks,
+                                  liNormalPriority, liHighPrioirty, lbUseHDCache && !lbRemapped,
+                                  static_cast<s32>(i));
+            lNewStream.Construct(&maReadStreams[i]);
+            ++muNumUsedReadStreams;
+            break;
+        }
+
+
+
+
+
+
+
+
+
+
+
+        CGS_ASSERT_STREAM(lNewStream.IsValid(), "Failed to set device on stream\n");
+        return lNewStream;
+    }
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST @0x82903EC8. Only a handle into the owned eight-stream table is
+    void FileSystem::CloseReadStreamInternal(ReadStream lStream)
+    {
+        // closable; the used count drops as soon as the asynchronous close begins.
+        for (u32 i = 0; i < KU_MAX_READ_STREAMS; ++i)
+        {
+            if (lStream.mpStreamDevice != &maReadStreams[i])
+                continue;
+            maReadStreams[i].Close();
+            --muNumUsedReadStreams;
+            return;
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST @0x828E8C20 (unnamed in the ledger).
+    bool FileSystem::RegisterMemFileInternal(const char* lpcFileName, void* lpData, u64 luSize)
+    {
+        CGS_ASSERT_STREAM(mpMemFileSystem != 0, "No memory file system\n");
+        return mpMemFileSystem->RegisterMemFile(lpcFileName, lpData, luSize);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST @0x828E8CE0.
+    bool FileSystem::UnregisterMemFileInternal(const char* lpcFileName)
+    {
+        CGS_ASSERT_STREAM(mpMemFileSystem != 0, "No memory file system\n");
+        return mpMemFileSystem->UnregisterMemFile(lpcFileName);
+    }
+
+
+
+
+
+
+    // ===== Not on a DWARF line of this file =====
+    // The public wrappers (header-inline in the original: ARTIST's resource handlers inline the
+    // filesystem-wide lock) and the stream-status accessors, whose ARTIST asserts name
+    // CgsFileSystem.h (GetStatus 581, IsReadStreamOpen 653, IsReadStreamClosed 710/712,
+    // GetReadStreamIndex 730): their home is the header, not yet restored.
     ReadStream FileSystem::OpenReadStream(
         const char* lpcName, void* lpBuffer, u32 luBufferSize, u32 luNumBlocks,
         s32 liNormalPriority, s32 liHighPriority, bool lbUseHDCache)
@@ -38,52 +704,6 @@ namespace CgsFileSystem
         return lStream;
     }
 
-    // ARTIST @0x82906950. Apply the patch overlay before choosing a stream slot.
-    ReadStream FileSystem::OpenReadStreamInternal(
-        const char* lpcName, void* lpBuffer, u32 luBufferSize, u32 luNumBlocks,
-        s32 liNormalPriority, s32 liHighPriority, bool lbUseHDCache)
-    {
-        const char* const lpcAssertFile =
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFileSystem.cpp";
-        if (muNumUsedReadStreams >= KU_MAX_READ_STREAMS)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-            lMessage << "Out of read streams\n";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcAssertFile, 578);
-            CgsDev::Assert::EndAssert();
-        }
-
-        ReadStream lResult;
-        lResult.Construct(0);
-        char lacFileName[256];
-        const bool lbRemapped = mPatchManager.RemapFilename(lpcName, lacFileName, sizeof(lacFileName));
-        for (u32 luIndex = 0; luIndex < KU_MAX_READ_STREAMS; ++luIndex)
-        {
-            StreamDeviceDiskRead& lrDevice = maReadStreams[luIndex];
-            if (GetEffectiveStreamStatus(&lrDevice) !=
-                StreamDeviceDiskRead::E_STATUS_CLOSED)
-                continue;
-
-            lrDevice.Open(lacFileName, lpBuffer, luBufferSize, luNumBlocks,
-                          liNormalPriority, liHighPriority, lbUseHDCache && !lbRemapped,
-                          static_cast<s32>(luIndex));
-            lResult.Construct(&lrDevice);
-            ++muNumUsedReadStreams;
-            break;
-        }
-
-        if (!lResult.IsValid())
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);
-            lMessage << "Failed to set device on stream\n";
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcAssertFile, 608);
-            CgsDev::Assert::EndAssert();
-        }
-        return lResult;
-    }
-
     void FileSystem::CloseReadStream(ReadStream lStream)
     {
         mFileSystemFutex.Lock();
@@ -91,22 +711,6 @@ namespace CgsFileSystem
         mFileSystemFutex.Unlock();
     }
 
-    // ARTIST @0x82903EC8. Only a handle into the owned eight-stream table is
-    // closable; the used count drops as soon as the asynchronous close begins.
-    void FileSystem::CloseReadStreamInternal(ReadStream lStream)
-    {
-        for (u32 luIndex = 0; luIndex < KU_MAX_READ_STREAMS; ++luIndex)
-        {
-            if (lStream.mpStreamDevice != &maReadStreams[luIndex])
-                continue;
-            maReadStreams[luIndex].Close();
-            CGS_ASSERT(muNumUsedReadStreams > 0, "muNumUsedReadStreams > 0");
-            --muNumUsedReadStreams;
-            return;
-        }
-    }
-
-    // Public wrappers inline the filesystem-wide lock in ARTIST resource handlers.
     s32 FileSystem::Open(const char* lpName, FileAccess leAccess, s32 liPriority, bool lbCache)
     {
         mFileSystemFutex.Lock();
@@ -135,76 +739,12 @@ namespace CgsFileSystem
         mFileSystemFutex.Unlock();
         return lbResult;
     }
-    // ARTIST828F0718 selects the first effectively closed file.
-    s32 FileSystem::OpenInternal(const char* lpName, FileAccess leAccess, s32 liPriority, bool lbCache)
-    {
-        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu)
-            if (maFiles[lu].GetStatus() == E_FILESTATE_CLOSED)
-            {
-                maFiles[lu].Open(lpName, leAccess, liPriority, lbCache);
-                return static_cast<s32>(lu);
-            }
-        CGS_ASSERT(false, "No more files available to open.\n");
-        return -1;
-    }
-    bool FileSystem::CloseInternal(u32 luId)
-    {
-        CGS_ASSERT(luId < KU_MAXNOOFFILES, "Invalid file id\n");
-        maFiles[luId].Close();
-        return true;
-    }
-    bool FileSystem::RegisterMemFileInternal(const char* lpName, void* lpData, u64 luSize)
-    {
-        CGS_ASSERT(mpMemFileSystem != 0, "No memory file system\n");
-        return mpMemFileSystem->RegisterMemFile(lpName, lpData, luSize);
-    }
-    bool FileSystem::UnregisterMemFileInternal(const char* lpName)
-    {
-        CGS_ASSERT(mpMemFileSystem != 0, "No memory file system\n");
-        return mpMemFileSystem->UnregisterMemFile(lpName);
-    }
 
     // @0x8264AE28.
     FileState FileSystem::GetStatus(u32 luFileId)
     {
         CGS_ASSERT(luFileId < KU_MAXNOOFFILES, "Invalid file id");
         return maFiles[luFileId].GetStatus();
-    }
-
-    // ARTIST @0x828F07F8. The native bounds assertion is non-terminal; execution then indexes maFiles.
-    bool FileSystem::ReadInternal(u32 luFileID, void* lpOutputBuffer,
-                                  u64 luFilePosition, u64 luSizeToRead)
-    {
-        if (luFileID >= KU_MAXNOOFFILES)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "Invalid file id\n",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFileSystem.cpp",
-                481);
-            CgsDev::Assert::EndAssert();
-        }
-
-        maFiles[luFileID].Read(lpOutputBuffer, luFilePosition, luSizeToRead);
-        return true;
-    }
-
-    // ARTIST @0x828E8B50. As above, keep the assertion non-terminal and return the native constant 1.
-    bool FileSystem::WriteInternal(u32 luFileID, const void* lpInputBuffer,
-                                   u64 luFilePosition, u64 luSizeToWrite)
-    {
-        if (luFileID >= KU_MAXNOOFFILES)
-        {
-            CgsDev::Assert::BeginAssert();
-            CgsDev::Assert::FireAssert(
-                "Invalid file id\n",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\CgsFileSystem.cpp",
-                500);
-            CgsDev::Assert::EndAssert();
-        }
-
-        maFiles[luFileID].Write(lpInputBuffer, luFilePosition, luSizeToWrite);
-        return true;
     }
 
     // @0x828D6860. The X360 asm computes (stream - &maReadStreams[0]) / sizeof(stream) via the
@@ -240,100 +780,6 @@ namespace CgsFileSystem
         const StreamDeviceDiskRead* lpStream = &maReadStreams[liIndex];
         CGS_ASSERT(lpStream != 0, "No device found");
         return GetEffectiveStreamStatus(lpStream) == StreamDeviceDiskRead::E_STATUS_CLOSED;
-    }
-
-    // ARTIST829033C0: native per-instance DVD/HDD devices and their logical remaps.
-    void FileSystem::Construct(rw::IResourceAllocator* lpAllocator,
-                               rw::IResourceAllocator* lpDebugAllocator,
-                               const char* lpcSearchPath, DiskLayout* lpDiskLayout, const char* /*lpcDiskCacheDrive*/)
-    {
-        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu)
-            maFiles[lu].Construct(this, &mLog, static_cast<s32>(lu));
-        for (u32 lu = 0; lu < KU_MAX_READ_STREAMS; ++lu)
-            maReadStreams[lu].Construct(this, &mLog);
-        mpFileSystemAllocator = lpAllocator;
-        mpDebugAllocator = lpDebugAllocator;
-        mPatchManager.Construct(lpAllocator);
-        DeviceManager::InitializeDeviceManager(lpAllocator);
-        mX360DVDDrive.Construct(0);
-        mX360HardDrive.Construct(1);
-        GetDeviceManager()->AddPhysicalDevice(&mX360DVDDrive, "p_dvd", RWDiskErrorHandler);
-        GetDeviceManager()->AddPhysicalDevice(&mX360HardDrive, "p_hdd", 0);
-        mX360RemapDVDDrive.Construct("/d");
-        mX360RemapHardDrive.Construct("/e");
-        GetDeviceManager()->AddVirtualDevice(&mX360RemapDVDDrive, "d", "p_dvd", 0);
-        GetDeviceManager()->AddVirtualDevice(&mX360RemapHardDrive, "e", "p_hdd", 0);
-        mbPrepared = false;
-        mpDiskLayout = lpDiskLayout;
-        CgsCore::StrCpy(maFilePrefix, sizeof(maFilePrefix), lpcSearchPath);
-        mDiskCache.Construct();
-    }
-
-    // ARTIST828F04E8: allocator-backed RenderWare manager, native memory driver,
-    // and the original search path. Construction does not report prepared early.
-    bool FileSystem::Prepare()
-    {
-        if (mbPrepared) return true;
-        if (!mpFileSystemAllocator) return false;
-        rw::core::filesys::FileSystemConfig lOptions;
-        lOptions.muMaxSearchPaths = 2;
-        lOptions.muScratchSize = 1024;
-        lOptions.mpAllocator = mpFileSystemAllocator;
-        rw::core::filesys::Manager::CreateInstance(&lOptions);
-        rw::core::filesys::Manager* lpManager =
-            static_cast<rw::core::filesys::Manager*>(rw::core::filesys::Manager::GetInstance());
-        EA::Thread::ThreadParameters lParameters = lpManager->mThreadParameters;
-        lParameters.mnPriority = 350;
-        lParameters.mpName = "RwFileSystem";
-        lpManager->mThreadParameters = lParameters;
-        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu) maFiles[lu].Prepare();
-        lpManager->SetSearchPath(maFilePrefix);
-        GetDeviceManager()->SetDefaultPath(maFilePrefix);
-        rw::ResourceDescriptor lDescriptor;
-        lDescriptor.m_baseResourceDescriptors[0].m_size = sizeof(DeviceMemFileSystem);
-        lDescriptor.m_baseResourceDescriptors[0].m_alignment = 4;
-        void* lpMemory = mpFileSystemAllocator->DoAllocate(lDescriptor, 0).m_baseResources[0];
-        mpMemFileSystem = lpMemory ? ::new (lpMemory) DeviceMemFileSystem("MEM:") : 0;
-        mpMemFileSystem->Construct();
-        lpManager->RegisterDevice(mpMemFileSystem, 0);
-        lpManager->mpErrorHandler = RWDiskErrorHandler;
-        mbPrepared = true;
-        muNumUsedReadStreams = 0;
-        mReleasing.SetValue(0);
-        return true;
-    }
-
-    // ARTIST82903880: start closes, retry while anything remains pending, then
-    // release files before retiring the RW manager and device workers.
-    bool FileSystem::Release()
-    {
-        mReleasing.SetValue(1);
-        if (!mbPrepared) return true;
-        bool lbClosed = true;
-        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu)
-        {
-            if (maFiles[lu].GetStatus() == E_FILESTATE_CLOSED) continue;
-            if (maFiles[lu].GetStatus() == E_FILESTATE_OPEN) maFiles[lu].Close();
-            lbClosed = false;
-        }
-        for (u32 lu = 0; lu < KU_MAX_READ_STREAMS; ++lu)
-        {
-            if (GetEffectiveStreamStatus(&maReadStreams[lu]) == StreamDeviceDiskRead::E_STATUS_CLOSED) continue;
-            maReadStreams[lu].Close();
-            lbClosed = false;
-        }
-        if (!lbClosed) return false;
-        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu) maFiles[lu].Release();
-        rw::core::filesys::Manager::DestroyInstance();
-        GetDeviceManager()->Shutdown();
-        mbPrepared = false;
-        return true;
-    }
-
-    // ARTIST828E8A88: only the sixteen file records are destructed here.
-    void FileSystem::Destruct()
-    {
-        for (u32 lu = 0; lu < KU_MAXNOOFFILES; ++lu) maFiles[lu].Destruct();
     }
 
     void FileSystem::AssertNativeLayout()

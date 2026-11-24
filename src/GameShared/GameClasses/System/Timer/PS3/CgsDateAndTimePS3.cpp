@@ -25,8 +25,7 @@ namespace
     }
 }
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\Timer/X360/CgsDateAndTimeX360.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\Timer/X360/CgsDateAndTimeX360.cpp".
 
 namespace CgsSystem
 {
@@ -94,9 +93,9 @@ namespace CgsSystem
     void DateAndTime::SetYear(s32 liYear)   // 0x828D6C08
     {
         CGS_ASSERT(liYear >= 0,
-            CgsDev::Assert::MessageAt("liYear >= 0", KAC_ARTIST_ASSERT_FILE, 282 /* ARTIST 0x828D6C34 */));
+            CgsDev::Assert::MessageAt("liYear >= 0", __FILE__, 282 /* ARTIST 0x828D6C34 */));
         CGS_ASSERT(liYear < 5000,
-            CgsDev::Assert::MessageAt("liYear < 5000", KAC_ARTIST_ASSERT_FILE, 283 /* ARTIST 0x828D6C58 */));
+            CgsDev::Assert::MessageAt("liYear < 5000", __FILE__, 283 /* ARTIST 0x828D6C58 */));
         SYSTEMTIME lSystemTime;
         FileTimeToSystemTime(AsFileTime(mFileTime), &lSystemTime);
         lSystemTime.wYear = static_cast<WORD>(liYear);
@@ -106,9 +105,9 @@ namespace CgsSystem
     void DateAndTime::SetMonth(s32 liMonth) // 0x828D6C98
     {
         CGS_ASSERT(liMonth >= 0,
-            CgsDev::Assert::MessageAt("liMonth >= 0", KAC_ARTIST_ASSERT_FILE, 301 /* ARTIST 0x828D6CC4 */));
+            CgsDev::Assert::MessageAt("liMonth >= 0", __FILE__, 301 /* ARTIST 0x828D6CC4 */));
         CGS_ASSERT(liMonth <= 12,
-            CgsDev::Assert::MessageAt("liMonth <= 12", KAC_ARTIST_ASSERT_FILE, 302 /* ARTIST 0x828D6CE8 */));
+            CgsDev::Assert::MessageAt("liMonth <= 12", __FILE__, 302 /* ARTIST 0x828D6CE8 */));
         SYSTEMTIME lSystemTime;
         FileTimeToSystemTime(AsFileTime(mFileTime), &lSystemTime);
         lSystemTime.wMonth = static_cast<WORD>(liMonth);
@@ -118,9 +117,9 @@ namespace CgsSystem
     void DateAndTime::SetDay(s32 liDay)     // 0x828D6D28
     {
         CGS_ASSERT(liDay >= 0,
-            CgsDev::Assert::MessageAt("liDay >= 0", KAC_ARTIST_ASSERT_FILE, 320 /* ARTIST 0x828D6D54 */));
+            CgsDev::Assert::MessageAt("liDay >= 0", __FILE__, 320 /* ARTIST 0x828D6D54 */));
         CGS_ASSERT(liDay <= 31,
-            CgsDev::Assert::MessageAt("liDay <= 31", KAC_ARTIST_ASSERT_FILE, 321 /* ARTIST 0x828D6D78 */));
+            CgsDev::Assert::MessageAt("liDay <= 31", __FILE__, 321 /* ARTIST 0x828D6D78 */));
         SYSTEMTIME lSystemTime;
         FileTimeToSystemTime(AsFileTime(mFileTime), &lSystemTime);
         lSystemTime.wDay = static_cast<WORD>(liDay);
@@ -130,9 +129,9 @@ namespace CgsSystem
     void DateAndTime::SetHour(s32 liHour)   // 0x828D6DB8
     {
         CGS_ASSERT(liHour >= 0,
-            CgsDev::Assert::MessageAt("liHour >= 0", KAC_ARTIST_ASSERT_FILE, 339 /* ARTIST 0x828D6DE4 */));
+            CgsDev::Assert::MessageAt("liHour >= 0", __FILE__, 339 /* ARTIST 0x828D6DE4 */));
         CGS_ASSERT(liHour < 24,
-            CgsDev::Assert::MessageAt("liHour < 24", KAC_ARTIST_ASSERT_FILE, 340 /* ARTIST 0x828D6E08 */));
+            CgsDev::Assert::MessageAt("liHour < 24", __FILE__, 340 /* ARTIST 0x828D6E08 */));
         SYSTEMTIME lSystemTime;
         FileTimeToSystemTime(AsFileTime(mFileTime), &lSystemTime);
         lSystemTime.wHour = static_cast<WORD>(liHour);
@@ -142,9 +141,9 @@ namespace CgsSystem
     void DateAndTime::SetMinute(s32 liMinute) // 0x828D6E48
     {
         CGS_ASSERT(liMinute >= 0,
-            CgsDev::Assert::MessageAt("liMinute >= 0", KAC_ARTIST_ASSERT_FILE, 359 /* ARTIST 0x828D6E74 */));
+            CgsDev::Assert::MessageAt("liMinute >= 0", __FILE__, 359 /* ARTIST 0x828D6E74 */));
         CGS_ASSERT(liMinute < 60,
-            CgsDev::Assert::MessageAt("liMinute < 60", KAC_ARTIST_ASSERT_FILE, 360 /* ARTIST 0x828D6E98 */));
+            CgsDev::Assert::MessageAt("liMinute < 60", __FILE__, 360 /* ARTIST 0x828D6E98 */));
         SYSTEMTIME lSystemTime;
         FileTimeToSystemTime(AsFileTime(mFileTime), &lSystemTime);
         lSystemTime.wMinute = static_cast<WORD>(liMinute);
@@ -154,9 +153,9 @@ namespace CgsSystem
     void DateAndTime::SetSecond(s32 liSecond) // 0x828D6ED8
     {
         CGS_ASSERT(liSecond >= 0,
-            CgsDev::Assert::MessageAt("liSecond >= 0", KAC_ARTIST_ASSERT_FILE, 379 /* ARTIST 0x828D6F04 */));
+            CgsDev::Assert::MessageAt("liSecond >= 0", __FILE__, 379 /* ARTIST 0x828D6F04 */));
         CGS_ASSERT(liSecond < 60,
-            CgsDev::Assert::MessageAt("liSecond < 60", KAC_ARTIST_ASSERT_FILE, 380 /* ARTIST 0x828D6F28 */));
+            CgsDev::Assert::MessageAt("liSecond < 60", __FILE__, 380 /* ARTIST 0x828D6F28 */));
         SYSTEMTIME lSystemTime;
         FileTimeToSystemTime(AsFileTime(mFileTime), &lSystemTime);
         lSystemTime.wSecond = static_cast<WORD>(liSecond);

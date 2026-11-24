@@ -1,9 +1,14 @@
 #include "GameShared/GameClasses/System/FileSystem/Devices/CgsDeviceMemFileSystem.h"
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "rw/core/stdc/stdc.h"
 #include <cstring>
 #include <cstddef>
 
+// SOURCE LINES: ARTIST's asserts in this file (file string @0x820F9748) pass the PS3 DecFIGS lines
+// unchanged (RegisterMemFile 107 .. FindEnd 482); each assert sits on that line. The two
+// registration asserts are plain messages, every other one streams its message (ARTIST builds the
+// StrStream over the shared assert buffer), as in the original.
 namespace CgsFileSystem
 {
     DeviceMemFileSystem::DeviceMemFileSystem(const char* lpcName)
@@ -16,6 +21,85 @@ namespace CgsFileSystem
         memset(maMemFiles, 0, sizeof(maMemFiles));
         mbConstructed = true;
     }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // ARTIST828DD378: first empty data slot, bounded name copy, then data and size.
     bool DeviceMemFileSystem::RegisterMemFile(const char* lpcName, void* lpData, u64 luSize)
@@ -32,13 +116,22 @@ namespace CgsFileSystem
         return false;
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
     // ARTIST828DD428. Registration names use exact-case comparison here.
     bool DeviceMemFileSystem::UnregisterMemFile(const char* lpcName)
     {
-        CGS_ASSERT(mbConstructed,
-            CgsDev::Assert::MessageAt(
-                "mbConstructed",
-                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\Drivers/CgsDeviceMemFileSystem.cpp", 134 /* ARTIST 0x828DD458 */));
+        CGS_ASSERT(mbConstructed, "mbConstructed");
         for (u32 lu = 0; lu < KU_MAX_MEM_FILES; ++lu)
         {
             if (strcmp(maMemFiles[lu].macName, lpcName) != 0) continue;
@@ -50,20 +143,43 @@ namespace CgsFileSystem
         return false;
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
     // ARTIST828DD500. Strip the device component after normalizing separators;
-    // flags1/2 reject writes/creates, matching the original early returns.
-    void* DeviceMemFileSystem::Open(const char* lpcPath, unsigned int luFlags,
-                                    rw::core::filesys::Handle**)
+    // flags 1/2 reject writes/creates, matching the original early returns.
+    void* DeviceMemFileSystem::Open(const char* lpcName, unsigned int luFlags, rw::core::filesys::Handle**)
     {
-        if (luFlags & 1) { CGS_ASSERT(false, "Can not open mem files for write\n"); return 0; }
-        if (luFlags & 2) { CGS_ASSERT(false, "Can not open mem files for create\n"); return 0; }
+        if (luFlags & 1)
+        {
+
+
+            CGS_ASSERT_STREAM(false, "Can not open mem files for write\n");
+            return 0;
+        }
+        if (luFlags & 2)
+        {
+
+
+            CGS_ASSERT_STREAM(false, "Can not open mem files for create\n");
+            return 0;
+        }
         char lacName[256];
-        if (*lpcPath == '/' || *lpcPath == '\\')
+        if (*lpcName == '/' || *lpcName == '\\')
         {
             rw::core::stdc::StringCopy(lacName, mDeviceName);
-            rw::core::stdc::StringCat(lacName, lpcPath);
+            rw::core::stdc::StringCat(lacName, lpcName);
         }
-        else rw::core::stdc::StringCopy(lacName, lpcPath);
+        else rw::core::stdc::StringCopy(lacName, lpcName);
         for (char* lp = lacName; *lp; ++lp) if (*lp == '/') *lp = '\\';
         const char* lpName = lacName;
         while (*lpName) { const char lc = *lpName++; if (lc == '\\') break; }
@@ -85,54 +201,301 @@ namespace CgsFileSystem
     void DeviceMemFileSystem::Close(void* lpFile)
     { rw::core::filesys::gpFileSysAllocator->Free(lpFile, 0); }
 
+    u64 DeviceMemFileSystem::GetSize(void* lpFile)
+    { return static_cast<OpenMemFile*>(lpFile)->muSize; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // ARTIST828DD780 performs no cursor update; Seek owns muPosition.
-    unsigned int DeviceMemFileSystem::Read(void* lpFile, void* lpBuffer, unsigned int luSize,
-                                          rw::core::filesys::DeviceDriver*, void*)
+    unsigned int DeviceMemFileSystem::Read(void* lpFH, void* lpBuffer, unsigned int luBufferSize, rw::core::filesys::DeviceDriver*, void*)
     {
-        OpenMemFile* lp = static_cast<OpenMemFile*>(lpFile);
-        const u32 luRead = lp->muPosition + luSize <= lp->muSize ? luSize
-            : static_cast<u32>(lp->muSize) - static_cast<u32>(lp->muPosition);
-        CGS_ASSERT(lpBuffer != 0, "No buffer passed in!\n");
+        OpenMemFile* lp = static_cast<OpenMemFile*>(lpFH);
+        u32 luRead;
+        if (lp->muPosition + luBufferSize > lp->muSize)
+        {
+            luRead = static_cast<u32>(lp->muSize) - static_cast<u32>(lp->muPosition);
+        }
+        else luRead = luBufferSize;
+        CGS_ASSERT_STREAM(lpBuffer != 0, "No buffer passed in!\n");
         memcpy(lpBuffer, static_cast<char*>(lp->mpData) + lp->muPosition, luRead);
         return luRead;
     }
-    unsigned int DeviceMemFileSystem::Write(void*, const void*, unsigned int,
-                                           rw::core::filesys::DeviceDriver*, void*)
-    { CGS_ASSERT(false, "Mem device does not support writes\n"); return 0; }
 
-    // ARTIST828DD8F8: r5 is a full64-bit position; r6 is whence.
-    u64 DeviceMemFileSystem::Seek(void* lpFile, u64 luPosition, int liWhence,
-                                  rw::core::filesys::DeviceDriver*, void*)
+
+
+
+
+
+
+
+
+    unsigned int DeviceMemFileSystem::Write(void*, const void*, unsigned int, rw::core::filesys::DeviceDriver*, void*)
     {
-        OpenMemFile* lp = static_cast<OpenMemFile*>(lpFile);
-        if (liWhence == 0 && luPosition == lp->muPosition) return luPosition;
+
+
+        CGS_ASSERT_STREAM(false, "Mem device does not support writes\n");
+        return 0;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST828DD8F8: r5 is a full 64-bit position; r6 is whence.
+    u64 DeviceMemFileSystem::Seek(void* lpFH, u64 luOffset, int liWhence, rw::core::filesys::DeviceDriver*, void*)
+    {
+        OpenMemFile* lp = static_cast<OpenMemFile*>(lpFH);
+        if (liWhence == 0 && luOffset == lp->muPosition) return luOffset;
         switch (static_cast<u32>(liWhence))
         {
-        case 0: lp->muPosition = luPosition; break;
-        case 1: lp->muPosition += luPosition; break;
-        case 2: lp->muPosition = lp->muSize - luPosition; break;
-        default: CGS_ASSERT(false, "Invalid 'whence' value\n"); break;
+        case 0:
+            lp->muPosition = luOffset;
+            break;
+        case 1:
+            lp->muPosition += luOffset;
+            break;
+        case 2:
+            lp->muPosition = lp->muSize - luOffset;
+            break;
+        default:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            CGS_ASSERT_STREAM(false, "Invalid 'whence' value\n");
+            break;
         }
         return lp->muPosition;
     }
-    u64 DeviceMemFileSystem::GetSize(void* lpFile)
-    { return static_cast<OpenMemFile*>(lpFile)->muSize; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     bool DeviceMemFileSystem::Resize(void*, u64)
-    { CGS_ASSERT(false, "Mem device does not support resizes\n"); return false; }
+    {
+        CGS_ASSERT_STREAM(false, "Mem device does not support resizes\n");
+        return false;
+    }
+
+
+
+
+
+
+
+
+
     bool DeviceMemFileSystem::Delete(const char*)
-    { CGS_ASSERT(false, "Mem device does not support deletes\n"); return false; }
+    {
+        CGS_ASSERT_STREAM(false, "Mem device does not support deletes\n");
+        return false;
+    }
+
+
+
+
+
+
+
+
+
     bool DeviceMemFileSystem::Move(const char*, const char*)
-    { CGS_ASSERT(false, "Mem device does not support moves\n"); return false; }
+    {
+        CGS_ASSERT_STREAM(false, "Mem device does not support moves\n");
+        return false;
+    }
+
+
+
+
+
+
+
+
+
     void* DeviceMemFileSystem::FindBegin(const char*, FindData*)
-    { CGS_ASSERT(false, "Mem device does not support searches\n"); return 0; }
+    {
+        CGS_ASSERT_STREAM(false, "Mem device does not support searches\n");
+        return 0;
+    }
+
+
+
+
+
+
+
+
     bool DeviceMemFileSystem::FindNext(void*, FindData*)
-    { CGS_ASSERT(false, "Mem device does not support searches\n"); return false; }
-    bool DeviceMemFileSystem::FindEnd(void*)
-    { CGS_ASSERT(false, "Mem device does not support searches\n"); return false; }
+    {
+        CGS_ASSERT_STREAM(false, "Mem device does not support searches\n");
+        return false;
+    }
+
+
+
+
+
+
+
+
     bool DeviceMemFileSystem::DirectoryCreate(const char*)
-    { CGS_ASSERT(false, "Mem device does not support directory creation\n"); return false; }
+    {
+        CGS_ASSERT_STREAM(false, "Mem device does not support directory creation\n");
+        return false;
+    }
+
+
+
+
+
+
+
+
     bool DeviceMemFileSystem::DirectoryRemove(const char*)
-    { CGS_ASSERT(false, "Mem device does not support directory removal\n"); return false; }
+    {
+        CGS_ASSERT_STREAM(false, "Mem device does not support directory removal\n");
+        return false;
+    }
+
+
+
+
+
+
+
+
+    bool DeviceMemFileSystem::FindEnd(void*)
+    {
+        CGS_ASSERT_STREAM(false, "Mem device does not support searches\n");
+        return false;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     void DeviceMemFileSystem::AssertNativeLayout()
     {

@@ -21,8 +21,7 @@
 // into the debug buffer (BasePriorityQueue::Clear + StrStream machinery) are expressed through
 // CGS_ASSERT, which forwards the message via the same Begin/Fire/End assert sequence.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsBaseDefragPoolModuleState.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\PoolModuleStates/CgsBaseDefragPoolModuleState.cpp".
 
 namespace CgsResource
 {
@@ -68,20 +67,20 @@ namespace CgsResource
         muMaxRelocateSources        = lpParams->muMaxRelocateSources;       // result[14] = a2[11]
 
         CGS_ASSERT(mpPool,
-            CgsDev::Assert::MessageAt("mpPool", KAC_ARTIST_ASSERT_FILE, 87 /* ARTIST 0x828DA12C */));                    // :87
+            CgsDev::Assert::MessageAt("mpPool", __FILE__, 87 /* ARTIST 0x828DA12C */));                    // :87
         CGS_ASSERT(mpAllocListSet,
-            CgsDev::Assert::MessageAt("mpAllocListSet", KAC_ARTIST_ASSERT_FILE, 88 /* ARTIST 0x828DA154 */));            // :88
+            CgsDev::Assert::MessageAt("mpAllocListSet", __FILE__, 88 /* ARTIST 0x828DA154 */));            // :88
         CGS_ASSERT(mpAddressedAllocRequests,
             CgsDev::Assert::MessageAt(
-                "mpAddressedAllocRequests", KAC_ARTIST_ASSERT_FILE, 89 /* ARTIST 0x828DA17C */));  // :89
+                "mpAddressedAllocRequests", __FILE__, 89 /* ARTIST 0x828DA17C */));  // :89
         CGS_ASSERT(mpRelocateRequests,
-            CgsDev::Assert::MessageAt("mpRelocateRequests", KAC_ARTIST_ASSERT_FILE, 90 /* ARTIST 0x828DA1A4 */));        // :90
+            CgsDev::Assert::MessageAt("mpRelocateRequests", __FILE__, 90 /* ARTIST 0x828DA1A4 */));        // :90
         CGS_ASSERT(mpDistributionEntries,
-            CgsDev::Assert::MessageAt("mpDistributionEntries", KAC_ARTIST_ASSERT_FILE, 91 /* ARTIST 0x828DA1CC */));     // :91
+            CgsDev::Assert::MessageAt("mpDistributionEntries", __FILE__, 91 /* ARTIST 0x828DA1CC */));     // :91
         CGS_ASSERT(mpLinearHeapNodes,
-            CgsDev::Assert::MessageAt("mpLinearHeapNodes", KAC_ARTIST_ASSERT_FILE, 92 /* ARTIST 0x828DA1F4 */));         // :92
+            CgsDev::Assert::MessageAt("mpLinearHeapNodes", __FILE__, 92 /* ARTIST 0x828DA1F4 */));         // :92
         CGS_ASSERT(mpRelocateSources,
-            CgsDev::Assert::MessageAt("mpRelocateSources", KAC_ARTIST_ASSERT_FILE, 93 /* ARTIST 0x828DA21C */));         // :93
+            CgsDev::Assert::MessageAt("mpRelocateSources", __FILE__, 93 /* ARTIST 0x828DA21C */));         // :93
     }
 
     // -------- FindNextFreeNode @ 0x828DA248 --------

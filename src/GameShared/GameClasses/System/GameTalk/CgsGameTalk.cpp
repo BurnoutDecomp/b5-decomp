@@ -29,8 +29,7 @@
 //   accessed by name.
 // =====================================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\System/GameTalk/CgsGameTalk.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\System/GameTalk/CgsGameTalk.h".
 
 namespace CgsGameTalk
 {
@@ -118,9 +117,9 @@ namespace CgsGameTalk
     s32 GameTalk::SendMessage(const char* lpTarget, EA::GameTalk::GameTalkMessage* lpMessage)
     {
         CGS_ASSERT(lpTarget != 0,
-            CgsDev::Assert::MessageAt("lpTarget", KAC_ARTIST_ASSERT_FILE, 178 /* ARTIST 0x828DAF14 */));
+            CgsDev::Assert::MessageAt("lpTarget", __FILE__, 178 /* ARTIST 0x828DAF14 */));
         CGS_ASSERT(lpMessage != 0,
-            CgsDev::Assert::MessageAt("lpMessage", KAC_ARTIST_ASSERT_FILE, 179 /* ARTIST 0x828DAF38 */));
+            CgsDev::Assert::MessageAt("lpMessage", __FILE__, 179 /* ARTIST 0x828DAF38 */));
 
         return EA::GameTalk::GameTalkManager::SendMessage(lpTarget, lpMessage);
     }

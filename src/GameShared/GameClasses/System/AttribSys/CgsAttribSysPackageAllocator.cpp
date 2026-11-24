@@ -5,8 +5,7 @@
 #include "GameShared/GameClasses/Memory/CgsHeapMalloc.h"     // CgsMemory::HeapMalloc
 #include "GameShared/GameClasses/System/AttribSys/CgsAttribSysMemoryManager.h" // AttribSysMemoryManager::HasMemoryBuffer (deallocate)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysPackageAllocator.h";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysPackageAllocator.h".
 
 namespace CgsAttribSys
 {
@@ -30,11 +29,11 @@ void AttribSysPackageAllocator::Construct(EAttribSysUserPackage leUserPackage)
 bool AttribSysPackageAllocator::Prepare(CgsMemory::HeapMalloc* lpHeapAllocator, s32 liAlignment)
 {
     CGS_ASSERT(mbHasAllocator == false,
-        CgsDev::Assert::MessageAt("mbHasAllocator == false", KAC_ARTIST_ASSERT_FILE, 214 /* ARTIST 0x828041E4 */));
+        CgsDev::Assert::MessageAt("mbHasAllocator == false", __FILE__, 214 /* ARTIST 0x828041E4 */));
     CGS_ASSERT(lpHeapAllocator != NULL,
-        CgsDev::Assert::MessageAt("lpHeapAllocator != NULL", KAC_ARTIST_ASSERT_FILE, 215 /* ARTIST 0x82804208 */));
+        CgsDev::Assert::MessageAt("lpHeapAllocator != NULL", __FILE__, 215 /* ARTIST 0x82804208 */));
     CGS_ASSERT(GetUserPackageName(),
-        CgsDev::Assert::MessageAt("GetUserPackageName()", KAC_ARTIST_ASSERT_FILE, 216 /* ARTIST 0x82804234 */));
+        CgsDev::Assert::MessageAt("GetUserPackageName()", __FILE__, 216 /* ARTIST 0x82804234 */));
 
     mpHeapAllocator = lpHeapAllocator;
     miAlignment     = liAlignment;
@@ -96,7 +95,7 @@ void AttribSysPackageAllocator::Free(void* lpBlock, size_t /*lnSize*/)
 void AttribSysPackageAllocator::Free(void* lpBlock)
 {
     CGS_ASSERT(mbHasAllocator,
-        CgsDev::Assert::MessageAt("mbHasAllocator", KAC_ARTIST_ASSERT_FILE, 324 /* ARTIST 0x828020F8 */));
+        CgsDev::Assert::MessageAt("mbHasAllocator", __FILE__, 324 /* ARTIST 0x828020F8 */));
 
     mpHeapAllocator->Free(lpBlock);
 }
@@ -142,7 +141,7 @@ const char* AttribSysPackageAllocator::GetUserPackageName()
     }
 
     CGS_ASSERT(false,
-        CgsDev::Assert::MessageAt("Unknown package.\n", KAC_ARTIST_ASSERT_FILE, 450 /* ARTIST 0x821F022C */));
+        CgsDev::Assert::MessageAt("Unknown package.\n", __FILE__, 450 /* ARTIST 0x821F022C */));
     return NULL;
 }
 }

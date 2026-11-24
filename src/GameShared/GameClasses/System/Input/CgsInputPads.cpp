@@ -16,8 +16,7 @@
 #include <cstdlib>   // [DIAG] std::getenv (BRN_RUMBLE_DIAG)
 #include <cstring>   // std::memset (Construct clears the action-down bitmap)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputPads.h";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputPads.h".
 
 namespace CgsInput
 {
@@ -32,10 +31,10 @@ namespace CgsInput
     DeviceX360Pad* InputPads::GetDebugGamePad(s32 liPortIndex)
     {
         CGS_ASSERT(liPortIndex >= 0,
-            CgsDev::Assert::MessageAt("liPortIndex >= 0", KAC_ARTIST_ASSERT_FILE, 251 /* ARTIST 0x823A5F64 */));                          // h:251
+            CgsDev::Assert::MessageAt("liPortIndex >= 0", __FILE__, 251 /* ARTIST 0x823A5F64 */));                          // h:251
         CGS_ASSERT(liPortIndex < (s32)KU_NUMBER_OF_PADS,
             CgsDev::Assert::MessageAt(
-                "liPortIndex < (int32_t)KU_NUMBER_OF_PADS", KAC_ARTIST_ASSERT_FILE, 252 /* ARTIST 0x823A5F88 */)); // h:252
+                "liPortIndex < (int32_t)KU_NUMBER_OF_PADS", __FILE__, 252 /* ARTIST 0x823A5F88 */)); // h:252
         return &maPads[liPortIndex];
     }
 

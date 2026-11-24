@@ -3,8 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Memory/CgsLinearMalloc.h"   // LinearMalloc::Malloc/GetAlignment (Prepare)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultAllocator.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysVaultAllocator.cpp".
 
 namespace CgsAttribSys
 {
@@ -22,15 +21,15 @@ void StreamedVaultAllocator::Construct()
 void StreamedVaultAllocator::Prepare(CgsMemory::LinearMalloc* lpAllocator)
 {
     CGS_ASSERT(lpAllocator != NULL,
-        CgsDev::Assert::MessageAt("lpAllocator != NULL", KAC_ARTIST_ASSERT_FILE, 65 /* ARTIST 0x82803C44 */));                       // .cpp:65
+        CgsDev::Assert::MessageAt("lpAllocator != NULL", __FILE__, 65 /* ARTIST 0x82803C44 */));                       // .cpp:65
     CGS_ASSERT(lpAllocator->GetAlignment() >= 16,
         CgsDev::Assert::MessageAt(
-            "lpAllocator->GetAlignment() >= 16", KAC_ARTIST_ASSERT_FILE, 66 /* ARTIST 0x82803C6C */));   // .cpp:66
+            "lpAllocator->GetAlignment() >= 16", __FILE__, 66 /* ARTIST 0x82803C6C */));   // .cpp:66
 
     mpau8VaultMemory = static_cast<u8*>(
         lpAllocator->Malloc(KI_MAX_NUM_STREAMED_VAULTS * KI_MAX_STREAMED_VAULT_BIN_SIZE));
     CGS_ASSERT(mpau8VaultMemory != NULL,
-        CgsDev::Assert::MessageAt("mpau8VaultMemory != NULL", KAC_ARTIST_ASSERT_FILE, 77 /* ARTIST 0x82803CA4 */));             // .cpp:77
+        CgsDev::Assert::MessageAt("mpau8VaultMemory != NULL", __FILE__, 77 /* ARTIST 0x82803CA4 */));             // .cpp:77
 }
 // Returns a pointer to the 4 KiB bin backing the given streamed-vault slot. The
 // X360 build inlines the BitArray bounds check and IsBitSet probe; both are

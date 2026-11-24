@@ -11,8 +11,7 @@
 #include "SDKs/EA/GameTalk/GameTalk.h"                              // EA::GameTalk::GameTalkMessage accessors
 #include "SDKs/Packages/AttribSys/1.2.1.2/AttribSys/runtime/attriblivelink.h" // Attrib::DecodeLiveLinkMessage
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModule.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\attribsys\\CgsAttribSysModule.cpp".
 
 namespace CgsAttribSys
 {
@@ -145,19 +144,19 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
 
             CGS_ASSERT(lpLinearAlloc   != 0,
                 CgsDev::Assert::MessageAt(
-                    "lpLinearAlloc != NULL", KAC_ARTIST_ASSERT_FILE, 133 /* ARTIST 0x828076C8 */));
+                    "lpLinearAlloc != NULL", __FILE__, 133 /* ARTIST 0x828076C8 */));
             CGS_ASSERT(lpAttribSysHeap != 0,
                 CgsDev::Assert::MessageAt(
-                    "lpAttribSysHeap != NULL", KAC_ARTIST_ASSERT_FILE, 134 /* ARTIST 0x828076EC */));
+                    "lpAttribSysHeap != NULL", __FILE__, 134 /* ARTIST 0x828076EC */));
             CGS_ASSERT(lpGameTalkHeap  != 0,
                 CgsDev::Assert::MessageAt(
-                    "lpGameTalkHeap != NULL", KAC_ARTIST_ASSERT_FILE, 135 /* ARTIST 0x82807710 */));
+                    "lpGameTalkHeap != NULL", __FILE__, 135 /* ARTIST 0x82807710 */));
             CGS_ASSERT(lpEastlHeap     != 0,
                 CgsDev::Assert::MessageAt(
-                    "lpEastlHeap != NULL", KAC_ARTIST_ASSERT_FILE, 136 /* ARTIST 0x82807734 */));
+                    "lpEastlHeap != NULL", __FILE__, 136 /* ARTIST 0x82807734 */));
             CGS_ASSERT(liMaxNumVaults > 0,
                 CgsDev::Assert::MessageAt(
-                    "liMaxNumVaults > 0", KAC_ARTIST_ASSERT_FILE, 137 /* ARTIST 0x82807758 */));
+                    "liMaxNumVaults > 0", __FILE__, 137 /* ARTIST 0x82807758 */));
 
             mMemoryManager.Prepare(lpLinearAlloc, lpAttribSysHeap,
                                             lpGameTalkHeap, lpEastlHeap);
@@ -167,7 +166,7 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
                 lpLinearAlloc->Malloc(KI_SCHEMA_VAULT_BYTES));
             CGS_ASSERT(mpSchemaVault != 0,
                 CgsDev::Assert::MessageAt(
-                    "mpSchemaVault != NULL", KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x828077B4 */));
+                    "mpSchemaVault != NULL", __FILE__, 152 /* ARTIST 0x828077B4 */));
 
             mePrepareStage++;
             // fall through
@@ -178,7 +177,7 @@ bool AttribSysModule::Prepare(CgsMemory::LinearMalloc* lpLinearAlloc,
         default:
             CGS_ASSERT(false,
                 CgsDev::Assert::MessageAt(
-                    "Invalid prepare state.\n", KAC_ARTIST_ASSERT_FILE, 169 /* ARTIST 0x828077F4 */));
+                    "Invalid prepare state.\n", __FILE__, 169 /* ARTIST 0x828077F4 */));
             return false;
     }
 }
@@ -206,7 +205,7 @@ bool AttribSysModule::Release()
         default:
             CGS_ASSERT(false,
                 CgsDev::Assert::MessageAt(
-                    "Invalid release state.\n", KAC_ARTIST_ASSERT_FILE, 226 /* ARTIST 0x828025B4 */));
+                    "Invalid release state.\n", __FILE__, 226 /* ARTIST 0x828025B4 */));
             return false;
     }
 }
@@ -298,11 +297,11 @@ void AttribSysModule::RegisterVault(AttribSysIO::RegisterVaultRequest* lpRegiste
 void AttribSysModule::UnregisterVault(AttribSysIO::UnregisterVaultRequest* lpUnregisterVaultRequest)
 {
     CGS_ASSERT(IsSchemaLoaded(),
-        CgsDev::Assert::MessageAt("IsSchemaLoaded()", KAC_ARTIST_ASSERT_FILE, 462 /* ARTIST 0x8280FA04 */));
+        CgsDev::Assert::MessageAt("IsSchemaLoaded()", __FILE__, 462 /* ARTIST 0x8280FA04 */));
     CGS_ASSERT(lpUnregisterVaultRequest != 0,
         CgsDev::Assert::MessageAt(
             "lpUnregisterVaultRequest != NULL",
-            KAC_ARTIST_ASSERT_FILE, 463 /* ARTIST 0x8280FA28 */));
+            __FILE__, 463 /* ARTIST 0x8280FA28 */));
     mVaultArray.UnregisterVault(lpUnregisterVaultRequest);
 
     const s32 liEventId = lpUnregisterVaultRequest->miEventId;
