@@ -1,6 +1,7 @@
 #include "GameSource/World/CrashModule/BrnCrashModule.h"
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // BrnCrashModule.cpp assert lines
 #include <cstdlib>
 
 namespace BrnWorld
@@ -102,7 +103,8 @@ namespace BrnWorld
     // ARTIST827D0F80.
     void CrashModule::HandleNewCrashingTraffic(const CrashIO::InputBuffer_PostPhysics* lpInput)
     {
-        CGS_ASSERT(lpInput, "lpInput != NULL");
+        // BrnCrashModule.cpp:1027 (li r5,0x403 at 0x827D0FA4).
+        CGS_ASSERT(lpInput, CgsDev::Assert::MessageAt("lpInput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/CrashModule/BrnCrashModule.cpp", 1027));
         const CrashIO::TrafficInputInterface::AddCrashingTrafficEventQueue& events = lpInput->GetTrafficInputInterface()->GetAddCrashingTrafficEventQueue();
         for (s32 i = 0; i < events.GetLength(); ++i)
         {
@@ -162,12 +164,13 @@ namespace BrnWorld
     // ARTIST827BF3F0.
     void CrashModule::HandleRecoveredSlammedTraffic(const CrashIO::InputBuffer_PostPhysics* lpInput)
     {
-        CGS_ASSERT(lpInput, "lpInput != NULL");
+        // BrnCrashModule.cpp:1260 / :1270 (li r5,0x4EC at 0x827BF41C, li r5,0x4F6 at 0x827BF478).
+        CGS_ASSERT(lpInput, CgsDev::Assert::MessageAt("lpInput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/CrashModule/BrnCrashModule.cpp", 1260));
         const CrashIO::TrafficInputInterface::RemoveSlammedTrafficEventQueue* events = lpInput->GetTrafficInputInterface()->GetRemoveSlammedTrafficEventQueue();
         for (s32 i = 0; i < events->GetLength(); ++i)
         {
             const u32 vehicle = events->GetEvent(i).muVehicleId;
-            CGS_ASSERT(vehicle < 600, "luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC");
+            CGS_ASSERT(vehicle < 600, CgsDev::Assert::MessageAt("luVehicle < BrnTraffic::KU_MAX_TOTAL_TRAFFIC", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/CrashModule/BrnCrashModule.cpp", 1270));
             maiSlammedTrafficOwners[vehicle] = -1;
         }
     }

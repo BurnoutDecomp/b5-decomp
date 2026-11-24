@@ -33,6 +33,7 @@
 #include "GameSource/Graphics/BrnShaderConstantsFrame.h"                           // gBrnWorldShaderConstantsFrameBringUp -- the live world white level
 #include "GameSource/Game/BrnDispatchThreadInputBuffer.h"                          // BrnGame::DispatchThreadInputBuffer
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // ARTIST assert lines
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "rw/math/vpu/vector3_operation.h"                                         // rw::math::vpu::{operator-, Dot}
 #include "SDKs/EATech/include/rw/math/vpu/vec_float.h"                             // rw::math::vpu::VecFloat (Random::RandomVecFloat)
@@ -1417,7 +1418,8 @@ void EffectsModule::ProcessActiveRaceCars(const EffectsModuleParams& lrParams,
                                           const AudioEffectsMessageQueue* lpAudioEffects,
                                           bool lbBumperCam)
 {
-    CGS_ASSERT(lpActiveRaceCars != 0, "lpActiveRaceCarInterface != NULL");   // EffectsModule.cpp:3252
+    // ARTIST bakes EffectsModule.cpp:3252 (li r5,0xCB4 at 0x8229EB68).
+    CGS_ASSERT(lpActiveRaceCars != 0, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", __FILE__, 3252));
     EActiveRaceCarIndex lePlayer = E_ACTIVE_RACE_CAR_INDEX_INVALID;
     if (lpActiveRaceCars->IsPlayerCarActive())
         lePlayer = lpActiveRaceCars->GetPlayerActiveRaceCarIndex();

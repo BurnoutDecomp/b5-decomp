@@ -798,16 +798,17 @@ namespace BrnWorld
     // whole-prop volumes) still leave the scene inside the prop-volume budget?
     bool PropCellManager::CanAddPartVolumes(const PropTypeData* lpType)
     {
-        u32 luPartVolumes = 0;
-        const u32 luNumberOfParts = lpType->GetNumberOfParts();
-        for (u32 luPart = 0; luPart < luNumberOfParts; ++luPart)
+        // DWARF locals: int32_t liPartIndex (cpp:397), int32_t liNumVolumesNeeded (cpp:400);
+        // the loop count compares signed (cmpwi / ble at 0x822A9FB0).
+        s32 liNumVolumesNeeded = 0;
+        for (s32 liPartIndex = 0; liPartIndex < lpType->GetNumberOfParts(); ++liPartIndex)
         {
-            luPartVolumes += lpType->GetPartVolumeGroups()[luPart].GetNumberOfVolumes();
+            liNumVolumesNeeded += lpType->GetPartVolumeGroups()[liPartIndex].GetNumberOfVolumes();
         }
 
         // The whole-prop volumes go away as the part volumes arrive, so only the delta
         // counts (asm subtracts mu8NumberOfVolumes then truncates to 16 bits).
-        const u16 lu16Delta = static_cast<u16>(luPartVolumes - lpType->GetNumberOfVolumes());
+        const u16 lu16Delta = static_cast<u16>(liNumVolumesNeeded - lpType->GetNumberOfVolumes());
         return (static_cast<u32>(lu16Delta) + mu16NumberOfPropVolumesInScene)
                < KU_MAX_PROP_VOLUMES_IN_SCENE;
     }
