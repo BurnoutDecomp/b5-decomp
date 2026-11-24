@@ -56,7 +56,7 @@ const s32 IdleHudState::miNumEventsObserved = 1;
 // 199 -> "SatNavMap", 90 -> "B5VersionTextComponent" all reproduce).
 // Both are type 7 == E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE, and the pair matches what this state
 // actually is: its own movie plus the TextField import behind OnEnter's "text_txt" Construct.
-const CgsGui::sResourceTuple IdleHudState::maResourcesToLoad[] =
+CgsGui::sResourceTuple       IdleHudState::maResourcesToLoad[] =
 {
     { 195u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5IdleHud
     {  29u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // TextField

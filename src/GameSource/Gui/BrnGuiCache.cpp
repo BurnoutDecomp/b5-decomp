@@ -306,7 +306,7 @@ namespace BrnGui
         // volume/trax defaults) so its range-asserted getters hold before any save
         // overwrites it (ScreenLoading's ApplyOptionsDataProfileSettings reads it on
         // the world-load hand-off).
-        GetOptionsDataProfile()->Construct();
+        GetMenuOptionsData()->Construct();
 
         // X360 0x825060EC..0x82506110 (immediately after that call): seed the live DLC1
         // options block that sits directly behind the options profile at cache+76776 --

@@ -639,7 +639,7 @@ public:
     void GetMessageParam(CgsGui::GuiPopupParameter* lpOut, s32 liIndex) const;
     void GetButton1Param(CgsGui::GuiPopupParameter* lpOut) const;
     void GetButton2Param(CgsGui::GuiPopupParameter* lpOut) const;
-    s32 GetMessageParamCount() const { return miNumMessages; }
+    s32 GetMessageParamCount() const { return miNumMessages; }  bool IsButton1ParamUsed() const { return mbButon1ParamUsed; }  bool IsButton2ParamUsed() const { return mbButon2ParamUsed; }  // DWARF h:5748/5752; one line keeps this header's __LINE__s
     friend struct GuiOverlaysDirector;
 
 private:
@@ -647,8 +647,8 @@ private:
     CgsGui::GuiPopupParameter mButton1Param;
     CgsGui::GuiPopupParameter mButton2Param;
     s32 miNumMessages;
-    bool mbButton1Used;
-    bool mbButton2Used;
+    bool mbButon1ParamUsed;
+    bool mbButon2ParamUsed;
 };
 CGS_STATIC_ASSERT((sizeof(GuiOverlayRequest) == 0x120), "ARTIST overlay request payload");
 CGS_STATIC_ASSERT((__alignof(GuiOverlayRequest) == 8), "ARTIST overlay request alignment");

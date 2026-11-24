@@ -143,7 +143,7 @@ namespace BrnGui
             // displacements off the cache pointer (cache+76672 / +76676 == the profile at
             // cache+0xB878 plus its +0x7308 / +0x730C). Un-inlined back onto the profile's
             // own public accessors rather than poking the (private) members.
-            const OptionsDataProfile* lpOptionsDataProfile = mpGuiCache->GetOptionsDataProfile();
+            const OptionsDataProfile* lpOptionsDataProfile = mpGuiCache->GetMenuOptionsData();
             if (lpOptionsDataProfile->GetNumCreatedOnlineGameOptions() > 0 ||
                 lpOptionsDataProfile->GetNumReceivedOnlineGameOptions() > 0)
             {

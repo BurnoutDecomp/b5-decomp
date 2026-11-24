@@ -75,14 +75,14 @@ const s32 CrashedHudState::miNumEventsObserved = 21;
 // their messages, helper components and button glyphs and differ only in their own movie. Two
 // independently-decoded tables agreeing on three of four entries is a further check that the
 // address decode is right.
-const CgsGui::sResourceTuple CrashedHudState::maResourcesToLoad[] =
+CgsGui::sResourceTuple       CrashedHudState::maResourcesToLoad[] =
 {
     { 193u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5CrashedHud
     {  38u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5CrashedHudMessages
     {  63u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5HelperComponents
     {  61u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5ControllerButtons
 };
-const u32 CrashedHudState::muNumResourcesToLoad = 4;
+u32       CrashedHudState::muNumResourcesToLoad = 4;
 
     // @ 0x82473780 -- hash the component name and append it to the expected-apt-component id list.
     // DWARF declares this void; the X360 leaves the hash in r3 (the id it just stored). The

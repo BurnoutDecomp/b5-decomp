@@ -83,8 +83,8 @@ namespace BrnGui
 
         static const s32                    maiEventToObserve[4];   // @0x82066620 (.rdata)
         static const s32                    miNumEventsObserved;    // == 4
-        static const CgsGui::sResourceTuple maResourcesToLoad[];    // @0x82F27278 (.rdata)
-        static const u32                    muNumResourcesToLoad;   // @0x82F27288 (.rdata) == 2
+        static CgsGui::sResourceTuple       maResourcesToLoad[];    // @0x82F27278 (.rdata)
+        static u32                          muNumResourcesToLoad;   // @0x82F27288 (.rdata) == 2
         static const char                   mpacEATraxMenuComponentName[19];
 
         EInternalScreenState meCurrentState;                        // +0x0038

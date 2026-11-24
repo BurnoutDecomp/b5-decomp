@@ -373,7 +373,7 @@ namespace BrnGui
         const s32 leAction = static_cast<const ControllerButtonPayload*>(lpEvent)->miButtonId;
         s32 liOption = mMenuOptions.GetHighlightedIndex() + miStartItem;
 
-        OptionsDataProfile* lpProfile = mpGuiCache->GetOptionsDataProfile();
+        OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
         GuiEventNetworkGameParams lParams;
 
         switch (leAction)

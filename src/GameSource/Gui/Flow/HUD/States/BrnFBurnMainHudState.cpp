@@ -217,7 +217,7 @@ namespace BrnGui
     // @ 0x82F26230 (count @ 0x82F2622C == 42): the B5RaceHud apt movie plus its aux
     // component imports (type 7 == GUIAPT aux import; type 11 == texture). The name
     // comments are off_82F278E0[id] from the image.
-    const CgsGui::sResourceTuple FBurnMainHudState::maResourcesToLoad[] =
+    CgsGui::sResourceTuple       FBurnMainHudState::maResourcesToLoad[] =
     {
         { 192u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5RaceHud
         {  29u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // TextField
@@ -262,7 +262,7 @@ namespace BrnGui
         {  89u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5JunctionInfoComponent
         {  90u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5VersionTextComponent
     };
-    const u32 FBurnMainHudState::muNumResourcesToLoad = 42;
+    u32       FBurnMainHudState::muNumResourcesToLoad = 42;
 
     // @ 0x8205AED8: the 56 event ids OnEnter registers (values from the image).
     const s32 FBurnMainHudState::maiEventToObserve[] =

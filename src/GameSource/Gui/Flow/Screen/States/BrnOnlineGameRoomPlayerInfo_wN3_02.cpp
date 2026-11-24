@@ -117,7 +117,7 @@ namespace BrnGui
         {
             if (BrnGameState::ChallengeManager::mbChallengesAreAllOnePlayer ||
                 BrnGameState::ChallengeManager::mbChallengesAreAllTwoPlayer ||
-                mpGuiCache->GetNumActivePlayers() == static_cast<s32>(mChallengeToggle.GetHighlightedId()))
+                mpGuiCache->GetOnlinePlayerCount() == static_cast<s32>(mChallengeToggle.GetHighlightedId()))
             {
                 lbShowButton = true;
             }
@@ -147,7 +147,7 @@ namespace BrnGui
         mChallengeToggle.SetHighlighted(true);
         mChallengeToggle.SetSelectable(true);
 
-        const s32 liNumPlayers = static_cast<s32>(mpGuiCache->GetNumActivePlayers());
+        const s32 liNumPlayers = static_cast<s32>(mpGuiCache->GetOnlinePlayerCount());
         const s32 liToggleId   = (liNumPlayers == 1) ? KI_MIN_CHALLENGE_PLAYERS : liNumPlayers;
         if (mChallengeToggle.mItemText.HighlightId(static_cast<u64>(static_cast<s64>(liToggleId))))
         {

@@ -71,7 +71,7 @@ namespace BrnGui
         void HandleControllerInputPressed(
             const CgsGui::GuiEventControllerInputPressed* lpControllerPressedEvent);
 
-        static const CgsGui::sResourceTuple maResourcesToLoad[];   // 4 entries
+        static CgsGui::sResourceTuple       maResourcesToLoad[];   // 4 entries
         static const u32                    muNumResourcesToLoad;  // == 4
         static const s32                    maiEventToObserve[];   // 6 entries
         static const s32                    miNumEventsObserved;   // == 6

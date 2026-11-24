@@ -290,7 +290,7 @@ namespace BrnGui
         CgsGui::GuiEventQueueSmall lLoadCompleteQueue;
         lLoadCompleteQueue.Construct();
 
-        OptionsDataProfile* lpProfile = mpGuiCache->GetOptionsDataProfile();
+        OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
         // BrnGuiOptionsDataProfile.h forward-declares its queue param as the (not yet
         // homed) BrnGui::GuiEventQueueSmall; the real object is the CgsGui small queue --
         // bridged here until that header adopts the CgsGui typedef.

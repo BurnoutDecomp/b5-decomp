@@ -194,8 +194,8 @@ const GuiEventUpdateSatNav::SatNavIconInfo* MapIconManager::GetDriveThroughOrJun
     CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
     const bool lbSkipPaintShop =
-        (mpGuiCache->GetCurrentGameModeType() == E_MODE_ROAD_RAGE ||
-         mpGuiCache->GetCurrentGameModeType() == E_MODE_MARKED_MAN);
+        (mpGuiCache->GetGameMode() == E_MODE_ROAD_RAGE ||
+         mpGuiCache->GetGameMode() == E_MODE_MARKED_MAN);
 
     const s32 liNumDriveThroughs = mpGuiCache->GetNumberOfDriveThroughs();
     for (s32 liDriveThrough = 0; liDriveThrough < liNumDriveThroughs; ++liDriveThrough)
@@ -208,7 +208,7 @@ const GuiEventUpdateSatNav::SatNavIconInfo* MapIconManager::GetDriveThroughOrJun
         if (!lpIcon->IsHiddenDriveThru() &&
             (!lbSkipPaintShop || lpIcon->GetIconTypeByte() != SatNavIconInfo::E_SATNAVICON_PAINT_SHOP))
         {
-            const s32 liGameMode = mpGuiCache->GetCurrentGameModeType();
+            const s32 liGameMode = mpGuiCache->GetGameMode();
             const bool lbAllowJunkyard =
                 (liGameMode == E_MODE_NONE || liGameMode == E_MODE_ONLINE_FREE_BURN_LOBBY);
 

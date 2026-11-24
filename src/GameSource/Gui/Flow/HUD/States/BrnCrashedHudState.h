@@ -93,8 +93,8 @@ namespace BrnGui
         //   0x82508500  816B63C0  lwz  r11, 0x63C0(r11)   -> 0x82F263C0
         // and the extent is self-confirming exactly as the CrashedStunt twin's is: four 8-byte
         // tuples end at 0x82F263C0, which is where the count word (reading 4) begins.
-        static const CgsGui::sResourceTuple maResourcesToLoad[];   // @ 0x82F263A0 (.rdata)
-        static const u32                    muNumResourcesToLoad;  // @ 0x82F263C0 (.rdata)
+        static CgsGui::sResourceTuple       maResourcesToLoad[];   // @ 0x82F263A0 (.rdata)
+        static u32                          muNumResourcesToLoad;  // @ 0x82F263C0 (.rdata)
 
         // --- members (DWARF order; base CgsGui::State occupies guest +0x00..+0x38) ---
 

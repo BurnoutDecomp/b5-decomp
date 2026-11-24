@@ -62,7 +62,7 @@ int OnlinePreEventMessages::SelectScreenKeyFrameForGameMode()
     CGS_ASSERT(lpGuiCache != 0, "mpStateInterface->GetAccessPointers()->GetGuiCache()");
 
     // Guest: r11 = *(guiCache + 40536) -- the active game-mode type.
-    const s32 liGameModeType = lpGuiCache->GetCurrentGameModeType();
+    const s32 liGameModeType = lpGuiCache->GetGameMode();
 
     // Guest: v7 == 12 || v7 == 14 || v7 == 17 ? "anim1_StuntRun" : "anim1".
     const char* lpacViewState = UsesStuntRunKeyFrame(liGameModeType) ? "anim1_StuntRun" : "anim1";

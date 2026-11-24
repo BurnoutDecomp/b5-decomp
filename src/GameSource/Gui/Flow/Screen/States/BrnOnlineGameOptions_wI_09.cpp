@@ -343,7 +343,7 @@ namespace BrnGui
             {
                 // Only worth opening when the profile actually holds a saved or a received
                 // set of options.
-                OptionsDataProfile* lpProfile = mpGuiCache->GetOptionsDataProfile();
+                OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
                 if (lpProfile->GetNumCreatedOnlineGameOptions() > 0 ||
                     lpProfile->GetNumReceivedOnlineGameOptions() > 0)
                 {

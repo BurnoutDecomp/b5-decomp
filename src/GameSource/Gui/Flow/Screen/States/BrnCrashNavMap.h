@@ -243,8 +243,8 @@ namespace BrnGui
         // muNumResourcesToLoad @0x82F26EBC = 7 (both dumped, boundaries observed --
         // scratchpad/waveH/ogrpi_rodata2.txt). The OGRPI screen unloads THIS table in
         // UnloadMapResources, so the statics are protected (derived access).
-        static const CgsGui::sResourceTuple maResourcesToLoad[7];
-        static const u32                    muNumResourcesToLoad;
+        static CgsGui::sResourceTuple       maResourcesToLoad[7];
+        static u32                          muNumResourcesToLoad;
 
         // ---- data members (DWARF order; X360 offsets in the header banner) ----------
         MapState        meMapState;               // X360 +56

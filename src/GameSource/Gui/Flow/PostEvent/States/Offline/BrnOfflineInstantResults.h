@@ -249,8 +249,8 @@ namespace BrnGui
         void UpdatePhoto();                // @0x824B47C8
         bool IsXSCarInUnlockedArray(s32 liStartIndex, s32* lpiFoundIndex, CgsID* lpFoundCar); // @0x824C0730
 
-        static const CgsGui::sResourceTuple maResourcesToLoad[];  // @0x82F26AFC (.rdata)
-        static const u32                    muNumResourcesToLoad; // @0x82F26B0C (.rdata)
+        static CgsGui::sResourceTuple       maResourcesToLoad[];  // @0x82F26AFC (.rdata)
+        static u32                          muNumResourcesToLoad; // @0x82F26B0C (.rdata)
 
         // ---- embedded components, in X360 constructor order (see the banner) -------------
         HelpItem            mHelpItems[KI_HELPITEMS];      // +0x0038  (DWARF h:384)

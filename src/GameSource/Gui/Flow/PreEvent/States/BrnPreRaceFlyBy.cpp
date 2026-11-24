@@ -87,12 +87,12 @@ namespace BrnGui
     // ===============================================================================
 
     // @0x82F26BE0 -- the one resource the fly-by state asks the loader for up front.
-    const CgsGui::sResourceTuple PreRaceFlyByState::maResourcesToLoad[1] =
+    CgsGui::sResourceTuple       PreRaceFlyByState::maResourcesToLoad[1] =
     {
         { 200u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // {200, 7}
     };
     // @0x82F26BE8 == 1.
-    const u32 PreRaceFlyByState::muNumResourcesToLoad = 1u;
+    u32       PreRaceFlyByState::muNumResourcesToLoad = 1u;
 
     // @0x82F26C00 -- the per-game-mode pre-event screen bundle, indexed by
     // GameStateModuleIO::EGameModeType 0..9. Ids run 207..216, all of type 4

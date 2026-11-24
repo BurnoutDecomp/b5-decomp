@@ -90,7 +90,7 @@ namespace BrnGui
 
         BrnGui::MenuComponent mSelectionMenu;         // [c:0x318] the "MenuItem" 2-entry menu
 
-        static const CgsGui::sResourceTuple maResourcesToLoad[];  // @ 0x82F25CEC (.rdata)
-        static const u32                    muNumResourcesToLoad; // @ 0x82F25CF4 (.rdata)
+        static CgsGui::sResourceTuple       maResourcesToLoad[];  // @ 0x82F25CEC (.rdata)
+        static u32                          muNumResourcesToLoad; // @ 0x82F25CF4 (.rdata)
     };
 }

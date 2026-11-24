@@ -87,7 +87,7 @@ namespace BrnGui
     //   147 == "BrnIntro"   59 == "B5HelpItem".
     // These are NOT handed to the generic loader: GetResourcesToLoad is the ICF fold that
     // returns {NULL, 0}. Update case 5 drives this array through the cache itself.
-    const CgsGui::sResourceTuple Intro::maResourcesToLoad[2] =
+    CgsGui::sResourceTuple       Intro::maResourcesToLoad[2] =
     {
         { 147u, CgsGui::E_GUI_RESOURCETYPE_APT },   // "BrnIntro"
         {  59u, CgsGui::E_GUI_RESOURCETYPE_APT },   // "B5HelpItem"

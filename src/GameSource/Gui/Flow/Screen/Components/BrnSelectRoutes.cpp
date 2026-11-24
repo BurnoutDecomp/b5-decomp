@@ -29,6 +29,9 @@
 
 namespace BrnGui
 {
+    // DWARF BrnSelectRoutes.cpp:48; ARTIST .data 0x82F25298 -> 0x8204B4F8 / 0x82049C28 / 0x820490C8.
+    const char* SelectRoutes::KPC_ARROW_ANIMATION_STATES[3] = { "invisible", "visible", "animate" };
+
     // ---- GetCurrentlySelectedCheckpointIndex @ 0x82418B90 -------------------------
     // Absolute menu index = first-checkpoint item + highlighted row; 0 when unselected.
     s32 SelectRoutes::GetCurrentlySelectedCheckpointIndex() const
@@ -456,6 +459,12 @@ namespace BrnGui
     void SelectRoutes::Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
                                  const char* lpacParentName)
     {
+        // DWARF locals (DecFIGS BrnGuiComponentUnity, BrnSelectRoutes.cpp:75-77); the row pointer gives
+        // ARTIST 82418BB8's per-row base. The trigger store is the inlined LightTriggerId::SetInvalid().
+        u32             luRoundNumber;
+        s32             liCheckpointIndex;
+        CheckpointData* lpCheckpointData;
+
         CgsGui::GuiComponent::Construct(lpacName, lpStateInterface, lpacParentName);
         miCurrentRound = 0;
         miStartItem = 0;
@@ -464,15 +473,16 @@ namespace BrnGui
                                KI_NUM_DISPLAYABLE_CHECKPOINTS, 0, 0xFFFFFFFFull);
         mUpArrowAnimator.Construct("ArrowUp_anim", lpStateInterface, 0);
         mDownArrowAnimator.Construct("ArrowDown_anim", lpStateInterface, 0);
-        for (s32 liRound = 0; liRound < KI_MAX_ROUNDS; ++liRound)
-            maiNumCheckpoints[liRound] = 1;
-        for (s32 liCheckpoint = 0; liCheckpoint < KI_MAX_CHECKPOINTS; ++liCheckpoint)
+        for (luRoundNumber = 0; luRoundNumber < KI_MAX_ROUNDS; luRoundNumber++)
+            maiNumCheckpoints[luRoundNumber] = 1;
+        for (liCheckpointIndex = 0; liCheckpointIndex < KI_MAX_CHECKPOINTS; liCheckpointIndex++)
         {
-            for (s32 liRound = 0; liRound < KI_MAX_ROUNDS; ++liRound)
+            lpCheckpointData = &maCheckpointData[liCheckpointIndex];
+            for (luRoundNumber = 0; luRoundNumber < KI_MAX_ROUNDS; luRoundNumber++)
             {
-                maCheckpointData[liCheckpoint].maeSelectedCounty[liRound] = BrnWorld::ECounty(0);
-                maCheckpointData[liCheckpoint].maLandmarkIndex[liRound] = BrnGameState::LandmarkIndex(0);
-                maCheckpointData[liCheckpoint].maStartLightTriggerID[liRound] = 0xFFFFFFFFu;
+                lpCheckpointData->maeSelectedCounty[luRoundNumber] = BrnWorld::ECounty(0);
+                lpCheckpointData->maLandmarkIndex[luRoundNumber] = BrnGameState::LandmarkIndex(0);
+                lpCheckpointData->maStartLightTriggerID[luRoundNumber] = 0xFFFFFFFFu;
             }
         }
     }
@@ -495,8 +505,8 @@ namespace BrnGui
     void SelectRoutes::Hide()
     {
         mMenuOptions.Clear();
-        mUpArrowAnimator.AddOutputAptViewState("apt_Transition", "invisible", false);
-        mDownArrowAnimator.AddOutputAptViewState("apt_Transition", "invisible", false);
+        mUpArrowAnimator.Run(KPC_ARROW_ANIMATION_STATES[0]);
+        mDownArrowAnimator.Run(KPC_ARROW_ANIMATION_STATES[0]);
     }
 
     // ARTIST 8242D728. The original only reveals the down arrow here.
@@ -505,7 +515,7 @@ namespace BrnGui
         mMenuOptions.SetupMenu(KI_NUM_DISPLAYABLE_CHECKPOINTS, false);
         miStartItem = 0;
         SetupMenuText();
-        mDownArrowAnimator.AddOutputAptViewState("apt_Transition", "visible", false);
+        mDownArrowAnimator.Run(KPC_ARROW_ANIMATION_STATES[1]);
     }
 
     // ARTIST 82418D78. Burning Home Run has no separate finish-point row.
@@ -851,10 +861,10 @@ namespace BrnGui
             if (lbMoved)
             {
                 leChanged = E_CHANGED_ITEM_CHECKPOINT;
-                mUpArrowAnimator.AddOutputAptViewState("apt_Transition", "animate", false);
+                mUpArrowAnimator.Run(KPC_ARROW_ANIMATION_STATES[2]);
                 if (GetCurrentlySelectedCheckpointIndex() == 0)
-                    mUpArrowAnimator.AddOutputAptViewState("apt_Transition", "invisible", false);
-                mDownArrowAnimator.AddOutputAptViewState("apt_Transition", "visible", false);
+                    mUpArrowAnimator.Run(KPC_ARROW_ANIMATION_STATES[0]);
+                mDownArrowAnimator.Run(KPC_ARROW_ANIMATION_STATES[1]);
                 PostMenuAudio(mpStateInterface, 7, "MenuToggleDefault");
             }
             break;
@@ -876,12 +886,12 @@ namespace BrnGui
             if (lbMoved)
             {
                 leChanged = E_CHANGED_ITEM_CHECKPOINT;
-                mDownArrowAnimator.AddOutputAptViewState("apt_Transition", "animate", false);
+                mDownArrowAnimator.Run(KPC_ARROW_ANIMATION_STATES[2]);
                 const s32 liCount = maiNumCheckpoints[miCurrentRound];
                 if ((liCount < KI_MAX_CHECKPOINTS && GetCurrentlySelectedCheckpointIndex() == liCount + 1) ||
                     (liCount == KI_MAX_CHECKPOINTS && GetCurrentlySelectedCheckpointIndex() == KI_MAX_CHECKPOINTS))
-                    mDownArrowAnimator.AddOutputAptViewState("apt_Transition", "invisible", false);
-                mUpArrowAnimator.AddOutputAptViewState("apt_Transition", "visible", false);
+                    mDownArrowAnimator.Run(KPC_ARROW_ANIMATION_STATES[0]);
+                mUpArrowAnimator.Run(KPC_ARROW_ANIMATION_STATES[1]);
                 PostMenuAudio(mpStateInterface, 7, "MenuToggleDefault");
             }
             break;
@@ -907,7 +917,7 @@ namespace BrnGui
                     SetupMenuText();
                     leChanged = E_CHANGED_ITEM_EDIT_NEW_CHECKPOINT;
                     if (maiNumCheckpoints[miCurrentRound] < KI_MAX_CHECKPOINTS)
-                        mDownArrowAnimator.AddOutputAptViewState("apt_Transition", "visible", false);
+                        mDownArrowAnimator.Run(KPC_ARROW_ANIMATION_STATES[1]);
                 }
             }
             else if (leType == E_MENU_ITEM_TYPE_DONE)
@@ -951,7 +961,7 @@ namespace BrnGui
                 const s32 liCount = maiNumCheckpoints[miCurrentRound];
                 if ((liCount < KI_MAX_CHECKPOINTS && GetCurrentlySelectedCheckpointIndex() == liCount + 2) ||
                     (liCount == KI_MAX_CHECKPOINTS && GetCurrentlySelectedCheckpointIndex() == 18))
-                    mDownArrowAnimator.AddOutputAptViewState("apt_Transition", "invisible", false);
+                    mDownArrowAnimator.Run(KPC_ARROW_ANIMATION_STATES[0]);
             }
             break;
         }
@@ -985,9 +995,9 @@ namespace BrnGui
                 leChanged = E_CHANGED_ITEM_EDIT_NEW_CHECKPOINT;
                 if (maiNumCheckpoints[miCurrentRound] == KI_MAX_CHECKPOINTS &&
                     GetCurrentlySelectedCheckpointIndex() == KI_MAX_CHECKPOINTS - 1)
-                    mDownArrowAnimator.AddOutputAptViewState("apt_Transition", "invisible", false);
+                    mDownArrowAnimator.Run(KPC_ARROW_ANIMATION_STATES[0]);
                 else
-                    mDownArrowAnimator.AddOutputAptViewState("apt_Transition", "visible", false);
+                    mDownArrowAnimator.Run(KPC_ARROW_ANIMATION_STATES[1]);
             }
             break;
         }

@@ -83,8 +83,8 @@ namespace BrnGui
 
         static const s32                    maiEventToObserve[4];  // @0x820660CC (.rdata)
         static const s32                    miNumEventsObserved;   // == 4
-        static const CgsGui::sResourceTuple maResourcesToLoad[];   // @0x82F26D88 (.rdata)
-        static const u32                    muNumResourcesToLoad;  // @0x82F26D90 (.rdata) == 1
+        static CgsGui::sResourceTuple       maResourcesToLoad[];   // @0x82F26D88 (.rdata)
+        static u32                          muNumResourcesToLoad;  // @0x82F26D90 (.rdata) == 1
         static const char* const            KAPC_STAT_TEXTFIELD_NAMES[KU_NUM_STAT_TEXTFIELDS];
 
         EInternalScreenState meCurrentState;                       // +0x0038

@@ -113,6 +113,9 @@ namespace BrnGui
 
     private:
         static const s32 KI_NUM_DISPLAYABLE_CHECKPOINTS = 6;
+        // DWARF BrnSelectRoutes.cpp:48, a private static array of (non-const) pointers: ARTIST keeps it in
+        // .data at 0x82F25298 = {"invisible", "visible", "animate"} and loads an entry per use (Hide 0x82418D18).
+        static const char* KPC_ARROW_ANIMATION_STATES[3];
         bool SelectRandomLandmark(s32 liCheckpointItem, BrnWorld::ECounty leCounty);
 
         // Pick a random online landmark (checkpoint) / finish point for the given checkpoint row

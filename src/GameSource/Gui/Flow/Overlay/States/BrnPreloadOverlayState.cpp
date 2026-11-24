@@ -37,7 +37,7 @@ const s32 PreloadOverlayState::miNumEventsObserved = 1;
 // requests type 7 == CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE. Resource id 197 is the
 // "Overlays" flapt file (the GUI resource-name table @0x82F278E0 names it; Update plays
 // the apt movie by that same name).
-const CgsGui::sResourceTuple PreloadOverlayState::maResourcesToLoad[] =
+CgsGui::sResourceTuple       PreloadOverlayState::maResourcesToLoad[] =
 {
     { 125, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },
     {  22, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },
@@ -51,7 +51,7 @@ const CgsGui::sResourceTuple PreloadOverlayState::maResourcesToLoad[] =
 };
 
 // .rdata @0x82F269F4 == 9 (decrypted XEX; sits immediately before the tuple table).
-const u32 PreloadOverlayState::muNumResourcesToLoad = 9;
+u32       PreloadOverlayState::muNumResourcesToLoad = 9;
 
 // @ 0x824B1528
 void PreloadOverlayState::OnEnter()

@@ -615,7 +615,7 @@ void OnlinePlay::CheckForCompletedLoads()
 
         mNewNewsAnimation.AddOutputAptViewState(
             "apt_Transition",
-            mpGuiCache->GetOptionsDataProfile()->IsThereUnreadNews() ? KPC_NEWS_VISIBLE
+            mpGuiCache->GetMenuOptionsData()->IsThereUnreadNews() ? KPC_NEWS_VISIBLE
                                                                       : KPC_NEWS_INVISIBLE,
             false);
 

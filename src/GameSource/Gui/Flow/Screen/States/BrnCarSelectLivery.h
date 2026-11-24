@@ -175,7 +175,7 @@ namespace BrnGui
         // @0x82F26C50 -- the six APT resources this screen loads (read out of the image):
         // 150 BrnCarSelectLivery, 34 B5MenuToggle, 35 B5MenuItemColourPicker, 30 ColourField,
         // 94 B5OnlineCarSelectComponents, 55 B5ManufacturersIcon.
-        static const CgsGui::sResourceTuple maResourcesToLoad[6];
+        static CgsGui::sResourceTuple       maResourcesToLoad[6];
         static const u32 muNumResourcesToLoad;
         // @0x82065DC0 -- { 6, 7, 8, 21, 64, 412, 406, 413, 414, 82, 244 }.
         static const s32 maiEventToObserve[11];

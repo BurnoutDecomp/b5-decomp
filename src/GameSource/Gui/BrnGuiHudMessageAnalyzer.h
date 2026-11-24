@@ -7,6 +7,9 @@
 #include "GameSource/BurnoutConstants.h"                   // EActiveRaceCarIndex
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"            // GuiHudMessage + the analyzer event-payload family
 #include "GameSource/GameState/BrnCgsPlayerName.h"         // CgsNetwork::PlayerName (embedded name slots)
+#include "GameShared/GameClasses/Core/CgsAssert.h"         // CGS_ASSERT / CGS_ASSERT_STREAM (TriggerMessage)
+#include "GameShared/GameClasses/Development/CgsStrStream.h" // the streamed assert messages
+#include "GameSource/Gui/BrnGuiHudMessageDirector.h"       // HudMessageDirector::AddMessage (TriggerMessage)
 
 // ============================================================================
 // GameSource/Gui/BrnGuiHudMessageAnalyzer.h
@@ -617,4 +620,156 @@ namespace BrnGui
     // FLAG: consumer-named -- the county string-id table HandleStuntsComplete indexes
     // (< 5 == BrnWorld county count); no DWARF row names it in this TU.
     extern const char* const KAPC_COUNTY_STRINGID[5];                 // (0x82F27704)
+}
+
+// ----------------------------------------------------------------------------
+// Header-inline bodies. ARTIST bakes this header's path and these line numbers into their
+// asserts (TriggerMessage(const char*) 0x825179E8: h:737 / h:738 / h:747; TriggerMessage(const
+// GuiHudMessage*) 0x82517AF8: h:764 / h:772), so each sits on its original line; the blank
+// lines only carry them there. DWARF (DecFIGS BrnGuiUnity) has the same bodies at PS3 h:698-733.
+// ----------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+namespace BrnGui
+{
+inline void HudMessageAnalyzer::TriggerMessage(const char* lpcMessageId) const
+{
+    CGS_ASSERT(NULL != lpcMessageId, "NULL != lpcMessageId");
+    CGS_ASSERT('\0' != lpcMessageId[0], "'\\0' != lpcMessageId[0]");
+
+
+
+
+
+    GuiHudMessage lMessage;
+    lMessage.Construct(lpcMessageId);
+
+    CGS_ASSERT_STREAM(mpHudMessageDirector != NULL, "Invalid HUD message director");
+    mpHudMessageDirector->AddMessage(&lMessage, false);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+inline void HudMessageAnalyzer::TriggerMessage(const GuiHudMessage* lpMessage) const
+{
+    CGS_ASSERT_STREAM(NULL != lpMessage, "Invalid HUD message");
+
+
+
+
+
+
+
+    CGS_ASSERT_STREAM(mpHudMessageDirector != NULL, "Invalid HUD message director");
+    mpHudMessageDirector->AddMessage(lpMessage, false);
+}
 }

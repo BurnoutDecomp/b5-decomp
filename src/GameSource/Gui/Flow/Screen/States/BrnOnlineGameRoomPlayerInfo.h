@@ -235,7 +235,7 @@ namespace BrnGui
         // from the profile and bind it onto the 4-slot toggle group.
         void ShowSettingsOptions()
         {
-            mCrashNavOptionsData.SetFromProfile(mpGuiCache->GetOptionsDataProfile());
+            mCrashNavOptionsData.SetFromProfile(mpGuiCache->GetMenuOptionsData());
             mCrashNavOptionsData.SetUpComponent<4>(&mSettingToggle);
         }
 

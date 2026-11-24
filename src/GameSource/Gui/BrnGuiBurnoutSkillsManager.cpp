@@ -112,7 +112,7 @@ void BurnoutSkillsManager::ResetSkillsData()
 // ----------------------------------------------------------------------------
 void BurnoutSkillsManager::YouBeatSkill(BrnGameState::BurnoutSkillzData::EBurnoutSkillType leSkill)
 {
-    if (mpCache->GetCurrentGameModeType() == KI_SKILLS_ACTIVE_GAME_MODE_TYPE)
+    if (mpCache->GetGameMode() == KI_SKILLS_ACTIVE_GAME_MODE_TYPE)
     {
         if (meCurrentShowingType == E_BURNOUT_SKILLS_SHOWING_TYPE_AUTO_ROTATE
             || meCurrentShowingType == E_BURNOUT_SKILLS_SHOWING_TYPE_NEW_SCORE)
@@ -233,7 +233,7 @@ void BurnoutSkillsManager::Update()
 {
     CGS_ASSERT(mpCache, CgsDev::Assert::MessageAt("mpCache", "..\\..\\..\\GameSource\\Gui/BrnGuiBurnoutSkillsManager.cpp", 107 /* ARTIST 0x824F9E38 */));
 
-    if (mpCache->GetCurrentGameModeType() == KI_SKILLS_ACTIVE_GAME_MODE_TYPE)
+    if (mpCache->GetGameMode() == KI_SKILLS_ACTIVE_GAME_MODE_TYPE)
     {
         // A "new record" flash has had its moment -- fall back to auto-rotate.
         if (meCurrentShowingType == E_BURNOUT_SKILLS_SHOWING_TYPE_NEW_SCORE
@@ -427,7 +427,7 @@ void BurnoutSkillsManager::SetSkillsData(EActiveRaceCarIndex leActiveRaceCar,
                     CGS_ASSERT(mpCache, "mpCache");
 
                     if (lpEvent->mbUpdateHUDMessage
-                        && mpCache->GetNumActivePlayers() > 1
+                        && mpCache->GetOnlinePlayerCount() > 1
                         && lfNewScore >= KAF_MINIMUM_HUD_MESSAGE_SKILLS_LEVEL[leSkill])
                     {
                         const EActiveRaceCarIndex lePreviousOwner = *lpRecordHolder;

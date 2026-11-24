@@ -136,7 +136,7 @@ namespace BrnGui
     // exactly at 0x82F26D28 where mpacCarSelectorName ("CarName") begins.
     //   149 BrnCarSelectMain, 52 B5RivalIcon, 70 B5CarsIcon,
     //    94 B5OnlineCarSelectComponents, 54 B5CarouselScrollBar, 55 B5ManufacturersIcon
-    const CgsGui::sResourceTuple CarSelectVehicle::maResourcesToLoad[6] =
+    CgsGui::sResourceTuple       CarSelectVehicle::maResourcesToLoad[6] =
     {
         { 149u, CgsGui::E_GUI_RESOURCETYPE_APT },
         {  52u, CgsGui::E_GUI_RESOURCETYPE_APT },

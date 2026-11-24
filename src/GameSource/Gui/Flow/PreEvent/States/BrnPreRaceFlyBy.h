@@ -123,8 +123,8 @@ namespace BrnGui
         // ---- statics (values read from BURNOUT_X360_ARTIST.XEX -- see the wave-J spec) ----
         static const s32 KI_MAX_LINES_DESCRIPTION_TEXT = 5;             // DWARF h:109
 
-        static const CgsGui::sResourceTuple maResourcesToLoad[1];       // @0x82F26BE0 {{200,(ResourceRequestTypes)7}}
-        static const u32                    muNumResourcesToLoad;       // @0x82F26BE8 (== 1)
+        static CgsGui::sResourceTuple       maResourcesToLoad[1];       // @0x82F26BE0 {{200,(ResourceRequestTypes)7}}
+        static u32                          muNumResourcesToLoad;       // @0x82F26BE8 (== 1)
         static const CgsGui::sResourceTuple maPerGamemodeScreens[10];   // @0x82F26C00 {{207,4}..{216,4}} (per EGameModeType 0..9)
 
         static const s32 maiEventToObserve[8];                          // @0x82065CAC {6,21,64,159,160,162,164,213}

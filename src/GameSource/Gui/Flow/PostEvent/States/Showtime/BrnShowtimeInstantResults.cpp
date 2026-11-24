@@ -192,10 +192,10 @@ namespace BrnGui
 
     // ---- static resource list ---------------------------------------------------------------
     // The three apt packages the results screen loads (read from the image).
-    const CgsGui::sResourceTuple ShowtimeInstantResultsState::maResourcesToLoad[] =
+    CgsGui::sResourceTuple       ShowtimeInstantResultsState::maResourcesToLoad[] =
         { { 217, CgsGui::E_GUI_RESOURCETYPE_APT }, { 70, CgsGui::E_GUI_RESOURCETYPE_APT },
           {  55, CgsGui::E_GUI_RESOURCETYPE_APT } };
-    const u32 ShowtimeInstantResultsState::muNumResourcesToLoad = 3;
+    u32       ShowtimeInstantResultsState::muNumResourcesToLoad = 3;
 
     // X360 .rdata durations (loaded by ResetStateTimer for the TOTALLING/SUMMARY/LEAVING cases).
     const f32 ShowtimeInstantResultsState::KF_TOTALLING_DURATION = 10.0f;   // cpp:33, flt_82065B68

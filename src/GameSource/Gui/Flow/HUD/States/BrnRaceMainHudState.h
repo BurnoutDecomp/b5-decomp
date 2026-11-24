@@ -198,8 +198,8 @@ namespace BrnGui
         static const s32 maiEventToObserve[];    // 76 entries (DWARF .cpp:33)
         static const s32 miNumEventsObserved;    // == 76      (DWARF .cpp:130)
         // 21 entries; values read from the XEX image, resolved + landed in the .cpp.
-        static const CgsGui::sResourceTuple maResourcesToLoad[];  // @ 0x82F25F88 (.rdata)
-        static const u32                    muNumResourcesToLoad; // @ 0x82F25F84 (.rdata) == 21
+        static CgsGui::sResourceTuple       maResourcesToLoad[];  // @ 0x82F25F88 (.rdata)
+        static u32                          muNumResourcesToLoad; // @ 0x82F25F84 (.rdata) == 21
 
         // ---- the apt/flapt component-name constants (DWARF sizes verbatim) -----------
         static const char  macEventInfoName[13];                     // .h:278

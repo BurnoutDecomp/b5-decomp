@@ -262,7 +262,7 @@ namespace BrnGui
         if (miCurrentRoundDisplayed == 0)
         {
             CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
-            mpGuiCache->GetOptionsDataProfile()->AddReceivedOnlineGameOptions(mpGuiCache,
+            mpGuiCache->GetMenuOptionsData()->AddReceivedOnlineGameOptions(mpGuiCache,
                                                                              &mCurrentGameParams);
             PostWire(mpStateInterface, GuiAutosaveRequestWire());
         }
@@ -530,7 +530,7 @@ namespace BrnGui
 
             BrnGameState::GameStateModuleIO::EPlayerTeam leTeam =
                 BrnGameState::GameStateModuleIO::E_PLAYER_TEAM_NONE;
-            if (mpGuiCache->GetCurrentGameModeType() !=
+            if (mpGuiCache->GetGameMode() !=
                 BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN)
             {
                 leTeam = static_cast<BrnGameState::GameStateModuleIO::EPlayerTeam>(

@@ -54,7 +54,7 @@ namespace BrnGui
         static const s32 maiEventToObserve[1];
         static const s32 miNumEventsObserved;
 
-        static const CgsGui::sResourceTuple maResourcesToLoad[];  // @ 0x82F269F8 (.rdata)
-        static const u32                    muNumResourcesToLoad; // @ 0x82F269F4 (.rdata)
+        static CgsGui::sResourceTuple       maResourcesToLoad[];  // @ 0x82F269F8 (.rdata)
+        static u32                          muNumResourcesToLoad; // @ 0x82F269F4 (.rdata)
     };
 }

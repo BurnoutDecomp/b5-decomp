@@ -1362,7 +1362,7 @@ void InGameMessageRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet
 
     // The run gate: (game mode NONE/-1 or 15 || fading out || autosave || disconnect)
     // AND enabled -- OR any queued custom message (which runs regardless of 145).
-    const s32 liGameModeType = mpGuiCache->GetCurrentGameModeType();   // cache+40536
+    const s32 liGameModeType = mpGuiCache->GetGameMode();   // cache+40536
     const bool lbAmbientWindow =
         (liGameModeType == -1 || liGameModeType == 15) ||
         meUpdateStage == E_UPDATESTAGE_FADINGOUT ||

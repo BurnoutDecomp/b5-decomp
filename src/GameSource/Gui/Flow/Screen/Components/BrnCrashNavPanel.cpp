@@ -300,7 +300,7 @@ namespace BrnGui
             lpOption->SetActive(false);
             lpOption->SetSelectable(false);
 
-            const s32 leGameModeType = mpGuiCache->GetCurrentGameModeType();   // +0x9E58
+            const s32 leGameModeType = mpGuiCache->GetGameMode();   // +0x9E58
             const bool lbOutOfEvent  = (leGameModeType == KI_GAME_MODE_TYPE_NONE)
                                     || (leGameModeType == KI_GAME_MODE_TYPE_FREEBURN);
             if (!lbOutOfEvent)
@@ -852,7 +852,7 @@ namespace BrnGui
                                                  s32 leRoadRuleScoreType, bool lbForce)
     {
         // The body runs only out of an event (or while an online start is in progress).
-        const s32 leGameModeType = mpGuiCache->GetCurrentGameModeType();
+        const s32 leGameModeType = mpGuiCache->GetGameMode();
         const bool lbRun = mpGuiCache->IsOnlineStartInProgress()
                         || (leGameModeType == KI_GAME_MODE_TYPE_NONE)
                         || (leGameModeType == KI_GAME_MODE_TYPE_FREEBURN);

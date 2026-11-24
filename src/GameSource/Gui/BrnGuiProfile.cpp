@@ -1416,7 +1416,7 @@ void ProfileManager::ReadProfileData()
     std::memcpy(mStoredData.mLiveRevengeProfile.maData, mpLiveRevengeProfile,
                 KI_LIVEREVENGE_PROFILE_SIZE_BYTES);
 
-    OptionsDataProfile* lpOptionsDataProfile = mpGuiCache->GetOptionsDataProfile();
+    OptionsDataProfile* lpOptionsDataProfile = mpGuiCache->GetMenuOptionsData();
     CGS_ASSERT(lpOptionsDataProfile != 0, "lpOptionsDataProfile");
     std::memcpy(mStoredData.mOptionsDataProfile.maData, lpOptionsDataProfile,
                 KI_OPTIONSDATA_PROFILE_SIZE_BYTES);

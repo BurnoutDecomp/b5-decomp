@@ -44,12 +44,12 @@ namespace BrnGui
     const s32 CrashNavTrax::miNumEventsObserved  = 4;
 
     // .rdata, read out of the image: { {0x91, 4}, {0x56, 4} }, count word = 2.
-    const CgsGui::sResourceTuple CrashNavTrax::maResourcesToLoad[] =
+    CgsGui::sResourceTuple       CrashNavTrax::maResourcesToLoad[] =
     {
         { 145u, CgsGui::E_GUI_RESOURCETYPE_APT },
         {  86u, CgsGui::E_GUI_RESOURCETYPE_APT },
     };
-    const u32 CrashNavTrax::muNumResourcesToLoad = 2;
+    u32       CrashNavTrax::muNumResourcesToLoad = 2;
 
     // DWARF BrnCrashNavTrax.cpp:50 -- the apt instance name OnEnter constructs the list
     // component under (X360 .rdata "EATraxMenuInstance", 18 chars + NUL == the DWARF's 19).
@@ -306,7 +306,7 @@ namespace BrnGui
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
 
-        OptionsDataProfile* lpProfile = mpGuiCache->GetOptionsDataProfile();
+        OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
         mEATraxMenuComponent.Initialize(lpProfile->GetTraxAvailableInFreeBurn(),
                                         lpProfile->GetTraxAvailableInEvents());
 
@@ -529,7 +529,7 @@ namespace BrnGui
     {
         CGS_ASSERT(mpGuiCache, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavTrax.cpp", 670 /* ARTIST 0x824CF974 */));   // cpp:670
 
-        OptionsDataProfile* lpProfile = mpGuiCache->GetOptionsDataProfile();
+        OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
         lpProfile->SetTraxAvailableInFreeBurn(
             mEATraxMenuComponent.GetTraxEnabledInFreeBurnBitfieldPtr());
         lpProfile->SetTraxAvailableInEvents(
@@ -554,7 +554,7 @@ namespace BrnGui
         PreviewTrack(KI_PREVIEW_STOP);
         SendStateEvent("GO_BACK");
 
-        OptionsDataProfile* lpProfile = mpGuiCache->GetOptionsDataProfile();
+        OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
 
         GuiEventAudioTraxUpdateRecord lRecord;
         lRecord.miSize   = 32;

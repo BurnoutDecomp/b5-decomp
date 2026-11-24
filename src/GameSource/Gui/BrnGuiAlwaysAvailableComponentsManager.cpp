@@ -357,7 +357,7 @@ namespace BrnGui
             // where GetOptionsDataProfile() points (BrnGuiCache.h:1001/:2116).
             CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                       // cpp:486
             OptionsDataProfile* lpOptionsDataProfile =
-                mpGuiCache->GetOptionsDataProfile();
+                mpGuiCache->GetMenuOptionsData();
             CGS_ASSERT(lpOptionsDataProfile != 0, "lpOptionsDataProfile");   // cpp:489
             // 825099C8  stw r11, 0x7344(r31) -- the setter, inlined by the console.
             lpOptionsDataProfile->SetLastPlayedSongIndex(lpNewTrack->miSongIndex);
@@ -443,7 +443,7 @@ namespace BrnGui
                 mEATraxInGameComponent.DisplayNewTrackNotification(macComposerTextId, macWorkTextId,
                     gacOnlineInviteArgument820046A7, true);
             CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
-            mpGuiCache->GetOptionsDataProfile()->SetLastPlayedPictureParadiseMusicIndex(lpClassical->miPieceIndex);
+            mpGuiCache->GetMenuOptionsData()->SetLastPlayedPictureParadiseMusicIndex(lpClassical->miPieceIndex);
             break;
         }
 

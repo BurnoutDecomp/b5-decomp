@@ -152,8 +152,8 @@ namespace BrnGui
         //      declaring a method whose definition does not exist is what the ledger's
         //      "reviewed" default has cost five separate waves.
 
-        static const CgsGui::sResourceTuple maResourcesToLoad[];  // @0x82F26BB8 (.rdata)
-        static const u32                    muNumResourcesToLoad; // @0x82F26BD0 (.rdata) == 3
+        static CgsGui::sResourceTuple       maResourcesToLoad[];  // @0x82F26BB8 (.rdata)
+        static u32                          muNumResourcesToLoad; // @0x82F26BD0 (.rdata) == 3
 
         // ---- embedded components, in X360 order (see the banner) --------------------------
         HelpItem      mHelpItems[KI_HELPITEMS];    // +0x0038  (DWARF h:159)

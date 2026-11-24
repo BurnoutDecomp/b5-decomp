@@ -217,7 +217,7 @@ namespace BrnGui
 
         // ---- statics (DWARF cpp:34..cpp:94; definitions in BrnCarSelectVehicle.cpp) -----
         // @0x82F26CF8 -- the six APT resources this screen loads (read out of the image).
-        static const CgsGui::sResourceTuple maResourcesToLoad[6];
+        static CgsGui::sResourceTuple       maResourcesToLoad[6];
         static const u32 muNumResourcesToLoad;
         // @0x82065F40 -- { 21, 82, 244, 466, 467 }.
         static const s32 maiEventToObserve[5];

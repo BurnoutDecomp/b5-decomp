@@ -332,9 +332,9 @@ namespace BrnGui
 
     // ARTIST .rdata @0x82F25F78: { id 127, type 4 }; the count at 0x82F25F80 is 1.
     // off_82F278E0[127] names the resource "SaveLoadComponent".
-    const CgsGui::sResourceTuple BootProfile::maResourcesToLoad[1] =
+    CgsGui::sResourceTuple       BootProfile::maResourcesToLoad[1] =
         { { 127u, CgsGui::E_GUI_RESOURCETYPE_APT } };
-    const u32 BootProfile::muNumResourcesToLoad = 1;
+    u32       BootProfile::muNumResourcesToLoad = 1;
 
     // @ 0x824743F8 (cpp:282) -- base Construct then thread the profile manager
     // (BrnHudFlow::Prepare @0x8251A620 dispatches this wider overload for BF_PROFILE).

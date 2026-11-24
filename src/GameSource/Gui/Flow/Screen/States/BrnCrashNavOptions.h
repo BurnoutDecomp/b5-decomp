@@ -307,7 +307,7 @@ namespace BrnGui
         void SetSettingsFromProfile()
         {
             CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // :853 (non-gating)
-            mOptionsData.SetFromProfile(mpGuiCache->GetOptionsDataProfile());
+            mOptionsData.SetFromProfile(mpGuiCache->GetMenuOptionsData());
         }
 
     private:
@@ -328,8 +328,8 @@ namespace BrnGui
         // The shared 112-byte audio-trigger post the X360 inlines at three sites here.
         void PostAudioTrigger(s32 liAction, const char* lpacMovie);
 
-        static const CgsGui::sResourceTuple maResourcesToLoad[1];   // DWARF h:296 (X360 @0x82F26F50)
-        static const u32                    muNumResourcesToLoad;   // DWARF h:297 (X360 @0x82F26F58)
+        static CgsGui::sResourceTuple       maResourcesToLoad[1];   // DWARF h:296 (X360 @0x82F26F50)
+        static u32                          muNumResourcesToLoad;   // DWARF h:297 (X360 @0x82F26F58)
 
         EState                     meState;            // X360 this+56
         GuiCache*                  mpGuiCache;         // X360 this+60

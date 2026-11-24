@@ -202,11 +202,11 @@ namespace BrnGui
     // entry is the title screen's own apt, id 128 "Title_Screen02" (name via off_82F278E0),
     // type 4 = E_GUI_RESOURCETYPE_APT. With the table empty, GetResourcesToLoad handed the
     // loader nothing and OnLeave's UnloadResources dropped nothing.
-    const CgsGui::sResourceTuple BootLegal::maResourcesToLoad[1] =
+    CgsGui::sResourceTuple       BootLegal::maResourcesToLoad[1] =
     {
         { 128u, CgsGui::E_GUI_RESOURCETYPE_APT },   // Title_Screen02
     };
-    const u32                    BootLegal::muNumResourcesToLoad  = 1u;
+    u32                          BootLegal::muNumResourcesToLoad  = 1u;
 
     BootLegal::BootLegal()
         : mpGuiCache(0)
@@ -310,7 +310,7 @@ namespace BrnGui
     {
         // Lay out the 2-entry menu and set each row's localisation-key text.
         mSelectionMenu.SetupMenu(KI_NUM_MENU_ENTRIES, true);
-        for (s32 liIndex = 0; liIndex < KI_NUM_MENU_ENTRIES; ++liIndex)
+        for (s32 liIndex = 0; liIndex != KI_NUM_MENU_ENTRIES; ++liIndex)   // `!=`: ARTIST 0x82475C74 bne
             mSelectionMenu.SetText(liIndex, KAAC_MENU_TEXT[liIndex]);
         mSelectionMenu.Update();                        // (*(*menu + 0x14))(menu) == slot 5
 
@@ -341,7 +341,7 @@ namespace BrnGui
         // Re-add the background's apt view state for the now-selected entry ("Normal"/"BeatTheTeam").
         // FLAG: the apt-view boundary (see DisplaySelectionMenu).
         mBackgroundAnimator.AddOutputAptViewState(           // this+0x1FC
-            "apt_Transition", KAAC_MENU_VIEW_STATE[static_cast<u8>(mSelectionMenu.GetHighlightedIndex())], false);
+            "apt_Transition", KAAC_MENU_VIEW_STATE[mSelectionMenu.GetHighlightedIndex()], false);
     }
 
     // ------------------------------------------------------------------ Update @ 0x82477270

@@ -57,7 +57,7 @@ namespace BrnGui
     // count (`li r5, 2`). gGuiResourceIdentifier @0x82F278E0 names the ids:
     // [148] "BrnCarSelectUnlock" (this screen's own movie) and [55] "B5ManufacturersIcon"
     // (the badge component bundle -- the same id 55 the CarSelectLivery sibling loads).
-    const CgsGui::sResourceTuple CarSelectUnlock::maResourcesToLoad[] =
+    CgsGui::sResourceTuple       CarSelectUnlock::maResourcesToLoad[] =
     {
         { 148u, CgsGui::E_GUI_RESOURCETYPE_APT },   // BrnCarSelectUnlock
         {  55u, CgsGui::E_GUI_RESOURCETYPE_APT },   // B5ManufacturersIcon

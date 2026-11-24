@@ -296,8 +296,8 @@ namespace BrnGui
                 break;
 
             case KI_ACTION_SELECT:
-                mCrashNavOptionsData.SetToProfile(mpGuiCache->GetOptionsDataProfile());
-                mCrashNavOptionsData.OutputEvents(mpGuiCache->GetOptionsDataProfile(),
+                mCrashNavOptionsData.SetToProfile(mpGuiCache->GetMenuOptionsData());
+                mCrashNavOptionsData.OutputEvents(mpGuiCache->GetMenuOptionsData(),
                                                   mpStateInterface);
 
                 mSettingToggle.Unloaded();
@@ -329,8 +329,8 @@ namespace BrnGui
                     // The X360 reads the two volumes into one stack record, plays the
                     // back-out cue, publishes the audio settings, then overwrites the
                     // record's first word with the voip volume and publishes that.
-                    const s32 liMusicVolume = mpGuiCache->GetOptionsDataProfile()->GetMusicVolume();
-                    const s32 liSFXVolume   = mpGuiCache->GetOptionsDataProfile()->GetSFXVolume();
+                    const s32 liMusicVolume = mpGuiCache->GetMenuOptionsData()->GetMusicVolume();
+                    const s32 liSFXVolume   = mpGuiCache->GetMenuOptionsData()->GetSFXVolume();
 
                     GuiAudioTriggerEvent lAudioPayload;
                     lAudioPayload.Construct(KI_AUDIO_ACTION_MENU_CUE, "", KAC_SOUND_LABEL_GO_BACK, "");
@@ -340,7 +340,7 @@ namespace BrnGui
                     mpStateInterface->OutputGuiEvent(lAudioSettings);
 
                     GuiEventVoipSettingsWire lVoipSettings(
-                        mpGuiCache->GetOptionsDataProfile()->GetVoipVolume());
+                        mpGuiCache->GetMenuOptionsData()->GetVoipVolume());
                     mpStateInterface->OutputGuiEvent(lVoipSettings);
 
                     mSettingToggle.Unloaded();

@@ -185,7 +185,7 @@ namespace BrnGui
     // E_GUI_RESOURCETYPE_LOCALISED_TEXT. Against the freeburn state's 42-entry list this
     // one adds B5CompassComponent (24) and B5ShowtimeComponents (88) and drops the whole
     // freeburn menu/ticker/mugshot block -- the in-event HUD's own surface.
-    const CgsGui::sResourceTuple RaceMainHudState::maResourcesToLoad[] =
+    CgsGui::sResourceTuple       RaceMainHudState::maResourcesToLoad[] =
     {
         { 192u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5RaceHud
         {  32u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // Timer
@@ -209,7 +209,7 @@ namespace BrnGui
         {  88u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5ShowtimeComponents
         {  90u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5VersionTextComponent
     };
-    const u32 RaceMainHudState::muNumResourcesToLoad = 21;
+    u32       RaceMainHudState::muNumResourcesToLoad = 21;
 
     const char* RaceMainHudState::KAAPC_MUGSHOT_FRAME_LABELS[6][6] =
     {
@@ -460,7 +460,7 @@ namespace BrnGui
     // Keep virtual leave/enter calls before publishing the two original override statics.
     void RaceMainHudState::ForceReenter(bool lbOverride, const bool* lpbComponentEnabledStates)
     {
-        if (mbInRaceHud)
+        if (mbInRaceHud == true)   // ARTIST 0x82474F1C cmplwi r11,1 / bne
         {
             OnLeave();
             OnEnter();

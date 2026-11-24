@@ -1035,9 +1035,9 @@ namespace BrnGui
             return;
         }
 
-        mImageInfoAnimator.AddOutputAptViewState("apt_Transition",
-                                                 (maiPhotoCountPerCategory[leCategory] > 0) ? "info" : "invisible",
-                                                 false);
+        if (maiPhotoCountPerCategory[leCategory] > 0) mImageInfoAnimator.AddOutputAptViewState("apt_Transition", "info", false);
+        else mImageInfoAnimator.AddOutputAptViewState("apt_Transition", "invisible", false);
+        // (two calls, cross-jumped: ARTIST 0x8248B758 sets r6/r3 above the count test)
         SetIntegerText(mTotalImageText, maiPhotoCountPerCategory[GetCurrentCategory()]);
         SetupButtons();
     }

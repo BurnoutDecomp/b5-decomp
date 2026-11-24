@@ -31,9 +31,11 @@
 // Construct(name, stateInterface, parentName) at state OnEnter, and AddOutputAptViewState
 // ("apt_Transition", <view state>, immediate) to drive it -- e.g. BrnGui::Intro::
 // SetupComponents @0x824D1718 pushes "transin"/"transout" straight at the base method on
-// its three embedded AnimationComponents. Run(const char*) is DWARF-attested but has no
-// X360 symbol (every call site inlines it) and no reconstructed call site, so it is
-// DECLARED ONLY -- it grows a body when a TU that needs it lands.
+// its three embedded AnimationComponents. Run(const char*) is DWARF-attested at h:64 and
+// has no symbol in ARTIST or in the PS3 DecFIGS build: every call site inlines it (DecFIGS
+// lists the inlined Run in e.g. SelectRoutes::Show / Hide), and the original tree has this
+// header and no BrnAnimationComponent.cpp (decfigs_source_tree.txt), so the body is
+// header-inline: one AddOutputAptViewState("apt_Transition", <state>, false) on the base.
 // ============================================================================
 
 #include "types.hpp"
@@ -43,7 +45,10 @@ namespace BrnGui
 {
     struct AnimationComponent : public CgsGui::GuiComponent
     {
-        // DWARF h:64. Declared only -- see the header note.
-        void Run(const char* lpacViewState);
+        // DWARF h:64, header-inline (see the header note).
+        void Run(const char* lpacViewState)
+        {
+            AddOutputAptViewState("apt_Transition", lpacViewState, false);
+        }
     };
 }

@@ -84,8 +84,8 @@ namespace BrnGui
 
         // The 42-entry static resource list (X360 .rdata @0x82F26230 / count
         // @0x82F2622C -- values read from the XEX image; the .cpp table names each id).
-        static const CgsGui::sResourceTuple maResourcesToLoad[];
-        static const u32                    muNumResourcesToLoad;
+        static CgsGui::sResourceTuple       maResourcesToLoad[];
+        static u32                          muNumResourcesToLoad;
 
         // The 56 observed event ids (X360 .rdata @0x8205AED8; values from the image).
         static const s32 maiEventToObserve[];

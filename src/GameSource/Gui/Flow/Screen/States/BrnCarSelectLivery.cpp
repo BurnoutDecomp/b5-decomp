@@ -126,7 +126,7 @@ namespace BrnGui
     // ================================================================================
 
     // @0x82F26C50 -- six APT resources. All six bundles are present in build\game\GUIAPT\.
-    const CgsGui::sResourceTuple CarSelectLivery::maResourcesToLoad[6] =
+    CgsGui::sResourceTuple       CarSelectLivery::maResourcesToLoad[6] =
     {
         { 150u, CgsGui::E_GUI_RESOURCETYPE_APT },   // BrnCarSelectLivery
         {  34u, CgsGui::E_GUI_RESOURCETYPE_APT },   // B5MenuToggle

@@ -700,7 +700,7 @@ namespace BrnGui
             OutputGuiEvent(mpStateInterface, lLeftPostEvent);
             GuiEventRunFsm lRun;
             lRun.mInitialStateId = 0;
-            if (mpGuiCache->GetCurrentGameModeType() == -1)
+            if (mpGuiCache->GetGameMode() == -1)
             {
                 lRun.mFsmId = CgsIDCompress("BRNFBFSM");
                 lRun.meFsmToRun = E_GUI_HUD_FREEBURN;
@@ -761,7 +761,7 @@ namespace BrnGui
                 {
                     mpGuiCache = static_cast<const CachePayload*>(lpEvent)->mpCache;
                     meCurrentGameMode = static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(
-                        mpGuiCache->GetCurrentGameModeType());
+                        mpGuiCache->GetGameMode());
                     CGS_ASSERT(meCurrentGameMode != BrnGameState::GameStateModuleIO::E_MODE_NONE,
                                "meCurrentGameMode != GsmIO::E_MODE_NONE");
                     mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);

@@ -733,7 +733,7 @@ void FriendsListComponent::UpdateAptVariables()
         // dynamic string "FRIEND_LIST_TITLE".
         char lacText[64];
         CgsCore::SPrintf(lacText, sizeof(lacText), "%d",
-                         mpGuiCache->GetNumActivePlayers());      // cache +0xAC74 @0x824235A8
+                         mpGuiCache->GetOnlinePlayerCount());      // cache +0xAC74 @0x824235A8
         lacText[sizeof(lacText) - 1] = 0;                        // @0x824235AC
 
         const char* const lkpcStringID = KAPC_LIST_TITLES[leListType];   // @0x824235D0
@@ -879,7 +879,7 @@ void FriendsListComponent::ShowSpecificChallenge(CgsID lu64Uid)
         return;
     if (meCurrentState != 0)                                       // @0x82441BB4..BC
         return;
-    if (mpGuiCache->GetNumActivePlayers() <= 1)                  // cache +0xAC74 @0x82441BC8..D0
+    if (mpGuiCache->GetOnlinePlayerCount() <= 1)                  // cache +0xAC74 @0x82441BC8..D0
         return;
 
     ShowChallengesList();
@@ -1254,7 +1254,7 @@ void FriendsListComponent::Update()
         mbTriggerHideFriendsList = false;
     }
     for (s32 i = 0; i < KI_VISIBLE_ROWS; ++i) maEntries[i].Update();
-    const s32 count = mpGuiCache->GetNumActivePlayers();
+    const s32 count = mpGuiCache->GetOnlinePlayerCount();
     if (count != static_cast<s32>(miPlayerCount))
     {
         if (meCurrentState != 0)

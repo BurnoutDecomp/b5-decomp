@@ -230,7 +230,7 @@ namespace BrnGui
     //  OnlineGameRoomPlayerInfo TU's UnloadMapResources, which unloads THIS base's table --
     //  which is why the pair is protected rather than file-local.
     // ================================================================================
-    const CgsGui::sResourceTuple CrashNavMap::maResourcesToLoad[7] =
+    CgsGui::sResourceTuple       CrashNavMap::maResourcesToLoad[7] =
     {
         { 132u, CgsGui::E_GUI_RESOURCETYPE_APT },   // BrnCrashNavMapMain
         {  83u, CgsGui::E_GUI_RESOURCETYPE_APT },
@@ -241,7 +241,7 @@ namespace BrnGui
         {  50u, CgsGui::E_GUI_RESOURCETYPE_APT },   // CrashNavBorough
     };
 
-    const u32 CrashNavMap::muNumResourcesToLoad = 7u;
+    u32       CrashNavMap::muNumResourcesToLoad = 7u;
 
     // ================================================================================
     //  CrashNavMap::CrashNavMap  @ 0x825114B8

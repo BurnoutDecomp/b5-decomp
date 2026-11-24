@@ -144,7 +144,7 @@ namespace
 // GetResourcesToLoad @0x825008D0 pins both addresses; the image reads {224,4},{59,4},{29,4},
 // {55,4} and a count word of 4 (tools/re/x360rd.py 82F27318 32 / 82066898 4). Update case 1
 // hands the same table to GuiCache::EnsureResourcesAreLoaded (`lis/addi unk_82F27318 ; li r5,4`).
-const CgsGui::sResourceTuple OfflineRivalShutdown::maResourcesToLoad[] =
+CgsGui::sResourceTuple       OfflineRivalShutdown::maResourcesToLoad[] =
 {
     { 224u, CgsGui::E_GUI_RESOURCETYPE_APT },   // BrnRivalShutdown
     {  59u, CgsGui::E_GUI_RESOURCETYPE_APT },

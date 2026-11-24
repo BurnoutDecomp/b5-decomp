@@ -57,7 +57,7 @@ namespace BrnGui
         static const s32 maiEventToObserve[1];   // BrnIdleHudState.cpp:24 (@0x8205B224 == 64)
         static const s32 miNumEventsObserved;    // BrnIdleHudState.cpp:29 (== 1)
 
-        static const CgsGui::sResourceTuple maResourcesToLoad[];  // @ 0x82F264BC (unk_82F264BC, .data)
+        static CgsGui::sResourceTuple       maResourcesToLoad[];  // @ 0x82F264BC (unk_82F264BC, .data)
         static       u32                    muNumResourcesToLoad; // @ 0x82F264CC (dword_82F264CC, .data)
 
         u32 mauExpectedComponentIds[KU_MAX_IDLEHUD_COMPONENTS_NUM]; // +0x16C (DWARF h:86)

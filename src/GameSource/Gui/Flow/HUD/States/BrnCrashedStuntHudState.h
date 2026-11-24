@@ -95,7 +95,7 @@ namespace BrnGui
         void SetExpectedAptComponentList();
 
     private:
-        static const CgsGui::sResourceTuple maResourcesToLoad[];  // @ 0x82F26488 (.rdata)
-        static const u32                    muNumResourcesToLoad; // @ 0x82F264A8 (.rdata)
+        static CgsGui::sResourceTuple       maResourcesToLoad[];  // @ 0x82F26488 (.rdata)
+        static u32                          muNumResourcesToLoad; // @ 0x82F264A8 (.rdata)
     };
 }

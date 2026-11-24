@@ -152,8 +152,8 @@ namespace BrnGui
     private:
         static const s32 maiEventToObserve[];                     // @ 0x8205AB98 (.rdata)
         static const s32 miNumEventsObserved;                     // == 3
-        static const CgsGui::sResourceTuple maResourcesToLoad[];  // @ 0x82F25F78 (.rdata)
-        static const u32                    muNumResourcesToLoad; // @ 0x82F25F80 (.rdata)
+        static CgsGui::sResourceTuple       maResourcesToLoad[];  // @ 0x82F25F78 (.rdata)
+        static u32                          muNumResourcesToLoad; // @ 0x82F25F80 (.rdata)
 
         InternalState           meInternalState;   // h:178  X360 this+60
         ProfileMessageComponent mProfileMessage;   // h:179  X360 this+64 (by value)

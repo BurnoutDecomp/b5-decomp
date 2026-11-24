@@ -221,9 +221,9 @@ namespace BrnGui
     // ---- statics -------------------------------------------------------------------
 
     // The two apt packages this screen loads (read from the image).
-    const CgsGui::sResourceTuple CrashNavColourCalibrate::maResourcesToLoad[] =
+    CgsGui::sResourceTuple       CrashNavColourCalibrate::maResourcesToLoad[] =
         { { 143, CgsGui::E_GUI_RESOURCETYPE_APT }, { 34, CgsGui::E_GUI_RESOURCETYPE_APT } };
-    const u32 CrashNavColourCalibrate::muNumResourcesToLoad = 2;
+    u32       CrashNavColourCalibrate::muNumResourcesToLoad = 2;
 
     // @0x820664C0 (.rdata, 2 entries) + the count word @0x820664C8. The two ids this
     // state registers for.
@@ -673,7 +673,7 @@ namespace BrnGui
 
         // X360 `addis r3, r11, 1 ; addi r3, r3, -0x4788` == cache + 0xB878 (47224) ==
         // GuiCache::GetOptionsDataProfile().
-        mBrightnessSetting = mpGuiCache->GetOptionsDataProfile()->GetBrightness();
+        mBrightnessSetting = mpGuiCache->GetMenuOptionsData()->GetBrightness();
     }
 
     // ---- ApplySettings @ 0x824CEB50 ------------------------------------------------
@@ -695,7 +695,7 @@ namespace BrnGui
     // on this path (the console has none here).
     void CrashNavColourCalibrate::SaveSettings()
     {
-        OptionsDataProfile* lpProfile = mpGuiCache->GetOptionsDataProfile();
+        OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
         lpProfile->SetBrightness(mBrightnessSetting);
         lpProfile->SetContrast(mContrastSetting);
 

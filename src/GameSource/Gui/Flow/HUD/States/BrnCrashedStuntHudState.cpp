@@ -47,14 +47,14 @@ const s32 CrashedStuntHudState::miNumEventsObserved = 12;
 //
 // All four are type 7 == E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE. Note the first entry names this
 // state's own movie, B5CrashedStuntHud -- the crash screen the stub could never load.
-const CgsGui::sResourceTuple CrashedStuntHudState::maResourcesToLoad[] =
+CgsGui::sResourceTuple       CrashedStuntHudState::maResourcesToLoad[] =
 {
     { 194u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5CrashedStuntHud
     {  38u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5CrashedHudMessages
     {  63u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5HelperComponents
     {  61u, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },   // B5ControllerButtons
 };
-const u32 CrashedStuntHudState::muNumResourcesToLoad = 4;
+u32       CrashedStuntHudState::muNumResourcesToLoad = 4;
 // ARTIST 0x82476318.
 void CrashedStuntHudState::OnEnter()
 {

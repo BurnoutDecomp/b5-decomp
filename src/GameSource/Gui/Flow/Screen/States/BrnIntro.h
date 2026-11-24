@@ -104,7 +104,7 @@ namespace BrnGui
         void HandleTransitionFromLicense();       // @0x824D1C18
 
         // ---- statics (DWARF BrnIntro.cpp:32..:91; values read from the X360 image) ----
-        static const CgsGui::sResourceTuple maResourcesToLoad[2];   // @0x82F272E0
+        static CgsGui::sResourceTuple       maResourcesToLoad[2];   // @0x82F272E0
         static const u32 muNumResourcesToLoad;                      // == 2
         static const s32 maiEventToObserve[8];                      // @0x8206670C
         static const s32 miNumEventsObserved;                       // == 8

@@ -465,7 +465,7 @@ namespace BrnGui
         // BrnGameState::GameStateModuleIO::EGameModeType value (s32) so this boundary header
         // does not need to pull in the heavy game-state enum header. Body links from the
         // GuiCache TU.
-        s32 GetCurrentGameModeType() const { return meGameModeType; }   // header-inline; duplicates the DWARF GetGameMode() (callers move with the templates claims)
+        // (GetCurrentGameModeType retired: callers use the DWARF GetGameMode() below.)
 
         // ADDITIVE GROW (BrnOnlinePreEvent TU): resolve the fly-by line-up entry at the given
         // index to its pre-event info record. The online pre-event state indexes it with its
@@ -500,7 +500,7 @@ namespace BrnGui
         // ADDITIVE GROW (BrnGuiBurnoutSkillsManager TU): the active-player count the
         // burnout-skills manager gates its HUD-message emission on. Same far member as
         // GetFriendsListCachedField (X360 lwzx r,this,0xAC74). Body links from the GuiCache TU.
-        s32 GetNumActivePlayers() const { return static_cast<s32>(muNumActivePlayers); }   // header-inline (DWARF name GetOnlinePlayerCount; rename pending the templates claims)         // X360 far member @0xAC74
+        s32 GetOnlinePlayerCount() const { return static_cast<s32>(muNumActivePlayers); }   // DWARF GetOnlinePlayerCount (int32_t miOnlinePlayerCount)         // X360 far member @0xAC74
 
         // ADDITIVE GROW (BrnGui::MapIconManager TU): the map-icon manager walks the cache's
         // drive-through / junkyard sat-nav icon list when building the on-map selection set
@@ -1006,7 +1006,7 @@ namespace BrnGui
         // from mpGuiCache+0x13B94), so exposing them by name keeps that leaf off raw offsets.
         // DECLARATION-ONLY per the far-member convention (bodies link from the GuiCache TU).
         const BrnProgression::Profile* GetProfile() const { return mpProfile; }   // X360 far member @0x405C
-        f32 GetDistanceDriven() const { return mfDistanceDriven; }   // header-inline (DWARF name GetDistanceDrivenInCurrentCar)                        // X360 far member @0x13B94
+        f32 GetDistanceDrivenInCurrentCar() const { return mfDistanceDriven; }   // DWARF name                        // X360 far member @0x13B94
 
         // ADDITIVE GROW (CrashNavSettings wave, 2026-08-29). The non-const twin of
         // GetProfile above: CrashNavSettings::HandleControllerInput @0x824D916C WRITES
@@ -1092,7 +1092,7 @@ namespace BrnGui
         // modelled tail; both CrashNavOptions::SetSettingsFromProfile @0x824B8028 and
         // OnlineGameRoomPlayerInfo::ShowSettingsOptions @0x82485140 inline the fetch).
         // DECLARATION-ONLY per the far-member convention (body links from the GuiCache TU).
-        OptionsDataProfile* GetOptionsDataProfile() { return &mOptionsData; }   // header-inline (DWARF name GetMenuOptionsData)   // X360 far member @0xB878
+        OptionsDataProfile* GetMenuOptionsData() { return &mOptionsData; }   // DWARF GetMenuOptionsData   // X360 far member @0xB878
 
         // The live DLC1 options block that sits directly after it (X360 far member
         // @0x12BE8/76776; ReadProfileData @0x824FF298 inlines the fetch the same way).

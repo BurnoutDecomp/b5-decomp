@@ -281,7 +281,7 @@ namespace BrnGui
 
         case E_ODOMETERSTATE_MILEAGE:
         {
-            const f32 lfDistanceDriven = mpGuiCache->GetDistanceDriven();
+            const f32 lfDistanceDriven = mpGuiCache->GetDistanceDrivenInCurrentCar();
             mMileageTextField.SetLocalisedText(
                 "STAT_LABEL_DIST_OFFLINE", 9, lfDistanceDriven, 19);
             break;

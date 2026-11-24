@@ -139,7 +139,7 @@ const s32 OfflineTrophyCarUnlock::miNumEventsObserved = 6;
 
 // ---- resources ----------------------------------------------------------------------------
 // The four apt packages the screen loads (read from the image).
-const CgsGui::sResourceTuple OfflineTrophyCarUnlock::maResourcesToLoad[] =
+CgsGui::sResourceTuple       OfflineTrophyCarUnlock::maResourcesToLoad[] =
     { { 225, CgsGui::E_GUI_RESOURCETYPE_APT }, { 59, CgsGui::E_GUI_RESOURCETYPE_APT },
       {  29, CgsGui::E_GUI_RESOURCETYPE_APT }, { 55, CgsGui::E_GUI_RESOURCETYPE_APT } };
 const u32 OfflineTrophyCarUnlock::muNumResourcesToLoad = 4;

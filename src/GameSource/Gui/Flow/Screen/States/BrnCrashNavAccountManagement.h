@@ -109,8 +109,8 @@ namespace BrnGui
         // run at both of its sites -- UpdateWFInit's tail and HandleNewsAndTOSEvent's).
         void RefreshTOSText();
 
-        static const CgsGui::sResourceTuple maResourcesToLoad[1];  // X360 @0x82F26FDC -- { 142, 4 }
-        static const u32                    muNumResourcesToLoad;  // X360 @0x82F26FE4 -- 1
+        static CgsGui::sResourceTuple       maResourcesToLoad[1];  // X360 @0x82F26FDC -- { 142, 4 }
+        static u32                          muNumResourcesToLoad;  // X360 @0x82F26FE4 -- 1
 
         EState                                  meState;              // X360 this+0x38
         GuiCache*                               mpGuiCache;           // X360 this+0x3C

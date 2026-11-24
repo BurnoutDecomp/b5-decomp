@@ -1171,7 +1171,7 @@ void GuiModule::Destruct()
                 CGS_ASSERT(lpEvent != NULL, "lpConnectedEvent");
                 if (lpBytes[1] && !mGuiCache.mbRoadRuleFriendScoresAvailable)
                 {
-                    mGuiCache.GetOptionsDataProfile()->SetUnreadNews(true);
+                    mGuiCache.GetMenuOptionsData()->SetUnreadNews(true);
                     mbProfileAutosavePending = true;
                 }
                 mGuiCache.mbRoadRuleFriendScoresAvailable = true;
@@ -1341,7 +1341,7 @@ void GuiModule::Destruct()
                 break;
             case 475:
                 CGS_ASSERT(lpEvent != NULL, "lpEvent != NULL");
-                mGuiCache.GetOptionsDataProfile()->SetDefaultGameCamera(lpWords[0] != 0);
+                mGuiCache.GetMenuOptionsData()->SetDefaultGameCamera(lpWords[0] != 0);
                 break;
             case 493:
                 if (lpWords[0] == 2) mbCollisionWorldInvalid = true;

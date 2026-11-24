@@ -446,7 +446,7 @@ namespace BrnGui
             GuiAutosaveRequestEvent lAutosaveEvent;
             lAutosaveEvent.maData[0] = 0;
 
-            OptionsDataProfile* lpOptions = mpGuiCache->GetOptionsDataProfile();
+            OptionsDataProfile* lpOptions = mpGuiCache->GetMenuOptionsData();
             if (lpOptions->IsThereUnreadNews())
             {
                 lpOptions->SetUnreadNews(false);

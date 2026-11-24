@@ -111,7 +111,7 @@ namespace BrnGui
 
         // The X360 inlines the cache's profile fetch and reads the two counters straight
         // out of the far block; restored as the real accessor chain.
-        OptionsDataProfile* lpOptionsData = mpGuiCache->GetOptionsDataProfile();
+        OptionsDataProfile* lpOptionsData = mpGuiCache->GetMenuOptionsData();
 
         s32         liNumRoutes;
         const char* lpacHeaderTextId;
@@ -180,7 +180,7 @@ namespace BrnGui
     // info panel.
     void OnlineGameOptions::ShowLoadOptions()
     {
-        OptionsDataProfile* lpOptionsData = mpGuiCache->GetOptionsDataProfile();
+        OptionsDataProfile* lpOptionsData = mpGuiCache->GetMenuOptionsData();
 
         s32 liNumRoutes;
         if (meOptionsToLoad == E_OPTIONS_TO_LOAD_SAVED)

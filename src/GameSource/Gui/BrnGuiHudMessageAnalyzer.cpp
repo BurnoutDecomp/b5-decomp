@@ -45,30 +45,8 @@ namespace
 namespace BrnGui
 {
 
-// @ 0x825179E8 (const per DWARF h:203)
-void HudMessageAnalyzer::TriggerMessage(const char* lpcMessageId) const
-{
-    // Non-gating tripwires: ARTIST bakes BrnGuiHudMessageAnalyzer.h:737/738/747 (a header body).
-    CGS_ASSERT(NULL != lpcMessageId, CgsDev::Assert::MessageAt("NULL != lpcMessageId", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.h", 737));
-    CGS_ASSERT('\0' != lpcMessageId[0], CgsDev::Assert::MessageAt("'\\0' != lpcMessageId[0]", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.h", 738));
-
-    GuiHudMessage lMessage;
-    lMessage.Construct(lpcMessageId);
-
-    // h:747 -- streamed ("Invalid HUD message director").
-    CGS_ASSERT(mpHudMessageDirector != NULL, CgsDev::Assert::StreamMessageAt("Invalid HUD message director", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.h", 747));
-    mpHudMessageDirector->AddMessage(&lMessage, false);
-}
-
-// @ 0x82517AF8 (const per DWARF h:208)
-void HudMessageAnalyzer::TriggerMessage(const GuiHudMessage* lpMessage) const
-{
-    // Non-gating tripwires, both streamed: BrnGuiHudMessageAnalyzer.h:764 / :772 (ARTIST
-    // 0x82517B7C / 0x82517BE0).
-    CGS_ASSERT(NULL != lpMessage, CgsDev::Assert::StreamMessageAt("Invalid HUD message", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.h", 764));
-    CGS_ASSERT(mpHudMessageDirector != NULL, CgsDev::Assert::StreamMessageAt("Invalid HUD message director", "..\\..\\..\\GameSource\\Gui/BrnGuiHudMessageAnalyzer.h", 772));
-    mpHudMessageDirector->AddMessage(lpMessage, false);
-}
+// HudMessageAnalyzer::TriggerMessage (both overloads, ARTIST 0x825179E8 / 0x82517AF8) are header-inline:
+// BrnGuiHudMessageAnalyzer.h, on the lines their asserts carry.
 
 // @ 0x8251B058
 void HudMessageAnalyzer::HandlePlayerEliminated(const s32* lpiEventPayload)
@@ -665,7 +643,7 @@ void HudMessageAnalyzer::HandleTakedown(const GuiTakedownEvent* lpTakedown)
             TriggerMessage(&lMessage);
         }
     }
-    else if (!mpGuiCache->IsOnlineStartInProgress() || mpGuiCache->GetNumActivePlayers() != 0)
+    else if (!mpGuiCache->IsOnlineStartInProgress() || mpGuiCache->GetOnlinePlayerCount() != 0)
     {
         // A third party's takedown seen from a spectating local player.
         const char* lpcMessageId;

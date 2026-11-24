@@ -63,11 +63,11 @@ namespace BrnGui
     // addresses UpdateLoading @0x824CAAA0 loads: `addi r4, r11, 0x6d88` / `lwz r5, 0x6d90`).
     // Resource id 0 -- the placeholder this replaces -- is a different resource, so the screen
     // would have waited on, and then drawn, the wrong movie.
-    const CgsGui::sResourceTuple CrashNavStats::maResourcesToLoad[] =
+    CgsGui::sResourceTuple       CrashNavStats::maResourcesToLoad[] =
     {
         { 137u, CgsGui::E_GUI_RESOURCETYPE_APT },
     };
-    const u32 CrashNavStats::muNumResourcesToLoad = 1;
+    u32       CrashNavStats::muNumResourcesToLoad = 1;
 
     // ---- file-local helpers ----------------------------------------------------------
     // (A former no-op stand-in for GuiCache::ClearExpectedAptComponentList stood here;

@@ -305,37 +305,27 @@ void PaybackComponent::TriggerAptAnimation(EPaybackComponentAnimations lePayback
             break;
         case E_PCA_ATSIDE:
         {
-            CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:407
+            CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 407 /* ARTIST 0x82411858 */));
             lpacMainFrameState = "ShowText";
             lpacIconFrameState = "Static";
             AddOutputAptViewState("PaybackText", "Payback on", false);
 
-            // Publish the victim's online name. The X360 walks the 8-entry online-player table
-            // (maPlayerInfo[8] @ GuiCache+0xAC80, 312-byte InGamePlayerStatusData stride), matching
-            // each record's meActiveRaceCarIndex (+276) against meVictimRaceCarIndex and reading its
-            // mPlayerName (+256). The not-found path passes the raw (const char*)256 the binary
-            // computes (v8 == 0, name = v8 + 256).
-            const char* lpacPersonName = reinterpret_cast<const char*>(256);
-            for (s32 liPlayer = 0; liPlayer < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liPlayer)
-            {
-                const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpRecord =
-                    mpGuiCache->GetOnlinePlayerInfoByIndex(liPlayer);
-                if (lpRecord->meActiveRaceCarIndex == meVictimRaceCarIndex)
-                {
-                    lpacPersonName = lpRecord->mPlayerName.macName;
-                    break;
-                }
-            }
-            AddOutputAptViewState("PersonName", lpacPersonName, false);
+            // Publish the victim's online name: ARTIST 0x824118A0 is the inlined header
+            // GuiCache::GetOnlinePlayerInfo(EActiveRaceCarIndex) (eight-slot scan, NULL when
+            // absent) followed by ->mPlayerName with no null check (the not-found path
+            // passes NULL + 0x100).
+            AddOutputAptViewState("PersonName",
+                                  mpGuiCache->GetOnlinePlayerInfo(meVictimRaceCarIndex)->mPlayerName.macName,
+                                  false);
 
             mHelpItem.SetItem("ACTIVATE", ButtonIconComponent::E_PADBUTTON_BACK,
                               ButtonIconComponent::E_PADBUTTON_INVISIBLE);
             break;
         }
         default:
-            CGS_ASSERT(false, "false");                        // cpp:418
-            CGS_ASSERT(lpacMainFrameState != 0, "lpMainFrame != NULL");   // cpp:423
-            CGS_ASSERT(lpacIconFrameState != 0, "lpIconFrame != NULL");   // cpp:424
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("false", __FILE__, 418 /* ARTIST 0x82411920 */));
+            CGS_ASSERT(lpacMainFrameState != 0, CgsDev::Assert::MessageAt("lpMainFrame != NULL", __FILE__, 423 /* ARTIST 0x82411944 */));
+            CGS_ASSERT(lpacIconFrameState != 0, CgsDev::Assert::MessageAt("lpIconFrame != NULL", __FILE__, 424 /* ARTIST 0x82411960 */));
             break;
     }
 

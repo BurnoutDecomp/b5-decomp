@@ -123,12 +123,12 @@ const s32 PauseScreen::miNumEventsObserved = 2;   // @ 0x82066668
 // "BrnGeneralPause" in the GUI resource-name table @0x82F278E0) + the shared menu-item
 // widget flapt (id 36 == "B5MenuItem"). Update pins these through the GuiCache; the
 // GetResourcesToLoad virtual deliberately reports none (the X360 fold below).
-const CgsGui::sResourceTuple PauseScreen::maResourcesToLoad[2] =
+CgsGui::sResourceTuple       PauseScreen::maResourcesToLoad[2] =
 {
     { 153, CgsGui::E_GUI_RESOURCETYPE_APT },
     {  36, CgsGui::E_GUI_RESOURCETYPE_FLAPT_HD_BUNDLE },
 };
-const u32 PauseScreen::muNumResourcesToLoad = 2;   // @ 0x82F2729C
+u32       PauseScreen::muNumResourcesToLoad = 2;   // @ 0x82F2729C
 
 // @ 0x8206666C (.rdata): the menu component's base name (rows are "<base>_<i>").
 const char PauseScreen::KAC_OPTION_CPT_NAME_BASE[7] = "Option";

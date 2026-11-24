@@ -119,8 +119,8 @@ namespace BrnGui
         void SaveSettings();
 
         // ---- statics (DWARF cpp:30/:36/:39/:45/:50/:52/:54; .rdata) -------------------
-        static const CgsGui::sResourceTuple maResourcesToLoad[];  // @ 0x82F27008 (.rdata, 2 entries)
-        static const u32                    muNumResourcesToLoad; // @ 0x82F27018 (.rdata)
+        static CgsGui::sResourceTuple       maResourcesToLoad[];  // @ 0x82F27008 (.rdata, 2 entries)
+        static u32                          muNumResourcesToLoad; // @ 0x82F27018 (.rdata)
         static const s32                    maiEventToObserve[2]; // @ 0x820664C0 (.rdata, 2 entries)
         static const s32                    miNumEventsObserved;  // @ 0x820664C8 (.rdata) == 2
         static const char                   KAC_OPTION_NAME[15];       // "optionToggle_0"

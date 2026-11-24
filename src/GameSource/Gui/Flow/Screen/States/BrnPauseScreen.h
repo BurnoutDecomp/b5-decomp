@@ -45,8 +45,8 @@ namespace BrnGui
         //      addresses noted on the definitions in the .cpp) ----
         static const s32                 maiEventToObserve[2];       // cpp:26 @0x82066660 {6, 64}
         static const s32                 miNumEventsObserved;        // @0x82066668 == 2
-        static const CgsGui::sResourceTuple maResourcesToLoad[2];    // cpp:35 @0x82F2728C
-        static const u32                 muNumResourcesToLoad;       // cpp:43 @0x82F2729C == 2
+        static CgsGui::sResourceTuple       maResourcesToLoad[2];    // cpp:35 @0x82F2728C
+        static u32                       muNumResourcesToLoad;       // cpp:43 @0x82F2729C == 2
         static const char                KAC_OPTION_CPT_NAME_BASE[7];    // cpp:47 @0x8206666C "Option"
         static const char*               KAPC_PAUSE_OPTION_STRING_IDS[1]; // cpp:51 @0x82F272A0
     };

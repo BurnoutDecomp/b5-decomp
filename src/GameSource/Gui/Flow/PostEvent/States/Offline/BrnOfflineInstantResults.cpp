@@ -257,12 +257,12 @@ namespace BrnGui
     // `lwz dword_82F26B0C` -> *r5). The extent is self-confirming: 0x82F26B0C - 0x82F26AFC ==
     // 0x10 == exactly two 8-byte tuples, the count word itself reads 2, and the DWARF spells
     // the member `sResourceTuple[2]`. Each id is named via gGuiResourceIdentifier[id].
-    const CgsGui::sResourceTuple InstantResultsState::maResourcesToLoad[] =
+    CgsGui::sResourceTuple       InstantResultsState::maResourcesToLoad[] =
     {
         { 217u, CgsGui::E_GUI_RESOURCETYPE_APT },   // Results
         {  55u, CgsGui::E_GUI_RESOURCETYPE_APT },   // B5ManufacturersIcon
     };
-    const u32 InstantResultsState::muNumResourcesToLoad = 2;    // @0x82F26B0C
+    u32       InstantResultsState::muNumResourcesToLoad = 2;    // @0x82F26B0C
 
     // @0x825006D8 -- default constructor.
     // ⭐ CORRECTION TO WHAT WAS COMMITTED HERE. The previous body read

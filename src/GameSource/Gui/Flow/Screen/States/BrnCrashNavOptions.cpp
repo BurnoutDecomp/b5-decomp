@@ -220,9 +220,9 @@ namespace BrnGui
     }
 
     // The options screen's apt package (read from the image).
-    const CgsGui::sResourceTuple CrashNavOptions::maResourcesToLoad[1] =
+    CgsGui::sResourceTuple       CrashNavOptions::maResourcesToLoad[1] =
         { { KI_RESOURCE_ID_OPTIONS, CgsGui::E_GUI_RESOURCETYPE_APT } };
-    const u32 CrashNavOptions::muNumResourcesToLoad = 1;
+    u32       CrashNavOptions::muNumResourcesToLoad = 1;
 
     // ---- CrashNavOptions @0x82508AA0 -----------------------------------------------
     // The X360 body is vptr installs plus the embedded components' own constructors, all
@@ -669,8 +669,8 @@ namespace BrnGui
         CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavOptions.cpp", 867 /* ARTIST 0x824CDD38 */));             // cpp:867
         CGS_ASSERT(mpStateInterface != 0, CgsDev::Assert::MessageAt("mpStateInterface", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnCrashNavOptions.cpp", 868 /* ARTIST 0x824CDD60 */)); // cpp:868
 
-        mOptionsData.SetToProfile(mpGuiCache->GetOptionsDataProfile());
-        mOptionsData.OutputEvents(mpGuiCache->GetOptionsDataProfile(), mpStateInterface);
+        mOptionsData.SetToProfile(mpGuiCache->GetMenuOptionsData());
+        mOptionsData.OutputEvents(mpGuiCache->GetMenuOptionsData(), mpStateInterface);
 
         // [DIAG] NOT IN THE X360 BINARY -- [opt] what was PERSISTED, read back out
         // of the profile block so this line proves the WRITE, not the model.
@@ -695,7 +695,7 @@ namespace BrnGui
         CGS_ASSERT((mpStateInterface != 0) && (mpGuiCache != 0),
                    "( mpStateInterface ) && ( mpGuiCache )");   // cpp:886
 
-        OptionsDataProfile* lpProfile = mpGuiCache->GetOptionsDataProfile();
+        OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
 
         GuiEventCrashNavAudioVolumes lEvent;
         lEvent.miMusicVolume = static_cast<s32>(lpProfile->GetMusicVolume());
@@ -711,7 +711,7 @@ namespace BrnGui
 
         GuiEventCrashNavVoipVolume lEvent;
         lEvent.miVoipVolume =
-            static_cast<s32>(mpGuiCache->GetOptionsDataProfile()->GetVoipVolume());
+            static_cast<s32>(mpGuiCache->GetMenuOptionsData()->GetVoipVolume());
         mpStateInterface->OutputGuiEvent(lEvent);
     }
 

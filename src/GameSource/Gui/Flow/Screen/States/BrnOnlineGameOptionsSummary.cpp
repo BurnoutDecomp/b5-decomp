@@ -483,7 +483,7 @@ namespace BrnGui
         miStartSaveItem = 0;
         SetupSaveMenuText();
 
-        OptionsDataProfile* lpProfile = mpGuiCache->GetOptionsDataProfile();
+        OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
         const s32 liNumSaved = lpProfile->GetNumCreatedOnlineGameOptions();
 
         if (liNumSaved < KI_MAX_SAVED_ROUTES)
@@ -531,7 +531,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptionsSummary::SetupSaveMenuText()
     {
-        const s32 liNumSaved = mpGuiCache->GetOptionsDataProfile()->GetNumCreatedOnlineGameOptions();
+        const s32 liNumSaved = mpGuiCache->GetMenuOptionsData()->GetNumCreatedOnlineGameOptions();
 
         for (s32 liRow = 0; liRow < KI_MAX_CREATE_GAME_OPTIONS; ++liRow)
         {
@@ -542,7 +542,7 @@ namespace BrnGui
             char lacRowText[KU_SLOT_TEXT_LENGTH];
             CgsCore::SPrintf(lacRowText, KU_SLOT_TEXT_LENGTH, KPC_SLOT_STRING_ID, liRow);
 
-            const s32 liNumSavedNow = mpGuiCache->GetOptionsDataProfile()->GetNumCreatedOnlineGameOptions();
+            const s32 liNumSavedNow = mpGuiCache->GetMenuOptionsData()->GetNumCreatedOnlineGameOptions();
             if (liSlot < liNumSavedNow)
             {
                 char lacSlotNumber[KU_SLOT_TEXT_LENGTH];
@@ -584,7 +584,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptionsSummary::FinishedCreatingGame()
     {
-        const s32 leGameMode = mpGuiCache->GetCurrentGameModeType();
+        const s32 leGameMode = mpGuiCache->GetGameMode();
         const bool lbInLobby = leGameMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY
                             || leGameMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME;
 
@@ -704,7 +704,7 @@ namespace BrnGui
             && lpOverlayComplete->meLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK
             && meSubState == E_SUBSTATE_SAVE_OPTIONS)
         {
-            mpGuiCache->GetOptionsDataProfile()->SetCreatedOnlineGameOptions(
+            mpGuiCache->GetMenuOptionsData()->SetCreatedOnlineGameOptions(
                 mMenuOptions.GetHighlightedIndex(), mpGuiCache,
                 reinterpret_cast<const GuiEventNetworkGameParams*>(mpGuiCache->maOnlineGameModeOptionsStorage));
             PostWire(mpStateInterface, GuiAutosaveRequestWire());
@@ -817,7 +817,7 @@ namespace BrnGui
         CGS_ASSERT(lpEvent != 0,
                    "Invalid event sent to OnlineGameOptionsSummary::HandleControllerInputSaveOptions");
 
-        OptionsDataProfile* lpProfile = mpGuiCache->GetOptionsDataProfile();
+        OptionsDataProfile* lpProfile = mpGuiCache->GetMenuOptionsData();
         const s32 liHighlightedSlot = mMenuOptions.GetHighlightedIndex() + miStartSaveItem;
 
         const ControllerButtonPayload* lpInput = static_cast<const ControllerButtonPayload*>(lpEvent);

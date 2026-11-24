@@ -222,11 +222,11 @@ namespace BrnGui
     }
 
     // ---- the static load table (X360 .rdata @0x82F26FDC / @0x82F26FE4) --------------
-    const CgsGui::sResourceTuple CrashNavAccountManagement::maResourcesToLoad[1] =
+    CgsGui::sResourceTuple       CrashNavAccountManagement::maResourcesToLoad[1] =
     {
         { KI_RESOURCE_ID_ACCT, CgsGui::E_GUI_RESOURCETYPE_APT },   // { 142, 4 }
     };
-    const u32 CrashNavAccountManagement::muNumResourcesToLoad = 1;
+    u32       CrashNavAccountManagement::muNumResourcesToLoad = 1;
 
     // ---- ctor ----------------------------------------------------------------------
     // The X360 constructor is vptr installs plus the embedded components' own

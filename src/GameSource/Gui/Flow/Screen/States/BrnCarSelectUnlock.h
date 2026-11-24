@@ -93,7 +93,7 @@ namespace BrnGui
         // ---- statics (DWARF cpp:26-53; .rdata; values MEASURED, wave L dump) ----
         static const s32                    maiEventToObserve[6];               // @0x82066054 == {64,73,74,76,538,6}
         static const s32                    miNumEventsObserved;                // == 6
-        static const CgsGui::sResourceTuple maResourcesToLoad[];               // @0x82F26D78 == {148 BrnCarSelectUnlock, 55 B5ManufacturersIcon} (APT)
+        static CgsGui::sResourceTuple       maResourcesToLoad[];               // @0x82F26D78 == {148 BrnCarSelectUnlock, 55 B5ManufacturersIcon} (APT)
         static const u32                    muNumResourcesToLoad;               // == 2
         static const char                   KAC_MANUFACTURER_LOGO[20];          // "ManufacturerLogo_mc"
         static const char                   KAC_CAR_NAME[11];                   // "CarName_mc"
