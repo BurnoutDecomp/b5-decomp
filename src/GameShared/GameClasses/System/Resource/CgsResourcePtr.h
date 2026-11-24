@@ -5,14 +5,62 @@
 #include <cstddef>
 #include "GameShared/GameClasses/System/Resource/CgsResourceHandle.h"
 #include "GameShared/GameClasses/System/Resource/CgsSmallResource.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT_STREAM
+#include "GameShared/GameClasses/Development/CgsStrStream.h"         // the streamed assert messages
+
+// CgsResource::BaseResourcePtr / ResourcePtr<T>: a typed, relinkable view of a pool resource.
+//
+// Declarator lines are the DecFIGS DWARF's (CgsResourcePtr.h: BaseResourcePtr h:65, NULLResourcePtr
+// h:149, ResourcePtr<T> h:160, its members h:417 .. h:711). ResourcePtr<T>'s members are defined
+// out of the class, inline, as the LegacySrc copy of this header does; the accessors that check
+// the main-memory resource stream their message through the assert buffer on the line ARTIST
+// bakes (file string @0x82007258 / 0x8201AE48): operator-> 544, const operator-> 563,
+// GetMemoryResource 581, const GetMemoryResource 599, operator* 618. ARTIST keeps an out-of-line
+// copy of operator-> (e.g. ResourcePtr<BrnAI::AISectionsData>::operator-> @0x82324FA0: the
+// streamed assert, then the cached word) and calls it.
 
 namespace CgsResource
 {
-    // Native value/link/handle layout. ARTIST copies three resource words at0/4/8,
-    // links atC/10 and the source handle at14/18. DecFIGS names the trailing
-    // mpThis member; native ResourcePtr arrays and owners require a32-byte stride.
+    // Native value/link/handle layout. ARTIST copies three resource words at 0/4/8,
+    // links at C/10 and the source handle at 14/18. DecFIGS names the trailing
+    // mpThis member; native ResourcePtr arrays and owners require a 32-byte stride.
     template <class Type> struct ResourcePtr;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     struct BaseResourcePtr
     {
@@ -36,10 +84,23 @@ namespace CgsResource
         void CreateFromHandle(const ResourceHandle* lpHandle);
         void Propogate();
 
+
+
+
+
+
+
+
+
+
+
         SmallResource mResourceMemory; // +00 cached main/system/local resources
         BaseResourcePtr* mpNext;       // +0C intrusive alias ring
         BaseResourcePtr* mpPrev;       // +10
         ResourceHandle mHandle;        // +14 source SmallResource and Entry
+
+
+
         BaseResourcePtr* mpThis;       // +1C; untouched by the ARTIST constructor
 
         static void AssertNativeLayout()
@@ -54,86 +115,620 @@ namespace CgsResource
         }
     };
 
-    template <class Type>
-    struct ResourcePtr : public BaseResourcePtr
-    {
-    public:
-        ResourcePtr() {}
-        ResourcePtr(const ResourcePtr<Type>& lrOther);
-        ResourcePtr(const BaseResourcePtr& lrOther)
-        {
-            CreateFromHandle(&lrOther.mHandle);
-        }
-        ResourcePtr(const ResourceHandle& lrHandle)
-        {
-            CreateFromHandle(&lrHandle);
-        }
 
-        ResourcePtr<Type>& operator=(const ResourcePtr<Type>& lrOther)
-        {
-            CreateFromHandle(&lrOther.mHandle);
-            return *this;
-        }
-        ResourcePtr<Type>& operator=(const BaseResourcePtr& lrOther)
-        {
-            CreateFromHandle(&lrOther.mHandle);
-            return *this;
-        }
-        ResourcePtr<Type>& operator=(const ResourceHandle& lrHandle)
-        {
-            CreateFromHandle(&lrHandle);
-            return *this;
-        }
 
-        bool HasMemoryResource() const { return mResourceMemory.m_baseResources[0] != 0; }
-        Type* operator->()
-        {
-            CGS_ASSERT(mResourceMemory.m_baseResources[0],
-                "Can not instance resource pointer - it has no main memory resource\n");
-            return static_cast<Type*>(mResourceMemory.m_baseResources[0]);
-        }
-        const Type* operator->() const
-        {
-            CGS_ASSERT(mResourceMemory.m_baseResources[0],
-                "Can not instance resource pointer - it has no main memory resource\n");
-            return static_cast<const Type*>(mResourceMemory.m_baseResources[0]);
-        }
-        Type& operator*()
-        {
-            CGS_ASSERT(mResourceMemory.m_baseResources[0],
-                "Can not instance resource pointer - it has no main memory resource\n");
-            return *static_cast<Type*>(mResourceMemory.m_baseResources[0]);
-        }
-        const Type& operator*() const
-        {
-            CGS_ASSERT(mResourceMemory.m_baseResources[0],
-                "Can not dereference resource pointer - it has no main memory resource\n");
-            return *static_cast<const Type*>(mResourceMemory.m_baseResources[0]);
-        }
-        Type* GetMemoryResource()
-        {
-            CGS_ASSERT(mResourceMemory.m_baseResources[0],
-                "Can not instance resource pointer - it has no main memory resource\n");
-            return static_cast<Type*>(mResourceMemory.m_baseResources[0]);
-        }
-        const Type* GetMemoryResource() const
-        {
-            CGS_ASSERT(mResourceMemory.m_baseResources[0],
-                "Can not instance resource pointer - it has no main memory resource\n");
-            return static_cast<const Type*>(mResourceMemory.m_baseResources[0]);
-        }
 
-        bool operator==(const ResourcePtr<Type>& lrOther) const;
-        bool operator==(const ResourceHandle& lrHandle) const;
-        bool operator!=(const ResourcePtr<Type>& lrOther) const;
-        bool operator!=(const ResourceHandle& lrHandle) const;
-        bool operator==(const BaseResourcePtr& lrOther) const { return IsEqual(&lrOther); }
-        bool operator!=(const BaseResourcePtr& lrOther) const { return !IsEqual(&lrOther); }
-    };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // DecFIGS CgsResourcePtr.h:149 defines this namespace-scope const in the
     // header. Its internal linkage gives each translation unit its own sentinel;
     // ARTIST TrafficEntity and TrafficCarStreamer use different instances.
     const BaseResourcePtr NULLResourcePtr;
+
+
+
+
+
+
+
+
+
+    template <class Type>
+    struct ResourcePtr : public BaseResourcePtr
+    {
+    public:
+        inline ResourcePtr();
+        inline ResourcePtr(const ResourcePtr<Type>& lrOther);
+        inline ResourcePtr(const BaseResourcePtr& lrOther);
+        inline ResourcePtr(const ResourceHandle& lrHandle);
+
+        inline ResourcePtr<Type>& operator=(const ResourcePtr<Type>& lrOther);
+        inline ResourcePtr<Type>& operator=(const BaseResourcePtr& lrOther);
+        inline ResourcePtr<Type>& operator=(const ResourceHandle& lrHandle);
+
+        bool HasMemoryResource() const { return mResourceMemory.m_baseResources[0] != 0; }
+
+        inline Type* operator->();
+        inline const Type* operator->() const;
+        inline Type* GetMemoryResource();
+        inline const Type* GetMemoryResource() const;
+        inline Type& operator*();
+        inline const Type& operator*() const;
+
+        inline bool operator==(const ResourcePtr<Type>& lrOther) const;
+        inline bool operator==(const BaseResourcePtr& lrOther) const;
+        inline bool operator==(const ResourceHandle& lrHandle) const;
+        inline bool operator!=(const ResourcePtr<Type>& lrOther) const;
+        inline bool operator!=(const BaseResourcePtr& lrOther) const;
+        inline bool operator!=(const ResourceHandle& lrHandle) const;
+    };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    template <class Type>
+    inline
+    ResourcePtr<Type>::ResourcePtr()
+    {
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    template <class Type>
+    inline
+    ResourcePtr<Type>::ResourcePtr(const BaseResourcePtr& lrOther)
+    {
+        CreateFromHandle(&lrOther.mHandle);
+    }
+
+
+
+
+
+
+
+
+
+
+
+    template <class Type>
+    inline
+    ResourcePtr<Type>::ResourcePtr(const ResourceHandle& lrHandle)
+    {
+        CreateFromHandle(&lrHandle);
+    }
+
+
+
+
+
+
+
+
+
+
+
+    template <class Type>
+    inline ResourcePtr<Type>&
+    ResourcePtr<Type>::operator=(const ResourcePtr<Type>& lrOther)
+    {
+        CreateFromHandle(&lrOther.mHandle);
+        return *this;
+    }
+
+
+
+
+
+
+
+
+
+
+
+    template <class Type>
+    inline ResourcePtr<Type>&
+    ResourcePtr<Type>::operator=(const BaseResourcePtr& lrOther)
+    {
+        CreateFromHandle(&lrOther.mHandle);
+        return *this;
+    }
+
+
+
+
+
+
+
+
+
+
+
+    template <class Type>
+    inline ResourcePtr<Type>&
+    ResourcePtr<Type>::operator=(const ResourceHandle& lrHandle)
+    {
+        CreateFromHandle(&lrHandle);
+        return *this;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+    template <class Type>
+    inline Type*
+    ResourcePtr<Type>::operator->()
+    {
+
+
+
+
+        CGS_ASSERT_STREAM(mResourceMemory.m_baseResources[0], "Can not instance resource pointer - it has no main memory resource\n");
+        return static_cast<Type*>(mResourceMemory.m_baseResources[0]);
+    }
+
+
+
+
+
+
+
+
+    template <class Type>
+    inline const Type*
+    ResourcePtr<Type>::operator->() const
+    {
+
+
+
+
+        CGS_ASSERT_STREAM(mResourceMemory.m_baseResources[0], "Can not instance resource pointer - it has no main memory resource\n");
+        return static_cast<const Type*>(mResourceMemory.m_baseResources[0]);
+    }
+
+
+
+
+
+
+
+    template <class Type>
+    inline Type*
+    ResourcePtr<Type>::GetMemoryResource()
+    {
+
+
+
+
+        CGS_ASSERT_STREAM(mResourceMemory.m_baseResources[0], "Can not instance resource pointer - it has no main memory resource\n");
+        return static_cast<Type*>(mResourceMemory.m_baseResources[0]);
+    }
+
+
+
+
+
+
+
+    template <class Type>
+    inline const Type*
+    ResourcePtr<Type>::GetMemoryResource() const
+    {
+
+
+
+
+        CGS_ASSERT_STREAM(mResourceMemory.m_baseResources[0], "Can not instance resource pointer - it has no main memory resource\n");
+        return static_cast<const Type*>(mResourceMemory.m_baseResources[0]);
+    }
+
+
+
+
+
+
+
+
+    template <class Type>
+    inline Type&
+    ResourcePtr<Type>::operator*()
+    {
+
+
+
+
+        CGS_ASSERT_STREAM(mResourceMemory.m_baseResources[0], "Can not dereference resource pointer - it has no main memory resource\n");
+        return *static_cast<Type*>(mResourceMemory.m_baseResources[0]);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    template <class Type>
+    inline bool
+    ResourcePtr<Type>::operator==(const BaseResourcePtr& lrOther) const
+    {
+        return IsEqual(&lrOther);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    template <class Type>
+    inline bool
+    ResourcePtr<Type>::operator!=(const BaseResourcePtr& lrOther) const
+    {
+        return !IsEqual(&lrOther);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    template <class Type>
+    inline const Type&
+    ResourcePtr<Type>::operator*() const
+    {
+        CGS_ASSERT_STREAM(mResourceMemory.m_baseResources[0], "Can not dereference resource pointer - it has no main memory resource\n");
+        return *static_cast<const Type*>(mResourceMemory.m_baseResources[0]);
+    }
 }
 #endif
