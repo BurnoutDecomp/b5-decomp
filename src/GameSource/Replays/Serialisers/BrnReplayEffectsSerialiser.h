@@ -108,7 +108,7 @@ namespace BrnReplays
 
         // X360 0x82278918. Read a race car's boost data (index < 8): active byte,
         // value float, and boost type (asserted in [-1,3)).
-        void GetBoostData(u32 luRaceCarIndex, u8& lruActive, f32& lrfValue, s32& lriBoostType);
+        void GetBoostData(s32 liRaceCarIndex, u8& lruActive, f32& lrfValue, s32& lriBoostType);
 
         // X360 0x822789D0. Read the recorded boost locators for a race car: writes the
         // live locator count into lruCount (asserts < 16) and copies the 4 boost-locator
@@ -123,7 +123,7 @@ namespace BrnReplays
         // X360 0x82278868. Record a race car's boost data into the static buffer:
         // active flag (+0x4E0+index), boost type (+0x4E8+4*index), value (+0x508+4*index).
         // luRaceCarIndex asserted < 8, liBoostType asserted in [-1,3). Read back by GetBoostData.
-        int WriteBoostData(u32 luRaceCarIndex, u8 lu8ActiveFlag, f32 lfBoostValue, s32 liBoostType);
+        void WriteBoostData(s32 liRaceCarIndex, u8 lu8ActiveFlag, f32 lfBoostValue, s32 liBoostType);   // void: ARTIST leaves r3 unset
 
         // X360 0x8227EEE0. Read a race-car contact record (index < contact count): two field
         // words, two u16s, two contact vectors (single quadwords, hence Vector4 not

@@ -68,10 +68,7 @@ iceanim::iceanim(const Attrib::RefSpec& lrRefSpec, void* lpOwner)
 //     Attrib::Instance::~Instance(v6);
 // The base is mpAttributeData, NOT `this` -- see the FLAG on the declaration for the
 // call-site consequence of that in the (unmounted) behaviour TU.
-s32 iceanim::GetAnimGuid() const
-{
-    return reinterpret_cast<const s32*>(GetLayoutPointer())[3]; // layout +0x0C
-}
+// (now header-inline in iceanim.h)
 
 }
 }

@@ -43,7 +43,7 @@ namespace Gen
         u32 SuitableFor() const     { return reinterpret_cast<const u32*>(GetLayoutPointer())[0]; }
         u32 ShotProperties() const  { return reinterpret_cast<const u32*>(GetLayoutPointer())[1]; }
 
-        // The ICE take guid this shot names. Bodied in iceanim.cpp.
+        // The ICE take guid this shot names.
         //
         // ⭐ OFFSET BASE CORRECTED 2026-07-31, and it was wrong before. This used to be
         // annotated "instance +0xC, past the 8-byte class-key head". The X360 call site
@@ -65,7 +65,8 @@ namespace Gen
         // SetParameters builds the temporary iceanim over the RefSpec exactly as
         // @0x8220F5C0 does, so this accessor is now only ever called on a REAL instance
         // whose mpAttributeData is the resolved layout block.
-        s32 GetAnimGuid() const;
+        // Header-inline like its siblings: ARTIST SetParameters reads it in place (0x8220F64C/54).
+        s32 GetAnimGuid() const     { return reinterpret_cast<const s32*>(GetLayoutPointer())[3]; } // layout +0x0C
     };
 
     // Chain the Instance ctor, assert the collection's class is ClassName::iceanim

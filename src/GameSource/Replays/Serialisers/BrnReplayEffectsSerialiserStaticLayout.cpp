@@ -74,17 +74,15 @@ namespace BrnReplays
     }
 
     // @ 0x82278918 -- read a race car's boost data (index < 8).
-    void EffectsSerialiserStaticLayout::GetBoostData(u32 luRaceCarIndex, u8& lruActive,
+    void EffectsSerialiserStaticLayout::GetBoostData(s32 liRaceCarIndex, u8& lruActive,
                                                      f32& lrfValue, s32& lriBoostType)
     {
-        CGS_ASSERT(luRaceCarIndex < 8,
+        CGS_ASSERT(liRaceCarIndex >= 0 && liRaceCarIndex < 8,   // signed range test (ARTIST 0x8227893C / WriteBoostData)
                    CgsDev::Assert::MessageAt("Invalid Race Car Index in EffectsSerialiser (GetBoostData)", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 485));
 
-        const u8* const lpBase = reinterpret_cast<const u8*>(this);
-
-        lruActive    = lpBase[KI_OFF_BOOST_ACTIVE + luRaceCarIndex];
-        lriBoostType = *reinterpret_cast<const s32*>(lpBase + 0x4E8 + luRaceCarIndex * 4);
-        lrfValue     = *reinterpret_cast<const f32*>(lpBase + 0x508 + luRaceCarIndex * 4);
+        lruActive    = maBoostActive[liRaceCarIndex];
+        lriBoostType = maBoostType[liRaceCarIndex];
+        lrfValue     = maBoostValue[liRaceCarIndex];
 
         CGS_ASSERT(lriBoostType >= -1 && lriBoostType < 3,
                    CgsDev::Assert::MessageAt("Invalid Boost Type in EffectsSerialiser (GetBoostData)", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 492));
@@ -110,21 +108,17 @@ namespace BrnReplays
     }
 
     // @ 0x82278868 -- record a race car's boost data into the static buffer (index < 8).
-    int EffectsSerialiserStaticLayout::WriteBoostData(u32 luRaceCarIndex, u8 lu8ActiveFlag,
+    void EffectsSerialiserStaticLayout::WriteBoostData(s32 liRaceCarIndex, u8 lu8ActiveFlag,
                                                       f32 lfBoostValue, s32 liBoostType)
     {
-        u8* lpBase = reinterpret_cast<u8*>(this);
-
-        CGS_ASSERT(luRaceCarIndex < 8,
+        CGS_ASSERT(liRaceCarIndex >= 0 && liRaceCarIndex < 8,   // signed range test (ARTIST 0x8227893C / WriteBoostData)
                    CgsDev::Assert::MessageAt("Invalid Race Car Index in EffectsSerialiser (SetBoostData)", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 469));
         CGS_ASSERT(liBoostType >= -1 && liBoostType < 3,
                    CgsDev::Assert::MessageAt("Invalid Boost Type in EffectsSerialiser (SetBoostData)", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayEffectsSerialiser.h", 470));
 
-        lpBase[0x4E0 + luRaceCarIndex]                                = lu8ActiveFlag;
-        *reinterpret_cast<s32*>(lpBase + 0x4E8 + 4 * luRaceCarIndex)  = liBoostType;
-        *reinterpret_cast<f32*>(lpBase + 0x508 + 4 * luRaceCarIndex)  = lfBoostValue;
-
-        return reinterpret_cast<intptr_t>(this);
+        maBoostActive[liRaceCarIndex] = lu8ActiveFlag;
+        maBoostType[liRaceCarIndex] = liBoostType;
+        maBoostValue[liRaceCarIndex] = lfBoostValue;
     }
 
     // @ 0x82278B08 -- record the boost locators for a race car (index < 8).

@@ -463,8 +463,8 @@ void BehaviourIceAnim::SetParameters(ShotReference* lpParameters)
     // block. The instance is a scoped temporary, as on the console.
     const Attrib::Gen::iceanim lShot(*lpParameters, 0);
 
+    miAnimGuid   = lShot.GetAnimGuid();   // ARTIST loads the guid before the mpSourceShot store (0x8220F654)
     mpSourceShot = lpParameters;
-    miAnimGuid   = lShot.GetAnimGuid();
 }
 
 // ============================================================================

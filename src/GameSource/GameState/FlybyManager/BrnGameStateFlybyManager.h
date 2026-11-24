@@ -64,6 +64,15 @@ public:
     // Reference BrnGameStateFlybyManager.h, header inline.
     CgsNumeric::Random* GetRandom() { return &mRandom; }
 
+    // DWARF BrnGameStateFlybyManager.h:245, header inline: ARTIST has no out-of-line copy and every
+    // OnlineFlybyManager use bakes its assert at h:247 (e.g. CalculateDisconnectRating 0x823642A8).
+    ScoringSystem* GetScoringSystem()
+    {
+        CGS_ASSERT(mpScoringSystem, CgsDev::Assert::MessageAt("mpScoringSystem",
+                   "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\flybymanager\\BrnGameStateFlybyManager.h", 247));
+        return mpScoringSystem;
+    }
+
     // Reference BrnGameStateFlybyManager.cpp: the string id of the gamertag message every flyby
     // car gets first.
     static const char* KPC_GAMERTAG_STRING_ID;
