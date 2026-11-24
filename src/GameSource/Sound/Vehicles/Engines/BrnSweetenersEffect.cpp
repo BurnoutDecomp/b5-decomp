@@ -8,7 +8,7 @@
 #include "GameSource/Sound/Global/BrnGlobalStateManager.h"
 #include "GameShared/GameClasses/Sound/IO/CgsMessage.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsCommon.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include <cmath>
 
 namespace BrnSound
@@ -253,25 +253,17 @@ bool SweetenersEffect::SelectSampleIndex(eSweetenerBankElement aeElement,
                                          s32& ariSampleIndex)
 {
     CGS_ASSERT(aeElement < E_SWEETENER_BANK_ELEMENT_COUNT,
-               "E_SWEETENER_BANK_ELEMENT_COUNT > leElement");
-    if (aeElement < 0 || aeElement >= E_SWEETENER_BANK_ELEMENT_COUNT)
-        return false;
+        CgsDev::Assert::MessageAt("E_SWEETENER_BANK_ELEMENT_COUNT > leElement",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnSweetenersEffect.cpp", 798));
 
     const SweetenerInfo& lrInfo = maSweetenerInfo[aeElement];
-    if (lrInfo.mi16FirstIndex == -1)
-        return false;
+    if (lrInfo.mi16FirstIndex != -1)
+    {
+        ariSampleIndex = mRandomGenerator.RandomInt(lrInfo.mi16FirstIndex, lrInfo.mi16LastIndex);
+        return true;
+    }
 
-    CGS_ASSERT(lrInfo.mi16LastIndex >= lrInfo.mi16FirstIndex,
-               "liMax >= liMin");
-    const u32 luCount = static_cast<u32>(
-        lrInfo.mi16LastIndex - lrInfo.mi16FirstIndex + 1);
-    CGS_ASSERT(luCount > 0, "luMod > 0");
-    if (!luCount)
-        return false;
-
-    ariSampleIndex = lrInfo.mi16FirstIndex +
-        static_cast<s32>(mRandomGenerator.RandomUInt() % luCount);
-    return true;
+    return false;
 }
 
 void SweetenersEffect::UpdateSweetenerInfo(

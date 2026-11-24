@@ -35,14 +35,12 @@
 // minimal home deliberately does not pull in, and no reconstructed body reads the ring through
 // it. alignas(16) carries the only observable consequence it has.
 //
-// Only the buffer-priming spine the embedders inline (Construct + its two private
-// helpers) is bodied here. The remaining DWARF methods
-// (SetSeed / RandomUInt / RandomInt / RandomBool / RandomFloat / the RandomVectorN
-// family) are other-TU surface and are declared-only so the shape stays coherent
-// without forking the VecFloat / Vector2/3/4 return types into this minimal home.
+// The small integer draws live here because ARTIST inlines them into users such as
+// Shuffle. The out-of-line methods retain their existing owning translation unit.
 // =============================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
 
 namespace CgsNumeric
 {
@@ -175,9 +173,20 @@ public:
     // calls ago. Do not re-inline them here; that is a duplicate-definition link error, which is
     // how the re-derivation was caught.
     void SetSeed(u64 lu64Seed);
-    u32  RandomUInt();
-    u32  RandomUInt(u32 luMin, u32 luMax);
-    s32  RandomInt(s32 liMin, s32 liMax);
+    // ARTIST 0x827537D0 draws the old seed's high word before stepping the LCG.
+    u32 RandomUInt()
+    {
+        const u32 luDraw = static_cast<u32>(muSeed >> 32);
+        muSeed = muSeed * KU_RANDOM_MULTIPLIER + 1u;
+        return luDraw;
+    }
+
+    u32 RandomUInt(u32 luMin, u32 luMax);
+
+    // ARTIST expands this draw at every attested site, including the four
+    // Shuffle instances. An ordinary inline definition still calls out with the
+    // XDK, so keep the draw and its bounds checks inline in native callers.
+    __forceinline s32 RandomInt(s32 liMin, s32 liMax);
     f32  RandomFloat();
     f32  RandomFloat(f32 lfMin, f32 lfMax);
     // DWARF CgsRandom.h:94. Header-inline on the console; the vector-slot draw
@@ -227,6 +236,19 @@ private:
         mauIntegerBuffer[muOldestBufferIndex] = luRandomFloatBits;
     }
 };
+
+// ARTIST 0x8271B18C uses signed bounds and an unsigned modulo of the old seed's
+// high word. The diagnostics use the CgsRandom.h filename at 0x82001F94.
+#line 318 "..\\..\\..\\GameShared\\GameClasses\\Numeric/CgsRandom.h"
+__forceinline s32 Random::RandomInt(s32 liMin, s32 liMax)
+{
+    CGS_ASSERT(liMax >= liMin, "liMax >= liMin");
+
+    const u32 luMod = static_cast<u32>(liMax - liMin) + 1u;
+    CGS_ASSERT(luMod > 0u, "luMod > 0");
+
+    return liMin + static_cast<s32>(RandomUInt() % luMod);
+}
 
 CGS_STATIC_ASSERT((sizeof(Random) == 0x30), "CgsNumeric::Random layout drift");
 CGS_STATIC_ASSERT((__alignof(Random) == 16),

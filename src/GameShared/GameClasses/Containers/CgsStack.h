@@ -2,7 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-
+#line 6 "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsStack.h"
 // CgsContainers::Stack<Type, Length> -- a fixed-capacity LIFO. Member set, names and lines
 // from the DecFIGS DWARF (references/DecFIGS/dwarfdump/GameShared/GameClasses/Containers/
 // CgsStack.h: namespace h:24, class h:33, maData h:81, miLength h:82); the header's shape (the

@@ -17,15 +17,15 @@
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
 
 // ---- CgsAlgorithms::Shuffle instances (CgsShuffle.h inline body) --------------------------
-template CgsContainers::Stack<u8, 199>&
+template void
 CgsAlgorithms::Shuffle<u8, CgsContainers::Stack<u8, 199> >(
     CgsContainers::Stack<u8, 199>&, s32, s32, CgsNumeric::Random&);
 
-template CgsContainers::Stack<u16, 1>&
+template void
 CgsAlgorithms::Shuffle<u16, CgsContainers::Stack<u16, 1> >(
     CgsContainers::Stack<u16, 1>&, s32, s32, CgsNumeric::Random&);
 
-template CgsContainers::Stack<u16, 400>&
+template void
 CgsAlgorithms::Shuffle<u16, CgsContainers::Stack<u16, 400> >(
     CgsContainers::Stack<u16, 400>&, s32, s32, CgsNumeric::Random&);
 
