@@ -35,43 +35,26 @@ namespace Deformation
     // store-for-store from BURNOUT_X360_ARTIST.XEX; the sound/effects/world PostPhysics IO buffers
     // call it directly (SetDeformationOutputInterface / SetDeformationInterface).
     //
-    // Copies the fixed-count entity-id array + the deformation-state pointer + the locator
-    // count/array member-wise, then for each of the five event queues clears the destination length
-    // and Append()s all live source events. Append order follows the asm.
+    // ARTIST copies miNumLocatorOutputs first (0x823C8920/0x823C8928), then walks ONE 28-entry loop
+    // that copies maBaseEntityIDs[i] and maLocatorData[i] together, then mpDeformationState, then
+    // assigns the five event queues through EventQueue::operator= (CgsEventQueue.h:194: the
+    // length store then Append) in this order: DetachedPartNotification, JointedPartState,
+    // BrokenJoint, GlassSmash, DetachedPartCurrentPosition.
     DeformationOutputInterface& DeformationOutputInterface::operator=(const DeformationOutputInterface& lkrOther)
     {
-        // maBaseEntityIDs[28] -- EntityId, 4 bytes each (lwzx/stw loop, stride 4).
-        for (s32 liIndex = 0; liIndex < 28; ++liIndex)
-        {
-            maBaseEntityIDs[liIndex] = lkrOther.maBaseEntityIDs[liIndex];
-        }
-
-        // miNumLocatorOutputs is hoisted before the loop by the asm; maLocatorData[28] copied 8 bytes/entry.
         miNumLocatorOutputs = lkrOther.miNumLocatorOutputs;
         for (s32 liIndex = 0; liIndex < 28; ++liIndex)
         {
-            maLocatorData[liIndex] = lkrOther.maLocatorData[liIndex];
+            maBaseEntityIDs[liIndex] = lkrOther.maBaseEntityIDs[liIndex];
+            maLocatorData[liIndex]   = lkrOther.maLocatorData[liIndex];
         }
-
-        // mpDeformationState pointer copy (asm dest+0x70 = src+0x70, after the loop).
         mpDeformationState = lkrOther.mpDeformationState;
 
-        // Five event queues: clear destination length, then Append all live source events.
-        // Order per asm: DetachedPartNotification, JointedPartState, BrokenJoint, GlassSmash, DetachedPartCurrentPosition.
-        mDetachedPartNotificationQueue.Clear();
-        mDetachedPartNotificationQueue.Append(lkrOther.mDetachedPartNotificationQueue);
-
-        mJointedPartStateQueue.Clear();
-        mJointedPartStateQueue.Append(lkrOther.mJointedPartStateQueue);
-
-        mBrokenJointNotificationQueue.Clear();
-        mBrokenJointNotificationQueue.Append(lkrOther.mBrokenJointNotificationQueue);
-
-        mGlassSmashOrCrackQueue.Clear();
-        mGlassSmashOrCrackQueue.Append(lkrOther.mGlassSmashOrCrackQueue);
-
-        mDetachedPartCurrentPositionQueue.Clear();
-        mDetachedPartCurrentPositionQueue.Append(lkrOther.mDetachedPartCurrentPositionQueue);
+        mDetachedPartNotificationQueue    = lkrOther.mDetachedPartNotificationQueue;
+        mJointedPartStateQueue            = lkrOther.mJointedPartStateQueue;
+        mBrokenJointNotificationQueue     = lkrOther.mBrokenJointNotificationQueue;
+        mGlassSmashOrCrackQueue           = lkrOther.mGlassSmashOrCrackQueue;
+        mDetachedPartCurrentPositionQueue = lkrOther.mDetachedPartCurrentPositionQueue;
 
         return *this;
     }
@@ -120,6 +103,8 @@ namespace Deformation
         }
 
         // Queues: clear destination length (`stw 0, 8(queue)` on console == Clear()), then Append.
+        // Written out (not EventQueue::operator=): ARTIST stores the length at a this-relative
+        // offset (stw r31,0x2E88(r29) at 0x827A9768) before forming the queue pointer.
         mDetachedPartRenderQueue.Clear();
         mDetachedPartRenderQueue.Append(lkrOther.mDetachedPartRenderQueue);
 

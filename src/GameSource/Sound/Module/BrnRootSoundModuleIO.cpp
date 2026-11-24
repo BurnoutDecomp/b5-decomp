@@ -315,8 +315,7 @@ void RootInputBuffer::SetTrafficOutputInterface(const TrafficSoundOutputInterfac
 void RootInputBuffer::SetPhysicalTrafficStates(const PhysicalTrafficStateQueue* lpStates)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Sound/Module/BrnRootSoundModuleIo.h", 207));
-    mPhysicalTrafficStates.Clear();
-    mPhysicalTrafficStates.Append(*lpStates);
+    mPhysicalTrafficStates = *lpStates;   // EventQueue::operator= (CgsEventQueue.h:194)
 }
 
 // X360 0x823C91F0 @ +0xB490: the write-lock tripwire (h:431), then
@@ -348,8 +347,7 @@ void RootInputBuffer::SetOnlineScoringInterface(const OnlineScoringOutputInterfa
 void RootInputBuffer::SetWorldLoadInterface(const SoundWorldLoadInterface* lpInterface)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Sound/Module/BrnRootSoundModuleIo.h", 495));
-    mWorldLoadInterface.Clear();
-    mWorldLoadInterface.Append(*lpInterface);
+    mWorldLoadInterface = *lpInterface;   // EventQueue::operator= (CgsEventQueue.h:194)
 }
 
 // X360 0x823B89B8 @ +0xEBA8 -- stores the caller's queue pointer (not a copy).
