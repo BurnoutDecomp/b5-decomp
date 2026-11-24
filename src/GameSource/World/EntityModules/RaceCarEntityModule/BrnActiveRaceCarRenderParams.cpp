@@ -281,7 +281,7 @@ bool ActiveRaceCar::RenderParams::RequestBluesAndTwosStateSwitch(f32 lfDeltaTime
 
     if (!lbForce || !mbBluesAndTwosCanSwitchState)
     {
-        return mbBluesAndTwosActive != 0;
+        return mbBluesAndTwosActive;
     }
 
     // Forced switch with the strobe armed: DISARM the switch, LATCH the toggled state, zero

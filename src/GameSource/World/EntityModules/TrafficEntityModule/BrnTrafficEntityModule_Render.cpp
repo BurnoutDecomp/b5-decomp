@@ -267,15 +267,15 @@ static Matrix44Affine ScaleWheelTransform(const Vector3& lrScale, const Matrix44
 //     GetStaticTrafficParamFromFullV @0x827078D0 is the console's own truncation of the DWARF's
 //     GetStaticTrafficParamFromFullVehicleIndex, not a different function.
 // ============================================================================
-namespace
+// DWARF BrnTrafficEntityModule.cpp:13722 `bool BrnTraffic::_CompareRenderInfos(const VehicleRenderInfo&,
+// const VehicleRenderInfo&)` (file-local: the dump does not mark it extern; PS3 0x914494 names the
+// parameters). std::sort takes it as a plain function pointer: ARTIST's instances are
+// std::_Sort / _Median / _Med3 / ... <VehicleRenderInfo*, bool (__cdecl*)(const VehicleRenderInfo&,
+// const VehicleRenderInfo&)> (e.g. 0x8274C3E8, 0x8272CC60), and PreDispatchUpdate passes the
+// function's address in r6 (0x82708BF0, an unexported 32-byte leaf: lfs 4(r3) / lfs 4(r4) / fcmpu / blt).
+static bool _CompareRenderInfos(const VehicleRenderInfo& lRenderInfo0, const VehicleRenderInfo& lRenderInfo1)
 {
-struct TrafficVehicleRenderInfoLess
-{
-    bool operator()(const VehicleRenderInfo& lhs, const VehicleRenderInfo& rhs) const
-    {
-        return lhs.mfDistanceSq < rhs.mfDistanceSq;
-    }
-};
+    return lRenderInfo0.mfDistanceSq < lRenderInfo1.mfDistanceSq;
 }
 
 void
@@ -337,7 +337,7 @@ TrafficEntityModule::PreDispatchUpdate( const BrnTrafficIO::InputBuffer_PreDispa
             lrInfo.mfDistanceSq = lfDistanceSq;
             lrInfo.mLOD = CgsGraphics::Model::E_STATE_LOD_0;
         }
-        std::sort(laVisible, laVisible + luVisible, TrafficVehicleRenderInfoLess());
+        std::sort(laVisible, laVisible + luVisible, _CompareRenderInfos);
         const u32 luCount = luVisible < muMaxVehiclesToRender ? luVisible : muMaxVehiclesToRender;
         for (u32 luIndex = 0; luIndex < luCount; ++luIndex)
             lrRenderInfos.Append(laVisible[luIndex]);

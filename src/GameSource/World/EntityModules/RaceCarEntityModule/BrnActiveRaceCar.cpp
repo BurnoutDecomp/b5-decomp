@@ -993,11 +993,6 @@ bool ActiveRaceCar::IsActive() const
     return muState == E_STATE_ACTIVE;
 }
 
-bool ActiveRaceCar::ToBePlacedOnTrack() const
-{
-    return mbToBePlacedOnTrack;
-}
-
 // ============================================================================
 // IsWrecked @ 0x822BFDA0   (player-input wave 2026-08-11)
 //

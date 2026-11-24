@@ -254,7 +254,8 @@ namespace
 // =================================================================================================
 AIDriver* AIModule::GetAIDriver(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
-    if (static_cast<u32>(leActiveRaceCarIndex) >= static_cast<u32>(KI_MAX_ACTIVE_RACE_CARS))
+    // Both bounds, signed (cmpwi 0 / blt, cmpwi 8 / blt at 0x82765BA4..0x82765BB0).
+    if (!(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leActiveRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS))
     {
         CgsDev::Assert::BeginAssert();
         CgsDev::StrStream lMessage(CgsDev::Assert::gpcMessageBuffer, CgsDev::Assert::giMessageBufferSize);

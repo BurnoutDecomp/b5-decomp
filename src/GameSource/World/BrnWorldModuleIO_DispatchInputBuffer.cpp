@@ -113,8 +113,9 @@ void DispatchInputBuffer::SetShaderConstantsFrame(BrnShaderConstantsFrame* lpFra
 // matching the asm order; "Invalid slot for Fx Layer" carries NO trailing newline.
 BrnEffectsFrame* DispatchInputBuffer::GetEffectsFrame(u8 luSlot) const
 {
-    CGS_ASSERT(luSlot < 4, "Invalid slot for Fx Layer");
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    // h:864 / h:865 (FireAssert at 0x827BCD10 / 0x827BCD94).
+    CGS_ASSERT(luSlot < 4, CgsDev::Assert::MessageAt("Invalid slot for Fx Layer", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 864));
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 865));
     return mapEffectsFrames[luSlot];
 }
 
@@ -123,8 +124,9 @@ BrnEffectsFrame* DispatchInputBuffer::GetEffectsFrame(u8 luSlot) const
 // check, then writes mapEffectsFrames[luSlot] (this + 0x174 + slot*4).
 void DispatchInputBuffer::SetEffectsFrame(u8 luSlot, BrnEffectsFrame* lpFrame)
 {
-    CGS_ASSERT(luSlot < 4, "Invalid slot for Fx Layer");
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    // h:872 / h:873 (FireAssert at 0x823B6C14 / 0x823B6C98).
+    CGS_ASSERT(luSlot < 4, CgsDev::Assert::MessageAt("Invalid slot for Fx Layer", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 872));
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 873));
     mapEffectsFrames[luSlot] = lpFrame;
 }
 
@@ -133,7 +135,7 @@ void DispatchInputBuffer::SetEffectsFrame(u8 luSlot, BrnEffectsFrame* lpFrame)
 // X360 0x827A42F0 (:398 R) -- read-lock handle to the blobby-shadow submission buffer (this+0x184).
 BrnBlobbyShadowManager::BrnBlobbyShadowBuffer* DispatchInputBuffer::GetBlobbyShadowBuffer() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 398));
     return mpBlobbyShadowBuffer;
 }
 
@@ -149,7 +151,7 @@ void DispatchInputBuffer::SetBlobbyShadowBuffer(BrnBlobbyShadowManager::BrnBlobb
 // X360 0x827A4398 (:401 R) -- read-lock handle to the corona-submission interface (this+0x188).
 BrnCoronaManager::BrnSubmissionInterface* DispatchInputBuffer::GetCoronaSubmissionInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 401));
     return mpCoronaSubmissionInterface;
 }
 
@@ -195,7 +197,7 @@ void DispatchInputBuffer::SetSimTime(f32 lfSimTime)
 // X360 0x827BC0E8 (:411 R) -- read-lock handle to the dispatch-thread input buffer (this+0x194).
 BrnGame::DispatchThreadInputBuffer* DispatchInputBuffer::GetDispatchThreadInputBuffer() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 411));
     return mpDispatchThreadInputBuffer;
 }
 

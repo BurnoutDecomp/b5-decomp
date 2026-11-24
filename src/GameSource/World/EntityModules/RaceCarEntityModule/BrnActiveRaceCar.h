@@ -196,8 +196,9 @@ public:
                            bool                  lbResettingPhysicsState,
                            u8                    lu8CarStrengthStat );
 
-    // X360: returns mbToBePlacedOnTrack (byte this+0x7C4). DWARF BrnActiveRaceCar.h:853.
-    bool ToBePlacedOnTrack() const;
+    // X360: returns mbToBePlacedOnTrack (byte this+0x7C4). DWARF BrnActiveRaceCar.h:824. Header-inline:
+    // ARTIST has no out-of-line copy and inlines it (RaceCar::RequestResetOnTrack 0x822BEB78 lbz 0x7C4).
+    bool ToBePlacedOnTrack() const { return mbToBePlacedOnTrack; }
 
     // ------------------------------------------------------------------------
     // X360 0x822BFB58  ActiveRaceCar::RequestPlaceOnTrack -- ask PlaceOnTrackManager to

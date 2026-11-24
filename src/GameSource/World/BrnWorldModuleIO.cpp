@@ -7,11 +7,15 @@
 //   - const getters assert read-lock  ("Not locked for reading")  and return &member;
 //   - mutable getters / Append / Set mutators assert write-lock ("Not locked for writing")
 //     and return &member or perform the store-for-store mutation.
-// The X360-baked d:\p4 file/line is intentionally not reproduced -- CGS_ASSERT stamps
-// __FILE__/__LINE__. Offsets are layout-derived (member-by-name), not hardcoded.
+// ARTIST compiled these accessors from BrnWorldModuleIO.h (one line each), so every copy bakes
+// that header's path and the accessor's header line, and streams its "Not locked for ...\n"
+// message through StrStream (r3 = gpcMessageBuffer): StreamMessageAt reproduces that, with the
+// line read from each copy's `li r5` (e.g. GetControllerActive li r5,0x12F == h:303 at
+// 0x827A3EC4). Offsets are layout-derived (member-by-name), not hardcoded.
 #include "GameSource/World/BrnWorldModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the accessors' streamed lock asserts
 
 // The header path and lines ARTIST bakes into the setters' tripwires: ARTIST compiled their bodies
 // from BrnWorldModuleIO.h (e.g. SetRaceCarColourIndex: li r5,0x2A5 == h:677 at 0x823A8370).
@@ -225,14 +229,14 @@ const VehicleInputInterface* UpdateInputBuffer::GetVehicleInputInterface() const
 // to the retired slice's memcpy stand-in.
 void UpdateInputBuffer::AppendVehicleInputInterface(const VehicleInputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 260));
     mVehicleInputInterface.Append(*lpInterface);
 }
 
 // X360 0x827A3660 (:262 R, GetVehicl) -- const vehicle-driver-input accessor (+142272).
 const VehicleDriverInputInterface* UpdateInputBuffer::GetVehicleDriverInputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 262));
     return &mVehicleDriverInputInterface;
 }
 
@@ -245,7 +249,7 @@ const VehicleDriverInputInterface* UpdateInputBuffer::GetVehicleDriverInputInter
 // half of the call never ran. Test: run_fxfollowups_world_driver_append.py.
 void UpdateInputBuffer::AppendVehicleDriverInputInterface(const VehicleDriverInputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 263));
     mVehicleDriverInputInterface.Append(lpInterface);
 }
 
@@ -254,7 +258,7 @@ void UpdateInputBuffer::AppendVehicleDriverInputInterface(const VehicleDriverInp
 // X360 0x823B4738 (:266 W, GetG) -- mutable game-action queue accessor (+147572).
 GameActionQueue* UpdateInputBuffer::GetGameActionQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 266));
     return &mGameActionQueue;
 }
 
@@ -264,7 +268,7 @@ GameActionQueue* UpdateInputBuffer::GetGameActionQueue()
 // null/self guard. Call the committed bulk Append by name instead of re-walking events one by one.
 void UpdateInputBuffer::AppendGameActionQueue(const GameActionQueue* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 267));
     mGameActionQueue.Append(*lpQueue);
 }
 
@@ -277,14 +281,14 @@ void UpdateInputBuffer::AppendGameActionQueue(const GameActionQueue* lpQueue)
 // WorldModule::BridgeInputToPhysicsModule @0x827AB830.
 const TimerStatusInterface* UpdateInputBuffer::GetTimerStatusInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 269));
     return &mTimerStatusInterface;
 }
 
 // X360 0x823B47E0 (:270 W) -- copy the source timer-status block into +160900..+160948.
 void UpdateInputBuffer::SetTimerStatusInterface(const TimerStatusInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 270));
     mTimerStatusInterface = *lpInterface;   // store-for-store (12-word block)
 }
 
@@ -296,7 +300,7 @@ void UpdateInputBuffer::SetTimerStatusInterface(const TimerStatusInterface* lpIn
 // Append merge -- called by name.
 void UpdateInputBuffer::AppendTakedownEventQueue(const TakedownEventQueue* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 273));
     mTakedownEventQueue.Append(*lpQueue);
 }
 
@@ -310,7 +314,7 @@ void UpdateInputBuffer::AppendTakedownEventQueue(const TakedownEventQueue* lpQue
 // TriggerManagementInputInterface::Append. Sole producer: BridgeGameStateToWorld @0x823E1890.
 void UpdateInputBuffer::AppendTriggerManagementInputInterface(const TriggerManagementInputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 276));
     mTriggerManagementInputInterface.Append(*lpInterface);
 }
 
@@ -322,7 +326,7 @@ void UpdateInputBuffer::AppendTriggerManagementInputInterface(const TriggerManag
 // committed bulk Append by name instead of re-walking events one by one.
 void UpdateInputBuffer::AppendTriggerQueryInputInterface(const TriggerQueryInputInterface* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 279));
     mTriggerQueryInputInterface.Append(*lpQueue);
 }
 
@@ -331,7 +335,7 @@ void UpdateInputBuffer::AppendTriggerQueryInputInterface(const TriggerQueryInput
 // X360 0x827A3AF8 (:284 R, Get) -- const traffic-network accessor (+301644).
 const TrafficNetworkInputInterface* UpdateInputBuffer::GetTrafficNetworkInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 284));
     return &mTrafficNetworkInterface;
 }
 
@@ -341,7 +345,7 @@ const TrafficNetworkInputInterface* UpdateInputBuffer::GetTrafficNetworkInterfac
 // traffic pre-scene buffer's SetTrafficNetworkInputInterface does the same).
 void UpdateInputBuffer::SetTrafficNetworkInterface(const TrafficNetworkInputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 285));
     TrafficNetworkInputInterface::ActivateHullQueue& lrQueue =
         const_cast<TrafficNetworkInputInterface::ActivateHullQueue&>(mTrafficNetworkInterface.GetActivateHullQueue());
     lrQueue.Clear();
@@ -352,7 +356,7 @@ void UpdateInputBuffer::SetTrafficNetworkInterface(const TrafficNetworkInputInte
 // X360 0x827A3BA0 (:287 R, GetCrashNetworkIn) -- const crash-network accessor (+301760).
 const CrashNetworkInputInterface* UpdateInputBuffer::GetCrashNetworkInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 287));
     return &mCrashNetworkInterface;
 }
 
@@ -361,7 +365,7 @@ const CrashNetworkInputInterface* UpdateInputBuffer::GetCrashNetworkInterface() 
 // clear+merge per race-car crashing-traffic queue), the committed type's own operator=.
 void UpdateInputBuffer::SetCrashNetworkInterface(const CrashNetworkInputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 288));
     mCrashNetworkInterface = *lpInterface;
 }
 
@@ -370,14 +374,14 @@ void UpdateInputBuffer::SetCrashNetworkInterface(const CrashNetworkInputInterfac
 // X360 0x827BBE48 (:290 R, GetDebugContro) -- const debug-controller accessor (+317324).
 const DebugController* UpdateInputBuffer::GetDebugController() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 290));
     return &mDebugController;
 }
 
 // X360 0x823B49B0 (:291 W) -- mutable debug-controller accessor (+317324).
 DebugController* UpdateInputBuffer::GetDebugController()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 291));
     return &mDebugController;
 }
 
@@ -386,7 +390,7 @@ DebugController* UpdateInputBuffer::GetDebugController()
 // X360 0x823B4A58 (:295 W) -- copy the source race-distance block into the member.
 void UpdateInputBuffer::SetRaceCarRaceDistanceInterface(const RaceCarRaceDistanceInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 295));
     mRaceCarRaceDistanceInterface = *lpInterface;   // store-for-store (10-word block)
 }
 
@@ -395,21 +399,22 @@ void UpdateInputBuffer::SetRaceCarRaceDistanceInterface(const RaceCarRaceDistanc
 // X360 0x827A3CF0 (:297 R, Ge) -- const scoring accessor (+317536).
 const ScoringInterface* UpdateInputBuffer::GetScoringInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 297));
     return &mScoringInterface;
 }
 
 // X360 0x823B4B28 (:298 W) -- copy the source scoring block (2736 bytes) into +317536.
 void UpdateInputBuffer::SetScoringInterface(const ScoringInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-    std::memcpy(&mScoringInterface, lpInterface, sizeof(ScoringInterface));
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 298));
+    // ARTIST copies through the XDK's XMemCpy (bl 0x82926BA0 at 0x823B4BD4), not the CRT memcpy.
+    XMemCpy(&mScoringInterface, lpInterface, sizeof(ScoringInterface));
 }
 
 // X360 0x823B4BE0 (:301 W) -- copy the source online-scoring block (164 bytes) into +322384.
 void UpdateInputBuffer::SetOnlineScoringInterface(const OnlineScoringInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 301));
     std::memcpy(&mOnlineScoringInterface, lpInterface, sizeof(OnlineScoringInterface));
 }
 
@@ -418,14 +423,14 @@ void UpdateInputBuffer::SetOnlineScoringInterface(const OnlineScoringInterface* 
 // X360 0x827A3E40 (:303 R) -- const controller-active read (+320272).
 bool UpdateInputBuffer::GetControllerActive() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 303));
     return mbControllerActive;
 }
 
 // X360 0x823B4C98 (:304 W) -- set controller-active (+320272).
 void UpdateInputBuffer::SetControllerActive(bool lbActive)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 304));
     mbControllerActive = lbActive;
 }
 
@@ -434,14 +439,14 @@ void UpdateInputBuffer::SetControllerActive(bool lbActive)
 // X360 0x823B4D48 (:307 W, GetWorldEntityRequestI) -- mutable request accessor (+320273).
 WorldEntityRequestInterface* UpdateInputBuffer::GetWorldEntityRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 307));
     return &mWorldEntityRequestInterface;
 }
 
 // X360 0x827A3EF0 (:308 R, GetWorldEntityRe) -- const request accessor (+320273).
 const WorldEntityRequestInterface* UpdateInputBuffer::GetWorldEntityRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 308));
     return &mWorldEntityRequestInterface;
 }
 
@@ -450,7 +455,7 @@ const WorldEntityRequestInterface* UpdateInputBuffer::GetWorldEntityRequestInter
 // X360 0x827A3F98 (:310 R, GetReplayStatusInter) -- const replay-status accessor (+320276).
 const ReplayStatusInterface* UpdateInputBuffer::GetReplayStatusInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 310));
     return &mReplayStatusInterface;
 }
 
@@ -460,7 +465,7 @@ const ReplayStatusInterface* UpdateInputBuffer::GetReplayStatusInterface() const
 // type's own operator=.
 void UpdateInputBuffer::SetReplayStatusInterface(const ReplayStatusInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 311));
     mReplayStatusInterface = *lpInterface;
 }
 
@@ -469,7 +474,7 @@ void UpdateInputBuffer::SetReplayStatusInterface(const ReplayStatusInterface* lp
 // X360 0x823B48F8 (:282 W) -- copy the source player-vehicle-controls (60 bytes) into +317264.
 void UpdateInputBuffer::SetPlayerVehicleControls(const PlayerVehicleControls* lpControls)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 282));
     std::memcpy(&mPlayerVehicleControls, lpControls, sizeof(PlayerVehicleControls));
 }
 
@@ -477,7 +482,7 @@ void UpdateInputBuffer::SetPlayerVehicleControls(const PlayerVehicleControls* lp
 // world spine. Homed here beside its writer.
 const PlayerVehicleControls* UpdateInputBuffer::GetPlayerVehicleControls() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 281));
     return &mPlayerVehicleControls;
 }
 
@@ -486,14 +491,14 @@ const PlayerVehicleControls* UpdateInputBuffer::GetPlayerVehicleControls() const
 // X360 0x823B4F50 (:317 W) -- set the active payback type.
 void UpdateInputBuffer::SetActivePaybackType(BrnNetwork::EPaybackType lePaybackType)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 317));
     meActivePaybackType = lePaybackType;
 }
 
 // X360 0x823B5000 (:319 W) -- set the active payback aggressor.
 void UpdateInputBuffer::SetActivePaybackAggressor(EActiveRaceCarIndex leAggressor)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 320));
     meActivePaybackAggressor = leAggressor;
 }
 
@@ -502,7 +507,7 @@ void UpdateInputBuffer::SetActivePaybackAggressor(EActiveRaceCarIndex leAggresso
 // X360 0x827A3708 (:265 R, IDA "UpdateInputBuffer") -- const game-action queue accessor (+147572).
 const GameActionQueue* UpdateInputBuffer::GetGameActionQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 265));
     return &mGameActionQueue;
 }
 
@@ -512,7 +517,7 @@ const GameActionQueue* UpdateInputBuffer::GetGameActionQueue() const
 const UpdateInputBuffer::AudioCarLoadedDataQueue*
 UpdateInputBuffer::GetAudioCarDataLoadedQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 313));
     return &mAudioCarDataLoadedQueue;
 }
 
@@ -521,28 +526,28 @@ UpdateInputBuffer::GetAudioCarDataLoadedQueue() const
 UpdateInputBuffer::AudioCarLoadedDataQueue*
 UpdateInputBuffer::GetAudioCarDataLoadedQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 314));
     return &mAudioCarDataLoadedQueue;
 }
 
 // X360 0x827A3858 (:272 R, IDA "UpdateInputBuffer_") -- const takedown-event queue accessor (+160952).
 const TakedownEventQueue* UpdateInputBuffer::GetTakedownEventQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 272));
     return &mTakedownEventQueue;
 }
 
 // X360 0x827A3900 (:276 R, IDA "UpdateInputB") -- const trigger-management-input accessor (+161288).
 const TriggerManagementInputInterface* UpdateInputBuffer::GetTriggerManagementInputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 275));
     return &mTriggerManagementInputInterface;
 }
 
 // X360 0x827A3C48 (:294 R, IDA "UpdateInputBuff") -- const race-car race-distance accessor (+317496).
 const RaceCarRaceDistanceInterface* UpdateInputBuffer::GetRaceCarRaceDistanceInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 294));
     return &mRaceCarRaceDistanceInterface;
 }
 
@@ -558,7 +563,7 @@ const RaceCarRaceDistanceInterface* UpdateInputBuffer::GetRaceCarRaceDistanceInt
 // (the slot UpdateInputBuffer::Construct seeds to the literal 3).
 BrnNetwork::EPaybackType UpdateInputBuffer::GetActivePaybackType() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 316));
     return meActivePaybackType;
 }
 
@@ -569,7 +574,7 @@ BrnNetwork::EPaybackType UpdateInputBuffer::GetActivePaybackType() const
 // own baked line is 319 -- the X360 header is one line further on for this decl.)
 EActiveRaceCarIndex UpdateInputBuffer::GetActivePaybackAggressor() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 319));
     return meActivePaybackAggressor;
 }
 
@@ -580,7 +585,7 @@ EActiveRaceCarIndex UpdateInputBuffer::GetActivePaybackAggressor() const
 // AppendTriggerQueryInputInterface @0x823C8CF0 merges into).
 const TriggerQueryInputInterface* UpdateInputBuffer::GetTriggerQueryInputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 278));
     return &mTriggerQueryInputInterface;
 }
 
@@ -608,7 +613,7 @@ const OnlineScoringInterface* UpdateInputBuffer::GetOnlineScoringInterface() con
 // (Host LLP64 offset differs from X360 +322240; parity is by named member.)
 const UpdateInputBuffer::RaceRouteRequestQueue* UpdateInputBuffer::GetRaceRouteRequestQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 255));
     return &mRaceRouteRequestQueue;
 }
 

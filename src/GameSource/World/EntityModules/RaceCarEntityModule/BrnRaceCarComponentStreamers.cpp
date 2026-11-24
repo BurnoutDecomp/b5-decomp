@@ -725,12 +725,12 @@ void RaceCarStreamer::Prepare( const BrnResource::VehicleList* lpVehicleList,
 void RaceCarStreamer::AppendGameDataRequests(
         RaceCarEntityModuleIO::ResourceRequestInterface* lpInterface ) const
 {
-    CGS_ASSERT( lpInterface != 0, "lpInterface" );   // X360 BrnRaceCarStreamer.cpp:378
-
-    if( lpInterface == 0 )
-    {
-        return;
-    }
+    // ARTIST bakes BrnRaceCarStreamer.cpp:378 (li r5,0x17A at 0x82302064) and appends with no
+    // null guard after the assert (the early return that stood here was a PC-side addition).
+    CGS_ASSERT( lpInterface != 0,
+        CgsDev::Assert::MessageAt( "lpInterface",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/EntityModules/RaceCarEntityModule/BrnRaceCarStreamer.cpp",
+            378 ) );
 
     lpInterface->Append( *mAttributeStreamer.GetGameDataRequestInterface() );
     lpInterface->Append( *mPhysicsStreamer.GetGameDataRequestInterface() );

@@ -225,23 +225,12 @@ void RaceCar::RemoveActiveRaceCar()
 }
 
 // ----------------------------------------------------------------------------
-// RemoveFromWorld @ 0x822A4C98. Returns the slot to the inactive state.
-// ----------------------------------------------------------------------------
-void RaceCar::RemoveFromWorld()
-{
-    CGS_ASSERT(IsInWorld(), "IsInWorld()");
-    CGS_ASSERT(mpActiveRaceCar == 0,
-               "RaceCar being removed from world while it still has an ActiveRaceCar attached");
-
-    muType         = E_RACE_CAR_TYPE_INACTIVE;
-    mbIsDispersing = false;
-}
-
-// ----------------------------------------------------------------------------
-// RequestResetOnTrack @ 0x822BEB28. Queues a reset-on-track request, unless one is
-// already pending or the attached active car is already due to be placed on track.
+// Removal and reset-on-track. RemoveFromWorld and RequestResetOnTrack sit on their DecFIGS DWARF
+// lines (BrnRaceCar.cpp:262 / :283), so their asserts land on the lines ARTIST bakes into them:
+// RemoveFromWorld :264/:265 (li r5,0x108 / 0x109 at 0x822A4CF8 / 0x822A4D20) and
+// RequestResetOnTrack :296 (li r5,0x128 at 0x822BEBB0).
 //
-// THE RESET-ON-TRACK CHAIN this request feeds (every rung is bodied):
+// THE RESET-ON-TRACK CHAIN RequestResetOnTrack feeds (every rung is bodied):
 //   RCEM::SendResetOnTrackRequests -- the only reader of mbToBeResetOnTrack. Walks all 35
 //       global race cars and, for each with muType != 3 && mbToBeResetOnTrack, pushes an
 //       AIModuleIO::ResetOnTrackRequest onto RaceCarEntityModuleIO::OutputBuffer_PostScene.
@@ -264,24 +253,49 @@ void RaceCar::RemoveFromWorld()
 // BrnVehicleManager_WriteOutVehicleStats.cpp.
 // Reference: scratchpad resetontrack_log.md.
 // ----------------------------------------------------------------------------
+
+
+
+
+
+// RemoveFromWorld @ 0x822A4C98. Returns the slot to the inactive state.
+void RaceCar::RemoveFromWorld()
+{
+    CGS_ASSERT(IsInWorld(), "IsInWorld()");
+    CGS_ASSERT(mpActiveRaceCar == 0, "RaceCar being removed from world while it still has an ActiveRaceCar attached");
+
+    muType         = E_RACE_CAR_TYPE_INACTIVE;
+    mbIsDispersing = false;
+}
+
+
+
+
+
+
+
+
+
+// RequestResetOnTrack @ 0x822BEB28. Queues a reset-on-track request, unless one is already
+// pending or the attached active car is already due to be placed on track (LegacySrc's nested
+// shape and blank lines; ARTIST tests mbToBeResetOnTrack, then HasActiveRaceCar, then the
+// inlined ActiveRaceCar::ToBePlacedOnTrack).
 void RaceCar::RequestResetOnTrack(f32 lfSpeed, BrnAI::EResetType leType, f32 lfDistance)
 {
-    if (mbToBeResetOnTrack)
+
+    if (!mbToBeResetOnTrack)
     {
-        return;
+
+        if (!HasActiveRaceCar() || !GetActiveRaceCar()->ToBePlacedOnTrack())
+        {
+            mfResetOnTrackSpeed    = lfSpeed;
+            mfResetOnTrackDistance = lfDistance;
+            meResetOnTrackType     = leType;
+            mbToBeResetOnTrack     = true;
+
+            CGS_ASSERT(mfResetOnTrackSpeed >= 0.0f, "mfResetOnTrackSpeed >= 0.0f");
+        }
     }
-
-    if (HasActiveRaceCar() && GetActiveRaceCar()->ToBePlacedOnTrack())
-    {
-        return;
-    }
-
-    mfResetOnTrackSpeed    = lfSpeed;
-    mfResetOnTrackDistance = lfDistance;
-    meResetOnTrackType     = leType;
-    mbToBeResetOnTrack     = true;
-
-    CGS_ASSERT(mfResetOnTrackSpeed >= 0.0f, "mfResetOnTrackSpeed >= 0.0f");
 }
 
 // ----------------------------------------------------------------------------
