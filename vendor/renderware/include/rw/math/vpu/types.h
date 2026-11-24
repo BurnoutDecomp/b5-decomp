@@ -35,6 +35,9 @@ namespace vpu
             lValue.u[3] = 0;
             mV = lValue;
         }
+        // rwmath vector2.h / vector2_type_inline.h: the raw-register constructor the
+        // vector2 operations return through (e.g. operator+ = Vector2(vaddfp(a, b))).
+        Vector2(VectorIntrinsicInParam v) : mV(v) {}
         void SetZero() { mV = __vspltisw(0); }
     };
 

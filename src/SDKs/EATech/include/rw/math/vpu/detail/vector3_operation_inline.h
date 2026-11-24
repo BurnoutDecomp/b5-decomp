@@ -8,6 +8,7 @@
 #include <cmath>
 
 #include "SDKs/EATech/include/rw/math/vpu/vector3.h"
+#include "SDKs/EATech/include/rw/math/vpu/scalar.h"
 
 namespace rw
 {
@@ -59,11 +60,11 @@ inline bool operator == (Vector3::InParam a, Vector3::InParam b)
 inline bool operator != (Vector3::InParam a, Vector3::InParam b) { return !(a == b); }
 bool IsZero(Vector3::InParam v, VecFloat::InParam tolerance);              // FLAGGED: _asmIsZeroV3
 bool IsSimilar(Vector3::InParam a, Vector3::InParam b, VecFloat::InParam epsilon); // FLAGGED: _asmIsSimilarV3
+// rwmath vector3_operation_inline.h: each lane splatted (VecFloat from VecFloatRef) and
+// tested by the scalar predicate -- CgsBox::IsValid's 3 vspltw + 3 vcmpeqfp. in ARTIST.
 inline bool IsValid(Vector3::InParam v)
 {
-    return v.mV.v[0] == v.mV.v[0]
-        && v.mV.v[1] == v.mV.v[1]
-        && v.mV.v[2] == v.mV.v[2];
+    return (IsValid(v.X()) && IsValid(v.Y()) && IsValid(v.Z()));
 }
 
 // IsAnyNaN -- FAITHFUL. The console vcmpeqfp_p predicate tests whether v==v in every lane;

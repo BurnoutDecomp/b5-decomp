@@ -1,12 +1,4 @@
 #include "SDKs/EATech/include/rw/math/vpu/vec_float.h"
 
-namespace rw { namespace math { namespace vpu {
-
-// ARTIST821F0DA0: referenced scalar in r4; load its raw bits without an FPU
-// conversion, broadcast word0 and store the native register at this in r3.
-VecFloat::VecFloat(const float& lfValue)
-{
-    mV = __vspltw(__lvlx(&lfValue, 0), 0);
-}
-
-} } }
+// VecFloat(const float&) is header-inline in the genuine type-inline header
+// (ARTIST inlines it; 0x821F0DA0 is its out-of-line COMDAT copy).

@@ -25,6 +25,8 @@
 // hand-maintained header is immune to regeneration (same as types.h / vector3_operation.h).
 
 #include "rw/math/vpu/types.h"    // rw::math::vpu::Vector2
+#include "SDKs/EATech/include/rw/math/vpu/vector_intrinsic_operation.h"
+#include "SDKs/EATech/include/rw/math/vpu/scalar.h"
 
 
 namespace rw
@@ -67,6 +69,24 @@ namespace vpu
         lEstimate = __vmaddfp(__vmulfp(lEstimate, lHalf), lCorrection, lEstimate);
         return VecFloat(__vsel(__vmulfp(lDot, lEstimate), lZero, __vcmpeqfp(lZero, lDot)));
     }
+
+    // rwmath detail/vector2_operation_inline.h (DecFIGS DWARF: operator+ :700, operator- :695,
+    // += :671, *= :344, * :372/:379, MagnitudeSquared :173). One VMX op per register, all four
+    // lanes carried (z/w are padding), as in the LegacySrc bodies.
+    inline Vector2 operator + (Vector2::InParam a, Vector2::InParam b) { return Vector2(__vaddfp(a.mV, b.mV)); }
+    inline Vector2 operator - (Vector2::InParam a, Vector2::InParam b) { return Vector2(__vsubfp(a.mV, b.mV)); }
+    inline Vector2& operator += (Vector2& v, Vector2::InParam b) { v.mV = __vaddfp(v.mV, b.mV); return v; }
+    inline Vector2& operator -= (Vector2& v, Vector2::InParam b) { v.mV = __vsubfp(v.mV, b.mV); return v; }
+    inline Vector2 operator * (Vector2::InParam v, VecFloat::InParam s) { return Vector2(__vmulfp(v.mV, s.mV)); }
+    inline Vector2 operator * (VecFloat::InParam s, Vector2::InParam v) { return Vector2(__vmulfp(v.mV, s.mV)); }
+    inline Vector2& operator *= (Vector2& v, VecFloat::InParam s) { v.mV = __vmulfp(v.mV, s.mV); return v; }
+
+    // vector2_operation_inline.h:678/683: the x/y compare (_asmIsEqualV2); ARTIST
+    // CrashNavMapIcon::SetPosition 0x827DD568 inlines the != form.
+    inline bool operator == (Vector2::InParam a, Vector2::InParam b) { return _asmIsEqualV2(a.mV, b.mV); }
+    inline bool operator != (Vector2::InParam a, Vector2::InParam b) { return !_asmIsEqualV2(a.mV, b.mV); }
+
+    inline VecFloat MagnitudeSquared(Vector2 lrVector) { return Dot(lrVector, lrVector); }
 }
 }
 }

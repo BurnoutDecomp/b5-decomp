@@ -117,6 +117,14 @@ inline VecFloat::VecFloat()
     // uninitialised on the console (no body); leave mV uninitialised.
 }
 
+// rwmath 1.02.00 vec_float_type_inline.h: header-inline, as ARTIST inlines it at its
+// callers (the out-of-line COMDAT copy is 0x821F0DA0): the referenced word loaded with
+// lvlx and broadcast from lane 0, no FPU conversion.
+inline VecFloat::VecFloat(const float& f)
+{
+    mV = __vspltw(__lvlx(&f, 0), 0);
+}
+
 inline VecFloat::VecFloat(VectorIntrinsicInParam v, int index)
 {
     // vspltw(v, index): broadcast lane `index` of v to all four lanes.
@@ -140,12 +148,9 @@ inline VecFloat::VecFloat(VecFloatRefIndex v)
 template<VectorAxis INDEX>
 inline VecFloat::VecFloat(VecFloatRef<INDEX> v)
 {
-    // vspltw(v.mV, INDEX): broadcast the referenced lane to all four lanes.
-    const float lfValue = v.mV.v[INDEX];
-    mV.v[0] = lfValue;
-    mV.v[1] = lfValue;
-    mV.v[2] = lfValue;
-    mV.v[3] = lfValue;
+    // rwmath 1.02.00 vec_float_type_inline.h: mV = vspltw(v.mV, INDEX), read through the
+    // reference (ARTIST 0x8270DCC4: addi rX,this,0x10; lvx128 v0,r0,rX; vspltw v0,v0,0).
+    mV = __vspltw(v.mV, INDEX);
 }
 
 inline void VecFloat::SetFloat(float v)

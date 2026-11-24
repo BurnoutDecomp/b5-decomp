@@ -2,6 +2,7 @@
 
 #include "SDKs/EATech/include/rw/math/vpu/vec_float.h"
 #include "SDKs/EATech/include/rw/math/vpu/maskscalar.h"
+#include "SDKs/EATech/include/rw/math/vpu/vector_intrinsic_operation.h"
 
 namespace rw { namespace math { namespace vpu {
 // DecFIGS scalar_operation_inline.h:303/311. Less-than is the native
@@ -14,5 +15,16 @@ inline MaskScalar CompLessThan(VecFloat::InParam a, VecFloat::InParam b)
 inline MaskScalar CompGreaterThan(VecFloat::InParam a, VecFloat::InParam b)
 {
     return MaskScalar(__vcmpgtfp(a.mV, b.mV));
+}
+// DecFIGS scalar.h / scalar_operation_inline.h: IsValid is !IsNaN, and the platform IsNaN
+// is !_asmIsEqualV4(value, value) (LegacySrc ps3/ppu/scalar_operation_platform_inline.h).
+// ARTIST 0x8270DFB8 (Vehicle::SetWheelRot's "RwMath::IsValid( lfValue )").
+inline bool IsNaN(VecFloat::InParam value)
+{
+    return !_asmIsEqualV4(value.mV, value.mV);
+}
+inline bool IsValid(VecFloat::InParam value)
+{
+    return !IsNaN(value);
 }
 }}}

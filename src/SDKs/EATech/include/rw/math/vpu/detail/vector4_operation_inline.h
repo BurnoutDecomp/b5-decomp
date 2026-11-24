@@ -7,6 +7,7 @@
 #include <cmath>
 
 #include "SDKs/EATech/include/rw/math/vpu/vector4.h"
+#include "SDKs/EATech/include/rw/math/vpu/scalar.h"
 
 namespace rw
 {
@@ -38,11 +39,15 @@ namespace detail
 //  Equality / validity / similarity -- DECLARATION-ONLY + FLAGGED
 // =====================================================================================
 
-bool operator == (Vector4::InParam a, Vector4::InParam b);                 // FLAGGED: _asmIsEqualV4
-bool operator != (Vector4::InParam a, Vector4::InParam b);                 // FLAGGED: _asmIsEqualV4
+inline bool operator == (Vector4::InParam a, Vector4::InParam b) { return _asmIsEqualV4(a.mV, b.mV); }
+inline bool operator != (Vector4::InParam a, Vector4::InParam b) { return !_asmIsEqualV4(a.mV, b.mV); }
 bool IsZero(Vector4::InParam v, VecFloat::InParam tolerance);              // FLAGGED: _asmIsZeroV4
 bool IsSimilar(Vector4::InParam a, Vector4::InParam b, VecFloat::InParam tolerance); // FLAGGED: _asmIsSimilarV4
-bool IsValid(Vector4::InParam v);                                         // FLAGGED: needs IsValid(VecFloat)
+// rwmath vector4_operation_inline.h: the four lanes' scalar predicates.
+inline bool IsValid(Vector4::InParam v)
+{
+    return (IsValid(v.X()) && IsValid(v.Y()) && IsValid(v.Z()) && IsValid(v.W()));
+}
 
 // IsAnyNaN -- FAITHFUL. vcmpeqfp_p(v,v): a NaN lane fails self-comparison.
 inline bool IsAnyNaN(Vector4::InParam v)
