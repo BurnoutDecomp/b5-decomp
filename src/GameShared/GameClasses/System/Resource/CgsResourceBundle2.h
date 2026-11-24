@@ -86,10 +86,10 @@ namespace CgsResource
         u32  mauResourceDataOffset[E_MEMTYPE_NUMTYPES];
         u32  muFlags;
 
-        bool IsFlagSet(u32 luFlag) const;
-        bool IsCompressed() const;
-        bool IsMainMemOptimised() const;
-        bool IsGraphicsMemOptimised() const;
-        bool ContainsDebugData() const;
+        bool IsFlagSet(u32 luFlag) const      { return (muFlags & luFlag) != 0; }
+        bool IsCompressed() const           { return IsFlagSet(static_cast<u32>(KU_FLAG_IS_COMPRESSED)); }
+        bool IsMainMemOptimised() const     { return IsFlagSet(static_cast<u32>(KU_FLAG_MAIN_MEM_OPTIMISED)); }
+        bool IsGraphicsMemOptimised() const { return IsFlagSet(static_cast<u32>(KU_FLAG_GRAPHICS_MEM_OPTIMISED)); }
+        bool ContainsDebugData() const      { return IsFlagSet(static_cast<u32>(KU_FLAG_CONTAINS_DEBUG_DATA)); }
     };
 }

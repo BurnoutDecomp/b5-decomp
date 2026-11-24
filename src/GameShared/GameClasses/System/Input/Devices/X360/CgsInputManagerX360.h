@@ -30,6 +30,7 @@
 // through the `friend class ManagerX360;` grant in CgsInputDeviceX360Pad.h.
 
 #include "types.hpp"
+#include "GameShared/GameClasses/System/Input/Devices/CgsInputManager.h"            // CgsInput::Manager (base, EInputPort)
 #include "GameShared/GameClasses/System/Input/Devices/X360/CgsInputDeviceX360Pad.h" // CgsInput::DeviceX360Pad (BindToPort)
 
 #include <cstddef>   // offsetof (the X360-pinned member-offset static_asserts below)
@@ -57,7 +58,7 @@ namespace CgsInput
     // ============================================================================
     // CgsInput::ManagerX360 -- head 0x78 bytes (X360).
     // ============================================================================
-    class ManagerX360
+    class ManagerX360 : public Manager   // as CgsInput::ManagerPS3 : public Manager (DWARF)
     {
     public:
         // Stores performed inline by InputPads::InitializePads before it constructs the pads:
@@ -97,11 +98,11 @@ namespace CgsInput
         // X360 0x828E7718. Bind port lePort to physical pad lpPad. Returns true when the slot
         // holds a device (its resolved sub-type is passed to DeviceX360Pad::BindToPort); false
         // when the slot has no device type (meDeviceType == 0), in which case nothing is bound.
-        bool BindToPort(DeviceX360Pad* lpPad, u32 lePort);
+        bool BindToPort(DeviceX360Pad* lpPad, Manager::EInputPort lePort);
 
         // X360 0x828E7808. Unbind port lePort from lpPad: clear the pad's connected flag and
         // port (two inlined pad writes), clear the bound-pad slot, and decrement the count.
-        void UnbindFromPort(DeviceX360Pad* lpPad, u32 lePort);
+        void UnbindFromPort(DeviceX360Pad* lpPad, Manager::EInputPort lePort);
 
     private:
         // Never-called layout pin so any drift in a member offset is a compile error.

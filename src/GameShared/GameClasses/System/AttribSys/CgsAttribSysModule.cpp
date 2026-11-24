@@ -80,8 +80,8 @@ void AttribSysModule::Construct()
 
     mVaultArray.Construct(&mGarbageCollector);
 
-    // mDebugComponent's construction (X360 the no-op call on this+0x22C, which Hex-Rays
-    // misnames BaseCollisionGenerator::Destruct) folds to an empty body.
+    // ARTIST @0x8280ADA0 calls the debug component's (empty, ICF-folded) Construct on this+0x22C.
+    mDebugComponent.Construct();
 
     sLogWindow.Construct(20);
 
@@ -214,9 +214,55 @@ bool AttribSysModule::Release()
 void AttribSysModule::Destruct()
 {
     ModuleSingleBuffered::Destruct();
-    // mDebugComponent's destruction (X360 the no-op call on this+0x22C, which Hex-Rays
-    // misnames BaseCollisionGenerator::Destruct) folds to an empty body.
+    // ARTIST @0x82804398 then calls the debug component's (empty, ICF-folded) Destruct on this+0x22C.
+    mDebugComponent.Destruct();
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // @ 0x8280FC60 -- per-frame entry: drain the queued requests, then (if a schema is loaded)
 // run an attribute-database garbage-collect pass.
@@ -232,6 +278,20 @@ void AttribSysModule::Update(const AttribSysIO::InputBuffer* lpInputBuffer)
     }
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // @ 0x8280FB60 -- drain every queued request from the read-locked input buffer, dispatching on
 // the event type id (0 RegisterVault, 1 RegisterSchema, 2 UnregisterVault).
 void AttribSysModule::ProcessInputs(const AttribSysIO::InputBuffer* lpInputBuffer)
@@ -240,15 +300,18 @@ void AttribSysModule::ProcessInputs(const AttribSysIO::InputBuffer* lpInputBuffe
 
     lpInputBuffer->LockForRead();
 
+    int32_t liEventId;
+    int32_t liEventSize;
+    const CgsModule::Event* lpEvent;
+    // The queue is fetched through AttribSysIO::Inp (ARTIST 0x828042D8) before each walk step; DecFIGS
+    // fetches it through InputBuffer::GetVaultRequestInterface instead, so its local list (the three
+    // above, cpp:303-305) does not settle this pointer. ARTIST keeps &lpEvent / &liEventSize as
+    // stack addresses at each call (addi r4/r5 @0x8280FBB0, 0x8280FC34) and r27-r31 only.
     const AttribSysIO::AttribSysEventQueue* lpQueue = AttribSysIO::Inp(lpInputBuffer);
-
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
-    for (s32 liEventType = lpQueue->GetFirstEvent(&lpEvent, &liSize);
-         liEventType >= 0;
-         liEventType = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liSize))
+    liEventId = lpQueue->GetFirstEvent(&lpEvent, &liEventSize);
+    while (liEventId >= 0)
     {
-        switch (liEventType)
+        switch (liEventId)
         {
             case 0:
                 RegisterVault(reinterpret_cast<AttribSysIO::RegisterVaultRequest*>(
@@ -263,15 +326,30 @@ void AttribSysModule::ProcessInputs(const AttribSysIO::InputBuffer* lpInputBuffe
                     const_cast<CgsModule::Event*>(lpEvent)));
                 break;
             default:
+
+
+
+
+
                 CGS_ASSERT(false, "Unrecognised AttribSys event type\n");
                 break;
         }
 
-        lpQueue = AttribSysIO::Inp(lpInputBuffer);
+        lpQueue   = AttribSysIO::Inp(lpInputBuffer);
+        liEventId = lpQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
     }
 
     lpInputBuffer->UnlockForRead();
 }
+
+
+
+
+
+
+
+
+
 
 // @ 0x8280EBF0 -- register a data vault (absent from the .ida-exports; recovered via
 // headless IDA over the ARTIST .i64): assert the schema is live, hand the request to the
@@ -290,69 +368,104 @@ void AttribSysModule::RegisterVault(AttribSysIO::RegisterVaultRequest* lpRegiste
         3, static_cast<s32>(sizeof(liEventId)));
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// @ 0x8280E4A0 -- load the (single) schema: construct the schema vault over the request's
+// .vlt image, resolve its dependency blob, initialise it into the database, then notify the
+// requester. Only one schema may be loaded at a time. The DWARF locals (DecFIGS unity CU,
+// CgsAttribSysModule.cpp:400-405, 435) are read up front in ARTIST's order (@0x8280E4E8..0x8280E4FC:
+// vlt size, bin size, vlt data, bin data); the placement new's null test is the compiler's.
+void AttribSysModule::RegisterSchema(AttribSysIO::RegisterSchemaRequest* lpRegisterSchemaRequest)
+{
+    CGS_ASSERT(!IsSchemaLoaded(), "!IsSchemaLoaded()");
+
+
+    int32_t liVltSize = lpRegisterSchemaRequest->miSchemaVltDataSize;
+    int32_t liBinSize = lpRegisterSchemaRequest->miSchemaBinDataSize;
+    void*   lpVltData = lpRegisterSchemaRequest->mpSchemaVltData;
+    void*   lpBinData = lpRegisterSchemaRequest->mpSchemaBinData;
+
+    Attrib::Vault* lpNewVault = new (mpSchemaVault) Attrib::Vault(Attrib::Database::GetExportPolicies(),
+                                                                  /*lAssetId*/ 0,
+                                                                  lpVltData,
+                                                                  static_cast<unsigned int>(liVltSize),
+                                                                  /*lbType*/ 1,
+                                                                  &mGarbageCollector);
+
+
+
+
+
+
+    CGS_ASSERT(lpNewVault == mpSchemaVault, "lpNewVault == mpSchemaVault");
+
+    if (lpNewVault->HasUnresolvedDependency())
+    {
+        lpNewVault->ResolveDependency(/*luIndex*/ 0, lpBinData, static_cast<unsigned int>(liBinSize),
+                                      /*lbIsAsset*/ 1);
+    }
+
+
+
+
+    CGS_ASSERT(!lpNewVault->HasUnresolvedDependency(), "!lpNewVault->HasUnresolvedDependency()");
+
+    lpNewVault->Initialize();
+
+
+
+
+    AttribSysIO::SchemaRegisteredResponse lResponse;
+    lpRegisterSchemaRequest->mpUserReceiverQueue->AddEvent(
+        reinterpret_cast<const CgsModule::Event*>(&lResponse), 4, 1);
+
+    sbSchemaLoaded = true;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // @ 0x8280F9D0 -- unregister a data vault: assert the schema is live, drop the array's
 // reference (slot unload at refcount 0), then acknowledge with a type-5 reply whose
 // 4-byte payload is the request's miEventId (ProcessUnregisterVehicleAttribsResponse
 // @0x8266EAA0 uses it as the GameData event-slot index).
 void AttribSysModule::UnregisterVault(AttribSysIO::UnregisterVaultRequest* lpUnregisterVaultRequest)
 {
-    CGS_ASSERT(IsSchemaLoaded(),
-        CgsDev::Assert::MessageAt("IsSchemaLoaded()", __FILE__, 462 /* ARTIST 0x8280FA04 */));
-    CGS_ASSERT(lpUnregisterVaultRequest != 0,
-        CgsDev::Assert::MessageAt(
-            "lpUnregisterVaultRequest != NULL",
-            __FILE__, 463 /* ARTIST 0x8280FA28 */));
+    CGS_ASSERT(IsSchemaLoaded(), "IsSchemaLoaded()");
+    CGS_ASSERT(lpUnregisterVaultRequest != 0, "lpUnregisterVaultRequest != NULL");
     mVaultArray.UnregisterVault(lpUnregisterVaultRequest);
 
     const s32 liEventId = lpUnregisterVaultRequest->miEventId;
     lpUnregisterVaultRequest->mpUserReceiverQueue->AddEvent(
         reinterpret_cast<const CgsModule::Event*>(&liEventId),
         5, static_cast<s32>(sizeof(liEventId)));
-}
-
-// @ 0x8280E4A0 -- load the (single) schema: construct the schema vault over the request's
-// .vlt image, resolve its dependency blob, initialise it into the database, then notify the
-// requester. Only one schema may be loaded at a time.
-void AttribSysModule::RegisterSchema(AttribSysIO::RegisterSchemaRequest* lpRegisterSchemaRequest)
-{
-    CGS_ASSERT(!IsSchemaLoaded(), "!IsSchemaLoaded()");
-
-    Attrib::Vault* lpNewVault = 0;
-    if (mpSchemaVault != 0)
-    {
-        // Placement-construct the schema vault over the request's serialised image. (The X360
-        // build passes the schema-vault storage in as the Vault ctor's `this`.)
-        // X360 @0x8280E4A0 calls GetExportPolicies pre-database (no Get() -- the
-        // database singleton does not exist yet at schema registration).
-        Attrib::ExportManager& lExportPolicies = Attrib::Database::GetExportPolicies();
-        lpNewVault = new (mpSchemaVault) Attrib::Vault(
-            lExportPolicies,
-            /*lAssetId*/ 0,
-            lpRegisterSchemaRequest->mpSchemaVltData,
-            static_cast<unsigned int>(lpRegisterSchemaRequest->miSchemaVltDataSize),
-            /*lbType*/ 1,
-            &mGarbageCollector);
-    }
-
-    CGS_ASSERT(lpNewVault == mpSchemaVault, "lpNewVault == mpSchemaVault");
-
-    if (lpNewVault->HasUnresolvedDependency())
-    {
-        lpNewVault->ResolveDependency(
-            /*luIndex*/ 0,
-            lpRegisterSchemaRequest->mpSchemaBinData,
-            static_cast<unsigned int>(lpRegisterSchemaRequest->miSchemaBinDataSize),
-            /*lbIsAsset*/ 1);
-    }
-    CGS_ASSERT(!lpNewVault->HasUnresolvedDependency(), "!lpNewVault->HasUnresolvedDependency()");
-
-    lpNewVault->Initialize();
-
-    // Acknowledge the load back to the requester (event type 4, payload size 1).
-    AttribSysIO::SchemaRegisteredResponse lResponse;
-    lpRegisterSchemaRequest->mpUserReceiverQueue->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lResponse), 4, 1);
-
-    sbSchemaLoaded = true;
 }
 }

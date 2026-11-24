@@ -33,6 +33,10 @@ namespace Events
         char macFileName[128];
         s32  miPoolId;
 
+        // DWARF CgsResourceIOEvents.h:74; inlined by its callers (BundleLoaderModule's streamed
+        // asserts read the name at +9 in place, e.g. addi r4,r31,0x4E1 @0x82904358).
+        const char* GetFileName() const { return macFileName; }
+
         // Copies a NUL-terminated path into macFileName, asserting the source fits
         // (length < 128, the macFileName buffer size); a null source clears the
         // buffer. Returns *this so callers can chain. Recovered from

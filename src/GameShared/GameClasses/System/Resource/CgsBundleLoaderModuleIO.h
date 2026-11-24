@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"
+#include "GameShared/GameClasses/System/Resource/CgsResourceRequestQueue.h"   // ResourceIO::ResourceRequestQueue
 
 // ARTIST getters 828E1D48..828E2528 and DecFIGS CgsBundleLoaderModuleIO.h.
 // Native event records and their queue storage use sizeof(T), not the 32-bit
@@ -51,7 +52,7 @@ struct OutputBuffer : public CgsModule::IOBuffer
     typedef CgsModule::VariableEventQueue<4096, 16> PoolSendQueue;
     typedef CgsModule::EventQueue<Events::LoadBundleResponse, 256> LoadBundleResponseQueue;
     typedef CgsModule::EventQueue<Events::UnloadBundleResponse, 256> UnloadBundleResponseQueue;
-    typedef CgsModule::VariableEventQueue<256, 16> StreamRequestQueue;
+    typedef ResourceIO::ResourceRequestQueue<256> StreamRequestQueue;   // DWARF CgsBundleLoaderModuleIO.h:133
     typedef PoolSendQueue PoolStorage;
     typedef StreamRequestQueue StreamStorage;
 

@@ -189,10 +189,10 @@ namespace CgsInput
                 if (leConnectedType == lrPad.GetDeviceType())
                     continue;
 
-                mInputManager.UnbindFromPort(&lrPad, liBoundPort);
+                mInputManager.UnbindFromPort(&lrPad, static_cast<Manager::EInputPort>(liBoundPort));
             }
             if (leConnectedType != Device::E_NO_DEVICE_TYPE)
-                mInputManager.BindToPort(&lrPad, liPort);
+                mInputManager.BindToPort(&lrPad, static_cast<Manager::EInputPort>(liPort));
         }
 
         mInputManager.Update();

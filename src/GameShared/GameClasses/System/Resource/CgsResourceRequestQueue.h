@@ -3,6 +3,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<BUFSIZE,ALIGN> (generic body inline)
+#include "GameShared/GameClasses/System/Resource/CgsResourceIOEvents.h"  // the request records the builders queue
 
 // CgsResource::ResourceIO::ResourceRequestQueue<N>
 //
@@ -26,11 +27,50 @@ namespace CgsResource
 {
     namespace ResourceIO
     {
+        // DWARF CgsResourceRequestQueue.h:36 -- the request event ids the builders queue under.
+        enum EEventType
+        {
+            EVENT_CREATEPOOL               = 0,
+            EVENT_DELETEPOOL               = 1,
+            EVENT_LOADBUNDLE               = 2,
+            EVENT_UNLOADBUNDLE             = 3,
+            EVENT_ACQUIRERESOURCE          = 4,
+            EVENT_ACQUIRERESOURCELIST      = 5,
+            EVENT_UNACQUIRERESOURCE        = 6,
+            EVENT_INVALIDATEPOOL           = 7,
+            EVENT_VALIDATEPOOL             = 8,
+            EVENT_CREATEBANK               = 9,
+            EVENT_CREATERESOURCE           = 10,
+            EVENT_CREATERWLINEARALLOCATOR  = 11,
+            EVENT_CREATERWGENERALALLOCATOR = 12,
+            EVENT_DESTROYBANK              = 13,
+            EVENT_CREATEALLOCATOR          = 14,
+            EVENT_DESTROYALLOCATOR         = 15,
+            EVENT_OPENREADSTREAM           = 16,
+            EVENT_OPENWRITESTREAM          = 17,
+            EVENT_CLOSEREADSTREAM          = 18,
+            EVENT_CLOSEWRITESTREAM         = 19,
+            EVENT_OPENFILE                 = 20,
+            EVENT_CLOSEFILE                = 21,
+            EVENT_REGISTERMEMFILE          = 22,
+            EVENT_UNREGISTERMEMFILE        = 23,
+            EVENT_GETLOADEDRESOURCELIST    = 24,
+            EVENT_COUNT                    = 25,
+        };
+
         template <s32 N>
         struct ResourceRequestQueue : public CgsModule::VariableEventQueue<N, 16>
         {
-            // DEFERRED (ResourceRequestQueue TU): the ~25 request methods + their request
-            // param structs + EEventType enum. No data members (DWARF).
+            // DWARF CgsResourceRequestQueue.h:274. Inlined by BundleLoaderModule::StreamClose
+            // @0x828FB2C4..0x828FB2D8: queue the record under EVENT_CLOSEREADSTREAM with its size.
+            bool CloseReadStream(const Events::CloseReadStreamRequest& lRequest)
+            {
+                return this->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRequest), EVENT_CLOSEREADSTREAM,
+                                      sizeof(lRequest));
+            }
+
+            // DEFERRED (ResourceRequestQueue TU): the other request builders (DWARF h:148..)
+            // and their request param structs. No data members (DWARF).
         };
     }
 }

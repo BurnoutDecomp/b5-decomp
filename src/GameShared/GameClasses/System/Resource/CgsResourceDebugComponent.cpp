@@ -161,11 +161,13 @@ namespace CgsResource
     // ARTIST828F6FA8. The base activation is an empty ICF body.
     void DebugComponent::OnActivate()
     {
+        // PS3 DecFIGS 0xCB9B78 and ARTIST @0x828F6FC0 call the base OnActivate first (ARTIST: its empty
+        // body, ICF-folded at 0x8284CB38) and re-read mpResourceModule for each registration.
+        CgsDev::DebugComponent::OnActivate();
         InitWindows();
-        s32* const lpiMaxFixups = &mpResourceModule->mBundleLoaderModule.miMaxPartialFixups;
-        RegisterVariable(lpiMaxFixups, "Max Partial Fixups");
-        SetRange(lpiMaxFixups, 0, 10000);
-        SetStep(lpiMaxFixups, 10);
+        RegisterVariable(&mpResourceModule->mBundleLoaderModule.miMaxPartialFixups, "Max Partial Fixups");
+        SetRange(&mpResourceModule->mBundleLoaderModule.miMaxPartialFixups, 0, 10000);
+        SetStep(&mpResourceModule->mBundleLoaderModule.miMaxPartialFixups, 10);
         RegisterVariable(&mbShowBundleLoaderQueue, "Show bundle loader queue");
     }
 

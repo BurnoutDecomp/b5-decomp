@@ -86,6 +86,18 @@ namespace CgsSystem
             CGS_STATIC_ASSERT((offsetof(ThreadLayout, mAssertFromSecondaryThread) == 0x7C), "ARTIST secondary assert");
         }
     };
+
+    // DWARF CgsThreadLayout.h:57 / h:60, with no CgsThreadLayout.cpp definition: header-inline.
+    // InteruptThreadForAssert inlines GetDispatchThreadId (Thread::GetId on this+0x14 @0x828D79F0).
+    inline EA::Thread::ThreadId ThreadLayout::GetUpdateThreadId() const
+    {
+        return mUpdateThreadId;
+    }
+
+    inline EA::Thread::ThreadId ThreadLayout::GetDispatchThreadId() const
+    {
+        return mDispatchThread.GetId();
+    }
 }
 
 CGS_STATIC_ASSERT((sizeof(CgsSystem::ThreadLayout) == 0x80), "ARTIST ThreadLayout size");

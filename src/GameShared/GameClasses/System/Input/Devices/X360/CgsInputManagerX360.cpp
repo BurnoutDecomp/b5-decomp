@@ -136,16 +136,158 @@ namespace CgsInput
         }
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // ============================================================================
     // BindToPort @0x828E7718. Bind port lePort to physical pad lpPad. Returns true (and binds)
     // only when the slot record has a resolved device type; false otherwise.
     // ============================================================================
-    bool ManagerX360::BindToPort(DeviceX360Pad* lpPad, u32 lePort)
+    bool ManagerX360::BindToPort(DeviceX360Pad* lpPad, Manager::EInputPort lePort)
     {
-        CGS_ASSERT(lpPad != 0, "lpPad");                                              // line 288
-        CGS_ASSERT(lePort < KU_NUMBER_OF_INPUT_PORTS,
-                   "(lePort >= E_INPUTPORT_FIRST) && (lePort < E_INPUTPORT_COUNT)");        // line 289
-        CGS_ASSERT(mapBoundPads[lePort] == 0, "mapBoundPads[lePort] == NULL");        // line 290
+        CGS_ASSERT(lpPad, "lpPad");
+        CGS_ASSERT((lePort >= E_INPUTPORT_FIRST) && (lePort < E_INPUTPORT_COUNT), "(lePort >= E_INPUTPORT_FIRST) && (lePort < E_INPUTPORT_COUNT)");
+        CGS_ASSERT(mapBoundPads[lePort] == 0, "mapBoundPads[lePort] == NULL");
 
         if (maDevices[lePort].meDeviceType == 0)
             return false;
@@ -156,17 +298,33 @@ namespace CgsInput
         return true;
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // ============================================================================
     // UnbindFromPort @0x828E7808. Unbind port lePort from lpPad: clear the pad's connected flag
     // and bound-port (two inlined writes into the pad's private members), clear the bound-pad
     // table slot, and decrement the bound count.
     // ============================================================================
-    void ManagerX360::UnbindFromPort(DeviceX360Pad* lpPad, u32 lePort)
+    void ManagerX360::UnbindFromPort(DeviceX360Pad* lpPad, Manager::EInputPort lePort)
     {
-        CGS_ASSERT(lpPad != 0, "lpPad");                                              // line 325
-        CGS_ASSERT(lePort < KU_NUMBER_OF_INPUT_PORTS,
-                   "(lePort >= E_INPUTPORT_FIRST) && (lePort < E_INPUTPORT_COUNT)");        // line 326
-        CGS_ASSERT(mapBoundPads[lePort] == lpPad, "mapBoundPads[lePort] == lpPad");         // line 327
+        CGS_ASSERT(lpPad, "lpPad");
+        CGS_ASSERT((lePort >= E_INPUTPORT_FIRST) && (lePort < E_INPUTPORT_COUNT), "(lePort >= E_INPUTPORT_FIRST) && (lePort < E_INPUTPORT_COUNT)");
+        CGS_ASSERT(mapBoundPads[lePort] == lpPad, "mapBoundPads[lePort] == lpPad");
 
         lpPad->mbConnected = 0;             // *(lpPad+0x10) = 0
         lpPad->mePort      = -1;            // *(lpPad+0xF0) = -1

@@ -20,31 +20,28 @@ namespace CgsSystem
     // ARTIST828E1658: the worker blocks on the start barrier until the first frame.
     void ThreadLayout::InitThreads()
     {
-        const EA::Thread::BarrierParameters lBarrierParameters(2, true);
-        mUpdateStartBarrier.Init(&lBarrierParameters);
-        mUpdateEndBarrier.Init(&lBarrierParameters);
+        // DWARF locals lBarrierParams (cpp:91) and lThreadParams (cpp:103) are default-constructed and
+        // then filled: ARTIST calls BarrierParameters(0, true, NULL) @0x828E1678 and then stores
+        // mbIntraProcess = 1 / mnHeight = 2 (@0x828E168C / 0x828E1690).
+        EA::Thread::BarrierParameters lBarrierParams;
+        lBarrierParams.mnHeight       = 2;
+        lBarrierParams.mbIntraProcess = true;
+        mUpdateStartBarrier.Init(&lBarrierParams);
+        mUpdateEndBarrier.Init(&lBarrierParams);
         EA::Thread::Thread::SetGlobalRunnableFunctionUserWrapper(GlobalThreadBeginWrapper);
         mUpdateThreadId = EA::Thread::GetThreadId();
-        EA::Thread::ThreadParameters lParameters;
-        lParameters.mbSuspended = false;
+        EA::Thread::ThreadParameters lThreadParams;
+        lThreadParams.mbSuspended = false;
         EA::Thread::SetThreadPriority(0);
-        lParameters.mnProcessor = 2;
-        lParameters.mnPriority = 0;
-        lParameters.mpName = "DispatchThread";
-        mDispatchThread.Begin(DispatchThread, this, &lParameters,
+        lThreadParams.mnProcessor = 2;
+        lThreadParams.mnPriority = 0;
+        lThreadParams.mpName = "DispatchThread";
+        mDispatchThread.Begin(DispatchThread, this, &lThreadParams,
             EA::Thread::Thread::GetGlobalRunnableFunctionUserWrapper());
         if (CgsDev::Message::gxMessageFilterFlags & 1u)
-        {
-            CgsDev::StrStreamBase& lStream = *CgsDev::Log::gpDebugPrint;
-            lStream << "Main thread priority: ";
-            lStream << EA::Thread::GetThreadPriority() << "\n";
-        }
+            *CgsDev::Log::gpDebugPrint << "Main thread priority: " << EA::Thread::GetThreadPriority() << "\n";
         if (CgsDev::Message::gxMessageFilterFlags & 1u)
-        {
-            CgsDev::StrStreamBase& lStream = *CgsDev::Log::gpDebugPrint;
-            lStream << "Dispatch priority: ";
-            lStream << mDispatchThread.GetPriority() << "\n";
-        }
+            *CgsDev::Log::gpDebugPrint << "Dispatch priority: " << mDispatchThread.GetPriority() << "\n";
     }
 
     intptr_t ThreadLayout::DispatchThread(void* lpContext)
@@ -60,9 +57,11 @@ namespace CgsSystem
 
     bool ThreadLayout::Update()
     {
-        if (const void* lpAssert = mAssertFromSecondaryThread.GetValue())
+        // DWARF: the test goes through AtomicInt<int32_t>::operator const int32_t (cmpwi @0x828E17E4)
+        // and the call re-reads the pointer (second lwz @0x828E17EC).
+        if (mAssertFromSecondaryThread != 0)
         {
-            InteruptThreadForAssert(static_cast<const AssertData*>(lpAssert));
+            InteruptThreadForAssert(static_cast<const AssertData*>(mAssertFromSecondaryThread.GetValue()));
             return true;
         }
         mbUpdatingResourceSystem = false;
@@ -71,15 +70,18 @@ namespace CgsSystem
         const u32 luStartTime = GetSystemTimeMS();
         const bool lbResult = mpThreadClass->UpdateThread();
         const u32 luTimeTaken = GetSystemTimeMS() - luStartTime;
-        static volatile bool _lbAllowStallTest = false;
-        static volatile bool _lbContinue = false;
+        // DWARF static locals _lbAllowStallTest (cpp:220) and _lbContinue (cpp:226, inner scope): plain
+        // bools a debugger flips. ARTIST reads _lbContinue once and spins on the register
+        // (lbz @0x828E1884, beq-to-self @0x828E188C), the code a non-volatile flag compiles to.
+        static bool _lbAllowStallTest = false;
         if (_lbAllowStallTest && luTimeTaken > 250u)
         {
             std::printf("Crazy frame stall of %ums\n", luTimeTaken);
-            // ARTIST samples the debugger byte once before polling.
-            const bool lbContinue = _lbContinue;
-            while (!lbContinue) {}
-            _lbContinue = false;
+            {
+                static bool _lbContinue = false;
+                while (!_lbContinue) {}
+                _lbContinue = false;
+            }
         }
         if (miPerfMonAllThreadSyncs >= 0)
             CgsDev::PerfMonCpu::StartMonitor(miPerfMonAllThreadSyncs);
@@ -133,21 +135,23 @@ namespace CgsSystem
 
     bool ThreadLayout::InteruptThreadForAssert(const AssertData* lpAssert)
     {
-        const EA::Thread::ThreadId lDispatchThreadId = mDispatchThread.GetId();
-        if (EA::Thread::GetThreadId() == lDispatchThreadId)
+        // DWARF: GetDispatchThreadId (inline) and AtomicPointer::SetValue; ARTIST compares
+        // GetThreadId() against each id (cmplw r3,r30 @0x828D79FC / 0x828D7A18) and places the
+        // secondary-thread branch after the update-thread one.
+        if (EA::Thread::GetThreadId() == GetDispatchThreadId())
             return false;
-        if (EA::Thread::GetThreadId() != mUpdateThreadId)
+        if (EA::Thread::GetThreadId() == GetUpdateThreadId())
         {
-            mAssertFromSecondaryThread.SetValue(const_cast<AssertData*>(lpAssert));
-            for (;;)
-            {
-                const EA::Thread::ThreadTime lSleepMs = 1000;
-                EA::Thread::ThreadSleep(&lSleepMs);
-            }
+            if (!mbUpdatingResourceSystem)
+                mUpdateEndBarrier.Wait();
+            mpThreadClass->RenderAssert(lpAssert);
+            return true;
         }
-        if (!mbUpdatingResourceSystem)
-            mUpdateEndBarrier.Wait();
-        mpThreadClass->RenderAssert(lpAssert);
-        return true;
+        mAssertFromSecondaryThread.SetValue(const_cast<AssertData*>(lpAssert));
+        for (;;)
+        {
+            const EA::Thread::ThreadTime lSleepMs = 1000;
+            EA::Thread::ThreadSleep(&lSleepMs);
+        }
     }
 }
