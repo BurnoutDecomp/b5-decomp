@@ -1,5 +1,5 @@
 #pragma once
-
+#line 3 "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\CgsSet.h"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (Insert/Erase/Find/GetItem guards)
 
