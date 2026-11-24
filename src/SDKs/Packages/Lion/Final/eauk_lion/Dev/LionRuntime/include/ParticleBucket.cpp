@@ -67,13 +67,12 @@ bool cParticleBucket::AllocateParticle(u32& arSlot,
     }
     else
     {
-        cMatrix* lpMatrices = mpMatrices;                    // lwz r10,0xE60
-        *appVector = 0;                                      // stw 0 at r6
-        cMatrix* lpResult = 0;                               // li r10,0
-        if (lpMatrices != 0)                                 // cmplwi 0
-            // &mpMatrices[count]: stride 0x40 (slwi r10,r10,6 + add).
+        cMatrix* const lpMatrices = mpMatrices;
+        *appVector = 0;
+        cMatrix* lpResult = 0;
+        if (lpMatrices)                                     // ARTIST reloads mpMatrices at 0x829087E4.
             lpResult = &mpMatrices[mnNextParticlePositionToFill];
-        *appMatrix = lpResult;                               // stw at r7
+        *appMatrix = lpResult;
         ++mnNextParticlePositionToFill;                      // ++0x50
         return true;                                         // li r3,1
     }

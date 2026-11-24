@@ -223,31 +223,29 @@ cParticleBucket* cParticleBucketManager::AllocateBucket(u32 auCount, const cTime
                                                         cParticleDescriptor::BucketType aeType)
 {
     cParticleBucket* lpBucket = BucketAlloc(auCount, arTime);
-    if (!lpBucket)
+    if (lpBucket)
     {
-        return 0;
+        switch (aeType)
+        {
+            case cParticleDescriptor::E_BUCKET_LIGHT:
+                lpBucket->mpMatrices = 0;
+                lpBucket->mpVectors = VectorBucketAlloc();
+                break;
+
+            case cParticleDescriptor::E_BUCKET_HEAVY:
+                lpBucket->mpMatrices = MatrixBucketAlloc();
+                lpBucket->mpVectors = 0;
+                break;
+
+            default:
+                lpBucket->mpMatrices = 0;
+                lpBucket->mpVectors = 0;
+                break;
+        }
+
+        lpBucket->mnNextParticlePositionToFill = 0;
+        lpBucket->mActiveBits = 0;
     }
-
-    switch (aeType)
-    {
-        case cParticleDescriptor::E_BUCKET_LIGHT:
-            lpBucket->mpMatrices = 0;
-            lpBucket->mpVectors  = VectorBucketAlloc();
-            break;
-
-        case cParticleDescriptor::E_BUCKET_HEAVY:
-            lpBucket->mpMatrices = MatrixBucketAlloc();
-            lpBucket->mpVectors  = 0;
-            break;
-
-        default:
-            lpBucket->mpMatrices = 0;
-            lpBucket->mpVectors  = 0;
-            break;
-    }
-
-    lpBucket->mnNextParticlePositionToFill = 0;
-    lpBucket->mActiveBits                  = 0;
     return lpBucket;
 }
 
@@ -308,7 +306,7 @@ cVector* cParticleBucketManager::VectorBucketAlloc()
     {
         if (lpResult)
         {
-            break;
+            return lpResult;
         }
 
         --lIndex;
@@ -354,7 +352,7 @@ cParticleBucketManager& cParticleBucketManager::Instance()
 // no ledger row, no pseudocode and no dossier. Disassembled out of the packed .i64
 // (tools/re/ppcdis.py); 30 instructions, and it is the 1024-byte twin of VectorBucketAlloc above.
 //
-//     8290CD6C  r11 = mMatrixBucketCount (+4) ; blelr  -- SIGNED <= 0, not == 0
+//     8290CD6C  r11 = mMatrixBucketCount (+4) ; cmplwi / blelr -- unsigned zero check
 //     8290CD88  r9  = (i << 2) & 0x1C          rlwinm r9, r6, 2, 27, 29
 //     8290CD90  r11 = (i >> 1) & 0x3FFFFFFC    rlwinm r11, r6, 31, 1, 29   == (i >> 3) * 4
 //     8290CD94  r8  = 0xF0000000 >>> r9        srw    -- a FOUR-BIT mask, 8 nibbles per word
@@ -375,38 +373,36 @@ cParticleBucketManager& cParticleBucketManager::Instance()
 // decides which slot a mixed workload gets, and "tidying" them to match would be a behaviour
 // change dressed as symmetry.
 //
-// ⚠ THE COUNT TEST IS SIGNED (`blelr cr6` after `cmpwi`-style semantics on r11), so a negative
-// count returns null rather than looping ~2 billion times. VectorBucketAlloc's is not. Kept.
-// ------------------------------------------------------------------------------------------------
 cMatrix* cParticleBucketManager::MatrixBucketAlloc()
 {
-    if (static_cast<s32>(mMatrixBucketCount) <= 0)
+    cMatrix* lpResult = 0;
+    u32 luIndex = 0;
+    // DecFIGS declares an unsigned index. ARTIST 0x8290CD70 and 0x8290CDCC
+    // use unsigned bounds before entering the loop and after each claim attempt.
+    if (mMatrixBucketCount <= luIndex)
     {
-        return 0;
+        return lpResult;
     }
 
-    cMatrix* lpResult = 0;
-    s32 lByteOffset = 0;
-    for (u32 lIndex = 0; lIndex < mMatrixBucketCount; ++lIndex)
+    u32 luByteOffset = 0;
+    do
     {
         if (lpResult)
         {
-            break;
+            return lpResult;
         }
 
-        // The nibble this matrix bucket owns: four consecutive vector-bucket bits.
-        const u32 luNibble = 0xF0000000u >> ((lIndex << 2) & 0x1Cu);
-        u32& lruWord = mpVectorBucketActiveBits[lIndex >> 3];
-
-        if ((lruWord & luNibble) == 0)
+        const u32 luNibble = 0xF0000000u >> ((luIndex << 2) & 0x1Cu);
+        const u32 luWord = luIndex >> 3;
+        if ((mpVectorBucketActiveBits[luWord] & luNibble) == 0)
         {
-            lpResult = reinterpret_cast<cMatrix*>(
-                reinterpret_cast<u8*>(mpMatrices) + lByteOffset);
-            lruWord |= luNibble;
+            u8* lpBase = reinterpret_cast<u8*>(mpMatrices);
+            lpResult = reinterpret_cast<cMatrix*>(lpBase + luByteOffset);
+            mpVectorBucketActiveBits[luWord] = luNibble | mpVectorBucketActiveBits[luWord];
         }
-
-        lByteOffset += static_cast<s32>(KU_MATRIX_BUCKET_STRIDE);
+        ++luIndex;
+        luByteOffset += KU_MATRIX_BUCKET_STRIDE;
     }
-
+    while (luIndex < mMatrixBucketCount);
     return lpResult;
 }

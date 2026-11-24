@@ -35,6 +35,7 @@
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/RenderedParticle.h"   // the per-particle RENDER record the behaviour processors write
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleWaveForm.h"    // ParticleBuild samples the three position wave forms
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
+#include "GameSource/Effects/Particles/LionPerfMon.h"
 #include <cmath>   // floorf / fabsf -- Blend's de-optimised magic-number floor
 
 #include <vectorintrinsics.h>   // native VMX round-to-nearest (vrfin)
@@ -48,17 +49,10 @@ namespace
 // it is never interpolated toward. The exact bits are kept so the comparison behaves.
 const f32 KF_BLEND_LAST_NONE = 100.12529754638672f;   // flt_820FF0D0
 
-// X360 dword_82FAB640 (LionPerfMon + 0x8) -- the emitter UPDATE monitor. Same arrangement as
-// the behaviour processors' handles below: LionPerfMon has no global instance in this tree yet.
-s32 giEmitterUpdateMonitor = -1;
-
 // flt_82F369A8 == 0x39AEC33E == 0.00033333332976326346 == 1/3000, the Lion tick rate. Written
 // as the image's float rather than 1.0f/3000.0f because the console multiplies by this exact
 // value in cParticleEmitter::Update, ::Emit and ::ParentMatrixCurrentBuild.
 const f32 KF_TICKS_TO_SECONDS = 0.00033333332976326346f;
-
-// X360 dword_82FAB644 (LionPerfMon + 0xC) -- the emitter GENERATE monitor.
-s32 giEmitterGenerateMonitor = -1;
 
 // flt_820FEC40 == 0.10000000149011612 and flt_82009E10 == 1000.0, both .rdata literals
 // cParticleEmitter::Generate loads directly (@0x829151FC and @0x8291520C). The first is a FLOOR
@@ -378,26 +372,20 @@ bool cParticleEmitter::ParticleInsert(cParticleBucket* apBucket,
                                       u32 auSlot,
                                       const cTime& arCurrentLocatorTime)
 {
-    if (apBucket->IsFull())
+    if (!apBucket->IsFull())
     {
-        return false;
+        sParticleNucleus* lpNucleus;
+        cVector* lpVector;
+        cMatrix* lpMatrix;
+        if (apBucket->AllocateParticle(auSlot, &lpNucleus, &lpVector, &lpMatrix))
+        {
+            InitialiseParticle(*lpNucleus, lpVector, lpMatrix, *apMatrix, arVector, arSeed,
+                               arTime, arCurrentLocatorTime);
+            apBucket->SetLatestBirthTime(arTime);
+            return true;
+        }
     }
-
-    sParticleNucleus* lpNucleus = 0;
-    cVector*          lpVector  = 0;
-    cMatrix*          lpMatrix  = 0;
-    if (!apBucket->AllocateParticle(auSlot, &lpNucleus, &lpVector, &lpMatrix))
-    {
-        return false;
-    }
-
-    InitialiseParticle(*lpNucleus, lpVector, lpMatrix, *apMatrix, arVector, arSeed,
-                       arTime, arCurrentLocatorTime);
-
-    // The bucket remembers when its youngest particle was born; the bucket manager's eviction
-    // pass signed-compares against it (`stw r11, 0xC(r31)` at 0x82913454).
-    apBucket->SetLatestBirthTime(arTime);
-    return true;
+    return false;
 }
 
 // ================================================================================================
@@ -680,12 +668,6 @@ void cParticleEmitter::PrecalculateParticleBuildData()
 // ================================================================================================
 namespace
 {
-// dword_82FAB63C -- the CPU perfmon handle this body brackets itself with. It is LionPerfMon's
-// miEmitterBlend (base 0x82FAB638, second member by declaration order). LionPerfMon has no
-// global instance in this tree yet, so the handle is carried here the same way
-// cParticleRandomSeed::Update carries guUpdateMonitor.
-s32 giEmitterBlendMonitor = -1;   // X360 dword_82FAB63C
-
 // flt_82002138 / flt_8201FDB8 -- the blend snap epsilon and its negation.
 const f32 KF_BLEND_EPSILON = 0.009999999776482582f;
 
@@ -707,7 +689,8 @@ cParticleBehaviour* AdvanceBehaviours(cParticleBehaviour* apHead, u32 auCount)
 
 void cParticleEmitter::Blend()
 {
-    CgsDev::PerfMonCpu::StartMonitor(giEmitterBlendMonitor);
+    const s32 liMonitor = gLionPerfMon.miParticleEmitterBlend;
+    CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     const cParticleDescriptor& lrDescriptor = *mpDescriptor;
     const s32 liBehaviourCount = lrDescriptor.mBehaviourCount;
@@ -793,7 +776,7 @@ void cParticleEmitter::Blend()
         }
     }
 
-    CgsDev::PerfMonCpu::StopMonitor(giEmitterBlendMonitor);
+    CgsDev::PerfMonCpu::StopMonitor(liMonitor);
 }
 
 // ================================================================================================
@@ -1039,20 +1022,10 @@ void cParticleEmitter::SpawnSubEmitter(cParticleBucket* apBucket,
 // (308) close the family -- 967 instructions, nothing left open. Each was the last thing
 // standing between cParticleEmitter::ParticleBuild and a link.
 //
-// The perf-monitor handles are LionPerfMon members reached off the same file-scope base
-// (0x82FAB638) that cParticleEmitter::Blend's giEmitterBlendMonitor uses; LionPerfMon has no
-// global instance in this tree yet, so each is carried as its own handle exactly as
-// ParticleRandomSeed.cpp already does.
+// These processors use the registered handles in the ARTIST LionPerfMon table.
 // ================================================================================================
 namespace
 {
-s32 giBaseColourWithVarianceMonitor = -1;   // X360 dword_82FAB660 (LionPerfMon + 0x28)
-s32 giColourStepsMonitor           = -1;   // X360 dword_82FAB664 (LionPerfMon + 0x2C)
-s32 giAlphaFadeMonitor             = -1;   // X360 dword_82FAB670 (LionPerfMon + 0x38)
-s32 giRotationMonitor              = -1;   // X360 dword_82FAB674 (LionPerfMon + 0x3C)
-s32 giSizeMonitor                  = -1;   // X360 dword_82FAB678 (LionPerfMon + 0x40)
-s32 giDragMonitor                  = -1;   // X360 dword_82FAB67C (LionPerfMon + 0x44)
-s32 giMultiFrameMonitor            = -1;   // X360 dword_82FAB680 (LionPerfMon + 0x48)
 
 // flt_820FEC38, read out of the image (tools/re/x360rd.py 0x820FEC38 -> 0x34000000). It is
 // FLT_EPSILON, and DragBehaviour::Process loads it with `lvlx` (the symbol is 8 mod 16, so the
@@ -1101,7 +1074,7 @@ void BaseColourWithVarianceBehaviour::Process(const cParticleEmitter::ParticleBu
                                               RenderedParticle& arParticle,
                                               cParticleRandomSeed& arSeed)
 {
-    const s32 liMonitor = giBaseColourWithVarianceMonitor;
+    const s32 liMonitor = gLionPerfMon.miBaseColourVarianceBehaviour;
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     // The console hands both draws the same two registers it just loaded (`lvx128 v1, r31, 0x60`
@@ -1173,7 +1146,7 @@ struct AlphaFadeBehaviour
 void AlphaFadeBehaviour::Process(const cParticleEmitter::ParticleBuildData& arData,
                                  RenderedParticle& arParticle)
 {
-    const s32 liMonitor = giAlphaFadeMonitor;
+    const s32 liMonitor = gLionPerfMon.miAlphaFadeBehaviour;
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     const f32 lfLife    = arParticle.mvTimeScaleAndLifeScale.y;
@@ -1241,7 +1214,7 @@ void RotationBehaviour::Process(const cParticleBehaviour& arBehaviour,
                                 RenderedParticle& arParticle,
                                 f32 afDeltaTime)
 {
-    const s32 liMonitor = giRotationMonitor;
+    const s32 liMonitor = gLionPerfMon.miRotationBehaviour;
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     if ((arBehaviour.mFlags & cParticleBehaviour::E_BV_ROT) != 0)
@@ -1347,7 +1320,7 @@ void SizeBehaviour::Process(const cParticleBehaviour& arBehaviour,
                             RenderedParticle& arParticle,
                             f32 afDeltaTime)
 {
-    const s32 liMonitor = giSizeMonitor;
+    const s32 liMonitor = gLionPerfMon.miSizeBehaviour;
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     // data +0x20 lane x -- the emitter's overall scale, splatted in every arm
@@ -1524,7 +1497,7 @@ void DragBehaviour::Process(const cParticleEmitter::ParticleBuildData& arData,
                             sParticleNucleus& arNucleus,
                             f32 afDeltaTime)
 {
-    const s32 liMonitor = giDragMonitor;
+    const s32 liMonitor = gLionPerfMon.miDragBehaviour;
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     // data +0x30 lane y -- the fixed drag time step (the member's name says so).
@@ -1642,7 +1615,7 @@ inline void UnpackColour8ToUnit(const cColour8& arColour, f32 aafOut[4])
 void ColourStepsBehaviour::Process(const cParticleBehaviour& arBehaviour,
                                    RenderedParticle& arParticle)
 {
-    const s32 liMonitor = giColourStepsMonitor;
+    const s32 liMonitor = gLionPerfMon.miColourStepsBehaviour;
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     const u32 luSteps = arBehaviour.mColourSteps;
@@ -1771,7 +1744,7 @@ void MultiFrameBehaviour::Process(const cParticleEmitter::ParticleBuildData& arD
                                   cParticleRandomSeed& arSeed,
                                   f32 afDeltaTime)
 {
-    const s32 liMonitor = giMultiFrameMonitor;
+    const s32 liMonitor = gLionPerfMon.miMultiFrameBehaviour;
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     // data +0x90 -- the atlas cell count as a float (`lvx128 v127, r27, 0x90`).
@@ -1995,9 +1968,6 @@ void MultiFrameBehaviour::Process(const cParticleEmitter::ParticleBuildData& arD
 // ================================================================================================
 namespace
 {
-s32 giParticleBuildMonitor = -1;   // X360 dword_82FAB648 (LionPerfMon + 0x10)
-s32 giRadialMonitor        = -1;   // X360 dword_82FAB684 (LionPerfMon + 0x4C)
-s32 giOffsetRotMonitor     = -1;   // X360 dword_82FAB688 (LionPerfMon + 0x50)
 
 // unk_82000C60, .rdata: (pi, 2pi, 1/pi, 1/2pi). Only lanes y and w are used -- the range
 // reduction is `x - 2pi * round(x * (1/2pi))`, a `vrfin` (round to nearest) plus a `vnmsubfp`.
@@ -2114,7 +2084,7 @@ cParticleEmitter::EParticleBuildResult cParticleEmitter::ParticleBuild(
         const cParticleBehaviour& arBhv,
         const ParticleBuildData& arParticleBuildData)
 {
-    const s32 liMonitor = giParticleBuildMonitor;
+    const s32 liMonitor = gLionPerfMon.miParticleEmitterParticleBuild;
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     // ---- 1. the life gate (asm 0x82910160..0x829101F8) ------------------------------------
@@ -2167,7 +2137,7 @@ cParticleEmitter::EParticleBuildResult cParticleEmitter::ParticleBuild(
     cVector lvAcc;
     if ((arBhv.mFlags & cParticleBehaviour::E_DO_RADIAL) != 0)
     {
-        const s32 liRadialMonitor = giRadialMonitor;
+        const s32 liRadialMonitor = gLionPerfMon.miParticleBehaviourRADIAL;
         CgsDev::PerfMonCpu::StartMonitor(liRadialMonitor);
 
         // splat4(-1) and splat4(2): a per-lane uniform in [-1, 1). Both are .bss splats the
@@ -2288,7 +2258,7 @@ cParticleEmitter::EParticleBuildResult cParticleEmitter::ParticleBuild(
 
     if ((arBhv.mFlags & cParticleBehaviour::E_DO_OFFSETROT) != 0)
     {
-        const s32 liOffsetRotMonitor = giOffsetRotMonitor;
+        const s32 liOffsetRotMonitor = gLionPerfMon.miParticleBehaviourOFFSETROT;
         CgsDev::PerfMonCpu::StartMonitor(liOffsetRotMonitor);
 
         // asm 0x82910504..0x82910518 -- integrate the offset rotation, exactly as
@@ -2495,7 +2465,7 @@ cParticleEmitter::EParticleBuildResult cParticleEmitter::ParticleBuild(
 // ================================================================================================
 u32 cParticleEmitter::Update(const cTime& arTime)
 {
-    const s32 liMonitor = giEmitterUpdateMonitor;
+    const s32 liMonitor = gLionPerfMon.miParticleEmitterUpdate;
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     const u32 luFlags = mFlags;
@@ -2901,7 +2871,7 @@ void cParticleEmitter::Emit(cParticleRandomSeed& arSeed,
 // ================================================================================================
 void cParticleEmitter::Generate(const cTime& arTime)
 {
-    const s32 liMonitor = giEmitterGenerateMonitor;
+    const s32 liMonitor = gLionPerfMon.miParticleEmitterGenerate;
     CgsDev::PerfMonCpu::StartMonitor(liMonitor);
 
     // asm 0x82915188..0x829151AC -- the scratch seed every decision below draws from.
