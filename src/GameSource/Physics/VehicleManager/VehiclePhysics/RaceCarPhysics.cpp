@@ -1627,3 +1627,162 @@ namespace Vehicle
     }
 }
 }
+
+// FOLDED FROM RaceCarPhysics_Construct.cpp
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"
+
+// ============================================================================================
+// BrnPhysics::Vehicle::RaceCarPhysics::Construct -- SPLIT OUT of RaceCarPhysics.cpp on
+// BUILD-MECHANICS SPLIT ONLY: the body below is byte-identical to the one that was
+// written into that file and its declared home is unchanged. Same precedent, same reason, as
+// BrnSimpleVehiclePhysics_Construct.cpp.
+//
+// WHY THE SPLIT. VehicleManager::Construct's eight-car loop calls this function, so mounting
+// BrnVehicleManager.cpp requires it to be linkable. RaceCarPhysics.cpp as a whole CANNOT be
+// mounted -- its Update path reads flt_820037C8 (the AI crash-timer re-seed) and unk_82FB8880
+// (KVF_AI_CRASH_SLOWMO_FACTOR), neither of which has been read out of the image yet, so that TU
+// still carries unresolved constants. This body reads none of them: its only callee is
+// VehiclePhysics::Construct, which is bodied in the already-mounted VehiclePhysics.cpp.
+//
+// DO NOT re-merge this into RaceCarPhysics.cpp while that file is unmountable. TO RE-MERGE:
+// read the two constants, mount RaceCarPhysics.cpp, then move this body back and delete the TU.
+// ============================================================================================
+
+namespace BrnPhysics
+{
+namespace Vehicle
+{
+    // ---------------------------------------------------------------------------------------
+    // Construct  -- INLINED at 0x8263BF10..0x8263BF38 inside the eight-car loop of
+    //               VehicleManager::Construct @0x8263B7C8; called OUT OF LINE by the PS3 DecFIGS
+    //               build as RaceCarPhysics::Construct @0x6EB3D4, whose whole body is these same
+    //               seven statements at Δ = −16.
+    //
+    // The X360 loop body, verbatim (r29 == record + 0x140D, a biased cursor; r20 == −0x1D;
+    // f31 == flt_82001CC0 == 0.0f; v127 == vspltisw128 0; r11 == record + 0x1070):
+    //     0x8263BF10  bl        VehiclePhysics::Construct     (r3 == r29 - 0x140D == record + 0)
+    //     0x8263BF14  addi      r11, r29, -0x39D              -> record + 0x1070
+    //     0x8263BF18  stfs      f31, -0xD(r29)                -> record + 0x1400
+    //     0x8263BF1C  stb       r30, -1(r29)                  -> record + 0x140C
+    //     0x8263BF20  stfs      f31, -5(r29)                  -> record + 0x1408
+    //     0x8263BF24  stb       r30, 0(r29)                   -> record + 0x140D
+    //     0x8263BF28  stvx128   v127, r29, r20                -> record + 0x13F0
+    //     0x8263BF30  lvx128    v0, r0, r11
+    //     0x8263BF34  vrlimi128 v0, v127, 2, 0                -> lane .z only (mask 2 == z)
+    //     0x8263BF38  stvx128   v0, r0, r11
+    // Every one of those six offsets is a NAMED member of this class's own block (the map in
+    // RaceCarPhysics.h), and 0x1070 is a named VehiclePhysics register. Nothing here is a poke.
+    //
+    // The order below is the ISSUE order, not the declaration order -- the X360 writes
+    // mfTimeSinceTookDownPlayer, mbPlayerCarInShowtime, mfBeachedTime, mbUsingAftertouch,
+    // mPropCollisionImpulseSum, then the lane insert. Kept as issued because the pairing
+    // (0x1400/0x140C then 0x1408/0x140D) is what the scheduler produced from the source order and
+    // reordering it would lose the only evidence of what that source order was.
+    // ---------------------------------------------------------------------------------------
+    void RaceCarPhysics::Construct()
+    {
+        VehiclePhysics::Construct();
+
+        mfTimeSinceTookDownPlayer = 0.0f;   // +0x1400  (stfs f31, -0xD(r29))
+        mbPlayerCarInShowtime     = false;  // +0x140C  (stb  r30, -1(r29))
+        mfBeachedTime             = 0.0f;   // +0x1408  (stfs f31, -5(r29))
+        mbUsingAftertouch         = false;  // +0x140D  (stb  r30, 0(r29))
+
+        mPropCollisionImpulseSum.SetZero(); // +0x13F0  (stvx128 v127, r29, r20)
+
+        // +0x1070 LANE Z ONLY -- a read-modify-write, exactly as VehiclePhysics::Construct already
+        // does to the same lane a few instructions earlier. Redundant in both builds; reproduced.
+        mvTimeSinceHardLanding_SteeringOverride_CarCarResponse_SecondsSinceLastWallContact.SetZ(0.0f);
+    }
+}
+}
+
+// FOLDED FROM RaceCarPhysics_ShowtimeBounce.cpp
+// ============================================================================
+// b5-decomp/src/GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics_ShowtimeBounce.cpp
+//
+// SLICE TU, split out of RaceCarPhysics.cpp 2026-08-06 (PhysicsModule::Update leaves wave) in the
+// RaceCarPhysics_Construct.cpp precedent: VehicleManager::ProcessDeformationStates @0x825EA580
+// calls UpdateShowtimeBounceModifiers. Carries exactly what the call needs:
+//   * the module-static showtime singleton msPlayerParams (extern-declared in RaceCarPhysics.h);
+//   * RaceCarPhysics::UpdateShowtimeBounceModifiers @0x825D7940.
+// (The old banner's "RaceCarPhysics.cpp must stay unmounted" rationale aged out -- both TUs are
+// mounted in build_game_exe.bat; the split stands because it links today and folding is churn.)
+//
+// REWRITTEN 2026-08-24 (showtime wave). The previous body was a SILENT-DROP STUB (audit F6): it
+// compiled, linked, ran, copied nothing, and published numSensors = 0 / deformationScale = 0.0
+// every frame -- the exact defect class the ledger warns about. Every excuse it carried was
+// stale: the CarState type is fully modelled (BrnDeformationState.h, deform-land wave), the
+// clamp band flt_82F2A2B8/flt_82F2A2BC is image-read ([0.4, 1.0]), and the per-sensor scratch
+// is now the NAMED PlayerParameters::maBounceSensors array (+0x120, 32-byte stride).
+// ============================================================================
+
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"
+#include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationState.h"  // CarState
+#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "rw/math/vpu/vector3_operation.h"           // vpu::MagnitudeSquared
+#include <cmath>                                     // std::sqrt
+
+namespace BrnPhysics
+{
+namespace Vehicle
+{
+    // The module-static showtime singleton (X360 msPlayerParams; base symbol lbBounceBoosting). One
+    // car at a time. Defined here (its tentative storage); the per-process instance.
+    PlayerParameters msPlayerParams = {};
+
+
+    // ---------------------------------------------------------------------------------------
+    // RaceCarPhysics::UpdateShowtimeBounceModifiers  @0x825D7940
+    //   Publish the live deformation state into the showtime singleton, per sensor
+    //   (asm 0x825D79F8..0x825D7AE0, CarState record stride 80, scratch stride 32):
+    //     maBounceSensors[i].mWorldScalarVector = sensor +0x10 (mWorldScalarVector);
+    //     maBounceSensors[i].mfSpecScalar       = sensor +0x40 (mfSpecScalar);
+    //     maBounceSensors[i].mfCrushFactor      = clamp(1 - 2*|sensor.mDisplacement|^2, 0.4, 1.0)
+    //       -- the fnmsubs(magsq, 2.0, 1.0) + two fsels @0x825D7AB8-D0; the band is
+    //       flt_82F2A2B8 (0.4) / flt_82F2A2BC (1.0), both image-read.
+    //   Then the global scale: mfDeformationScale = sqrt(summedDisplacementSquared) / numSensors
+    //   (fsqrts + s64->f64 fcfid convert of the count @0x825D7AE4-0x825D7B04).
+    //   The per-iteration bounds assert is the console's own (CarState::GetSensor's tripwire,
+    //   BrnDeformationState.h:62, fired three times per record on X360 because the accessor is
+    //   inlined thrice; once per iteration here).
+    // ---------------------------------------------------------------------------------------
+    void RaceCarPhysics::UpdateShowtimeBounceModifiers(const Deformation::CarState* lpDeformationState)
+    {
+        namespace vpu = rw::math::vpu;
+        static const f32 KF_CRUSH_BAND_LO = 0.4f;   // flt_82F2A2B8
+        static const f32 KF_CRUSH_BAND_HI = 1.0f;   // flt_82F2A2BC
+
+        CGS_ASSERT(mbPlayerCarInShowtime, "mbPlayerCarInShowtime");   // :1157
+        CGS_ASSERT(lpDeformationState != 0, "lpDeformationState");   // :1158
+
+        const u8 luNumSensors = lpDeformationState->mu8NumSensors;    // lbz +0x6A4
+        MS.mu8NumBounceSensors = luNumSensors;                        // byte_82FB8590
+
+        for (u8 luSensor = 0; luSensor < luNumSensors; ++luSensor)
+        {
+            CGS_ASSERT(luSensor < lpDeformationState->mu8NumSensors,
+                       "luSensorIndex < mu8NumSensors");              // BrnDeformationState.h:62
+            const Deformation::CarSensorState& lrSensor = lpDeformationState->maSensors[luSensor];
+            PlayerParameters::BounceSensor& lrOut = MS.maBounceSensors[luSensor];
+
+            lrOut.mWorldScalarVector = lrSensor.mWorldScalarVector;   // lvx rec+0x10 -> scratch+0
+            lrOut.mfSpecScalar       = lrSensor.mfSpecScalar;         // lfs rec+0x40 -> scratch+0x10
+
+            // crush factor: 1 - 2*|displacement|^2, clamped to [0.4, 1.0].
+            const f32 lfDispSq = vpu::MagnitudeSquared(lrSensor.mDisplacement);   // vmsum3fp rec+0x20
+            f32 lfCrush = 1.0f - 2.0f * lfDispSq;                     // fnmsubs(magsq, 2.0, 1.0)
+            if (lfCrush < KF_CRUSH_BAND_LO) lfCrush = KF_CRUSH_BAND_LO;   // fsel vs flt_82F2A2B8
+            if (lfCrush > KF_CRUSH_BAND_HI) lfCrush = KF_CRUSH_BAND_HI;   // fsel vs flt_82F2A2BC
+            lrOut.mfCrushFactor = lfCrush;                            // stfsx scratch+0x14
+        }
+
+        // global deformation scale = sqrt(summed displacement^2) / numSensors. The console does
+        // the integer->double convert unguarded (fcfid @0x825D7AF8); a zero-sensor record yields
+        // the same IEEE 0/0 result on both machines, so no guard is invented.
+        MS.mfDeformationScale =
+            std::sqrt(lpDeformationState->mfSummedDisplacementSquared)
+            / static_cast<f32>(luNumSensors);                         // flt_82FB84B4
+    }
+}
+}

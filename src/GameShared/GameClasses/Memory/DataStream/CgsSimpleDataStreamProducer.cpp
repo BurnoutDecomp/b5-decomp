@@ -131,3 +131,107 @@ namespace CgsMemory
         return miNumAddedCommands;
     }
 }
+
+// FOLDED FROM CgsSimpleDataStreamProducer_Begin.cpp
+// ============================================================================
+// GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer_Begin.cpp
+//
+// ⭐ SLICE TU (big-five #2 wave, 2026-08-06): SimpleDataStreamProducer::Begin.
+// The home TU (CgsSimpleDataStreamProducer.cpp) stays UNMOUNTED -- its Construct calls the
+// still-declared-only DataStreamCommandPoster::Construct -- so the one method the mounted
+// contact-generation chain needs lives here. Fold back when the home mounts.
+//
+// The X360 has no out-of-line emission: VehicleManager::StartVehicleContactGeneration
+// @0x8262AEE8 INLINES this body three times (asm 0x8262BE10.., one per stream producer):
+//   * publish the private stream geometry into the shared snapshot
+//     (mShared.{miMaxCommands,miCommandSize,miMaxResults,miResultSize,miAlignedResultSize,
+//     mpResultBuffer} <- the same-named private members -- the six lwz/stw pairs
+//     +32..+52 -> +0..+20),
+//   * bind the shared poster pointer to the embedded poster (+24 <- this+128),
+//   * raise mbIsStreaming (+256 <- 1),
+//   * then DataStreamCommandPoster::Begin @0x82867AE8.
+// The PS3 DecFIGS keeps it out-of-line behind its thunks (sub_4BFEC8 family), same shape.
+// ============================================================================
+
+#include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"
+
+namespace CgsMemory
+{
+    void SimpleDataStreamProducer::Begin()
+    {
+        mShared.miMaxCommands       = miMaxCommands;
+        mShared.miCommandSize       = miCommandSize;
+        mShared.miMaxResults        = miMaxResults;
+        mShared.miResultSize        = miResultSize;
+        mShared.miAlignedResultSize = miAlignedResultSize;
+        mShared.mpResultBuffer      = mpResultBuffer;
+        mShared.mpPoster            = &mCommandPoster;
+
+        mbIsStreaming = true;
+
+        mCommandPoster.Begin();
+    }
+}
+
+// FOLDED FROM CgsSimpleDataStreamProducer_ResultIterator.cpp
+// ============================================================================
+// GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer_ResultIterator.cpp
+//
+// ⭐ SLICE TU (ground wave, 2026-08-10): the SimpleDataStreamResultIterator read cursor.
+// Same reason CgsSimpleDataStreamProducer_Begin.cpp exists -- the home TU
+// (CgsSimpleDataStreamProducer.cpp) is still unmountable because its Construct calls the
+// declared-only DataStreamCommandPoster::Construct, and the traction-line harvest
+// (VehicleManager::ReadRaceCarTractionLineTestResults @0x82618058) needs the cursor.
+// GetCurrent was MOVED here from the home TU, not copied; fold both back when the home mounts.
+//
+//   SimpleDataStreamResultIterator::GetCurrent  @ X360 0x825B29A0 (out-of-line, exported)
+//   SimpleDataStreamResultIterator::GetNext     -- inlined by the console at its call sites
+// ============================================================================
+
+#include "GameShared/GameClasses/Memory/DataStream/CgsSimpleDataStreamProducer.h"
+
+#include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT
+
+namespace CgsMemory
+{
+    // X360 0x825B29A0.
+    // Returns a pointer to the result record the iterator currently points at.
+    // The record address is mpResultBuffer + miAlignedResultSize * miResultIndex
+    // (results are stored at the aligned stride). If the cursor has reached the
+    // end (miResultIndex >= parent->miNumAddedCommands) the cursor is clamped to
+    // the count and a null pointer is returned.
+    //
+    // Asm: a1[1]=mpParent checked non-null ('No parent'); mpParent+0x100=mbIsStreaming
+    // checked false ('Parent is streaming'); then compares miResultIndex (a1[0]) with
+    // mpParent[0x104]=miNumAddedCommands; else-branch computes
+    // miAlignedResultSize(0x30)*miResultIndex + mpResultBuffer(0x34).
+    const void* SimpleDataStreamResultIterator::GetCurrent()
+    {
+        CGS_ASSERT(mpParent != 0, "No parent\n");
+        CGS_ASSERT(!mpParent->mbIsStreaming, "Parent is streaming\n");
+
+        SimpleDataStreamProducer* const lpParent = mpParent;
+        const s32 liNumAddedCommands = lpParent->miNumAddedCommands;
+
+        if (miResultIndex >= liNumAddedCommands)
+        {
+            miResultIndex = liNumAddedCommands;
+            return 0;
+        }
+
+        return reinterpret_cast<const char*>(lpParent->mpResultBuffer)
+             + lpParent->miAlignedResultSize * miResultIndex;
+    }
+
+    // No out-of-line X360 emission -- the console inlines this. The shape is read off one of the
+    // inline sites, VehicleManager::ReadRaceCarTractionLineTestResults @0x82618204..0x82618210:
+    //     lwz r11, 0(r30) ; addi r11, r11, 1 ; stw r11, 0(r30)   <- ++miResultIndex
+    //     bl  SimpleDataStreamResultIterator::GetCurrent          <- and return its answer
+    // i.e. the bump happens FIRST and GetCurrent then re-validates the new cursor against the
+    // parent's command count (so a walk past the end yields null rather than an out-of-range read).
+    const void* SimpleDataStreamResultIterator::GetNext()
+    {
+        ++miResultIndex;
+        return GetCurrent();
+    }
+}

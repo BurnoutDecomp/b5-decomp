@@ -7,6 +7,5 @@
 
 #include "CgsSku.cpp"
 #include "CgsLanguageManager.cpp"
-#include "CgsLanguageManager_wS34_00.cpp"  // part of CgsLanguageManager.cpp (x360 tree partfile)
 #include "CgsLanguageManagerDebugComponent.cpp"
 #include "Resources/CgsLanguageResourceType.cpp"

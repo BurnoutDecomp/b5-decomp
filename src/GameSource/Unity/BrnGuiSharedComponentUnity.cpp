@@ -25,4 +25,3 @@
 #include "../Gui/Flow/Shared/Components/BrnComplexBar.cpp"
 #include "../Gui/Flow/Shared/Components/BrnPlayerStatsBar.cpp"
 #include "../Gui/Flow/Shared/Components/BrnAnimator.cpp"
-#include "../Gui/Flow/Shared/Components/BrnAnimator_wS34_00.cpp"  // part of BrnAnimator.cpp (x360 tree partfile)

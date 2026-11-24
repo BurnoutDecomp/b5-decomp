@@ -20,8 +20,6 @@
 #include "../../SDKs/Packages/ICE/ICERender.cpp"
 #include "../../SDKs/Packages/ICE/ICEPoint.cpp"
 #include "../../SDKs/Packages/ICE/ICEWrapper.cpp"
-#include "../../SDKs/Packages/ICE/ICEWrapper_wG_09.cpp"  // part of ICEWrapper.cpp (x360 tree partfile)
-#include "../../SDKs/Packages/ICE/ICEWrapper_wG_11.cpp"  // part of ICEWrapper.cpp (x360 tree partfile)
 #include "../Director/BrnDirectorICEWrapperPrepare.cpp"  // holds functions of ICEWrapper.cpp (x360 tree split)
 #include "../Director/BrnDirectorICEWrapper.cpp"  // EditorOn/EditorOff: ARTIST 0x82540360/0x825403D0, the TU's last pass
 // Not yet included: the ICE editor, X360 ARTIST only (no PS3 counterpart); ARTIST interleaves its

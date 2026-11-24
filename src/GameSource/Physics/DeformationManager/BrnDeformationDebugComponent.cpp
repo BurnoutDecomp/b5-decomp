@@ -1085,3 +1085,182 @@ namespace Deformation
     }
 }
 }
+
+// FOLDED FROM BrnDeformationDebugComponent_Construct.cpp
+#include "GameSource/Physics/DeformationManager/BrnDeformationDebugComponent.h"
+#include "GameSource/Physics/DeformationManager/BrnDeformationManager.h"                          // DeformationManager
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformableObject.h"         // DeformableObject + debug accessors
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnDeformationSensor.h"        // DeformationSensor
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"  // StreamedDeformationSpec
+#include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"                                // CgsGeometric::Sphere
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                       // CGS_ASSERT + ARTIST location
+
+// ==================================================================================================
+// The DeformationDebugComponent::Construct chain -- SPLIT OUT of BrnDeformationDebugComponent.cpp.
+// BUILD-MECHANICS SPLIT ONLY: every body below was MOVED verbatim. PhysicsModule::Construct reaches
+// it through DeformationManager::Construct, whose first act is to construct this component.
+//
+// The two out-of-line accessors come along because OnSelectedSensorChange calls both and this file
+// was their only home.
+//
+// BrnDeformationDebugComponent.cpp is mounted as well, so re-merging is a plain move of these bodies.
+// ==================================================================================================
+
+namespace BrnPhysics
+{
+namespace Deformation
+{
+    // Set by OnSelectedRigChange; defined by the deformation-physics TUs (see the extern block in
+    // BrnDeformationDebugComponent.cpp).
+    extern bool kbAllowDeformationDebug;
+
+    // Out-of-line bodies for two accessors declared (but not defined) in headers that keep their operand
+    // types opaque/forward-declared. Bodied here, where the full layouts are in scope.
+
+    // The manager's model-slot accessor (declared-only in BrnDeformationManager.h, which keeps
+    // DeformableObject forward-declared). &mpaModels[liIndex] from the pool base.
+    DeformableObject* DeformationManager::GetDeformableObject(s32 liIndex)
+    {
+        return &mpaModels[liIndex];
+    }
+
+
+    // =============================================================================================
+    // Construct  @ 0x82606480
+    //
+    // Two-phase init: base DebugComponent::Construct (the folded BaseCollisionGenerator::Destruct),
+    // assert + cache the manager, zero every slider/selector/flag, then refresh the selected rig.
+    // =============================================================================================
+    void DeformationDebugComponent::Construct(DeformationManager* lpDeformationManager)
+    {
+        // ARTIST 0x8260649C: the base two-phase init, an empty body (PS3 DecFIGS
+        // CgsDev::DebugComponent::Construct is `;`) folded at 0x8284CB38.
+        CgsDev::DebugComponent::Construct();
+
+        CGS_ASSERT(lpDeformationManager != 0, CgsDev::Assert::MessageAt("lpDeformationManager != NULL",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\"
+            "../Physics/DeformationManager/BrnDeformationDebugComponent.cpp", 158 /* ARTIST 0x826064B0 */));
+        mpDeformationManager = lpDeformationManager;
+
+        mfCompressRightSide = 0.0f;
+        mfCompressLeftSide  = 0.0f;
+        mfCompressFloor     = 0.0f;
+        mfCompressRoof      = 0.0f;
+        mfCompressRear      = 0.0f;
+        mfCompressFront     = 0.0f;
+
+        mbRenderDeformationRig          = false;
+        mbRenderTagPoints               = false;
+        mbRenderDrivenPoints            = false;
+        mbRenderOffsets                 = false;
+        mbRenderDrivenPointConnections  = false;
+
+        miSelectedSensor   = 0;
+        mpSelectedSensor   = 0;
+        miSelectedRig      = 0;
+        mpSelectedRig      = 0;
+        miCompressPreset   = 0;
+
+        mbDrawDrivetimeLimitsBox = false;
+        mbDrawDeformedBox        = false;
+        mbDrawDetachedWheels     = false;
+
+        OnSelectedRigChange( &miSelectedRig, this );
+    }
+
+
+    // =============================================================================================
+    // OnSelectedRigChange  @ 0x825DF408  (registered VariableCallbackFunction; static)
+    //
+    // The "Selected rig" slider changed. Validate the index against the active-rigs bit array, then:
+    //  - if that rig is live: bind mpSelectedRig to it, enable the compression sliders, flip the global
+    //    deformation-debug allow flag, and refresh the selected sensor;
+    //  - otherwise: clear mpSelectedRig + the sensor/point selection and make every editable read-only.
+    // =============================================================================================
+    void DeformationDebugComponent::OnSelectedRigChange(void* /*lpValue*/, void* lpUserData)
+    {
+        DeformationDebugComponent* lpThis = static_cast<DeformationDebugComponent*>(lpUserData);
+
+        const s32 liRig = lpThis->miSelectedRig;
+        CGS_ASSERT( static_cast<u32>(liRig) < 28u, "invalid index : liIndex < 28" );   // CgsBitArray.h:203 (non-gating)
+
+        DeformationManager* lpMgr = lpThis->mpDeformationManager;
+        if ( lpMgr != 0 && lpMgr->IsDeformableObjectActive(liRig) )
+        {
+            lpThis->mpSelectedRig = lpMgr->GetDeformableObject(liRig);
+
+            lpThis->SetReadOnly( &lpThis->mfCompressRightSide, false );
+            lpThis->SetReadOnly( &lpThis->mfCompressLeftSide,  false );
+            lpThis->SetReadOnly( &lpThis->mfCompressFloor,     false );
+            lpThis->SetReadOnly( &lpThis->mfCompressRoof,      false );
+            lpThis->SetReadOnly( &lpThis->mfCompressRear,      false );
+            lpThis->SetReadOnly( &lpThis->mfCompressFront,     false );
+
+            kbAllowDeformationDebug = true;
+            OnSelectedSensorChange( &lpThis->miSelectedSensor, lpThis );
+        }
+        else
+        {
+            lpThis->mpSelectedRig    = 0;
+            lpThis->mpSelectedSensor = 0;
+            lpThis->miSelectedSensor = 0;
+
+            lpThis->SetReadOnly( &lpThis->miSelectedSensor, true );
+            lpThis->SetReadOnly( &lpThis->mfSensorX,        true );
+            lpThis->SetReadOnly( &lpThis->mfSensorX,        true );
+            lpThis->SetReadOnly( &lpThis->mfSensorY,        true );
+            lpThis->SetReadOnly( &lpThis->mfSensorZ,        true );
+            lpThis->SetReadOnly( &lpThis->mfSensorScratch,  true );
+            lpThis->SetReadOnly( &lpThis->mfCompressRightSide, true );
+            lpThis->SetReadOnly( &lpThis->mfCompressLeftSide,  true );
+            lpThis->SetReadOnly( &lpThis->mfCompressFloor,     true );
+            lpThis->SetReadOnly( &lpThis->mfCompressRoof,      true );
+            lpThis->SetReadOnly( &lpThis->mfCompressRear,      true );
+            lpThis->SetReadOnly( &lpThis->mfCompressFront,     true );
+        }
+    }
+
+
+    // =============================================================================================
+    // OnSelectedSensorChange  @ 0x825DF310  (registered VariableCallbackFunction; static)
+    //
+    // The "Selected sensor" slider changed. If a rig is selected and the index is in range, bind the
+    // selected sensor, copy its local-sphere centre + scratch amount into the X/Y/Z/scratch sliders, and
+    // make those four editable.
+    // =============================================================================================
+    void DeformationDebugComponent::OnSelectedSensorChange(void* /*lpValue*/, void* lpUserData)
+    {
+        DeformationDebugComponent* lpThis = static_cast<DeformationDebugComponent*>(lpUserData);
+
+        DeformableObject* lpRig = lpThis->mpSelectedRig;
+        if ( lpRig == 0 )
+        {
+            return;
+        }
+
+        const s32 liSensor = lpThis->miSelectedSensor;
+        if ( liSensor >= lpRig->GetDeformationSpec()->GetNumDeformationSensors() )
+        {
+            return;
+        }
+
+        // ARTIST825DF344..350 forms rig+432*(index+15): 432*15 is the
+        // maDeformationSensors base0x1950, already represented by the named accessor.
+        DeformationSensor& lrSensor = lpRig->GetSensorDebug( liSensor );
+        lpThis->mpSelectedSensor = &lrSensor;
+
+        const Vector3Plus& lvCentre = lrSensor.GetLocalSpaceSphere()->mData;
+        lpThis->mfSensorX       = lvCentre.mV.x;
+        lpThis->mfSensorY       = lvCentre.mV.y;
+        lpThis->mfSensorZ       = lvCentre.mV.z;
+        lpThis->mfSensorScratch = lrSensor.GetScratchAmount();
+
+        lpThis->SetReadOnly( &lpThis->miSelectedSensor, false );
+        lpThis->SetReadOnly( &lpThis->mfSensorX,        false );
+        lpThis->SetReadOnly( &lpThis->mfSensorY,        false );
+        lpThis->SetReadOnly( &lpThis->mfSensorZ,        false );
+        lpThis->SetReadOnly( &lpThis->mfSensorScratch,  false );
+    }
+
+}
+}

@@ -28,18 +28,13 @@
 #include "View/CgsGuiViewModule.cpp"
 #include "View/CgsGuiViewModuleIO.cpp"
 #include "View/AptInterface/CgsAptAnimChannel.cpp"
-#include "View/AptInterface/CgsAptAnimChannel_wS34_00.cpp"  // part of CgsAptAnimChannel.cpp (x360 tree partfile)
 #include "View/AptInterface/CgsAptAnimData.cpp"
-#include "View/AptInterface/CgsAptAnimData_wS34_00.cpp"  // part of CgsAptAnimData.cpp (x360 tree partfile)
 #include "View/AptInterface/CgsAptAnimator.cpp"
-#include "View/AptInterface/CgsAptAnimator_wS34_00.cpp"  // part of CgsAptAnimator.cpp (x360 tree partfile)
 #include "View/AptInterface/CgsAptAux.cpp"
 #include "View/AptInterface/CgsAptCommunicator.cpp"
 #include "View/AptInterface/CgsAptDataHandler.cpp"
 #include "View/AptInterface/CgsAptInterpolator.cpp"
-#include "View/AptInterface/CgsAptInterpolator_wS34_00.cpp"  // part of CgsAptInterpolator.cpp (x360 tree partfile)
 #include "View/AptInterface/CgsAptObjectController.cpp"
-#include "View/AptInterface/CgsAptObjectController_wS34_00.cpp"  // part of CgsAptObjectController.cpp (x360 tree partfile)
 #include "View/AptInterface/CgsAptCallbackRender.cpp"  // holds functions of cgsaptrender.cpp (x360 tree split)
 #include "View/AptInterface/CgsAptRenderHandler.cpp"  // holds functions of cgsaptrender.cpp (x360 tree split)
 #include "View/AptInterface/CgsAptCallbackRenderAllocateString.cpp"  // holds functions of cgsaptrender.cpp (x360 tree split)

@@ -3856,9 +3856,9 @@ void GuiCache::GetOnlineLandmarkInfoAtPositionInList(
 
 // @ 0x8241E520 (the GuiCache face over the mEvents CgsArray element accessor
 // @0x8241E430 -> CgsContainers::Arr). Stride 0x2C (the 7700-byte storage / 175 cap).
-// NOTE: BrnGuiCache_wB_res.cpp carries a declared-only twin behind a link-time helper
-// (GetPresetEventAtIndex) with two further unreconstructed deps; that TU stays
-// unmounted and THIS is the single mounted definition.
+// The preset event table lives in maEventsStorage. This is the shared accessor.
+
+
 const PresetEvent* GuiCache::GetPresetEvent(s32 liIndex) const
 {
     CGS_ASSERT(mEventsCtorSentinel != -1,
@@ -5214,4 +5214,148 @@ namespace BrnGui
         CgsDev::Assert::EndAssert();
         return 0;
     }
+}
+
+// FOLDED FROM BrnGuiCache_wB_11.cpp
+#include "GameSource/Gui/BrnGuiCache.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameSource/GameState/BrnCgsPlayerName.h"   // CgsNetwork::PlayerName::Construct (append path)
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. GuiCache replay-player-active table
+// (maReplayPlayersActive @0x141E0, 16 entries of stride 32; per entry: lead
+// CgsNetwork::PlayerName name @+0x00, a 64-bit value slot @+0x10 and the u32 hit
+// count @+0x18). Accessed BY NAME against the ReplayPlayerActive record in BrnGuiCache.h.
+// Guarded by the game's debug assert (CGS_ASSERT is a no-op in this build, matching the
+// X360 release assert machinery).
+
+// External DirtySDK lobby C-API name comparator (vendor SDK; not yet homed in vendor/).
+// A not-yet-homed callee is satisfied by its declaration under cl /c; no body needed.
+extern "C" s32 LobbyNameCmp(const char* pNameA, const char* pNameB);
+
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp".
+
+namespace BrnGui
+{
+    // @ 0x824EEE28 -- reset the replay-player-active table. Clears mbReplayHasBeenSorted
+    // (@0x143E8), then per entry (stride 32) zeroes the name's leading byte, the 64-bit
+    // value slot @+0x10 (std) and the u32 count @+0x18 (stw); finally clears the per-ARCI
+    // replay-rendered flags (@0x143E0).
+    void GuiCache::ClearReplayPlayerActive()
+    {
+        mbReplayHasBeenSorted = false;
+
+        for (s32 liEntry = 0; liEntry < 16; ++liEntry)
+        {
+            ReplayPlayerActive& lEntry = maReplayPlayersActive[liEntry];
+            lEntry.mName.macName[0] = 0;   // stb  name[0]
+            lEntry.mValue = 0;             // std  value slot
+            lEntry.muActiveCount = 0;      // stw  count
+        }
+
+        for (s32 liArci = 0; liArci < E_ACTIVE_RACE_CAR_INDEX_COUNT; ++liArci)
+        {
+            maReplayARCRendered[liArci] = false;
+        }
+    }
+
+    // @ 0x824EEEC0 -- record one hit for lpcPlayerName in the replay-player-active table.
+    // Only while the list is still unsorted (mbReplayHasBeenSorted != 1) and the name is
+    // non-empty: scan the 16 entries; on a name match bump that entry's count; on the first
+    // empty slot (count == 0) construct the name, seed the +0x10 value slot with liValue
+    // (std) and set the count to 1. Runs off the end of the 16 slots with no change.
+    void GuiCache::IncrementReplayPlayerActive(const char* lpcPlayerName, s32 liValue)
+    {
+        if (mbReplayHasBeenSorted != true && *lpcPlayerName != '\0')
+        {
+            u32 luEntry = 0;
+            while (true)
+            {
+                ReplayPlayerActive& lEntry = maReplayPlayersActive[luEntry];
+                if (LobbyNameCmp(lEntry.mName.GetPlayerName(), lpcPlayerName) == 0)
+                {
+                    ++lEntry.muActiveCount;
+                    break;
+                }
+                if (lEntry.muActiveCount == 0)
+                {
+                    lEntry.mName.Construct(lpcPlayerName);
+                    lEntry.mValue = liValue;
+                    ++lEntry.muActiveCount;
+                    break;
+                }
+                if (++luEntry >= 16)
+                {
+                    break;
+                }
+            }
+        }
+    }
+
+    // @ 0x824EEFA0 -- index the sorted replay-player-active table. Asserts the table has
+    // been sorted (mbReplayHasBeenSorted == true @0x143E8) and luIndex < 16, then returns
+    // &maReplayPlayersActive[luIndex] (32*(luIndex+2575)+this == base+0x141E0+32*luIndex);
+    // ReplayCredits::OnEnter reads both the name (+0x00) and the count (+0x18) off it.
+    const ReplayPlayerActive* GuiCache::GetSortedReplayPlayerActive(u32 luIndex) const
+    {
+        CGS_ASSERT(mbReplayHasBeenSorted == true,
+            CgsDev::Assert::MessageAt(
+                "mbReplayHasBeenSorted == true", __FILE__, 4516 /* ARTIST 0x824EEFD8 */));
+        CGS_ASSERT(luIndex < 16,
+            CgsDev::Assert::MessageAt("luIndex < 16", __FILE__, 4517 /* ARTIST 0x824EEFFC */));
+        return &maReplayPlayersActive[luIndex];
+    }
+}
+
+// FOLDED FROM BrnGuiCache_wB_12.cpp
+#include "GameSource/Gui/BrnGuiCache.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+#include <cstdlib>   // qsort (replay-players-active sort)
+
+// Reconstructed from BURNOUT_X360_ARTIST.XEX. GuiCache replay-players-active sort +
+// the field-init constructor. Faithful store-for-store to the X360 asm; named members
+// per the frozen BrnGuiCache.h layout.
+
+// LobbyNameCmp: the dirtysdk lobby name comparator (extern "C" vendor leaf, declared in
+// the DirtySock server-interface TUs). The GuiCache TU reaches it as a global; links from
+// the vendor TU. Used both as the qsort tie-break and by IncrementReplayPlayerActive.
+extern "C" s32 LobbyNameCmp(const char* pNameA, const char* pNameB);
+
+namespace BrnGui
+{
+    // @ 0x824EF028 -- qsort comparator over the 16 stride-32 replay-players-active entries.
+    // Reads each entry's count word @+0x18 (un-homed within the raw entry storage; see
+    // BrnGuiCache.h "count@+0x18") as unsigned and sorts DESCENDING by it; ties (equal
+    // counts) fall back to LobbyNameCmp on the entry's lead CgsNetwork::PlayerName (entry
+    // base). Returns 1 (a before b) when a's count is smaller, -1 when larger.
+    s32 GuiCache::_SortReplayPlayersActiveByCount(const void* lpA, const void* lpB)
+    {
+        const u32 luCountA = *reinterpret_cast<const u32*>(static_cast<const u8*>(lpA) + 0x18);
+        const u32 luCountB = *reinterpret_cast<const u32*>(static_cast<const u8*>(lpB) + 0x18);
+        if (luCountA < luCountB)
+        {
+            return 1;
+        }
+        if (luCountA <= luCountB)
+        {
+            return LobbyNameCmp(static_cast<const char*>(lpA), static_cast<const char*>(lpB));
+        }
+        return -1;
+    }
+
+    // @ 0x824F8C58 -- sort the replay-players-active table once. Asserts it has not already
+    // been sorted, latches mbReplayHasBeenSorted (@0x143E8), then qsorts the 16 stride-32
+    // entries of maReplayPlayersActive (@0x141E0) by _SortReplayPlayersActiveByCount.
+    void GuiCache::SortReplayPlayersActive()
+    {
+        CGS_ASSERT(!mbReplayHasBeenSorted,
+            CgsDev::Assert::MessageAt(
+                "mbReplayHasBeenSorted == false",
+                "..\\..\\..\\GameSource\\Gui/BrnGuiCache.cpp", 4501 /* ARTIST 0x824F8C8C */));
+        mbReplayHasBeenSorted = true;
+        qsort(maReplayPlayersActive, 16, 32, _SortReplayPlayersActiveByCount);
+    }
+
+    // GuiCache::GuiCache @0x827E05B8 is homed in mounted BrnGuiCache.cpp.
+
 }

@@ -28,7 +28,6 @@
 #include "DebugSystem/Core/UI/Windows/CgsCustomWindow.cpp"
 #include "DebugSystem/Core/UI/Windows/CgsLogWindow.cpp"
 #include "DebugSystem/Core/UI/ScriptInterface/CgsScriptInterface.cpp"
-#include "DebugSystem/Core/UI/ScriptInterface/CgsScriptInterface_part_window_savestate.cpp"  // part of CgsScriptInterface.cpp (x360 tree partfile)
 #include "DebugSystem/Core/UI/CommandWindow/CgsCommandWindow.cpp"
 #include "DebugSystem/Controller/CgsDebugController.cpp"
 #include "DebugSystem/Render/CgsDebugRender.cpp"
