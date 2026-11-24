@@ -544,13 +544,13 @@ void BridgeAIToEntityModules_PrePhysics(
     if (lpPropInputBuffer_PrePhysics != 0)
     {
         lpPropInputBuffer_PrePhysics->AppendResetOnTrackResultQueue(
-            lpAIOutputBuffer->GetAIModuleResultInterfaceConst()->GetResetOnTrackResultQueue());
+            lpAIOutputBuffer->GetAIModuleResultInterface()->GetResetOnTrackResultQueue());
     }
 
     if (lpRaceCarInputBuffer_PrePhysics != 0)
     {
         lpRaceCarInputBuffer_PrePhysics->SetAIModuleResultInterface(
-            lpAIOutputBuffer->GetAIModuleResultInterfaceConst());
+            lpAIOutputBuffer->GetAIModuleResultInterface());
     }
 }
 

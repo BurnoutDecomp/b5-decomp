@@ -2830,8 +2830,7 @@ namespace BrnDirector
         lSharedInfo.mpNamedBehaviourParams   =
             &mBehaviourManager.GetBehaviourParameterBank().GetNamedParameters();                         // +0x2F050
         lSharedInfo.mpPlayerTracker          = &mVehicleTracker;                                         // +0x339E0
-        lSharedInfo.mpContacts               =
-            reinterpret_cast<const MomentSharedInfo::ContactSpyInterface*>(lpInput->GetContacts());     // GetCont
+        lSharedInfo.mpContacts               = lpInput->GetContacts();
         lSharedInfo.mpDirectorResourceManager = lpIO->mpResourceManager;                                 // lwz 8(r30)
         lSharedInfo.mpShotSelector           = &mShotSelector;                                           // +0x121F0
         lSharedInfo.mpCrashAnalysis          = &mCrashAnalyser.GetAnalysis();                            // +0x1245C

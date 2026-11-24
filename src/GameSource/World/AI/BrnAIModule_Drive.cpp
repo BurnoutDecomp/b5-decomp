@@ -87,7 +87,7 @@
 //                                                                   @0x827955F0     ABSENT (owner lane:
 //                                                                                  route responses -> AICar::
 //                                                                                  UpdateRoute)
-// 26  0x8279B7D8  RouteResponseQueue::Append(out->GetRouteResponseQueueForWrite(),
+// 26  0x8279B7D8  RouteResponseQueue::Append(out->GetRouteMapResponseQueue(),
 //                 lRouteOut->GetRouteResponseQueue()(sub_8276B148)) @0x8277B668     EXISTS (BaseEventQueue
 //                                                                                  _RouteResponse.cpp)
 // 27  0x8279B7F0  lRouteOut->UnlockForRead(); RouteMapModuleIO helper dtor(&lRouteOut)
@@ -676,8 +676,7 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
             lpCar->mbPlaceOnTrackRequested = false;
 
             AIModuleIO::AIModuleResultInterface* lpResults =
-                reinterpret_cast<AIModuleIO::AIModuleResultInterface*>(
-                    lpOutputBuffer->GetAIModuleResultInterfaceForWrite());
+                lpOutputBuffer->GetAIModuleResultInterface();
             const AIDriver* lpDriverAgain = GetAIDriver(leSlot);
             AIModuleIO::PlaceOnTrackRequest lRequest;
             lRequest.Construct(static_cast<EGlobalRaceCarIndex>(lpDriverAgain->GetCar()->GetRaceCarIndex()),

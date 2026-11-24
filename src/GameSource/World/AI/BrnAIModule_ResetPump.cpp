@@ -367,8 +367,7 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
                 const CgsSystem::Time lSimTime = lpTimers->GetSimTimerStatus()->GetTime();
                 const f32 lfTime = static_cast<f32>(lSimTime.GetSeconds()) + lSimTime.GetFraction();
                 UpdateResetOnTrackManager(
-                    reinterpret_cast<AIModuleIO::AIModuleResultInterface*>(
-                        lpOutputBuffer->GetAIModuleResultInterfaceForWrite()),
+                    lpOutputBuffer->GetAIModuleResultInterface(),
                     lfTime);
             }
 
@@ -382,7 +381,7 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
             if (lbBuzzOccured)                                                            // row 37: event 113, payload 16
             {
                 const s32 liBuzzPayload = 16;
-                reinterpret_cast<CgsModule::VariableEventQueue<1536, 16>*>(lpOutputBuffer->GetGameEventQueue())
+                lpOutputBuffer->GetGameEventQueue()
                     ->AddEvent(reinterpret_cast<const CgsModule::Event*>(&liBuzzPayload), 113, sizeof(liBuzzPayload));
             }
         }   // ~IOHelper<InputBuffer> -- row 40

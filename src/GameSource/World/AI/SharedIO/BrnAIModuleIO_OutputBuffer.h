@@ -50,10 +50,10 @@
 //   GetVehicleInterface            @0x8279CA00 R -> this + 0x15120  (86304)  :409
 //   GetAIRaceCarInterface          @0x8276DBC0 W -> this + 0x165D0  (91600)  :444
 //   GetAICarOutputInterface        @0x8276DC68 W -> this + 0x16A60  (92768)  :458
-//   GetAICarOutputInterfaceForRead @0x8279CCA0 R -> this + 0x16A60  (92768)  :465
+//   GetAICarOutputInterface const  @0x8279CCA0 R -> this + 0x16A60  (92768)  :465
 //   GetAIModuleResultInterface(W)  @0x8276DD10 W -> this + 0x17F50  (98128)  :472
 //   GetAIModuleResultInterface(R)  @0x8279CD48 R -> this + 0x17F50  (98128)  :479
-//   GetGameEventQueueForRead       @0x8279C658 R -> this + 0x1AF30  (110448) :232
+//   GetGameEventQueue const        @0x8279C658 R -> this + 0x1AF30  (110448) :232
 //   GetGameEventQueue              @0x8276D680 W -> this + 0x1AF30  (110448) :233
 //
 // ⭐ TWO ACCESSOR NAMES WERE WRONG, AND THE OFFSETS SAY SO
@@ -124,18 +124,18 @@ namespace AIModuleIO
         const BrnResource::GameDataIO::RequestInterface<4096>* GetAIResourceRequestInterface() const;
 
         // X360 0x8279CB50 (R, :437) / 0x8276DB18 (W, :430) -- the route response queue.
-        const RouteMapModuleIO::RouteResponseQueue* GetRouteResponseQueue() const;
-        u8*                                         GetRouteResponseQueueForWrite();
+        typedef RouteMapModuleIO::RouteResponseQueue RouteResponseQueue;
+        const RouteResponseQueue* GetRouteMapResponseQueue() const;
+        RouteResponseQueue*       GetRouteMapResponseQueue();
 
         // X360 0x8276DC68 (W, :458) / 0x8279CCA0 (R, :465).
-        const AICarOutputInterface* GetAICarOutputInterfaceConst() const;
+        const AICarOutputInterface* GetAICarOutputInterface() const;
         AICarOutputInterface*       GetAICarOutputInterface();
-        u8*                         GetAICarOutputInterfaceForRead();
 
         // X360 0x8279C658 (R, :232) / 0x8276D680 (W, :233).
-        const CgsModule::VariableEventQueue<1536, 16>* GetGameEventQueueConst() const;
-        u8*                                            GetGameEventQueueForRead();
-        u8*                                            GetGameEventQueue();
+        typedef CgsModule::VariableEventQueue<1536, 16> GameEventQueue;
+        const GameEventQueue* GetGameEventQueue() const;
+        GameEventQueue*       GetGameEventQueue();
 
         // X360 0x8276D9C8 (W, :402) / 0x8279CA00 (R, :409).
         // RETYPED 2026-09-03 (aiwave lane A4): the member is the real
@@ -145,11 +145,9 @@ namespace AIModuleIO
         // host sizeof == the console's 5296). The DWARF pair is :197 (W) / :200 (R const);
         // the R const twin is what WorldModule::BridgeAIModuleToPhysicsModule @0x827AAAA8
         // walks (VariableEventQueue<5040,16>::GetLength/GetFirstEvent/GetNextEvent on it).
-        // GetVehicleInterface() keeps its pre-wave u8* spelling of the same read seat.
         typedef BrnPhysics::Vehicle::VehicleDriverInputInterface VehicleDriverInputInterface;   // DWARF :~60
         VehicleDriverInputInterface*       GetVehicleDriverInterface();           // :197 (W)
         const VehicleDriverInputInterface* GetVehicleDriverInterface() const;     // :200 (R) X360 0x8279CA00
-        u8*                                GetVehicleInterface();                 // pre-wave spelling of the R seat (kept)
 
         // X360 0x8276DBC0 (W, :444) / 0x8279CBF8 (R, :451 -- export HOLE, disassembled from
         // the image: bit-4 test, "Not locked for reading\n", returns this+0x165D0).
@@ -159,14 +157,8 @@ namespace AIModuleIO
         const AIRaceCarInterface* GetAIRaceCarInterface() const;    // :218 (R) X360 0x8279CBF8
 
         // X360 0x8276DD10 (W, :472) / 0x8279CD48 (R, :479).
-        u8* GetAIModuleResultInterfaceForWrite();
-        u8* GetAIModuleResultInterface();
-        // ADDITIVE 2026-08-26 (resetpump wave), same precedent as GetAICarOutputInterfaceConst
-        // above: the SAME read-locked seat (X360 0x8279CD48, this+0x17F50), typed and const, so
-        // WorldModule::BridgeAIToEntityModules_PrePhysics -- which takes the buffer by const
-        // pointer exactly as the console does -- can reach the interface BY NAME. The untyped
-        // u8* twin stays for the callers that hand the raw seat on.
-        const AIModuleResultInterface* GetAIModuleResultInterfaceConst() const;
+        AIModuleResultInterface*       GetAIModuleResultInterface();
+        const AIModuleResultInterface* GetAIModuleResultInterface() const;
 
     private:
         // @X360 +0x0004. Exact-size confirmed: 4096 + 16 == 0x1010 == 0x1014 - 0x4.
@@ -186,7 +178,7 @@ namespace AIModuleIO
         // @X360 +0x16A60 / +0x17F50 / +0x1AF30 -- all three have real reconstructed types.
         AICarOutputInterface                   mAICarOutputInterface;
         AIModuleResultInterface                mAIModuleResultInterface;
-        CgsModule::VariableEventQueue<1536, 16> mGameEventQueue;
+        GameEventQueue                         mGameEventQueue;
     };
 }
 }

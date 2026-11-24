@@ -7,13 +7,8 @@
 // BrnAIModuleIO_OutputBuffer.cpp accessors: return the address of the member the X360
 // offset names, guarded by whichever lock bit the asm names.
 //
-// ⭐ RENAMED 2026-08-25 (aimodule wave): this used to be `GetAIOutputBufferHeader`, an
-// invented placeholder name for "the untyped thing at this+0x1014". The ARTIST body at
-// 0x8279CB50 returns the SAME this+0x1014 under a READ lock at BrnAIModuleIO.h:437 --
-// i.e. it is the read twin of this write-side :430 -- and the tree's declared-only
-// `GetRouteResponseQueue()` is exactly that read twin. So +0x1014 is the ROUTE RESPONSE
-// QUEUE and this is its write-side handle. The old name had no caller outside this
-// group (verified by grep before the rename).
+// DecFIGS declares the mutable and const GetRouteMapResponseQueue overloads.
+// ARTIST 0x8279CB50 returns the same member under a read lock.
 
 namespace BrnAI
 {
@@ -24,10 +19,10 @@ namespace AIModuleIO
     // (`addi r3,this,0x1014` on the console spine).
     // Callers AIModule::PausedUpdate, AIModule::Update.
     // Faithfully tests the WRITE bit (do not "fix" to read).
-    u8* OutputBuffer::GetRouteResponseQueueForWrite()
+    OutputBuffer::RouteResponseQueue* OutputBuffer::GetRouteMapResponseQueue()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 430));
-        return reinterpret_cast<u8*>(&mRouteResponseQueue);
+        return &mRouteResponseQueue;
     }
 }
 }

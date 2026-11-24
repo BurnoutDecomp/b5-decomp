@@ -792,9 +792,9 @@ void BridgeAIModuleToOutput(
     // back on the AI module's own receiver queue.
     lpWorldOutput->AppendResourceRequestInterface(
         lpAIOutputBuffer->GetAIResourceRequestInterface() );
-    lpWorldOutput->AppendRouteResponseQueue( lpAIOutputBuffer->GetRouteResponseQueue() );
-    lpWorldOutput->SetAICarOutputInterface( lpAIOutputBuffer->GetAICarOutputInterfaceConst() );
-    lpWorldOutput->AppendGameEventQueue( lpAIOutputBuffer->GetGameEventQueueConst() );
+    lpWorldOutput->AppendRouteResponseQueue( lpAIOutputBuffer->GetRouteMapResponseQueue() );
+    lpWorldOutput->SetAICarOutputInterface( lpAIOutputBuffer->GetAICarOutputInterface() );
+    lpWorldOutput->AppendGameEventQueue( lpAIOutputBuffer->GetGameEventQueue() );
 }
 
 // ----------------------------------------------------------------------------

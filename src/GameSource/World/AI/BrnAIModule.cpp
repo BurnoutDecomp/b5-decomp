@@ -1803,7 +1803,7 @@ void AIModule::OnRaceCarReachedCheckpoint(
 //                                                 (vtbl+68 == RouteMapModule::Update @0x82793ED8)
 //   0x8279B7D4  IOBuffer::LockForRead(routeOut)
 //   0x8279B7E4  UpdateCarRoutes(aiOut, routeOut)  == UpdateCarRoutes() below
-//   0x8279B800  aiOut->GetRouteResponseQueueForWrite()->Append(*routeOut->GetRouteResponseQueue())
+//   0x8279B800  aiOut->GetRouteMapResponseQueue()->Append(*routeOut->GetRouteResponseQueue())
 //                                                 == AppendRouteResponses() below
 //   0x8279B808  IOBuffer::UnlockForRead(routeOut)
 //   0x8279B810  ~IOHelper<OutputBuffer>           (routeOut is gone from here on)
@@ -1949,9 +1949,8 @@ void AIModule::UpdateCarRoutes(AIModuleIO::OutputBuffer* lpOutputBuffer,
                 // var_60` with no store; `li r6, 1`): the event carries no data, only its type. A
                 // zeroed byte here -- the consumer never reads it.
                 u8 luPlayerRouteUpdatedEvent = 0;
-                CgsModule::VariableEventQueue<1536, 16>* lpGameEventQueue =
-                    reinterpret_cast<CgsModule::VariableEventQueue<1536, 16>*>(
-                        lpOutputBuffer->GetGameEventQueue());
+                AIModuleIO::OutputBuffer::GameEventQueue* lpGameEventQueue =
+                    lpOutputBuffer->GetGameEventQueue();
                 lpGameEventQueue->AddEvent(
                     reinterpret_cast<const CgsModule::Event*>(&luPlayerRouteUpdatedEvent),
                     AIModuleRoutes::KI_EVENT_PLAYER_ROUTE_UPDATED, 1);
@@ -1967,7 +1966,7 @@ namespace AIModuleRoutes
 // AI module's OUTPUT buffer, where WorldModule::BridgeAIModuleToOutput (AppendRouteResponseQueue)
 // carries it to the game-state / GUI bridges (BridgeWorldToGameState, BridgeWorldRouteInformationToGui).
 //   bl 0x8276B148  routeOut->GetRouteResponseQueue()          (const, R; read lock asserted)
-//   bl 0x8276DB18  aiOut->GetRouteResponseQueueForWrite()      (W; the AI output is write-locked
+//   bl 0x8276DB18  aiOut->GetRouteMapResponseQueue()      (W; the AI output is write-locked
 //                                                              by the spine at 0x8279B588)
 //   bl 0x8277B668  BaseEventQueue<RouteResponse>::Append
 // PRE: lpRouteOutputBuffer read-locked, lpOutputBuffer write-locked.
@@ -1983,8 +1982,7 @@ void AppendRouteResponses(AIModuleIO::OutputBuffer* lpOutputBuffer,
     }
 
     const RouteMapModuleIO::RouteResponseQueue* lpSource = lpRouteOutputBuffer->GetRouteResponseQueue();
-    RouteMapModuleIO::RouteResponseQueue* lpDestination =
-        reinterpret_cast<RouteMapModuleIO::RouteResponseQueue*>(lpOutputBuffer->GetRouteResponseQueueForWrite());
+    AIModuleIO::OutputBuffer::RouteResponseQueue* lpDestination = lpOutputBuffer->GetRouteMapResponseQueue();
 
     lpDestination->Append(*lpSource);
 }

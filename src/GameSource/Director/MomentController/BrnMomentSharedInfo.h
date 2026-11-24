@@ -66,6 +66,7 @@
 // ============================================================================
 
 namespace CgsNumeric { class Random; }
+namespace BrnPhysics { namespace ContactSpy { struct ContactSpyInterface; } }
 
 namespace BrnDirector
 {
@@ -87,8 +88,7 @@ namespace BrnDirector
 
     struct MomentSharedInfo
     {
-        // The record's own nested interface name for the contact spy the moments poll.
-        class ContactSpyInterface;
+        typedef BrnPhysics::ContactSpy::ContactSpyInterface ContactSpyInterface;
 
         // The player's vehicle snapshot, BY VALUE and first -- which is why the moment family's
         // "direct" reaches (the tumbling moment's linear/angular velocity lanes) land inside

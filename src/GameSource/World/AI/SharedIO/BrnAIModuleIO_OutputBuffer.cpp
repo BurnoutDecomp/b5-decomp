@@ -60,7 +60,7 @@ namespace AIModuleIO
     }
 
     // X360 0x8279CB50 (R, :437) -- read-lock handle at this+0x1014.
-    const RouteMapModuleIO::RouteResponseQueue* OutputBuffer::GetRouteResponseQueue() const
+    const OutputBuffer::RouteResponseQueue* OutputBuffer::GetRouteMapResponseQueue() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 437));
         return &mRouteResponseQueue;
@@ -87,15 +87,8 @@ namespace AIModuleIO
     // Consumer: WorldModule::BridgeAIModuleToPhysicsModule @0x827AAAA8 (0x827AAAF0).
     const OutputBuffer::VehicleDriverInputInterface* OutputBuffer::GetVehicleDriverInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return &mVehicleDriverInterface;
-    }
-
-    // X360 0x8279CA00 (R, :409) -- the same read seat under its pre-wave u8* spelling.
-    u8* OutputBuffer::GetVehicleInterface()
-    {
         CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 409));
-        return reinterpret_cast<u8*>(&mVehicleDriverInterface);
+        return &mVehicleDriverInterface;
     }
 
     // X360 0x8276DBC0 (W, :444) -- write-lock handle at this+0x165D0.
@@ -124,58 +117,37 @@ namespace AIModuleIO
     }
 
     // X360 0x8279CCA0 (R, :465) -- read-lock handle at this+0x16A60.
-    u8* OutputBuffer::GetAICarOutputInterfaceForRead()
+    const AICarOutputInterface* OutputBuffer::GetAICarOutputInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 465));
-        return reinterpret_cast<u8*>(&mAICarOutputInterface);
-    }
-
-    // Typed read twin used by WorldModule::BridgeAIModuleToOutput.
-    const AICarOutputInterface* OutputBuffer::GetAICarOutputInterfaceConst() const
-    {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return &mAICarOutputInterface;
     }
 
     // X360 0x8276DD10 (W, :472) -- write-lock handle at this+0x17F50.
-    u8* OutputBuffer::GetAIModuleResultInterfaceForWrite()
+    AIModuleResultInterface* OutputBuffer::GetAIModuleResultInterface()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 472));
-        return reinterpret_cast<u8*>(&mAIModuleResultInterface);
+        return &mAIModuleResultInterface;
     }
 
     // X360 0x8279CD48 (R, :479) -- read-lock handle at this+0x17F50.
-    u8* OutputBuffer::GetAIModuleResultInterface()
-    {
-        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 479));
-        return reinterpret_cast<u8*>(&mAIModuleResultInterface);
-    }
-
-    // X360 0x8279CD48 (R, :479) -- the TYPED const twin of the accessor above; same seat.
-    const AIModuleResultInterface* OutputBuffer::GetAIModuleResultInterfaceConst() const
+    const AIModuleResultInterface* OutputBuffer::GetAIModuleResultInterface() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 479));
         return &mAIModuleResultInterface;
     }
 
     // X360 0x8279C658 (R, :232) -- read-lock handle at this+0x1AF30.
-    u8* OutputBuffer::GetGameEventQueueForRead()
+    const OutputBuffer::GameEventQueue* OutputBuffer::GetGameEventQueue() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 232));
-        return reinterpret_cast<u8*>(&mGameEventQueue);
+        return &mGameEventQueue;
     }
 
     // X360 0x8276D680 (W, :233) -- write-lock handle at this+0x1AF30.
-    u8* OutputBuffer::GetGameEventQueue()
+    OutputBuffer::GameEventQueue* OutputBuffer::GetGameEventQueue()
     {
         CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 233));
-        return reinterpret_cast<u8*>(&mGameEventQueue);
-    }
-
-    // Typed read twin used by WorldModule::BridgeAIModuleToOutput.
-    const CgsModule::VariableEventQueue<1536, 16>* OutputBuffer::GetGameEventQueueConst() const
-    {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
         return &mGameEventQueue;
     }
 }

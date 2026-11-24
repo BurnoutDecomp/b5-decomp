@@ -13,6 +13,7 @@
 #include "GameSource/Director/Camera/Utils/BrnDebugController.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (mTimerInterface @0x6750, exactly 48B)
 #include "GameSource/Director/SharedIO/BrnDirectorVehicleInputInterface.h" // BrnDirector::BrnDirectorVehicleInputInterface (mVehicleDriverInputInterface @0x6780)
+#include "GameSource/Physics/ContactSpies/BrnContactSpyInterface.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // RCEntityGlobalRaceCarOutputInterface (mGlobalRaceCarInterface @0x0010)
 #include "GameSource/World/EntityModules/WorldEntityModule/SharedIO/BrnWorldEntityStatusInterface.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/SharedIO/BrnTrafficDirectorInterfaces.h" // TrafficDirectorOutputInterface (mTrafficOutputInterface @0x6AC0)
@@ -92,7 +93,6 @@
 // HONEST PLACEHOLDERS. Several embedded members are large interface aggregates whose full byte
 // layouts are not yet reconstructed (ControllerInfo,
 // TimerStatusInterface, BrnDirectorVehicleInputInterface, the
-// ContactSpyInterface,
 // CarScoreData, DirectorProfileData, and the GameActionQueue). (PlayerCrashInfo left this list
 // 2026-09-24: it is the typed Camera::PlayerCrashInfo member @0x78E0 now. So did
 // RCEntityGlobalRaceCarOutputInterface, the same day: the typed mGlobalRaceCarInterface @0x0010.
@@ -118,9 +118,6 @@ namespace DirectorIO
         // ⚠️ IT IS NOT A ZERO-FILL: it seeds mePlayerCarIndex @0x7AA8 AND miCameraType @0x7AB8
         // to -1 (`*(a1 + 31400) = -1; *(a1 + 31416) = -1;`). Both are "none" sentinels that
         // consumers test with `> -1`, so a plain memset publishes a live request every frame.
-        // Only the SEEDS whose members are named here are reproduced; the aggregate sub-object
-        // Constructs the X360 also runs (the contact spy, the vehicle-event queue, the score
-        // data, ...) belong to their own un-homed homes and stay with them.
         void Construct();
 
         // DWARF BrnDirectorModuleIO.h:95 (body BrnDirectorModuleIO.cpp:109), ARTIST 0x8221B298:
@@ -128,10 +125,11 @@ namespace DirectorIO
         void Destruct();
 
         // --- queries (getters): all const, all read-lock-asserted ---
-        // (GetContacts/GetHookEnumeration/GetControllerInfo return the addresses of
+        // (GetHookEnumeration/GetControllerInfo return the addresses of
         //  opaque-but-correctly-sized members, typed as void* until those interface homes are
         //  reconstructed. GetVehicleInputInterface is TYPED as of 2026-08-02 -- see the member.)
-        const void*                                        GetContacts() const;
+        typedef BrnPhysics::ContactSpy::ContactSpyInterface ContactSpyInterface;
+        const ContactSpyInterface*                         GetContacts() const;
         const CgsContainers::BitArray<8u>*                 GetUsedRaceCars() const;
         // @0x82206EF0: the eight per-car team words @0x3238 (see maVehicleInfoArray) --
         // AllVehicleData::Update's lpaVehicleTeams.
@@ -320,7 +318,7 @@ namespace DirectorIO
         bool GetFinished100PercentSequence() const;        // @0x7AD4  (GUI command 469/470, flag == 0)
 
         // --- mutators: all write-lock-asserted ---
-        void AppendContacts(const void* lpContacts);
+        void AppendContacts(const ContactSpyInterface* lpContacts);
         void SetControllerInfo(const void* lpControllerInfo);
         // Original count/100-pointer payload. The actual type supplies host
         // width; the existing tail-layout checks use its resulting widening.
@@ -458,16 +456,8 @@ namespace DirectorIO
         BrnWorld::WorldEntityIO::StatusInterface mWorldStatusInterface;                 // @0x6AB0
         u8 maWorldStatusInterfacePad[0x6AB8 - 0x6AB0 - sizeof(BrnWorld::WorldEntityIO::StatusInterface)];
 
-        // @0x6AB8 (27320): contacts. AppendContacts stores one 32-bit word at member word [0]
-        // (this[6830] == 0x6AB8). GetContacts returns its address. HONEST opaque storage.
-        // ⭐ SPLIT 2026-09-24 (crash parity FX-BRIDGES CC-6) at the DWARF's own member order
-        // (BrnDirectorModuleIO.h:337 mContacts / :338 mTrafficOutputInterface / :339
-        // mPlayerCrashInfo) and the console's anchors: BridgeWorldToDirector writes the traffic
-        // interface's u16 head at +0x6AC0 and its 3588-byte block at +0x6AD0 (0x823E3F68..
-        // 0x823E3F78), so 0x6AC0 + 0x10 + 3588 == 0x78D4 -> 16-aligned 0x78E0 is where the
-        // crash record starts, and 0x78E0 + 48 == 0x7910 is the hook enumeration. The spans
-        // around the typed record stay opaque (no reader on this build).
-        u8  mContacts[0x6AC0 - 0x6AB8];                  // @0x6AB8 ContactSpyInterface (DWARF :337)
+        // ARTIST 0x82207618 and 0x823B3238 address the contact-spy handle at +0x6AB8.
+        ContactSpyInterface mContacts;
         // @0x6AC0 (27328): the traffic module's director records (DWARF :338). ⭐ TYPED 2026-09-25
         // (crash parity FX-DIRECTOR2) from opaque bytes: BridgeWorldToDirector step 4 copies the
         // world output's interface in (mu16EntityCount @+0 == 0x6AC0, the 32-slot entity array

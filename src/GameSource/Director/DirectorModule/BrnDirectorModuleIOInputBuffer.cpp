@@ -20,7 +20,7 @@
 // the stringized condition + __FILE__/__LINE__). The bodies then read/write the member the
 // X360 addresses by raw offset -- here named, with the offsets pinned in _AssertLayout().
 //
-// The "value" payloads of the opaque interface members are not interpreted: AppendContacts /
+// The "value" payloads of the opaque interface members are not interpreted:
 // SetControllerInfo / SetHookEnumeration copy the producer's bytes into the correctly-sized
 // member storage exactly as the X360 memcpy/word-store bodies do.
 
@@ -54,6 +54,7 @@ namespace DirectorIO
         CGS_STATIC_ASSERT((sizeof(BrnWorld::WorldEntityIO::StatusInterface) == 5), "world status payload size");
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mbWorldWantsDebugControllerFocus) == 0x7AC7 + InputBuffer::KU_HOOK_ENUMERATION_WIDENING), "world controller focus seat");
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mContacts)            == 0x6AB8), "mContacts @0x6AB8");
+        CGS_STATIC_ASSERT((sizeof(ContactSpyInterface) == sizeof(void*)), "contact-spy handle size");
         CGS_STATIC_ASSERT((offsetof(InputBuffer, mTrafficOutputInterface) == 0x6AC0), "mTrafficOutputInterface @0x6AC0");
         CGS_STATIC_ASSERT((sizeof(BrnTraffic::BrnTrafficIO::TrafficDirectorOutputInterface) == 0x78E0 - 0x6AC0),
                       "TrafficDirectorOutputInterface spans the console's 0xE20 (u16 head, the array @+0x10, its count @+0xE10)");
@@ -95,11 +96,7 @@ namespace DirectorIO
 
     // ---- Construct @0x822393D0 --------------------------------------------------------------
     // The scalar/flag seeds of the console body, for the members this class names. The X360
-    // additionally runs the embedded aggregates' own Constructs (ContactSpyInterface @+27320,
-    // the NewVehicleEvent queue @+26496, TimerStatusInterface::Clear @+26448, CarScoreData::
-    // ClearData @+12560, the vehicle-info pointer table clear, ...); each of those belongs to
-    // its own home and stays there, so this seeds what it owns and leaves the honest-opaque
-    // spans to the caller's zero-fill.
+    // also initializes embedded aggregates through their own APIs.
     void InputBuffer::Construct()
     {
         CgsModule::IOBuffer::Construct();
@@ -111,6 +108,7 @@ namespace DirectorIO
         // MainDirector::ProcessNewVehicleEvents drains it. Without this call mpEvents stays
         // NULL and the first Append/AddEvent writes through it.
         mVehicleDriverInputInterface.Construct();
+        mContacts.Construct();  // ARTIST 0x82239460
 
         // The two "none" sentinels. Everything downstream tests them with `> -1` / `== -1`.
         mePlayerCarIndex       = static_cast<EActiveRaceCarIndex>(-1);   // 31400 = -1
@@ -200,10 +198,11 @@ namespace DirectorIO
 
     // ---- getters (read-lock asserted) -------------------------------------------------------
 
-    const void* InputBuffer::GetContacts() const
+    const InputBuffer::ContactSpyInterface* InputBuffer::GetContacts() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        return mContacts;
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 848));
+        return &mContacts;
     }
 
     const CgsContainers::BitArray<8u>* InputBuffer::GetUsedRaceCars() const
@@ -508,12 +507,10 @@ namespace DirectorIO
 
     // ---- mutators (write-lock asserted) -----------------------------------------------------
 
-    void InputBuffer::AppendContacts(const void* lpContacts)
+    void InputBuffer::AppendContacts(const ContactSpyInterface* lpContacts)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 858));
-        // X360: this[6830] = *(u32*)lpContacts; i.e. publish the first word of the producer's
-        // contact-spy payload into the contacts member's leading word.
-        *reinterpret_cast<u32*>(mContacts) = *static_cast<const u32*>(lpContacts);
+        mContacts = *lpContacts;
     }
 
     void InputBuffer::SetControllerInfo(const void* lpControllerInfo)
