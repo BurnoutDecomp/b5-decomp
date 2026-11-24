@@ -183,9 +183,9 @@ namespace BrnTraffic
     // -- GetCoronaPosition @ 0x82753820 -------------------------------------------
     Vector3 TrafficLightCollection::GetCoronaPosition(u32 luCorona) const
     {
-        CGS_ASSERT(luCorona < muNumCoronas, "luCorona < muNumCoronas");
+        CGS_ASSERT(luCorona < muNumCoronas, CgsDev::Assert::MessageAt("luCorona < muNumCoronas", KAC_ARTIST_ASSERT_FILE, 230));
         CGS_ASSERT(rw::math::vpu::IsValid(mpaCoronaPositions[luCorona]),
-                   "RwMath::IsValid( mpaCoronaPositions[luCorona] )");
+            CgsDev::Assert::MessageAt("RwMath::IsValid( mpaCoronaPositions[luCorona] )", KAC_ARTIST_ASSERT_FILE, 231));
 
         return mpaCoronaPositions[luCorona];
     }

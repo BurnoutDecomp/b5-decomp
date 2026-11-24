@@ -27,7 +27,7 @@
 #include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
 #include "GameSource/Gui/Events/BrnGuiEventOnlineStatsResponse.h"         // GuiEventOnlineStatsResponse
 #include "GameSource/Input/GameInputActions.h"                            // EGameInputActions
-
+static const char KAC_BRN_ONLINE_STATS_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineStats.cpp"; // ARTIST filename 0x820610DC
 namespace BrnGui
 {
     // ================================================================================
@@ -204,7 +204,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineStats::UpdateGetCache()
     {
-        CGS_ASSERT(0 == mpGuiCache, "NULL == mpGuiCache");
+        CGS_ASSERT(0 == mpGuiCache, CgsDev::Assert::MessageAt("NULL == mpGuiCache", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 270));
 
 
 
@@ -219,13 +219,13 @@ namespace BrnGui
                 const GuiEventCachePayload* lpCacheEvent =
                     static_cast<const GuiEventCachePayload*>(lpEvent);
                 CGS_ASSERT(0 != lpCacheEvent->mpCachePointer,
-                           "NULL != lpCacheEvent->mpCachePointer");
+                    CgsDev::Assert::MessageAt("NULL != lpCacheEvent->mpCachePointer", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 280));
                 mpGuiCache = lpCacheEvent->mpCachePointer;
                 break;
             }
         }
 
-        CGS_ASSERT(0 != mpGuiCache, "NULL != mpGuiCache");
+        CGS_ASSERT(0 != mpGuiCache, CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_BRN_ONLINE_STATS_ASSERT_FILE, 289));
     }
 
     // ================================================================================

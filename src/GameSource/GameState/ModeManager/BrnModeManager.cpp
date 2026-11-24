@@ -1008,7 +1008,7 @@ const BrnTrigger::TriggerData* ModeManager::GetCheckpointTriggerData() const
 const BrnTraffic::TrafficData* ModeManager::GetTrafficData() const
 {
     const BrnTraffic::TrafficData* lpTrafficData = mpTriggerQueryManager->GetTrafficData();
-    CGS_ASSERT(lpTrafficData != 0, "lpTrafficData");
+    CGS_ASSERT(lpTrafficData != 0, CgsDev::Assert::MessageAt("lpTrafficData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\BrnModeManager.h", 1631));
     return lpTrafficData;
 }
 

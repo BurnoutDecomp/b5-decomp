@@ -734,7 +734,7 @@ namespace BrnAI
     // ==================================================================================
     Vector3 AICar::GetVelocity() const
     {
-        CGS_ASSERT(vpu::IsValid(mVelocity), "Invalid velocity");
+        CGS_ASSERT(vpu::IsValid(mVelocity), CgsDev::Assert::MessageAt("Invalid velocity", KAC_ARTIST_ASSERT_FILE, 865));
         return mVelocity;
     }
 
@@ -746,7 +746,7 @@ namespace BrnAI
     // ==================================================================================
     Vector3 AICar::GetLastGoodPosition() const
     {
-        CGS_ASSERT(vpu::IsValid(mLastGoodPosition), "Invalid car last good position");
+        CGS_ASSERT(vpu::IsValid(mLastGoodPosition), CgsDev::Assert::MessageAt("Invalid car last good position", KAC_ARTIST_ASSERT_FILE, 872));
         return mLastGoodPosition;
     }
 
@@ -1132,14 +1132,14 @@ namespace BrnAI
     // ==================================================================================
     Vector3 AICar::GetPosition() const
     {
-        CGS_ASSERT(vpu::IsValid(mPosition), "Invalid car position");                        // BrnAICar.h:839
+        CGS_ASSERT(vpu::IsValid(mPosition), CgsDev::Assert::MessageAt("Invalid car position", KAC_ARTIST_ASSERT_FILE, 839));
         return mPosition;
     }
 
     Vector3 AICar::GetDirection() const
     {
-        CGS_ASSERT(vpu::IsValid(mDirection), "Invalid car direction");                      // BrnAICar.h:856
-        CGS_ASSERT(BrnMath::IsNormal(mDirection), "BrnMath::IsNormal( mDirection )");        // BrnAICar.h:857
+        CGS_ASSERT(vpu::IsValid(mDirection), CgsDev::Assert::MessageAt("Invalid car direction", KAC_ARTIST_ASSERT_FILE, 856));
+        CGS_ASSERT(BrnMath::IsNormal(mDirection), CgsDev::Assert::MessageAt("BrnMath::IsNormal( mDirection )", KAC_ARTIST_ASSERT_FILE, 857));
         return mDirection;
     }
 

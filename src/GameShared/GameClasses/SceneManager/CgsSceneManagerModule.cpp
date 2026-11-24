@@ -61,7 +61,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsLine.h"                                  // CgsGeometric::Line
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"                                // CgsGeometric::Sphere (ProcessVolumeTestDeepest's world arm)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventVolumeTestDeepest.h"         // SceneManagerIO::InEventVolumeTestDeepest (the 224-byte record)
-
+static const char KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\CgsSceneManagerModule.cpp"; // ARTIST filename 0x820F2FF8
 // rw::collision::AABBox is only NAMED in this TU (GetBBox's out-parameter and AddBody's
 // pointer parameter). Its real home, vendor/renderware/collision/AABBox.hpp, pulls the SDK
 // rw::math::vpu::Vector3 CLASS into a TU that already has the vendor 4-lane POD via
@@ -2723,10 +2723,10 @@ namespace CgsSceneManager
                                                   SceneManagerIO::InputBuffer_Query* lpSceneInputBuffer,
                                                   SceneManagerIO::OutputBuffer* lpSceneOutputBuffer)
     {
-        CGS_ASSERT(lpInputBufferStack != NULL,  "lpInputBufferStack != NULL");    // :847
-        CGS_ASSERT(lpOutputBufferStack != NULL, "lpOutputBufferStack != NULL");   // :848
-        CGS_ASSERT(lpSceneInputBuffer != NULL,  "lpSceneInputBuffer != NULL");    // :849
-        CGS_ASSERT(lpSceneOutputBuffer != NULL, "lpSceneOutputBuffer != NULL");   // :850
+        CGS_ASSERT(lpInputBufferStack != NULL, CgsDev::Assert::MessageAt("lpInputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 847));
+        CGS_ASSERT(lpOutputBufferStack != NULL, CgsDev::Assert::MessageAt("lpOutputBufferStack != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 848));
+        CGS_ASSERT(lpSceneInputBuffer != NULL, CgsDev::Assert::MessageAt("lpSceneInputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 849));
+        CGS_ASSERT(lpSceneOutputBuffer != NULL, CgsDev::Assert::MessageAt("lpSceneOutputBuffer != NULL", KAC_CGS_SCENE_MANAGER_MODULE_ASSERT_FILE, 850));
 
         SpatialPartitionIO::OutputBuffer* lpSpatialPartitionOutputBuffer = 0;
         lpOutputBufferStack->CreateIOBuffer(&lpSpatialPartitionOutputBuffer, "SpacialPartition");

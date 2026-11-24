@@ -16,7 +16,7 @@
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlinePreEvent.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface
 #include "GameShared/GameClasses/Gui/View/AptInterface/CgsAptCommunicator.h" // GuiEventAptTriggerPayload
@@ -24,7 +24,7 @@
 #include "GameSource/Gui/BrnGuiCache.h"                                   // BrnGui::GuiCache
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                           // GuiOverlayRequest
 #include "GameSource/Gui/BrnGuiShared.h"                                  // gGuiResourceIdentifier
-
+static const char KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlinePreEvent.cpp"; // ARTIST filename 0x82061F00
 namespace BrnGui
 {
     // ================================================================================
@@ -168,7 +168,7 @@ namespace BrnGui
     // ================================================================================
     void OnlinePreEvent::UpdateGetCache()
     {
-        CGS_ASSERT(0 == mpGuiCache, "NULL == mpGuiCache");
+        CGS_ASSERT(0 == mpGuiCache, CgsDev::Assert::MessageAt("NULL == mpGuiCache", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 188));
 
 
 
@@ -183,13 +183,13 @@ namespace BrnGui
                 const GuiEventCachePayload* lpCacheEvent =
                     static_cast<const GuiEventCachePayload*>(lpEvent);
                 CGS_ASSERT(0 != lpCacheEvent->mpCachePointer,
-                           "NULL != lpCacheEvent->mpCachePointer");
+                    CgsDev::Assert::MessageAt("NULL != lpCacheEvent->mpCachePointer", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 198));
                 mpGuiCache = lpCacheEvent->mpCachePointer;
                 break;
             }
         }
 
-        CGS_ASSERT(0 != mpGuiCache, "NULL != mpGuiCache");
+        CGS_ASSERT(0 != mpGuiCache, CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_BRN_ONLINE_PRE_EVENT_ASSERT_FILE, 207));
     }
 
     // ================================================================================

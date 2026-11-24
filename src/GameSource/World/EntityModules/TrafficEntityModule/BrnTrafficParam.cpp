@@ -413,7 +413,7 @@ bool Param::ShouldBeIndicatingRight() const
 Vector3 ParamTransform::GetLerpedPos() const
 {
     CGS_ASSERT(rw::math::vpu::IsValid(mLerpedPosAndSpeed.GetVector3()),
-               "RwMath::IsValid( mLerpedPosAndSpeed.GetVector3() )");
+        CgsDev::Assert::MessageAt("RwMath::IsValid( mLerpedPosAndSpeed.GetVector3() )", KAC_ARTIST_ASSERT_FILE, 568));
 
     return mLerpedPosAndSpeed.GetVector3();
 }
@@ -421,7 +421,7 @@ Vector3 ParamTransform::GetLerpedPos() const
 // 0x827126A0 -- the vehicle's right axis (mRight @0x20), guarded by an IsValid NaN check.
 Vector3 ParamTransform::GetRight() const
 {
-    CGS_ASSERT(rw::math::vpu::IsValid(mRight), "RwMath::IsValid( mRight )");
+    CGS_ASSERT(rw::math::vpu::IsValid(mRight), CgsDev::Assert::MessageAt("RwMath::IsValid( mRight )", KAC_ARTIST_ASSERT_FILE, 584));
 
     return mRight;
 }
@@ -525,7 +525,7 @@ Vector3 ParamTransform::GetDeterministicPos() const
 Vector3 ParamTransform::GetDirection() const
 {
     CGS_ASSERT(rw::math::vpu::IsValid(mDirAndAccel.GetVector3()),
-               "RwMath::IsValid( mDirAndAccel.GetVector3() )");
+        CgsDev::Assert::MessageAt("RwMath::IsValid( mDirAndAccel.GetVector3() )", KAC_ARTIST_ASSERT_FILE, 576));
 
     return mDirAndAccel.GetVector3();
 }

@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Sound/Logic/CgsEnvironment.h"         // Environment::GetDynamicMixer
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include <cmath>                                                       // std::fabs (the inlined |delta|)
-
+static const char KAC_BRN_CAMERA_CONTROL_ASSERT_FILE[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Global/BrnCameraControl.cpp"; // ARTIST filename 0x820AF8D8
 // =============================================================================
 // BrnSound::Logic::CameraControl — out-of-line bodies.
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. See BrnCameraControl.h for the
@@ -270,12 +270,12 @@ BrnSound::ECameraModes CameraControl::GetCameraMode(
 BrnSound::ECameraModes CameraControl::GetCameraModeFromLogicModule(
     BrnSound::Module::SoundLogicModule* lpLogicModule)
 {
-    CGS_ASSERT(lpLogicModule != 0, "lpLogicModule");             // 8269C868.. (cpp:446)
+    CGS_ASSERT(lpLogicModule != 0, CgsDev::Assert::MessageAt("lpLogicModule", KAC_BRN_CAMERA_CONTROL_ASSERT_FILE, 446));
 
     // 8269C884 `lwz r11, 0x4C94(r31)` + the "mpBrnLogicInputBuffer" assert is
     // GetBrnInputStructure() @0x82682518 inlined; 8269C8B0 re-loads the same member.
     BrnSound::Module::Io::RootInputBuffer* lpInputBuffer = lpLogicModule->GetBrnInputStructure();
-    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer");             // 8269C8BC.. (cpp:451)
+    CGS_ASSERT(lpInputBuffer != 0, CgsDev::Assert::MessageAt("lpInputBuffer", KAC_BRN_CAMERA_CONTROL_ASSERT_FILE, 451));
 
     // 8269C8DC / 8269C8E8 / 8269C8F0 (`addi r3, r30, 0x138` == Camera::mState).
     return GetCameraMode(lpInputBuffer->GetDirectorCamera()->GetState(),

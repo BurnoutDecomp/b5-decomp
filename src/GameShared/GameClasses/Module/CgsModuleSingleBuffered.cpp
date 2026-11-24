@@ -1,7 +1,7 @@
 #include "CgsModuleSingleBuffered.h"
 
-#include <GameShared/GameClasses/Core/CgsAssert.h>
-
+#include <GameShared/GameClasses/Core/CgsAssertMessageAt.h>
+static const char KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_FILE[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\module\\CgsModuleSingleBuffered.cpp"; // ARTIST filename 0x820E84E8
 void CgsModule::ModuleSingleBuffered::Construct()
 {
     this->mePrepareStage = EManagerPrepareStage::E_MANAGERPREPARESTAGE_START;
@@ -78,7 +78,7 @@ bool CgsModule::ModuleSingleBuffered::Prepare()
             this->mePrepareStage = EManagerPrepareStage::E_MANAGERPREPARESTAGE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Unknown prepare stage");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown prepare stage", KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_FILE, 176));
 
             return false;
     }
@@ -142,7 +142,7 @@ bool CgsModule::ModuleSingleBuffered::Release()
             meReleaseStage = EManagerReleaseStage::E_MANAGERRELEASESTAGE_DONE;
             return true;
         default:
-            CGS_ASSERT(false, "Unknown release stage");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown release stage", KAC_CGS_MODULE_SINGLE_BUFFERED_ASSERT_FILE, 308));
 
             return false;
     }

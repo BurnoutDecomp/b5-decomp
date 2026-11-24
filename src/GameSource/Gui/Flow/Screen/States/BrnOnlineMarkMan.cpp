@@ -21,7 +21,7 @@
 #include "GameSource/Gui/SatNav/BrnGuiTracker.h"                            // GuiEventCachePointer (event 64)
 
 #include <cstring>   // strcmp
-
+static const char KAC_BRN_ONLINE_MARK_MAN_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineMarkMan.cpp"; // ARTIST filename 0x82061050
 namespace BrnGui
 {
 namespace
@@ -232,7 +232,7 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
     // Latch the cache from the first cache-pointer event in the in-queue.
     void OnlineMarkMan::UpdateGetCache()
     {
-        CGS_ASSERT(mpGuiCache == 0, "NULL == mpGuiCache");
+        CGS_ASSERT(mpGuiCache == 0, CgsDev::Assert::MessageAt("NULL == mpGuiCache", KAC_BRN_ONLINE_MARK_MAN_ASSERT_FILE, 227));
 
 
         const CgsModule::Event* lpEvent;
@@ -244,13 +244,13 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
             if (liEventId == KI_EVENT_GUI_CACHE)
             {
                 const GuiEventCachePointer* lpCacheEvent = reinterpret_cast<const GuiEventCachePointer*>(lpEvent);
-                CGS_ASSERT(lpCacheEvent->mpCachePointer != 0, "NULL != lpCacheEvent->mpCachePointer");
+                CGS_ASSERT(lpCacheEvent->mpCachePointer != 0, CgsDev::Assert::MessageAt("NULL != lpCacheEvent->mpCachePointer", KAC_BRN_ONLINE_MARK_MAN_ASSERT_FILE, 237));
                 mpGuiCache = lpCacheEvent->mpCachePointer;
                 break;
             }
         }
 
-        CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_BRN_ONLINE_MARK_MAN_ASSERT_FILE, 246));
     }
 
     // ---- UpdateLoadResources ---------------------------------------------------

@@ -31,7 +31,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/Boost/BrnBoostType.h" // BrnWorld::EBoostType
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"           // BrnPhysics::Vehicle::RaceCarState (complete)
 #include "rw/core/base/ostypes.h"                                   // RwRGBAReal (complete 16-byte)
-
+static const char KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE[] = "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h"; // ARTIST filename 0x82003360
 namespace BrnResource { struct VehicleListEntry; }
 namespace BrnPhysics { namespace Deformation { struct StreamedDeformationSpec; } }
 namespace BrnGameState { namespace GameStateModuleIO { enum EPlayerScoringIndex ; } }
@@ -319,9 +319,9 @@ namespace RaceCarEntityModuleIO
         const BoostOutputInfo* GetBoostOutputInfoN(EActiveRaceCarIndex leActiveRaceCarIndex) const
         {
             CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-                                    "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");   // :1157
+                CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 1157));
             CGS_ASSERT(leActiveRaceCarIndex <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                                    "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT"); // :1158
+                CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", KAC_BRN_RACE_CAR_ENTITY_MODULE_OUTPUT_INTERFACE_ASSERT_FILE, 1158));
             return &maBoostOutputInfo[leActiveRaceCarIndex];
         }
         // ⚠️ PARAMETER ORDER (asm-attested, 2026-08-01): the console passes

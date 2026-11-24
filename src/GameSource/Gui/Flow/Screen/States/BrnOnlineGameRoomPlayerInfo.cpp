@@ -1,5 +1,5 @@
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h"
-
+static const char KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.cpp"; // ARTIST filename 0x820607A0
 // ===================================================================================
 // BrnGui::OnlineGameRoomPlayerInfo -- reconstructed from BURNOUT_X360_ARTIST.XEX
 // (addresses in the header). WAVE H KEYSTONE SCAFFOLD: this file carries the TU's
@@ -201,7 +201,7 @@ namespace BrnGui
 // reconstruction, unchanged apart from this banner.
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameRoomPlayerInfo.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Gui/CgsGuiEvent.h"                       // CgsGui::GuiEvent<N>
 #include "GameShared/GameClasses/Gui/CgsGuiShared.h"                      // CgsGui::GuiAccessPointers
 #include "GameShared/GameClasses/Gui/Model/State/CgsGuiStateInterface.h"  // StateInterface out-queue
@@ -709,7 +709,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameRoomPlayerInfo::UpdateSoundSettings()
     {
-        CGS_ASSERT(mpStateInterface != 0, "mpStateInterface");   // cpp:4636 (non-fatal)
+        CGS_ASSERT(mpStateInterface != 0, CgsDev::Assert::MessageAt("mpStateInterface", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 4636));
 
         // { 8, 463, 12, music, sfx } on channel 40, X360 record size 20. The X360 copies
         // the two adjacent option words out as one doubleword; they are the two volume
@@ -3903,18 +3903,18 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::ClearSplashScreenOverlay(
         const OverlayCompleteData* lpOverlayCompleteEvent)
     {
-        CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:2990
+        CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("mpGuiCache", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 2990));
 
         const s32 leGameModeType = mpGuiCache->meGameModeType;
         if (leGameModeType != BrnGameState::GameStateModuleIO::E_MODE_NONE)
         {
             // ARTIST E_MODE_COUNT (the X360 compares against 18) -- see KI_ARTIST_MODE_COUNT.
             CGS_ASSERT(leGameModeType < KI_ARTIST_MODE_COUNT,
-                       "leGameModeType < GsmIO::E_MODE_COUNT");   // cpp:2997
+                CgsDev::Assert::MessageAt("leGameModeType < GsmIO::E_MODE_COUNT", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 2997));
 
             const char* lpcSplashScreenID = GetSplashScreenIDForGameMode(
                 static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(leGameModeType));
-            CGS_ASSERT(lpcSplashScreenID != 0, "lpcSplashScreenID != NULL");   // cpp:3002
+            CGS_ASSERT(lpcSplashScreenID != 0, CgsDev::Assert::MessageAt("lpcSplashScreenID != NULL", KAC_BRN_ONLINE_GAME_ROOM_PLAYER_INFO_ASSERT_FILE, 3002));
 
             if (lpOverlayCompleteEvent->mOverlayId == CgsIDCompress(lpcSplashScreenID) &&
                 lpOverlayCompleteEvent->miLeaveMethod == 0)

@@ -22,7 +22,7 @@
 
 #include <cmath>     // ceil
 #include <cstring>   // strcmp
-
+static const char KAC_ONLINE_YOU_WIN_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/OnlineYouWin.cpp"; // ARTIST filename 0x8206126C
 namespace BrnGui
 {
 namespace
@@ -157,7 +157,7 @@ void OnlineYouWin::Update()
 // leave the screen as soon as the cache is known.
 void OnlineYouWin::UpdateGetCache()
 {
-    CGS_ASSERT(mpGuiCache == 0, "NULL == mpGuiCache");
+    CGS_ASSERT(mpGuiCache == 0, CgsDev::Assert::MessageAt("NULL == mpGuiCache", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 218));
 
 
     const CgsModule::Event* lpEvent;
@@ -169,7 +169,7 @@ void OnlineYouWin::UpdateGetCache()
         if (liEventId == KI_EVENT_GUI_CACHE)
         {
             const GuiEventCachePointer* lpCacheEvent = reinterpret_cast<const GuiEventCachePointer*>(lpEvent);
-            CGS_ASSERT(lpCacheEvent->mpCachePointer != 0, "NULL != lpCacheEvent->mpCachePointer");
+            CGS_ASSERT(lpCacheEvent->mpCachePointer != 0, CgsDev::Assert::MessageAt("NULL != lpCacheEvent->mpCachePointer", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 228));
             mpGuiCache = lpCacheEvent->mpCachePointer;
             if (IsStuntRunGameMode(mpGuiCache->GetGameMode()))
             {
@@ -179,7 +179,7 @@ void OnlineYouWin::UpdateGetCache()
         }
     }
 
-    CGS_ASSERT(mpGuiCache != 0, "NULL != mpGuiCache");
+    CGS_ASSERT(mpGuiCache != 0, CgsDev::Assert::MessageAt("NULL != mpGuiCache", KAC_ONLINE_YOU_WIN_ASSERT_FILE, 243));
 }
 
 // ---- UpdateWFWinResult ---------------------------------------------------------

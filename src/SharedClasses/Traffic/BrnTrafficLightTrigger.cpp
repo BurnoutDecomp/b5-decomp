@@ -1,8 +1,8 @@
 #include "SharedClasses/Traffic/BrnTrafficLightTrigger.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "rw/math/vpu/vector3_operation.h"           // rw::math::vpu::IsValid (per-lane NaN test) -- canonical home
 #include "SharedClasses/Traffic/BrnTrafficSharedMaths.h"
-
+static const char KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE[] = "..\\..\\..\\SharedClasses\\Traffic/BrnTrafficLightTrigger.h"; // ARTIST filename 0x820216C4
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnTraffic::LightTriggerStartData::GetStartPosition  @ 0x8231BB50
 //   BrnTraffic::LightTriggerStartData::GetStartDirection @ 0x8231BC68
@@ -39,9 +39,9 @@ Matrix44Affine LightTrigger::GetTransform() const
 // R31 = 16*luIndex + this -> &maStartingPositions[luIndex] (array at +0).
 Vector3 LightTriggerStartData::GetStartPosition(u32 luIndex) const
 {
-    CGS_ASSERT(muNumStartingPositions <= KU_MAX_START_POSITIONS, "muNumStartingPositions <= KU_MAX_START_POSITIONS");
-    CGS_ASSERT(luIndex < muNumStartingPositions, "luIndex < muNumStartingPositions");
-    CGS_ASSERT(rw::math::vpu::IsValid(maStartingPositions[luIndex]), "RwMath::IsValid( maStartingPositions[luIndex] )");
+    CGS_ASSERT(muNumStartingPositions <= KU_MAX_START_POSITIONS, CgsDev::Assert::MessageAt("muNumStartingPositions <= KU_MAX_START_POSITIONS", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 280));
+    CGS_ASSERT(luIndex < muNumStartingPositions, CgsDev::Assert::MessageAt("luIndex < muNumStartingPositions", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 281));
+    CGS_ASSERT(rw::math::vpu::IsValid(maStartingPositions[luIndex]), CgsDev::Assert::MessageAt("RwMath::IsValid( maStartingPositions[luIndex] )", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 282));
     return maStartingPositions[luIndex];
 }
 
@@ -50,9 +50,9 @@ Vector3 LightTriggerStartData::GetStartPosition(u32 luIndex) const
 // follows the 8-entry positions array, base +128).
 Vector3 LightTriggerStartData::GetStartDirection(u32 luIndex) const
 {
-    CGS_ASSERT(muNumStartingPositions <= KU_MAX_START_POSITIONS, "muNumStartingPositions <= KU_MAX_START_POSITIONS");
-    CGS_ASSERT(luIndex < muNumStartingPositions, "luIndex < muNumStartingPositions");
-    CGS_ASSERT(rw::math::vpu::IsValid(maStartingDirections[luIndex]), "RwMath::IsValid( maStartingDirections[luIndex] )");
+    CGS_ASSERT(muNumStartingPositions <= KU_MAX_START_POSITIONS, CgsDev::Assert::MessageAt("muNumStartingPositions <= KU_MAX_START_POSITIONS", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 289));
+    CGS_ASSERT(luIndex < muNumStartingPositions, CgsDev::Assert::MessageAt("luIndex < muNumStartingPositions", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 290));
+    CGS_ASSERT(rw::math::vpu::IsValid(maStartingDirections[luIndex]), CgsDev::Assert::MessageAt("RwMath::IsValid( maStartingDirections[luIndex] )", KAC_BRN_TRAFFIC_LIGHT_TRIGGER_ASSERT_FILE, 291));
     return maStartingDirections[luIndex];
 }
 

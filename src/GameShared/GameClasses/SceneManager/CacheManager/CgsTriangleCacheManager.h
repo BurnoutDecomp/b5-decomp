@@ -6,7 +6,7 @@
 #include "GameShared/GameClasses/Geometric/Primitives/CgsSphere.h"
 #include "GameShared/GameClasses/Containers/CgsBitArray.h" // CgsContainers::BitArray<N>
 #include "GameShared/GameClasses/Geometric/Primitives/CgsTriangle4.h" // CgsGeometric::Triangle4
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (inlined GetCachedTriangle guard)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT (inlined GetCachedTriangle guard)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"  // CgsModule::EventQueue<T, N>
 #include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManagerIO.h" // InEvent{AddToCache,UpdateCachedPosition}
 
@@ -161,7 +161,7 @@ namespace CgsSceneManager
         // the single inlined X360 function store-for-store.
         const CgsGeometric::Triangle4* GetCachedTriangle(s32 liIndex) const
         {
-            CGS_ASSERT(mpaTriangleCache != NULL, "mpaTriangleCache != NULL");
+            CGS_ASSERT(mpaTriangleCache != NULL, CgsDev::Assert::MessageAt("mpaTriangleCache != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\scenemanager\\cachemanager\\CgsCachedTriangleList.h", 153));
             return &mpaTriangleCache[liIndex];
         }
     };

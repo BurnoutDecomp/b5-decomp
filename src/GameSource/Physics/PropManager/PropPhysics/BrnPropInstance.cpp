@@ -34,7 +34,7 @@ namespace Props
     void PropInstance::SetAngularVelocity(Vector3 lAngularVelocity)
     {
         CGS_ASSERT(rw::math::vpu::IsValid(lAngularVelocity),
-                   "RwMath::IsValid( lAngularVelocity )");
+            CgsDev::Assert::MessageAt("RwMath::IsValid( lAngularVelocity )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\propmanager\\PropPhysics/BrnPropInstance.h", 251));
         mAngularVelocity = lAngularVelocity;
     }
 

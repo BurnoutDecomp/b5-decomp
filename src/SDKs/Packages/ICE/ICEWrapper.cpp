@@ -16,7 +16,7 @@
 
 #include "GameSource/Director/BrnDirectorICEWrapper.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                 // CGS_ASSERT
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface (sim-time step)
 
 namespace BrnDirector
@@ -244,7 +244,7 @@ void ICEWrapper::PlayMovie(CgsResource::ID lTakeId, f32 lfStartPosition,
                            VehicleRef::EType leVehicleRefType, EActiveRaceCarIndex leRaceCar)
 {
     ICE::ICETakeData* lpTakeData = mpResourceManager->GetKeyAnim(lTakeId);
-    CGS_ASSERT(lpTakeData != 0, "Invalid ICE Movie Requested");
+    CGS_ASSERT(lpTakeData != 0, CgsDev::Assert::MessageAt("Invalid ICE Movie Requested", "..\\..\\..\\SDKs\\Packages\\ICE\\ICEWrapper.cpp", 342));
 
     // Bind + start the manager's playback take at the requested position (sets the
     // manager's playback-active flag).

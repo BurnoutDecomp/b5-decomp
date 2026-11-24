@@ -1,7 +1,7 @@
 #include "GameSource/Physics/PropManager/PropPhysics/BrnPropPartInstance.h"
 #include "rw/math/vpu/vector3_operation.h"           // rw::math::vpu::IsValid(Vector3)
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
+static const char KAC_BRN_PROP_PART_INSTANCE_ASSERT_FILE[] = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\propmanager\\PropPhysics/BrnPropPartInstance.h"; // ARTIST filename 0x82095E08
 // ===========================================================================
 // BrnPhysics::Props::PropPartInstance out-of-line setters, reconstructed store-for-
 // store from BURNOUT_X360_ARTIST.XEX (SetPosition @0x825DE798,
@@ -66,7 +66,7 @@ namespace Props
     // check on x/y/z) then stores the position at this+0.
     void PropPartInstance::SetPosition(Vector3 lPosition)
     {
-        CGS_ASSERT(rw::math::vpu::IsValid(lPosition), "RwMath::IsValid( lPosition )");
+        CGS_ASSERT(rw::math::vpu::IsValid(lPosition), CgsDev::Assert::MessageAt("RwMath::IsValid( lPosition )", KAC_BRN_PROP_PART_INSTANCE_ASSERT_FILE, 191));
         mPos = lPosition;
     }
 
@@ -74,7 +74,7 @@ namespace Props
     // check on x/y/z) then stores the linear velocity at this+0x10.
     void PropPartInstance::SetLinearVelocity(Vector3 lLinearVelocity)
     {
-        CGS_ASSERT(rw::math::vpu::IsValid(lLinearVelocity), "RwMath::IsValid( lLinearVelocity )");
+        CGS_ASSERT(rw::math::vpu::IsValid(lLinearVelocity), CgsDev::Assert::MessageAt("RwMath::IsValid( lLinearVelocity )", KAC_BRN_PROP_PART_INSTANCE_ASSERT_FILE, 205));
         mLinearVelocity = lLinearVelocity;
     }
 }

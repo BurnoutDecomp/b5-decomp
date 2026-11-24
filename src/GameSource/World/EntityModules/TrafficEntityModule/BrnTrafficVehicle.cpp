@@ -751,8 +751,8 @@ Vector3 Vehicle::GetTargetPos() const
 
 Vector3 Vehicle::GetLinearVelocity() const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    CGS_ASSERT(rw::math::vpu::IsValid(mLinearVelocity), "IsValid( mLinearVelocity )");
+    CGS_ASSERT(IsAlive(), CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 761));
+    CGS_ASSERT(rw::math::vpu::IsValid(mLinearVelocity), CgsDev::Assert::MessageAt("IsValid( mLinearVelocity )", KAC_ARTIST_ASSERT_FILE, 762));
     return mLinearVelocity;
 }
 
@@ -1080,15 +1080,15 @@ void Vehicle::SetSwerveTime(f32 lfValue)
 
 void Vehicle::SetTargetPos(Vector3 lTargetPos)
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    CGS_ASSERT(rw::math::vpu::IsValid(lTargetPos), "IsValid( lTargetPos )");
+    CGS_ASSERT(IsAlive(), CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 734));
+    CGS_ASSERT(rw::math::vpu::IsValid(lTargetPos), CgsDev::Assert::MessageAt("IsValid( lTargetPos )", KAC_ARTIST_ASSERT_FILE, 735));
     mTargetPos = lTargetPos;
 }
 
 void Vehicle::SetLinearVelocity(Vector3 lLinearVelocity)
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    CGS_ASSERT(rw::math::vpu::IsValid(lLinearVelocity), "IsValid( lLinearVelocity )");
+    CGS_ASSERT(IsAlive(), CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 752));
+    CGS_ASSERT(rw::math::vpu::IsValid(lLinearVelocity), CgsDev::Assert::MessageAt("IsValid( lLinearVelocity )", KAC_ARTIST_ASSERT_FILE, 753));
     mLinearVelocity = lLinearVelocity;
 }
 

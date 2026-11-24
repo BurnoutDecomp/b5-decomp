@@ -1093,8 +1093,8 @@ namespace BrnGui
     // ================================================================================
     void LicenseComponent::StartOutputtingGamerpic()
     {
-        CGS_ASSERT(mpProfile != 0, "mpProfile");                                     // cpp:1231
-        CGS_ASSERT(mbShowingProfilePicture == false, "mbShowingProfilePicture == false"); // cpp:1232
+        CGS_ASSERT(mpProfile != 0, CgsDev::Assert::MessageAt("mpProfile", KAC_ARTIST_ASSERT_FILE, 1231));
+        CGS_ASSERT(mbShowingProfilePicture == false, CgsDev::Assert::MessageAt("mbShowingProfilePicture == false", KAC_ARTIST_ASSERT_FILE, 1232));
 
         PostPlayerTextureEvent(mpStateInterface, E_PLAYERTEXTURE_LICENCE_GAMERPIC);
     }
