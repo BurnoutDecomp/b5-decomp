@@ -152,8 +152,9 @@ void GameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeType)
 // -----------------------------------------------------------------------------
 s32 GameModeParams::GetCheckpointCount() const
 {
-    CGS_ASSERT(maCheckpointDataArray.GetCount() != CheckpointDataArray::KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    return maCheckpointDataArray.GetCount();
+    // The array's own checked GetLength (CgsArray.h:336), inlined on the array (ARTIST 0x822B1F00
+    // `addi r31, r3, 0x260`).
+    return maCheckpointDataArray.GetLength();
 }
 
 // -----------------------------------------------------------------------------
@@ -196,8 +197,8 @@ CheckpointData* GameModeParams::GetCheckpointData(s32 liIndex)
 // -----------------------------------------------------------------------------
 s32 GameModeParams::GetStartLocationCount() const
 {
-    CGS_ASSERT(maStartLocations.GetCount() != StartLocationArray::KI_UNCONSTRUCTED, "Array used before Construct/Clear was called");
-    return maStartLocations.GetCount();
+    // The array's own checked GetLength (CgsArray.h:336), inlined on the array.
+    return maStartLocations.GetLength();
 }
 
 // GetFlag (X360 @ 0x821F2C88) is defined inline in BrnGameModeParams.h:193 -- the out-of-line

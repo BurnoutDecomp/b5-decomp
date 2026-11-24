@@ -38,7 +38,7 @@ namespace ReplayIO
         // ("Not locked for writing", BrnReplayModuleIO.h:176), then bulk-appends the
         // source game-event queue into mGameEventQueue (Append<1536,16>). Returns the
         // Append result.
-        int AppendGameEventQueue(const GameEventQueue* lpSourceQueue);
+        void AppendGameEventQueue(const GameEventQueue* lpSourceQueue);     // DWARF h:180 (void)
 
         static void _AssertLayout();
 
@@ -124,7 +124,7 @@ namespace ReplayIO
         // X360 0x823C9A38: write-lock (bit 3, "Not locked for writing", :72); bulk-appends the
         // source game-action queue into mGameActionQueue (VariableEventQueue<13312,16>::
         // Append<13312,16>). Returns the Append result.
-        int AppendGameActionQueue(const GameActionQueue* lpSourceQueue);
+        void AppendGameActionQueue(const GameActionQueue* lpSourceQueue);   // DWARF h:72 (void)
         // X360 0x8264E128: read-lock (bit 4, "Not locked for reading", :74); returns
         // &mTimerStatusInterface (this+0x3414).
         const CgsSystem::TimerStatusInterface* GetTimerStatusInterface() const;
@@ -167,7 +167,7 @@ namespace ReplayIO
         // X360 0x823BB320: write-lock (bit 3, "Not locked for writing", :143); merges the source
         // request interface's serialiser slots into mRequestInterface (this+4). Returns the
         // Append result.
-        int AppendRequestInterface(const RequestInterface* lpSource);
+        void AppendRequestInterface(const RequestInterface* lpSource);      // DWARF h:147 (void)
         // X360 0x8264E3C8: read-lock (bit 4, "Not locked for reading", :145); returns
         // &mGuiEventQueue (this+0x30).
         const GuiEventQueue* GetGuiEvent() const;

@@ -155,7 +155,8 @@ namespace BrnDirector
         // Clear the two base camera flags. The derived states' virtual Construct() re-zero
         // them at init time (X360 byte stores at +0x170 / +0x171); exposed protected so the
         // derived Construct can reset them by name without poking the base privates by offset.
-        void ResetBaseCameraFlags() { mbDebugDisplayActive = false; mbCycleCameraThisFrame = false; }
+        // ARTIST clears +0x171 before +0x170 (ArbStateAttractMode::Construct 0x8225B1E8 / 0x8225B1EC).
+        void ResetBaseCameraFlags() { mbCycleCameraThisFrame = false; mbDebugDisplayActive = false; }
 
         // Mutable camera access for the derived states' per-frame effect / transition pokes.
         Camera::Camera& GetNonConstCamera() { return mCamera; }

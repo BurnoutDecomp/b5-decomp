@@ -223,12 +223,14 @@ const GameModeParams* PrepareForModeAction::GetGameModeParams() const
 // of the miNumPlayersDisconnected recorded ids. The two asserts bound the count to [0, 8).
 bool PrepareForModeAction::GetPlayerDisconnected(BrnNetwork::NetworkPlayerID lNetworkPlayerID) const
 {
-    CGS_ASSERT(miNumPlayersDisconnected >= 0, "miNumPlayersDisconnected >= 0");
-    CGS_ASSERT(miNumPlayersDisconnected < KI_MAX_DISCONNECTED_NETWORK_PLAYERS, "miNumPlayersDisconnected < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+    CGS_ASSERT(miNumPlayersDisconnected >= 0,
+        CgsDev::Assert::MessageAt("miNumPlayersDisconnected >= 0", "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 1136 /* ARTIST 0x822A01C8 */));
+    CGS_ASSERT(miNumPlayersDisconnected < KI_MAX_DISCONNECTED_NETWORK_PLAYERS,
+        CgsDev::Assert::MessageAt("miNumPlayersDisconnected < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 1137 /* ARTIST 0x822A01F0 */));
 
     for (s32 liIndex = 0; liIndex < miNumPlayersDisconnected; ++liIndex)
     {
-        if (maDisconnectedNetworkPlayerID[liIndex] == lNetworkPlayerID)
+        if (lNetworkPlayerID == maDisconnectedNetworkPlayerID[liIndex])
         {
             return true;
         }

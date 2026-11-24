@@ -952,7 +952,7 @@ namespace BrnProgression
 
             const ProgressionData* lpProgressionData = GetLoadedProgressionData(mpProgressionManager->mpProgressionData);
             const RaceEventData* lpRaceEventData = lpProgressionData->FindOfflineEvent(lrEvent.GetID());
-            CGS_ASSERT(lpRaceEventData, "lpRaceEventData");
+            CGS_ASSERT(lpRaceEventData, CgsDev::Assert::MessageAt("lpRaceEventData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionDebugComponent.cpp", 874));
 
             if (lpRaceEventData->GetSpecialEventCarId() == 0)
             {

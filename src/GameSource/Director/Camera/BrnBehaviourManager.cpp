@@ -1,4 +1,5 @@
 #include "GameSource/Director/Utils/BrnDirectorVehicleTracker.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h"
 #include <cmath>
 #include <cfloat>
@@ -212,7 +213,7 @@ namespace Camera
     // ------------------------------------------------------------------------
     void BehaviourManager::CheckNoBehavioursAreAllocatedByState(ArbitratorState* lpArbitratorState)
     {
-        CGS_ASSERT(lpArbitratorState != 0, "lpArbitratorState != NULL");
+        CGS_ASSERT(lpArbitratorState != 0, CgsDev::Assert::MessageAt("lpArbitratorState != NULL", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 484));
 
         const u32 luNumBehaviours = mBehaviourHelperIndexArray.GetLength();
         for (u32 luLoop = 0; luLoop < luNumBehaviours; ++luLoop)
@@ -742,7 +743,7 @@ namespace Camera
 
             const bool lbPrepared = mBehaviourHelperPool[lHelper].GetBehaviour()->Prepare(lSharedInfo);
             CGS_ASSERT(lbPrepared,
-                       "mBehaviourHelperPool[lBehaviourHelperIndex].Get().Prepare(lSharedInfo)"); // .cpp:162
+                       CgsDev::Assert::MessageAt("mBehaviourHelperPool[lBehaviourHelperIndex].Get().Prepare(lSharedInfo)", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.cpp", 162)); // .cpp:162
             (void)lbPrepared;
 
             mBehaviourNeedsPreparingFlags.UnSetBit(static_cast<u32>(liHelper));

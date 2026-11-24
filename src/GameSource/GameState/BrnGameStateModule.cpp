@@ -1,5 +1,6 @@
 #include "GameSource/GameState/BrnGameStateModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // [diagnostic] Prepare's per-stage log line
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"            // BrnGameState::ModeManager::GetCurrentGameMode
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameMode.h"     // BrnGameState::GameMode::IsOnline
@@ -300,16 +301,16 @@ void GameStateModule::PreWorldUpdate(
     const bool lbSimPaused = IsSimPaused(true, false);
     CgsDev::PerfMonCpu::StartMonitor(miGameStatePrePM);
     mbIsUpdating = true;
-    CGS_ASSERT(lpInputBufferStack != 0, "lpInputBufferStack != NULL");
-    CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");
-    CGS_ASSERT(lpInput != 0, "lpInput != NULL");
-    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");
+    CGS_ASSERT(lpInputBufferStack != 0, CgsDev::Assert::MessageAt("lpInputBufferStack != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 1128));
+    CGS_ASSERT(lpOutputBufferStack != 0, CgsDev::Assert::MessageAt("lpOutputBufferStack != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 1129));
+    CGS_ASSERT(lpInput != 0, CgsDev::Assert::MessageAt("lpInput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 1130));
+    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 1131));
     lpInput->LockForRead();
     lpOutput->LockForWrite();
     CGS_ASSERT(lpInput->GetTimerStatusInterface() != 0,
-               "lpInput->GetTimerStatusInterface() != NULL");
+               CgsDev::Assert::MessageAt("lpInput->GetTimerStatusInterface() != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 1138));
     CGS_ASSERT(lpInput->GetTimerStatusInterface()->GetSimTimerStatus() != 0,
-               "lpInput->GetTimerStatusInterface()->GetSimTimerStatus() != NULL");
+               CgsDev::Assert::MessageAt("lpInput->GetTimerStatusInterface()->GetSimTimerStatus() != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 1139));
     mfSimTimeStep = 0.0f;
     mfSimTimeStep = lpInput->GetTimerStatusInterface()->GetSimTimerStatus()->GetCurrentTimeStep();
     // ARTIST 823A54C4 repeats the read accessor before fetching the game status.
@@ -317,7 +318,7 @@ void GameStateModule::PreWorldUpdate(
     const f32 lfGameTimeStep =
         lpInput->GetTimerStatusInterface()->GetGameTimerStatus()->GetCurrentTimeStep();
     GameStateModuleIO::GameActionQueue* const lpActionQueue = lpOutput->GetGameActionQueue();
-    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
+    CGS_ASSERT(lpActionQueue != 0, CgsDev::Assert::MessageAt("lpActionQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 1149));
 
     if (mbSendSetupPlayerCarPending)
     {
@@ -1405,7 +1406,7 @@ CgsModule::VariableEventQueue<18432, 16>* GameStateModule::GetOutputGuiEventQueu
 void GameStateModule::SetCarUnlockAlreadyShown(CgsID lCarId)
 {
     BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
-    CGS_ASSERT(lpProfile != 0, "mProgressionManager.GetProfile()");
+    CGS_ASSERT(lpProfile != 0, CgsDev::Assert::MessageAt("mProgressionManager.GetProfile()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 4823));
     lpProfile->SetCarUnlockAlreadyShown(lCarId);
 }
 
@@ -1555,7 +1556,7 @@ void GameStateModule::RequestUnpause(s32 leUnpauseModule, GameStateModuleIO::Gam
 // --------------------------------------------------------------------------------------------
 void GameStateModule::WaitForStreaming(GameStateModuleIO::GameActionQueue* lpQueue)
 {
-    CGS_ASSERT(lpQueue != 0, "lpOutputActionQueue != NULL");   // BrnGameStateModule.cpp:6283
+    CGS_ASSERT(lpQueue != 0, CgsDev::Assert::MessageAt("lpOutputActionQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 6283));   // BrnGameStateModule.cpp:6283
     if (lpQueue == 0)
         return;
     miStreamingWaitCountdown = 2;
@@ -2457,8 +2458,8 @@ void GameStateModule::ProcessContacts(
 
     // The console's two tripwires, with their baked line numbers (li r5, 0x1A68 / 0x1A69).
     // Neither gates -- both are address-of-a-subobject tests that can only fail on a null this.
-    CGS_ASSERT(lpCrashScorer != 0, "lpCrashScorer != NULL");   // BrnGameStateModule.cpp:6760
-    CGS_ASSERT(lpStuntScorer != 0, "lpStuntScorer != NULL");   // BrnGameStateModule.cpp:6761
+    CGS_ASSERT(lpCrashScorer != 0, CgsDev::Assert::MessageAt("lpCrashScorer != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 6760));   // BrnGameStateModule.cpp:6760
+    CGS_ASSERT(lpStuntScorer != 0, CgsDev::Assert::MessageAt("lpStuntScorer != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 6761));   // BrnGameStateModule.cpp:6761
 
     // ------------------------------------------------------------------------------------
     // LEG 1 -- the PROP contacts (0x8236BD84..0x8236BE70).
@@ -2663,7 +2664,7 @@ void GameStateModule::SendVehicleImpactMessages(
         GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
     CGS_ASSERT(lpImpactEvent != 0, "lpVehicleImpactEvent != NULL");
-    CGS_ASSERT(lpActionQueue != 0, "lpActionQueue != NULL");
+    CGS_ASSERT(lpActionQueue != 0, CgsDev::Assert::MessageAt("lpActionQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 1149));
     if (lpImpactEvent == 0 || lpActionQueue == 0)
     {
         return;
@@ -2788,7 +2789,7 @@ void GameStateModule::SendRouteRequestAction(const GameStateModuleIO::LandmarkRo
     typedef GameStateModuleIO::LandmarkRouteRequestEvent RouteRequest;
 
     CGS_ASSERT(lpRouteRequestEvent != 0, "lpRouteRequestEvent");   // BrnGameStateModule.cpp:5899 (0x170B)
-    CGS_ASSERT(lpOutputActionQueue != 0, "lpOutputActionQueue");   // BrnGameStateModule.cpp:5900 (0x170C)
+    CGS_ASSERT(lpOutputActionQueue != 0, CgsDev::Assert::MessageAt("lpOutputActionQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5797));   // BrnGameStateModule.cpp:5900 (0x170C)
 
     GameStateModuleIO::RequestRouteInfoAction lRouteRequestAction;
     std::memset(&lRouteRequestAction, 0, sizeof(lRouteRequestAction));

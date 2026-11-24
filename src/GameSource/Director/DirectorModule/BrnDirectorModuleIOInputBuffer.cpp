@@ -1,6 +1,7 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the [takedown-cam] director-read witness
 
 #include <cstddef>   // offsetof
@@ -180,6 +181,22 @@ namespace DirectorIO
         mGameActionQueue.Construct();
     }
 
+    // ---- Destruct @0x8221B298 (DWARF BrnDirectorModuleIO.cpp:109) ---------------------------
+    // IOBuffer::Destruct, then the eight per-car team words cleared through the
+    // EActiveRaceCarIndex walk (the BurnoutConstants.h:39 tripwire at 0x8221B2D4..0x8221B2F0),
+    // then the two end-of-event bytes @0x7AD5 / @0x7AD6.
+    void InputBuffer::Destruct()
+    {
+        CgsModule::IOBuffer::Destruct();
+        for (EActiveRaceCarIndex leCar = E_ACTIVE_RACE_CAR_INDEX_0;
+             leCar < E_ACTIVE_RACE_CAR_INDEX_COUNT; leCar++)
+        {
+            maVehicleInfoArray[leCar] = 0u;
+        }
+        mbPlayerEliminated = 0;
+        mbModeTimeExpired  = false;
+    }
+
     // ---- getters (read-lock asserted) -------------------------------------------------------
 
     const void* InputBuffer::GetContacts() const
@@ -190,7 +207,7 @@ namespace DirectorIO
 
     const CgsContainers::BitArray<8u>* InputBuffer::GetUsedRaceCars() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 714));
         return &mUsedRaceCars;
     }
 
@@ -238,7 +255,7 @@ namespace DirectorIO
     // The console body is exactly: assert the read lock, then `return this + 0x3340`.
     const CgsModule::VariableEventQueue<13312, 16>* InputBuffer::GetGameActionQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 583));
         return &mGameActionQueue;
     }
 
@@ -298,7 +315,7 @@ namespace DirectorIO
     // lock, calls this, and copies the game module's 48-byte snapshot over it).
     CgsSystem::TimerStatusInterface* InputBuffer::GetTimerStatusInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 592));
         return &mTimerInterface;
     }
 
@@ -306,7 +323,7 @@ namespace DirectorIO
     // `this + 0x6780`. Its only console caller is MainDirector::ProcessNewVehicleEvents.
     const BrnDirectorVehicleInputInterface* InputBuffer::GetVehicleInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 618));
         return &mVehicleDriverInputInterface;
     }
 
@@ -327,13 +344,13 @@ namespace DirectorIO
 
     EActiveRaceCarIndex InputBuffer::GetPlayerCarIndex() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 629));
         return mePlayerCarIndex;
     }
 
     bool InputBuffer::GetShortcutMenuState() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 830));
         return mbShortcutMenuState;
     }
 
@@ -341,37 +358,37 @@ namespace DirectorIO
 
     bool InputBuffer::HasGotHookEnumeration() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 878));
         return mbHasGotHookEnumeration;
     }
 
     bool InputBuffer::HasGotShortcutMenuEvent() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 814));
         return mbGotShortcutMenuEvent;
     }
 
     bool InputBuffer::HasGotCrashNavShownEvent() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 760));
         return mbGotCrashNavShownEvent;
     }
 
     bool InputBuffer::HasGotCrashNavHiddenEvent() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 778));
         return mbGotCrashNavHiddenEvent;
     }
 
     bool InputBuffer::HasGotColourCalibrationShownEvent() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 796));
         return mbGotColourCalibrationShownEvent;
     }
 
     bool InputBuffer::HasGotColourCalibrationHiddenEvent() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 839));
         return mbGotColourCalibrationHiddenEvent;
     }
 
@@ -486,7 +503,7 @@ namespace DirectorIO
 
     void InputBuffer::AppendContacts(const void* lpContacts)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 858));
         // X360: this[6830] = *(u32*)lpContacts; i.e. publish the first word of the producer's
         // contact-spy payload into the contacts member's leading word.
         *reinterpret_cast<u32*>(mContacts) = *static_cast<const u32*>(lpContacts);
@@ -494,13 +511,13 @@ namespace DirectorIO
 
     void InputBuffer::SetControllerInfo(const void* lpControllerInfo)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 733));
         std::memcpy(mControllerInfo, lpControllerInfo, sizeof(mControllerInfo)); // 224 bytes
     }
 
     void InputBuffer::SetHookEnumeration(const BrnGui::GuiPFXHookEnumeration* lpHookEnumeration)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 868));
         std::memcpy(&mHookEnumeration, lpHookEnumeration, sizeof(mHookEnumeration));
         mbHasGotHookEnumeration = true;
     }
@@ -521,7 +538,7 @@ namespace DirectorIO
 
     void InputBuffer::SetCrashingCentreOfMass(u32 luIndex, const Matrix44Affine& lrCentreOfMass)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 686));
         // X360 copies the 4-row affine (4 * 16-byte VMX stores) into the indexed VehicleInfo's
         // mCrashingCentreOfMass (element+0x460) then sets mbHasCrashingCenterOfMass (element+0x4E5).
         mRaceCarInfo[luIndex].mCrashingCentreOfMass     = lrCentreOfMass;
@@ -567,32 +584,32 @@ namespace DirectorIO
 
     void InputBuffer::SetShortcutMenuEvent(bool lbState)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 822));
         mbShortcutMenuState    = lbState;
         mbGotShortcutMenuEvent = true;
     }
 
     void InputBuffer::SetGotCrashNavShownEvent()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 751));
         mbGotCrashNavShownEvent = true;
     }
 
     void InputBuffer::SetGotCrashNavHiddenEvent()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 769));
         mbGotCrashNavHiddenEvent = true;
     }
 
     void InputBuffer::SetGotColourCalibrationShownEvent()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 787));
         mbGotColourCalibrationShownEvent = true;
     }
 
     void InputBuffer::SetGotColourCalibrationHiddenEvent()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 805));
         mbGotColourCalibrationHiddenEvent = true;
     }
 
@@ -722,7 +739,7 @@ namespace DirectorIO
     // X360 0x822070E8 (BrnDirectorModuleIO.h:742): read-lock; return &mControllerInfo (this+0x3260).
     const ControlInput* InputBuffer::GetControll() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 742));
         return reinterpret_cast<const ControlInput*>(mControllerInfo);
     }
 

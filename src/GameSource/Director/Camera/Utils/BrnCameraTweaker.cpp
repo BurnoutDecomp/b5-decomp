@@ -73,21 +73,26 @@ namespace BrnDirector
             // else is touched -- AddMapping fully overwrites a slot when it is (re)used.
             void Tweaker::Construct()
             {
-                for (s32 liMap = 0; liMap < E_MAP_COUNT; ++liMap)
+                u32 luMap;       // DWARF BrnCameraTweaker.cpp:68
+                u32 luAxis;      // :69
+                u32 luControl;   // :70
+
+                // ARTIST clears this first (0x821F8598), ahead of the mapping loops.
+                mbHideInstructions = false;
+
+                for (luMap = 0; luMap < E_MAP_COUNT; ++luMap)
                 {
-                    for (s32 liAxis = 0; liAxis < E_AXIS_COUNT; ++liAxis)
+                    for (luAxis = 0; luAxis < E_AXIS_COUNT; ++luAxis)
                     {
-                        maAxisMapping[liMap][liAxis].mbUsed = false;
+                        maAxisMapping[luMap][luAxis].mbUsed = false;
                     }
 
-                    for (s32 liControl = 0; liControl < DebugController::E_CONTROL_COUNT; ++liControl)
+                    for (luControl = 0; luControl < DebugController::E_CONTROL_COUNT; ++luControl)
                     {
-                        mJustPressedMapping[liMap][liControl].mbUsed  = false;
-                        mJustReleasedMapping[liMap][liControl].mbUsed = false;
+                        mJustPressedMapping[luMap][luControl].mbUsed  = false;
+                        mJustReleasedMapping[luMap][luControl].mbUsed = false;
                     }
                 }
-
-                mbHideInstructions = false;
             }
 
             // Bind a tunable float to an axis with a CONSTANT scale. Fills the [map][axis]

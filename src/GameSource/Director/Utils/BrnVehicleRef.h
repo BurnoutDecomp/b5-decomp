@@ -4,6 +4,7 @@
 #include "types.hpp"
 #include "GameSource/BurnoutConstants.h"   // EActiveRaceCarIndex (VehicleRef::Set race car)
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT (Get's five tripwires)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Utils/BrnDirectorAllVehicleData.h" // AllVehicleData -- the "world" Get resolves against
 
 // ============================================================================
@@ -60,7 +61,7 @@ namespace BrnDirector
         // as an early return so no assert is skipped that the console does not skip.
         const Camera::VehicleInfo* Get(const void* lpWorld) const
         {
-            CGS_ASSERT(mbSet, "mbSet");                                   // BrnVehicleRef.h:121
+            CGS_ASSERT(mbSet, CgsDev::Assert::MessageAt("mbSet", "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 121));                                   // BrnVehicleRef.h:121
 
             const AllVehicleData& lrWorld = *static_cast<const AllVehicleData*>(lpWorld);
 
@@ -84,7 +85,7 @@ namespace BrnDirector
                 break;
             }
 
-            CGS_ASSERT(false, "this shouldn't happen");                   // BrnVehicleRef.h:155
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("this shouldn't happen", "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 155));                   // BrnVehicleRef.h:155
             return &lrWorld.GetPlayer();
         }
 
@@ -142,11 +143,11 @@ namespace BrnDirector
                 break;
 
             case E_TRAFFIC_VEHICLE:
-                CGS_ASSERT(false, "not implemented yet");    // non-gating
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("not implemented yet", "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 301));    // non-gating
                 return false;
 
             default:
-                CGS_ASSERT(false, "unknown type");           // non-gating
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("unknown type", "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 307));           // non-gating
                 return false;
             }
 

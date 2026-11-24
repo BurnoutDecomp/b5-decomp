@@ -7,6 +7,7 @@
 #include "GameShared/GameClasses/Containers/CgsBitArray.h"   // CgsContainers::BitArray<8>
 #include "GameShared/GameClasses/Algorithms/CgsBubbleSort.h" // CgsAlgorithms::BubbleSort
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT (the inline accessors' tripwires)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h" // BrnDirector::Camera::VehicleInfo (mpRaceCars' real pointee)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"      // Camera::Utils::CreateLookAt (the heading-space frame)
 #include "rw/math/vpu/vector3_operation.h"                     // Cross / Normalize (the impact-space basis)
@@ -330,7 +331,7 @@ namespace BrnDirector
             CGS_ASSERT(mpRaceCars != 0, "mpRaceCars != NULL");                                    // h:157
             CGS_ASSERT(static_cast<s32>(mePlayerRaceCarIndex) < 8, "mePlayerRaceCarIndex < 8");   // h:158
             CGS_ASSERT(mUsedRaceCars.IsBitSet(static_cast<u32>(mePlayerRaceCarIndex)),
-                       "mUsedRaceCars.IsBitSet(mePlayerRaceCarIndex)");                           // h:159
+                       CgsDev::Assert::MessageAt("mUsedRaceCars.IsBitSet(mePlayerRaceCarIndex)", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorAllVehicleData.h", 159));                           // h:159
             return mpRaceCars[static_cast<s32>(mePlayerRaceCarIndex)];
         }
         const Camera::VehicleInfo& GetRaceCar(EActiveRaceCarIndex leIndex) const  // :61
@@ -338,7 +339,7 @@ namespace BrnDirector
             CGS_ASSERT(mpRaceCars != 0, "mpRaceCars != NULL");                                    // h:170
             CGS_ASSERT(static_cast<s32>(leIndex) < 8, "leRaceCarIndex < 8");                      // h:171
             CGS_ASSERT(mUsedRaceCars.IsBitSet(static_cast<u32>(leIndex)),
-                       "mUsedRaceCars.IsBitSet(leRaceCarIndex)");                                 // h:172
+                       CgsDev::Assert::MessageAt("mUsedRaceCars.IsBitSet(leRaceCarIndex)", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorAllVehicleData.h", 172));                                 // h:172
             return mpRaceCars[static_cast<s32>(leIndex)];
         }
 
@@ -355,7 +356,7 @@ namespace BrnDirector
         EActiveRaceCarIndex GetNearestRaceCarIndexToPlayer(u32 luRank) const      // :82
         {
             CGS_ASSERT(maNearestRaceCarsToPlayer.GetLength() > 0,
-                       "maNearestRaceCarsToPlayer.GetLength() > 0");                              // h:186
+                       CgsDev::Assert::MessageAt("maNearestRaceCarsToPlayer.GetLength() > 0", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorAllVehicleData.h", 186));                              // h:186
 
             if (luRank >= maNearestRaceCarsToPlayer.GetLength())
             {

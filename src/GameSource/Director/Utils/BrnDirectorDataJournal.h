@@ -3,6 +3,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (the index bounds asserts)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // ============================================================================
 // GameSource/Director/Utils/BrnDirectorDataJournal.h
@@ -73,7 +74,7 @@ public:
     // The sample i frames back ( [0] newest .. [N-1] oldest ). Asserts the index is live.
     const T& operator[](int liIndex) const
     {
-        CGS_ASSERT(liIndex < miSize, "liIndex < miSize");
+        CGS_ASSERT(liIndex < miSize, CgsDev::Assert::MessageAt("liIndex < miSize", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\utils\\BrnDirectorDataJournal.h", 209));
         return maEntries[(miWriteIndex + liIndex) % N];
     }
 
@@ -89,9 +90,9 @@ public:
     // the parameterless GetPrevious() above; no layout/sizeof change.
     const T& GetPrevious(int liIndex) const
     {
-        CGS_ASSERT(liIndex >= 0, "lIndex >= 0");
+        CGS_ASSERT(liIndex >= 0, CgsDev::Assert::MessageAt("lIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\utils\\BrnDirectorDataJournal.h", 114));
         CGS_ASSERT(miSize > 0, "miSize > 0");
-        CGS_ASSERT(liIndex < miSize - 1, "lIndex < miSize-1");
+        CGS_ASSERT(liIndex < miSize - 1, CgsDev::Assert::MessageAt("lIndex < miSize-1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\utils\\BrnDirectorDataJournal.h", 116));
         return (*this)[liIndex + 1];
     }
 

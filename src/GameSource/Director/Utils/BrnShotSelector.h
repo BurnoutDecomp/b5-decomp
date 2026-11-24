@@ -40,8 +40,8 @@ public:
         E_NUM_GROUPS              = 3,
     };
 
-    static const u32 KU_NUM_SHOT_LISTS = 3;
-    static const u32 KU_SHOT_LIST_SIZE = 50;
+    static const s32 KI_NUM_SHOT_LISTS = 3;
+    static const s32 KI_SHOT_LIST_SIZE = 50;
 
     // Initialise the selector: record the resource manager, then bring all three
     // time lists to their full (50-element) state with every slot zeroed. @0x8221B410.
@@ -76,7 +76,7 @@ private:
 
     // DWARF: Array<int32_t,50u>[3] maaShotTimes -- per-group per-shot "time last
     // used" stamps, indexed [group][shot index].
-    CgsContainers::Array<s32, KU_SHOT_LIST_SIZE>  maaShotTimes[KU_NUM_SHOT_LISTS];   // +0x000 / +0x0CC / +0x198
+    CgsContainers::Array<s32, KI_SHOT_LIST_SIZE>  maaShotTimes[KI_NUM_SHOT_LISTS];   // +0x000 / +0x0CC / +0x198
     s32                            miCurrentTimeID;                    // +0x264
     const DirectorResourceManager* mpResourceManager;                  // +0x268
 };

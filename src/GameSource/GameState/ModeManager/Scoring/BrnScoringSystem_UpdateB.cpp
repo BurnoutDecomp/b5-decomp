@@ -274,12 +274,12 @@ namespace BrnGameState
     void ScoringSystem::DetectPlayerDrivingWrongWay(const ActiveRaceCarOutputInterface* lpOutput,
                                                     f32 lfDeltaTime)
     {
-        CGS_ASSERT(lpOutput != NULL, "lpActiveRaceCarInterface != NULL");
+        CGS_ASSERT(lpOutput != NULL, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1932));
 
         const ::EActiveRaceCarIndex lePlayerIndex = lpOutput->GetPlayerActiveRaceCarIndex();
         CGS_ASSERT(lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID, "Player car index hasn't been set");
         CGS_ASSERT(lpOutput->IsRaceCarActive(lePlayerIndex),
-                   "lpActiveRaceCarInterface->IsRaceCarActive( lePlayerActiveRaceCarIndex )");
+                   CgsDev::Assert::MessageAt("lpActiveRaceCarInterface->IsRaceCarActive( lePlayerActiveRaceCarIndex )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1936));
 
         const f32 lfDistanceLastFrame = mfPlayerDistanceToFinishLastFrame;
         const f32 lfDistanceThisFrame = GetRaceCarDistanceToFinish(lePlayerIndex);
@@ -318,7 +318,7 @@ namespace BrnGameState
     void ScoringSystem::DetectPlayerStationary(const ActiveRaceCarOutputInterface* lpOutput,
                                                f32 lfDeltaTime)
     {
-        CGS_ASSERT(lpOutput != NULL, "lpActiveRaceCarInterface != NULL");
+        CGS_ASSERT(lpOutput != NULL, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1968));
 
         const ::EActiveRaceCarIndex lePlayerIndex = lpOutput->GetPlayerActiveRaceCarIndex();
         CGS_ASSERT(lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
@@ -389,7 +389,7 @@ namespace BrnGameState
     // The X360 "result pointer" return is the void method's result-register artifact and is dropped.
     void ScoringSystem::UpdateNetworkPlayerResults(const PlayerResultsInterface* lpResults, bool lbFinal)
     {
-        CGS_ASSERT(lpResults != NULL, "lpNetworkResultsInterface");
+        CGS_ASSERT(lpResults != NULL, CgsDev::Assert::MessageAt("lpNetworkResultsInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1145));
 
         if (lbFinal)
         {
@@ -397,7 +397,7 @@ namespace BrnGameState
             {
                 const BrnNetwork::BrnNetworkModuleIO::PlayerResultsData* lpPlayerResultsData =
                     lpResults->GetPlayerResultsData(liIndex);
-                CGS_ASSERT(lpPlayerResultsData != NULL, "lpPlayerResultsData");
+                CGS_ASSERT(lpPlayerResultsData != NULL, CgsDev::Assert::MessageAt("lpPlayerResultsData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1158));
 
                 if (lpPlayerResultsData->mbValid)
                 {
@@ -422,7 +422,7 @@ namespace BrnGameState
                 }
             }
 
-            CGS_ASSERT(mpCurrentOnlineModeScoring, "mpCurrentOnlineModeScoring");
+            CGS_ASSERT(mpCurrentOnlineModeScoring, CgsDev::Assert::MessageAt("mpCurrentOnlineModeScoring", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1184));
 
             // X360: (*(*mpCurrentOnlineModeScoring + 24))(mpCurrentOnlineModeScoring, this, muCarsInCurrentMode)
             // vtable byte +0x18 (==24) == BaseOnlineModeScoring slot 6 == UpdatePlayerPoints (slot 5/+0x14 is Update).
@@ -473,7 +473,7 @@ namespace BrnGameState
                                            f32 lfDeltaTime, bool lbOnline)
     {
         const u32 luNumberOfActiveRaceCars = lpOutput->maCarsInTheRace.GetLength();
-        CGS_ASSERT(luNumberOfActiveRaceCars >= 1, "liNumberOfActiveRaceCars >= 1");
+        CGS_ASSERT(luNumberOfActiveRaceCars >= 1, CgsDev::Assert::MessageAt("liNumberOfActiveRaceCars >= 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2104));
         // PS3 DecFIGS (BrnScoringSystem.cpp:2022) bakes the verbatim stream-assert prefix
         // "Amount of active race cars is: " (the count is streamed after it); the prior
         // "...is too many" message was a placeholder guess. Prefix matched to the real source.
@@ -489,10 +489,10 @@ namespace BrnGameState
             // pin them in [E_ACTIVE_RACE_CAR_INDEX_0, E_ACTIVE_RACE_CAR_INDEX_COUNT).
             if (leLeadIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leLastIndex >= E_ACTIVE_RACE_CAR_INDEX_0)
             {
-                CGS_ASSERT(leLeadIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "meLeadRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-                CGS_ASSERT(leLastIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "meLastRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-                CGS_ASSERT(leLeadIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "meLeadRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-                CGS_ASSERT(leLastIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "meLastRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                CGS_ASSERT(leLeadIndex >= E_ACTIVE_RACE_CAR_INDEX_0, CgsDev::Assert::MessageAt("meLeadRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2118));
+                CGS_ASSERT(leLastIndex >= E_ACTIVE_RACE_CAR_INDEX_0, CgsDev::Assert::MessageAt("meLastRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2119));
+                CGS_ASSERT(leLeadIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, CgsDev::Assert::MessageAt("meLeadRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2121));
+                CGS_ASSERT(leLastIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, CgsDev::Assert::MessageAt("meLastRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2122));
 
                 CarData* lpLeadCar = GetCarData(leLeadIndex);
                 CarData* lpLastCar = GetCarData(leLastIndex);
@@ -575,7 +575,7 @@ namespace BrnGameState
     {
         CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 &&
                    leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                   CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 252));
 
         CarData* lpCar = GetCarData(leRaceCarIndex);
         if (lpCar)
@@ -608,7 +608,7 @@ namespace BrnGameState
     void ScoringSystem::DealWithStunt(const GameStateModuleIO::WorldStuntAction* lpAction, bool lbOnline)
     {
         StuntModeScoring* lpStuntModeScoring = lbOnline ? &mOnlineStuntModeScoring : &mStuntModeScoring;
-        CGS_ASSERT(lpStuntModeScoring != NULL, "lpStuntModeScoring");
+        CGS_ASSERT(lpStuntModeScoring != NULL, CgsDev::Assert::MessageAt("lpStuntModeScoring", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 2528));
 
         lpStuntModeScoring->DealWithStunt(lpAction);
     }

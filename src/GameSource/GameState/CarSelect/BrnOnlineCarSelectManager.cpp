@@ -1,4 +1,5 @@
 #include "GameSource/GameState/CarSelect/BrnOnlineCarSelectManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"             // CgsDev::Assert Begin/Fire/EndAssert
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"     // CgsDev::Log::gpDebugPrint, CgsDev::Message::gxMessageFilterFlags
@@ -228,7 +229,7 @@ void OnlineCarSelectManager::StartCarModificationState(GameStateModuleIO::GameAc
     {
         mDesiredCarId = mStartCarId;
     }
-    CGS_ASSERT(mDesiredCarId != 0, "mDesiredCarId != kCGSID_NULL");
+    CGS_ASSERT(mDesiredCarId != 0, CgsDev::Assert::MessageAt("mDesiredCarId != kCGSID_NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 325));
 
     GameStateModuleIO::CarSelectModificationScreen lModScreenAction;
     lModScreenAction.meCarSelectType = GameStateModuleIO::E_CAR_SELECT_TYPE_ONLINE_EVENT_START;
@@ -345,7 +346,7 @@ void OnlineCarSelectManager::RequestChangeCar(GameStateModuleIO::GameActionQueue
         *CgsDev::Log::gpDebugPrint << "RG :: CS Manager : " << "RequestChangeCar\n" << "\n";
     }
 
-    CGS_ASSERT(lCardId != 0, "lCardId != kCGSID_NULL");
+    CGS_ASSERT(lCardId != 0, CgsDev::Assert::MessageAt("lCardId != kCGSID_NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 439));
 
     if (meStateOfChangingCars == E_CAR_CHANGE_BUSY)
     {
@@ -358,7 +359,7 @@ void OnlineCarSelectManager::RequestChangeCar(GameStateModuleIO::GameActionQueue
     }
 
     const BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
-    CGS_ASSERT(lpProfile, "lpProfile");
+    CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 451));
 
     if (meInternalState == E_INTERNAL_STATE_CAR_MODIFICATION)
     {
@@ -372,7 +373,7 @@ void OnlineCarSelectManager::RequestChangeCar(GameStateModuleIO::GameActionQueue
         {
             const BrnResource::VehicleListEntry* lpVehicleListEntry =
                 mpVehicleList.Get()->GetVehicleFromId(lBaseCarID);
-            CGS_ASSERT(lpVehicleListEntry, "lpVehicleListEntry");
+            CGS_ASSERT(lpVehicleListEntry, CgsDev::Assert::MessageAt("lpVehicleListEntry", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 470));
             if (lpVehicleListEntry->IsLiveryColour())
             {
                 lBaseCarID = lpVehicleListEntry->GetParentId();

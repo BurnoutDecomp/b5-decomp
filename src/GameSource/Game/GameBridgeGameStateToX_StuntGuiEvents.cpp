@@ -28,6 +28,7 @@
 #include "GameSource/Game/GameBridgeGameStateToX.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // original formatted rivalry assertions
 #include "GameSource/Gui/BrnGuiDemangledEventTypes.h"               // BrnGui::GuiAutosaveRequestEvent (id 356)
 #include "GameSource/Gui/BrnGuiEventTypeDefs.h"                    // BrnGui::StuntType / GuiEventStunt*
@@ -317,8 +318,8 @@ namespace
         CgsGui::CgsGuiModuleIO::InputBuffer* lpGuiInput,
         const BrnGameState::GameStateModuleIO::OutputBuffer* lpGameStateOutput)
     {
-        CGS_ASSERT(lpGuiInput != 0, "lpGuiInput");                   // :754
-        CGS_ASSERT(lpGameStateOutput != 0, "lpGameStateOutput");     // :755
+        CGS_ASSERT(lpGuiInput != 0, CgsDev::Assert::MessageAt("lpGuiInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 754));                   // :754
+        CGS_ASSERT(lpGameStateOutput != 0, CgsDev::Assert::MessageAt("lpGameStateOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGameStateToX.cpp", 755));     // :755
         if (lpGuiInput == 0 || lpGameStateOutput == 0)
         {
             return;

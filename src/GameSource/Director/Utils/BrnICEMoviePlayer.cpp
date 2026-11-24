@@ -184,16 +184,9 @@ void ICEMoviePlaylist::InsertMovieBefore(s32 liDesiredZeroBasedIndex, const IceM
 // ----------------------------------------------------------------------------
 s32 ICEMoviePlaylist::GetMovieCount() const
 {
-    if (mMoviePoolIndicies.GetCount() == -1)
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert(
-            "Array used before Construct/Clear was called",
-            "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h",
-            336);
-        CgsDev::Assert::EndAssert();
-    }
-    return mMoviePoolIndicies.GetCount();
+    // The array's own checked GetLength (CgsArray.h:336), inlined on the array (ARTIST
+    // 0x82208728 `addi r31, r3, 0x380`).
+    return mMoviePoolIndicies.GetLength();
 }
 
 // ----------------------------------------------------------------------------

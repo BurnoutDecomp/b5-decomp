@@ -321,7 +321,7 @@ void Profile::Construct()
 // ====================================================================================
 CarData* Profile::AddCar(CgsID lCarId, CarData::UnlockType leUnlockType)
 {
-    CGS_ASSERT(miCarCount < KI_MAX_PROFILE_CAR_COUNT, "miCarCount < KI_MAX_PROFILE_CAR_COUNT");
+    CGS_ASSERT(miCarCount < KI_MAX_PROFILE_CAR_COUNT, CgsDev::Assert::MessageAt("miCarCount < KI_MAX_PROFILE_CAR_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 560));
 
     s32 liIndex = miCarCount;
     ++miCarCount;
@@ -399,7 +399,7 @@ ProfileEvent* Profile::FindEvent(u32 luEventID)
 // ====================================================================================
 RivalData* Profile::AddRival(CgsID lRivalId, CgsID lCarId)
 {
-    CGS_ASSERT(miRivalCount < KI_MAX_RIVAL_COUNT - 1, "miRivalCount < KI_MAX_RIVAL_COUNT - 1");
+    CGS_ASSERT(miRivalCount < KI_MAX_RIVAL_COUNT - 1, CgsDev::Assert::MessageAt("miRivalCount < KI_MAX_RIVAL_COUNT - 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 729));
 
     s32 liIndex = miRivalCount;
     RivalData& lRival = maRivals[liIndex];
@@ -508,7 +508,7 @@ void Profile::SetChosenLiveryIdForBaseCar(CgsID lBaseCarId, CgsID lChosenLiveryI
             }
         }
 
-        CGS_ASSERT(liIndex < KI_MAX_PROFILE_CAR_COUNT, "liIndex < KI_MAX_PROFILE_CAR_COUNT");
+        CGS_ASSERT(liIndex < KI_MAX_PROFILE_CAR_COUNT, CgsDev::Assert::MessageAt("liIndex < KI_MAX_PROFILE_CAR_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 601));
     }
 
     LiveryData& lLivery = maLiveryChoices[liIndex];
@@ -528,7 +528,7 @@ void Profile::SetCarUnlockAlreadyShown(CgsID lCarId)
 {
     CarData* lpCarData = FindCar(lCarId);
 
-    CGS_ASSERT(lpCarData, "lpCarData");
+    CGS_ASSERT(lpCarData, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 671));
     if (lpCarData)
         lpCarData->mbUnlockSequenceAlreadyShown = true;
 }
@@ -680,7 +680,7 @@ void Profile::DEBUG_ClearMedals()
 // ====================================================================================
 s32 Profile::GetNumMugshots(s32 leMugshotType)
 {
-    CGS_ASSERT(leMugshotType < 5, "leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");
+    CGS_ASSERT(leMugshotType < 5, CgsDev::Assert::MessageAt("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 979));
 
     return maaMugshotInfo[leMugshotType].GetCount();
 }
@@ -787,7 +787,7 @@ u8  MugshotInfo::GetLockedFlag() const { return mbLocked ? 1u : 0u; }           
 s32 Profile::AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID,
                         CgsSystem::DateAndTime lDateTaken, BrnWorld::WorldRegion lRegion)
 {
-    CGS_ASSERT(leMugshotType != 5, "leMugshotType != GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");  // X360 BrnProfile.cpp:758
+    CGS_ASSERT(leMugshotType != 5, CgsDev::Assert::MessageAt("leMugshotType != GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 758));  // X360 BrnProfile.cpp:758
 
     CgsContainers::BitArray<20u>& lrFileIds = maAvailableMugshotFileIDs[leMugshotType];
     CgsContainers::Array<MugshotInfo, 20u>&      lrGallery = maaMugshotInfo[leMugshotType];
@@ -810,7 +810,7 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID
     }
 
     // No file id left: the gallery must be full (X360 BrnProfile.cpp:784).
-    CGS_ASSERT(lrGallery.IsFull(), "maaMugshotInfo[leMugshotType].IsFull()");
+    CGS_ASSERT(lrGallery.IsFull(), CgsDev::Assert::MessageAt("maaMugshotInfo[leMugshotType].IsFull()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 784));
 
     // Evict the first NON-LOCKED record and reuse its file id (X360 0x82370E84..0x82371008).
     const s32 liCount = static_cast<s32>(lrGallery.GetLength());
@@ -839,7 +839,7 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID
 // ====================================================================================
 MugshotInfo* Profile::GetMugshotInfo(s32 leMugshotType, s32 liImageIndex)
 {
-    CGS_ASSERT(leMugshotType < 5, "leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");  // X360 BrnProfile.cpp:999
+    CGS_ASSERT(leMugshotType < 5, CgsDev::Assert::MessageAt("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 999));  // X360 BrnProfile.cpp:999
 
     CgsContainers::Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
     if (liImageIndex >= static_cast<s32>(lrGallery.GetLength()))    // X360 `cmpw ; bge -> li r3,0`
@@ -858,7 +858,7 @@ MugshotInfo* Profile::GetMugshotInfo(s32 leMugshotType, s32 liImageIndex)
 // ====================================================================================
 bool Profile::LockOrUnlockMugshot(s32 leMugshotType, s32 liImageIndex)
 {
-    CGS_ASSERT(leMugshotType < 5, "leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");  // X360 BrnProfile.cpp:926
+    CGS_ASSERT(leMugshotType < 5, CgsDev::Assert::MessageAt("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 926));  // X360 BrnProfile.cpp:926
 
     CgsContainers::Array<MugshotInfo, 20u>& lrGallery = maaMugshotInfo[leMugshotType];
     if (liImageIndex >= static_cast<s32>(lrGallery.GetLength()))
@@ -879,7 +879,7 @@ bool Profile::LockOrUnlockMugshot(s32 leMugshotType, s32 liImageIndex)
 // ====================================================================================
 s32 Profile::DeleteMugshot(s32 leMugshotType, s32 liImageIndex)
 {
-    CGS_ASSERT(leMugshotType < 5, "leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT");  // X360 BrnProfile.cpp:836
+    CGS_ASSERT(leMugshotType < 5, CgsDev::Assert::MessageAt("leMugshotType < GsmIO::E_IMAGE_GALLERY_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 836));  // X360 BrnProfile.cpp:836
 
     s32 liFileID = -1;                                             // X360 `li r27, -1`
 
@@ -1479,7 +1479,7 @@ CarData* Profile::RepairUnlockedVehicle(CgsID lCarId)
 {
     CarData* lpCarData = FindCar(lCarId);
 
-    CGS_ASSERT(lpCarData, "lpCarData");
+    CGS_ASSERT(lpCarData, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 671));
     lpCarData->mfUnlockDeformedAmount = 0.0f;   // the X360 stores through even after a failed assert
     return lpCarData;
 }
@@ -1659,7 +1659,7 @@ void Profile::SetTargetEventScore(BrnGameState::GameStateModuleIO::TargetEventSc
     if (!lpTargetEventScore)
     {
         lpTargetEventScore = maTargetEventScores.AddNew();
-        CGS_ASSERT(lpTargetEventScore, "lpTargetEventScore");   // BrnProfile.cpp:1604
+        CGS_ASSERT(lpTargetEventScore, CgsDev::Assert::MessageAt("lpTargetEventScore", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 1604));   // BrnProfile.cpp:1604
     }
 
     lpTargetEventScore->mEventId = lEventId;
@@ -1735,7 +1735,7 @@ void Profile::SetEventScoreToUpload(CgsID lEventId, s32 liScore, GsmIO::EGameMod
     if (!lpEventScoreToUpload)
     {
         lpEventScoreToUpload = maEventScoresToUpload.AddNew();
-        CGS_ASSERT(lpEventScoreToUpload, "lpEventScoreToUpload");   // BrnProfile.cpp:1714
+        CGS_ASSERT(lpEventScoreToUpload, CgsDev::Assert::MessageAt("lpEventScoreToUpload", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProfile.cpp", 1714));   // BrnProfile.cpp:1714
     }
 
     lpEventScoreToUpload->mu64EventID = lEventId;

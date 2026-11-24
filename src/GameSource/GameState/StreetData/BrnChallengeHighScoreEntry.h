@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "SharedClasses/StreetData/BrnChallengeData.h"   // BrnStreetData::ScoreType / ScoreList / ChallengeData (shared home)
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/BrnCgsPlayerName.h"        // CgsNetwork::PlayerName (shared 16-byte home)
 
 // ChallengeHighScoreEntry : ChallengeData. ChallengeData/ScoreType/ScoreList now come
@@ -43,7 +44,7 @@ namespace BrnStreetData
         CgsNetwork::PlayerName*  lpPlayerName ) const
     {
         CGS_ASSERT( lpiScore, "lpiScore != NULL" );
-        CGS_ASSERT( lpPlayerName, "lpPlayerName != NULL" );
+        CGS_ASSERT( lpPlayerName, CgsDev::Assert::MessageAt("lpPlayerName != NULL", "..\\..\\..\\GameSource\\GameState/StreetData/BrnChallengeHighScoreEntry.h", 134) );
         *lpiScore = ChallengeData::GetScore( leScoreType );
         *lpPlayerName = maPlayerNames[ leScoreType ];
     }
@@ -68,7 +69,7 @@ namespace BrnStreetData
         const CgsNetwork::PlayerName* lpPlayerName )
     {
         CGS_ASSERT( leScoreType >= 0 && leScoreType < E_SCORE_TYPE_COUNT,
-                    "leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT" );
+                    CgsDev::Assert::MessageAt("leScoreType >=0 && leScoreType < E_SCORE_TYPE_COUNT", "..\\..\\..\\GameSource\\GameState/StreetData/BrnChallengeHighScoreEntry.h", 155) );
 
         if ( liScore >= ScoreList::KAI_MIN_SCORES[ leScoreType ] &&
              liScore <= ScoreList::KAI_MAX_SCORES[ leScoreType ] )

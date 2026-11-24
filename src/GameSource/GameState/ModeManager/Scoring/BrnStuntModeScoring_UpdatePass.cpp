@@ -443,7 +443,7 @@ namespace BrnGameState
                         // Arm the stunt-info HUD event when there are any awesome stunt types.
                         mbStuntInfoEventPending = (mRecentStunt.muAwesomeStuntTypes != 0);
 
-                        CGS_ASSERT(mbComboInProgress, "mbComboInProgress");
+                        CGS_ASSERT(mbComboInProgress, CgsDev::Assert::MessageAt("mbComboInProgress", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 1049));
 
                         if (mbRecentStunt)
                         {

@@ -57,6 +57,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                              // CgsID (u64)
 #include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT (GetLiveryType bounds guard)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Containers/CgsArray.h"  // Array<T,N> -- the base AND the member
 #include "SharedClasses/DataLists/VehicleListEntry.h"    // BrnResource::VehicleListEntry::ELiveryType
 // [map arm 2026-08-27] the two builder bodies below walk the vehicle list, so the full
@@ -94,8 +95,8 @@ namespace BrnProgression
         void ConstructColourLiveryList(const BrnResource::VehicleList* lpVehicleList,
                                        const CgsID& lParentOrSiblingCarId)
         {
-            CGS_ASSERT(lpVehicleList != 0, "lpVehicleList");                          // h:93
-            CGS_ASSERT(lParentOrSiblingCarId != 0, "lParentOrSiblingCarId != kCGSID_NULL");   // h:94
+            CGS_ASSERT(lpVehicleList != 0, CgsDev::Assert::MessageAt("lpVehicleList", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\Progression/BrnDerivedCars.h", 93));                          // h:93
+            CGS_ASSERT(lParentOrSiblingCarId != 0, CgsDev::Assert::MessageAt("lParentOrSiblingCarId != kCGSID_NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\Progression/BrnDerivedCars.h", 94));   // h:94
 
             // Resolve the seed entry (index < 0 and a null row both fire h:97).
             const s32 liSeedIndex = lpVehicleList->GetVehicleIndex(lParentOrSiblingCarId);
@@ -107,7 +108,7 @@ namespace BrnProgression
             const CgsID lParentCarId = lpVehicleListEntry->IsLiveryColour()
                                            ? lpVehicleListEntry->GetParentId()
                                            : lParentOrSiblingCarId;
-            CGS_ASSERT(lParentCarId != 0, "lParentCarId != kCGSID_NULL");             // h:112
+            CGS_ASSERT(lParentCarId != 0, CgsDev::Assert::MessageAt("lParentCarId != kCGSID_NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\Progression/BrnDerivedCars.h", 112));             // h:112
 
             Clear();                 // the CgsID array count   (X360 `*(this+64)=0`)
             maLiveryTypes.Clear();   // the parallel kind array (X360 `*(this+104)=0`)
@@ -152,7 +153,7 @@ namespace BrnProgression
                 (liSeedIndex >= 0) ? lpVehicleList->GetVehicleData(liSeedIndex) : 0;
             CGS_ASSERT(lpVehicleListEntry != 0, "lpVehicleListEntry");                // h:163
             CGS_ASSERT(!lpVehicleListEntry->IsLiveryColour(),
-                       "!lpVehicleListEntry->IsLiveryColour()");                      // h:164
+                       CgsDev::Assert::MessageAt("!lpVehicleListEntry->IsLiveryColour()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\Progression/BrnDerivedCars.h", 164));                      // h:164
 
             const CgsID lParentCarId =
                 (lpVehicleListEntry->GetLiveryType() ==
@@ -207,7 +208,7 @@ namespace BrnProgression
         BrnResource::VehicleListEntry::ELiveryType GetLiveryType(u32 luIndex) const
         {
             CGS_ASSERT(luIndex < KU_MAX_AMOUNT_OF_DERIVED_CARS,
-                       "luIndex < KU_MAX_AMOUNT_OF_DERIVED_CARS");
+                       CgsDev::Assert::MessageAt("luIndex < KU_MAX_AMOUNT_OF_DERIVED_CARS", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\Progression/BrnDerivedCars.h", 232));
             return maLiveryTypes.GetItem(luIndex);
         }
 
@@ -229,7 +230,7 @@ namespace BrnProgression
         // mode, so they are used directly rather than re-implementing the radix latch.
         void DEBUG_PrintArray() const
         {
-            CGS_ASSERT(GetLength() != 0, "GetLength() != 0");                          // h:248
+            CGS_ASSERT(GetLength() != 0, CgsDev::Assert::MessageAt("GetLength() != 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\Progression/BrnDerivedCars.h", 248));                          // h:248
 
             const bool lbLog = ((CgsDev::Message::gxMessageFilterFlags & 1) != 0) &&
                                (CgsDev::Log::gpDebugPrint != 0);

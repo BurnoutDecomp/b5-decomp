@@ -4061,7 +4061,7 @@ void ChallengeManager::UpdateArbitration(
             case BrnResource::ChallengeListEntryAction::E_CHALLENGE_COOP_TYPE_CUMULATIVE:   // 4
             {
                 CGS_ASSERT(liActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE,
-                           "liActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE");   // :1449
+                           CgsDev::Assert::MessageAt("liActionIndex < BrnResource::ChallengeListEntry::KI_MAX_ACTIONS_PER_CHALLENGE", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/ChallengeManager/BrnChallengeManager.cpp", 3008));   // :1449
 
                 // Fold this frame's per-player scores into the cumulative total and clear them.
                 for (::EActiveRaceCarIndex lePlayer = ::E_ACTIVE_RACE_CAR_INDEX_0;

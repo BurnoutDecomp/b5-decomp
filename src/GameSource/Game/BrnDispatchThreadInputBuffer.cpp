@@ -23,7 +23,7 @@ namespace BrnGame
     // GetParticleData() const @ 0x8227F4F0 (DWARF h:97). Read-lock, return &mParticleData (+16).
     const BrnParticle::ParticleModule::DispatchThreadUpdateData* DispatchThreadInputBuffer::GetParticleData() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 97));
         return &mParticleData;
     }
 
@@ -31,7 +31,7 @@ namespace BrnGame
     // &mParticleData (+16).
     BrnParticle::ParticleModule::DispatchThreadUpdateData* DispatchThreadInputBuffer::GetParticleData()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 98));
         return &mParticleData;
     }
 
@@ -39,7 +39,7 @@ namespace BrnGame
     // return &mParticleRenderData (+0x38A0).
     BrnParticle::ParticleModule::ParticleRenderData* DispatchThreadInputBuffer::GetParticleRenderData()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 101));
         return &mParticleRenderData;
     }
 
@@ -49,7 +49,7 @@ namespace BrnGame
     // unnamed body as this overload.
     const BrnParticle::ParticleModule::ParticleRenderData* DispatchThreadInputBuffer::GetParticleRenderData() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 100));
         return &mParticleRenderData;
     }
 
@@ -58,14 +58,14 @@ namespace BrnGame
     // GetBufferCrashTriangleCache() const @ 0x8227F790 (DWARF h:103). Read-lock, &member (+0x3B00).
     const BrnEffects::BrnCrashTriangleCache* DispatchThreadInputBuffer::GetBufferCrashTriangleCache() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 103));
         return &mBufferCrashTriangleCache;
     }
 
     // GetBufferCrashTriangleCache() @ 0x8227F838 (DWARF h:104, NON-const). Write-lock, &member.
     BrnEffects::BrnCrashTriangleCache* DispatchThreadInputBuffer::GetBufferCrashTriangleCache()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 104));
         return &mBufferCrashTriangleCache;
     }
 
@@ -75,7 +75,7 @@ namespace BrnGame
     // Read-lock, return &mParticleInterThreadEventQueue (+0x5980).
     const DispatchThreadInputBuffer::CappedInterThreadEventQueue* DispatchThreadInputBuffer::GetParticleInterThreadEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 106));
         return &mParticleInterThreadEventQueue;
     }
 
@@ -83,7 +83,7 @@ namespace BrnGame
     // "GetParticleInterT"). Write-lock, return &mParticleInterThreadEventQueue (+0x5980).
     DispatchThreadInputBuffer::CappedInterThreadEventQueue* DispatchThreadInputBuffer::GetParticleInterThreadEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 107));
         return &mParticleInterThreadEventQueue;
     }
 
@@ -93,7 +93,7 @@ namespace BrnGame
     // committed template's Append<SRCBUF,SRCALIGN> deduces <16384,16> from the source type.
     void DispatchThreadInputBuffer::AppendParticleInterThreadEventQueue(const CappedInterThreadEventQueue* lpSource)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Game/BrnDispatchThreadInputBuffer.h", 108));
         mParticleInterThreadEventQueue.Append(*lpSource);
     }
 

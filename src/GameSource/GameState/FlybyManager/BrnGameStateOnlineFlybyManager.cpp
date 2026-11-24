@@ -224,7 +224,7 @@ const CombinedStringID KA_NO_RIVALRY_MESSAGES[OnlineFlybyManager::E_NO_RIVALRY_C
 s32 OnlineFlybyManager::CalculateNumberOfCarsInFlyby()
 {
     CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
-    CGS_ASSERT(mpScoringSystem, "GetScoringSystem()");
+    CGS_ASSERT(mpScoringSystem, CgsDev::Assert::MessageAt("GetScoringSystem()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 468));
     CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
 
     s32 liNumRivals = mpScoringSystem->GetNumberOfNetworkPlayersStillConnected() - 1;
@@ -290,7 +290,7 @@ void OnlineFlybyManager::CalculatePointsLeaderRating(FlybyManager::RivalRating* 
     const BrnNetwork::NetworkPlayerID lPointsLeader = mpScoringSystem->GetPointsLeader();
 
     CGS_ASSERT(lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-               "lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+               CgsDev::Assert::MessageAt("lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 696));
 
     if (lpRating->mPlayerID == lPointsLeader)
         lpRating->miRivalWeighting += KI_WEIGHTING_POINTS_LEADER;
@@ -349,7 +349,7 @@ void OnlineFlybyManager::CalculateNewOrOngoingRivalryRating(FlybyManager::RivalR
     CgsSystem::DateAndTime lNow;
     lNow.Update();
 
-    CGS_ASSERT(lpRelationship->Validate(), "lpRelationship->Validate()");
+    CGS_ASSERT(lpRelationship->Validate(), CgsDev::Assert::MessageAt("lpRelationship->Validate()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 557));
 
     const s32 liSecondsSinceActivity =
         lNow.GetDifferenceInSeconds(lpRelationship->GetLastChangedTime());
@@ -397,7 +397,7 @@ void OnlineFlybyManager::CalculateRivalryRating(FlybyManager::RivalRating* lpRat
             CalculateNewOrOngoingRivalryRating(lpRating);
         }
 
-        CGS_ASSERT(lpRating->miRivalWeighting >= 0, "lpRating->miRivalWeighting >= 0");
+        CGS_ASSERT(lpRating->miRivalWeighting >= 0, CgsDev::Assert::MessageAt("lpRating->miRivalWeighting >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 628));
     }
 }
 
@@ -452,11 +452,11 @@ s32 OnlineFlybyManager::GetOngoingStat(FlybyManager::RivalRating* lpRating,
 s32 OnlineFlybyManager::GetNewRivalryStat(FlybyManager::RivalRating* lpRating,
                                           ENewRivalryCompare leStatType, EMessageStyle leStyle)
 {
-    CGS_ASSERT(lpRating, "lpRating");
+    CGS_ASSERT(lpRating, CgsDev::Assert::MessageAt("lpRating", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 1069));
 
     const BrnNetwork::LiveRevengeRelationship* lpRelationship =
         GetLiveRevengeRelationship(lpRating->mPlayerID);
-    CGS_ASSERT(lpRelationship, "lpRelationship");
+    CGS_ASSERT(lpRelationship, CgsDev::Assert::MessageAt("lpRelationship", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 1073));
 
     const bool lbRivalSide = (leStyle != E_MESSAGE_STYLE_POSITIVE);
     const BrnNetwork::CommonRelationshipStats* lpSideStats =
@@ -475,7 +475,7 @@ s32 OnlineFlybyManager::GetNewRivalryStat(FlybyManager::RivalRating* lpRating,
     case E_NEW_RIVALRY_LONGEST_STREAK:
         return lpSideStats->miLongestStreak;
     default:
-        CGS_ASSERT(false, "Unknow stat type");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknow stat type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 1130));
         return 0;
     }
 }
@@ -792,7 +792,7 @@ void OnlineFlybyManager::AddNewRivalryMessage(FlybyManager::RivalRating* lpRatin
 {
     const BrnNetwork::LiveRevengeRelationship* lpRelationship =
         GetLiveRevengeRelationship(lpRating->mPlayerID);
-    CGS_ASSERT(lpRelationship, "lpRelationship");
+    CGS_ASSERT(lpRelationship, CgsDev::Assert::MessageAt("lpRelationship", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 841));
 
     ENewRivalryCompare leStatType = E_NEW_RIVALRY_START;
     if (lpRelationship->IsCurrentRelationshipEqual())
@@ -808,7 +808,7 @@ void OnlineFlybyManager::AddNewRivalryMessage(FlybyManager::RivalRating* lpRatin
             }
         }
 
-        CGS_ASSERT(laAvaiableMessageIndex.GetLength() > 0, "laAvaiableMessageIndex.GetLength() > 0");
+        CGS_ASSERT(laAvaiableMessageIndex.GetLength() > 0, CgsDev::Assert::MessageAt("laAvaiableMessageIndex.GetLength() > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 869));
         leStatType = laAvaiableMessageIndex[static_cast<u32>(
             mRandom.RandomInt(0, static_cast<s32>(laAvaiableMessageIndex.GetLength()) - 1))];
     }

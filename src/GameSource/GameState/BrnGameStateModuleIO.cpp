@@ -2,6 +2,7 @@
 
 #include <cstring>                                   // std::memset (OutputBuffer::Construct's console zero-fills)
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CgsDev::Assert Begin/Fire/EndAssert
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 #include "GameSource/Resource/SharedIO/BrnGameDataRequestQueue.h" // RequestInterface<3072> (the +0x3414 member's real type)
 #include "GameSource/GameState/BrnGameStateSharedIO.h"            // RaceCarRaceDistanceInterface / ScoringOutputInterface / OnlineScoringOutputInterface (the tail members' real types)
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // TriggerManagementInputInterface (Construct's two embedded queues)
@@ -92,14 +93,14 @@ void PreWorldInputBuffer::Destruct()
 // X360 0x823632F8 - read-lock accessor for the controller input (this+0x34).
 const ControllerInput* PreWorldInputBuffer::GetControllerInput() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 377));
     return &mControllerInput;
 }
 
 // X360 0x8231CE28 - read-lock accessor for the timer-status payload (this+0x04).
 const TimerStatusInterface* PreWorldInputBuffer::GetTimerStatusInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 133));
     return &mTimerStatusInterface;
 }
 
@@ -107,7 +108,7 @@ const TimerStatusInterface* PreWorldInputBuffer::GetTimerStatusInterface() const
 // TimerStatusInterface::operator= as the field-by-field copy of both blocks.
 void PreWorldInputBuffer::SetTimerStatusInterface(const TimerStatusInterface* lpSource)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 135));
     mTimerStatusInterface = *lpSource;
 }
 
@@ -163,7 +164,7 @@ void PreWorldInputBuffer::SetButtonPressed(const ControllerActionSource* lpActio
 void PreWorldInputBuffer::SetPlayerStatusInterface(
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpSource)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 147));
     mPlayerStatusInterface = *lpSource;
 }
 
@@ -171,14 +172,14 @@ void PreWorldInputBuffer::SetPlayerStatusInterface(
 // Forwards to the committed BrnNetwork PlayerResultsInterface::operator= (X360 0x823B8F68).
 void PreWorldInputBuffer::SetNetworkPlayerResultsInterface(const NetworkPlayerResultsInterface* lpSource)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 150));
     mNetworkPlayerResultsInterface = *lpSource;
 }
 
 // X360 0x8231CD80 - read-lock accessor for the buffered game-event queue (this+0x4C).
 const GameEventQueue* PreWorldInputBuffer::GetGameEventQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 130));
     // [gateui] `&member`, not a reinterpret_cast over a u8 seat -- the seat is the real type now.
     return &mGameEventQueue;
 }
@@ -186,35 +187,35 @@ const GameEventQueue* PreWorldInputBuffer::GetGameEventQueue() const
 // X360 0x823B8C60 - write-lock (mutable) accessor for the game-event queue (this+0x4C).
 GameEventQueue* PreWorldInputBuffer::GetGameEventQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 131));
     return &mGameEventQueue;
 }
 
 // X360 0x823B8E18 - write-lock accessor for the takedown-event input queue (this+0x660).
 TakedownEventInputQueueType* PreWorldInputBuffer::GetTakedownEventInputQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 138));
     return &mTakedownEventInputQueue;
 }
 
 // X360 0x82362778 - read-lock accessor for the takedown-event input queue (this+0x660).
 const TakedownEventInputQueueType* PreWorldInputBuffer::GetTakedownEventInputQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 137));
     return &mTakedownEventInputQueue;
 }
 
 // X360 0x8231D020 - read-lock accessor for the network player-results interface (this+0x36B8).
 const NetworkPlayerResultsInterface* PreWorldInputBuffer::GetNetworkPlayerResultsInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 149));
     return &mNetworkPlayerResultsInterface;
 }
 
 // X360 0x8231CED0 - read-lock accessor for the network-to-game-state input interface (this+0x7B0).
 const NetworkToGameStateInterface* PreWorldInputBuffer::GetNetworkToGameStateInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 140));
     return &mNetworkToGameStateInterface;
 }
 
@@ -230,7 +231,7 @@ const NetworkToGameStateInterface* PreWorldInputBuffer::GetNetworkToGameStateInt
 const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface*
 PreWorldInputBuffer::GetPlayerStatusInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 146));
     return &mPlayerStatusInterface;
 }
 
@@ -248,7 +249,7 @@ const ControllerToGameStateInterface* PreWorldInputBuffer::GetControllerToGameSt
 // The assertion continues to the same canonical interface on failure.
 ControllerToGameStateInterface* PreWorldInputBuffer::GetControllerToGameStateInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 144));
     return &mControllerToGameStateInterface;
 }
 
@@ -307,21 +308,21 @@ void PostWorldInputBuffer::Destruct()
 // X360 0x8231D218 - read-lock accessor for the vehicle output interface (this+0x220).
 const VehicleOutputInterface* PostWorldInputBuffer::GetVehicleOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 201));
     return &mVehicleOutputInterface;
 }
 
 // X360 0x823B9300 - write-lock accessor for the vehicle output interface (this+0x220).
 VehicleOutputInterface* PostWorldInputBuffer::GetVehicleOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 202));
     return &mVehicleOutputInterface;
 }
 
 // X360 0x8231D0C8 - read-lock accessor for the game-event queue (this+0xA4B0).
 const GameEventQueue* PostWorldInputBuffer::GetGameEventQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 195));
     // [gateui] `&member`, not a reinterpret_cast over a u8 seat -- the seat is the real type now.
     // This is the queue owner `bridge`'s BridgeWorldToGameState @0x823E5368 Appends the world's
     // per-frame game events into, and the one GameStateModule::PostWorldUpdate @0x8238F358 drains
@@ -332,7 +333,7 @@ const GameEventQueue* PostWorldInputBuffer::GetGameEventQueue() const
 // X360 0x823B91B0 - write-lock accessor for the game-event queue (this+0xA4B0).
 GameEventQueue* PostWorldInputBuffer::GetGameEventQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 196));
     return &mGameEventQueue;
 }
 
@@ -340,7 +341,7 @@ GameEventQueue* PostWorldInputBuffer::GetGameEventQueue()
 const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface*
 PostWorldInputBuffer::GetActiveRaceCarOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 210));
     return &mActiveRaceCarOutputInterface;
 }
 
@@ -354,7 +355,7 @@ PostWorldInputBuffer::RCEntityActiveRaceCarOutputInterface* PostWorldInputBuffer
 // X360 0x8231D410 - read-lock accessor for the AI-car output interface (this+0xAAC0).
 const AICarOutputInterface* PostWorldInputBuffer::GetAICarOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 216));
     return &mAICarOutputInterface;
 }
 
@@ -362,7 +363,7 @@ const AICarOutputInterface* PostWorldInputBuffer::GetAICarOutputInterface() cons
 // Non-const twin of GetAICarOutputInterface() const.
 AICarOutputInterface* PostWorldInputBuffer::GetAICarOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 217));
     return &mAICarOutputInterface;
 }
 
@@ -370,7 +371,7 @@ AICarOutputInterface* PostWorldInputBuffer::GetAICarOutputInterface()
 // (+0xBFA8) with the queue's own Append.
 void PostWorldInputBuffer::AppendTrafficTypeResponseQueue(const TrafficTypeResponseQueue* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 220));
     mTrafficTypeResponseQueue.Append(*lpQueue);
 }
 
@@ -384,7 +385,7 @@ const PostWorldInputBuffer::TrafficTypeResponseQueue* PostWorldInputBuffer::GetT
 // X360 0x8231D170 - read-lock accessor for the race-car crash-event queue (this+0x10).
 const RaceCarCrashEventQueue* PostWorldInputBuffer::GetRaceCarCrashEventQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 198));
     return &mRaceCarCrashEventQueue;
 }
 
@@ -398,7 +399,7 @@ RaceCarCrashEventQueue* PostWorldInputBuffer::GetRaceCarCrashEventQueue()
 // X360 0x82362A30 - read-lock accessor for the trigger-entity-module output interface (this+0x6E34).
 const TriggerEntityModuleOutputInterface* PostWorldInputBuffer::GetTriggerEntityOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 207));
     return &mTriggerEntityOutputInterface;
 }
 
@@ -406,7 +407,7 @@ const TriggerEntityModuleOutputInterface* PostWorldInputBuffer::GetTriggerEntity
 // interface (this+0x6E34).
 TriggerEntityModuleOutputInterface* PostWorldInputBuffer::GetTriggerEntityOutputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 208));
     return &mTriggerEntityOutputInterface;
 }
 
@@ -652,7 +653,7 @@ void OutputBuffer::Destruct()
 // X360 0x8231D4B8 - write-lock accessor for the game-action queue (this+0x04).
 GameActionQueue* OutputBuffer::GetGameActionQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 266));
     return reinterpret_cast<GameActionQueue*>(&mGameActionQueueStorage);
 }
 
@@ -660,7 +661,7 @@ GameActionQueue* OutputBuffer::GetGameActionQueue()
 // queue (this+0x04); assert __FILE__/__LINE__ = BrnGameStateModuleIO.h:265.
 const GameActionQueue* OutputBuffer::GetGameActionQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 265));
     return reinterpret_cast<const GameActionQueue*>(&mGameActionQueueStorage);
 }
 
@@ -668,21 +669,21 @@ const GameActionQueue* OutputBuffer::GetGameActionQueue() const
 // output queue (this+0x4040); assert __FILE__/__LINE__ = BrnGameStateModuleIO.h:271.
 const TakedownEventOutputQueueType* OutputBuffer::GetTakedownEventOutputQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 271));
     return &mTakedownEventOutputQueue;
 }
 
 // X360 0x823B9798 - read-lock accessor for the resource-request interface (this+0x3414).
 const ResourceRequestInterface* OutputBuffer::GetResourceRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 268));
     return reinterpret_cast<const ResourceRequestInterface*>(&mResourceRequestInterfaceStorage);
 }
 
 // X360 0x82362B80 - write-lock accessor for the takedown-event output queue (this+0x4040).
 TakedownEventOutputQueueType* OutputBuffer::GetTakedownEventOutputQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 272));
     return &mTakedownEventOutputQueue;
 }
 
@@ -735,7 +736,7 @@ const BrnNetwork::BrnNetworkModuleIO::GameStateToNetworkInterface* OutputBuffer:
 // X360 0x8231D8A8 - write-lock accessor for the game-state-to-GUI interface (this+0x4450).
 GameStateToGuiInterface* OutputBuffer::GetGameStateToGuiInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 296));
     return &mGameStateToGuiInterface;
 }
 
@@ -743,14 +744,14 @@ GameStateToGuiInterface* OutputBuffer::GetGameStateToGuiInterface()
 // == 17488). class:BrnGameState catch-all TU; BridgeGameStateToGui reads it under a read lock.
 const GameStateToGuiInterface* OutputBuffer::GetGameStateToGuiInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 295));
     return &mGameStateToGuiInterface;
 }
 
 // X360 0x823630F0 - write-lock accessor for the race-car race-distance interface (this+0x2A48C).
 RaceCarRaceDistanceInterface* OutputBuffer::GetRaceCarRaceDistanceInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 311));
     return reinterpret_cast<RaceCarRaceDistanceInterface*>(&mRaceCarRaceDistanceInterfaceStorage);
 }
 
@@ -770,7 +771,7 @@ GameStateToControllerInterface* OutputBuffer::GetGameStateToControllerInterface(
 // X360 0x823B9AE0 - read-lock accessor for the trigger-management input interface (this+0x9050).
 const TriggerManagementInputInterface* OutputBuffer::GetTriggerManagementInputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 283));
     return &mTriggerManagementInputInterface;
 }
 
@@ -778,7 +779,7 @@ const TriggerManagementInputInterface* OutputBuffer::GetTriggerManagementInputIn
 // (this+0x9050).
 TriggerManagementInputInterface* OutputBuffer::GetTriggerManagementInputInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 284));
     return &mTriggerManagementInputInterface;
 }
 
@@ -808,7 +809,7 @@ const TriggerQueryInputInterface* OutputBuffer::GetTriggerQueryInputInterface() 
 // race-distance interface (this+173196); const twin of the 0x823630F0 write-side accessor.
 const RaceCarRaceDistanceInterface* OutputBuffer::GetRaceCarRaceDistanceInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 310));
     return reinterpret_cast<const RaceCarRaceDistanceInterface*>(&mRaceCarRaceDistanceInterfaceStorage);
 }
 
@@ -899,7 +900,7 @@ GameModeOutputInterface* OutputBuffer::GetGameModeOutputInterface()
 // X360 0x8231D560 - write-lock accessor for the resource-request interface (this+0x3414).
 ResourceRequestInterface* OutputBuffer::GetResourceRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 269));
     return reinterpret_cast<ResourceRequestInterface*>(&mResourceRequestInterfaceStorage);
 }
 
@@ -958,35 +959,35 @@ const OutputBufferFrameRateTypeReqInterface* OutputBuffer::GetFrameRateTypeReque
 // X360 0x82362C28 - write-lock accessor for the GUI event queue (this+18496).
 OutputBufferGuiEventQueue* OutputBuffer::GetGuiEventQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 281));
     return &mGuiEventQueue;
 }
 
 // X360 0x823B9A38 - read-lock accessor for the GUI event queue (this+18496).
 const OutputBufferGuiEventQueue* OutputBuffer::GetGuiEventQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 280));
     return &mGuiEventQueue;
 }
 
 // X360 0x823B9E28 - read-lock getter for meActivePaybackType (this+173180).
 BrnNetwork::EPaybackType OutputBuffer::GetActivePaybackType() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 298));
     return meActivePaybackType;
 }
 
 // X360 0x82362E20 - write-lock setter for meActivePaybackType (this+173180).
 void OutputBuffer::SetActivePaybackType(BrnNetwork::EPaybackType lePaybackType)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 299));
     meActivePaybackType = lePaybackType;
 }
 
 // X360 0x823B9ED8 - read-lock getter for meActivePaybackAggressor (this+173184).
 ::EActiveRaceCarIndex OutputBuffer::GetActivePaybackAggressor() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 301));
     return meActivePaybackAggressor;
 }
 
@@ -994,7 +995,7 @@ void OutputBuffer::SetActivePaybackType(BrnNetwork::EPaybackType lePaybackType)
 // (Verifier fix: was CGS_ASSERT_W, an undefined macro -> explicit Begin/Fire/End.)
 void OutputBuffer::SetActivePaybackAggressor(::EActiveRaceCarIndex leAggressor)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 302));
     meActivePaybackAggressor = leAggressor;
 }
 
@@ -1002,14 +1003,14 @@ void OutputBuffer::SetActivePaybackAggressor(::EActiveRaceCarIndex leAggressor)
 // (Verifier fix: was CGS_ASSERT_W -> explicit Begin/Fire/End.)
 void OutputBuffer::SetGameModeElapsedTime(const CgsSystem::Time* lpTime)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 305));
     mGameModeElapsedTime = *lpTime;
 }
 
 // X360 0x823B9F88 - read-lock getter for mbControllerActive (this+192490).
 bool OutputBuffer::GetControllerActive() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 307));
     return mbControllerActive;
 }
 
@@ -1017,14 +1018,14 @@ bool OutputBuffer::GetControllerActive() const
 // (Verifier fix: was CGS_ASSERT_W -> explicit Begin/Fire/End.)
 void OutputBuffer::SetControllerActive(bool lbActive)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 308));
     mbControllerActive = lbActive;
 }
 
 // X360 0x823BA0E0 - read-lock getter for mbSetUpAllEventStartsInterfaceIsValid (this+192488).
 bool OutputBuffer::GetSetUpAllEventStartsInterfaceIsValid() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 328));
     return mbSetUpAllEventStartsInterfaceIsValid;
 }
 
@@ -1032,7 +1033,7 @@ bool OutputBuffer::GetSetUpAllEventStartsInterfaceIsValid() const
 // (Verifier fix: was CGS_ASSERT_W -> explicit Begin/Fire/End.)
 void OutputBuffer::SetSetUpAllEventStartsInterfaceIsValid(bool lbValid)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 329));
     mbSetUpAllEventStartsInterfaceIsValid = lbValid;
 }
 
@@ -1071,7 +1072,7 @@ const SpecificGameModeEventInterface& OutputBuffer::GetSpecificGameModeEventInte
 // X360 0x823BA190 - read-lock getter for mbSpecificGameModeEventInterfaceIsValid (this+192489).
 bool OutputBuffer::GetSpecificGameModeEventInterfaceIsValid() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 334));
     return mbSpecificGameModeEventInterfaceIsValid;
 }
 
@@ -1079,7 +1080,7 @@ bool OutputBuffer::GetSpecificGameModeEventInterfaceIsValid() const
 // (Verifier fix: was CGS_ASSERT_W -> explicit Begin/Fire/End.)
 void OutputBuffer::SetSpecificGameModeEventInterfaceIsValid(bool lbValid)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 335));
     mbSpecificGameModeEventInterfaceIsValid = lbValid;
 }
 

@@ -43,9 +43,9 @@ namespace BrnDirector
         //   a plain strcpy including the NUL.
         void Set(const char* lpcName)
         {
-            CGS_ASSERT(lpcName != NULL, "lpcName != NULL");                              // 1st
+            CGS_ASSERT(lpcName != NULL, CgsDev::Assert::MessageAt("lpcName != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h", 54));                              // 1st
             CGS_ASSERT(strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH,
-                       "strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH");               // 2nd
+                       CgsDev::Assert::MessageAt("strlen(lpcName) <= BrnGui::KI_MAX_PFX_ID_LENGTH", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h", 55));               // 2nd
             CGS_ASSERT(strlen(lpcName) < 32, "String is too long. Buffer size = 32");    // 3rd
             strcpy(mHookNameString, lpcName);
         }

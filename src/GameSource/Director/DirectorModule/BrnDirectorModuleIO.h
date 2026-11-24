@@ -123,6 +123,10 @@ namespace DirectorIO
         // data, ...) belong to their own un-homed homes and stay with them.
         void Construct();
 
+        // DWARF BrnDirectorModuleIO.h:95 (body BrnDirectorModuleIO.cpp:109), ARTIST 0x8221B298:
+        // the base teardown, then the per-car team words and the end-of-event pair cleared.
+        void Destruct();
+
         // --- queries (getters): all const, all read-lock-asserted ---
         // (GetContacts/GetHookEnumeration/GetControllerInfo return the addresses of
         //  opaque-but-correctly-sized members, typed as void* until those interface homes are

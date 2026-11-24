@@ -8,6 +8,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebugRender.h"                // CgsDev::DebugRender / RGBA / Vector2
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                                          // CgsCore::StrCpy / SPrintf
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                               // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/vector3_operation.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX. The "Scoring System" chainable-stunt-multiplier debug
@@ -159,7 +160,7 @@ namespace BrnGameState
 
         const BrnPhysics::Vehicle::RaceCarState* lpLocalPlayersCarState =
             lpActiveCarOutput->GetPlayerRaceCarState();
-        CGS_ASSERT(lpLocalPlayersCarState != 0, "lpLocalPlayersCarState");
+        CGS_ASSERT(lpLocalPlayersCarState != 0, CgsDev::Assert::MessageAt("lpLocalPlayersCarState", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.cpp", 339));
 
         if (!lpActiveCarOutput->IsRaceCarActive(leRaceCarIndex))
             return;

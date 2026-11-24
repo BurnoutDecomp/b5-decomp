@@ -335,7 +335,7 @@ void FlybyData::AddMessage(const char* lpcMessage, const char* lpcParameter)
     FlybyRivalData& lRival = mRivalsToShow[liFlybyCarIndex];
     const s32 liCurrentMessageIndex = lRival.miNumberOfMessages;
 
-    CGS_ASSERT(liCurrentMessageIndex < FlybyRivalData::KI_MAX_MESSAGES, "liCurrentMessageIndex < GameStateModuleIO::FlybyRivalData::KI_MAX_MESSAGES");
+    CGS_ASSERT(liCurrentMessageIndex < FlybyRivalData::KI_MAX_MESSAGES, CgsDev::Assert::MessageAt("liCurrentMessageIndex < GameStateModuleIO::FlybyRivalData::KI_MAX_MESSAGES", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp", 273));
 
     // Inlined StrnCpy<KI_MAX_MESSAGE_ID_BUFFER>(maacMessageIDs[idx], lpcMessage) bounds check.
     if (std::strlen(lpcMessage) >= static_cast<u32>(FlybyRivalData::KI_MAX_MESSAGE_ID_BUFFER))
@@ -369,7 +369,7 @@ void FlybyData::AddMessage(const char* lpcMessage, const char* lpcParameter)
                      FlybyRivalData::KI_MAX_PARAMTER_LENGTH);
 
         ++lRival.maiNumberOfParameters[liCurrentMessageIndex];
-        CGS_ASSERT(lRival.maiNumberOfParameters[liCurrentMessageIndex] <= FlybyRivalData::KI_MAX_PARAMETERS, "mRivalsToShow[liFlybyCarIndex].maiNumberOfParameters[liCurrentMessageIndex] <= GameStateModuleIO::FlybyRivalData::KI_MAX_PARAMETERS");
+        CGS_ASSERT(lRival.maiNumberOfParameters[liCurrentMessageIndex] <= FlybyRivalData::KI_MAX_PARAMETERS, CgsDev::Assert::MessageAt("mRivalsToShow[liFlybyCarIndex].maiNumberOfParameters[liCurrentMessageIndex] <= GameStateModuleIO::FlybyRivalData::KI_MAX_PARAMETERS", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp", 287));
     }
 
     ++lRival.miNumberOfMessages;

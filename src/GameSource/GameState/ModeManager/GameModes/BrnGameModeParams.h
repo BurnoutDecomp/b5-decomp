@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "BrnCommonTypes.h"                                   // Vector3, CgsID
 #include "GameShared/GameClasses/Containers/CgsArray.h"       // Array<T, N>
 #include "GameSource/GameState/BrnGameStateSharedIO.h"        // GameStateModuleIO::EGameModeType
@@ -269,7 +270,7 @@ public:
     const OpponentData* GetOpponentData(s32 liOpponentIndex) const
     {
         CGS_ASSERT(liOpponentIndex >= 0 && liOpponentIndex < GetOpponentCount(),
-                   "liOpponentIndex>=0 && liOpponentIndex<GetOpponentCount()");   // BrnGameModeParams.h:1154
+                   CgsDev::Assert::MessageAt("liOpponentIndex>=0 && liOpponentIndex<GetOpponentCount()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h", 1154));   // BrnGameModeParams.h:1154
         return &maOpponentData.GetItem(static_cast<u32>(liOpponentIndex));
     }
 

@@ -262,8 +262,8 @@ bool AchievementManagerX360::GetAchievementsFromX360Api(GameStateModuleIO::Outpu
 {
     if (miState == KI_STATE_IDLE)
     {
-        CGS_ASSERT(miUserIndex >= KI_MIN_USER_INDEX, "miUserIndex >= 0");
-        CGS_ASSERT(miUserIndex <= KI_MAX_USER_INDEX, "miUserIndex <= 3");
+        CGS_ASSERT(miUserIndex >= KI_MIN_USER_INDEX, CgsDev::Assert::MessageAt("miUserIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.cpp", 408));
+        CGS_ASSERT(miUserIndex <= KI_MAX_USER_INDEX, CgsDev::Assert::MessageAt("miUserIndex <= 3", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/X360/BrnGameStateAchievementManagerX360.cpp", 409));
 
         if (XUserCreateAchievementEnumerator(KU_ACHIEVEMENT_ENUMERATE_TITLE_ID, static_cast<u32>(miUserIndex),
                                              KU_ACHIEVEMENT_ENUMERATE_XUID,

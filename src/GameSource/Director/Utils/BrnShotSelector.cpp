@@ -19,6 +19,7 @@
 #include "GameSource/Director/Utils/BrnShotSelector.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"           // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 #include "GameShared/GameClasses/Numeric/CgsBitOperations.h"        // GetNumberOfSetBits
 #include "GameSource/AttribSys/Generated/classes/iceanim.h"         // Attrib::Gen::iceanim
@@ -102,13 +103,14 @@ ShotSelector::Construct(const DirectorResourceManager* lpResourceManager)
 {
     mpResourceManager = lpResourceManager;           // stw r4, 0x268(this)
 
-    for (u32 luList = 0; luList < KU_NUM_SHOT_LISTS; ++luList)
+    // DWARF BrnShotSelector.cpp:52/53: int32_t liLoop / liLoop2 (ARTIST 0x8221B44C cmpwi).
+    for (s32 liLoop = 0; liLoop < KI_NUM_SHOT_LISTS; ++liLoop)
     {
-        CgsContainers::Array<s32, KU_SHOT_LIST_SIZE>& lrList = maaShotTimes[luList];
+        CgsContainers::Array<s32, KI_SHOT_LIST_SIZE>& lrList = maaShotTimes[liLoop];
         lrList.SetFullCount();                       // stw 50, 0xC8(base)  -> miCount = 50
-        for (u32 luSlot = 0; luSlot < KU_SHOT_LIST_SIZE; ++luSlot)
+        for (s32 liLoop2 = 0; liLoop2 < KI_SHOT_LIST_SIZE; ++liLoop2)
         {
-            lrList.GetItem(luSlot) = 0;              // *(&maElements[slot]) = 0
+            lrList.GetItem(liLoop2) = 0;              // *(&maElements[slot]) = 0
         }
     }
 }
@@ -172,7 +174,7 @@ Camera::Camera::ShotReference* ShotSelector::GetCrashShot(
     EGroup leShotGroup) const
 {
     // Non-gating tripwire (cpp:123).
-    CGS_ASSERT(lpShotSelectionInfoOut != NULL, "lpShotSelectionInfoOut != NULL");
+    CGS_ASSERT(lpShotSelectionInfoOut != NULL, CgsDev::Assert::MessageAt("lpShotSelectionInfoOut != NULL", "..\\..\\..\\GameSource\\Director/BrnShotSelector.cpp", 123));
 
     u32 luIndex = 0;
     s32 liLeastRecentTime = miCurrentTimeID;
@@ -200,7 +202,7 @@ Camera::Camera::ShotReference* ShotSelector::GetCrashShot(
         break;
     }
     // Non-gating (cpp:158): the X360 carries on with the null group after firing.
-    CGS_ASSERT(lpCrashShots != NULL, "lpCrashShots != NULL");
+    CGS_ASSERT(lpCrashShots != NULL, CgsDev::Assert::MessageAt("lpCrashShots != NULL", "..\\..\\..\\GameSource\\Director/BrnShotSelector.cpp", 158));
 
     while (luIndex < lpCrashShots->Num_ShotList())
     {
@@ -288,7 +290,7 @@ Camera::Camera::ShotReference* ShotSelector::GetCrashShot(
         if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             *CgsDev::Log::gpDebugPrint << "\n\n";
 
-        CGS_ASSERT(false, "Could not find a suitable shot");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Could not find a suitable shot", "..\\..\\..\\GameSource\\Director/BrnShotSelector.cpp", 305));
     }
 
     return lpBestShot;

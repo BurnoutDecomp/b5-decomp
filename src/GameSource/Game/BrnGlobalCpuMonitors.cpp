@@ -27,8 +27,6 @@ namespace BrnGame
         miUT_Triggers         = -1;
         miUT_CrashManager     = -1;
         miUT_Physics          = -1;
-        miUT_World            = -1;
-        miUT_Replay           = -1;
         miUT_Resource         = -1;
         miUT_DebugManager     = -1;
         miUT_RenderAll        = -1;
@@ -41,6 +39,10 @@ namespace BrnGame
         miDT_DispatchToGpu    = -1;
         miUT_ThreadSync       = -1;
         miUT_WaitOnDispatch   = -1;
+        // ARTIST seeds World/Replay here, after WaitOnDispatch (0x823A9114 / 0x823A9118); the PS3
+        // DecFIGS Construct stores World (+60) at the same point.
+        miUT_World            = -1;
+        miUT_Replay           = -1;
         miUT_RaceCar_SQ       = -1;
         miUT_Traffic_SQ       = -1;
         miUT_Triggers_SQ      = -1;

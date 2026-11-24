@@ -25,6 +25,7 @@
 #include "SharedClasses/DataLists/VehicleListEntry.h"
 #include "GameShared/GameClasses/Containers/CgsArray.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                          // CgsIDUnCompress
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -170,11 +171,11 @@ void GameStateModule::RequestStreamingForVehicleSelection(GameStateModuleIO::Gam
     {
         // A colour livery is not in the list itself: look up its parent car instead.
         const BrnResource::VehicleListEntry* lpCurrentVehicleData = mpVehicleList->GetVehicleData(lCurrentVehicle);
-        CGS_ASSERT(lpCurrentVehicleData != 0, "lpCurrentVehicleData != NULL");
+        CGS_ASSERT(lpCurrentVehicleData != 0, CgsDev::Assert::MessageAt("lpCurrentVehicleData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 7461));
         if (lpCurrentVehicleData->IsLiveryColour())
         {
             CGS_ASSERT(lpCurrentVehicleData->GetParentId() != 0,
-                       "lpCurrentVehicleData->GetParentId() != kCGSID_NULL");
+                       CgsDev::Assert::MessageAt("lpCurrentVehicleData->GetParentId() != kCGSID_NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 7465));
             liCurrentVehicleIndex = lCars.FindFirstInstanceOf(lpCurrentVehicleData->GetParentId());
         }
     }

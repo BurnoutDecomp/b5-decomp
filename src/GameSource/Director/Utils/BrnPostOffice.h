@@ -38,6 +38,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Containers/CgsArray.h"     // Array<T,N> (global scope)
 #include "GameSource/Director/Utils/BrnPostBox.h"           // BrnDirector::PostBox
 
@@ -65,8 +66,8 @@ namespace BrnDirector
         PostBoxIDIntType AddPostBox(PostBox<Type>& lPostBox)                         // h:76
         {
             CGS_ASSERT(mPostBoxMap.GetLength() < mPostBoxMap.GetCapacity(),
-                       "mPostBoxMap.GetLength() < mPostBoxMap.GetCapacity()");      // h:78
-            CGS_ASSERT(!mPostBoxMap.Contains(&lPostBox), "!mPostBoxMap.Contains(&lPostBox)");  // h:79
+                       CgsDev::Assert::MessageAt("mPostBoxMap.GetLength() < mPostBoxMap.GetCapacity()", "..\\..\\..\\GameSource\\Director/Utils/BrnPostOffice.h", 78));      // h:78
+            CGS_ASSERT(!mPostBoxMap.Contains(&lPostBox), CgsDev::Assert::MessageAt("!mPostBoxMap.Contains(&lPostBox)", "..\\..\\..\\GameSource\\Director/Utils/BrnPostOffice.h", 79));  // h:79
             lPostBox.WaitForPackage();
             mPostBoxMap.Append(&lPostBox);
             return static_cast<PostBoxIDIntType>(mPostBoxMap.GetLength() - 1);
@@ -74,8 +75,8 @@ namespace BrnDirector
 
         void Deliver(u16 lID, const Type& lrPackage)                                 // h:93
         {
-            CGS_ASSERT(lID < mPostBoxMap.GetLength(), "lID < mPostBoxMap.GetLength()");  // h:95
-            CGS_ASSERT(mPostBoxMap[lID] != 0, "mPostBoxMap[lID] != NULL");              // h:96
+            CGS_ASSERT(lID < mPostBoxMap.GetLength(), CgsDev::Assert::MessageAt("lID < mPostBoxMap.GetLength()", "..\\..\\..\\GameSource\\Director/Utils/BrnPostOffice.h", 95));  // h:95
+            CGS_ASSERT(mPostBoxMap[lID] != 0, CgsDev::Assert::MessageAt("mPostBoxMap[lID] != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnPostOffice.h", 96));              // h:96
             mPostBoxMap[lID]->TakePackage(lrPackage);
         }
 
