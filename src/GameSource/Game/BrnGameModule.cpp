@@ -1444,12 +1444,10 @@ namespace BrnGame
 
         mTimerStatusInterface.StoreTimers(&mGameTimer, &mSimTimer);
 
-        if (lpDirectorInput != 0)
-        {
-            lpDirectorInput->LockForWrite();
-            *lpDirectorInput->GetTimerStatusInterface() = mTimerStatusInterface;
-            lpDirectorInput->UnlockForWrite();
-        }
+        // ARTIST 0x823BD1AC locks the input supplied by DoUpdate after StoreTimers.
+        lpDirectorInput->LockForWrite();
+        *lpDirectorInput->GetTimerStatusInterface() = mTimerStatusInterface;
+        lpDirectorInput->UnlockForWrite();
     }
 
     // ------------------------------------------------------------------------------------

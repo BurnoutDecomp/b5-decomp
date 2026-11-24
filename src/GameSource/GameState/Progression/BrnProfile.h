@@ -177,7 +177,6 @@ struct MugshotInfo
     // the offsets; the wire record they fill is unchanged either way.
     struct UniquePlayerIDImage { u64 mu64Lo; u64 mu64Hi; };
     UniquePlayerIDImage GetUniquePlayerID() const;  // +0x00 (16 bytes == the PlayerName base)
-    u64  GetGamerCardXuid() const;                   // +0x10 (UniquePlayerIDX360::mqXuid)
     s32  GetImageWord0() const;                      // +0x18 (mCaptureDate.mbIsLocal word)
     s32  GetImageWord1() const;                      // +0x1C (mCaptureDate FILETIME low)
     s32  GetImageWord2() const;                      // +0x20 (mCaptureDate FILETIME high)

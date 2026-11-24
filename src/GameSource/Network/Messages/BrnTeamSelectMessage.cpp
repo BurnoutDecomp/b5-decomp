@@ -81,7 +81,7 @@ namespace BrnNetwork
         CGS_ASSERT(lpaPlayerTeamInfo != 0, CgsDev::Assert::MessageAt(
             "lpaPlayerTeamInfo",
             __FILE__, 96 /* ARTIST 0x825800D4 */));
-        CGS_ASSERT(static_cast<s32>(8 * liNumPlayers) <= static_cast<s32>(sizeof(maPlayerTeamInfo)), CgsDev::Assert::MessageAt(
+        CGS_ASSERT(sizeof(maPlayerTeamInfo) >= liNumPlayers * sizeof(PlayerTeamInfo), CgsDev::Assert::MessageAt(
             "sizeof( maPlayerTeamInfo) >= liNumPlayers * sizeof( PlayerTeamInfo )",
             __FILE__, 97 /* ARTIST 0x825800FC */));
 

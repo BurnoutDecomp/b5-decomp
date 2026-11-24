@@ -588,7 +588,7 @@ void GameStateImageManagerBase::ProcessShowGamerCardRequest(const ImageGalleryRe
     {
         // The X360 posts the 8-byte qword at MugshotInfo +0x10 (ld r11,0x10(r3); std @var_30), the
         // gamercard XUID -- NOT the unique-player-id at +0x00.
-        u64 lu64GamerCardXuid = lpMugshotInfo->GetGamerCardXuid();
+        u64 lu64GamerCardXuid = lpMugshotInfo->mUniquePlayerID.mqXuid;
 
         CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ImageManager/BrnGameStateImageManagerBase.cpp", 1331));
         CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, CgsDev::Assert::MessageAt("lpOutput->GetGameActionQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ImageManager/BrnGameStateImageManagerBase.cpp", 1332));

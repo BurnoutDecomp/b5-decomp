@@ -737,7 +737,6 @@ MugshotInfo::UniquePlayerIDImage MugshotInfo::GetUniquePlayerID() const
     memcpy(&lImage, &mUniquePlayerID.macName[0], sizeof(lImage));
     return lImage;
 }
-u64 MugshotInfo::GetGamerCardXuid() const { return mUniquePlayerID.mqXuid; }              // +0x10
 s32 MugshotInfo::GetImageWord0() const    { return mCaptureDate.IsLocal() ? 1 : 0; }      // +0x18
 s32 MugshotInfo::GetImageWord1() const                                                    // +0x1C
 {
