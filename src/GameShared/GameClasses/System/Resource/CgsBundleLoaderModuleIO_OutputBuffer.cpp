@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsBundleLoaderModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 #include <cstddef>   // offsetof
 
@@ -53,7 +54,9 @@ namespace BundleLoaderIO
     // X360 0x828E21E0: write-lock; return this + 4 (the pool-send queue).
     OutputBuffer::PoolStorage* OutputBuffer::GetPool()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");   // :143
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsBundleLoaderModuleIO.h", 143));   // :143
         return &mPoolSendQueue;
     }
 
@@ -69,7 +72,9 @@ namespace BundleLoaderIO
     // X360 0x828E2330: write-lock (bit 3); return &mLoadBundleResponseQueue (this + 0x1014).
     OutputBuffer::LoadBundleResponseQueue* OutputBuffer::GetLoadBundleResponseQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");   // :146
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsBundleLoaderModuleIO.h", 146));   // :146
         return &mLoadBundleResponseQueue;
     }
 

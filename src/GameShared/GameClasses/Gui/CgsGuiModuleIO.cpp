@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Gui/CgsGuiModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 // CgsGui::CgsGuiModuleIO::OutputBuffer::SetGuiResourceRequestQueue, reconstructed from
 // BURNOUT_X360_ARTIST.XEX @ 0x8285AFB0. The OutputBuffer's other X360-emitted accessors
@@ -44,7 +45,9 @@ namespace CgsGuiModuleIO
     // AddEvent push ("Not locked for writing\n").
     InputBuffer::GuiEventInputQueue* InputBuffer::GetGuiEvents()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.cpp", 110));
         return &mInputQueue;
     }
 }

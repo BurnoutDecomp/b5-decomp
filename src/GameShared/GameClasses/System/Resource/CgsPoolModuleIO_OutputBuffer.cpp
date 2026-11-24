@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 #include <cstddef>   // offsetof
 
@@ -50,7 +51,9 @@ namespace PoolIO
     // X360 0x828E1AA8: read-lock; return this + 4.
     const OutputBuffer::PoolOutputQueue* OutputBuffer::GetPoolOutputQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModuleIO.h", 262));
         return &mPoolOutputQueue;
     }
 
@@ -64,14 +67,18 @@ namespace PoolIO
     // X360 0x828E1BF8: write-lock; return this + 4.
     OutputBuffer::PoolOutputQueue* OutputBuffer::GetPoolOutputQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModuleIO.h", 264));
         return &mPoolOutputQueue;
     }
 
     // X360 0x828E1CA0: write-lock; return this + 8212.
     OutputBuffer::PoolResourceRequestQueueStorage* OutputBuffer::GetPoolResourceRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModuleIO.h", 265));
         return &mPoolResourceRequestQueue;
     }
 }

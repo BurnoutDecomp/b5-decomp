@@ -49,7 +49,9 @@ namespace CrashIO
     const CgsSystem::TimerStatusInterface*
     InputBuffer_PreScene::GetTimerStatusInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 75));
         return &mTimerStatusInterface;
     }
 
@@ -58,7 +60,9 @@ namespace CrashIO
     const NetworkInputInterface*
     InputBuffer_PreScene::GetNetworkInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 78));
         return &mNetworkInputInterface;
     }
 
@@ -196,7 +200,9 @@ namespace CrashIO
     const TrafficInputInterface*
     InputBuffer_PostPhysics::GetTrafficInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 168));
         return &mTrafficInputInterface;
     }
 

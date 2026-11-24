@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Gui/Model/Resources/CgsGuiResourceModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 #include <cstddef>   // offsetof
 
@@ -76,7 +77,9 @@ namespace GuiResourceModuleIO
     // X360 0x8284DFF8: read-lock (bit 4) const handle to the load-notification queue (this+0x814).
     const OutputBuffer::GuiEventQueue* OutputBuffer::GetLoadNotifications() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/Resources/CgsGuiResourceModuleIO.h", 397));
         return &mLoadNotifications;
     }
 

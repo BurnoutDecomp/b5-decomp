@@ -53,7 +53,9 @@ namespace AIModuleIO
     const BrnResource::GameDataIO::RequestInterface<4096>*
     OutputBuffer::GetAIResourceRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 423));
         return &mAIResourceRequestInterface;
     }
 

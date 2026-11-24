@@ -193,7 +193,9 @@ const OutputBuffer::UnBindResultQueue* OutputBuffer::GetUnbindResultQueue() cons
 // X360 0x823B1188 (ledger "Outpu") - read-lock accessor for the pad-disconnected queue (this+220).
 const OutputBuffer::PadDisconnectedQueue* OutputBuffer::GetPadDisconnectedQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        "Not locked for reading\n",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\input\\CgsInputModuleIO.h", 1185));
     return &mPadDisconnectedQueue;
 }
 

@@ -169,7 +169,9 @@ namespace PropEntityIO
     // interface -- the independent confirmation that this getter is the PROP one.
     OutputBuffer_PostPhysics::PropInputInterface* OutputBuffer_PostPhysics::GetPropInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 742));
         return &mPropInputInterface;
     }
 
@@ -218,7 +220,9 @@ namespace PropEntityIO
     // getter and hands the result to ReplayIO::RequestInterface::RegisterSerialiser.
     OutputBuffer_PostPhysics::ReplayRequestInterface* OutputBuffer_PostPhysics::GetReplayRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 748));
         return &mReplayRequestInterface;
     }
 

@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Gui/Model/CgsEventInterpreterModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 #include <cstddef>   // offsetof
 
@@ -72,14 +73,18 @@ namespace EventInterpreterModuleIO
     // X360 0x8284E480: read-lock (bit 4) const handle to the out-event queue (this+4).
     const OutputBuffer::GuiEventQueue* OutputBuffer::GetOutEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\model\\CgsEventInterpreterModuleIO.h", 146));
         return &mGuiOutEvents;
     }
 
     // X360 0x8284E528: write-lock (bit 3) non-const handle to the out-event queue (this+4).
     OutputBuffer::GuiEventQueue* OutputBuffer::GetOutEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\model\\CgsEventInterpreterModuleIO.h", 162));
         return &mGuiOutEvents;
     }
 
@@ -87,7 +92,9 @@ namespace EventInterpreterModuleIO
     // (this+0x4814 == 18452).
     const OutputBuffer::GuiEventQueueSmall* OutputBuffer::GetResourceEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\model\\CgsEventInterpreterModuleIO.h", 178));
         return &mGuiOutResource;
     }
 
@@ -102,7 +109,9 @@ namespace EventInterpreterModuleIO
     // (this+0x5824 == 22564).
     const OutputBuffer::GuiEventQueueLarge* OutputBuffer::GetViewEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\model\\CgsEventInterpreterModuleIO.h", 210));
         return &mGuiOutView;
     }
 
@@ -110,7 +119,9 @@ namespace EventInterpreterModuleIO
     // (this+0x5824 == 22564).
     OutputBuffer::GuiEventQueueLarge* OutputBuffer::GetViewEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\model\\CgsEventInterpreterModuleIO.h", 226));
         return &mGuiOutView;
     }
 }

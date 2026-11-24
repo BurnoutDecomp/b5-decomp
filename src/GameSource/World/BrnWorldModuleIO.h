@@ -38,6 +38,7 @@
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"
 #include "types.hpp"                                              // s8/s16/s32/u8/u16/u32/f32
 #include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT (per-race-car inline getters)
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"            // CgsModule::IOBuffer base
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"  // CgsModule::VariableEventQueue<N,16>
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"          // CgsModule::EventQueue<T,N>
@@ -650,7 +651,9 @@ namespace BrnWorldIO
         // ---- gui events (+170176; :607 read-lock, :608 write-lock) ----
         const GuiEventInputQueue* GetGuiEventQueue() const
         {
-            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+            CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+                "Not locked for reading\n",
+                "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 607));
             return &mGuiEventQueue;
         }
         GuiEventInputQueue* GetGuiEventQueue();                                           // X360 0x827A4E08

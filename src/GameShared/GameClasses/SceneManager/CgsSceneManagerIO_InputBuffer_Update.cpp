@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 // CgsSceneManager::SceneManagerIO::InputBuffer_Update member function, reconstructed from
 // BURNOUT_X360_ARTIST.XEX (semantic parity, not byte match).
@@ -23,7 +24,9 @@ namespace SceneManagerIO
     // X360 0x825BD8C0: write-lock (bit 3) handle to the embedded scene-update input aggregate (this+16).
     InSceneUpdateInterface* InputBuffer_Update::GetInSceneUpdateInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModuleIO.h", 463));
         return &mInSceneUpdateInterface;
     }
 

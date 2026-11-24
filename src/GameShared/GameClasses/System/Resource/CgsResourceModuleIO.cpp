@@ -112,7 +112,9 @@ namespace CgsResource
         // writing\n" at CgsResourceModuleIO.h:111 when the buffer is not write-locked.
         FileSystemStatusInterface* OutputBuffer::GetFileSystemStatusInterface()
         {
-            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+            CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+                "Not locked for writing\n",
+                "..\\..\\..\\GameShared\\GameClasses\\System/Resource/CgsResourceModuleIO.h", 111));
             return &mFileSystemStatusInterface;
         }
     }

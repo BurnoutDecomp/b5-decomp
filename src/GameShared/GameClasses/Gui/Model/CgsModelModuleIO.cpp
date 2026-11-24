@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/Gui/Model/CgsModelModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 // CgsGui::ModelIO catch-all member functions, reconstructed from BURNOUT_X360_ARTIST.XEX.
 // The InputBuffer / OutputBuffer ctors-destructors-appenders are homed by the per-class split
@@ -34,14 +35,18 @@ namespace ModelIO
     // X360 0x8284F7F0: read-lock (bit 4) const handle to the GUI-event queue (this+4).
     const InputBuffer::GuiEventInputQueue* InputBuffer::GetEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.cpp", 122));
         return &mGuiEvents;
     }
 
     // X360 0x8284F898: write-lock (bit 3) handle to the GUI-event queue (this+4).
     InputBuffer::GuiEventInputQueue* InputBuffer::GetEventQueueNonConst()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.cpp", 139));
         return &mGuiEvents;
     }
 

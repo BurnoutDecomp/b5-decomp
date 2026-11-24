@@ -1,6 +1,7 @@
 #include "GameShared/GameClasses/System/Resource/CgsPoolModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 #include <cstddef>   // offsetof
 
@@ -24,7 +25,9 @@ namespace PoolIO
     // X360 0x828E1A00: write-lock; return this + 4.
     InputBuffer::PoolInputQueue* InputBuffer::GetPoolInputQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsPoolModuleIO.h", 234));
         return &mPoolInputQueue;
     }
 }

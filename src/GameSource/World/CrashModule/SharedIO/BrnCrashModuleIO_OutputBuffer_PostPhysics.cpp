@@ -30,7 +30,9 @@ namespace CrashIO
         // Pinned from inside the member so offsetof can see the private member.
         CGS_STATIC_ASSERT((offsetof(OutputBuffer_PostPhysics, mNetworkOutputInterface) == 0x10),
                       "mNetworkOutputInterface @0x10");
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 208));
         return &mNetworkOutputInterface;
     }
 }

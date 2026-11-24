@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"  // InputBuffer + ResourceRequestQueue
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
 //
@@ -23,7 +24,9 @@ namespace CgsResource
         // Write-lock gate ((mxStatusFlags >> 3) & 1), then return the embedded request queue.
         ResourceRequestQueue<16384>* InputBuffer::GetResourceQueue()
         {
-            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");   // CgsResourceModuleIO.h:81
+            CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+                "Not locked for writing\n",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModuleIO.h", 81));   // CgsResourceModuleIO.h:81
             return &mResourceQueue;
         }
     }

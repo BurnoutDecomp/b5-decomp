@@ -23,7 +23,9 @@ namespace MemoryIO
     // X360 0x82869248 (const): assert read-locked (status bit 4), then hand back the queue.
     const InputBuffer::MemoryRequestQueue* InputBuffer::GetMemoryRequestQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModuleIO.h", 753));
         return &mMemoryRequestQueue;
     }
 
@@ -37,13 +39,17 @@ namespace MemoryIO
     // OutputBuffer accessors -- mirror of InputBuffer (the response queue lives at this+4).
     const OutputBuffer::MemoryResponseQueue* OutputBuffer::GetMemoryResponseQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "..\\..\\..\\GameShared\\GameClasses\\Memory/CgsMemoryModuleIO.h", 785));
         return &mMemoryResponseQueue;
     }
 
     OutputBuffer::MemoryResponseQueue* OutputBuffer::GetMemoryResponseQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\memory\\CgsMemoryModuleIO.h", 786));
         return &mMemoryResponseQueue;
     }
 

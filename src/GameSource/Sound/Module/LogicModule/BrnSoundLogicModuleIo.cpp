@@ -56,7 +56,9 @@ const RootOutputBuffer::SoundResourceRequestInterface* LogicOutputBuffer::GetRes
 }
 RootOutputBuffer::SoundResourceRequestInterface* LogicOutputBuffer::GetResourceRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        "Not locked for writing\n",
+        "..\\..\\..\\GameSource\\Sound/Module/LogicModule/BrnSoundLogicModuleIo.h", 128));
     return reinterpret_cast<RootOutputBuffer::SoundResourceRequestInterface*>(&mResourceRequestInterfaceStorage);
 }
 

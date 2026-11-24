@@ -214,7 +214,9 @@ namespace DirectorIO
 
     const u32* InputBuffer::GetVehicleInfoArray() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 649));
         // @0x82206EF0 (`addi r3, this, 0x3238`): the eight per-car TEAM words SetVehicleTeam writes
         // (see the header) -- AllVehicleData::Update's fifth argument, lpaVehicleTeams.
         return maVehicleInfoArray;
@@ -308,7 +310,9 @@ namespace DirectorIO
 
     const CgsSystem::TimerStatusInterface* InputBuffer::GetTimerStatusInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 601));
         return &mTimerInterface;
     }
 
@@ -332,7 +336,9 @@ namespace DirectorIO
     {
         // X360 0x823B2890: the non-const (write-side) handle tests bit 3 (write-lock),
         // unlike the const read-lock overload above.
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 609));
         return &mVehicleDriverInputInterface;
     }
 

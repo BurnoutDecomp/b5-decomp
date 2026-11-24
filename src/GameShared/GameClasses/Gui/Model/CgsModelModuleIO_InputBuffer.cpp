@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 #include <cstddef>   // offsetof
 
@@ -100,7 +101,9 @@ namespace ModelIO
     // X360 0x824F7490 (non-const overload -- write-lock guarded).
     InputBuffer::GuiEventQueueSmall* InputBuffer::GetLoadRequests()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/CgsModelModuleIO.h", 214));
         return &mLoadRequests;
     }
 }

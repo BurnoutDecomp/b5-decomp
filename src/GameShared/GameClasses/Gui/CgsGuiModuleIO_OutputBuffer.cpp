@@ -62,7 +62,9 @@ namespace CgsGuiModuleIO
     // ((*a1 >> 3) & 1) == write-lock bit; returns this + 4.
     OutputBuffer::GuiResourceRequestQueueStorage* OutputBuffer::GetGuiResourceRequestQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for writing\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\gui\\CgsGuiModuleIO.cpp", 214));
         return &mResourceRequestQueue;
     }
 

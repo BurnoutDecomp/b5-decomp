@@ -104,7 +104,9 @@ const BrnPhysics::Deformation::DeformationOutputInterface* InputBuffer::GetDefor
 
 const InputBuffer::AudioEffectsMessageQueue* InputBuffer::GetAudioEffectsMessageQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        "Not locked for reading\n",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 156));
     return &mAudioEffectsMessageQueue;
 }
 

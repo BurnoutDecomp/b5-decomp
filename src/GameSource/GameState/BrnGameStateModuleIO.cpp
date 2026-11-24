@@ -241,7 +241,9 @@ PreWorldInputBuffer::GetPlayerStatusInterface() const
 // "lpPreWorldInputBuffer->GetControllerToGameStateInterface()".
 const ControllerToGameStateInterface* PreWorldInputBuffer::GetControllerToGameStateInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        "Not locked for reading\n",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 143));
     return &mControllerToGameStateInterface;
 }
 
@@ -907,39 +909,27 @@ ResourceRequestInterface* OutputBuffer::GetResourceRequestInterface()
 // X360 0x8231D608 - write-lock accessor for the timer-request interface (this+16420).
 OutputBufferTimerRequestInterface* OutputBuffer::GetTimerRequestInterface()
 {
-    if (!IsBufferLockedForWriting())
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Not locked for writing\n",
-            "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 275);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        "Not locked for writing\n",
+        "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 275));
     return &mTimerRequestInterface;
 }
 
 // X360 0x823B98E8 - read-lock accessor for the timer-request interface (this+16420).
 const OutputBufferTimerRequestInterface* OutputBuffer::GetTimerRequestInterface() const
 {
-    if (!IsBufferLockedForReading())
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Not locked for reading\n",
-            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 274);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        "Not locked for reading\n",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModuleIO.h", 274));
     return &mTimerRequestInterface;
 }
 
 // X360 0x8231D6B0 - write-lock accessor for the frame-rate-type request interface (this+16436).
 OutputBufferFrameRateTypeReqInterface* OutputBuffer::GetFrameRateTypeRequestInterface()
 {
-    if (!IsBufferLockedForWriting())
-    {
-        CgsDev::Assert::BeginAssert();
-        CgsDev::Assert::FireAssert("Not locked for writing\n",
-            "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 278);
-        CgsDev::Assert::EndAssert();
-    }
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+        "Not locked for writing\n",
+        "..\\..\\..\\GameSource\\GameState/BrnGameStateModuleIO.h", 278));
     return &mFrameRateTypeRequestInterface;
 }
 
