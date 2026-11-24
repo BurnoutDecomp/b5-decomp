@@ -4,7 +4,7 @@
 #include "rw/core/stdc/stdc.h"
 #include <cstring>
 #include <cstddef>
-
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 // SOURCE LINES: ARTIST's asserts in this file (file string @0x820F9748) pass the PS3 DecFIGS lines
 // unchanged (RegisterMemFile 107 .. FindEnd 482); each assert sits on that line. The two
 // registration asserts are plain messages, every other one streams its message (ARTIST builds the
@@ -440,7 +440,7 @@ namespace CgsFileSystem
 
     bool DeviceMemFileSystem::FindNext(void*, FindData*)
     {
-        CGS_ASSERT_STREAM(false, "Mem device does not support searches\n");
+        CGS_ASSERT(false, CgsDev::Assert::StreamMessageAt("Mem device does not support searches\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\filesystem\\Drivers/CgsDeviceMemFileSystem.cpp", 443));
         return false;
     }
 
