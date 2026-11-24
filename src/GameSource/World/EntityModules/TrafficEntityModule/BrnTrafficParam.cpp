@@ -204,23 +204,18 @@ void Param::SetParamAlong(f32 lfParamAlong)
 // 0x82712398 — true when the param is crawling (not in a stopping behaviour) and slow.
 bool Param::IsQueueing() const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
+    // Header-inline in the original: ARTIST bakes BrnTrafficParam.h:520 into the assert (li r5,0x208).
+    CGS_ASSERT(IsAlive(), CgsDev::Assert::MessageAt("IsAlive()",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficParam.h", 520));
 
-    // miBehaviour is sign-extended (extsb) before the switch; the retail behaviour enum
-    // (renumbered from the LegacySrc reference) selects 2/4/6 as the "not queueing" cases.
-    // FLAG: the full retail Behaviours enum is not recoverable from this TU; the literal
-    // comparisons below match the X360 switch exactly.
+    // miBehaviour is sign-extended (extsb) before the tests; the retail behaviour enum
+    // (renumbered from the LegacySrc reference) selects 6/2/4 as the "not queueing" cases, tested
+    // in that order (cmpwi 6 / 2 / 4 at 0x827123E4..0x827123F4).
+    // FLAG: the full retail Behaviours enum is not recoverable from this TU.
     const s32 liBehaviour = static_cast<s32>(miBehaviour);
-    switch (liBehaviour)
+    if (liBehaviour == 6 || liBehaviour == 2 || liBehaviour == 4)
     {
-        case 6:
-            return false;
-        case 2:
-            return false;
-        case 4:
-            return false;
-        default:
-            break;
+        return false;
     }
 
     if (mfSpeed >= 5.0f)

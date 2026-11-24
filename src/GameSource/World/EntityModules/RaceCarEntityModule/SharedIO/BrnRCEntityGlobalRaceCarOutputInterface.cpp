@@ -63,12 +63,13 @@ void RCEntityGlobalRaceCarOutputInterface::Clear()
     CGS_STATIC_ASSERT((offsetof(T, mePlayerGlobalRaceCarIndex)== 2408), "mePlayerGlobalRaceCarIndex @+0x968");
 
     const f32 lfClearedSpeed = -1.0f;
-    for (s32 luIndex = 0; luIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT; ++luIndex)
+    // The enum walk through the inlined operator++(EGlobalRaceCarIndex&, int) (BurnoutConstants.h:84,
+    // li r5,0x54 at 0x822B40F0).
+    for (EGlobalRaceCarIndex leIndex = E_GLOBAL_RACE_CAR_INDEX_0; leIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT; leIndex++)
     {
-        mafRaceCarSpeeds[luIndex]        = lfClearedSpeed;                 // -1.0f @+0x7A8
-        maeActiveRaceCarIndices[luIndex] = E_ACTIVE_RACE_CAR_INDEX_INVALID; // -1 (0xFFFFFFFF) @+0x834
-        mauAISectionIndices[luIndex]     = 0x7FFF;                        // @+0x8E4
-        CGS_ASSERT(luIndex + 1 <= E_GLOBAL_RACE_CAR_INDEX_COUNT, "leEnumIndex <= E_GLOBAL_RACE_CAR_INDEX_COUNT");
+        mafRaceCarSpeeds[leIndex]        = lfClearedSpeed;                 // -1.0f @+0x7A8
+        maeActiveRaceCarIndices[leIndex] = E_ACTIVE_RACE_CAR_INDEX_INVALID; // -1 (0xFFFFFFFF) @+0x834
+        mauAISectionIndices[leIndex]     = 0x7FFF;                        // @+0x8E4
     }
 
     mGlobalRaceCarIndices.UnSetAll();   // @+0x930

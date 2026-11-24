@@ -613,8 +613,7 @@ void UpdateOutputBuffer::AppendReplayRequestInterface(const ReplayRequestInterfa
 void UpdateOutputBuffer::SetPropVFXLocatorQueue(const PropVFXLocatorQueue* lpQueue)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/BrnWorldModuleIO.h", 600));
-    mPropVFXLocatorQueue.Clear();
-    mPropVFXLocatorQueue.Append(*lpQueue);
+    mPropVFXLocatorQueue = *lpQueue;   // EventQueue::operator= (DWARF CgsEventQueue.h:194)
 }
 
 // X360 0x827A4E08 checks the write lock and returns mGuiEventQueue at +170176.

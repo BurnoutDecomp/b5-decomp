@@ -45,7 +45,7 @@
 #include "SharedClasses/World/BrnWorldRegion.h"                           // BrnWorld::E_DISTRICT_INVALID
 #include "GameSource/BurnoutConstants.h"                                  // EGlobalRaceCarIndex / EActiveRaceCarIndex (+ the ++ guards)
 #include "GameShared/GameClasses/Core/CgsID.h"                            // CgsIDCompress("XUSCCOB2")
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameSource/GameState/BrnGameActions.h"                           // StopModeAction / AddRivalCarAction (actions 39 / 196)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"                  // BrnDirector::Camera::Utils::CreateLookAt (the rival spawn frame)
 #include "SharedClasses/DataLists/VehicleList.h"                           // BrnResource::VehicleList::GetVehicleIndex / GetVehicleData
@@ -323,11 +323,11 @@ void RaceCarEntityModule::AddRivalCar(const BrnGameState::GameStateModuleIO::Add
     s32 liVehicleIndex = mpVehicleList->GetVehicleIndex(lrRival.GetCarId());
     if (liVehicleIndex < 0)
     {
-        CGS_ASSERT(mpVehicleList->GetVehicleCount() > 0, "No vehicles available!");   // :9248
+        CGS_ASSERT(mpVehicleList->GetVehicleCount() > 0, CgsDev::Assert::MessageAt("No vehicles available!", __FILE__, 9248));   // :9248
         liVehicleIndex = 0;
     }
     const BrnResource::VehicleListEntry* lpVehicleData = mpVehicleList->GetVehicleData(liVehicleIndex);
-    CGS_ASSERT(lpVehicleData != 0, "lpVehicleData");                                    // :9253
+    CGS_ASSERT(lpVehicleData != 0, CgsDev::Assert::MessageAt("lpVehicleData", __FILE__, 9253));                                    // :9253
 
     // 0x82301AF0..0x82301B08: look from the spawn position towards position + heading.
     const Matrix44Affine lSpawnTransform = BrnDirector::Camera::Utils::CreateLookAt(
@@ -420,7 +420,7 @@ void RaceCarEntityModule::HandleStopModeAction(const BrnGameState::GameStateModu
     lpBoostStrategy->SetInfiniteBoost(false);                                          // vtbl+128
 
     ActiveRaceCar* lpPlayerActiveRaceCar = GetActiveRaceCar(mePlayerActiveRaceCarIndex);
-    CGS_ASSERT(lpPlayerActiveRaceCar != 0, "lpPlayerActiveRaceCar");                 // :8511
+    CGS_ASSERT(lpPlayerActiveRaceCar != 0, CgsDev::Assert::MessageAt("lpPlayerActiveRaceCar", __FILE__, 8511));                 // :8511
     CGS_ASSERT(lpPlayerActiveRaceCar->IsAttached(), "IsAttached()");                 // BrnActiveRaceCar.h:1089
     lpPlayerActiveRaceCar->GetGlobalRaceCar()->SetInCurrentGameMode(false, true);
     lpPlayerActiveRaceCar->SetInGameMode(false);                                       // stb 0, 0x777

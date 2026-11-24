@@ -1,6 +1,6 @@
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToPhysics.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"            // CgsModule::Event (the drain loop's cursor)
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h"  // Props::PropInputInterface (Append)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h" // BrnPlayerDriverControls (miVehicleID, the filter key)
@@ -46,8 +46,8 @@ void BridgeEntityModulesToPhysicsModule_PreScene(
     // seat as the implicit `this`); kept so the call site's shape matches the console's.
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, "lpPhysicsModuleInputBuffer != NULL");     // :42
-    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, "lpRaceCarOutputBuffer_PreScene != NULL"); // :43
+    CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpPhysicsModuleInputBuffer != NULL", __FILE__, 42));     // :42
+    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpRaceCarOutputBuffer_PreScene != NULL", __FILE__, 43)); // :43
     // AS SHIPPED: there is no lpPropOutputBuffer_PreScene tripwire -- the console asserts only
     // the first two arguments even though it dereferences all three.
 
@@ -164,10 +164,10 @@ void BridgeEntityModulesToPhysicsModule_PrePhysics(
     const BrnWorld::RaceCarEntityModuleIO::OutputBuffer_PrePhysics* lpRaceCarOutputBuffer_PrePhysics,
     const BrnWorld::PropEntityIO::OutputBuffer_PrePhysics* lpPropOutputBuffer_PrePhysics)
 {
-    CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, "lpPhysicsModuleInputBuffer != NULL");            // :76
-    CGS_ASSERT(lpTrafficOutputBuffer_PrePhysics != 0, "lpTrafficOutputBuffer_PrePhysics != NULL"); // :77
-    CGS_ASSERT(lpRaceCarOutputBuffer_PrePhysics != 0, "lpRaceCarOutputBuffer_PrePhysics != NULL"); // :78
-    CGS_ASSERT(lpPropOutputBuffer_PrePhysics != 0, "lpPropOutputBuffer_PrePhysics != NULL");       // :79
+    CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpPhysicsModuleInputBuffer != NULL", __FILE__, 76));            // :76
+    CGS_ASSERT(lpTrafficOutputBuffer_PrePhysics != 0, CgsDev::Assert::MessageAt("lpTrafficOutputBuffer_PrePhysics != NULL", __FILE__, 77)); // :77
+    CGS_ASSERT(lpRaceCarOutputBuffer_PrePhysics != 0, CgsDev::Assert::MessageAt("lpRaceCarOutputBuffer_PrePhysics != NULL", __FILE__, 78)); // :78
+    CGS_ASSERT(lpPropOutputBuffer_PrePhysics != 0, CgsDev::Assert::MessageAt("lpPropOutputBuffer_PrePhysics != NULL", __FILE__, 79));       // :79
 
     const BrnWorld::WorldModule* const lpModule =
         static_cast<const BrnWorld::WorldModule*>(lpWorldModule);
@@ -191,7 +191,7 @@ void BridgeEntityModulesToPhysicsModule_PrePhysics(
             // 0x827AAFC4 `cmpwi r30, 1` -- E_DRIVER_TYPE_AI. AS SHIPPED this is a NON-GATING
             // tripwire: the console fires it and then processes the event anyway.
             CGS_ASSERT(liType != BrnPhysics::Vehicle::E_DRIVER_TYPE_AI,
-                       "What the hell is the RCEM doing generating AI controls??");              // :94
+                       CgsDev::Assert::MessageAt("What the hell is the RCEM doing generating AI controls??", __FILE__, 94));              // :94
 
             // 0x827AAFE8 `lwz r11, 0(r31)` -- the event's leading word. Every driver-controls
             // record derives from BrnPlayerDriverControls, whose first member is miVehicleID

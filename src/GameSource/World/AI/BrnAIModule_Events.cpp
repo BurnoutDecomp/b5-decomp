@@ -121,7 +121,7 @@
 #include "GameSource/GameState/BrnGameActions.h"                       // EGameActionType + the action records
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"  // BrnGameState::GameModeParams
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
@@ -188,15 +188,15 @@ namespace
 // =================================================================================================
 void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");                              // :1784
+    CGS_ASSERT(lpInputBuffer != 0, CgsDev::Assert::MessageAt("lpInputBuffer != NULL", __FILE__, 1784));                              // :1784
 
     const AIModuleIO::RaceCarAIInterface* const lpCarInterface = lpInputBuffer->GetRaceCarAIInterface();
-    CGS_ASSERT(lpCarInterface != 0, "lpCarInterface != NULL");                            // :1789
+    CGS_ASSERT(lpCarInterface != 0, CgsDev::Assert::MessageAt("lpCarInterface != NULL", __FILE__, 1789));                            // :1789
 
     // asm 0x82798694 `addi r31, r31, 0x2F8` -- the management queue is the interface's own member.
     const CgsModule::VariableEventQueue<16384, 16>* const lpManagementQueue =
         &lpCarInterface->mManagementQueue;
-    CGS_ASSERT(lpManagementQueue != 0, "lpManagementQueue != NULL");                      // :1793
+    CGS_ASSERT(lpManagementQueue != 0, CgsDev::Assert::MessageAt("lpManagementQueue != NULL", __FILE__, 1793));                      // :1793
 
     const CgsModule::Event* lpEvent = 0;
     s32 liSize = 0;
@@ -216,9 +216,9 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             const EGlobalRaceCarIndex leGlobalRaceCarIndex = lpAttach->meGlobalRaceCarIndex;
 
             CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
-                       "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");              // :1807
+                       CgsDev::Assert::MessageAt("leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", __FILE__, 1807));              // :1807
             CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-                       "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");           // :1808
+                       CgsDev::Assert::MessageAt("leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", __FILE__, 1808));           // :1808
 
             AICar* const lpCar = GetAICar(leGlobalRaceCarIndex);
 
@@ -247,9 +247,9 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             const EActiveRaceCarIndex leDriverActiveRaceCarIndex = lpActivate->meActiveRaceCarIndex;
 
             CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
-                       "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");              // :1831
+                       CgsDev::Assert::MessageAt("leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", __FILE__, 1831));              // :1831
             CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-                       "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");           // :1832
+                       CgsDev::Assert::MessageAt("leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", __FILE__, 1832));           // :1832
             CGS_ASSERT(leDriverActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
                        "leDriverActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");        // :1834
             CGS_ASSERT(leDriverActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
@@ -280,9 +280,9 @@ void AIModule::HandleManagementEvents(const AIModuleIO::InputBuffer* lpInputBuff
             //  0x82798B6C touches only word 0.)
 
             CGS_ASSERT(leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0,
-                       "leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0");              // :1852
+                       CgsDev::Assert::MessageAt("leGlobalRaceCarIndex >= E_GLOBAL_RACE_CAR_INDEX_0", __FILE__, 1852));              // :1852
             CGS_ASSERT(leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-                       "leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");           // :1853
+                       CgsDev::Assert::MessageAt("leGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", __FILE__, 1853));           // :1853
 
             AICar* const lpCar = GetAICar(leGlobalRaceCarIndex);
 
@@ -563,7 +563,7 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
             }
 
             AICar* const lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
-            CGS_ASSERT(lpPlayerCar != 0, "lpPlayerCar");                                    // :1731
+            CGS_ASSERT(lpPlayerCar != 0, CgsDev::Assert::MessageAt("lpPlayerCar", __FILE__, 1731));                                    // :1731
 
             lpPlayerCar->mfBehaviourTimer = 0.0f;                                           // 0x82792578
 
@@ -667,8 +667,8 @@ void AIModule::HandleGameActions(const AIModuleIO::InputBuffer* lpInputBuffer,
         // AI-side builder, which stamps muOwnerId = E_OWNER_AI.
         case E_ACTION_REQUEST_ROUTE_INFO:
         {
-            CGS_ASSERT(lpRouteInputBuffer != 0, "lpRouteInputBuffer");                      // :1644
-            CGS_ASSERT(lpAction != 0, "lpRouteRequest");                                    // :1649
+            CGS_ASSERT(lpRouteInputBuffer != 0, CgsDev::Assert::MessageAt("lpRouteInputBuffer", __FILE__, 1644));                      // :1644
+            CGS_ASSERT(lpAction != 0, CgsDev::Assert::MessageAt("lpRouteRequest", __FILE__, 1649));                                    // :1649
 
             const RequestRouteInfoAction* const lpRouteInfo =
                 reinterpret_cast<const RequestRouteInfoAction*>(lpAction);
@@ -955,7 +955,7 @@ void AIModule::OnRaceCarReachedFinish(
 // =================================================================================================
 void AIModule::OnModeStart(const BrnGameState::GameModeParams* lpGameModeParams)
 {
-    CGS_ASSERT(lpGameModeParams != 0, "lpGameModeParams != NULL");                            // :911
+    CGS_ASSERT(lpGameModeParams != 0, CgsDev::Assert::MessageAt("lpGameModeParams != NULL", __FILE__, 911));                            // :911
 
     // +0x94 IS GameModeParams::mbIsOnline (crash parity G04-D2, 2026-09-22 -- the old park said it
     // had no pinned member): GameModeParams::Construct @0x8231C370 zeroes it (`stb 0, 0x94(r3)`),

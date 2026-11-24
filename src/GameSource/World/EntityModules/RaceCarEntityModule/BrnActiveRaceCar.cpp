@@ -432,7 +432,7 @@ void ActiveRaceCar::Detach( BrnPhysics::Vehicle::VehicleInputInterface* lpVehicl
                             CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface )
 {
     CGS_ASSERT(IsAttached(), "IsAttached()");            // X360 BrnActiveRaceCar.cpp:943
-    CGS_ASSERT(mpRaceCar != 0, "mpRaceCar != NULL");     // :944
+    CGS_ASSERT(mpRaceCar != 0, CgsDev::Assert::MessageAt("mpRaceCar != NULL", __FILE__, 944));     // :944
     if (mpRaceCar == 0)
     {
         return;
@@ -565,12 +565,8 @@ void ActiveRaceCar::RemoveHandlingModel( BrnPhysics::Vehicle::VehicleInputInterf
 void ActiveRaceCar::RemoveFromScene( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
                                      BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface )
 {
-    CGS_ASSERT(IsActive(), "IsActive()");                           // X360 :1306
-    CGS_ASSERT(lpSceneInterface != 0, "lpSceneInterface != NULL");   // :1307
-    if (lpSceneInterface == 0)
-    {
-        return;
-    }
+    CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 1306));                           // X360 :1306
+    CGS_ASSERT(lpSceneInterface != 0, CgsDev::Assert::MessageAt("lpSceneInterface != NULL", __FILE__, 1307));   // :1307
 
     lpSceneInterface->RemoveVolumeInstance(mHandlingBodyVolumeId);
     lpSceneInterface->RemoveVolume(CgsSceneManager::VolumeId(mHandlingBodyVolumeId.muId));
@@ -617,7 +613,7 @@ void ActiveRaceCar::RemoveFromScene( CgsSceneManager::SceneManagerIO::InSceneUpd
 void ActiveRaceCar::RemoveFromCollision( CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface,
                                          BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface )
 {
-    CGS_ASSERT(IsActive(), "IsActive()");                           // X360 :1500
+    CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 1500));                           // X360 :1500
     (void)lpVehicleInterface;   // passed by the console's call site; never read by the callee
 
     mbChangeCollisionState     = true;    // 0x78D
@@ -896,9 +892,9 @@ void ActiveRaceCar::CalcBodyTransform(Matrix44Affine& lrBodyTransform) const
 void ActiveRaceCar::UpdatePhysicsState(const BrnPhysics::Vehicle::RaceCarState* lpState,
                                        CgsWorld::WorldMap2D* lpWorldMap)
 {
-    CGS_ASSERT(IsActive(), "IsActive()");                        // :1843
-    CGS_ASSERT(lpState != 0, "lpState != NULL");                 // :1844
-    CGS_ASSERT(mpRaceCar != 0, "mpRaceCar != NULL");             // :1845
+    CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 1843));                        // :1843
+    CGS_ASSERT(lpState != 0, CgsDev::Assert::MessageAt("lpState != NULL", __FILE__, 1844));                 // :1844
+    CGS_ASSERT(mpRaceCar != 0, CgsDev::Assert::MessageAt("mpRaceCar != NULL", __FILE__, 1845));             // :1845
 
     // The console's four-row NaN sweep over lpState->mTransform, then
     // "Bad racecar matrix coming from physics." + the car name + ", transform: " + the matrix.
@@ -1105,9 +1101,9 @@ void ActiveRaceCar::RequestPlaceOnTrack( const Vector3& lPosition, const Vector3
 {
     CGS_ASSERT(IsAttached(), "IsAttached()");                        // BrnActiveRaceCar.cpp:1801
     CGS_ASSERT(rw::math::vpu::IsValid(lDirection),
-               "RwMath::IsValid( lDirection )");                     // :1802
+               CgsDev::Assert::MessageAt("RwMath::IsValid( lDirection )", __FILE__, 1802));                     // :1802
     CGS_ASSERT(BrnMath::IsNormal(lDirection),
-               "BrnMath::IsNormal( lDirection )");                   // :1803
+               CgsDev::Assert::MessageAt("BrnMath::IsNormal( lDirection )", __FILE__, 1803));                   // :1803
 
     if( !mbToBePlacedOnTrack )
     {
@@ -1116,7 +1112,7 @@ void ActiveRaceCar::RequestPlaceOnTrack( const Vector3& lPosition, const Vector3
         mPlaceOnTrackDirection = lDirection;                         // +0x7B0
         mbToBePlacedOnTrack    = true;                               // +0x7C4
 
-        CGS_ASSERT(mfPlaceOnTrackSpeed >= 0.0f, "mfPlaceOnTrackSpeed >= 0.0f");   // :1813
+        CGS_ASSERT(mfPlaceOnTrackSpeed >= 0.0f, CgsDev::Assert::MessageAt("mfPlaceOnTrackSpeed >= 0.0f", __FILE__, 1813));   // :1813
     }
 }
 
@@ -1144,7 +1140,7 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourcePtr<BrnPhysics
                             Vector3 lInitialVelocity )
 {
     CGS_ASSERT(IsAttached(), "IsAttached()");     // BrnActiveRaceCar.cpp:821
-    CGS_ASSERT(!IsActive(), "!IsActive()");       // :822
+    CGS_ASSERT(!IsActive(), CgsDev::Assert::MessageAt("!IsActive()", __FILE__, 822));       // :822
 
     (void)lpVehicleInterface;
     (void)lInitialVelocity; // ARTIST receives r6/v1 but does not consume either.
@@ -1158,7 +1154,7 @@ void ActiveRaceCar::OnResourcesLoaded( const CgsResource::ResourcePtr<BrnPhysics
     mCentreOfMassTransform =
         mDeformationModelResourcePtr->mCarModelSpaceToHandlingBodySpaceTransform;
     CGS_ASSERT( rw::math::vpu::IsValid( mCentreOfMassTransform ),
-                "RwMath::IsValid( mCentreOfMassTransform )" );                         // :831
+                CgsDev::Assert::MessageAt("RwMath::IsValid( mCentreOfMassTransform )", __FILE__, 831));                         // :831
 
     // 0x822EB404 `mr r3, r28 ; bl ResetVerletOffsets` (G61-D6): a slot re-used for a new car
     // starts undented. muState is WAITING here, so its !IsInactive() tripwire holds.
@@ -1210,8 +1206,8 @@ void ActiveRaceCar::AddHandlingModel( BrnPhysics::Vehicle::VehicleInputInterface
     const Vector3 lZeroVelocity(0.0f, 0.0f, 0.0f);
 
     CGS_ASSERT(IsActive(), "IsActive()");                             // BrnActiveRaceCar.cpp:1153
-    CGS_ASSERT(lpVehicleInterface != 0, "lpVehicleInterface != NULL"); // :1154
-    CGS_ASSERT(mpRaceCar != 0, "mpRaceCar != NULL");                   // :1155
+    CGS_ASSERT(lpVehicleInterface != 0, CgsDev::Assert::MessageAt("lpVehicleInterface != NULL", __FILE__, 1154)); // :1154
+    CGS_ASSERT(mpRaceCar != 0, CgsDev::Assert::MessageAt("mpRaceCar != NULL", __FILE__, 1155));                   // :1155
 
     bool lbDisablePhysicsStateReset = false;
     if( lbResettingPhysicsState )
@@ -1653,7 +1649,7 @@ void ActiveRaceCar::UpdateEngineState(f32 lfTimeStep,
         break;
 
     default:                                                            // 0x822A5190
-        CGS_ASSERT( false, "How did it get here?" );                     // X360 :1743
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("How did it get here?", __FILE__, 1743));                     // X360 :1743
         break;
     }
 }
@@ -2033,8 +2029,8 @@ void ActiveRaceCar::OnCrash(bool lbIsPrimaryCrash,
     (void)lbRemoveHandlingVolumeFromScene;
     (void)lfSimTime;
 
-    CGS_ASSERT( IsActive(), "IsActive()" );                              // :991
-    CGS_ASSERT( lpSceneInterface != 0, "lpSceneInterface != NULL" );     // :992
+    CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 991));                              // :991
+    CGS_ASSERT(lpSceneInterface != 0, CgsDev::Assert::MessageAt("lpSceneInterface != NULL", __FILE__, 992));     // :992
 
     mCrashData.mbFirstCrash = lbIsPrimaryCrash;                          // stb r4, 0x580
 
@@ -2798,8 +2794,8 @@ void ActiveRaceCar::AddToScene(
         BrnPhysics::Vehicle::VehicleInputInterface* lpVehicleInterface,
         f32 lfTimeStep )
 {
-    CGS_ASSERT(IsActive(), "IsActive()");                              // X360 :1240
-    CGS_ASSERT(lpSceneInterface != 0, "lpSceneInterface != NULL");     // X360 :1241
+    CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 1240));                              // X360 :1240
+    CGS_ASSERT(lpSceneInterface != 0, CgsDev::Assert::MessageAt("lpSceneInterface != NULL", __FILE__, 1241));     // X360 :1241
     if (lpSceneInterface == 0)
     {
         return;
@@ -2921,7 +2917,7 @@ void ActiveRaceCar::AddToScene(
 
     // `cmplwi cr6, r21, 0 ; bne` @0x822EBBB0 -- the console's own null test on Initialize's
     // RESULT, now spellable exactly (the placeholder's invented bool return is gone).
-    CGS_ASSERT(lpVolume != 0, "NULL != lpVolume");               // X360 :1279
+    CGS_ASSERT(lpVolume != 0, CgsDev::Assert::MessageAt("NULL != lpVolume", __FILE__, 1279));               // X360 :1279
 
     // ---- the volume's transform row ([FLAG BLOCKED 2] RETIRED 2026-08-18) ------------
     // 0x822EBBD4..0x822EBBF8, and it is scalar arithmetic on ONE lane:
@@ -3101,10 +3097,10 @@ void ActiveRaceCar::AddToCollision(
 {
     const Vector3 lZeroVelocity(0.0f, 0.0f, 0.0f);
 
-    CGS_ASSERT(IsActive(), "IsActive()");                                // X360 :1387
-    CGS_ASSERT(lpSceneInterface != 0, "lpSceneInterface != NULL");       // X360 :1388
-    CGS_ASSERT(lpVehicleInterface != 0, "lpVehicleInput != NULL");       // X360 :1389
-    CGS_ASSERT(!mbAddedForCollision, "!mbAddedForCollision");            // X360 :1390
+    CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 1387));                                // X360 :1387
+    CGS_ASSERT(lpSceneInterface != 0, CgsDev::Assert::MessageAt("lpSceneInterface != NULL", __FILE__, 1388));       // X360 :1388
+    CGS_ASSERT(lpVehicleInterface != 0, CgsDev::Assert::MessageAt("lpVehicleInput != NULL", __FILE__, 1389));       // X360 :1389
+    CGS_ASSERT(!mbAddedForCollision, CgsDev::Assert::MessageAt("!mbAddedForCollision", __FILE__, 1390));            // X360 :1390
 
     (void)lpVehicleInterface;   // asserted, then never read (r30 is reused at 0x822D42E8)
 
@@ -3225,7 +3221,7 @@ void ActiveRaceCar::SendSceneUpdatesPostPhysics(
 void ActiveRaceCar::UpdateCullingGroup(
         CgsSceneManager::SceneManagerIO::InSceneUpdateInterface* lpSceneInterface )
 {
-    CGS_ASSERT(IsActive(), "IsActive()");                            // X360 :1439
+    CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 1439));                            // X360 :1439
 
     const BrnPhysics::Vehicle::SetRaceCarCullingGroupEvent::CullingGroup lCullingGroup =
         DetermineCullingGroup();

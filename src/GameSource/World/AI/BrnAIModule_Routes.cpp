@@ -74,7 +74,7 @@
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"               // the "Route" buffer pair
 #include "GameSource/World/AI/Route/BrnRoute.h"                          // BrnAI::Route
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // VariableEventQueue<1536,16>
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 
 namespace BrnAI
@@ -149,18 +149,18 @@ void AppendRaceRouteRequests(RouteMapModuleIO::InputBuffer* lpRouteInputBuffer,
 void AIModule::UpdateCarRoutes(AIModuleIO::OutputBuffer* lpOutputBuffer,
                                const RouteMapModuleIO::OutputBuffer* lpRouteOutputBuffer)
 {
-    CGS_ASSERT(lpRouteOutputBuffer != 0, "lpRouteOutputBuffer != NULL");   // :1503
+    CGS_ASSERT(lpRouteOutputBuffer != 0, CgsDev::Assert::MessageAt("lpRouteOutputBuffer != NULL", __FILE__, 1503));   // :1503
 
     const RouteMapModuleIO::RouteResponseQueue* lpRouteResponseQueue =
         lpRouteOutputBuffer->GetRouteResponseQueue();
-    CGS_ASSERT(lpRouteResponseQueue != 0, "lpRouteResponseQueue != NULL");   // :1507
+    CGS_ASSERT(lpRouteResponseQueue != 0, CgsDev::Assert::MessageAt("lpRouteResponseQueue != NULL", __FILE__, 1507));   // :1507
 
     const s32 liResponseCount = lpRouteResponseQueue->GetLength();
     for (s32 liResponse = 0; liResponse < liResponseCount; ++liResponse)
     {
         const RouteMapModuleIO::RouteResponse* lpRouteResponse =
             &lpRouteResponseQueue->GetEvent(liResponse);
-        CGS_ASSERT(lpRouteResponse != 0, "lpRouteResponse != NULL");   // :1517
+        CGS_ASSERT(lpRouteResponse != 0, CgsDev::Assert::MessageAt("lpRouteResponse != NULL", __FILE__, 1517));   // :1517
 
         if (lpRouteResponse->GetOwnerId() != static_cast<u16>(RouteMapModuleIO::E_OWNER_AI))
         {

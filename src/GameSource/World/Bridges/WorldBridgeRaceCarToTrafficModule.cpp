@@ -1,5 +1,5 @@
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToEntityModules.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"
 
@@ -27,10 +27,10 @@ void BridgeRaceCarModuleToTrafficModule_PreScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpTrafficInputBuffer_PreScene != 0, "lpTrafficInputBuffer_PreScene");       // :33
-    CGS_ASSERT(lpTrafficInputBuffer_PostScene != 0, "lpTrafficInputBuffer_PostScene");     // :34
-    CGS_ASSERT(lpTrafficInputBuffer_PostPhysics != 0, "lpTrafficInputBuffer_PostPhysics"); // :35
-    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, "lpRaceCarOutputBuffer_PreScene");     // :36
+    CGS_ASSERT(lpTrafficInputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpTrafficInputBuffer_PreScene", __FILE__, 33));       // :33
+    CGS_ASSERT(lpTrafficInputBuffer_PostScene != 0, CgsDev::Assert::MessageAt("lpTrafficInputBuffer_PostScene", __FILE__, 34));     // :34
+    CGS_ASSERT(lpTrafficInputBuffer_PostPhysics != 0, CgsDev::Assert::MessageAt("lpTrafficInputBuffer_PostPhysics", __FILE__, 35)); // :35
+    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpRaceCarOutputBuffer_PreScene", __FILE__, 36));     // :36
 
     // 0x827A5194..0x827A51CC: the same const getter (@0x8279D500) feeds all three setters.
     lpTrafficInputBuffer_PreScene->SetActiveRaceCarOutputInterface(

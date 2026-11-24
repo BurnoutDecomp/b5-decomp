@@ -1073,8 +1073,7 @@ void
 InputBuffer_PrePhysics::SetPotentialContactQueue(const PotentialContactQueue* lpPotentialContactQueue)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnRaceCarEntityModuleIO.h", 422));
-    mPotentialContactQueue.Clear();
-    mPotentialContactQueue.Append(*lpPotentialContactQueue);
+    mPotentialContactQueue = *lpPotentialContactQueue;   // EventQueue::operator= (DWARF CgsEventQueue.h:194)
 }
 
 // X360 0x8279DDB0 (W, :431) -- single-byte copy of the source
@@ -1107,8 +1106,7 @@ void
 InputBuffer_PrePhysics::SetTakedownEventQueue(const TakedownEventQueue* lpTakedownEventQueue)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnRaceCarEntityModuleIO.h", 431));
-    mTakedownEventQueue.Clear();
-    mTakedownEventQueue.Append(*lpTakedownEventQueue);
+    mTakedownEventQueue = *lpTakedownEventQueue;   // EventQueue::operator= (DWARF CgsEventQueue.h:194)
 }
 
 // DecFIGS declares this const accessor at BrnRaceCarEntityModuleIO.h:421.  It

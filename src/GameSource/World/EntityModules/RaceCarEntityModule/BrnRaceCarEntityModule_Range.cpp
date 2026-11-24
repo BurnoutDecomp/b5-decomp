@@ -60,7 +60,7 @@
 #include "GameSource/World/AI/BrnAISharedConstants.h"                                    // BrnAI::EResetType
 #include "GameSource/BurnoutConstants.h"                                                 // EActiveRaceCarIndex / EGlobalRaceCarIndex
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                                    // CgsNumeric::Random
-#include "GameShared/GameClasses/Core/CgsAssert.h"                                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                                       // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                               // gpDebugPrint
 #include <cmath>                                                                          // std::fabs (the vandc sign-mask ABS at 0x822E9FFC)
 #include "rw/math/vpu/vector3_operation.h"                                               // Dot / Cross / Normalize / Magnitude / IsValid / GetVector3_*Axis
@@ -679,7 +679,7 @@ void RaceCarEntityModule::UpdateInAndOutOfRangeCars(
             ++liAttachedCars;
 
             CGS_ASSERT(lpRaceCar->GetActiveRaceCar() != 0,
-                       "lpRaceCar->GetActiveRaceCar() != NULL");    // X360 :5504
+                       CgsDev::Assert::MessageAt("lpRaceCar->GetActiveRaceCar() != NULL", __FILE__, 5504));    // X360 :5504
         }
 
         CGS_ASSERT(liGlobalSlot + 1 <= E_GLOBAL_RACE_CAR_INDEX_COUNT,
@@ -770,13 +770,13 @@ void RaceCarEntityModule::ReadOutOfRangeRaceCarDataFromAI(
 
         CGS_ASSERT(lpRaceCar->GetType() < E_RACE_CAR_TYPE_COUNT,
                    "muType < E_RACE_CAR_TYPE_COUNT");        // BrnRaceCar.h:547
-        CGS_ASSERT(lpRaceCar->IsInWorld(), "lpRaceCar->IsInWorld()");   // X360 :5926
+        CGS_ASSERT(lpRaceCar->IsInWorld(), CgsDev::Assert::MessageAt("lpRaceCar->IsInWorld()", __FILE__, 5926));   // X360 :5926
 
         Vector3 lUp = rw::math::vpu::GetVector3_YAxis();      // unk_82181510 == {0,1,0,0}
         const Vector3 lAt = lpAIRaceCarInterface->GetInactiveRaceCarAt(li8Slot);
 
-        CGS_ASSERT(rw::math::vpu::IsValid(lAt), "RwMath::IsValid(lTransform.At())");   // :5931
-        CGS_ASSERT(rw::math::vpu::IsValid(lUp), "RwMath::IsValid(lTransform.Up())");   // :5932
+        CGS_ASSERT(rw::math::vpu::IsValid(lAt), CgsDev::Assert::MessageAt("RwMath::IsValid(lTransform.At())", __FILE__, 5931));   // :5931
+        CGS_ASSERT(rw::math::vpu::IsValid(lUp), CgsDev::Assert::MessageAt("RwMath::IsValid(lTransform.Up())", __FILE__, 5932));   // :5932
 
         Vector3 lRight = rw::math::vpu::Cross(lUp, lAt);
         if (!(rw::math::vpu::Magnitude(lRight) > KF_CROSS_PRODUCT_EPSILON))
@@ -792,9 +792,9 @@ void RaceCarEntityModule::ReadOutOfRangeRaceCarDataFromAI(
         const Vector3 lPosition = lpAIRaceCarInterface->GetInactiveRaceCarPosition(li8Slot);
 
         CGS_ASSERT(rw::math::vpu::IsValid(lRight),
-                   "RwMath::IsValid(lTransform.Right())");                              // :5945
+                   CgsDev::Assert::MessageAt("RwMath::IsValid(lTransform.Right())", __FILE__, 5945));                              // :5945
         CGS_ASSERT(rw::math::vpu::IsValid(lPosition),
-                   "RwMath::IsValid(lTransform.Pos())");                                // :5946
+                   CgsDev::Assert::MessageAt("RwMath::IsValid(lTransform.Pos())", __FILE__, 5946));                                // :5946
 
         Matrix44Affine lTransform;
         lTransform.Right() = lRight;

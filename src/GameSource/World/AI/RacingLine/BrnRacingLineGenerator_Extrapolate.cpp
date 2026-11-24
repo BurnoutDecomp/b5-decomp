@@ -60,7 +60,7 @@
 #include "GameSource/World/AI/Route/BrnRouteMapModule.h"          // BrnAI::SectionAndPortalIndices
 #include "SharedClasses/AI/AISectionsResourceType.h"              // AISection / AISectionsData
 #include "GameSource/World/AI/BrnAIPortal.h"                      // BrnAI::Portal
-#include "GameShared/GameClasses/Core/CgsAssert.h"                // CGS_ASSERT + Begin/Fire/End
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                // CGS_ASSERT + Begin/Fire/End
 #include "GameShared/GameClasses/Development/CgsStrStream.h"      // CgsDev::StrStream
 
 namespace BrnAI
@@ -218,7 +218,7 @@ s32 RacingLineGenerator::ExtrapolateRouteBackwards(s32 liNumSectionsToGenerate,
     (void)lCarPosition;   // v2: never read (0x82782580..0x82782BB8 copy only v1)
 
     CGS_ASSERT(luStartSectionIndex != KU_INVALID_SECTION_INDEX,
-               "luStartSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX");   // :3087
+               CgsDev::Assert::MessageAt("luStartSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", __FILE__, 3087));   // :3087
 
     s32 liCurrentSectionIndex = luStartSectionIndex;
 

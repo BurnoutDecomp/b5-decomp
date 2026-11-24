@@ -10,7 +10,7 @@
 #include "GameShared/GameClasses/Graphics/CgsShaderConstants.h"          // ShaderConstantTable
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcher.h"      // DispatchFrame / DispatchBin / DispatchList
 #include "GameShared/GameClasses/Graphics/Dispatch/CgsDispatcherCommands.h" // DrawRenderable::AddToBin
-#include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                       // CGS_ASSERT
 #include "GameSource/World/ShadowMap/BrnShadowMap.h"                     // BrnWorld::ShadowMap
 #include "SharedClasses/World/BrnVehicleGraphicsSpec.h"                  // BrnVehicle::GraphicsSpec
 #include "SharedClasses/World/BrnWheelGraphicsSpec.h"                    // BrnWheel::GraphicsSpec
@@ -953,8 +953,8 @@ RaceCarEntityModule::SubmitCoronasForRaceCar(
     ActiveRaceCar::RenderParams* lpRenderParams,
     bool lbIsPlayerCar ) const
 {
-    CGS_ASSERT( lpCoronaSubmissionInterface != 0, "lpCoronaSubmissionInterface != NULL" );  // :3905
-    CGS_ASSERT( lpRenderParams != 0, "lpRenderParams != NULL" );                            // :3906
+    CGS_ASSERT(lpCoronaSubmissionInterface != 0, CgsDev::Assert::MessageAt("lpCoronaSubmissionInterface != NULL", __FILE__, 3905));  // :3905
+    CGS_ASSERT(lpRenderParams != 0, CgsDev::Assert::MessageAt("lpRenderParams != NULL", __FILE__, 3906));                            // :3906
 
     // The four light-state bytes, in the console's own load order
     // (@0x822D1684/0x822D1688/0x822D1690/0x822D1698).

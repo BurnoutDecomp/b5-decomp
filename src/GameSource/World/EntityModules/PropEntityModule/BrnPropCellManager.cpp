@@ -40,7 +40,7 @@
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h" // OutputBuffer_PreScene
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h"          // PropInputInterface
 #include "GameSource/Replays/Serialisers/BrnReplayPropEntitySerialiser.h"           // PropEntitySerialiser
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags
 #include "SharedClasses/Physics/Props/BrnPropPhysicsDataHeader.h"  // PropPhysicsDataHeader::GetType, PropTypeData accessors
 #include "rw/math/vpu/vector3_operation.h"                          // operator-, MagnitudeSquared (sphere test)
@@ -1120,9 +1120,9 @@ namespace BrnWorld
         // Copied once, up front, exactly where the asm copies it (before the first tripwire).
         const Matrix44Affine lTransform = lpProp->mWorldTransform;
 
-        CGS_ASSERT(!lpProp->IsAddedToContactGen(), "!lpProp->IsAddedToContactGen()");    // :280
+        CGS_ASSERT(!lpProp->IsAddedToContactGen(), CgsDev::Assert::MessageAt("!lpProp->IsAddedToContactGen()", __FILE__, 280));    // :280
         CGS_ASSERT(mu16NumberOfPropVolumesInScene <= KU_MAX_PROP_VOLUMES_IN_SCENE,
-                   "mu16NumberOfPropVolumesInScene <= BrnPhysics::Props::KU_MAX_PROP_COLLISION_VOLUMES_IN_SCENE"); // :282
+                   CgsDev::Assert::MessageAt("mu16NumberOfPropVolumesInScene <= BrnPhysics::Props::KU_MAX_PROP_COLLISION_VOLUMES_IN_SCENE", __FILE__, 282)); // :282
 
         const u32 luNumberOfVolumes = lpType->GetNumberOfVolumes();
 
@@ -1298,7 +1298,7 @@ namespace BrnWorld
                                                           PropVolumeInstanceID lVolumeInstanceID,
                                                           InSceneUpdateInterface* lpScene)
     {
-        CGS_ASSERT(lpProp->IsAddedToContactGen(), "lpProp->IsAddedToContactGen()");   // :435
+        CGS_ASSERT(lpProp->IsAddedToContactGen(), CgsDev::Assert::MessageAt("lpProp->IsAddedToContactGen()", __FILE__, 435));   // :435
 
         lpProp->mu8Flags &= static_cast<u8>(~KU_ADDED_TO_CONTACT_GEN_BIT);
 

@@ -161,9 +161,9 @@ namespace Native
     void BrnSimpleParticleArray::Construct(CgsMemory::HeapMalloc* lpHeapMalloc,
                                            ENativeParticleType leParticleType)
     {
-        CGS_ASSERT(lpHeapMalloc != 0, "lpHeapMalloc != NULL");   // :930
+        CGS_ASSERT(lpHeapMalloc != 0, CgsDev::Assert::MessageAt("lpHeapMalloc != NULL", __FILE__, 930));   // :930
         CGS_ASSERT((leParticleType >= 0) && (leParticleType < eParticleArray_Max),
-                   "( leParticleType >= 0 ) && ( leParticleType < AttribSys::Enums::NativeParticleType::eParticleArray_Max )"); // :931
+                   CgsDev::Assert::MessageAt("( leParticleType >= 0 ) && ( leParticleType < AttribSys::Enums::NativeParticleType::eParticleArray_Max )", __FILE__, 931)); // :931
 
         mpStandardParams = &maStandardParams[leParticleType];       // `stw ..., 0x24(r?)` (&unk_82FABA80 + 128*type)
         maTextures[leParticleType] = gsDefaultTexture;               // both words zeroed (0x8228C618)
@@ -182,7 +182,7 @@ namespace Native
             }
         }
         CGS_ASSERT(luLoop < eParticleArray_Max,
-                   "Cannot find Particle Bank Size for enum type.  Have they changed ?");   // :954
+                   CgsDev::Assert::MessageAt("Cannot find Particle Bank Size for enum type.  Have they changed ?", __FILE__, 954));   // :954
 
         Initialize();
     }
@@ -287,7 +287,7 @@ namespace Native
                                                f32 lrAlpha)
     {
         CB4ParticleBank* const lpBank = lbIsCrash ? &mBankCrash : &mBankRegular;
-        CGS_ASSERT(lpBank->mpaParticles != 0, "lpBank->mpaParticles != NULL");   // :1077
+        CGS_ASSERT(lpBank->mpaParticles != 0, CgsDev::Assert::MessageAt("lpBank->mpaParticles != NULL", __FILE__, 1077));   // :1077
 
         CB4Particle* const lpParticle = &lpBank->mpaParticles[lpBank->muNextParticle];
 

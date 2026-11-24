@@ -161,8 +161,7 @@ void InputBuffer::SetActiveRaceCarInterface(const RCEntityActiveRaceCarOutputInt
 void InputBuffer::SetVehiclePhysicalStateQueue(const PhysicalTrafficStateQueue* lpQueue)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 113));
-    mVehiclePhysicalStateQueue.Clear();
-    mVehiclePhysicalStateQueue.Append(*lpQueue);
+    mVehiclePhysicalStateQueue = *lpQueue;   // EventQueue::operator= (DWARF CgsEventQueue.h:194)
 }
 
 // X360 0x823C9770 (:100) -- mCameraInput = *lpCameraInput (Camera::operator=).
@@ -219,8 +218,7 @@ void InputBuffer::SetEffectsEnvironmentInterface(const EffectsEnvironmentInterfa
 void InputBuffer::SetPropVFXLocatorQueue(const PropVFXLocatorQueue* lpQueue)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 147));
-    mPropVFXLocatorQueue.Clear();
-    mPropVFXLocatorQueue.Append(*lpQueue);
+    mPropVFXLocatorQueue = *lpQueue;   // EventQueue::operator= (DWARF CgsEventQueue.h:194)
 }
 
 // X360 0x823BA928 (:172) -- one word: the interface IS its TriangleCacheManager pointer.

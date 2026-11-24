@@ -31,7 +31,7 @@
 
 #include "GameSource/World/Bridges/WorldBridgeSceneToPhysics.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                              // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // CgsDev::Log::gpDebugPrint ([DIAG])
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerModuleIO.h"        // OutEventLineTestNearestResult
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h" // VehicleInputInterface
@@ -74,8 +74,8 @@ namespace WorldModule
         BrnPhysics::PhysicsModuleIO::InputBuffer* lpPhysicsModuleInputBuffer,
         const CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneModuleOutputBuffer)
     {
-        CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, "lpPhysicsModuleInputBuffer != NULL");  // :40
-        CGS_ASSERT(lpSceneModuleOutputBuffer != 0,  "lpSceneModuleOutputBuffer != NULL");   // :41
+        CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpPhysicsModuleInputBuffer != NULL", __FILE__, 40));  // :40
+        CGS_ASSERT(lpSceneModuleOutputBuffer != 0, CgsDev::Assert::MessageAt("lpSceneModuleOutputBuffer != NULL", __FILE__, 41));   // :41
 
         if (lpPhysicsModuleInputBuffer == 0 || lpSceneModuleOutputBuffer == 0)
         {
@@ -194,8 +194,8 @@ namespace WorldModule
         BrnPhysics::PhysicsModuleIO::InputBuffer* lpPhysicsModuleInputBuffer,
         const CgsSceneManager::SceneManagerIO::OutputBuffer* lpSceneModuleOutputBuffer)
     {
-        CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, "lpPhysicsModuleInputBuffer != NULL");  // :117
-        CGS_ASSERT(lpSceneModuleOutputBuffer != 0,  "lpSceneModuleOutputBuffer != NULL");   // :118
+        CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpPhysicsModuleInputBuffer != NULL", __FILE__, 117));  // :117
+        CGS_ASSERT(lpSceneModuleOutputBuffer != 0, CgsDev::Assert::MessageAt("lpSceneModuleOutputBuffer != NULL", __FILE__, 118));   // :118
 
         // ---- leg 1: the culler's potential contacts ------------------------------------
         // Source getter first, destination getter second -- both are lock tripwires, so the

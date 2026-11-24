@@ -4,7 +4,7 @@
 #include "GameSource/World/AI/BrnAIPortal.h"                          // BrnAI::Portal (node positions)
 #include "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"    // RacingLineGenerator::Extrapolate*
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"          // CgsModule::IOBufferStack
-#include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"           // gpDebugPrint (witness)
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
@@ -117,10 +117,10 @@ void RouteMapModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
                             const RouteMapModuleIO::InputBuffer* lpInputBuffer,
                             RouteMapModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpInputBufferStack  != 0, "lpInputBufferStack != NULL");    // :97
-    CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");   // :98
-    CGS_ASSERT(lpInputBuffer       != 0, "lpInputBuffer != NULL");         // :99
-    CGS_ASSERT(lpOutputBuffer      != 0, "lpOutputBuffer != NULL");        // :100
+    CGS_ASSERT(lpInputBufferStack  != 0, CgsDev::Assert::MessageAt("lpInputBufferStack != NULL", __FILE__, 97));    // :97
+    CGS_ASSERT(lpOutputBufferStack != 0, CgsDev::Assert::MessageAt("lpOutputBufferStack != NULL", __FILE__, 98));   // :98
+    CGS_ASSERT(lpInputBuffer       != 0, CgsDev::Assert::MessageAt("lpInputBuffer != NULL", __FILE__, 99));         // :99
+    CGS_ASSERT(lpOutputBuffer      != 0, CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", __FILE__, 100));        // :100
     (void)lpInputBufferStack;
     (void)lpOutputBufferStack;
 
@@ -194,7 +194,7 @@ void RouteMapModule::ProcessRaceRoute(const RouteMapModuleIO::RaceRouteRequest* 
                                       RouteMapModuleIO::RouteResponseQueue* lpRouteResponseQueue)
 {
     CGS_ASSERT(mAStar.IsInProgress() || (lpRouteRequest != 0),
-               "mAStar.IsInProgress() || (lpRouteRequest != NULL )");   // :173
+               CgsDev::Assert::MessageAt("mAStar.IsInProgress() || (lpRouteRequest != NULL )", __FILE__, 173));   // :173
 
     if (!mAStar.IsInProgress())
     {

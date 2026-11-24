@@ -55,7 +55,7 @@
 #include "GameSource/World/AI/BrnAIModule_Routes.h"                   // AIModuleRoutes:: legs (lane A5)
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"           // CgsModule::IOHelper<T>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"       // the game-event queue (event 113)
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 namespace BrnAI
@@ -268,10 +268,10 @@ void AIModule::Update(CgsModule::IOBufferStack* lpInputBufferStack,
         return;
     }
 
-    CGS_ASSERT(lpInputBufferStack  != 0, "lpInputBufferStack != NULL");    // X360 :611
-    CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");   // X360 :612
-    CGS_ASSERT(lpInputBuffer       != 0, "lpInputBuffer != NULL");         // X360 :613
-    CGS_ASSERT(lpOutputBuffer      != 0, "lpOutputBuffer != NULL");        // X360 :614
+    CGS_ASSERT(lpInputBufferStack  != 0, CgsDev::Assert::MessageAt("lpInputBufferStack != NULL", __FILE__, 611));    // X360 :611
+    CGS_ASSERT(lpOutputBufferStack != 0, CgsDev::Assert::MessageAt("lpOutputBufferStack != NULL", __FILE__, 612));   // X360 :612
+    CGS_ASSERT(lpInputBuffer       != 0, CgsDev::Assert::MessageAt("lpInputBuffer != NULL", __FILE__, 613));         // X360 :613
+    CGS_ASSERT(lpOutputBuffer      != 0, CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", __FILE__, 614));        // X360 :614
 
     (void)lpInputBufferStack;    // used only by the parked "Route" IO-buffer pair
     (void)lpOutputBufferStack;
@@ -443,10 +443,10 @@ void AIModule::PausedUpdate( CgsModule::IOBufferStack* lpInputBufferStack,
                              AIModuleIO::OutputBuffer* lpOutputBuffer,
                              BrnUpdateSet lUpdateSet )
 {
-    CGS_ASSERT(lpInputBufferStack  != 0, "lpInputBufferStack != NULL");    // X360 :767 (0x2FF)
-    CGS_ASSERT(lpOutputBufferStack != 0, "lpOutputBufferStack != NULL");   // X360 :768 (0x300)
-    CGS_ASSERT(lpInputBuffer       != 0, "lpInputBuffer != NULL");         // X360 :769 (0x301)
-    CGS_ASSERT(lpOutputBuffer      != 0, "lpOutputBuffer != NULL");        // X360 :770 (0x302)
+    CGS_ASSERT(lpInputBufferStack  != 0, CgsDev::Assert::MessageAt("lpInputBufferStack != NULL", __FILE__, 767));    // X360 :767 (0x2FF)
+    CGS_ASSERT(lpOutputBufferStack != 0, CgsDev::Assert::MessageAt("lpOutputBufferStack != NULL", __FILE__, 768));   // X360 :768 (0x300)
+    CGS_ASSERT(lpInputBuffer       != 0, CgsDev::Assert::MessageAt("lpInputBuffer != NULL", __FILE__, 769));         // X360 :769 (0x301)
+    CGS_ASSERT(lpOutputBuffer      != 0, CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", __FILE__, 770));        // X360 :770 (0x302)
 
 
     CgsModule::IOHelper<RouteMapModuleIO::InputBuffer> lRouteIn(lpInputBufferStack, "Route");   // 0x8279A2B4

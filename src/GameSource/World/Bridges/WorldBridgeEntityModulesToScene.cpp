@@ -54,8 +54,8 @@ void BridgePropModuleToPhysicsModule_Prepare(
 
     // The X360 checks only the prop output buffer, firing the same tripwire twice (the
     // compiler CSE'd two identical consecutive null-asserts into a single branch on a3).
-    CGS_ASSERT(lpPropOutputBuffer_Prepare != 0, "lpPropOutputBuffer_Prepare != NULL");   // :76
-    CGS_ASSERT(lpPropOutputBuffer_Prepare != 0, "lpPropOutputBuffer_Prepare != NULL");   // :77
+    CGS_ASSERT(lpPropOutputBuffer_Prepare != 0, CgsDev::Assert::MessageAt("lpPropOutputBuffer_Prepare != NULL", __FILE__, 76));   // :76
+    CGS_ASSERT(lpPropOutputBuffer_Prepare != 0, CgsDev::Assert::MessageAt("lpPropOutputBuffer_Prepare != NULL", __FILE__, 77));   // :77
 
     // asm order: fetch the prop output's prop-input interface first, then the physics
     // prop-manager's, then merge source into destination.
@@ -79,8 +79,8 @@ void BridgePropModuleToSceneModule_Prepare(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpSceneInputBuffer != 0, "lpSceneInputBuffer != NULL");                   // :58
-    CGS_ASSERT(lpPropOutputBuffer_Prepare != 0, "lpPropOutputBuffer_Prepare != NULL");   // :59
+    CGS_ASSERT(lpSceneInputBuffer != 0, CgsDev::Assert::MessageAt("lpSceneInputBuffer != NULL", __FILE__, 58));                   // :58
+    CGS_ASSERT(lpPropOutputBuffer_Prepare != 0, CgsDev::Assert::MessageAt("lpPropOutputBuffer_Prepare != NULL", __FILE__, 59));   // :59
 
     // asm order: fetch the prop output's scene-input interface first, then the scene manager's
     // in-scene-update aggregate, then merge source into destination.
@@ -157,11 +157,11 @@ void BridgeEntityModulesToSceneModule_PreScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpSceneInputBuffer != 0, "lpSceneModuleInputBuffer != NULL");                       // :98
-    CGS_ASSERT(lpTriggerOutputBuffer_PreScene != 0, "lpTriggerOutputBuffer_PreScene != NULL");     // :99
-    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, "lpRaceCarOutputBuffer_PreScene != NULL");     // :100
-    CGS_ASSERT(lpPropOutputBuffer_PreScene != 0, "lpPropOutputBuffer_PreScene != NULL");           // :101
-    CGS_ASSERT(lpWorldEntityOutputBuffer_PreScene != 0, "lpWorldOutputBuffer_PreScene != NULL");   // :102
+    CGS_ASSERT(lpSceneInputBuffer != 0, CgsDev::Assert::MessageAt("lpSceneModuleInputBuffer != NULL", __FILE__, 98));                       // :98
+    CGS_ASSERT(lpTriggerOutputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpTriggerOutputBuffer_PreScene != NULL", __FILE__, 99));     // :99
+    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpRaceCarOutputBuffer_PreScene != NULL", __FILE__, 100));     // :100
+    CGS_ASSERT(lpPropOutputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpPropOutputBuffer_PreScene != NULL", __FILE__, 101));           // :101
+    CGS_ASSERT(lpWorldEntityOutputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpWorldOutputBuffer_PreScene != NULL", __FILE__, 102));   // :102
 
     typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface InSceneUpdateInterface;
     InSceneUpdateInterface* lpScene = lpSceneInputBuffer->GetInSceneUpdateInterface();
@@ -243,10 +243,10 @@ void BridgeEntityModulesToScene_PostPhysics(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpSceneInputBuffer != 0, "lpSceneModuleInputBuffer != NULL");                            // :243
-    CGS_ASSERT(lpTrafficOutputBuffer_PostPhysics != 0, "lpTrafficOutputBuffer_PostPhysics != NULL");    // :244
-    CGS_ASSERT(lpRaceCarOutputBuffer_PostPhysics != 0, "lpRaceCarOutputBuffer_PostPhysics != NULL");    // :245
-    CGS_ASSERT(lpPropOutputBuffer_PostPhysics != 0, "lpPropOutputBuffer_PostPhysics != NULL");          // :246
+    CGS_ASSERT(lpSceneInputBuffer != 0, CgsDev::Assert::MessageAt("lpSceneModuleInputBuffer != NULL", __FILE__, 243));                            // :243
+    CGS_ASSERT(lpTrafficOutputBuffer_PostPhysics != 0, CgsDev::Assert::MessageAt("lpTrafficOutputBuffer_PostPhysics != NULL", __FILE__, 244));    // :244
+    CGS_ASSERT(lpRaceCarOutputBuffer_PostPhysics != 0, CgsDev::Assert::MessageAt("lpRaceCarOutputBuffer_PostPhysics != NULL", __FILE__, 245));    // :245
+    CGS_ASSERT(lpPropOutputBuffer_PostPhysics != 0, CgsDev::Assert::MessageAt("lpPropOutputBuffer_PostPhysics != NULL", __FILE__, 246));          // :246
 
     typedef CgsSceneManager::SceneManagerIO::InSceneUpdateInterface InSceneUpdateInterface;
     InSceneUpdateInterface* lpScene = lpSceneInputBuffer->GetInSceneUpdateInterface();

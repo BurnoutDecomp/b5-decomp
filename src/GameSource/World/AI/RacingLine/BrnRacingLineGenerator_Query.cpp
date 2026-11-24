@@ -54,7 +54,7 @@
 #include "GameSource/World/AI/BrnAICar.h"                                 // AICar::GetPosition / GetRoute
 #include "SharedClasses/AI/AISectionsResourceType.h"                      // AISectionsData / AISection
 #include "GameSource/Math/BrnMathUtils.h"                                 // BrnMath::Flatten
-#include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor/Start/Stop
 
 namespace BrnAI
@@ -151,13 +151,13 @@ f32 RacingLineGenerator::GetPerpendicularDistanceToCentreLine(RacingLine* lpRaci
 void RacingLineGenerator::InitialiseRacingLine(RacingLine* lpRacingLine, AICar* lpCar,
                                                s32 liSectionIndex, AISectionsData* lpSectionsData)
 {
-    CGS_ASSERT(lpRacingLine != 0, "lpRacingLine");      // :1196
-    CGS_ASSERT(lpSectionsData != 0, "lpSectionsData");  // :1197
+    CGS_ASSERT(lpRacingLine != 0, CgsDev::Assert::MessageAt("lpRacingLine", __FILE__, 1196));      // :1196
+    CGS_ASSERT(lpSectionsData != 0, CgsDev::Assert::MessageAt("lpSectionsData", __FILE__, 1197));  // :1197
 
     const Route* lpRoute = lpCar->GetRoute();
-    CGS_ASSERT(lpRoute != 0, "lpRoute");                                                // :1201
+    CGS_ASSERT(lpRoute != 0, CgsDev::Assert::MessageAt("lpRoute", __FILE__, 1201));                                                // :1201
     CGS_ASSERT(lpRoute->GetStatus() != Route::E_STATUS_UNINITIALISED,
-               "lpRoute->IsInitialised()");                                             // :1202
+               CgsDev::Assert::MessageAt("lpRoute->IsInitialised()", __FILE__, 1202));                                             // :1202
 
     const Vector3 lCarPosition = lpCar->GetPosition();
 
@@ -182,11 +182,11 @@ void RacingLineGenerator::InitialiseRacingLine(RacingLine* lpRacingLine, AICar* 
                                                                 KE_RACING_LINE_PERFMON_PAGE, false,
                                                                 KF_PERFMON_BUDGET_STEP, true);
 
-        CGS_ASSERT(miGenerateRacingLinePM >= 0, "miGenerateRacingLinePM >= 0");   // :1216
-        CGS_ASSERT(miGenerateInSectionPM  >= 0, "miGenerateInSectionPM >= 0");    // :1217
-        CGS_ASSERT(miHNGMapGenerationPM1  >= 0, "miHNGMapGenerationPM1 >= 0");    // :1218
-        CGS_ASSERT(miHNGMapGenerationPM2  >= 0, "miHNGMapGenerationPM2 >= 0");    // :1219
-        CGS_ASSERT(miHNGMapGenerationPM3  >= 0, "miHNGMapGenerationPM3 >= 0");    // :1220
+        CGS_ASSERT(miGenerateRacingLinePM >= 0, CgsDev::Assert::MessageAt("miGenerateRacingLinePM >= 0", __FILE__, 1216));   // :1216
+        CGS_ASSERT(miGenerateInSectionPM  >= 0, CgsDev::Assert::MessageAt("miGenerateInSectionPM >= 0", __FILE__, 1217));    // :1217
+        CGS_ASSERT(miHNGMapGenerationPM1  >= 0, CgsDev::Assert::MessageAt("miHNGMapGenerationPM1 >= 0", __FILE__, 1218));    // :1218
+        CGS_ASSERT(miHNGMapGenerationPM2  >= 0, CgsDev::Assert::MessageAt("miHNGMapGenerationPM2 >= 0", __FILE__, 1219));    // :1219
+        CGS_ASSERT(miHNGMapGenerationPM3  >= 0, CgsDev::Assert::MessageAt("miHNGMapGenerationPM3 >= 0", __FILE__, 1220));    // :1220
         // (the console emits FIVE of these, not six -- miFarAheadPM is not asserted.)
     }
 
@@ -316,7 +316,7 @@ f32 RacingLineGenerator::GetRoadPositionAsPercentage(RacingLine* lpRacingLine, A
 void RacingLineGenerator::RaceLineDefaultsToSlamPlayer(RacingLine* lpRacingLine,
                                                        Vector3 lSlamTarget3D)
 {
-    CGS_ASSERT(rw::math::vpu::IsValid(lSlamTarget3D), "RwMath::IsValid( lSlamTarget3D )");  // :3297
+    CGS_ASSERT(rw::math::vpu::IsValid(lSlamTarget3D), CgsDev::Assert::MessageAt("RwMath::IsValid( lSlamTarget3D )", __FILE__, 3297));  // :3297
 
     const Vector2 lSlamTarget2D = BrnMath::Flatten(lSlamTarget3D);
 

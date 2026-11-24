@@ -599,7 +599,7 @@ namespace BrnParticle
                 if (lpData != 0)
                 {
                     CGS_ASSERT((reinterpret_cast<uintptr_t>(lpData) & 0xF) == 0,
-                               "(((uint32_t)lpData) & 0xf) == 0");                 // .cpp:843
+                               CgsDev::Assert::MessageAt("(((uint32_t)lpData) & 0xf) == 0", __FILE__, 843));                 // .cpp:843
                     memcpy(lpData, &mu16SpawnBufferCount, 16);
                     memcpy(static_cast<u8*>(lpData) + 16, mpSparkSpawnBuffer,
                            static_cast<size_t>(lu16Count) * 80);

@@ -383,7 +383,7 @@ namespace BrnAI
             }
         }
 
-        CGS_ASSERT(luIndex < 0x23u, "Overflow in ResetOnTrackManager request queue");   // :187
+        CGS_ASSERT(luIndex < 0x23u, CgsDev::Assert::MessageAt("Overflow in ResetOnTrackManager request queue", __FILE__, 187));   // :187
 
         mResetOnTrackRequestQueue.Append(*lpRequest);
     }

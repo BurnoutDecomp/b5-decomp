@@ -29,7 +29,7 @@
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnPlayerVehicleControls.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"    // CgsDev::Log::gpDebugPrint
 
@@ -168,8 +168,8 @@ void BridgeTrafficToCrashModule_PostPhysics(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT( lpCrashInputBuffer_PostPhysics != 0, "lpCrashInputBuffer_PostPhysics" );          // :55
-    CGS_ASSERT( lpTrafficOutputBuffer_PostPhysics != 0, "lpTrafficOutputBuffer_PostPhysics" );    // :56
+    CGS_ASSERT(lpCrashInputBuffer_PostPhysics != 0, CgsDev::Assert::MessageAt("lpCrashInputBuffer_PostPhysics", __FILE__, 55));          // :55
+    CGS_ASSERT(lpTrafficOutputBuffer_PostPhysics != 0, CgsDev::Assert::MessageAt("lpTrafficOutputBuffer_PostPhysics", __FILE__, 56));    // :56
 
     lpCrashInputBuffer_PostPhysics->SetTrafficInputInterface(
         lpTrafficOutputBuffer_PostPhysics->GetCrashTrafficInputInterface() );

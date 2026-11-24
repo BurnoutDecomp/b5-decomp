@@ -31,7 +31,7 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/BrnRaceCarEntityModuleIO.h"
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleRaceCarIOInterfaces.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameSource/World/AI/BrnAISharedConstants.h"   // BrnAI::EResetType
 #include "GameSource/GameState/ModeManager/GameModes/BrnGameModeParams.h"   // KU_FLAG_AI_PERSISTENT_DAMAGE
@@ -545,11 +545,11 @@ void RaceCarEntityModule::ProcessRaceCarCrashEvents_PostPhysics(
         const s32 liActiveRaceCarIndex = static_cast<s32>( ( luEntityWord >> 10 ) & 0x3FFFu );
 
         CGS_ASSERT( liActiveRaceCarIndex >= 0,
-                    "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0" );                  // :5251
+                    CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", __FILE__, 5251));                  // :5251
         CGS_ASSERT( liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                    "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" );               // :5252
+                    CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", __FILE__, 5252));               // :5252
         CGS_ASSERT( static_cast<s32>( mePlayerActiveRaceCarIndex ) >= 0,
-                    "mePlayerActiveRaceCarIndex >= 0" );                                    // :5255
+                    CgsDev::Assert::MessageAt("mePlayerActiveRaceCarIndex >= 0", __FILE__, 5255));                                    // :5255
 
         if( static_cast<s32>( mePlayerActiveRaceCarIndex ) == liActiveRaceCarIndex )
         {

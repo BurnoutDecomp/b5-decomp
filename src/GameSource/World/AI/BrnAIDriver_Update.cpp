@@ -295,7 +295,7 @@ namespace BrnAI
     // ================================================================================
     s32 AIDriver::ChooseAggressiveSteeringFan(AICar* lpPlayerCar)
     {
-        CGS_ASSERT(lpPlayerCar != 0, "lpPlayerCar");                     // :493
+        CGS_ASSERT(lpPlayerCar != 0, CgsDev::Assert::MessageAt("lpPlayerCar", __FILE__, 493));                     // :493
 
         // The player is crashing and this car drew an odd opponent index -> pile in (bias 2).
         if (lpPlayerCar->IsCrashing() && (mpCar->miOpponentIndex % 2) != 0)
@@ -410,7 +410,7 @@ namespace BrnAI
     // ================================================================================
     bool AIDriver::IsStuck()
     {
-        CGS_ASSERT(mpCar != 0, "mpCar != NULL");                       // :2519
+        CGS_ASSERT(mpCar != 0, CgsDev::Assert::MessageAt("mpCar != NULL", __FILE__, 2519));                       // :2519
 
         AICar* lpCar = mpCar;
         f32 lfThreshold = KF_AI_TIME_FOR_BEING_STUCK;                      // 5.0
@@ -1015,7 +1015,7 @@ namespace BrnAI
             mActiveRouteTimeStamp = lpCar->miRouteTimeStamp;
         }
 
-        CGS_ASSERT(lpCar != 0, "AI car doesn't have a route");   // :905
+        CGS_ASSERT(lpCar != 0, CgsDev::Assert::MessageAt("AI car doesn't have a route", __FILE__, 905));   // :905
 
         if (lpRoute->GetStatus() == Route::E_STATUS_UNINITIALISED)
             return;
@@ -1044,7 +1044,7 @@ namespace BrnAI
         mSteeringTargetVector.SetZero();                       // stvx 0x1C70
         mbIsRacingLineInitialised = 1;                         // stb 1, 0x1D68
 
-        CGS_ASSERT(GetRacingLine().mbIsInitialised, "Racing line not initialised properly");  // :954
+        CGS_ASSERT(GetRacingLine().mbIsInitialised, CgsDev::Assert::MessageAt("Racing line not initialised properly", __FILE__, 954));  // :954
     }
 
     // ================================================================================
@@ -1059,8 +1059,8 @@ namespace BrnAI
     {
         (void)lfTimeStep;   // the console body takes no float
 
-        CGS_ASSERT(mpCar != 0, "AI driver trying to make a racing line without a car");   // :993
-        CGS_ASSERT(GetRacingLine().mbIsInitialised, "Racing line not initialised properly");  // :994
+        CGS_ASSERT(mpCar != 0, CgsDev::Assert::MessageAt("AI driver trying to make a racing line without a car", __FILE__, 993));   // :993
+        CGS_ASSERT(GetRacingLine().mbIsInitialised, CgsDev::Assert::MessageAt("Racing line not initialised properly", __FILE__, 994));  // :994
 
         // stvx128 v0, r31, 6736 == this+0x1A50 == mRacingLine.mCarPos (RacingLine +0xB30)
         GetRacingLine().mCarPos = mpCar->GetPosition();
@@ -1290,9 +1290,9 @@ namespace BrnAI
     // ================================================================================
     bool AIDriver::AddNearbyTrafficToAvoidance(const BrnTraffic::BrnTrafficIO::TrafficAIEntity* lpEntity)
     {
-        CGS_ASSERT(mNearbyVehicles.GetCount() >= 0, "mNearbyVehicles.GetCount() >= 0");   // :2591
+        CGS_ASSERT(mNearbyVehicles.GetCount() >= 0, CgsDev::Assert::MessageAt("mNearbyVehicles.GetCount() >= 0", __FILE__, 2591));   // :2591
         CGS_ASSERT(mNearbyVehicles.GetCount() <= NearbyVehicles::KI_MAX_NEARBY_VEHICLES,
-                   "mNearbyVehicles.GetCount() <= KI_MAX_NEARBY_TRAFFIC");                // :2592
+                   CgsDev::Assert::MessageAt("mNearbyVehicles.GetCount() <= KI_MAX_NEARBY_TRAFFIC", __FILE__, 2592));                // :2592
 
         s32 liIndex;
         if (mNearbyVehicles.miCount < NearbyVehicles::KI_MAX_NEARBY_VEHICLES)   // lwz 0x700
@@ -1345,9 +1345,9 @@ namespace BrnAI
         if (rw::math::vpu::Dot(lSeparation, lUseful) < 0.0f && !lpCar->mbIsPlayer)         // lbz 0x1549
             return false;
 
-        CGS_ASSERT(mNearbyVehicles.GetCount() >= 0, "mNearbyVehicles.GetCount() >= 0");    // :2674
+        CGS_ASSERT(mNearbyVehicles.GetCount() >= 0, CgsDev::Assert::MessageAt("mNearbyVehicles.GetCount() >= 0", __FILE__, 2674));    // :2674
         CGS_ASSERT(mNearbyVehicles.GetCount() <= NearbyVehicles::KI_MAX_NEARBY_VEHICLES,
-                   "mNearbyVehicles.GetCount() <= KI_MAX_NEARBY_TRAFFIC");                 // :2675
+                   CgsDev::Assert::MessageAt("mNearbyVehicles.GetCount() <= KI_MAX_NEARBY_TRAFFIC", __FILE__, 2675));                 // :2675
 
         const Vector2 lCentre = To2DU(lpCar->GetPosition());       // the console re-fetches it
 

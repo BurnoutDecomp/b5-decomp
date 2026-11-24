@@ -98,12 +98,16 @@ namespace BrnAI
     // ------------------------------------------------------------------------
     bool BuzzBy::AICarCanBuzz(const AICar* lpCar)
     {
-        CGS_ASSERT(lpCar != NULL, "lpCar != NULL");
+        CGS_ASSERT(lpCar != NULL, CgsDev::Assert::MessageAt("lpCar != NULL", __FILE__, 467));
 
         // 0x82767020: lfs f13,0x1508(lpCar); lfs f0,flt_820C4318(=200.0); blt -> 0 else 1.
         // NaN polarity (FX-AINAN2): `li r3,0 ; fcmpu ; blt 0x82767070 ; li r3,1` -- blt is not
         // taken on an unordered compare, so a NaN distance CAN buzz; `>= 200` said no.
-        return !(lpCar->mfBuzzDistanceToPlayer < 200.0f);
+        if (lpCar->mfBuzzDistanceToPlayer < 200.0f)
+        {
+            return false;
+        }
+        return true;
     }
 
     // ------------------------------------------------------------------------

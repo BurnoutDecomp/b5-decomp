@@ -356,14 +356,14 @@ void TrafficLightManager::RenderAllLightsToBeInStateForHull(const Hull* lpHull,
                                                             Vector3 lCameraPosition, Vector3 lCameraDirection,
                                                             VecFloat lfCullDistSq) const
 {
-    CGS_ASSERT(lpHull, "lpHull");                                                        // .cpp:359
-    CGS_ASSERT(lpTrafficLightData, "lpTrafficLightData");                                // .cpp:360
+    CGS_ASSERT(lpHull, CgsDev::Assert::MessageAt("lpHull", __FILE__, 359));                                                        // .cpp:359
+    CGS_ASSERT(lpTrafficLightData, CgsDev::Assert::MessageAt("lpTrafficLightData", __FILE__, 360));                                // .cpp:360
 
     for (u32 luInstance = lpHull->muFirstTrafficLight; luInstance < lpHull->muLastTrafficLight; ++luInstance)
     {
         const TrafficLightRuntimeState* lpLightState =
             GetLightState(luInstance);
-        CGS_ASSERT(lpLightState, "lpLightState");                                          // .cpp:366
+        CGS_ASSERT(lpLightState, CgsDev::Assert::MessageAt("lpLightState", __FILE__, 366));                                          // .cpp:366
         if (!lpLightState->IsSmashed())
         {
             lpTrafficLightData->RenderCoronasForInstance(luInstance, luActiveStates, lpCoronaSubmissionInterface,

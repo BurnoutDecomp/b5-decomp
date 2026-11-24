@@ -1,6 +1,6 @@
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToCrash.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 
 // @ 0x827A5060 -- latch the race-car module's pre-scene active-car view (read-locked
@@ -19,8 +19,8 @@ void BridgeEntityModulesToCrashModule_PreScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpCrashInputBuffer_PreScene != 0, "lpCrashInputBuffer_PreScene");           // :37
-    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, "lpRaceCarOutputBuffer_PreScene");     // :38
+    CGS_ASSERT(lpCrashInputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpCrashInputBuffer_PreScene", __FILE__, 37));           // :37
+    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpRaceCarOutputBuffer_PreScene", __FILE__, 38));     // :38
 
     lpCrashInputBuffer_PreScene->SetActiveRaceCarInterface(
         lpRaceCarOutputBuffer_PreScene->GetActiveRaceCarOutputInterface());

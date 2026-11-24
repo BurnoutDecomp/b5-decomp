@@ -1,6 +1,6 @@
 #include "GameSource/World/Bridges/WorldBridgeCrashToEntityModules.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"  // the real interface type behind both storages
 
 // @ 0x827AAC70 -- append the crash module's staged vehicle-input events into the
@@ -19,8 +19,8 @@ void BridgeCrashModuleToPhysicsModule(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT( lpPhysicsModuleInputBuffer != 0, "lpPhysicsModuleInputBuffer" );   // :58
-    CGS_ASSERT( lpCrashOutput_PreScene != 0, "lpCrashOutput_PreScene" );           // :59
+    CGS_ASSERT(lpPhysicsModuleInputBuffer != 0, CgsDev::Assert::MessageAt("lpPhysicsModuleInputBuffer", __FILE__, 58));   // :58
+    CGS_ASSERT(lpCrashOutput_PreScene != 0, CgsDev::Assert::MessageAt("lpCrashOutput_PreScene", __FILE__, 59));           // :59
 
     const BrnPhysics::Vehicle::VehicleInputInterface* lpCrashVehicleInput =
         lpCrashOutput_PreScene->GetVehicleInputInterface();                        // 0x827AACD8

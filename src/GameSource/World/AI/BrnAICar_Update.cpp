@@ -12,7 +12,7 @@
 #include "GameSource/AttribSys/Generated/classes/physicsvehicleboostattribs.h"   // SetDriver: MaxBoostSpeed
 
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"           // CgsNumeric::Random (the BrnAICar.cpp file-scope RNG @.data 0x8300D5D0)
-#include "GameShared/GameClasses/Core/CgsAssert.h"              // CGS_ASSERT + KI_MESSAGEBUFFERSIZE
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"              // CGS_ASSERT + KI_MESSAGEBUFFERSIZE
 #include "GameShared/GameClasses/Development/CgsStrStream.h"    // CgsDev::StrStream (streamed assert messages)
 #include "rw/math/vpu/vector3_operation.h"                     // rw::math::vpu Dot / Magnitude / Normalize / Cross / IsValid / IsZero
 
@@ -175,7 +175,7 @@ namespace BrnAI
                        const AICar* lpPlayerCar, AISectionsData* lpAISectionsData,
                        const Route* lpRoute, bool lbIsOnline)
     {
-        CGS_ASSERT(IsActive(), "IsActive()");                                              // :866
+        CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 866));                                              // :866
 
         // 0x82798FE8  mfBehaviourTime += dt
         mfBehaviourTimer = mfBehaviourTimer + lfTimeStep;
@@ -185,7 +185,7 @@ namespace BrnAI
         mfBuzzDistanceToPlayer = vpu::Magnitude(mPosition - lPlayerPos);
 
         // 0x8279906C  the console tests lane X only (vspltw v0,v0,0 ; vcmpeqfp.)
-        CGS_ASSERT(mPosition.X().GetFloat() == mPosition.X().GetFloat(), "AI car with nonsense position");            // :871
+        CGS_ASSERT(mPosition.X().GetFloat() == mPosition.X().GetFloat(), CgsDev::Assert::MessageAt("AI car with nonsense position", __FILE__, 871));            // :871
 
         // 0x827990A4  race timer: held at 0 while starting, else accumulates (not in free roam)
         if (meRouteFindingStyle != E_ROUTE_FINDING_FREE_ROAM)
@@ -204,7 +204,7 @@ namespace BrnAI
             const f32 lfDesiredSpeed = CalcDesiredSpeed(lpRaceBalancingManager, lpAISectionsData, lpPlayerCar);
             mfSpeedOutOfRange = lfDesiredSpeed;   // == DWARF mfDesiredSpeed @+0x14E8 (stfs f1,0x14E8)
             // `fcmpu f1, 0.0 ; bge` 0x82799114/0x82799118 skips the assert on an unordered compare.
-            CGS_ASSERT(!(lfDesiredSpeed < 0.0f), "mfDesiredSpeed >= 0.0f");                 // :897
+            CGS_ASSERT(!(lfDesiredSpeed < 0.0f), CgsDev::Assert::MessageAt("mfDesiredSpeed >= 0.0f", __FILE__, 897));                 // :897
 
             // 0x82799138  opponents only (miOpponentIndex != -1 && !mbIsPlayer)
             if (miOpponentIndex != -1 && !mbIsPlayer)
@@ -216,14 +216,14 @@ namespace BrnAI
 
         if (leCarState == E_AI_CAR_STATE_OUT_OF_RANGE)
         {
-            CGS_ASSERT(vpu::IsValid(mPosition), "RwMath::IsValid( mPosition )");            // :912
-            CGS_ASSERT(vpu::IsValid(GetDirection()), "RwMath::IsValid( GetDirection() )");   // :913
-            CGS_ASSERT(vpu::IsValid(GetRight()), "RwMath::IsValid( GetRight() )");           // :914
+            CGS_ASSERT(vpu::IsValid(mPosition), CgsDev::Assert::MessageAt("RwMath::IsValid( mPosition )", __FILE__, 912));            // :912
+            CGS_ASSERT(vpu::IsValid(GetDirection()), CgsDev::Assert::MessageAt("RwMath::IsValid( GetDirection() )", __FILE__, 913));   // :913
+            CGS_ASSERT(vpu::IsValid(GetRight()), CgsDev::Assert::MessageAt("RwMath::IsValid( GetRight() )", __FILE__, 914));           // :914
 
             UpdatePositionOutOfRange(lfTimeStep, lpAISectionsData);                         // 0x8279934C
 
-            CGS_ASSERT(vpu::IsValid(mPosition), "RwMath::IsValid( mPosition )");            // :919
-            CGS_ASSERT(vpu::IsValid(GetDirection()), "RwMath::IsValid( GetDirection() )");   // :920
+            CGS_ASSERT(vpu::IsValid(mPosition), CgsDev::Assert::MessageAt("RwMath::IsValid( mPosition )", __FILE__, 919));            // :919
+            CGS_ASSERT(vpu::IsValid(GetDirection()), CgsDev::Assert::MessageAt("RwMath::IsValid( GetDirection() )", __FILE__, 920));   // :920
             CGS_ASSERT(vpu::IsValid(GetRight()), "RwMath::IsValid( GetRight() )");           // :921
         }
         else
@@ -544,7 +544,7 @@ namespace BrnAI
     // ==================================================================================
     void AICar::UpdatePositionOutOfRange(f32 lfTimeStep, AISectionsData* lpAISectionsData)
     {
-        CGS_ASSERT(IsActive(), "IsActive()");                                              // :1218
+        CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 1218));                                              // :1218
 
         if (!HasValidRoute())                                                               // 0x8276F0DC
             return;
@@ -715,7 +715,7 @@ namespace BrnAI
         if (!lbFound)                                                                       // 0x8277C214
             return false;
 
-        CGS_ASSERT(lpRoute != 0, "lpRoute != NULL");                                        // :1927
+        CGS_ASSERT(lpRoute != 0, CgsDev::Assert::MessageAt("lpRoute != NULL", __FILE__, 1927));                                        // :1927
 
         const RouteNode* lpNode = lpRoute->GetNode(liNode);                                 // 0x8277C24C
         f32 lfSegX;
@@ -760,7 +760,7 @@ namespace BrnAI
         }
 
         // `fcmpu f31, 0.0 ; bge` 0x8277C490/0x8277C494 skips the assert on an unordered compare.
-        CGS_ASSERT(!(lfDistance < 0.0f), "lfDistance >= 0.0f");                             // :1966
+        CGS_ASSERT(!(lfDistance < 0.0f), CgsDev::Assert::MessageAt("lfDistance >= 0.0f", __FILE__, 1966));                             // :1966
         *lpfOutDistance = lfDistance;
         return true;
     }
@@ -780,7 +780,7 @@ namespace BrnAI
                                   bool lbIsOnStartLine, bool lbIsPlayer, bool lbIsDrivenByPlayer,
                                   bool lbIsDrifting, bool lbIsTouchingRaceCar, bool lbIsTouchingPlayer)
     {
-        CGS_ASSERT(IsActive(), "IsActive()");                                              // :1372
+        CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 1372));                                              // :1372
 
         const Vector3& lrPosition = lrTransform.wAxis;                                      // lvx128 v0,r30,0x30 -> stvx128 0x1430
         const Vector3& lrAt       = lrTransform.zAxis;                                      // lvx128 v1,r30,0x20
@@ -792,7 +792,7 @@ namespace BrnAI
         muBestSectionIndex = luUnderCarSectionIndex;                                        // sth r28,0x1534 (== muUnderCarSectionIndex)
         mVelocity = lVelocity;                                                              // stvx128 v127,0x1470
 
-        CGS_ASSERT(lbIsPlayer || !lbIsInShowtime, "lbIsPlayer || !lbIsInShowtime");        // :1382
+        CGS_ASSERT(lbIsPlayer || !lbIsInShowtime, CgsDev::Assert::MessageAt("lbIsPlayer || !lbIsInShowtime", __FILE__, 1382));        // :1382
 
         mfSpeedInRange      = lfSpeed;                                                      // stfs f31,0x14E4 (== mfActualInRangeSpeed)
         mbIsInAir           = lbIsInAir;                                                    // stb 0x1541
@@ -821,10 +821,10 @@ namespace BrnAI
     void AICar::UpdateResetOnTrackSection(EResetSpeedType leResetSpeedType, u16 luResetOnTrackSectionIndex,
                                           u8 luStartPortal, u8 luEndPortal)
     {
-        CGS_ASSERT(IsActive(), "IsActive()");                                              // :1415
-        CGS_ASSERT(!IsInAir() || mbIsInShowtime, "!IsInAir() || mbIsInShowtime");            // :1416
+        CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 1415));                                              // :1415
+        CGS_ASSERT(!IsInAir() || mbIsInShowtime, CgsDev::Assert::MessageAt("!IsInAir() || mbIsInShowtime", __FILE__, 1416));            // :1416
         CGS_ASSERT(luResetOnTrackSectionIndex != KI_INVALID_SECTION_INDEX,
-                   "luResetOnTrackSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX");     // :1417
+                   CgsDev::Assert::MessageAt("luResetOnTrackSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", __FILE__, 1417));     // :1417
 
         meResetSpeedType           = leResetSpeedType;                                      // stw 0x14D0
         muResetOnTrackSectionIndex = luResetOnTrackSectionIndex;                            // sth 0x1530
@@ -844,7 +844,7 @@ namespace BrnAI
     void AICar::UpdateOutOfRangeData(Vector3 lPosition, Vector3 lAtVector, u16 luSectionIndex,
                                      u8 luSectionSpeed)
     {
-        CGS_ASSERT(IsActive(), "IsActive()");                                              // :1440
+        CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 1440));                                              // :1440
 
         mPosition = lPosition;                                                              // stvx128 v126,0x1430
 
@@ -907,8 +907,8 @@ namespace BrnAI
     // ==================================================================================
     void AICar::OnModeStartRacing()
     {
-        CGS_ASSERT(IsActive(), "IsActive()");                                              // :491
-        CGS_ASSERT(mbIsInGameMode, "mbIsInGameMode");                                       // :492
+        CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 491));                                              // :491
+        CGS_ASSERT(mbIsInGameMode, CgsDev::Assert::MessageAt("mbIsInGameMode", __FILE__, 492));                                       // :492
 
         SetBehaviour(E_AI_BEHAVIOUR_CRUISING);                                              // 0x14E0=0 ; 0x14B8<-0x14B4 ; 0x14B4=3
         mbForceStandardRoute = 0;                                                           // stb 0,0x1548 (== mbIsStartingRace)
@@ -929,13 +929,13 @@ namespace BrnAI
                             bool lbCanUseAIShortcuts, u16 luDestinationSectionIndex,
                             f32 lfProgressionRankAsRatio)
     {
-        CGS_ASSERT(IsActive(), "IsActive()");                                              // :396
+        CGS_ASSERT(IsActive(), CgsDev::Assert::MessageAt("IsActive()", __FILE__, 396));                                              // :396
         CGS_ASSERT(static_cast<u32>(liOpponentIndex) < 8u,
-                   "liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS"); // :397 (cmplwi ,8)
+                   CgsDev::Assert::MessageAt("liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", __FILE__, 397)); // :397 (cmplwi ,8)
         // `fcmpu r,0.0 ; blt -> fire` 0x8277BDE8/0x8277BDF0 then `fcmpu r,1.0 ; ble -> skip`
         // 0x8277BDF4/0x8277BDF8: an unordered ratio skips the assert (FX-AINAN2).
         CGS_ASSERT(!(lfProgressionRankAsRatio < 0.0f) && !(lfProgressionRankAsRatio > 1.0f),
-                   "lfProgressionRankAsRatio >= 0.0f && lfProgressionRankAsRatio <= 1.0f");  // :398
+                   CgsDev::Assert::MessageAt("lfProgressionRankAsRatio >= 0.0f && lfProgressionRankAsRatio <= 1.0f", __FILE__, 398));  // :398
 
         Route* lpThisRoute = GetRoute();
 

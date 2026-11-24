@@ -1,6 +1,6 @@
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToAI.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 
 
 // @ 0x827A4FA0 -- latch the race-car module's pre-scene AI view (read-locked getter
@@ -19,8 +19,8 @@ void BridgeRaceCarModuleToAIModule_PreScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpAIInputBuffer != 0, "lpAIInputBuffer");                                   // :40
-    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, "lpRaceCarOutputBuffer_PreScene");     // :41
+    CGS_ASSERT(lpAIInputBuffer != 0, CgsDev::Assert::MessageAt("lpAIInputBuffer", __FILE__, 40));                                   // :40
+    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpRaceCarOutputBuffer_PreScene", __FILE__, 41));     // :41
 
     lpAIInputBuffer->SetRaceCarAIInterface(
         lpRaceCarOutputBuffer_PreScene->GetRaceCarAIInterface());
@@ -52,8 +52,8 @@ void BridgeRaceCarModuleToAIModule_PostScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpAIInputBuffer != 0, "lpAIInputBuffer");                                    // :60
-    CGS_ASSERT(lpRaceCarOutputBuffer_PostScene != 0, "lpRaceCarOutputBuffer_PostScene");    // :61
+    CGS_ASSERT(lpAIInputBuffer != 0, CgsDev::Assert::MessageAt("lpAIInputBuffer", __FILE__, 60));                                    // :60
+    CGS_ASSERT(lpRaceCarOutputBuffer_PostScene != 0, CgsDev::Assert::MessageAt("lpRaceCarOutputBuffer_PostScene", __FILE__, 61));    // :61
 
     if (lpAIInputBuffer == 0 || lpRaceCarOutputBuffer_PostScene == 0)
     {

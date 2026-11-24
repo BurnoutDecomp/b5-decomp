@@ -44,7 +44,7 @@
 #include <cmath>
 #include <cstdlib>
 #include "SharedClasses/World/BrnCollisionTag.h"                            // KU_MAX_AI_SECTION_INDEX
-#include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                          // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                  // gpDebugPrint
 
 namespace BrnWorld
@@ -75,10 +75,10 @@ void RaceCarEntityModule::UpdateRaceCarCollisionTagging(
         s32 liActiveRaceCarIndex,
         const BrnPhysics::Vehicle::RaceCarState* lpRaceCarState )
 {
-    CGS_ASSERT( liActiveRaceCarIndex >= 0, "liActiveRaceCarIndex >= 0" );                    // :5775
+    CGS_ASSERT(liActiveRaceCarIndex >= 0, CgsDev::Assert::MessageAt("liActiveRaceCarIndex >= 0", __FILE__, 5775));                    // :5775
     CGS_ASSERT( liActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                "liActiveRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS" );                          // :5776
-    CGS_ASSERT( lpRaceCarState != 0, "lpRaceCarState" );                                     // :5777
+                CgsDev::Assert::MessageAt("liActiveRaceCarIndex < KI_MAX_ACTIVE_RACE_CARS", __FILE__, 5776));                          // :5776
+    CGS_ASSERT(lpRaceCarState != 0, CgsDev::Assert::MessageAt("lpRaceCarState", __FILE__, 5777));                                     // :5777
 
     // The console's own first gate: no valid ground under the car means no tag to read, and it
     // returns WITHOUT touching the section (so the last known section survives one bad frame).

@@ -1,5 +1,5 @@
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToEntityModules.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"  // gpDebugPrint / gxMessageFilterFlags (the DIAG witness only)
 #include "GameSource/World/EntityModules/TriggerEntityModule/SharedIO/BrnTriggerEntityModuleInputInterface.h" // TriggerManagementInputInterface (real aggregate)
 
@@ -52,8 +52,8 @@ void BridgeTrafficToRaceCar_PrePhysics(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpRaceCarInputBuffer_PrePhysics != 0, "lpRaceCarInputBuffer_PrePhysics");   // :72
-    CGS_ASSERT(lpTrafficOutputBuffer_PostScene != 0, "lpTrafficOutputBuffer_PostScene");   // :73
+    CGS_ASSERT(lpRaceCarInputBuffer_PrePhysics != 0, CgsDev::Assert::MessageAt("lpRaceCarInputBuffer_PrePhysics", __FILE__, 72));   // :72
+    CGS_ASSERT(lpTrafficOutputBuffer_PostScene != 0, CgsDev::Assert::MessageAt("lpTrafficOutputBuffer_PostScene", __FILE__, 73));   // :73
 
     lpRaceCarInputBuffer_PrePhysics->SetTrafficToRaceCarInterface_PostScene(
         reinterpret_cast<const BrnWorld::RaceCarEntityModuleIO::InputBuffer_PrePhysics::TrafficToRaceCarInterface_PostScene*>(
@@ -74,8 +74,8 @@ void BridgeTrafficToTrigger_PreScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpTriggerInputBuffer_PreScene != 0, "lpTriggerInputBuffer_PreScene");       // :50
-    CGS_ASSERT(lpTrafficOutputBuffer_PreScene != 0, "lpTrafficOutputBuffer_PreScene");     // :51
+    CGS_ASSERT(lpTriggerInputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpTriggerInputBuffer_PreScene", __FILE__, 50));       // :50
+    CGS_ASSERT(lpTrafficOutputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpTrafficOutputBuffer_PreScene", __FILE__, 51));     // :51
 
     // FLAG cross-home casts: both IO buffers expose their trigger-management member as opaque
     // storage; both ARE the trigger module's TriggerManagementInputInterface (whose Append

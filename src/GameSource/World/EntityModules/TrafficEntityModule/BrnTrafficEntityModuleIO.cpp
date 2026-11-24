@@ -541,8 +541,7 @@ namespace BrnTrafficIO
     void InputBuffer_PrePhysics::SetPotentialContactQueue(const PotentialContactQueue* lpPotentialContactQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 282));
-        mPotentialContactQueue.Clear();             // stw r28,8(&mPotentialContactQueue) -> miLength = 0
-        mPotentialContactQueue.Append(*lpPotentialContactQueue);
+        mPotentialContactQueue = *lpPotentialContactQueue;   // EventQueue::operator= (DWARF CgsEventQueue.h:194): Clear + Append
     }
 
     // X360 0x827A9E98: write-lock; reset the queue then merge the source overlap-pair queue
@@ -551,8 +550,7 @@ namespace BrnTrafficIO
     void InputBuffer_PrePhysics::SetOverlapPairsQueue(const OverlapPairsQueue* lpOverlapPairsQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 285));
-        mOverlapPairsQueue.Clear();                 // stw r28,8(&mOverlapPairsQueue) -> miLength = 0
-        mOverlapPairsQueue.Append(*lpOverlapPairsQueue);
+        mOverlapPairsQueue = *lpOverlapPairsQueue;   // EventQueue::operator= (DWARF CgsEventQueue.h:194): Clear + Append
     }
 
     // X360 0x82711268 (27 insns, :280): read-lock tripwire then `return this + 163872`

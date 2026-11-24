@@ -1,6 +1,6 @@
 #include "GameSource/World/EntityModules/RaceCarEntityModule/PowerParking/BrnPowerParkingManager.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Math/BrnMathUtils.h"            // BrnMath::GetPointToInfiniteLineDistance (declared there)
 #include "rw/math/vpu/vector3_operation.h"           // rw::math::vpu::Dot / Magnitude / MagnitudeSquared
 #include "rw/math/fpu/scalar_operation.h"            // rw::math::fpu::Min / Max / Clamp (the console's fsel forms)
@@ -120,28 +120,31 @@ namespace BrnWorld
         // 0x822A74B8 `cmplwi 2 ; bge` and 0x822A74D4 `fcmpu f13(+0x80), f0(3.0) ; bge` -> outcome 0.
         // That bge is bc 4,lt: TAKEN on NaN, so a NaN distance is "not aligned" -- the negated
         // compare keeps that (the old `>=` spelling went on to score a NaN park as a SUCCESS).
+        // if/else, not an early return: ARTIST keeps the TO_BE_DETERMINED arm right after the two
+        // tests (li r11,0 at 0x822A74C0) and shares the outcome store (0x822A7554) with SUCCESS.
         if (muNearbyParkedCarCount < 2u ||
             !(mfClosestPerpendicularDist < KF_MAX_PERPENDICULAR_DISTANCE_FOR_ALIGNMENT))
         {
             mePowerParkOutcome = E_PPO_TO_BE_DETERMINED;
-            return;
         }
+        else
+        {
+            miOverallRating = miWeightedDistanceScore
+                            + miWeightedProximityScore
+                            + miWeightedSpeedScore
+                            + miWeightedRotationScore
+                            + miWeightedPositionAlignmentScore
+                            + miWeightedAngleAlignmentScore;
 
-        miOverallRating = miWeightedDistanceScore
-                        + miWeightedProximityScore
-                        + miWeightedSpeedScore
-                        + miWeightedRotationScore
-                        + miWeightedPositionAlignmentScore
-                        + miWeightedAngleAlignmentScore;
+            CGS_ASSERT(miOverallRating >= 0, CgsDev::Assert::MessageAt("miOverallRating >= 0", __FILE__, 399));
 
-        CGS_ASSERT(miOverallRating >= 0, "miOverallRating >= 0");
+            if (miOverallRating >= 100)
+                miOverallRating = 100;
 
-        if (miOverallRating >= 100)
-            miOverallRating = 100;
-
-        // Only promote a still-undetermined attempt to a success (a FAILURE stays a FAILURE).
-        if (mePowerParkOutcome == E_PPO_TO_BE_DETERMINED)
-            mePowerParkOutcome = E_PPO_SUCCESS;
+            // Only promote a still-undetermined attempt to a success (a FAILURE stays a FAILURE).
+            if (mePowerParkOutcome == E_PPO_TO_BE_DETERMINED)
+                mePowerParkOutcome = E_PPO_SUCCESS;
+        }
     }
 
     // DWARF :346. No out-of-line symbol: Update inlines it three times as the same run of stores
@@ -235,7 +238,7 @@ namespace BrnWorld
             {
                 ClearData();
             }
-            CGS_ASSERT(!mbPowerParkInProgress, "!mbPowerParkInProgress");         // :150 (li r5, 0x96)
+            CGS_ASSERT(!mbPowerParkInProgress, CgsDev::Assert::MessageAt("!mbPowerParkInProgress", __FILE__, 150));         // :150 (li r5, 0x96)
             return;
         }
 

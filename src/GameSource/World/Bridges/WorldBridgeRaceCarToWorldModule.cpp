@@ -1,6 +1,6 @@
 #include "GameSource/World/Bridges/WorldBridgeEntityModulesToEntityModules.h"
 #include "GameSource/World/BrnWorldModule.h"   // BrnWorld::WorldModule -- the members, BY NAME
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // ============================================================================
 // GameSource/World/Bridges/WorldBridgeRaceCarToWorldModule.cpp
@@ -65,12 +65,12 @@ void WorldModule::BridgeRaceCarModuleToWorldModule_PreScene(
     WorldEntityIO::InputBuffer_PreScene* lpWorldInputBuffer_PreScene,
     const RaceCarEntityModuleIO::OutputBuffer_PreScene* lpRaceCarOutputBuffer_PreScene)
 {
-    CGS_ASSERT(lpWorldInputBuffer_PreScene != 0, "lpWorldInputBuffer_PreScene");           // :94
-    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, "lpRaceCarOutputBuffer_PreScene");     // :95
+    CGS_ASSERT(lpWorldInputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpWorldInputBuffer_PreScene", __FILE__, 94));           // :94
+    CGS_ASSERT(lpRaceCarOutputBuffer_PreScene != 0, CgsDev::Assert::MessageAt("lpRaceCarOutputBuffer_PreScene", __FILE__, 95));     // :95
 
     const RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpRaceCarEntityOutputInterface =
         lpRaceCarOutputBuffer_PreScene->GetActiveRaceCarOutputInterface();
-    CGS_ASSERT(lpRaceCarEntityOutputInterface != 0, "lpRaceCarEntityOutputInterface");     // :100
+    CGS_ASSERT(lpRaceCarEntityOutputInterface != 0, CgsDev::Assert::MessageAt("lpRaceCarEntityOutputInterface", __FILE__, 100));     // :100
 
     // The committed world-entity input buffer names the race-car interface by its real type
     // (InputBuffer_PreScene::ActiveRaceCarInterface ==

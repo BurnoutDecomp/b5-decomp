@@ -284,8 +284,7 @@ namespace AIModuleIO
     void InputBuffer::SetTakedownEventQueue(const TakedownEventQueue* lpQueue)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 152));
-        mTakedownEventQueue.Clear();
-        mTakedownEventQueue.Append(*lpQueue);
+        mTakedownEventQueue = *lpQueue;   // EventQueue::operator= (DWARF CgsEventQueue.h:194)
     }
 
     // X360 0x8279C5A0 (W, :155) -- memcpy(60) into the player vehicle controls (console +0x1B9E8).

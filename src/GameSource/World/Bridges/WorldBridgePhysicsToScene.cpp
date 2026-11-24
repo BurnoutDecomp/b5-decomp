@@ -1,6 +1,6 @@
 #include "GameSource/World/Bridges/WorldBridgePhysicsToScene.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleOutputInterface.h"  // VehicleOutputRequestInterface::GetRequestFineLineQueue (the +0x28C0 seat)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTestNearest.h"   // InEventLineTestNearest (type 6)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventVolumeTestDeepest.h" // InEventVolumeTestDeepest (type 7)
@@ -43,8 +43,8 @@ void BridgePhysicsSceneUpdateToScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpSceneInputBuffer_Update != 0, "lpSceneInputBuffer_Update != NULL");           // :103
-    CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL");       // :104
+    CGS_ASSERT(lpSceneInputBuffer_Update != 0, CgsDev::Assert::MessageAt("lpSceneInputBuffer_Update != NULL", __FILE__, 103));           // :103
+    CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, CgsDev::Assert::MessageAt("lpPhysicsModuleOutputBuffer != NULL", __FILE__, 104));       // :104
 
     // The console's evaluation order: source (read-locked) first, destination (write-locked)
     // second, then the whole-interface merge.
@@ -100,8 +100,8 @@ void BridgePhysicsSceneQueriesToScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpSceneInputBuffer_Query != 0,    "lpSceneInputBuffer_Query != NULL");     // :40
-    CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL");  // :41
+    CGS_ASSERT(lpSceneInputBuffer_Query != 0, CgsDev::Assert::MessageAt("lpSceneInputBuffer_Query != NULL", __FILE__, 40));     // :40
+    CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, CgsDev::Assert::MessageAt("lpPhysicsModuleOutputBuffer != NULL", __FILE__, 41));  // :41
 
     // The producer's own ids (BrnVehicleManager_UpdateVehiclePhysics.cpp,
     // KI_SCENE_QUERY_EVENT_LINE_TEST_NEAREST == 6); 7 is the deepest-volume request.

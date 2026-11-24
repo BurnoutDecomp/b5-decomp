@@ -184,7 +184,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h" // BrnPhysics::Vehicle::VehicleDriverInputInterface
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"
 #include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "SharedClasses/AI/AISectionsResourceType.h"                    // BrnAI::AISectionsData
@@ -593,11 +593,11 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
                              Vector3 lPlayerCarPosition,
                              f32 lfTimeStep)
 {
-    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");   // X360 :1383
+    CGS_ASSERT(lpInputBuffer != 0, CgsDev::Assert::MessageAt("lpInputBuffer != NULL", __FILE__, 1383));   // X360 :1383
 
 
     const AIModuleIO::RaceCarAIInterface* lpCarInterface = lpInputBuffer->GetRaceCarAIInterface();
-    CGS_ASSERT(lpCarInterface != 0, "lpCarInterface != NULL");   // X360 :1388
+    CGS_ASSERT(lpCarInterface != 0, CgsDev::Assert::MessageAt("lpCarInterface != NULL", __FILE__, 1388));   // X360 :1388
 
     AICar* lpPlayerCar = 0;
     {
@@ -735,9 +735,9 @@ void AIModule::UpdateDrivers(const AIModuleIO::InputBuffer* lpInputBuffer,
 // =================================================================================================
 void AIModule::StoreDrivenCarData(const AIModuleIO::InputBuffer* lpInputBuffer)
 {
-    CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");   // X360 :2003
+    CGS_ASSERT(lpInputBuffer != 0, CgsDev::Assert::MessageAt("lpInputBuffer != NULL", __FILE__, 2003));   // X360 :2003
     const AIModuleIO::RaceCarAIInterface* lpCarInterface = lpInputBuffer->GetRaceCarAIInterface();
-    CGS_ASSERT(lpCarInterface != 0, "lpCarInterface != NULL");   // X360 :2010
+    CGS_ASSERT(lpCarInterface != 0, CgsDev::Assert::MessageAt("lpCarInterface != NULL", __FILE__, 2010));   // X360 :2010
 
 
     for (EActiveRaceCarIndex leSlot = E_ACTIVE_RACE_CAR_INDEX_0;
@@ -927,10 +927,10 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
         return;
     }
 
-    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");   // X360 :2144
+    CGS_ASSERT(lpOutputBuffer != 0, CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", __FILE__, 2144));   // X360 :2144
 
     VehicleDriverInputInterface* lpDriverInputInterface = lpOutputBuffer->GetVehicleDriverInterface();
-    CGS_ASSERT(lpDriverInputInterface != 0, "lpDriverInputInterface != NULL");   // X360 :2148
+    CGS_ASSERT(lpDriverInputInterface != 0, CgsDev::Assert::MessageAt("lpDriverInputInterface != NULL", __FILE__, 2148));   // X360 :2148
 
     VehicleDriverInputInterface::UpdateDriverEventQueue* lpQueue = lpDriverInputInterface->GetUpdateDriverQueue();
 
@@ -1017,11 +1017,11 @@ void AIModule::ProcessAIVehicleInputs(AIModuleIO::OutputBuffer* lpOutputBuffer)
 // =================================================================================================
 void AIModule::ProcessOutOfRangeVehicles(AIModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");   // X360 :2196
+    CGS_ASSERT(lpOutputBuffer != 0, CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", __FILE__, 2196));   // X360 :2196
 
     AIModuleIO::AIRaceCarInterface* lpAIRaceCarInterface =
         lpOutputBuffer->GetAIRaceCarInterface();
-    CGS_ASSERT(lpAIRaceCarInterface != 0, "lpAIRaceCarInterface != NULL");   // X360 :2200
+    CGS_ASSERT(lpAIRaceCarInterface != 0, CgsDev::Assert::MessageAt("lpAIRaceCarInterface != NULL", __FILE__, 2200));   // X360 :2200
 
     for (EGlobalRaceCarIndex leCar = E_GLOBAL_RACE_CAR_INDEX_0;
          leCar < E_GLOBAL_RACE_CAR_INDEX_COUNT;
@@ -1049,11 +1049,11 @@ void AIModule::ProcessOutOfRangeVehicles(AIModuleIO::OutputBuffer* lpOutputBuffe
 // =================================================================================================
 void AIModule::ProcessInRangeVehicles(AIModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");   // X360 :2231
+    CGS_ASSERT(lpOutputBuffer != 0, CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", __FILE__, 2231));   // X360 :2231
 
     AIModuleIO::AIRaceCarInterface* lpAIRaceCarInterface =
         lpOutputBuffer->GetAIRaceCarInterface();
-    CGS_ASSERT(lpAIRaceCarInterface != 0, "lpAIRaceCarInterface != NULL");   // X360 :2235
+    CGS_ASSERT(lpAIRaceCarInterface != 0, CgsDev::Assert::MessageAt("lpAIRaceCarInterface != NULL", __FILE__, 2235));   // X360 :2235
 
     for (EGlobalRaceCarIndex leCar = E_GLOBAL_RACE_CAR_INDEX_0;
          leCar < E_GLOBAL_RACE_CAR_INDEX_COUNT;
@@ -1095,7 +1095,7 @@ void AIModule::ProcessInRangeVehicles(AIModuleIO::OutputBuffer* lpOutputBuffer)
 // =================================================================================================
 void AIModule::ExportCarData(AIModuleIO::OutputBuffer* lpOutputBuffer)
 {
-    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer != NULL");   // X360 :2270
+    CGS_ASSERT(lpOutputBuffer != 0, CgsDev::Assert::MessageAt("lpOutputBuffer != NULL", __FILE__, 2270));   // X360 :2270
 
     const AICar* lpPlayerCar = GetAICar(mePlayerGlobalRaceCarIndex);
     if (lpPlayerCar == 0)
@@ -1105,7 +1105,7 @@ void AIModule::ExportCarData(AIModuleIO::OutputBuffer* lpOutputBuffer)
 
     AIModuleIO::AICarOutputInterface* lpCarOutputInterface =
         lpOutputBuffer->GetAICarOutputInterface();
-    CGS_ASSERT(lpCarOutputInterface != 0, "lpCarOutputInterface != NULL");   // X360 :2279
+    CGS_ASSERT(lpCarOutputInterface != 0, CgsDev::Assert::MessageAt("lpCarOutputInterface != NULL", __FILE__, 2279));   // X360 :2279
 
     for (EGlobalRaceCarIndex leCar = E_GLOBAL_RACE_CAR_INDEX_0;
          leCar < E_GLOBAL_RACE_CAR_INDEX_COUNT;

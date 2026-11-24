@@ -1,6 +1,6 @@
 #include "GameSource/World/Bridges/WorldBridgeSceneToEntityModules.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // gpDebugPrint  ([DIAG] only)
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h" // BrnTrafficIO::InputBuffer_PrePhysics (the header only forward-declares it)
 
@@ -26,8 +26,8 @@ void BridgeSceneQueryResultsToRaceCarModule_PrePhysics(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpRaceCarInputBuffer_PrePhysics != 0, "lpRaceCarInputBuffer_PrePhysics != NULL");   // :98
-    CGS_ASSERT(lpSceneModuleOutputBuffer != 0, "lpSceneModuleOutputBuffer != NULL");               // :99
+    CGS_ASSERT(lpRaceCarInputBuffer_PrePhysics != 0, CgsDev::Assert::MessageAt("lpRaceCarInputBuffer_PrePhysics != NULL", __FILE__, 98));   // :98
+    CGS_ASSERT(lpSceneModuleOutputBuffer != 0, CgsDev::Assert::MessageAt("lpSceneModuleOutputBuffer != NULL", __FILE__, 99));               // :99
 
     lpRaceCarInputBuffer_PrePhysics->GetSceneResultQueue()->Append(
         *lpSceneModuleOutputBuffer->GetSceneQueryResultsQueue());
@@ -105,8 +105,8 @@ void BridgeSceneContactsToRaceCarModule_PrePhysics(
 {
     (void)lpWorldModule;   // X360 r3 -- overwritten at 0x827ABC40 and never read
 
-    CGS_ASSERT(lpRaceCarInputBuffer_PrePhysics != 0, "lpRaceCarInputBuffer_PrePhysics != NULL"); // :171
-    CGS_ASSERT(lpSceneModuleOutputBuffer != 0, "lpSceneModuleOutputBuffer != NULL");             // :172
+    CGS_ASSERT(lpRaceCarInputBuffer_PrePhysics != 0, CgsDev::Assert::MessageAt("lpRaceCarInputBuffer_PrePhysics != NULL", __FILE__, 171)); // :171
+    CGS_ASSERT(lpSceneModuleOutputBuffer != 0, CgsDev::Assert::MessageAt("lpSceneModuleOutputBuffer != NULL", __FILE__, 172));             // :172
 
     // Source getter (read-lock), then destination setter (write-lock) -- the console's own
     // order, and its own register dance (bl getter ; mr r4,r3 ; mr r3,r30 ; bl setter).

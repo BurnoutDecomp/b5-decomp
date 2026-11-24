@@ -45,7 +45,7 @@
 #include "GameSource/Effects/Curves.h"                        // BrnEffects::Curves::SmoothStep
 #include "GameSource/Effects/BrnEffectsUtils.h"               // Utils::Vector3Randomiser (FireWheelDebris)
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"  // BrnPhysics::Vehicle::RaceCarState / WheelLite
-#include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"            // CGS_ASSERT
 #include "SDKs/EATech/include/rw/math/vpu/vec_float.h"    // rw::math::vpu::VecFloat (RandomVecFloat's splat)
 #include <cmath>
 
@@ -576,7 +576,7 @@ EffectsState JumpStateMachine::OnDetermineNextState(CarState& lCarState,
             break;
 
         default:
-            CGS_ASSERT(false, "Unknown state");   // .cpp:242
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown state", __FILE__, 242));   // .cpp:242
             break;
     }
 
@@ -639,7 +639,7 @@ void JumpStateMachine::OnChangeState(EffectsState leNewState,
             break;
 
         default:
-            CGS_ASSERT(false, "Unknown state");   // .cpp:302
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown state", __FILE__, 302));   // .cpp:302
             break;
     }
 }

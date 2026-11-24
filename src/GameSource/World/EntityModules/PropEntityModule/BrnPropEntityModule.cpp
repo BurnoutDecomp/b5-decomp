@@ -1585,7 +1585,7 @@ namespace BrnWorld
         // 0x822EF578. The write-locked prop-manager input interface this whole body feeds.
         BrnPhysics::Props::PropInputInterface* lpPropManagerInterface =
             lpOutput->GetPropInputInterface();
-        CGS_ASSERT(lpPropManagerInterface != NULL, "lpPropManagerInterface");            // :1565
+        CGS_ASSERT(lpPropManagerInterface != NULL, CgsDev::Assert::MessageAt("lpPropManagerInterface", __FILE__, 1565));            // :1565
 
         // 0x822EF5AC. ⚠️ THIS ASSERT IS *NOT* CanChangeState -- corrected 2026-08-18.
         // Round 1 routed it through the member because the committed inline happened to be
@@ -1598,12 +1598,12 @@ namespace BrnWorld
         // cmpwi r29,5 ; beq` -- and the full rodata message at 0x8201DFAC is literally the
         // expression spelled below. So it is spelled inline, verbatim.
         CGS_ASSERT((leOldState < leNewState) || (leOldState == E_MOVED),
-                   "leOldState < leNewState || (leOldState == E_MOVED)");                // :1567
+                   CgsDev::Assert::MessageAt("leOldState < leNewState || (leOldState == E_MOVED)", __FILE__, 1567));                // :1567
 
         // 0x822EF5D8. See the NaN-polarity note in this file's banner: `vcmpgtfp.` is the
         // ordered compare, so plain `>` is the faithful (and NaN-correct) spelling.
         CGS_ASSERT(lpProp->GetWorldTransform().Pos().GetY().GetFloat() > BrnPhysics::Props::KVF_PROP_FLOOR,
-                   "lpProp->GetWorldTransform().Pos().Y() > BrnPhysics::Props::KVF_PROP_FLOOR"); // :1569
+                   CgsDev::Assert::MessageAt("lpProp->GetWorldTransform().Pos().Y() > BrnPhysics::Props::KVF_PROP_FLOOR", __FILE__, 1569)); // :1569
 
         // 0x822EF628 / 0x822EF664 -- the legality pair. Each is a chain of `cmpwi/beq` over
         // exactly the enumerators its message names, in the asm's own order.
@@ -1629,7 +1629,7 @@ namespace BrnWorld
         // ResourcePtr's GetMemoryResource. The type id is `lhz 0x44(prop)` == muTypeId.
         const BrnPhysics::Props::PropTypeData* lpPropTypeData =
             mpPropPhysicsDataHeader.GetMemoryResource()->GetType(lpProp->muTypeId);
-        CGS_ASSERT(lpPropTypeData != NULL, "lpPropTypeData");                            // :1590
+        CGS_ASSERT(lpPropTypeData != NULL, CgsDev::Assert::MessageAt("lpPropTypeData", __FILE__, 1590));                            // :1590
 
         if (leOldState == E_STATIC || leOldState == E_LEANING)
         {

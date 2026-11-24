@@ -48,7 +48,7 @@
 #include "GameSource/World/AI/BrnAISharedConstants.h"        // EAICarState / EResetType
 #include "GameSource/Math/BrnMathUtils.h"                    // BrnMath::Flatten (XZ)
 #include "SharedClasses/AI/AISectionsResourceType.h"         // AISection / AISectionsData
-#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"
 
 #include <math.h>     // sqrtf
@@ -156,7 +156,7 @@ bool ResetOnTrackManager::TestRecentResets(Vector3 lTestPosition)
 bool ResetOnTrackManager::TestSectionHNG(const AISection* lpAISection,
                                           Vector2 lStartPos, Vector2 lEndPos)
 {
-    CGS_ASSERT(lpAISection != 0, "lpAISection != NULL");   // :2254
+    CGS_ASSERT(lpAISection != 0, CgsDev::Assert::MessageAt("lpAISection != NULL", __FILE__, 2254));   // :2254
     if (lpAISection == 0 || !mpAISectionData.HasMemoryResource())
     {
         return false;   // [GUARD] the console dereferences both unconditionally
@@ -230,8 +230,8 @@ bool ResetOnTrackManager::TestCarHNG(const AISection* lpAISection,
                                      const NearbyVehicles* lpaNearbyVehicles,
                                      Vector2 lPosition, Vector2 lDirection, f32 lfSpeed)
 {
-    CGS_ASSERT(lpAISection != 0, "lpAISection != NULL");   // :2215
-    CGS_ASSERT(BrnMath::IsNormal(lDirection), "BrnMath::IsNormal( lDirection )");   // :2216
+    CGS_ASSERT(lpAISection != 0, CgsDev::Assert::MessageAt("lpAISection != NULL", __FILE__, 2215));   // :2215
+    CGS_ASSERT(BrnMath::IsNormal(lDirection), CgsDev::Assert::MessageAt("BrnMath::IsNormal( lDirection )", __FILE__, 2216));   // :2216
 
     const f32 KF_CAR_HNG_LOOK_AHEAD   = 6.0f;   // flt_820C4250
     const f32 KF_CAR_HNG_MIDDLE       = 4.5f;   // flt_820C4844
@@ -316,7 +316,7 @@ bool ResetOnTrackManager::TestCarHNG(const AISection* lpAISection,
 bool ResetOnTrackManager::AvoidObstacles(const AIModuleIO::ResetOnTrackRequest* lpRequest,
                                           ResetOnTrackCoords* lpResetData)
 {
-    CGS_ASSERT(lpRequest != 0, "lpRequest != NULL");   // :549
+    CGS_ASSERT(lpRequest != 0, CgsDev::Assert::MessageAt("lpRequest != NULL", __FILE__, 549));   // :549
     if (lpRequest == 0 || lpResetData == 0)
     {
         return false;

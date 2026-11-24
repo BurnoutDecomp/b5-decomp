@@ -77,7 +77,7 @@
 #include "GameSource/World/AI/BrnAIUtils.h"              // IsInsideSectionFast / Calc2DIntersectionEquationData
 #include "GameSource/Math/BrnMathUtils.h"                // BrnMath::Flatten
 #include "SharedClasses/AI/AISectionsResourceType.h"     // AISection / AISectionsData
-#include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT + Begin/Fire/End
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"       // CGS_ASSERT + Begin/Fire/End
 #include "GameShared/GameClasses/Development/CgsStrStream.h"          // CgsDev::StrStream
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"  // Start/StopMonitor
 
@@ -1202,7 +1202,7 @@ bool RacingLineGenerator::GetCentreCentreLineHere(RacingLine* lpRacingLine, Vect
                                                   Vector2 lTargetPos2D, Vector2& lrCentreHere,
                                                   Vector2& lrCentreAhead)
 {
-    CGS_ASSERT(lpRacingLine->IsInitialised(), "lpRacingLine->IsInitialised()");   // .cpp:126
+    CGS_ASSERT(lpRacingLine->IsInitialised(), CgsDev::Assert::MessageAt("lpRacingLine->IsInitialised()", __FILE__, 126));   // .cpp:126
 
     const s32 liLocalSection = GetLocalSectionID(lpRacingLine, lCarPos2D,
                                                  lpRacingLine->miLastKnownSectionID);
@@ -1354,7 +1354,7 @@ s32 RacingLineGenerator::CacheLocalSections(RacingLine* lpRacingLine, const Rout
          liSection <= lpRacingLine->mLastSectionInCache;
          ++liSection)
     {
-        CGS_ASSERT(liSection < lpRoute->GetNodeCount(), "Route node count out of range");  // :341
+        CGS_ASSERT(liSection < lpRoute->GetNodeCount(), CgsDev::Assert::MessageAt("Route node count out of range", __FILE__, 341));  // :341
 
         if (CacheUpToDate(lpRacingLine, liSection))
         {

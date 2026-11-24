@@ -6,7 +6,7 @@
 #include "rw/math/vpu/matrix44affine_operation.h"     // rw::math::vpu::IsValid(Matrix44Affine)
 #include "rw/math/vpu/vector3_operation.h"            // rw::math::vpu::Cross / Normalize (GetValuesForCarSelect)
 #include "SDKs/EATech/include/rw/math/vpu/vec_float.h"   // rw::math::vpu::VecFloat (Random::RandomVecFloat)
-#include "GameShared/GameClasses/Core/CgsAssert.h"    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"    // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h" // CgsDev::Log::gpDebugPrint
 
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTest.h" // InEventLineTestFine (PostSceneUpdate)
@@ -666,8 +666,8 @@ void PlaceOnTrackManager::GetValuesForCarSelect(
         Vector3* const lResetNormal,
         Vector3* const lResetDirection )
 {
-    CGS_ASSERT( lpBestIntersection != 0, "lpBestIntersection" );   // :361
-    CGS_ASSERT( lpActiveRaceCar != 0,    "lpActiveRaceCar" );      // :362
+    CGS_ASSERT(lpBestIntersection != 0, CgsDev::Assert::MessageAt("lpBestIntersection", __FILE__, 361));   // :361
+    CGS_ASSERT(lpActiveRaceCar != 0, CgsDev::Assert::MessageAt("lpActiveRaceCar", __FILE__, 362));      // :362
     if( lpActiveRaceCar == 0 )
     {
         return;

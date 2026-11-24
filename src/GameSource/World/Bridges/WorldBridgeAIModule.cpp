@@ -13,7 +13,7 @@
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverInputInterface.h"      // Vehicle::VehicleDriverInputInterface
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleDriverControls.h"            // Vehicle::BrnPlayerDriverControls (miVehicleID) / E_DRIVER_TYPE_AI
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h"   // CgsSystem::TimerStatusInterface
-#include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                         // CGS_ASSERT
 
 #include "GameShared/GameClasses/Development/CgsStrStream.h"
 
@@ -90,8 +90,8 @@ void BridgeInputToAIModule(
     const BrnWorldIO::GameActionQueue* const lpInQueue = lpWorldInput->GetGameActionQueue();
     BrnAI::AIModuleIO::InputBuffer::GameActionQueue* const lpOutQueue = lpAIInputBuffer->GetGameActionQueue();
 
-    CGS_ASSERT(lpInQueue != 0, "lpInQueue");     // :45
-    CGS_ASSERT(lpOutQueue != 0, "lpOutQueue");   // :46
+    CGS_ASSERT(lpInQueue != 0, CgsDev::Assert::MessageAt("lpInQueue", __FILE__, 45));     // :45
+    CGS_ASSERT(lpOutQueue != 0, CgsDev::Assert::MessageAt("lpOutQueue", __FILE__, 46));   // :46
     // [GUARD] the console falls through into Append, which dereferences both; a NULL here
     // faults on the console too, so the early-out only changes WHERE a null dies.
     if (lpInQueue == 0 || lpOutQueue == 0)
@@ -173,8 +173,8 @@ void BridgePhysicsModuleToAIModule_PostPhysics(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpAIModuleInputBuffer_PostPhysics != 0, "lpAIModuleInputBuffer_PostPhysics != NULL");   // :142
-    CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL");               // :143
+    CGS_ASSERT(lpAIModuleInputBuffer_PostPhysics != 0, CgsDev::Assert::MessageAt("lpAIModuleInputBuffer_PostPhysics != NULL", __FILE__, 142));   // :142
+    CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, CgsDev::Assert::MessageAt("lpPhysicsModuleOutputBuffer != NULL", __FILE__, 143));               // :143
     // [GUARD] the console dereferences both unconditionally right after the tripwires.
     if (lpAIModuleInputBuffer_PostPhysics == 0 || lpPhysicsModuleOutputBuffer == 0)
     {
@@ -310,7 +310,7 @@ namespace BrnAI
 {
     void AIModule::PostPhysicsUpdate( const AIModuleIO::InputBuffer_PostPhysics* lpInputBuffer )
     {
-        CGS_ASSERT(lpInputBuffer != 0, "lpInputBuffer != NULL");   // :738
+        CGS_ASSERT(lpInputBuffer != 0, CgsDev::Assert::MessageAt("lpInputBuffer != NULL", __FILE__, 738));   // :738
         // [GUARD] the console LockForRead()s through it unconditionally.
         if (lpInputBuffer == 0)
         {

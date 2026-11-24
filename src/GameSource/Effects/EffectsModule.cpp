@@ -3776,16 +3776,16 @@ void EffectsModule::HandleShowtimeTrafficBounce(
     CGS_ASSERT((lpJustBouncedAction != 0)
                || (lpJustBouncedAction == 0 && IsReplayPlayback(mEffectsSerialiser.GetMode())),
                "( NULL != lpJustBouncedAction ) || ( NULL == lpJustBouncedAction && mReplayEffectsSerialiser.IsPlaying() )");
-    CGS_ASSERT(lpEffectsInputBuffer != 0, "NULL != lpEffectsInputBuffer");                   // :2860
+    CGS_ASSERT(lpEffectsInputBuffer != 0, CgsDev::Assert::MessageAt("NULL != lpEffectsInputBuffer", __FILE__, 2860));                   // :2860
 
     const CgsSystem::TimerStatus* const lpTimerStatus =
         lpEffectsInputBuffer->GetTimerStatusInterface()->GetSimTimerStatus();                  // `addi r31, r11, 0x18`
     const BrnDirector::Camera::Camera* const lpCamera = lpEffectsInputBuffer->GetCameraInput();
     const RCEntityActiveRaceCarOutputInterface* const lpActiveRaceCarInterface =
         lpEffectsInputBuffer->GetActiveRaceCarInterface();
-    CGS_ASSERT(lpTimerStatus != 0, "NULL != lpTimerStatus");                                    // :2867
-    CGS_ASSERT(lpCamera != 0, "NULL != lpCamera");                                              // :2868
-    CGS_ASSERT(lpActiveRaceCarInterface != 0, "NULL != lpActiveRaceCarInterface");              // :2869
+    CGS_ASSERT(lpTimerStatus != 0, CgsDev::Assert::MessageAt("NULL != lpTimerStatus", __FILE__, 2867));                                    // :2867
+    CGS_ASSERT(lpCamera != 0, CgsDev::Assert::MessageAt("NULL != lpCamera", __FILE__, 2868));                                              // :2868
+    CGS_ASSERT(lpActiveRaceCarInterface != 0, CgsDev::Assert::MessageAt("NULL != lpActiveRaceCarInterface", __FILE__, 2869));              // :2869
 
     // (f32)seconds + fraction (`fcfid ; frsp ; fadds` 0x8229296C..0x8229297C).
     const f32 lfCurrentTime = lpTimerStatus->GetTime().GetFloatVal();
@@ -3806,7 +3806,7 @@ void EffectsModule::HandleShowtimeTrafficBounce(
     }
 
     CGS_ASSERT(lpActiveRaceCarInterface->IsPlayerCarActive() && lpActiveRaceCarInterface->IsPlayerCarCrashing(),
-               "lpActiveRaceCarInterface->IsPlayerCarActive() && lpActiveRaceCarInterface->IsPlayerCarCrashing()");   // :2896
+               CgsDev::Assert::MessageAt("lpActiveRaceCarInterface->IsPlayerCarActive() && lpActiveRaceCarInterface->IsPlayerCarCrashing()", __FILE__, 2896));   // :2896
     const EActiveRaceCarIndex lePlayerCarIndex = lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();       // :2696
     const RaceCarState* const lpRaceCarState   = lpActiveRaceCarInterface->GetRaceCarState(lePlayerCarIndex);   // :2697
     const Vector3& lrVelocity = lpRaceCarState->mLinearVelocity;                                                // +0x330

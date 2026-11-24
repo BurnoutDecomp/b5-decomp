@@ -2,7 +2,7 @@
 #include "GameSource/Effects/EffectsModule.h"          // BrnEffects::CarState (+0x10 mDt, +0x4E mbJumping)
 #include "GameSource/Effects/BrnEffectsDebugComponent.h" // EffectsDebugComponent::JumpParams().IsForceJumping()
 #include "GameSource/Effects/ParticleEffectHelper.h"   // RaceCarParticleEffectHelper::DebugComponent()
-#include "GameShared/GameClasses/Core/CgsAssert.h"     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"     // CGS_ASSERT + MessageAt
 
 // BrnEffects::EffectsStateMachine out-of-line bodies, reconstructed from BURNOUT_X360_ARTIST.XEX.
 // The generic effects state-machine spine: OnConstruct seeds the state timer; Tick runs the
@@ -41,13 +41,18 @@ namespace BrnEffects
         if (mTime > 0.0f)
         {
             mTime -= lCarState.GetDt();   // asm `lfs f13, 0x10(r29)` == EffectsModuleParams::mDt
-            lbStateTimerExpired = !(mTime > 0.0f);
+            // ARTIST sets the flag on its own path (`bgt` over `li r5,1` at 0x822804C4).
+            if (mTime <= 0.0f)
+            {
+                lbStateTimerExpired = true;
+            }
         }
 
         // Ask the derived machine for the next state.
         const EffectsState leNextState =
             OnDetermineNextState(lCarState, lbStateTimerExpired, mState, lHelper);
-        CGS_ASSERT(leNextState < EffectsState_MAX, "Invalid State in EffectsStateMachine");
+        CGS_ASSERT(leNextState < EffectsState_MAX,
+                   CgsDev::Assert::MessageAt("Invalid State in EffectsStateMachine", __FILE__, 65));   // 0x82280500
 
         // On a state change: reset the timer (before the entry hook, matching the X360 store
         // order), run the entry hook, then commit the new state.

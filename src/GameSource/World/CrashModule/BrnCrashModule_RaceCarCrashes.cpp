@@ -30,7 +30,7 @@
 #include <cstdlib>
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"
 
-#include "GameShared/GameClasses/Core/CgsAssert.h"                  // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                  // CGS_ASSERT
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // CgsDev::Log::gpDebugPrint
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"              // IOBuffer lock/unlock
 #include "GameSource/BurnoutConstants.h"                            // E_ACTIVE_RACE_CAR_INDEX_*
@@ -99,12 +99,12 @@ void CrashModule::ProcessCrashedRaceCarEvents( const CrashIO::InputBuffer_PostPh
     const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleInterface =
         lpInput->GetVehicleOutputInterface();
 
-    CGS_ASSERT( lpVehicleManagerOutputInterface != 0, "lpVehicleManagerOutputInterface" );   // :882
-    CGS_ASSERT( lpVehicleInterface != 0, "lpVehicleInterface" );                             // :883
+    CGS_ASSERT(lpVehicleManagerOutputInterface != 0, CgsDev::Assert::MessageAt("lpVehicleManagerOutputInterface", __FILE__, 882));   // :882
+    CGS_ASSERT(lpVehicleInterface != 0, CgsDev::Assert::MessageAt("lpVehicleInterface", __FILE__, 883));                             // :883
 
     const BrnPhysics::Vehicle::VehicleManagerOutputInterface::RaceCarCrashEventQueue*
         lpRaceCarCrashEvents = lpVehicleManagerOutputInterface->GetRaceCarCrashEventQueue();
-    CGS_ASSERT( lpRaceCarCrashEvents != 0, "lpRaceCarCrashEvents" );                         // :886
+    CGS_ASSERT(lpRaceCarCrashEvents != 0, CgsDev::Assert::MessageAt("lpRaceCarCrashEvents", __FILE__, 886));                         // :886
 
     const s32 liEventCount = lpRaceCarCrashEvents->GetLength();
     for( s32 liEvent = 0; liEvent < liEventCount; ++liEvent )
@@ -187,8 +187,8 @@ void CrashModule::ProcessCrashedRaceCarEvents( const CrashIO::InputBuffer_PostPh
 // =================================================================================================
 void CrashModule::TickCrashes( const CrashIO::InputBuffer_PreScene* lpInput )
 {
-    CGS_ASSERT( lpInput != 0, "lpInput" );                    // :1687
-    CGS_ASSERT( mbClearUpEnabled, "mbClearUpEnabled" );       // :1688
+    CGS_ASSERT(lpInput != 0, CgsDev::Assert::MessageAt("lpInput", __FILE__, 1687));                    // :1687
+    CGS_ASSERT(mbClearUpEnabled, CgsDev::Assert::MessageAt("mbClearUpEnabled", __FILE__, 1688));       // :1688
 
     const f32 lfTimeStep =
         lpInput->GetTimerStatusInterface()->GetSimTimerStatus()->GetCurrentTimeStep();
@@ -365,9 +365,9 @@ void CrashModule::ClearupCrashes( const CrashIO::InputBuffer_PreScene* lpInput,
 void CrashModule::ResetRaceCarFromCrashIndex( CrashIO::OutputBuffer_PreScene* lpOutput,
                                               u32 luCrashIndex, bool lbRemoveRaceCar )
 {
-    CGS_ASSERT( lpOutput != 0, "lpOutput" );                                     // :2083
+    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput", __FILE__, 2083));                                     // :2083
     CGS_ASSERT( luCrashIndex < mRaceCarCrashes.GetLength(),
-                "luCrashIndex < mRaceCarCrashes.GetLength()" );                  // :2084
+                CgsDev::Assert::MessageAt("luCrashIndex < mRaceCarCrashes.GetLength()", __FILE__, 2084));                  // :2084
 
     const RaceCarCrash& lrCrash = mRaceCarCrashes.GetItem( luCrashIndex );
 
@@ -463,17 +463,17 @@ void CrashModule::OnContactFromNetworkPlayer( EActiveRaceCarIndex lePlayer )
 void CrashModule::ResetCrashedNetworkRaceCars( const CrashIO::InputBuffer_PreScene* lpInput,
                                                CrashIO::OutputBuffer_PreScene* lpOutput )
 {
-    CGS_ASSERT( lpInput != 0, "lpInput != NULL" );             // :2032
-    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );           // :2033
-    CGS_ASSERT( mbIsOnlineGameMode, "IsOnlineGameMode()" );    // :2034
+    CGS_ASSERT(lpInput != 0, CgsDev::Assert::MessageAt("lpInput != NULL", __FILE__, 2032));             // :2032
+    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", __FILE__, 2033));           // :2033
+    CGS_ASSERT(mbIsOnlineGameMode, CgsDev::Assert::MessageAt("IsOnlineGameMode()", __FILE__, 2034));    // :2034
 
     const RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarInterface =
         lpInput->GetActiveRaceCarInterface();
     const BrnPhysics::Vehicle::VehicleDriverInputInterface::UpdateDriverEventQueue* lpDriverQueue =
         lpInput->GetVehicleDriverInterface()->GetUpdateDriverQueue();
 
-    CGS_ASSERT( lpActiveRaceCarInterface != 0, "lpActiveRaceCarInterface" );   // :2038
-    CGS_ASSERT( lpDriverQueue != 0, "lpDriverQueue" );                         // :2039
+    CGS_ASSERT(lpActiveRaceCarInterface != 0, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface", __FILE__, 2038));   // :2038
+    CGS_ASSERT(lpDriverQueue != 0, CgsDev::Assert::MessageAt("lpDriverQueue", __FILE__, 2039));                         // :2039
     (void)lpActiveRaceCarInterface;
 
     const CgsModule::Event* lpEvent = 0;
@@ -489,7 +489,7 @@ void CrashModule::ResetCrashedNetworkRaceCars( const CrashIO::InputBuffer_PreSce
 
         const BrnPhysics::Vehicle::BrnNetworkDriverControls* lpNetworkDriver =
             reinterpret_cast<const BrnPhysics::Vehicle::BrnNetworkDriverControls*>( lpEvent );
-        CGS_ASSERT( lpNetworkDriver != 0, "lpNetworkDriver" );   // :2049
+        CGS_ASSERT(lpNetworkDriver != 0, CgsDev::Assert::MessageAt("lpNetworkDriver", __FILE__, 2049));   // :2049
 
         if( lpNetworkDriver->mbCrash )
         {
@@ -541,8 +541,8 @@ void CrashModule::ResetCrashedNetworkRaceCars( const CrashIO::InputBuffer_PreSce
 void CrashModule::GenerateOwnedTrafficUpdates( const CrashIO::InputBuffer_PostPhysics* lpInput,
                                                CrashIO::OutputBuffer_PostPhysics* lpOutput )
 {
-    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );             // :1357
-    CGS_ASSERT( mbIsOnlineGameMode, "IsOnlineGameMode()" );      // :1358
+    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", __FILE__, 1357));             // :1357
+    CGS_ASSERT(mbIsOnlineGameMode, CgsDev::Assert::MessageAt("IsOnlineGameMode()", __FILE__, 1358));      // :1358
 
     if( mbIsShowtimeGameMode )
     {
@@ -661,9 +661,9 @@ void CrashModule::GenerateOwnedTrafficUpdates( const CrashIO::InputBuffer_PostPh
 void CrashModule::HandleNetworkCrashingTraffic( const CrashIO::InputBuffer_PreScene* lpInput,
                                                 CrashIO::OutputBuffer_PreScene* lpOutput )
 {
-    CGS_ASSERT( lpInput != 0, "lpInput != NULL" );             // :1056
-    CGS_ASSERT( lpOutput != 0, "lpOutput != NULL" );           // :1057
-    CGS_ASSERT( mbIsOnlineGameMode, "IsOnlineGameMode()" );    // :1058
+    CGS_ASSERT(lpInput != 0, CgsDev::Assert::MessageAt("lpInput != NULL", __FILE__, 1056));             // :1056
+    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", __FILE__, 1057));           // :1057
+    CGS_ASSERT(mbIsOnlineGameMode, CgsDev::Assert::MessageAt("IsOnlineGameMode()", __FILE__, 1058));    // :1058
 
     CgsContainers::Set<u16, 160> lCrashingTrafficForPlayer;
 

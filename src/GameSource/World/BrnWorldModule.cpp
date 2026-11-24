@@ -560,7 +560,7 @@ WorldModule::UpdatePhysicsNetworkCatchup(
 {
     CGS_ASSERT( lpInputBufferStack != 0, "lpInputBufferStack != NULL" );   // X360 cpp:2305
     CGS_ASSERT( lpOutputBufferStack != 0, "lpOutputBufferStack != NULL" ); // X360 cpp:2306
-    CGS_ASSERT( lpPhysicsModuleOutputBuffer != 0, "lpPhysicsModuleOutputBuffer != NULL" ); // :2307
+    CGS_ASSERT(lpPhysicsModuleOutputBuffer != 0, CgsDev::Assert::MessageAt("lpPhysicsModuleOutputBuffer != NULL", __FILE__, 2307)); // :2307
 
     // X360: PhysicsModule::UpdateNetworkCatchup(this + 1561376, a4, a6) -- the
     // physics INPUT buffer and the frame update set (the output buffer is only
@@ -4902,8 +4902,8 @@ void BridgeRaceCarModuleToSceneModule_PostScene(
 {
     (void)lpWorldModule;   // the world-module context: copied out of its register and never read
 
-    CGS_ASSERT(lpSceneQueryInput != 0, "lpSceneModuleInputBuffer != NULL");                    // :123
-    CGS_ASSERT(lpRaceCarOutputBuffer_PostScene != 0, "lpRaceCarOutputBuffer_PostScene != NULL"); // :124
+    CGS_ASSERT(lpSceneQueryInput != 0, CgsDev::Assert::MessageAt("lpSceneModuleInputBuffer != NULL", __FILE__, 123));                    // :123
+    CGS_ASSERT(lpRaceCarOutputBuffer_PostScene != 0, CgsDev::Assert::MessageAt("lpRaceCarOutputBuffer_PostScene != NULL", __FILE__, 124)); // :124
 
     const CgsModule::VariableEventQueue<16384, 16>& lrCoarseSource =
         *lpRaceCarOutputBuffer_PostScene->GetSceneCoarseQueryQueue();
@@ -4928,7 +4928,7 @@ void BridgeTrafficModuleToSceneModule_PostScene(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpSceneQueryInput != 0, "lpSceneModuleInputBuffer != NULL");   // :144
+    CGS_ASSERT(lpSceneQueryInput != 0, CgsDev::Assert::MessageAt("lpSceneModuleInputBuffer != NULL", __FILE__, 144));   // :144
 
     const CgsModule::VariableEventQueue<16384, 16>& lrCoarseSource =
         *lpTrafficOutputBuffer_PostScene->GetSceneCoarseQueryQueue();
@@ -4965,7 +4965,7 @@ void BridgeSceneQueryResultsToTrafficModule_PrePhysics(
 {
     (void)lpWorldModule;
 
-    CGS_ASSERT(lpSceneQueryOutput != 0, "lpSceneModuleOutputBuffer != NULL");   // :119
+    CGS_ASSERT(lpSceneQueryOutput != 0, CgsDev::Assert::MessageAt("lpSceneModuleOutputBuffer != NULL", __FILE__, 119));   // :119
 
     lpTrafficInputBuffer_PostPhysics->GetSceneResultQueue()->Append(
         *lpSceneQueryOutput->GetSceneQueryResultsQueue());
@@ -5004,8 +5004,8 @@ void BridgeTrafficCarEntityInfoToOutput_PrePhysics(
 {
     (void)lpWorldModule;   // read only for the perf-monitor handle, which is not modelled
 
-    CGS_ASSERT(lpOutputBuffer != 0, "lpOutputBuffer");                              // :355
-    CGS_ASSERT(lpTrafficOutput_PrePhysics != 0, "lpTrafficOutput_PrePhysics");      // :356
+    CGS_ASSERT(lpOutputBuffer != 0, CgsDev::Assert::MessageAt("lpOutputBuffer", __FILE__, 355));                              // :355
+    CGS_ASSERT(lpTrafficOutput_PrePhysics != 0, CgsDev::Assert::MessageAt("lpTrafficOutput_PrePhysics", __FILE__, 356));      // :356
 
     if (!lpTrafficOutput_PrePhysics->GetPlayingShowtime())
         return;

@@ -144,7 +144,7 @@ namespace BrnWorld
         // 0x827BF0E4 `lfs f30, 0xC(this)` -- the PRE-decrement value, kept for the edge test.
         const f32 lfSecondsBefore = mfSecondsBeforeCleanup;
 
-        CGS_ASSERT(lpActiveRaceCarInterface != 0, "lpActiveRaceCarInterface");   // :112
+        CGS_ASSERT(lpActiveRaceCarInterface != 0, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface", __FILE__, 112));   // :112
 
         // 0x827BF118..0x827BF124
         const f32 lfSecondsAfter = mfSecondsBeforeCleanup - lfTimeStep;

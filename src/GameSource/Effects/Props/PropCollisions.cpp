@@ -235,7 +235,7 @@ namespace
         const u32 lNumProps = lpPropCollection->GetTableSize();                            // :296
 
         CGS_ASSERT(lpPhysics->GetNumberOfPropTypes() <= BrnPhysics::Props::KU_MAX_PROP_TYPES,
-                   "lpPhysics->GetNumberOfPropTypes() <= BrnPhysics::Props::KU_MAX_PROP_TYPES");   // :298
+                   CgsDev::Assert::MessageAt("lpPhysics->GetNumberOfPropTypes() <= BrnPhysics::Props::KU_MAX_PROP_TYPES", __FILE__, 298));   // :298
 
         for (u32 j = 0; j < KU_MAX_PROP_TYPE_MAPPINGS; ++j)                                // :300
             maPropToMaterialMappings[j] = PropToVFXMaterialMapping();
