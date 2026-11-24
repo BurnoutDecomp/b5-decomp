@@ -258,22 +258,27 @@ namespace BrnNetwork
     // =========================================================================
     TrafficManager::TrafficSyncData* TrafficManager::GetTrafficSyncDataEntry(NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(lPlayerID != CgsNetwork::KI_INVALID_PLAYER_ID,
-                   "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+        const char* const lpcFile = "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTrafficManager.cpp";
+        CGS_ASSERT(lPlayerID != CgsNetwork::KI_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+            "lPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", lpcFile, 659 /* ARTIST 0x82545A70 */));
 
-        TrafficSyncData* lpDataEntry = 0;
         for (s32 liIndex = 0; liIndex < ::KI_MAX_NETWORK_PLAYERS; ++liIndex)
         {
             if (maTrafficData[liIndex].mPlayerID == lPlayerID)
             {
-                lpDataEntry = &maTrafficData[liIndex];
-                break;
+                return &maTrafficData[liIndex];
             }
         }
 
-        // The console streams the player id after this prefix.
-        CGS_ASSERT(lpDataEntry != 0, "No entry for this player: ");
-        return lpDataEntry;
+        // ARTIST 0x82545AA8 streams the signed player ID and a newline on lookup failure.
+        CgsDev::Assert::BeginAssert();
+        CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer,
+                                     CgsDev::Assert::giMessageBufferSize);
+        lStrStream << "No entry for this player: ";
+        lStrStream.PrintSignedInteger(lPlayerID) << "\n";
+        CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, lpcFile, 669);
+        CgsDev::Assert::EndAssert();
+        return 0;
     }
 
     // =========================================================================
@@ -1214,7 +1219,9 @@ namespace BrnNetwork
     // =========================================================================
     bool TrafficManager::FindHashForFrame(u16 lu16Update10HzFrame, u16* lpu16OutHash) const
     {
-        CGS_ASSERT(lpu16OutHash != 0, "lpu16OutHash");
+        CGS_ASSERT(lpu16OutHash != 0, CgsDev::Assert::MessageAt(
+            "lpu16OutHash",
+            "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkTrafficManager.cpp", 2219 /* ARTIST 0x825524C8 */));
 
         for (s32 liIndex = 0; liIndex < maStoredTrafficHashes.GetLength(); ++liIndex)
         {

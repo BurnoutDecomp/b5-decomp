@@ -1,5 +1,5 @@
 #pragma once
-
+#line 3 "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsRingBuffer.h"
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"      // CGS_ASSERT(_STREAM); kept for its users
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // Push's streamed assert
