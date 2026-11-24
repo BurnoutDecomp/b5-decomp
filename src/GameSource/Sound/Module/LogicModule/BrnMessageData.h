@@ -83,8 +83,10 @@ struct MusicOnMenuStreamData
 
 // BrnMessageData.h:104 (DWARF). Two floats -> 8 bytes -> Message<FxVolumes> == 24
 // (arg 0x18).
-struct FxVolumes
+// ARTIST decorates it as a class (V): ??$AddEvent@V?$Message@VFxVolumes@BrnSound@@... 0x826DFA80.
+class FxVolumes
 {
+public:
     f32 mfWhineVolume;
     f32 mfTurboVolume;
 };
@@ -94,8 +96,10 @@ struct FxVolumes
 // header dependency-free (the enum value width/semantics are identical; the enum's
 // own home is GameSource/GameState/BrnGameStateSharedIO.h). 8 bytes ->
 // Message<GameModeLostResults> == 24 (arg 0x18).
-struct GameModeLostResults
+// ARTIST decorates it as a class (V): ...Message@VGameModeLostResults@BrnSound@@... 0x826DE7C0.
+class GameModeLostResults
 {
+public:
     s32 meGameMode;              // DWARF: EGameModeType meGameMode
     s32 miNumLossesForGameMode;
 };
@@ -109,8 +113,10 @@ struct GameModeLostResults
 // DWARF-named fields is a merge-window drift whose placement is not recovered here.
 // Modelled as a size-attested opaque block (per the GuiEvent payload house style)
 // rather than fabricating a fourth field or an offset for the drift.
-struct RaceCarIsNowActive
+// ARTIST decorates it as a class (V): ...Message@VRaceCarIsNowActive@BrnSound@@... 0x826DF8F0.
+class RaceCarIsNowActive
 {
+public:
     u8 maData[16];   // DWARF names mID / mRaceCarIndex / mAttribKey; +4 drift un-placed.
 };
 

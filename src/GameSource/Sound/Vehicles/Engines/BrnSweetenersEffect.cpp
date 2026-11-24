@@ -318,10 +318,11 @@ void SweetenersEffect::UpdateSweetenerInfo(
     if (!lpModule)
         return;
 
-    CgsSound::Io::Message<FxVolumes> lMessage(lVolumes);
+    CgsSound::Io::Message<FxVolumes> lMessage;
     lMessage.Construct(E_SOUNDMESSAGE_FX_VOLUMES, 1,
         static_cast<u16>(GetInstanceId()), 12,
         CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+    lMessage.mData = lVolumes;
     lpModule->PostMessage(lMessage);
     lMessage.Construct(E_SOUNDMESSAGE_FX_VOLUMES, 1,
         static_cast<u16>(GetInstanceId()), 11,

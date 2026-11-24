@@ -254,9 +254,10 @@ void TrafficEngine::ProcessUpdate()
         lSphere.mfRadius = 1.0f;
         lSphere.mfDurationVisible = 0.1f;
         lSphere.mpDebugString = 0;
-        CgsSound::Io::Message<Brn3DEffectControl::DrawSphere> lMessage( lSphere );
+        CgsSound::Io::Message<Brn3DEffectControl::DrawSphere> lMessage;
         lMessage.Construct( 1, 3, static_cast<u16>( ( GetId() >> 11 ) & 0x1F ), 1,
                             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL );
+        lMessage.mData = lSphere;
         GetLogicModule()->PostMessage( lMessage );
     }
 

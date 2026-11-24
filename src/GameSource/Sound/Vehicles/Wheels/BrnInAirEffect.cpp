@@ -423,9 +423,10 @@ void InAirEffect::UpdateWheelLandings(f32)
 
         if (GetStateId() == 1 && lpModule)
         {
-            CgsSound::Io::Message<bool> lMessage(false);
+            CgsSound::Io::Message<bool> lMessage;
             lMessage.Construct(14, 0, 0, 2,
                 CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+            lMessage.mData = false;
             lpModule->PostMessage(lMessage);
         }
     }
@@ -458,9 +459,10 @@ void InAirEffect::UpdateWheelLandings(f32)
         SetMixerInputValue(2, 0x7FFF);
         if (GetStateId() == 1 && lpModule)
         {
-            CgsSound::Io::Message<bool> lMessage(true);
+            CgsSound::Io::Message<bool> lMessage;
             lMessage.Construct(14, 0, 0, 2,
                 CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+            lMessage.mData = true;
             lpModule->PostMessage(lMessage);
         }
     }

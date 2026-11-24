@@ -126,10 +126,11 @@ void EnclosureControl::UpdateParams(f32 afTimeStep)
 
     if (lrHere.HasChanged())
     {
-        CgsSound::Io::Message<bool> lMessage((lrHere.muActiveTriggers & 1) != 0);
+        CgsSound::Io::Message<bool> lMessage;
         // 826F5058..68: id39, manager2, instanceFFFF, effect0, CONTROL2.
         lMessage.Construct(39, 2, CgsSound::Io::MessageHeader::KU16_NO_DESTINATION,
                            0, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL);
+        lMessage.mData = (lrHere.muActiveTriggers & 1) != 0;
         lpLogicModule->PostMessage(lMessage);
         static s32 siDiag = 0;
     }

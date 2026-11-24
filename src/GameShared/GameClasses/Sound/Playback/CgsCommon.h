@@ -27,7 +27,8 @@ namespace Playback
 
 // CgsCommon.h:102. Interned sound-playback name: a 32-bit hash with an interning
 // side-table so equal names share one hash and collisions are caught.
-struct Name
+// ARTIST decorates it as a class (V): ...Message@VName@Playback@CgsSound@@... 0x826DE950.
+class Name
 {
 public:
     // CgsCommon.h. Default-construct an (uninterned) Name. The DWARF lists Name()

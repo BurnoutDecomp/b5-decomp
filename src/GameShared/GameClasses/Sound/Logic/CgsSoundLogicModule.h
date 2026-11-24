@@ -124,12 +124,13 @@ public:
 
     // CgsSoundLogicModule.h:357. Effects post typed messages into the module's
     // deferred dispatch queue; Update drains the queue through Environment::Notify.
+    // DWARF local `int32_t liEventId` (h:359); ARTIST queues through the typed
+    // AddEvent<Message<T>> (0x826EC1B8 -> 0x826DDF28).
     template <typename T>
-    bool PostMessage(const CgsSound::Io::Message<T>& arMessage)
+    bool PostMessage(const CgsSound::Io::Message<T>& lMessage)
     {
-        return mMessageQueue.AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&arMessage),
-            arMessage.GetEventId(), static_cast<s32>(sizeof(arMessage)));
+        s32 liEventId = lMessage.GetEventId();
+        return mMessageQueue.AddEvent(lMessage, liEventId);
     }
 
     // ARTIST vtable +0x48 / +0x4C. The base state count is pure virtual.

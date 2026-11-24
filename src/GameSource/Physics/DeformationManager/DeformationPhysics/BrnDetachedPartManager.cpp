@@ -4,6 +4,7 @@
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationModuleIO.h"   // the REAL sim OutputBuffer (walls leg 4: local model retired)
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h" // CgsPhysics::PhysicsSimulationIO::Event (OutUpdateRigidBody base)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // CgsDev::Assert::MessageAt (ARTIST file/line)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h"   // InSceneUpdateInterface::UpdateCachedObjectPosition (the real tri-cache producer)
 #include "rw/math/vpu/vector3_operation.h"                         // rw::math::vpu::MagnitudeSquared (transform validation tripwires)
 #include "GameShared/GameClasses/Geometric/Primitives/CgsBox.h"   // CgsGeometric::Box -- [part-rest] resting-orientation read
@@ -212,16 +213,19 @@ namespace Deformation
     // ⚠️ The assert is NON-GATING: the asm falls straight through into GetPart with an unused index,
     // exactly as spelled. GetPart returns the slot regardless; the console does the same.
     // ------------------------------------------------------------------------------------------
+    // BrnDetachedPartManager.cpp:205 (DWARF params liPoolIndex / lpSimInput /
+    // lpPhysicsModuleOutputBuffer); ARTIST 0x8260E3C0 asserts on line 207 and chains GetPart.
     bool DetachedPartManager::TestJointForBreaking(
-        s32 liPartIndex,
+        s32 liPoolIndex,
         CgsPhysics::PhysicsSimulationIO::InputBuffer* lpSimInput,
-        BrnPhysics::PhysicsModuleIO::OutputBuffer* lpOutput)
+        BrnPhysics::PhysicsModuleIO::OutputBuffer* lpPhysicsModuleOutputBuffer)
     {
-        CGS_ASSERT(mPartPool.IsPartIndexUsed(liPartIndex), "IsPartIndexUsed( liPoolIndex )");
-
-        PhysicalBodyPart* lpPart = mPartPool.GetPart(static_cast<s16>(liPartIndex));
-
-        return lpPart->TestJointForBreaking(lpSimInput, lpOutput);
+        CGS_ASSERT(mPartPool.IsPartIndexUsed(liPoolIndex), CgsDev::Assert::MessageAt(
+            "IsPartIndexUsed( liPoolIndex )",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/DeformationManager/DeformationPhysics/BrnDetachedPartManager.cpp",
+            207));
+        return mPartPool.GetPart(static_cast<s16>(liPoolIndex))->TestJointForBreaking(
+            lpSimInput, lpPhysicsModuleOutputBuffer);
     }
 
     // ------------------------------------------------------------------------------------------

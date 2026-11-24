@@ -605,10 +605,11 @@ void PassbyEffect::ProcessUpdate()
             lSphere.mfRadius = 2.0f;
             lSphere.mfDurationVisible = 0.5f;
             lSphere.mpDebugString = 0;
-            CgsSound::Io::Message<Brn3DEffectControl::DrawSphere> lMessage(lSphere);
+            CgsSound::Io::Message<Brn3DEffectControl::DrawSphere> lMessage;
             lMessage.Construct(1, static_cast<u16>((GetId() >> 16) & 0xFF),
                 static_cast<u16>((GetId() >> 11) & 0x1F), 0,
                 CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL);
+            lMessage.mData = lSphere;
             GetLogicModule()->PostMessage(lMessage);
         }
 

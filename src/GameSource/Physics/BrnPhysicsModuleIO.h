@@ -62,6 +62,7 @@
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropInputInterface.h" // Props::PropInputInterface (mPropManagerInputInterface, retyped 2026-08-10)
 #include "GameSource/Physics/PropManager/SharedIO/BrnPropOutputInterface.h" // Props::PropOutputInterface (mPropManagerOutputInterface, retyped 2026-08-19)
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_SceneUpdate.h" // SceneManagerIO::InSceneUpdateInterface (mSceneInputInterface, retyped 2026-08-19)
+#include "GameSource/Director/Camera/Camera.h"   // BrnDirector::Camera::Camera (mCameraInput, DWARF :309)
 #include "GameSource/Physics/DeformationManager/SharedIO/BrnDeformationOutputInterface.h" // Deformation::DeformationOutputInterface(+ForEntityModules) (both seats retyped 2026-08-24)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h" // BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface (mRCEntityOutputInterface, retyped 2026-08-10)
 
@@ -298,7 +299,10 @@ namespace PhysicsModuleIO
     {
     public:
         // Opaque foreign-type storages, sized to their X360-attested copied/embedded extent.
-        struct CameraStorage                        { unsigned char maBytes[0x160]; };  // 352
+        // DWARF BrnPhysicsModuleIO.h:309 `Camera mCameraInput` is the director camera
+        // (BrnDirector::Camera::Camera, 0x160 bytes); ARTIST's SetCameraInput calls its out-of-line
+        // operator= (0x827A9DD4 -> 0x82233A80).
+        typedef BrnDirector::Camera::Camera         CameraStorage;                      // 352
         // RETYPED 2026-08-06 (big-five #2, contact-generation wave; GameActionQueueStorage
         // precedent -- typedef keeps the four accessors' signatures). The vehicle-input span is
         // the REAL committed BrnPhysics::Vehicle::VehicleInputInterface now: the bridge driver

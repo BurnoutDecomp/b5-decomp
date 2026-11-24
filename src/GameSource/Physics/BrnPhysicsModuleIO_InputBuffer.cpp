@@ -245,12 +245,12 @@ namespace PhysicsModuleIO
 
     // ---- setters (write-lock: status bit 3) -----------------------------------------
 
-    // X360 0x827A9D30 (DWARF :273): write-lock; mCameraInput = *lpCamera. The X360 build calls
-    // Camera::operator= out-of-line copying the 0x160 Camera extent; modelled as an image copy.
+    // X360 0x827A9D30 (DWARF :273): write-lock; mCameraInput = *lpCamera through Camera::operator=
+    // (ARTIST calls it out of line, 0x82233A80).
     void InputBuffer::SetCameraInput(const CameraStorage* lpCamera)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 273));
-        std::memcpy(&mCameraInput, lpCamera, sizeof(CameraStorage));
+        mCameraInput = *lpCamera;
     }
 
     // X360 0x8279EF20 (DWARF :285): write-lock; XMemCpy 0x28F0 (10480) bytes into
@@ -263,13 +263,12 @@ namespace PhysicsModuleIO
         XMemCpy(&mRCEntityOutputInterface, lpInterface, sizeof(RCEntityOutputInterfaceStorage));
     }
 
-    // X360 0x8279F128 (DWARF :296): write-lock; mTimerInterface = *lpTimer. The X360 build expands
-    // operator= as two contiguous 24-byte field runs (+0x00, +0x18); modelled as a single 0x30-byte
-    // struct-image copy.
+    // X360 0x8279F128 (DWARF :296): write-lock; mTimerInterface = *lpTimer through the header-inline
+    // TimerStatusInterface::operator= (CgsTimerStatusInterface.h:98), which ARTIST expands member-wise.
     void InputBuffer::SetTimerInterface(const TimerStatusInterfaceStorage* lpTimer)
     {
         CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 296));
-        std::memcpy(&mTimerInterface, lpTimer, sizeof(TimerStatusInterfaceStorage));
+        mTimerInterface = *lpTimer;
     }
 
     // X360 0x8279F240 (DWARF :299): write-lock; store one word into mSolverMaxIterations (this+327200).

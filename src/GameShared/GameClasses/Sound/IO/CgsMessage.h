@@ -3,39 +3,24 @@
 
 #include "types.hpp"
 
+#include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::Event (the queued-record base)
+
 // CgsSound::Io::MessageHeader - the leading header of a sound-subsystem message
-// (this is the SOUND message system, distinct from the network CgsMessage). The
-// only function homed here is Destruct() at 0x82689868, recovered from the X360
-// pseudocode/asm:
+// (this is the SOUND message system, distinct from the network CgsMessage).
 //
-//   0x82689868  li   r11, 0           ; r11 = 0
-//   0x8268986C  li   r10, -1          ; r10 = -1 (0xFFFF as u16)
-//   0x82689870  sth  r11, 8(r3)       ; *(this + 0x08) = 0
-//   0x82689874  sth  r10, 0xA(r3)     ; *(this + 0x0A) = 0xFFFF
-//   0x82689878  blr                   ; return this
+// DWARF (DecFIGS CgsMessage.h:82): `struct MessageHeader : public Event` with a
+// `_vptr.MessageHeader` -- its one virtual is Destruct() (CgsMessage.cpp:119). The X360
+// layout follows from that: the vptr at +0x00 (ARTIST vtable 0x820AEC04 = { Destruct
+// 0x82689868 }, stored by every Message<T> built on the stack, e.g. 0x826EC1B0), the
+// empty Event base and meEffectType at +0x04, then the four 16-bit fields at +0x08..+0x0E;
+// 16 bytes. The PS3 bodies of Construct (0x82E878 / 0x82E898 / 0x82E8B8) and
+// SetDestination (0x822EDC) store meEffectType at +4 and leave +0 alone. Because the
+// Event base sits at +4, ARTIST's AddEvent<Message<T>> (0x826DDF28) converts the record
+// to `const Event*` with `addi 4` and a null check.
 //
-// So Destruct() resets the two 16-bit fields at +0x08 and +0x0A: the first to 0
-// and the second to 0xFFFF ("invalid id"). The Hex-Rays pseudocode collapses the
-// pair into a single "*(result + 8) = 0xFFFF" store; the asm is authoritative and
-// shows two separate halfword stores, so both fields are modelled by name.
-//
-// FLAG (faithful, not byte-identical; un-homed surface modelled honestly): the
-// leading 8 bytes (+0x00..+0x07) are not touched by Destruct and are modelled as two
-// named opaque 4-byte words so the two reset fields land at their proven offsets
-// (+0x08, +0x0A). Their meaning is unknown and is NOT fabricated (the DecFIGS DWARF
-// names them the X360 4-byte vtable pointer slot at +0x00 and meEffectType at +0x04,
-// but their exact PC modelling is deferred). Destruct returns `this` (the X360 thunk
-// returns r3 unchanged), matching the in-place destructor convention used elsewhere.
-//
-// SIZE (X360-attested = 16 bytes, corrected from the earlier 12-byte model): the
-// header carries two more 16-bit destination fields at +0x0C/+0x0E (DWARF
-// mu16InstanceID / mu16EffectId) that Destruct does not touch. Their existence is
-// proven by the sound command queues: every CgsModule::VariableEventQueue<*,16>::
-// AddEvent<CgsSound::Io::Message<T>> bakes sizeof(Message<T>) as its record-size arg,
-// and those args (0x14==20 for Message<bool>/<float>/<u32>/<enum>, 0x18==24 for
-// Message<unsigned __int64>) require sizeof(MessageHeader)==16 -- a 12-byte header
-// would yield 16/16/20. BrnSound::Logic::SubmixesEffect::Notify independently reads a
-// Message payload byte at +0x10, i.e. immediately past this 16-byte header.
+// The sizes of the queued records follow: every CgsModule::VariableEventQueue<8192,16>::
+// AddEvent<CgsSound::Io::Message<T>> bakes sizeof(Message<T>) as its record size
+// (0x14 for Message<bool>/<float>/<u32>/<enum>, 0x18 for Message<unsigned __int64>).
 namespace CgsSound
 {
 namespace Io
@@ -49,7 +34,7 @@ namespace Io
 typedef u32 QueueElement;
 
 // Leading header block of a sound message.
-class MessageHeader
+class MessageHeader : public CgsModule::Event
 {
 public:
     enum eEffectTypes
@@ -62,109 +47,83 @@ public:
     static const u16 KU16_NO_DESTINATION  = 0xFFFF;
     static const u16 KU16_ALL_DESTINATIONS = 0xFFFE;
 
-    MessageHeader()
-        : muLeadingOpaque0(0)
-        , meEffectType(E_EFFECT_TYPE_NONE)
-        , mi16EventId(0)
-        , mu16StateManagerId(KU16_NO_DESTINATION)
-        , mu16InstanceID(KU16_NO_DESTINATION)
-        , mu16EffectId(KU16_NO_DESTINATION)
-    {
-    }
-
-    explicit MessageHeader(s16 ai16EventId) { Construct(ai16EventId); }
-
+    // CgsMessage.cpp:52 (PS3 0x82E878): no destination.
     void Construct(s16 ai16EventId)
     {
-        SetDestination(KU16_NO_DESTINATION, KU16_NO_DESTINATION,
-                       KU16_NO_DESTINATION, E_EFFECT_TYPE_NONE);
-        mi16EventId = ai16EventId;
+        SetEventId(ai16EventId);
+        SetStateManagerId(KU16_NO_DESTINATION);
+        SetInstanceID(KU16_NO_DESTINATION);
+        SetEffectId(KU16_NO_DESTINATION, E_EFFECT_TYPE_NONE);
     }
 
+    // CgsMessage.cpp:74 (PS3 0x82E898).
     void Construct(s16 ai16EventId, u16 au16StateManagerId)
     {
-        SetDestination(au16StateManagerId, KU16_NO_DESTINATION,
-                       KU16_NO_DESTINATION, E_EFFECT_TYPE_NONE);
-        mi16EventId = ai16EventId;
+        SetEventId(ai16EventId);
+        SetStateManagerId(au16StateManagerId);
+        SetInstanceID(KU16_NO_DESTINATION);
+        SetEffectId(KU16_NO_DESTINATION, E_EFFECT_TYPE_NONE);
     }
 
+    // CgsMessage.cpp:99 (PS3 0x82E8B8).
     void Construct(s16 ai16EventId, u16 au16StateManagerId,
                    u16 au16InstanceId, u16 au16EffectId,
                    eEffectTypes aeEffectType)
     {
-        SetDestination(au16StateManagerId, au16InstanceId,
-                       au16EffectId, aeEffectType);
-        mi16EventId = ai16EventId;
+        SetStateManagerId(au16StateManagerId);
+        SetInstanceID(au16InstanceId);
+        SetEffectId(au16EffectId, aeEffectType);
+        SetEventId(ai16EventId);
     }
 
+    // CgsMessage.cpp:119, ARTIST 0x82689868: clears the event id and the state manager.
+    virtual void Destruct();
+
+    // CgsMessage.cpp:142 (PS3 0x822EDC).
     void SetDestination(u16 au16StateManagerId, u16 au16InstanceId,
                         u16 au16EffectId, eEffectTypes aeEffectType)
     {
-        muLeadingOpaque0   = 0;
-        meEffectType       = aeEffectType;
-        mu16StateManagerId = au16StateManagerId;
-        mu16InstanceID     = au16InstanceId;
-        mu16EffectId       = au16EffectId;
+        SetStateManagerId(au16StateManagerId);
+        SetInstanceID(au16InstanceId);
+        SetEffectId(au16EffectId, aeEffectType);
     }
 
-    // Reset the two trailing 16-bit fields to their "destructed" values:
-    // mu16Field08 = 0, mu16Id = 0xFFFF (invalid). Returns `this`.
-    // Recovered from the X360 in-place destructor at 0x82689868.
-    MessageHeader* Destruct()
-    {
-        mi16EventId         = 0;
-        mu16StateManagerId  = KU16_NO_DESTINATION;
-        return this;
-    }
-
-    // FLAG (additive accessor exposure, 2026-08-25 wave 5): named access for the
-    // +0x08 event-id read (DWARF mi16EventId) message consumers dispatch on --
+    // CgsMessage.h:298..366 (DWARF). Message consumers dispatch on the event id at +0x08,
     // e.g. SubmixesEffect::Notify @0x82687EE8 (`lhz r11, 8(r4)`).
     s16          GetEventId() const        { return mi16EventId; }
     u16          GetStateManagerId() const { return mu16StateManagerId; }
     u16          GetInstanceId() const     { return mu16InstanceID; }
-    u16          GetEffectId() const       { return mu16EffectId; }
     eEffectTypes GetEffectType() const     { return meEffectType; }
+    u16          GetEffectId() const       { return mu16EffectId; }
 
 private:
-    // +0x00: leading block untouched by Destruct (opaque, not fabricated).
-    // Modelled as two 4-byte words (not a u64) to keep 4-byte alignment so the
-    // reset fields below land at +0x08/+0x0A without alignment padding. DWARF:
-    // X360 vtable pointer slot (+0x00) and meEffectType (+0x04).
-    u32 muLeadingOpaque0;
-    eEffectTypes meEffectType;
-    // +0x08: 16-bit field reset to 0 on destruct (DWARF mi16EventId).
-    s16 mi16EventId;
-    // +0x0A: 16-bit message id, reset to 0xFFFF ("invalid") on destruct
-    // (DWARF mu16StateManagerId; 0xFFFF == KU16_NO_DESTINATION).
-    u16 mu16StateManagerId;
-    // +0x0C/+0x0E: the two trailing destination fields (DWARF mu16InstanceID /
-    // mu16EffectId). NOT written by Destruct (its asm halfword stores touch only
-    // +0x08/+0x0A); modelled for SIZE correctness -- see the SIZE note above. Their
-    // meaning is DWARF-named but their reset/use is not attested here, so they carry
-    // no fabricated value.
-    u16 mu16InstanceID;
-    u16 mu16EffectId;
+    // CgsMessage.h:435..490 (DWARF, private).
+    void SetEventId(s16 ai16EventId)               { mi16EventId = ai16EventId; }
+    void SetStateManagerId(u16 au16StateManagerId) { mu16StateManagerId = au16StateManagerId; }
+    void SetInstanceID(u16 au16InstanceID)         { mu16InstanceID = au16InstanceID; }
+    void SetEffectId(u16 au16EffectId, eEffectTypes aeEffectType)
+    {
+        mu16EffectId = au16EffectId;
+        meEffectType = aeEffectType;
+    }
+
+    eEffectTypes meEffectType;       // +0x04  CgsMessage.h:250
+    s16          mi16EventId;        // +0x08  CgsMessage.h:252
+    u16          mu16StateManagerId; // +0x0A  CgsMessage.h:254
+    u16          mu16InstanceID;     // +0x0C  CgsMessage.h:255
+    u16          mu16EffectId;       // +0x0E  CgsMessage.h:256
 };
 
 // CgsSound::Io::Message<T> -- a MessageHeader followed by a T payload. DecFIGS DWARF
-// (CgsMessage.h:272) declares "struct Message<T> : public MessageHeader { T mData; }".
-// The sound command queues store these by byte image: CgsModule::VariableEventQueue
-// <*,16>::AddEvent<Message<T>> forwards sizeof(Message<T>) as the record size. With
-// the 16-byte MessageHeader above, sizeof(Message<T>) == 16 + sizeof(T) (rounded to
-// alignof(T)), which reproduces the X360 size args exactly for the fixed-width
-// payloads (Message<bool>/<float>/<u32>/<enum> == 20, Message<unsigned __int64> == 24,
-// the GUI event payloads == 16 + their attested size, etc.). Payloads that embed a
-// pointer/uintptr_t (e.g. CgsSound::Playback::Name) are wider on the x64 PC target
-// than on the 32-bit X360, so their Message<T> sizeof carries the documented
-// pointer-width delta rather than matching the X360 arg byte-for-byte.
+// (CgsMessage.h:272) declares "struct Message<T> : public MessageHeader { T mData; }" with
+// only the implicit constructors (ARTIST stores just the vptr when one is built, e.g.
+// 0x826EC1B0, the payload is assigned afterwards). sizeof(Message<T>) == 16 + sizeof(T)
+// (rounded to alignof(T)), the record size every AddEvent<Message<T>> instance bakes.
 template <typename T>
 class Message : public MessageHeader
 {
 public:
-    Message() : MessageHeader(), mData() {}
-    explicit Message(const T& arData) : MessageHeader(), mData(arData) {}
-    T mData;
+    T mData;   // CgsMessage.h:274
 };
 
 }

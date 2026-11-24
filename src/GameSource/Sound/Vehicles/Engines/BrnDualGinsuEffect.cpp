@@ -769,12 +769,12 @@ void DualGinsuEffect::ProcessUpdate()
         lSphere.mfDurationVisible = 1.0f;
         lSphere.mpDebugString = 0;
 
-        CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere>
-            lMessage(lSphere);
+        CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere> lMessage;
         lMessage.Construct(1,
             static_cast<u16>((GetId() >> 16) & 0xFF),
             static_cast<u16>((GetId() >> 11) & 0x1F),
             7, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL);
+        lMessage.mData = lSphere;
         GetLogicModule()->PostMessage(lMessage);
     }
 

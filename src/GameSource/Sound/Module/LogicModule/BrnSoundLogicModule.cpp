@@ -64,8 +64,10 @@ namespace
     void QueueSoundMessage(CgsModule::VariableEventQueue<8192, 16>& arQueue,
                            const CgsSound::Io::Message<T>& arMessage)
     {
-        arQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&arMessage),
-                         arMessage.GetEventId(), static_cast<s32>(sizeof(arMessage)));
+        // The inlined CgsSound::Logic::Module::PostMessage<T> (CgsSoundLogicModule.h:357):
+        // ARTIST queues through the typed AddEvent<Message<T>> (e.g. 0x826EC1B8).
+        s32 liEventId = arMessage.GetEventId();
+        arQueue.AddEvent(arMessage, liEventId);
     }
 
     // Construct + queue in one statement, the way the X360 dispatch folds it (every
@@ -1422,18 +1424,25 @@ bool SoundLogicModule::PrepareStateManagersOnEnteringGameplay(s32 liIncludeBitfi
         }
     }
 
-    // E_SOUNDMESSAGE_HOLD_VOLUMES to the music effect (2) and the submixes effect (4).
-    PostSoundMessage(mMessageQueue, 15, 0, 0, 2,
-                     CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, true);
-    PostSoundMessage(mMessageQueue, 15, 0, 0, 4,
-                     CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT, true);
+    // E_SOUNDMESSAGE_HOLD_VOLUMES to the music effect (2), then the same message re-addressed
+    // to the submixes effect (4). DWARF locals lHoldVolumesMessage (cpp:793) and lMessage
+    // (cpp:805); ARTIST re-reads the event id of the reused message after the first post
+    // (lhz 0x58 at 0x826EC1BC) and stores only the new destination (SetDestination).
+    CgsSound::Io::Message<bool> lHoldVolumesMessage;
+    lHoldVolumesMessage.mData = true;
+    lHoldVolumesMessage.Construct(15, 0, 0, 2, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+    PostMessage(lHoldVolumesMessage);
+    lHoldVolumesMessage.SetDestination(0, 0, 4, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_OBJECT);
+    PostMessage(lHoldVolumesMessage);
 
     mbHoldingVolumes = true;
     mfHoldTimer      = 1.0f;
 
     // E_SOUNDMESSAGE_RESTART_MIXER to the mixer control (0).
-    PostSoundMessage(mMessageQueue, 43, 0, 0, 0,
-                     CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL, true);
+    CgsSound::Io::Message<bool> lMessage;
+    lMessage.mData = true;
+    lMessage.Construct(43, 0, 0, 0, CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL);
+    PostMessage(lMessage);
 
     return true;
 }

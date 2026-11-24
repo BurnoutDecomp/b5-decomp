@@ -75,8 +75,10 @@ struct Brn3DEffectControl : public CgsSound::Logic::Cgs3dEffectControl
     // static_assert below; full field semantics DEFERRED to the Brn3DEffectControl TU.
     // Defining the nested type is additive and does not alter Brn3DEffectControl's own
     // size/vtable (the mDrawSphere member itself stays DEFERRED, as noted above).
-    struct DrawSphere
+    // ARTIST decorates it as a class (V): ...Message@VDrawSphere@Brn3DEffectControl@Logic@BrnSound@@... 0x826DF9B8.
+    class DrawSphere
     {
+    public:
         f32 mfHeightOffset;
         f32 mfRadius;
         f32 mfDurationVisible;

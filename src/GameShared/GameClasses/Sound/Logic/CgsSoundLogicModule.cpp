@@ -232,25 +232,24 @@ void Module::Update(f32 af32GameDt, f32 af32SimDt,
 // ---------------------------------------------------------------------------
 // Module::ProcessMessageQueue @0x826C45A8
 //
-// Walk every queued message, dispatching each to Environment::Notify. The
-// console's `event - 4` back-step recovers the message START from the queue's
-// returned first-serializable-field pointer (the console record view skips the
-// message's leading vtable-pointer word); the host queue's GetFirstEvent
-// already returns the record payload start == the Message, so no adjustment.
+// Walk every queued message, dispatching each to Environment::Notify. DWARF locals
+// (CgsSoundLogicModule.cpp:396..404): liEventId, liEventSize, lpEvent, then
+// lpMessageHeader per record. The record is a CgsSound::Io::Message<T> whose Event base
+// sits after MessageHeader's vptr, so the downcast steps back 4 with a null check
+// (ARTIST 0x826C45DC..0x826C45E8); GetNextEvent writes the next record into lpEvent.
 // ---------------------------------------------------------------------------
 void Module::ProcessMessageQueue(CgsModule::VariableEventQueue<8192, 16>* apQueue)
 {
-    const CgsModule::Event* lpEvent = 0;
-    s32 liSize = 0;
+    s32 liEventId;
+    s32 liEventSize;
+    const CgsModule::Event* lpEvent;
 
-    apQueue->GetFirstEvent(&lpEvent, &liSize);
+    liEventId = apQueue->GetFirstEvent(&lpEvent, &liEventSize);
     while (lpEvent)
     {
-        mEnvironment.Notify(reinterpret_cast<const Io::MessageHeader*>(lpEvent));
-
-        const CgsModule::Event* lpNext = 0;
-        apQueue->GetNextEvent(lpEvent, &lpNext, &liSize);
-        lpEvent = lpNext;
+        const Io::MessageHeader* lpMessageHeader = static_cast<const Io::MessageHeader*>(lpEvent);
+        mEnvironment.Notify(lpMessageHeader);
+        liEventId = apQueue->GetNextEvent(lpEvent, &lpEvent, &liEventSize);
     }
 }
 

@@ -94,8 +94,8 @@ Module::Module()
     , mhAemsFactory()        // X360 +0x2260 = 0
     , mhSplicerFactory()     // X360 +0x2264 = 0 (DWARF h:374)
     , mStreamMutex(0, true)  // X360 +0x2268: Mutex(NULL, true) (DWARF h:379)
-    , mpStringTable(0)       // X360 +0x26FC (DWARF h:489)
 {
+    // mpStringTable (+0x26FC, DWARF h:489) is left to Construct (ARTIST 0x827DFA98 never stores it).
 }
 
 // ---------------------------------------------------------------------------

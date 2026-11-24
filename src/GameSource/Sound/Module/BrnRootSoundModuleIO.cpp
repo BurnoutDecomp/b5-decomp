@@ -366,11 +366,12 @@ void RootInputBuffer::SetGameModeInterface(const GameModeOutputInterface* lpInte
     std::memcpy(&mGameModeInterface, lpInterface, sizeof(GameModeOutputInterface));
 }
 
-// X360 0x823B7F70 @ +0xEBBC.
+// X360 0x823B7F70 @ +0xEBBC. DWARF UpdateInfo (BrnSoundRootSharedIO.h:107) is a one-bool struct
+// (mbRenderStalled) copied by its implicit assignment: ARTIST stbx through lis/ori 0xEBBC.
 void RootInputBuffer::SetUpdateInfo(const UpdateInfo* lpInfo)
 {
     CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Sound/Module/BrnRootSoundModuleIo.h", 166));
-    std::memcpy(&mUpdateInfo, lpInfo, sizeof(UpdateInfo));
+    mUpdateInfo = *lpInfo;
 }
 
 // X360 0x823B8310 @ +0xEEE0.

@@ -170,10 +170,11 @@ void CollisionControl::UpdateParams(f32 /*afDeltaTime*/)
         lSphere.mfRadius = 0.25f;
         lSphere.mfDurationVisible = 1.0f;
         lSphere.mpDebugString = 0;
-        CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere> lMessage(lSphere);
+        CgsSound::Io::Message<BrnSound::Logic::Brn3DEffectControl::DrawSphere> lMessage;
         lMessage.Construct(1, 5,
             static_cast<u16>((mpCollision3DControl->GetId() >> 11) & 0x1F), 1,
             CgsSound::Io::MessageHeader::E_EFFECT_TYPE_CONTROL);
+        lMessage.mData = lSphere;
         GetLogicModule()->PostMessage(lMessage);
     }
 }
