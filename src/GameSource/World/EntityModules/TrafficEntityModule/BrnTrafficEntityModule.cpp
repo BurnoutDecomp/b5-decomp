@@ -270,9 +270,10 @@ namespace BrnTraffic
     {
         if (mbDEBUGOverrideJunctionFUP)
             return true;
-        if (mbAllowDivergentBehaviour)
-            return mfJunctionFUP >= 65.0f;
-        return false;
+        // ARTIST 0x82707FFC: the not-allowed exit comes first (bne over li r3,0; blr).
+        if (!mbAllowDivergentBehaviour)
+            return false;
+        return mfJunctionFUP >= 65.0f;
     }
 
     // 0x827081D8: optional debug message, then clear the replay asset-ready byte.
@@ -4944,7 +4945,7 @@ void TrafficEntityModule::GenerateRemovedVehicleEvents(
 
     for (u32 luIndex = 0; luIndex < maRecentlyRemovedVehicles.GetLength(); ++luIndex)
     {
-        lpCrashInputInterface->AddRemoveCrashedTrafficEvent(maRecentlyRemovedVehicles.GetItem(luIndex));
+        lpCrashInputInterface->RemoveCrashedTraffic(maRecentlyRemovedVehicles.GetItem(luIndex));
     }
     maRecentlyRemovedVehicles.Clear();
 }
@@ -4978,7 +4979,7 @@ void TrafficEntityModule::GenerateSlamRecoveryEvents(
             continue;
         }
 
-        lpCrashInputInterface->AddRemoveSlammedTrafficEvent(luVehicle);
+        lpCrashInputInterface->RemoveSlammedTraffic(luVehicle);
     }
     maRecentlyRecoveredSlammedTraffic.Clear();
 }
@@ -12371,8 +12372,6 @@ namespace
     // The two bits of TrafficPhysicsInfo::muContactSideFlags the console tests (`li r5, 1` then
     // `li r5, 2` at 0x82708D94 / 0x82708DB0), paired with mfStuckTimeFront (+0xFCC) and
     // mfStuckTimeBack (+0xFD0) in that order.
-    const s32 KI_CONTACT_SIDE_FRONT = 1;
-    const s32 KI_CONTACT_SIDE_BACK  = 2;
 
     // GenerateDriverInputs' own RODATA, dumped headless from the ARTIST image:
     //   flt_820047C8 == 0.05f  stuck-timer threshold that forces gas/brake to zero and re-sends
@@ -12525,10 +12524,10 @@ void TrafficEntityModule::UpdateVehicleStuckTimers(void* lpPhysicsInfo, f32 lfRe
 
     TrafficPhysicsInfo* const lpInfo = static_cast<TrafficPhysicsInfo*>(lpPhysicsInfo);
 
-    UpdateVehicleStuckSideTime(static_cast<s32>(lpInfo->muContactSideFlags), KI_CONTACT_SIDE_FRONT,
+    UpdateVehicleStuckSideTime(lpInfo->muContactSideFlags, TrafficPhysicsInfo::E_CONTACT_SIDE_FRONT,
                                lfReset, lfThreshold, &lpInfo->mfStuckTimeFront);
 
-    UpdateVehicleStuckSideTime(static_cast<s32>(lpInfo->muContactSideFlags), KI_CONTACT_SIDE_BACK,
+    UpdateVehicleStuckSideTime(lpInfo->muContactSideFlags, TrafficPhysicsInfo::E_CONTACT_SIDE_BACK,
                                lfReset, lfThreshold, &lpInfo->mfStuckTimeBack);
 }
 

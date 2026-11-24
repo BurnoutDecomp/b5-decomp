@@ -33,6 +33,17 @@ namespace WorldEntityIO
         // layout is semantic-by-NAME; the X360 offsets live as comments in the header.
     }
 
+    // X360 0x822EDFF0 (DecFIGS BrnWorldEntityModuleIO.cpp:136): IOBuffer status, the request
+    // queue Construct+Clear, the status flags and the scene input aggregate.
+    void OutputBuffer_PostPhysics::Construct()
+    {
+        CgsModule::IOBuffer::Construct();
+        mResourceRequestInterface.mRequestQueue.Construct();
+        mResourceRequestInterface.mRequestQueue.Clear();
+        mStatusInterface.Construct();
+        mSceneInputInterface.Construct();
+    }
+
     // X360 0x822BA810: write-lock; return this + 4.
     ResourceRequestInterface*
     OutputBuffer_PostPhysics::GetResourceRequestInterface()

@@ -133,23 +133,25 @@ namespace CrashIO
         // are BAKED WITH THIS HEADER'S PATH (BrnCrashModuleTrafficIOInterfaces.h :294 / :314), which
         // is what places the bounds check here rather than in the traffic module. The queue targets
         // are the console's `a2 + 0xA10` (slammed) and `a2 + 0xB5C` (crashed), i.e. the two members
-        // below. Names are consumer-derived (no DWARF accessor row).
-        void AddRemoveSlammedTrafficEvent(u32 luVehicleIndex)
+        // below. DWARF names and types them RemoveSlammedTraffic(uint16_t) (h:165) and
+        // RemoveCrashedTraffic(uint16_t) (h:170); ARTIST narrows the index to 16 bits before the
+        // bound (GenerateSlamRecoveryEvents 0x82720908 `clrlwi r31,r31,16`).
+        void RemoveSlammedTraffic(u16 luVehicleIndex)
         {
             CGS_ASSERT(luVehicleIndex < 600u,
                        CgsDev::Assert::MessageAt("luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
                                                  BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 294));
             RemoveSlammedTrafficEvent lEvent;
-            lEvent.muVehicleId = static_cast<u16>(luVehicleIndex);
+            lEvent.muVehicleId = luVehicleIndex;
             mRemoveSlammedTrafficEventQueue.AddEvent(lEvent);
         }
-        void AddRemoveCrashedTrafficEvent(u32 luVehicleIndex)
+        void RemoveCrashedTraffic(u16 luVehicleIndex)
         {
             CGS_ASSERT(luVehicleIndex < 600u,
                        CgsDev::Assert::MessageAt("luVehicleIndex < BrnTraffic::KU_MAX_TOTAL_TRAFFIC",
                                                  BRN_CRASHMODULETRAFFICIOINTERFACES_H_ASSERT_FILE, 314));   // 0x8272079C
             RemoveCrashedTrafficEvent lEvent;
-            lEvent.muVehicleId = static_cast<u16>(luVehicleIndex);
+            lEvent.muVehicleId = luVehicleIndex;
             mRemoveCrashedTrafficEventQueue.AddEvent(lEvent);
         }
 

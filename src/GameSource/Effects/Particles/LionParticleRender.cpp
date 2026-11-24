@@ -712,7 +712,8 @@ void LionParticleRender::Render(EffectsVertexBufferIterator& arIterator,
                                 const cLionFog* /*apFog*/,
                                 const cTime& arTime)
 {
-    CGS_ASSERT(mpCurrentRenderer != 0, "No renderer set up. RenderGroupBegin not called");
+    CGS_ASSERT(mpCurrentRenderer != 0,
+               CgsDev::Assert::MessageAt("No renderer set up. RenderGroupBegin not called", __FILE__, 83));   // ARTIST 0x82289088
 
     if (auCount == 0)
         return;

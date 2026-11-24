@@ -20,6 +20,7 @@
 #include "GameShared/GameClasses/Network/CgsNetworkConstants.h"        // u8/u16/u32/s8/s32/u64/f32
 #include "GameShared/GameClasses/Core/CgsAssert.h"  // CGS_ASSERT (UpdateVehicleStuckSideTime inline)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"  // the inline pool accessors' ARTIST lines
+#include "rw/math/fpu/scalar_operation.h"                   // rw::math::fpu::Max (UpdateVehicleStuckSideTime)
 
 // The original header's __FILE__ as ARTIST bakes it into the inline accessors (0x820BB3A0).
 #define BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE \
@@ -752,12 +753,16 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
         // @ 0x82707F00. Console defines it here (its assert names BrnTrafficEntityModule.h:2637).
         // The fsel else-value flt_82001CC0 is 0.0f: Param::Construct @0x82751B60 loads it as the
         // SetParamAlong argument `0.0`, ParamListNode::Construct @0x82751C38 as `mfParamAlong = 0.0`.
-        void  UpdateVehicleStuckSideTime(s32 liFlags, s32 liMask, f32 lfReset,
-                                         f32 lfThreshold, f32* lpfTimer)
+        // DWARF h:2716: (uint32_t, TrafficPhysicsInfo::EContactSideFlag, float32_t, float32_t,
+        // float32_t*) -- the flag test is an unsigned `and`/cmplwi (0x82707F54/0x82707F5C), and the
+        // underflow clamp is rw::math::fpu::Max's fsel against 0.0 (0x82707FB4).
+        void  UpdateVehicleStuckSideTime(u32 luFlags, TrafficPhysicsInfo::EContactSideFlag leSide,
+                                         f32 lfReset, f32 lfThreshold, f32* lpfTimer)
         {
-            CGS_ASSERT(lpfTimer != 0, "lpfTimer");   // 0x82707F2C..0x82707F50, .h:2637
+            CGS_ASSERT(lpfTimer != 0,
+                       CgsDev::Assert::MessageAt("lpfTimer", BRN_TRAFFICENTITYMODULE_H_ASSERT_FILE, 2637));   // 0x82707F3C
 
-            if ((liFlags & liMask) != 0)
+            if ((luFlags & leSide) != 0)
             {
                 if (*lpfTimer < lfThreshold)    // 0x82707F64 fcmpu / bge
                 {
@@ -768,10 +773,7 @@ namespace BrnTrafficIO { struct TrafficTypeResponse; }
             else
             {
                 *lpfTimer = *lpfTimer - mfSimTimeStep;   // 0x82707FA8 fsubs
-                if (*lpfTimer < 0.0f)                    // 0x82707FB4 fsel f0, f0, f0, 0.0f
-                {
-                    *lpfTimer = 0.0f;
-                }
+                *lpfTimer = rw::math::fpu::Max(*lpfTimer, 0.0f);   // 0x82707FB4 fsel f0, f0, f0, 0.0f
             }
         }
         void  UpdateVehicleStuckTimers(void* lpPhysicsInfo, f32 lfReset, f32 lfThreshold); // @ 0x82708D48 (FLAG)

@@ -12,6 +12,7 @@
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "rw/math/vpu/vector3_operation.h"                 // vpu::Magnitude / vpu::Dot
 #include "rw/math/vpu/vector2_operation.h"                 // vpu::Magnitude (2-lane: GetIndexOfFurthestVehicle)
+#include "rw/math/fpu/scalar_operation.h"                   // fpu::SgnNonZero (StartDrift)
 
 #include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"
 #include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"
@@ -758,11 +759,9 @@ namespace BrnAI
         mbWantToEnterDrift = 1;      // stb  1, 0x1D65
         mbWantToExitDrift  = 0;      // stb  0, 0x1D64
 
-        // fsel f1, mfAngleForDrift, 1.0, -1.0
-        const f32 lfSteer = (mfAngleForDrift >= 0.0f) ? 1.0f : -1.0f;
-
         mfHandBrake = 0.0f;          // stfs flt_82001CC0, 0x1D30
-        UpdateSteeringAngle(lfSteer);
+        // DWARF BrnAIDriver.cpp:1450: rw::math::fpu::SgnNonZero<float> (fsel f1, a, 1.0, -1.0).
+        UpdateSteeringAngle(rw::math::fpu::SgnNonZero(mfAngleForDrift));
         mfAccelerator = 1.0f;        // stfs flt_82001C98, 0x1D28
     }
 

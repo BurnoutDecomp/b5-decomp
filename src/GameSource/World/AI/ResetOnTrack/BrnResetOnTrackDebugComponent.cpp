@@ -13,6 +13,7 @@
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsCoreConstants.h"   // CgsCore::KF_MPH_TO_MPS / KF_MPS_TO_MPH (ARTIST 0x82F31928 / 0x830180B0)
 
 #include <math.h>
 
@@ -21,12 +22,7 @@ namespace BrnAI
 namespace
 {
     const s32 KI_AI_CAR_COUNT = 35;
-    const f32 KF_MPH_TO_METRES_PER_SECOND = 0.44704f;
     const f32 KF_DEGREES_PER_RADIAN = 57.295780181884766f; // flt_820C3B48
-
-    // ARTIST initializer @0x82C6D0C0 computes 1.0 / flt_82F31928 (0.44704) and
-    // stores flt_830180B0; RenderHUD reads it at 0x82778928 for the mph display.
-    const f32 gResetSpeedDisplayScale = 1.0f / KF_MPH_TO_METRES_PER_SECOND;
 
     const CgsDev::RGBA K_WHITE = 0xFFFFFFFFu;
     const CgsDev::RGBA K_CYAN  = 0xFF00FFFFu;
@@ -110,7 +106,7 @@ void ResetOnTrackDebugComponent::Update()
         {
             AIModuleIO::ResetOnTrackRequest lRequest;
             lRequest.Construct(mpResetOnTrackManager->mePlayerGlobalRaceCarIndex,
-                               100.0f * KF_MPH_TO_METRES_PER_SECOND,
+                               CgsCore::KF_MPH_TO_MPS * 100.0f,
                                0.0f,
                                E_RESET_TYPE_STANDARD);
             mpResetOnTrackManager->PushResetOnTrackRequest(&lRequest);
@@ -128,7 +124,7 @@ void ResetOnTrackDebugComponent::ResetPlayerCarOnTrackCallback(void* lpUserData)
         static_cast<ResetOnTrackDebugComponent*>(lpUserData);
     AIModuleIO::ResetOnTrackRequest lRequest;
     lRequest.Construct(lpThis->mpResetOnTrackManager->mePlayerGlobalRaceCarIndex,
-                       60.0f * KF_MPH_TO_METRES_PER_SECOND,
+                       CgsCore::KF_MPH_TO_MPS * 60.0f,
                        0.0f,
                        E_RESET_TYPE_STANDARD);
     lpThis->mpResetOnTrackManager->PushResetOnTrackRequest(&lRequest);
@@ -277,7 +273,7 @@ void ResetOnTrackDebugComponent::RenderHUD(CgsDev::Debug2DImmediateRender* lpDis
                     << static_cast<s32>(lrEntry.mRequest.GetGlobalRaceCarIndex())
                     << ", " << lpcResetType << ", "
                     << static_cast<s32>(lrEntry.mRequest.GetResetDistance()) << "m, "
-                    << static_cast<s32>(lrEntry.mResult.GetResetSpeed() * gResetSpeedDisplayScale)
+                    << static_cast<s32>(lrEntry.mResult.GetResetSpeed() * CgsCore::KF_MPS_TO_MPH)
                     << " mph";
             if (lrEntry.miHngTestCount > 1)
             {
@@ -306,7 +302,7 @@ void ResetOnTrackDebugComponent::RenderWorld(CgsDev::Debug3DImmediateRender* lpD
     if (mbShowHngTestInfo)
     {
         const f32 lfLineLength =
-            KF_MPH_TO_METRES_PER_SECOND * 60.0f + 6.0f;
+            CgsCore::KF_MPH_TO_MPS * 60.0f + 6.0f;
 
         for (s32 liCarIndex = 0; liCarIndex < KI_AI_CAR_COUNT; ++liCarIndex)
         {

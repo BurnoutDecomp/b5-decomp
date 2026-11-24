@@ -699,10 +699,13 @@ void Vehicle::UpdateEffects(f32 lfTimeDelta, s32 liBulbWarmthDelta, CgsNumeric::
 //   mSpeed_DistAcrossLane_SwerveAmount_W = { Speed, DistAcrossLane, SwerveAmount, - }
 //   mPitch_Roll_Steering_WheelRot        = { Pitch, Roll, Steering, WheelRot }
 // Getters broadcast one lane (vspltw); setters insert one lane (vrlimi), others intact.
+// The four lane getters read through the SDK's VecFloatRef (ARTIST GetSpeed 0x8270DCC4:
+// addi rX,this,0x10; lvx128; vspltw), with the header's assert lines baked in.
 VecFloat Vehicle::GetSpeed() const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    return VecFloat(__vspltw(mSpeed_DistAcrossLane_SwerveAmount_W.mV, 0));
+    CGS_ASSERT(IsAlive(),
+        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 619 /* ARTIST 0x8270DCAC */));
+    return mSpeed_DistAcrossLane_SwerveAmount_W.GetX();
 }
 
 VecFloat Vehicle::GetDistAcrossLane() const
@@ -713,20 +716,23 @@ VecFloat Vehicle::GetDistAcrossLane() const
 
 VecFloat Vehicle::GetSwerveAmount() const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    return VecFloat(__vspltw(mSpeed_DistAcrossLane_SwerveAmount_W.mV, 2));
+    CGS_ASSERT(IsAlive(),
+        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 633 /* ARTIST 0x827533E4 */));
+    return mSpeed_DistAcrossLane_SwerveAmount_W.GetZ();
 }
 
 VecFloat Vehicle::GetSteering() const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    return VecFloat(__vspltw(mPitch_Roll_Steering_WheelRot.mV, 2));
+    CGS_ASSERT(IsAlive(),
+        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 654 /* ARTIST 0x8270DD24 */));
+    return mPitch_Roll_Steering_WheelRot.GetZ();
 }
 
 VecFloat Vehicle::GetWheelRot() const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    return VecFloat(__vspltw(mPitch_Roll_Steering_WheelRot.mV, 3));
+    CGS_ASSERT(IsAlive(),
+        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 661 /* ARTIST 0x8270DD9C */));
+    return mPitch_Roll_Steering_WheelRot.GetW();
 }
 
 Vector4 Vehicle::GetPitch_Roll_Steering_WheelRot() const
@@ -943,24 +949,19 @@ bool Vehicle::IsLeftIndicatorOn() const
 // =================================================================================================
 bool Vehicle::IsSympatheticallyCrashing() const
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");                                    // .h:1202
-
-    // ⭐ THE ONE-LINE CONTROL. NOT IN THE X360 BINARY. DELETE-WHEN-STABLE.
-    // Restores the pre-2026-08-29 body EXACTLY, so the latched build and the fixed build are ONE
-    // binary differing in one branch. Without it, "the car now leaves" rests on comparing two
-    // different exes. Same shape as BRN_TRAFFIC_EVENTS_CONTROL in
-    // BrnPhysicalTrafficManager_TrafficEvents.cpp.
+    // Same shape as IsExtremeSwerving below: `if (x == v) { asserts; return true; } return false;`
+    // with the header's lines baked in (ARTIST 0x82704B50/0x82704B88/0x82704BB0).
+    CGS_ASSERT(IsAlive(),
+        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 1202 /* ARTIST 0x82704B50 */));
+    if (miPhysicalReason == 3)   // E_PHYSICALREASON_SYMPATHETIC_CRASHING
     {
+        CGS_ASSERT(IsPhysical(),
+            CgsDev::Assert::MessageAt("IsPhysical()", KAC_ARTIST_ASSERT_FILE, 1205 /* ARTIST 0x82704B88 */));
+        CGS_ASSERT(mSympCrashTarget.muValue != 0xFFFFFFFFu,
+            CgsDev::Assert::MessageAt("mSympCrashTarget.IsValid()", KAC_ARTIST_ASSERT_FILE, 1206 /* ARTIST 0x82704BB0 */));
+        return true;
     }
-
-    if (miPhysicalReason != 3)   // E_PHYSICALREASON_SYMPATHETIC_CRASHING
-    {
-        return false;
-    }
-    CGS_ASSERT(IsPhysical(), "IsPhysical()");                              // .h:1205
-    CGS_ASSERT(mSympCrashTarget.muValue != 0xFFFFFFFFu,
-               "mSympCrashTarget.IsValid()");                              // .h:1206
-    return true;
+    return false;
 }
 
 bool Vehicle::IsCrashing() const
@@ -1055,12 +1056,11 @@ void Vehicle::SetSteering(f32 lfValue)
 
 void Vehicle::SetWheelRot(VecFloat lfValue)
 {
-    CGS_ASSERT(IsAlive(), "IsAlive()");
-    // ARTIST @0x8270DFBC: vcmpeqfp128. lfValue,lfValue; CR6.EQ is set only when
-    // every lane is self-equal (so a NaN in any lane fails this guard).
-    unsigned int luComparison = 0;
-    __vcmpeqfpR(lfValue.mV, lfValue.mV, &luComparison);
-    CGS_ASSERT((luComparison & 0x80u) != 0, "RwMath::IsValid( lfValue )");
+    CGS_ASSERT(IsAlive(),
+        CgsDev::Assert::MessageAt("IsAlive()", KAC_ARTIST_ASSERT_FILE, 700));
+    // ARTIST @0x8270DFBC: rw::math::vpu::IsValid (vcmpeqfp128. lfValue,lfValue, all-true bit).
+    CGS_ASSERT(rw::math::vpu::IsValid(lfValue),
+        CgsDev::Assert::MessageAt("RwMath::IsValid( lfValue )", KAC_ARTIST_ASSERT_FILE, 701));
     mPitch_Roll_Steering_WheelRot.mV =
         __vrlimi(mPitch_Roll_Steering_WheelRot.mV, lfValue.mV, 1, 0);
 }

@@ -1,4 +1,5 @@
 #include "GameSource/Graphics/PostFx/BrnPostFx.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                    // CgsDev::Assert::MessageAt
 #include <cstddef>
 #include <new>                                                                  // placement new (the carved effects)
 #include "GameSource/Graphics/BrnRendererMemory.h"                              // the render-target pool
@@ -367,7 +368,8 @@ void BrnPostFx::BeginTintBlend()
         lrBlendParameters.factor[luSource] = m_tintFactors[luSource];
     }
 
-    CGS_ASSERT(m_numCubesToBlend <= 5u, "m_numCubesToBlend <= 5");           // BrnPostFx.cpp:266
+    CGS_ASSERT(m_numCubesToBlend <= 5u,
+               CgsDev::Assert::MessageAt("m_numCubesToBlend <= 5", __FILE__, 266));   // ARTIST 0x823F8430
 
     lrBlendParameters.factor[5] = KF_POST_FX_ZERO;   // stfs flt_82001CC0, 0x40(r29)
 

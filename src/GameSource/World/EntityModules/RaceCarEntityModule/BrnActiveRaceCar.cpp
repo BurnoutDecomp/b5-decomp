@@ -2547,7 +2547,7 @@ void ActiveRaceCar::UpdateIndicators(f32 lfTimeStep)
         }
     }
 
-    const bool lbIndicatorActive = mfIndicatorTime < 0.25f;   // flt_82003F40
+    bool lbIndicatorActive = mfIndicatorTime < 0.25f;   // flt_82003F40
     mRenderParams.SetIndicatingLeft(mbLeftIndicatorActive && lbIndicatorActive);
     mRenderParams.SetIndicatingRight(mbRightIndicatorActive && lbIndicatorActive);
 }

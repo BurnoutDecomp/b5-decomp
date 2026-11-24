@@ -1,6 +1,7 @@
 #include "GameSource/World/AI/BrnAIUtils.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (StepTo negative-step guard)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CgsDev::Assert::MessageAt
 
 #include <cmath>   // std::sqrt (the de-optimised VMX rsqrt paths)
 
@@ -25,15 +26,17 @@ namespace BrnAI
         const f32 lfDelta = lfTarget - lfCurrent;
         const f32 lfAbsDelta = std::fabs(lfDelta);                  // fabs f28, f13 @0x82766BD8
 
-        CGS_ASSERT(!(lfStep < 0.0f), "Negative Step");
+        CGS_ASSERT(!(lfStep < 0.0f), CgsDev::Assert::MessageAt("Negative Step", __FILE__, 176));   // ARTIST 0x82766BE8
 
         if (lfStep > lfAbsDelta)
             return lfTarget;
 
-        if (!(lfTarget < lfCurrent))
-            return lfCurrent + lfStep;
+        // ARTIST 0x82766C14 `bge` to the +step arm, the -step arm falling through: the test is
+        // `target < current` (an unordered compare also takes the +step arm).
+        if (lfTarget < lfCurrent)
+            return lfCurrent - lfStep;
 
-        return lfCurrent - lfStep;
+        return lfCurrent + lfStep;
     }
 
     // 0x82771800 - 2D line-line intersection parameters for segments (lP1->lP2) and (lQ1->lQ2).

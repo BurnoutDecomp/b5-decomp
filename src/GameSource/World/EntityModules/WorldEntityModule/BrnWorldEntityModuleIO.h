@@ -107,14 +107,9 @@ namespace WorldEntityIO
         // X360 0x822EDFF0 -- IOBuffer status, the request queue Construct+Clear, the five
         // status flags (0/0/0/1/1) and the scene input aggregate.
         void Destruct();   // DecFIGS BrnWorldEntityModuleIO.cpp:145, out of line (ARTIST DestroyIOBuffer 0x827B7820 calls it)
-        void Construct()
-        {
-            CgsModule::IOBuffer::Construct();
-            mResourceRequestInterface.mRequestQueue.Construct();
-            mResourceRequestInterface.mRequestQueue.Clear();
-            mStatusInterface.Construct();
-            mSceneInputInterface.Construct();
-        }
+        // DecFIGS BrnWorldEntityModuleIO.cpp:136, out of line (ARTIST CreateIOBuffer<> 0x827B7800
+        // calls it).
+        void Construct();
 
         // X360 0x822BA810: write-lock; X360 this+4.
         ResourceRequestInterface* GetResourceRequestInterface();
