@@ -139,7 +139,7 @@ namespace BrnWorld
 
         RegisterVariable(&mbRenderTrafficLights, "Render props marked as Traffic Lights");
 
-        CGS_ASSERT(mpPropEntityModule != 0, "mpPropEntityModule != NULL");
+        CGS_ASSERT(mpPropEntityModule != 0, CgsDev::Assert::MessageAt("mpPropEntityModule != NULL", __FILE__, 290));   // ARTIST 0x822C53B8
 
         RegisterVariable(&mpPropEntityModule->mbUseOverrides,          "Overrides...", "Use Overrides");
         RegisterVariable(&mpPropEntityModule->mfOverrideLeanThreshold, "Overrides...", "Override Lean Threshold");

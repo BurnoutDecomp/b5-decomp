@@ -20,7 +20,13 @@
 
 namespace BrnReplays
 {
-    class PropEntitySerialiser : public BaseSerialiser
+    // 128-byte class alignment, as RaceCarEntitySerialiser (x360 9170d78da): ARTIST's
+    // PropEntityModule::Construct 0x822FA188 constructs the serialiser at module+0xD3180,
+    // the first 128-byte boundary after mPropGraphicsManager ends (+0xD21C4 + 500 * 8 =
+    // +0xD3164), and the next member meStreamingMode sits at +0xD3200 (Construct 0x822FA08C,
+    // ResetProps), i.e. sizeof rounded from 0x60 up to 0x80. One annotation closes both
+    // gaps; the exact original attribute spelling is not retained.
+    class CGS_ALIGN(128) PropEntitySerialiser : public BaseSerialiser
     {
     public:
         // @0x8264C6C0

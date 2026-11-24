@@ -177,23 +177,26 @@ namespace BrnWorld
     // populated) or installs the pointer with ref count 1. Always returns true.
     bool PropGraphicsManager::Register(const PropGraphics* lpPropGraphics)
     {
-        CGS_ASSERT(lpPropGraphics != 0, "lpPropGraphics");
+        CGS_ASSERT(lpPropGraphics != 0, CgsDev::Assert::MessageAt("lpPropGraphics", __FILE__, 986));
 
         // X360 `lwz r30,0(r29)` -- the record's FIRST word is its prop type id. Read BY
         // NAME now that BrnPropGraphicsList.h homes the layout (muTypeId @ +0), replacing
         // the previous `*reinterpret_cast<const u32*>(lpPropGraphics)` offset-read.
         const u32 luType = lpPropGraphics->muTypeId;
-        CGS_ASSERT(luType < KU_MAX_PROP_TYPES, "luType < BrnPhysics::Props::KU_MAX_PROP_TYPES");
+        CGS_ASSERT(luType < KU_MAX_PROP_TYPES,
+                   CgsDev::Assert::MessageAt("luType < BrnPhysics::Props::KU_MAX_PROP_TYPES", __FILE__, 990));
 
+        // ARTIST 0x822A9E64 and the PS3 body (0x129234) both store the record and a count of
+        // one straight into the slot they tested: no second index computation, no helper call.
         PropGraphicsReference& lrReference = maPropGraphicsReferences[luType];
-        if (lrReference.mpPropGraphics != 0)
+        if (lrReference.mpPropGraphics == 0)
         {
-            ++lrReference.mu8RefCount;
+            lrReference.mpPropGraphics = lpPropGraphics;
+            lrReference.mu8RefCount    = 1;
         }
         else
         {
-            // The X360 inlines AddPropGraphics here; de-inlined to the named helper.
-            AddPropGraphics(lpPropGraphics);
+            ++lrReference.mu8RefCount;
         }
         return true;
     }
@@ -201,8 +204,9 @@ namespace BrnWorld
     // ========================================================================
     // PropGraphicsManager::AddPropGraphics (DWARF BrnPropZoneManager.h:473)
     // ------------------------------------------------------------------------
-    // The install half Register @0x822A9DE8 folds inline: seat the record in its own type
-    // slot with a fresh reference count of one (asm `stw r29,0(r11); li r10,1; stb r10,4(r11)`).
+    // DWARF-declared install helper. Register @0x822A9DE8 does not call it: ARTIST and the PS3
+    // body (0x129234) store into the slot Register already indexed, so Register spells the
+    // two stores itself. No ARTIST copy of this helper exists.
     void PropGraphicsManager::AddPropGraphics(const PropGraphics* lpPropGraphics)
     {
         CGS_ASSERT(lpPropGraphics != 0, "lpPropGraphics");
@@ -410,14 +414,20 @@ namespace BrnWorld
     // by the zone's part start index.
     PropPartEntityInstance* PropZoneManager::GetPart(u16 lu16ZoneId, u16 lu16PropIndex, u16 lu16PartIndex)
     {
-        CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES, "luZoneId < BrnPhysics::Props::KU_MAX_ZONES");
+        CGS_ASSERT(lu16ZoneId < KU_MAX_ZONES,
+            CgsDev::Assert::MessageAt("luZoneId < BrnPhysics::Props::KU_MAX_ZONES",
+                                      KAC_ARTIST_ASSERT_FILE, 600 /* ARTIST 0x822A42CC */));
 
-        const u16 lu16StartIndex = mauStartIndexOfZone[lu16ZoneId];
-        CGS_ASSERT(lu16StartIndex != KU_UNLOADED_ZONE, "luStartIndex != KU_UNLOADED_ZONE");
+        // u32, as the assert text names it (luStartIndex); ARTIST keeps it in r27.
+        const u32 luStartIndex = mauStartIndexOfZone[lu16ZoneId];
+        CGS_ASSERT(luStartIndex != KU_UNLOADED_ZONE,
+            CgsDev::Assert::MessageAt("luStartIndex != KU_UNLOADED_ZONE",
+                                      KAC_ARTIST_ASSERT_FILE, 603 /* ARTIST 0x822A4300 */));
         CGS_ASSERT(lu16PropIndex < mauNumberOfPropsInZone[lu16ZoneId],
-                   "luPropIndex < mauNumberOfPropsInZone[luZoneId]");
+            CgsDev::Assert::MessageAt("luPropIndex < mauNumberOfPropsInZone[luZoneId]",
+                                      KAC_ARTIST_ASSERT_FILE, 604 /* ARTIST 0x822A4338 */));
 
-        const PropEntityInstance& lrProp = maProps[lu16StartIndex + lu16PropIndex];
+        const PropEntityInstance& lrProp = maProps[luStartIndex + lu16PropIndex];
         return &maParts[lrProp.mu16PartsIndex + lu16PartIndex];
     }
 
@@ -433,7 +443,7 @@ namespace BrnWorld
     // (s16)-1, so the sentinel survives the narrowing intact -- that is the whole trick.)
     s16 PropZoneManager::GetZone(PropEntityID lEntityId) const
     {
-        lEntityId.AssertIsProp();
+        // One tripwire only (ARTIST 0x822C600C): the one inside the inlined GetEntityIndex.
         return static_cast<s16>(maProps[lEntityId.GetEntityIndex()].mu16ZoneIndex);
     }
 

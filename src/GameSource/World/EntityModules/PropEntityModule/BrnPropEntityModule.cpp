@@ -137,10 +137,10 @@ namespace BrnWorld
         // both call sites in InitializePropPhysicsData).
         const u8 KU8_PROP_VOLUME_TYPE_FLAG = 16;
 
-        // CgsDev::PerfMonCpu page + budget baked into both perf-monitor constructors
-        // (li r4, 6 ; li r5, 0 ; lfs f1, flt_82014984 == 2.0f ; li r7, 1).
-        const s32 KI_PROP_PERFMON_PAGE   = 6;
-        const f32 KF_PROP_PERFMON_BUDGET = 2.0f;
+        // DWARF BrnPropEntityModule.cpp:48 `const CgsDev::PerfMonCpuPage KE_PROP_ENTITY_PERFMON_PAGE`
+        // (li r4, 6 in both perf-monitor constructors). The 2.0f budget is a literal at each
+        // call (no DWARF constant; ARTIST loads __real 2.0f from 0x82014984 once into f31).
+        const CgsDev::PerfMonCpuPage KE_PROP_ENTITY_PERFMON_PAGE = CgsDev::E_PMP_6;
     }
 
     // ========================================================================
@@ -336,27 +336,23 @@ namespace BrnWorld
     {
         miCollisionStreamingPM = CgsDev::PerfMonCpu::AddMonitor(
             "      Collision streaming",
-            static_cast<CgsDev::PerfMonCpuPage>(KI_PROP_PERFMON_PAGE),
-            false, KF_PROP_PERFMON_BUDGET, true);
-        CGS_ASSERT(miCollisionStreamingPM >= 0, "miCollisionStreamingPM >= 0");
+            KE_PROP_ENTITY_PERFMON_PAGE, false, 2.0f, true);
+        CGS_ASSERT(miCollisionStreamingPM >= 0, CgsDev::Assert::MessageAt("miCollisionStreamingPM >= 0", __FILE__, 206));
 
         miLoadingPM = CgsDev::PerfMonCpu::AddMonitor(
             "      Zone loading",
-            static_cast<CgsDev::PerfMonCpuPage>(KI_PROP_PERFMON_PAGE),
-            false, KF_PROP_PERFMON_BUDGET, true);
-        CGS_ASSERT(miLoadingPM >= 0, "miLoadingPM >= 0");
+            KE_PROP_ENTITY_PERFMON_PAGE, false, 2.0f, true);
+        CGS_ASSERT(miLoadingPM >= 0, CgsDev::Assert::MessageAt("miLoadingPM >= 0", __FILE__, 208));
 
         miUnloadingPM = CgsDev::PerfMonCpu::AddMonitor(
             "      Zone unloading",
-            static_cast<CgsDev::PerfMonCpuPage>(KI_PROP_PERFMON_PAGE),
-            false, KF_PROP_PERFMON_BUDGET, true);
-        CGS_ASSERT(miUnloadingPM >= 0, "miUnloadingPM >= 0");
+            KE_PROP_ENTITY_PERFMON_PAGE, false, 2.0f, true);
+        CGS_ASSERT(miUnloadingPM >= 0, CgsDev::Assert::MessageAt("miUnloadingPM >= 0", __FILE__, 210));
 
         miSerialisePM = CgsDev::PerfMonCpu::AddMonitor(
             "      Serialising",
-            static_cast<CgsDev::PerfMonCpuPage>(KI_PROP_PERFMON_PAGE),
-            false, KF_PROP_PERFMON_BUDGET, true);
-        CGS_ASSERT(miSerialisePM >= 0, "miSerialisePM >= 0");
+            KE_PROP_ENTITY_PERFMON_PAGE, false, 2.0f, true);
+        CGS_ASSERT(miSerialisePM >= 0, CgsDev::Assert::MessageAt("miSerialisePM >= 0", __FILE__, 212));
     }
 
     // ========================================================================
@@ -366,15 +362,13 @@ namespace BrnWorld
     {
         miProcessContactsPM = CgsDev::PerfMonCpu::AddMonitor(
             "      Process contacts",
-            static_cast<CgsDev::PerfMonCpuPage>(KI_PROP_PERFMON_PAGE),
-            false, KF_PROP_PERFMON_BUDGET, true);
-        CGS_ASSERT(miProcessContactsPM >= 0, "miProcessContactsPM >= 0");
+            KE_PROP_ENTITY_PERFMON_PAGE, false, 2.0f, true);
+        CGS_ASSERT(miProcessContactsPM >= 0, CgsDev::Assert::MessageAt("miProcessContactsPM >= 0", __FILE__, 228));
 
         miUpdatePropsPM = CgsDev::PerfMonCpu::AddMonitor(
             "      Update props",
-            static_cast<CgsDev::PerfMonCpuPage>(KI_PROP_PERFMON_PAGE),
-            false, KF_PROP_PERFMON_BUDGET, true);
-        CGS_ASSERT(miUpdatePropsPM >= 0, "miUpdatePropsPM >= 0");
+            KE_PROP_ENTITY_PERFMON_PAGE, false, 2.0f, true);
+        CGS_ASSERT(miUpdatePropsPM >= 0, CgsDev::Assert::MessageAt("miUpdatePropsPM >= 0", __FILE__, 230));
     }
 
     // ========================================================================
@@ -847,7 +841,9 @@ namespace BrnWorld
                 return false;
             }
             miReplayState = 3;
-            return true;
+            // FALL THROUGH into case 3's answer: ARTIST's `stw 3` at 0x822A9558 runs
+            // straight into case 3's `li r3,1` at 0x822A955C with no branch between them
+            // (the same shape as RestoreFromReplay's cases 1-3 -> 4).
 
         case 3:
             // Terminal "ready" state -- no store, just the answer (the asm falls into the
@@ -858,7 +854,7 @@ namespace BrnWorld
             // X360: CgsDev::Assert::FireAssert("Shouldn't get here",
             //   "d:\p4\b5_main\burnout\main\code\gamesource\unity\../World/EntityModules/
             //    PropEntityModule/BrnPropEntityModule.cpp", 1861)
-            CGS_ASSERT(false, "Shouldn't get here");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Shouldn't get here", __FILE__, 1861));
             return false;
         }
     }
@@ -918,7 +914,7 @@ namespace BrnWorld
 
         default:
             // X360: FireAssert("Shouldn't get here", <same path>, 1908)
-            CGS_ASSERT(false, "Shouldn't get here");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Shouldn't get here", __FILE__, 1908));
             return false;
         }
     }
