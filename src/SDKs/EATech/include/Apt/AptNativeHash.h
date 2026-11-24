@@ -59,7 +59,7 @@ struct AptHashItem
 // ---------------------------------------------------------------------------
 // The two magic property keys the table routes to the fast-slots, both HOMED:
 // StringPool::saConstant (defined in AptStringPool.cpp) carries the __proto__
-// key (hash 27581 -> mp__Proto__); gAptKeyPrototype (AptGlobals.cpp,
+// key (hash 27581 -> mp__Proto__); StringPool::saConstant[StringPool::KU_NAME_PROTOTYPE] (AptGlobals.cpp,
 // "prototype") is the prototype key (the binary's dword_8324E580/0x8324E698 key
 // bodies, hash 1689 -> mpPrototype). The hash literals are their case-folded FNV.
 // ---------------------------------------------------------------------------
@@ -68,7 +68,6 @@ struct AptHashItem
 // __proto__ key) is needed here; the mini declaration below matches the full
 // class (AptString/StringPool.h), whose saConstant is defined in AptStringPool.cpp.
 #include "SDKs/EATech/include/Apt/AptString/StringPool.h"
-extern const EAStringC& gAptKeyPrototype;
 
 struct AptNativeHash
 {

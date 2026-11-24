@@ -93,8 +93,6 @@ struct AptRenderItem
     // concrete subtype supplies its sized allocation + render-type flag + vtable.
     virtual AptRenderItem* Clone(int nCreatedOnTick, bool bCopyExtended) = 0;
 
-    virtual ~AptRenderItem();                                       // @0x80F860
-
     // The base render hooks are empty (@0x7E49A8/0x7E499C/0x7E49A4/0x7E49A0); each
     // character subtype (Shape/Sprite/Button/Text/...) overrides Render to draw.
     virtual void Render(AptRenderingContext* pCtx, AptMaskRenderOperation eOp, int nTick) const;
@@ -117,7 +115,12 @@ struct AptRenderItem
     // this one: the position + colour transforms (lazily (re)allocated, or reset to
     // identity when the source has none), the clip depth, and the isVisible flag.
     // (Used by AptCIH::ReplaceZombieChild to carry a swapped node's look over.)
-    void CopyRenderDataFrom(const AptRenderItem* pSource);
+    // Virtual: ARTIST's AptRenderItem vtable 0x821455D8 is Clone, Render, PushRenderData,
+    // PopRenderData, PushRenderDataAbsolute, CopyRenderDataFrom (+0x14, the slot its
+    // callers dispatch through), then the deleting destructor (+0x18, 0x82AEF2B0).
+    virtual void CopyRenderDataFrom(const AptRenderItem* pSource);
+
+    virtual ~AptRenderItem();                                       // @0x80F860
 
     int16_t GetDepth() const;       void SetDepth(int nDepth);          // @0x7DEE14/0x7DEEA0 (x64 ?SetDepth@...@@QEAAXH@Z: void)
     int16_t GetClipDepth() const;   void SetClipDepth(int nClipDepth);  // @0x7DEDF8/0x7DEEA8 (x64 ?SetClipDepth@...@@QEAAXH@Z: void)

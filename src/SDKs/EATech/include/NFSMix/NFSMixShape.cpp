@@ -264,7 +264,7 @@ static int CurveFrac(int liPos)
 // the position; dB form negates the DWN dB. SQ shapes square the amplitude (or 2x the dB).
 // ONE_MIN uses 0x7FFF - eqpwr; LINEAR is 0x7FFF - pos.
 // ---------------------------------------------------------------------------
-int GetCurveOutput(int liId, int liPos, char lbDb)
+int GetCurveOutput(int liId, int liPos, bool lbDb)
 {
     switch (liId)
     {

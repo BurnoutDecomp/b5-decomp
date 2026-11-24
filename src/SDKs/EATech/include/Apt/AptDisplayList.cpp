@@ -4,6 +4,7 @@
 #endif
 
 #include "SDKs/EATech/include/Apt/AptCharacterAnimationInst.h" // native embedded movie accessor
+#include "SDKs/EATech/include/Apt/AptString/StringPool.h"
 // ===========================================================================
 // EATech Apt -- AptDisplayList: the teardown / removal core of a movie clip's
 // child display list.   Reconstructed from the X360 ARTIST.XEX pseudocode/asm
@@ -331,7 +332,7 @@ int AptDisplayList::tick(int nDepthLayerMask, uint8_t bUseDepthLayerMask)
         const uint32_t nTypeTag = pCharInst->GetTypeTag();
         bool bTick = (nTypeTag == 5 || nTypeTag == 9);
         // GetTypeTag() == 4 (button); x64 low-6-bit tag (X360 form 0xFC000000/0x10000000).
-        if (bTick || (pCharInst->mTypeFlags & 0x3Fu) == 4u)
+        if (bTick || (pCharInst->mnType) == 4)
             nResult |= pNode->tick();   // AptCIH::tick
     }
 
@@ -580,7 +581,7 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
         const uint32_t nEventFlags = pHandlers->mpHandlers[i].mnEventFlags;
         if (nEventFlags & 0x201C7u)
         {
-            pSprite->mnClipActionFlags |= (nEventFlags & 0xFFFFFFu);
+            pSprite->mnClipActions |= nEventFlags;
             if (nEventFlags & 0x200C0u)
                 bHasLoadUnload = true;
         }
@@ -633,10 +634,10 @@ void AptDisplayList::_addToSetCaches(AptCIH* pNode, uint8_t bRunLoad)
     // On the placing frame, queue this node's load + init clip events.
     if (bRunLoad)
     {
-        pSprite->mnClipActionFlags |= 0x40200u;   // events 0x200|0x40000; x64 low-24 mask (X360 <<8 form 0x4020000)
+        pSprite->mnClipActions |= 0x40200;   // events 0x200|0x40000; x64 low-24 mask (X360 <<8 form 0x4020000)
         pNode->queueClipEvents(512,     gnAptActionFrameId, 1);
         pNode->queueClipEvents(0x40000, gnAptActionFrameId, 1);
-        pSprite->mnClipActionFlags &= ~0x40200u;
+        pSprite->mnClipActions &= ~0x40200;
     }
 }
 
@@ -871,7 +872,7 @@ AptCIH* AptDisplayList::placeObject(AptCIH* pExistingNode, int nDepth, AptCharac
             static_cast<AptClipEventHandlerList*>(const_cast<void*>(pPlacementClipActions));   // console stw 0x18(charInst)
 
     // A morph instance (type tag 8) takes the AS frame value as its blend amount.
-    if ((pInst->mTypeFlags & 0x3Fu) == 8u)   // morph; x64 low-6-bit tag (X360 form 0x20000000)
+    if ((pInst->mnType) == 8)   // morph; x64 low-6-bit tag (X360 form 0x20000000)
         *reinterpret_cast<float*>(&static_cast<AptCharacterMorphInst*>(pInst)->mMorphState_unknown) =
             static_cast<float>(fFrameValue);
 
@@ -995,7 +996,7 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
 
         if (pSrc->mnDepth == nExistingDepth)
         {
-            const uint32_t nTag = pInst->GetTypeTag();
+            const int nTag = pInst->GetTypeTag();
             const bool bSpriteOrAnim = (nTag == 5 || nTag == 9);
 
             // An AS-owned sprite/animation node (render-item bit27) is left as-is.
@@ -1028,7 +1029,7 @@ AptCIH* AptDisplayList::mergeState(void** ppMergeInfo, AptNativeHash* pParentHas
 
             // Placement-identity gate (evaluated BEFORE any in-place merge).
             const bool bGate1 = (pProps->mi16CharacterId == pNode->GetCreatedOnFrame());
-            const bool bGate2 = ((pInst->mTypeFlags & 0x3Fu) == 9u);   // animation; x64 low-6-bit tag
+            const bool bGate2 = ((pInst->mnType) == 9);   // animation; x64 low-6-bit tag
             if (!bGate1 && !bGate2)
             {
                 pResult = ReplaceDisplyListItem(pParentHash, pNode,
@@ -1274,7 +1275,7 @@ AptCIH* AptFramePlacementDispatch(AptDisplayList* pThis, void** ppPlacement, Apt
 // AptCloneClassMembers -- the AS class-object member copy folded into the X360's
 // InsertChild / placeObject AS-class tail (@0x82B09CA0): walk the class object's
 // native hash and copy every member -- skipping the two reserved keys __proto__
-// (StringPool::saConstant, console dword_8324E580) and prototype (gAptKeyPrototype,
+// (StringPool::saConstant, console dword_8324E580) and prototype (StringPool::saConstant[StringPool::KU_NAME_PROTOTYPE],
 // console dword_8324E698) -- onto the freshly placed instance via setVariable.
 //   X360: hash = (*(*classObj+8))(classObj);  // GetNativeHashVirtual (vtbl slot 2)
 //         for (i = GetFirstItem(); i; i = GetNextItem(hash, i))
@@ -1293,7 +1294,7 @@ void AptCloneClassMembers(AptCIH* pNode, AptValue* pClassObject)
          pItem = pHash->GetNextItem(pItem))
     {
         // Skip the two reserved keys (__proto__ / prototype).
-        if (pItem->mKey == StringPool::saConstant[0] || pItem->mKey == gAptKeyPrototype)
+        if (pItem->mKey == StringPool::saConstant[0] || pItem->mKey == StringPool::saConstant[StringPool::KU_NAME_PROTOTYPE])
             continue;
         gAptActionInterpreter.setVariable(static_cast<AptValue*>(pNode), 0,
                                           &pItem->mKey, pItem->mpValue, 1, 1, 0);
@@ -1335,9 +1336,9 @@ int AptCIH::AssociateInstToClass()
     // (mTypeFlags 0xFC000000 == 0x24000000), that is NOT created-dynamic
     // (item->mFlags bit27 == AptRenderItem::mbCreatedDynamic -- a runtime
     // createEmptyMovieClip/createTextField child has no library export name to bind).
-    const uint32_t nTag = pInst->mTypeFlags & 0x3Fu;          // x64 low-6-bit tag (X360 v2[2] >> 26)
+    const uint32_t nTag = pInst->mnType;          // x64 low-6-bit tag (X360 v2[2] >> 26)
     const bool bSpriteLike = (nTag == 5u || nTag == 16u);
-    if (!bSpriteLike && (pInst->mTypeFlags & 0x3Fu) != 9u)   // x64 low-6-bit tag
+    if (!bSpriteLike && (pInst->mnType) != 9)   // x64 low-6-bit tag
         return 0;
     if ((pInst->GetRenderItem()->mFlags & 0x08000000u) != 0u)   // already class-bound (x64 bit 4; X360 bit27)
         return 0;

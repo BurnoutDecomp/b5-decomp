@@ -180,7 +180,7 @@ public:
     int32_t     UTF8_Find(const char* const pStrText, const int32_t iStart = 0) const;
     EAStringC&  UTF8_MakeLower();
     EAStringC&  UTF8_MakeUpper();
-    EAStringC&  UTF8_Initialize(const int32_t iCharacter);
+    void        UTF8_Initialize(const int32_t iCharacter);
 
     static int32_t     UTF8_GetCharacterSize(const char* const pBuffer);
     static int32_t     UTF8_GetCharacterSize(const int32_t iCharacter);

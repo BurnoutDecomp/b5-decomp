@@ -812,14 +812,14 @@ bool EAStringC::EndWithRemoveIgnoreCase(const char* const pStrText)
 
 // ---------------------------------------------------------------------------
 // MakeLower.  X360 0x82AE8C00.  Force a private, fully-sized copy (copy-on-write
-// via ChangeBuffer), then ASCII-lowercase the whole buffer in place with the CRT
-// _strlwr (MSVC form; matches the file's existing _stricmp usage).
+// via ChangeBuffer), then ASCII-lowercase the whole buffer in place with the CRT's
+// old-name strlwr (ARTIST 0x82AE8C38 calls `strlwr` 0x82C145B0, libcMT, not _strlwr).
 // ---------------------------------------------------------------------------
 EAStringC& EAStringC::MakeLower()
 {
     const uint32_t uSize = m_pData->m_uSize;
     ChangeBuffer(uSize, 0, uSize, CB_PUSH_ZERO, uSize);
-    _strlwr(GetInternalBuffer());
+    strlwr(GetInternalBuffer());
     return *this;
 }
 
@@ -1017,19 +1017,20 @@ EAStringC& EAStringC::UTF8_Append(const char* const pStrText, const int32_t iSiz
     return Append(pStrText, static_cast<uint32_t>(p - pStrText));
 }
 
-EAStringC& EAStringC::UTF8_Initialize(const int32_t iCharacter)
+// void: both ARTIST callers (AptString::sMethod_fromCharCode 0x82AF2A48, sMethod_split
+// 0x82AFC660) discard r3, and the body ends on UTF8_SetOneCharacter (0x82AE9180).
+void EAStringC::UTF8_Initialize(const int32_t iCharacter)
 {
     // Reset to empty, reserve room for one encoded code point, then write it.
     DecreaseInternalRefCount(m_pData);
     m_pData = reinterpret_cast<DebugDataC*>(&s_EmptyInternalData);
 
     const uint32_t uBytes = static_cast<uint32_t>(UTF8_GetCharacterSize(iCharacter));
-    uint32_t uKeep = m_pData->m_uMaxSize;       // empty block's max size (0)
+    uint32_t uKeep = m_pData->m_uSize;          // empty block's size (0); lhz +2 at 0x82AE9154
     if (uKeep > uBytes)
         uKeep = uBytes;
     ChangeBuffer(uBytes, 0, uKeep, CB_PUSH_ZERO, uKeep);
     UTF8_SetOneCharacter(iCharacter);
-    return *this;
 }
 
 EAStringC& EAStringC::UTF8_MakeLower()

@@ -574,7 +574,7 @@ void AptLinker::Update()
                 AptCharacterSpriteInstBase* pSpriteInst =
                     static_cast<AptCharacterSpriteInstBase*>(pCIH->mpCharacterInst);
                 pSpriteInst->mnGotoFrame        = -1;           // *(v61[8]+16) = -1
-                pSpriteInst->mnClipActionFlags |= 0x1000000u;   // bJustLoaded (X360 form |= 0x80)
+                pSpriteInst->mbJustLoaded = 1;   // bJustLoaded (X360 form |= 0x80)
                 pCIH->SetDirtyState(false, false);                        // AptCIH::SetDirtyState(...,0)
                 pCIH->tick();                                            // AptCIH::tick
                 pCIH->SetDirtyState(true, true);                          // AptCIH::SetDirtyState(v61,1,1)

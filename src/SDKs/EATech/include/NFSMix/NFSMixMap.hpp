@@ -62,7 +62,7 @@ public:
     void PreProcessMixMap();           // @0x82B48498 -- parse the blob -> counts (tail-called by InitMixMap)
 
     // ---- cursor / block-pointer helpers (ARTIST-verified) ----
-    stMixCtlProc* GetProcessMixCtlPtr(char lbAdvance);     // @0x82B49500
+    stMixCtlProc* GetProcessMixCtlPtr(bool lbAdvance);     // @0x82B49500
     int*          GetMasterChannelOutputArrayPtr(int liN); // @0x82B495F0
     int**         GetMasterChannelInputPtr(int liN);       // @0x82B49618
     int**         GetSubChannelInputPtr(int liN);          // @0x82B49638
@@ -70,23 +70,23 @@ public:
 
     // ---- "next slot" allocators (return &m_p<X>[m_nAssigned<X>]; bump the count if
     //      the advance flag is set). ARTIST-verified (member-name systematic mapping). ----
-    stEvtMixCtlProc*       GetNextEvtMixCtlProc(char lbAdvance);       // @0x82B48F88
-    stEvtMixCtlSharedData* GetNextEvtMixCtlShared(char lbAdvance);     // @0x82B48FB8
-    st3DMixCtlProc*        GetNext3DMixCtlProc(char lbAdvance);        // @0x82B49048
-    st3DMixCtlSharedData*  GetNext3DMixCtlShared(char lbAdvance);      // @0x82B49078
-    st3DMixCtlUniqueData*  GetNext3DMixCtlUnique(char lbAdvance);      // @0x82B490B0
-    stMasterMixChProc*     GetNextMasterMixProc(char lbAdvance);       // @0x82B490E0
-    stMasterMixChSharedData* GetNextMasterMixShared(char lbAdvance);   // @0x82B49110
-    stSubMixChProc*        GetNextSubMixProc(char lbAdvance);          // @0x82B49178
-    stMixChSharedData*     GetNextSubMixShared(char lbAdvance);        // @0x82B491D8
+    stEvtMixCtlProc*       GetNextEvtMixCtlProc(bool lbAdvance);       // @0x82B48F88
+    stEvtMixCtlSharedData* GetNextEvtMixCtlShared(bool lbAdvance);     // @0x82B48FB8
+    st3DMixCtlProc*        GetNext3DMixCtlProc(bool lbAdvance);        // @0x82B49048
+    st3DMixCtlSharedData*  GetNext3DMixCtlShared(bool lbAdvance);      // @0x82B49078
+    st3DMixCtlUniqueData*  GetNext3DMixCtlUnique(bool lbAdvance);      // @0x82B490B0
+    stMasterMixChProc*     GetNextMasterMixProc(bool lbAdvance);       // @0x82B490E0
+    stMasterMixChSharedData* GetNextMasterMixShared(bool lbAdvance);   // @0x82B49110
+    stSubMixChProc*        GetNextSubMixProc(bool lbAdvance);          // @0x82B49178
+    stMixChSharedData*     GetNextSubMixShared(bool lbAdvance);        // @0x82B491D8
     // "Next slot" UNIQUE-record allocators (twins of the shared/proc ones above; the
     // Evt one zero-inits the fresh record with flt_82001CC0 == 0.0). ARTIST-verified.
-    stEvtMixCtlUniqueData*   GetNextEvtMixCtlUnique(char lbAdvance);   // @0x82B48FF0
-    stMasterMixChUniqueData* GetNextMasterMixUnique(char lbAdvance);   // @0x82B49140
-    stMixChUniqueData*       GetNextSubMixUnique(char lbAdvance);      // @0x82B491A8
+    stEvtMixCtlUniqueData*   GetNextEvtMixCtlUnique(bool lbAdvance);   // @0x82B48FF0
+    stMasterMixChUniqueData* GetNextMasterMixUnique(bool lbAdvance);   // @0x82B49140
+    stMixChUniqueData*       GetNextSubMixUnique(bool lbAdvance);      // @0x82B491A8
     // GetNextMapState @0x82B49210 -- byte-offset cursor over m_pStateProcMemBlock
     // (stride 0x60 == sizeof NFSMixMapState).
-    NFSMixMapState*          GetNextMapState(char lbAdvance);          // @0x82B49210
+    NFSMixMapState*          GetNextMapState(bool lbAdvance);          // @0x82B49210
 
     void AssignSFXCallbacks(void* lpOwner);              // @0x82B481B8 -- mpMixerInterface = owner
     stCurveDataProc* GetCurveDataPtr(int* lpParam);      // @0x82B49238 -- find/append curve-proc slot
@@ -108,7 +108,7 @@ public:
 
     // Host callbacks, graph construction, and per-frame DSP update passes.
     int   SETSFXID(int liID, int* lpObj);                 // @0x82B481C0  (host slot +4)
-    void* GetObjectPtr(int liID, char lbA, char lbB);     // @0x82B4A550  (host slot +4 / DMixIO)
+    void* GetObjectPtr(int liID, bool lbA, bool lbB);     // @0x82B4A550  (host slot +4 / DMixIO)
     void  ConnectMixMap();                                // @0x82B4A8D8  (via SETSFXID/GetObjectPtr)
     int   SetupStateRefCount();                           // @0x82B48410  (host slot +8)
     void  AllocateDMixIOArrays();                         // @0x82B49750  (host debug / DMixIO)

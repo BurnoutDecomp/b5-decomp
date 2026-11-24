@@ -61,8 +61,7 @@ AptCharacterInst::AptCharacterInst(AptCharacter* pCharacter)
 
     // LOW 6 bits of mTypeFlags = the character's type tag (15 when none).
     // x64 ctor 0x140825A00: `and dword ptr [rbx+10h],0FFFFFFC0h / or [rbx+10h],ecx`.
-    const uint32_t uType = pCharacter ? static_cast<uint32_t>(pCharacter->mnType) : 15u;
-    mTypeFlags = (mTypeFlags & ~0x3Fu) | (uType & 0x3Fu);
+    mnType = pCharacter ? pCharacter->mnType : 15;
 
     if (pItem)
         pItem->AddReference();

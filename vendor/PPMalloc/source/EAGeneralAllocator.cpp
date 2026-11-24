@@ -310,8 +310,8 @@ void GeneralAllocator::LinkChunk(Chunk* pChunk, Chunk* pChunkPrev, Chunk* pChunk
 {
     pChunk->mpPrevChunk = pChunkPrev;
     pChunk->mpNextChunk = pChunkNext;
-    pChunkNext->mpPrevChunk = pChunk;
-    pChunkPrev->mpNextChunk = pChunk;
+    pChunkPrev->mpNextChunk = pChunk;   // prev's link before next's (ARTIST TrimCore 0x82B4F18C/190;
+    pChunkNext->mpPrevChunk = pChunk;   // the PPMalloc LinkChunk order)
 }
 int GeneralAllocator::GetFastBinChunksExist() const { return mnMaxFastBinChunkSize & 1; }
 int GeneralAllocator::GetLargeBinIndexFromChunkSize(unsigned int nSize) // 82B4D810, static

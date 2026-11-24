@@ -171,7 +171,7 @@ void AptCharacterTextInst::SetText(AptCIH* pScope)
         {
             // x64 type tag = mTypeFlags & 0x3F (the console read was >>26, the
             // X360 big-endian position -- it reads garbage on the x64 layout).
-            const uint32_t nType = pNode->mpCharacterInst->GetTypeTag();
+            const int nType = pNode->mpCharacterInst->GetTypeTag();
             const bool bScope = (nType == 5u || nType == 9u);
             if (bScope || !pNode->mpDisplayListParent)
                 break;
@@ -229,7 +229,7 @@ void AptCharacterTextInst::UpdateText(AptCIH* pScope)
         while (true)
         {
             // x64 type tag = mTypeFlags & 0x3F (the console read was >>26 -- see SetText).
-            const uint32_t nType = pNode->mpCharacterInst->GetTypeTag();
+            const int nType = pNode->mpCharacterInst->GetTypeTag();
             const bool bScope = (nType == 5u || nType == 9u);
             if (bScope || !pNode->mpDisplayListParent)
                 break;

@@ -24,6 +24,7 @@
 #endif
 
 #include "SDKs/EATech/include/Apt/AptScriptFunction2.h"
+#include "SDKs/EATech/include/Apt/AptString/StringPool.h"
 #include "SDKs/EATech/include/Apt/AptObject.h"   // AptValueWithHash (the live _global symbol type)
 #include "SDKs/EATech/include/Apt/AptFrameStack.h"               // spFrameStack->Set (the call-local hash)
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"           // AptValue::findChild / Release / mnValueData
@@ -55,8 +56,6 @@ extern AptValueWithHash* gpAptGlobalFallback;
 // `super.X()` call silently no-opped (the invisible learner-permit card).
 // Defined in AptGlobals.cpp.
 // ---------------------------------------------------------------------------
-extern const EAStringC& gAptKeyThis;        // unk_8324E6C0 -- "this"
-extern const EAStringC& gAptKeySuper;       // unk_8324E6B8 -- "super"
 
 // ---------------------------------------------------------------------------
 // operator new @ 0x82AE61C8
@@ -194,7 +193,7 @@ void AptScriptFunction2::SetupBeforeExecution(SavedExecutionState* pSaved,
     if (uFlags & KU_PRELOAD_THIS)
     {
         if (!pPreloadThis)
-            pPreloadThis = mpCIH->findChild(&gAptKeyThis, 0);
+            pPreloadThis = mpCIH->findChild(&StringPool::saConstant[StringPool::KU_NAME_THIS], 0);
         if (!pPreloadThis)
             pPreloadThis = gpUndefinedValue;   // miss -> the undefined singleton (as _parent)
         AptScriptFunctionBase::SetRegisterValue(1, pPreloadThis);
@@ -208,7 +207,7 @@ void AptScriptFunction2::SetupBeforeExecution(SavedExecutionState* pSaved,
     {
         AptValue* pSuper = pPreloadSuper;
         if (!pSuper)
-            pSuper = pArgScope->findChild(&gAptKeySuper, 0);
+            pSuper = pArgScope->findChild(&StringPool::saConstant[StringPool::KU_NAME_SUPER], 0);
         // X360: ((pSuper->mnValueData >> 27) & 1) -- the defined bit on the
         // resolved value; if it (or the value) is missing, resolve "super"
         // against the function's own scope instead.
@@ -217,7 +216,7 @@ void AptScriptFunction2::SetupBeforeExecution(SavedExecutionState* pSaved,
         // meValueType bit 2 here, so an UNDEFINED `super` was accepted (and a defined
         // one of the wrong tag rejected) when preloading register `super`.
         if (!pSuper || !pSuper->getIsDefined())
-            pSuper = mpCIH->findChild(&gAptKeySuper, 0);
+            pSuper = mpCIH->findChild(&StringPool::saConstant[StringPool::KU_NAME_SUPER], 0);
         if (!pSuper)
             pSuper = gpUndefinedValue;     // miss -> the undefined singleton
         AptScriptFunctionBase::SetRegisterValue(nReg++, pSuper);

@@ -1582,7 +1582,7 @@ int AptAnimationTarget::RunActions()
                 // and the CIH state (ARTIST mFlagsA bits 1-2) must not be dead (3).
                 AptCharacterInst* lpCharInst = lpNode->mpCharacterInst;   // v5 = v4[8]
                 const u32 lnCharType = (lpCharInst != 0)
-                    ? (lpCharInst->mTypeFlags & 0x3Fu) : 0xFu;
+                    ? (lpCharInst->mnType) : 0xFu;
                 const u32 lnCIHState = lpNode->mFlagsA & 0x60000000u;            // v4[3]
 
                 if (lnCharType != 0xFu && lnCIHState != 0x60000000u)
@@ -1834,7 +1834,7 @@ int AptAnimationTarget::TickIntervalTimers(int nDeltaMs)
                 AptCharacterInst* lpBoundInst =
                     static_cast<AptCIH*>(lpBound)->GetCharacterInst();
                 lbFire = lpBoundInst != 0 &&
-                         (static_cast<u32>(lpBoundInst->mTypeFlags) & 0x3Fu) != 15u;   // x64 low-6-bit tag
+                         (lpBoundInst->mnType) != 15;   // x64 low-6-bit tag
             }
         }
 

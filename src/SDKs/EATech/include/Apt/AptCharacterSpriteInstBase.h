@@ -95,7 +95,14 @@ struct AptClipEventHandlerList
 struct AptCharacterSpriteInstBase : public AptCharacterInst
 {
     int32_t        mnGotoFrame;        // +0x20 x64 (-1 = none; console +0x10)
-    uint32_t       mnClipActionFlags;  // +0x24 x64: LOW 24 bits = clip-event mask, bit24 justLoaded, bit25 isPlaying
+    // Console +0x14: one word of bit-fields. MSVC allocates bit-fields from the MSB on the
+    // X360 (ARTIST HasClipAction 0x82AD50BC reads the mask with `srawi 8`; the ctor's
+    // rlwimi at 0x82AFF85C writes 0xC0 into the top 28 bits) and from the LSB on x64
+    // (`shl 8; sar 8`, ctor `(v & 0xF3000000) | 0x03000000`).
+    int32_t        mnClipActions     : 24;  // AS clip-event-handler mask (signed)
+    uint32_t       mbJustLoaded      : 1;
+    uint32_t       mbIsPlaying       : 1;
+    uint32_t       mnIsCustomControl : 2;
     // +0x18: the registered clip-event-handler list (null until handlers are set).
     // RECONCILED: this slot was modelled as `int32_t mnCurrentFrame`, but it is only
     // ever zero-initialised (never read as a frame) and AptDisplayList::_addToSetCaches

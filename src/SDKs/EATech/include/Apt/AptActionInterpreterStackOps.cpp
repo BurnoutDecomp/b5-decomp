@@ -27,6 +27,7 @@
 #endif
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
+#include "SDKs/EATech/include/Apt/AptString/StringPool.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptInteger.h"   // AptInteger::Create
 #include "SDKs/EATech/include/Apt/AptValue/AptBoolean.h"   // AptBoolean::Create
@@ -672,7 +673,6 @@ extern AptValue* gpAptDestroyedClipValue;   // dword_8324D818 (AptGlobals.cpp)
 // 2026-08-05 identification), and the "this" key (dword_8324E6C0) the supercall
 // path re-resolves the bound function name under.
 extern const EAStringC& gAptEmptyMethodName;  // unk_8324E6B8 ("super"; AptGlobals.cpp)
-extern const EAStringC& gAptThisKey;          // dword_8324E6C0 ("this"; AptGlobals.cpp)
 
 // The method-name hash lookup is now the static AptActionInterpreter::HashLookupName
 // member (AptNativeHash::Lookup over the +8 slot; declared in the header).
@@ -931,7 +931,7 @@ void AptActionInterpreter::_FunctionAptActionCallMethod(AptActionInterpreter* pI
             // the recon formerly compared the WRONG context field, mpCharacterInst).
             // re-resolve the bound function under the "this" key.
             pBoundThis = pInterp->getVariable(reinterpret_cast<AptValue*>(pContext->mpCIH),
-                                              0, &gAptThisKey, 1, 1, 0);   // console &dword_8324E6C0
+                                              0, &StringPool::saConstant[StringPool::KU_NAME_THIS], 1, 1, 0);   // console &dword_8324E6C0
         }
 
         if (bBindThis)
@@ -1198,8 +1198,7 @@ void AptActionInterpreter::_FunctionAptActionGotoLabel(AptActionInterpreter* /*p
         pNode->jumpToFrame(nFrame);                             // real member (play-head seek)
         // clear the "playing" bit on the node's sprite instance (bIsPlaying, x64 bit 25;
         // console form *(node+0x20)+0x14 &= ~0x40).
-        static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst())->mnClipActionFlags
-            &= ~0x2000000u;
+        static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst())->mbIsPlaying = 0;
     }
 }
 
@@ -1273,7 +1272,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame2(AptActionInterpreter* pI
         AptCharacterSpriteInstBase* const pSprite =
             static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
         // set/clear bit 6 (0x40, "playing") from the play flag.
-        pSprite->mnClipActionFlags = (pSprite->mnClipActionFlags & ~0x2000000u) | (bPlay ? 0x2000000u : 0u);   // bIsPlaying, x64 bit 25
+        pSprite->mbIsPlaying = bPlay;
         if (bPlay)
             pNode->SetDirtyState(true, true);              // real member (dirty latch)
     }

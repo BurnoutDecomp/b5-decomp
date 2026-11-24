@@ -204,7 +204,9 @@ protected:
                           const AptScriptFunctionBase& rOther,
                           AptValue* pCIH);
 
-    virtual ~AptScriptFunctionBase();
+    // Empty and header-inline: ARTIST has no out-of-line copy, its own deleting destructor
+    // (0x82AF5B08) and AptScriptFunction2's (0x82AF5BF0) go straight to ~AptObject.
+    virtual ~AptScriptFunctionBase() {}
 
     // +0x20 -- the bound character-instance-handle value (AddRef'd; "CIH").
     AptValue* mpCIH;

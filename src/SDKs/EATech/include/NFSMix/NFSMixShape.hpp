@@ -39,7 +39,7 @@ namespace NFSMixShape
         SHAPE_DWN_LINEAR = 8, SHAPE_UP_LINEAR = 9, MAX_SHAPE_TYPES = 10,
     };
     // Evaluate curve `liId` at position liPos [0,0x7FFF]; lbDb -> dB hundredths else Q15. @0x82B45160
-    int   GetCurveOutput(int liId, int liPos, char lbDb);
+    int   GetCurveOutput(int liId, int liPos, bool lbDb);
 
     // Pitch multiplier -> cents (inverse of GetPitchMultFromCents). @0x82B455B8
     int   GetCentsFromPitchMult(float lfMult);

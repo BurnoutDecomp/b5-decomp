@@ -104,7 +104,6 @@ static inline bool IsClipHandleOrCIHNone(const AptValue* pValue)
 
 // The clip's play-head "playing" bit (bIsPlaying, x64 mnClipActionFlags bit 25); set by
 // sMethod_play, cleared by sMethod_nextFrame. (Console *(spriteBase+0x14) & 0x40.)
-static const uint32_t KU_CLIP_PLAYING = 0x2000000u;   // bIsPlaying, x64 bit 25 (X360 reversed bit 6)
 
 // ===========================================================================
 // sMethod_getDepth @0x82AED6D8 -- AS getDepth(): the node's display depth (the
@@ -180,7 +179,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_stop(AptValue* pContext, int /*nAr
 // ===========================================================================
 // sMethod_nextFrame @0x82B0D568 -- AS nextFrame(): advance the play-head one frame
 // (jumpToFrame(mnGotoFrame + 1)) and clear the clip's "playing" bit
-// (mnClipActionFlags &= ~KU_CLIP_PLAYING; x64 bit 25). Always returns undefined.
+// (mbIsPlaying = 0). Always returns undefined.
 // ===========================================================================
 AptValue* AptCIHNativeFunctionHelper::sMethod_nextFrame(AptValue* pContext, int /*nArgCount*/)
 {
@@ -191,7 +190,7 @@ AptValue* AptCIHNativeFunctionHelper::sMethod_nextFrame(AptValue* pContext, int 
     // Seek the node's play-head (the real member AptCIH::jumpToFrame, AptCIH.cpp).
     pNode->jumpToFrame(pSprite->mnGotoFrame + 1);
 
-    pSprite->mnClipActionFlags &= ~KU_CLIP_PLAYING;
+    pSprite->mbIsPlaying = 0;
     return gpUndefinedValue;
 }
 
@@ -256,7 +255,7 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
             gAptActionInterpreter.mpStack[gAptActionInterpreter.mnStackTop - 1];
 
         AptCharacterInst* const pInst = pNode->GetCharacterInst();   // +0x20
-        if ((pInst->mTypeFlags & 0x3Fu) != 15u)        // tag 15 -> no-op (x64 low-6-bit tag)
+        if ((pInst->mnType) != 15)        // tag 15 -> no-op (x64 low-6-bit tag)
         {
             int32_t nFrame;
             if (pArg->isString())
@@ -297,8 +296,7 @@ AptValue* AptCIH::_gotoAndX(AptValue* pContext, int nArgCount, int bPlay)
                 // playing := bPlay (bIsPlaying, x64 bit 25).
                 AptCharacterSpriteInstBase* const pSprite =
                     static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
-                pSprite->mnClipActionFlags =
-                    (pSprite->mnClipActionFlags & ~KU_CLIP_PLAYING) | (bPlay ? KU_CLIP_PLAYING : 0u);
+                pSprite->mbIsPlaying = bPlay;
                 // X360 @0x82B0D3F8: `if (v14 == 1) SetDirtyState(1, 1)` where v14 IS the
                 // play flag -- a gotoAndPlay must RE-DIRTY the node so tick() picks the
                 // playing clip back up (tick early-outs on a clean node; without this a

@@ -94,7 +94,7 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
     AptAnimationTarget* pAnim = gpAptTarget->mpAnimationTarget;
 
     AptCharacterInst* pRootInst = pAnim->mDisplayList.mpHead->mpFirst->GetCharacterInst();
-    if ((pRootInst->mTypeFlags & 0x3Fu) != 9u)   // x64: tag in LOW 6 bits (X360 form 0xFC000000/0x24000000)
+    if ((pRootInst->mnType) != 9)   // x64: tag in LOW 6 bits (X360 form 0xFC000000/0x24000000)
         return 0;
 
     AptCharacterAnimationInst* pRootAnimInst =
@@ -122,7 +122,7 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
             // the generalised-process pass (the X360 break path).
             AptCharacterInst* pCurrentRoot =
                 gpAptTarget->mpAnimationTarget->mDisplayList.mpHead->mpFirst->GetCharacterInst();
-            if ((pCurrentRoot->mTypeFlags & 0x3Fu) != 9u)   // x64 low-6-bit tag
+            if ((pCurrentRoot->mnType) != 9)   // x64 low-6-bit tag
                 return 1;
 
             // Single-step when the input recorder is armed; otherwise keep catching
@@ -136,7 +136,7 @@ static int AptUpdateRunTargetFrames(int nElapsedMs, int nDepthLayerMask, int nMa
     {
         AptCharacterInst* pStoreRoot =
             gpAptTarget->mpAnimationTarget->mDisplayList.mpHead->mpFirst->GetCharacterInst();
-        if ((pStoreRoot->mTypeFlags & 0x3Fu) == 9u)   // x64 low-6-bit tag
+        if ((pStoreRoot->mnType) == 9)   // x64 low-6-bit tag
             static_cast<AptCharacterAnimationInst*>(pStoreRoot)->mnAccumulatedUpdateMs = nBankedMs;
     }
 
@@ -290,7 +290,7 @@ static void AptUpdateReplaySavedInputs(int nFrames, int nDepthLayerMask)
         AptCIH* const pRootNode = gpAptTarget->mpAnimationTarget->mDisplayList.mpHead->mpFirst;
         if (!AptSavedInputCheckpoints::CanContinueSavedInputs(*gpAptSavedInputCheckpoints)
             || pRootNode == 0
-            || (pRootNode->GetCharacterInst()->mTypeFlags & 0x3Fu) != 9u)   // x64 low-6-bit tag
+            || (pRootNode->GetCharacterInst()->mnType) != 9)   // x64 low-6-bit tag
         {
             gpAptTarget->mpLinker->Update();
             return;
@@ -322,7 +322,7 @@ void AptUpdate(int nElapsedMs, int nDepthLayerMask, int nMaxBankedFrames)
         AptAnimationTarget* pAnim = gpAptTarget->mpAnimationTarget;
         AptCIH* pRootNode = pAnim->mDisplayList.mpHead->mpFirst;
         if (pRootNode != 0
-            && (pRootNode->GetCharacterInst()->mTypeFlags & 0x3Fu) == 9u)   // x64 low-6-bit tag
+            && (pRootNode->GetCharacterInst()->mnType) == 9)   // x64 low-6-bit tag
         {
             if (AptUpdateRunTargetFrames(nElapsedMs, nDepthLayerMask, nMaxBankedFrames))
                 AptUpdateRecordFrame();

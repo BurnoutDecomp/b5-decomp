@@ -67,10 +67,12 @@ AptCharacterSpriteInstBase::AptCharacterSpriteInstBase(AptCharacter* pCharacter)
     // mDisplayList default-constructed here (X360: AptDisplayList::AptDisplayList(this+7))
 {
     mnGotoFrame         = -1;
-    // x64 ctor 0x140825A00: `(v & 0xF3000000) | 0x03000000` -- bJustLoaded (bit 24)
-    // + bIsPlaying (bit 25) set, clip-event mask (low 24) clear. (The old 0xC0 seed
-    // was the X360 big-endian allocation order.)
-    mnClipActionFlags   = 0x03000000u;
+    // ARTIST 0x82AFF85C: one rlwimi seeds the top 28 bits with 0xC0 (mask clear, just
+    // loaded, playing, not a custom control); x64 0x140825A00 is the LSB-first mirror.
+    mnClipActions       = 0;
+    mbJustLoaded        = 1;
+    mbIsPlaying         = 1;
+    mnIsCustomControl   = 0;
     mpClipEventHandlers = 0; // x64 +0x28 (no registered clip-event handlers yet)
     mnLastActionFrame   = 0;
 
@@ -135,8 +137,7 @@ void AptCharacterSpriteInstBase::PreDestroy()
 // ---------------------------------------------------------------------------
 int32_t AptCharacterSpriteInstBase::HasClipAction(int32_t nMask) const
 {
-    // x64 @0x140839F70: sign-extend the LOW 24-bit mask (`shl eax,8; sar eax,8`), then AND.
-    return ((static_cast<int32_t>(mnClipActionFlags << 8)) >> 8) & nMask;
+    return mnClipActions & nMask;
 }
 
 // ---------------------------------------------------------------------------
@@ -148,8 +149,7 @@ int32_t AptCharacterSpriteInstBase::HasClipAction(int32_t nMask) const
 // ---------------------------------------------------------------------------
 AptCharacterSpriteInstBase* AptCharacterSpriteInstBase::SetClipAction(int32_t nMask)
 {
-    // x64 @0x1408411B0: `and edx,0FFFFFFh / or [rcx+24h],edx` -- mask into the LOW 24 bits.
-    mnClipActionFlags |= (static_cast<uint32_t>(nMask) & 0xFFFFFFu);
+    mnClipActions |= nMask;
     return this;
 }
 
@@ -161,9 +161,7 @@ AptCharacterSpriteInstBase* AptCharacterSpriteInstBase::SetClipAction(int32_t nM
 // ---------------------------------------------------------------------------
 AptCharacterSpriteInstBase* AptCharacterSpriteInstBase::RemoveClipAction(int32_t nMask)
 {
-    // x64 @0x14083F260: `not edx / or edx,0FF000000h / and [rcx+24h],edx` -- clear LOW-24
-    // bits, preserve the high state byte.
-    mnClipActionFlags &= (~static_cast<uint32_t>(nMask)) | 0xFF000000u;
+    mnClipActions &= ~nMask;
     return this;
 }
 

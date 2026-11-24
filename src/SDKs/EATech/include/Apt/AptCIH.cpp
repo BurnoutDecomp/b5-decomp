@@ -164,7 +164,7 @@ void AptCIH::RegisterReferences()
     // AptDisplayListState.cpp) -- the child links keep placed children reachable.
     if (mpCharacterInst)
     {
-        const uint32_t nType = mpCharacterInst->GetTypeTag();
+        const int nType = mpCharacterInst->GetTypeTag();
         if (nType == 5u || nType == 9u)
         {
             AptDisplayListState* pChildren =
@@ -275,14 +275,14 @@ bool AptCIH::IsCustomControlInst() const { return mpCharacterInst->GetTypeTag() 
 // A sprite inst is a movie-clip (5) or its custom-control variant (16). @0x82AD59B0
 bool AptCIH::IsSpriteInst() const
 {
-    const uint32_t nType = mpCharacterInst->GetTypeTag();
+    const int nType = mpCharacterInst->GetTypeTag();
     return nType == 5 || nType == 16;
 }
 
 // A sprite-base inst is a movie-clip (5) or an imported animation (9). @0x82AD59E0
 bool AptCIH::IsSpriteInstBase() const
 {
-    const uint32_t nType = mpCharacterInst->GetTypeTag();
+    const int nType = mpCharacterInst->GetTypeTag();
     return nType == 5 || nType == 9;
 }
 
@@ -317,7 +317,7 @@ AptCIH* AptCIH::GetRootAnimation()
         return AptGetAnimationAtLevel(0);
 
     AptCIH* pNode = this;
-    uint32_t uTag = pNode->mpCharacterInst->GetTypeTag();   // *(this[8]+8) >> 26
+    int uTag = pNode->mpCharacterInst->GetTypeTag();   // *(this[8]+8) >> 26
     while (uTag != 9u && uTag != 15u)
     {
         pNode = pNode->mpDisplayListParent;                 // this[7]
@@ -340,7 +340,7 @@ void AptCIH::SetDirtyState(bool bDirty, bool bPropagate)
         return;
     }
 
-    const uint32_t nType = mpCharacterInst->GetTypeTag();
+    const int nType = mpCharacterInst->GetTypeTag();
     if (nType == 1 || nType == 2 || nType == 10 || IsNone())
     {
         mFlagsA &= ~0x02000000u;
@@ -434,7 +434,7 @@ int AptCIH::jumpToFrame(int nFrame)
             const char bForward = (pInst->mnGotoFrame < nFrame) ? 1 : 0;
 
             // A freshly-placed clip (bJustLoaded, x64 bit 24) restarts from frame 0.
-            if ((pInst->mnClipActionFlags & 0x1000000u) != 0u)
+            if (pInst->mbJustLoaded != 0)
                 pInst->mnGotoFrame = 0;
             // Never replay forward FROM a frame already at/after the target.
             if (pInst->mnGotoFrame >= nFrame)
@@ -486,15 +486,14 @@ int AptCIH::tick()
         static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);   // v6 = *(a1+32)
 
     // Only sprite(5)/animation(9) clips have a play-head (v6[2] >> 26 == 5 or 9).
-    const uint32_t nType = pInst->GetTypeTag();
+    const int nType = pInst->GetTypeTag();
     if (nType != 5 && nType != 9)
         return (mFlagsA >> 25) & 1u;   // LABEL_44 (ARTIST dirty bit)
 
-    const uint32_t nFlags = pInst->mnClipActionFlags;   // v11 = v6[5]
     pInst->mnLastActionFrame = 0;                        // v6[8] = 0
 
-    const bool bNeedsAction = (nFlags & 0x2000000u) != 0;   // bIsPlaying (x64 bit 25; X360 bit6)
-    const bool bFreshPlaced = (nFlags & 0x1000000u) != 0;   // bJustLoaded (x64 bit 24; X360 bit7)
+    const bool bNeedsAction = pInst->mbIsPlaying != 0;   // bIsPlaying (x64 bit 25; X360 bit6)
+    const bool bFreshPlaced = pInst->mbJustLoaded != 0;   // bJustLoaded (x64 bit 24; X360 bit7)
 
     AptMovie* const pClipMovie = AptGetClipMovie(pInst);   // *(v6[1]+4) + embed
 
@@ -544,8 +543,7 @@ int AptCIH::tick()
     // Normal fall-through ONLY (queueFrameActions @0x82B0C034). The single-frame and
     // end-wrap paths jump PAST this block to the enterFrame stage (label_27 below).
     {
-        const uint32_t nFlags2 = pInst->mnClipActionFlags;   // v16 = v6[5]
-        if (((nFlags2 & 0x2000000u) != 0) || (((nFlags2 & 0x1000000u) != 0) && gbAptRecorderGate != 0))
+        if ((pInst->mbIsPlaying != 0) || ((pInst->mbJustLoaded != 0) && gbAptRecorderGate != 0))
         {
             // Negate the stamped frame while the actions are queued (the X360's
             // running-frame marker), then restore it.
@@ -560,18 +558,18 @@ label_27:
     // (3) enterFrame clip event: a non-fresh clip (or the 0x24 custom-control family)
     // with an onEnterFrame handler (clip-event mask bit 0x200 or a __proto__ event
     // member) queues its enterFrame handlers.
-    if ((((pInst->mnClipActionFlags & 0x1000000u) == 0) ||   // not freshly placed (bJustLoaded)
-         ((pInst->mTypeFlags & 0x3Fu) == 9u)) &&   // animation; x64 low-6-bit tag
-        (((pInst->mnClipActionFlags & 0x2u) != 0) || HasEventMember(2)))   // enterFrame; x64 low-24 mask
+    if (((pInst->mbJustLoaded == 0) ||   // not freshly placed (bJustLoaded)
+         ((pInst->mnType) == 9)) &&   // animation; x64 low-6-bit tag
+        (((pInst->mnClipActions & 0x2) != 0) || HasEventMember(2)))   // enterFrame; x64 low-24 mask
     {
         queueClipEvents(2, gnAptActionFrameId, 1);
     }
     // (4) construct/load clip event on first placement; then clear the freshly-placed bit.
-    if ((pInst->mnClipActionFlags & 0x1000000u) != 0)
+    if (pInst->mbJustLoaded != 0)
     {
-        if (((pInst->mnClipActionFlags & 0x1u) != 0) || HasEventMember(1))   // load; x64 low-24 mask
+        if (((pInst->mnClipActions & 0x1) != 0) || HasEventMember(1))   // load; x64 low-24 mask
             queueClipEvents(1, gnAptActionFrameId, 1);
-        pInst->mnClipActionFlags &= ~0x1000000u;
+        pInst->mbJustLoaded = 0;
     }
 
     // ---- (5) recurse the child display list -------------------------------
@@ -582,13 +580,13 @@ label_27:
     // enterFrame handler; otherwise it inherits the child-list tick result --
     // unless it is a playing multi-frame clip (bIsPlaying set, frame count != 1),
     // which leaves the dirty bit untouched.
-    if (((pInst->mnClipActionFlags & 0x2u) != 0) || HasEventMember(2))
+    if (((pInst->mnClipActions & 0x2) != 0) || HasEventMember(2))
     {
         mFlagsA |= 0x02000000u;
     }
     else
     {
-        if ((pInst->mnClipActionFlags & 0x2000000u) != 0 &&
+        if (pInst->mbIsPlaying != 0 &&
             AptGetClipMovie(pInst)->mnFrameCount != 1)
         {
             return (mFlagsA >> 25) & 1u;

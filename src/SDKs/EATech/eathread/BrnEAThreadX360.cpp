@@ -284,13 +284,14 @@ namespace Thread
 
         // Not created by EAThread (or not yet cached): duplicate the pseudo
         // handle for the current thread into a real, stable HANDLE and cache it.
-        // X360 call: DuplicateHandle(-1, -2, -1, &handle, 0, 1, 2).
-        HANDLE lhThread = 0;
-        if (DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(),
-                            &lhThread, 0, TRUE, DUPLICATE_SAME_ACCESS))
-        {
+        // X360 call: DuplicateHandle(-1, -2, -1, &handle, 0, 1, 2). The handle is not
+        // pre-cleared (EAThread eathread_pc.cpp `HANDLE hThread, hThreadPseudo = ...`; ARTIST
+        // passes &handle at 0x82B42594 with no prior store).
+        HANDLE lhThread, lhThreadPseudo = GetCurrentThread();
+        const BOOL lbResult = DuplicateHandle(GetCurrentProcess(), lhThreadPseudo, GetCurrentProcess(),
+                                              &lhThread, 0, TRUE, DUPLICATE_SAME_ACCESS);
+        if (lbResult)
             SetCurrentThreadHandle(lhThread, true);
-        }
         return lhThread;
     }
 

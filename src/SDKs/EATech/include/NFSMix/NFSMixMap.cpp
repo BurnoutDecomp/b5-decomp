@@ -935,7 +935,7 @@ int NFSMixMap::SetupStateRefCount()
 
 // GetProcessMixCtlPtr @0x82B49500 -- next mix-ctl proc slot; bump the assigned count
 // only when lbAdvance != 0 (X360 stride 8 == sizeof stMixCtlProc -> x64 array index).
-stMixCtlProc* NFSMixMap::GetProcessMixCtlPtr(char lbAdvance)
+stMixCtlProc* NFSMixMap::GetProcessMixCtlPtr(bool lbAdvance)
 {
     stMixCtlProc* lpProc = &m_pMixCtlProc[m_nAssignedMixCtlProc]; // r10*8 + (+0x190)
     if (lbAdvance)
@@ -982,49 +982,49 @@ int NFSMixMap::GetMapStateCopies(int liState)
 // modelled as the real x64 array index. (Member-name mapping ARTIST-verified, e.g.
 // GetNextMasterMixProc: counter +0x154, array +0x1C0.)
 // ---------------------------------------------------------------------------
-stEvtMixCtlProc* NFSMixMap::GetNextEvtMixCtlProc(char lbAdvance)
+stEvtMixCtlProc* NFSMixMap::GetNextEvtMixCtlProc(bool lbAdvance)
 {
     stEvtMixCtlProc* lp = &m_pEvtMixCtlProc[m_nAssignedEvtMixCtlProc];
     if (lbAdvance) ++m_nAssignedEvtMixCtlProc;
     return lp;
 }
-stEvtMixCtlSharedData* NFSMixMap::GetNextEvtMixCtlShared(char lbAdvance)
+stEvtMixCtlSharedData* NFSMixMap::GetNextEvtMixCtlShared(bool lbAdvance)
 {
     stEvtMixCtlSharedData* lp = &m_pEvtMixCtlData_S[m_nAssignedEvtMixCtlShared];
     if (lbAdvance) ++m_nAssignedEvtMixCtlShared;
     return lp;
 }
-st3DMixCtlProc* NFSMixMap::GetNext3DMixCtlProc(char lbAdvance)
+st3DMixCtlProc* NFSMixMap::GetNext3DMixCtlProc(bool lbAdvance)
 {
     st3DMixCtlProc* lp = &m_p3DMixCtlProc[m_nAssigned3DMixCtlProc];
     if (lbAdvance) ++m_nAssigned3DMixCtlProc;
     return lp;
 }
-st3DMixCtlSharedData* NFSMixMap::GetNext3DMixCtlShared(char lbAdvance)
+st3DMixCtlSharedData* NFSMixMap::GetNext3DMixCtlShared(bool lbAdvance)
 {
     st3DMixCtlSharedData* lp = &m_p3DMixCtlData_S[m_nAssigned3DMixCtlShared];
     if (lbAdvance) ++m_nAssigned3DMixCtlShared;
     return lp;
 }
-stMasterMixChProc* NFSMixMap::GetNextMasterMixProc(char lbAdvance)
+stMasterMixChProc* NFSMixMap::GetNextMasterMixProc(bool lbAdvance)
 {
     stMasterMixChProc* lp = &m_pMasterChProc[m_nAssignedMasterMixProc]; // +0x1C0 / +0x154
     if (lbAdvance) ++m_nAssignedMasterMixProc;
     return lp;
 }
-stMasterMixChSharedData* NFSMixMap::GetNextMasterMixShared(char lbAdvance)
+stMasterMixChSharedData* NFSMixMap::GetNextMasterMixShared(bool lbAdvance)
 {
     stMasterMixChSharedData* lp = &m_pMasterChData_S[m_nAssignedMasterMixShared];
     if (lbAdvance) ++m_nAssignedMasterMixShared;
     return lp;
 }
-stSubMixChProc* NFSMixMap::GetNextSubMixProc(char lbAdvance)
+stSubMixChProc* NFSMixMap::GetNextSubMixProc(bool lbAdvance)
 {
     stSubMixChProc* lp = &m_pSubChProc[m_nAssignedSubMixProc];
     if (lbAdvance) ++m_nAssignedSubMixProc;
     return lp;
 }
-stMixChSharedData* NFSMixMap::GetNextSubMixShared(char lbAdvance)
+stMixChSharedData* NFSMixMap::GetNextSubMixShared(bool lbAdvance)
 {
     stMixChSharedData* lp = &m_pSubChData_S[m_nAssignedSubMixShared];
     if (lbAdvance) ++m_nAssignedSubMixShared;
@@ -1144,7 +1144,7 @@ void NFSMixMap::AssignSFXCallbacks(void* lpOwner)
 
 // GetNextEvtMixCtlUnique @0x82B48FF0 -- zero the fresh record (flt_82001CC0 == 0.0),
 // return &m_pEvtMixCtlData_U[m_nAssignedEvtMixCtlUnique]; bump the count if advancing.
-stEvtMixCtlUniqueData* NFSMixMap::GetNextEvtMixCtlUnique(char lbAdvance)
+stEvtMixCtlUniqueData* NFSMixMap::GetNextEvtMixCtlUnique(bool lbAdvance)
 {
     stEvtMixCtlUniqueData* lp = &m_pEvtMixCtlData_U[m_nAssignedEvtMixCtlUnique]; // +0x19C / +0x174
     lp->msStageElapsed = 0.0f;              // +0x04
@@ -1158,7 +1158,7 @@ stEvtMixCtlUniqueData* NFSMixMap::GetNextEvtMixCtlUnique(char lbAdvance)
 }
 
 // GetNextMasterMixUnique @0x82B49140 -- &m_pMasterChData_U[m_nAssignedMasterMixUnique].
-stMasterMixChUniqueData* NFSMixMap::GetNextMasterMixUnique(char lbAdvance)
+stMasterMixChUniqueData* NFSMixMap::GetNextMasterMixUnique(bool lbAdvance)
 {
     stMasterMixChUniqueData* lp = &m_pMasterChData_U[m_nAssignedMasterMixUnique]; // +0x1BC / +0x15C
     if (lbAdvance) ++m_nAssignedMasterMixUnique;
@@ -1166,7 +1166,7 @@ stMasterMixChUniqueData* NFSMixMap::GetNextMasterMixUnique(char lbAdvance)
 }
 
 // GetNextSubMixUnique @0x82B491A8 -- &m_pSubChData_U[m_nAssignedSubMixUnique].
-stMixChUniqueData* NFSMixMap::GetNextSubMixUnique(char lbAdvance)
+stMixChUniqueData* NFSMixMap::GetNextSubMixUnique(bool lbAdvance)
 {
     stMixChUniqueData* lp = &m_pSubChData_U[m_nAssignedSubMixUnique]; // +0x1B0 / +0x150
     if (lbAdvance) ++m_nAssignedSubMixUnique;
@@ -1178,7 +1178,7 @@ stMixChUniqueData* NFSMixMap::GetNextSubMixUnique(char lbAdvance)
 // (== X360 sizeof NFSMixMapState); the object block is allocated at PC sizeof stride, so
 // the raw 0x60 step diverges on x64. Kept X360-faithful; reconciled with AllocateMixerMemory's
 // stride when the (currently absent) NFSMixMapState build chain lands.
-NFSMixMapState* NFSMixMap::GetNextMapState(char lbAdvance)
+NFSMixMapState* NFSMixMap::GetNextMapState(bool lbAdvance)
 {
     const int liOff = m_CurrentStateProcBlockOffset;   // +0x20C (byte offset)
     NFSMixMapState* lp = reinterpret_cast<NFSMixMapState*>(
@@ -1680,7 +1680,7 @@ int NFSMixMap::SETSFXID(int liID, int* lpObj)
     return 1;
 }
 
-void* NFSMixMap::GetObjectPtr(int liID, char lbDbOutput, char lbProcOutput)
+void* NFSMixMap::GetObjectPtr(int liID, bool lbDbOutput, bool lbProcOutput)
 {
     m_dummyout = 0;
     const u32 luID = static_cast<u32>(liID);
@@ -1885,7 +1885,7 @@ void NFSMixMap::AssignMixCtlDataPtrs(stMixCtlProc* lpProc, int* lpEntry,
     }
     lpProc->pudata = &m_pMixCtlData_U[m_AssignedMixCtlsUnique++];
 }
-st3DMixCtlUniqueData* NFSMixMap::GetNext3DMixCtlUnique(char lbAdvance)
+st3DMixCtlUniqueData* NFSMixMap::GetNext3DMixCtlUnique(bool lbAdvance)
 {
     st3DMixCtlUniqueData* lp = &m_p3DMixCtlData_U[m_nAssigned3DMixCtlUnique];
     if (lbAdvance) ++m_nAssigned3DMixCtlUnique;

@@ -24,6 +24,7 @@
 #endif
 
 #include "SDKs/EATech/include/Apt/AptKey.h"
+#include "SDKs/EATech/include/Apt/AptString/StringPool.h"
 
 #include "SDKs/EATech/include/Apt/AptObject.h"             // AptObject::Create / operator new
 #include "SDKs/EATech/include/Apt/AptCIH.h"                // AptCIH::mFlagsA (the listener marker test)
@@ -120,7 +121,6 @@ extern float gAptAnalogAxis1[];   // flt_8324E204 (axis1 view @+4 of the same re
 // The interned "controller" property key the getAnalog* methods store the pad
 // index under (X360 unk_8324E614). Defined in AptGlobals.cpp ("controller").
 // ---------------------------------------------------------------------------
-extern const EAStringC& gAptKeyControllerKey;   // unk_8324E614
 
 // ---- the nine class-wide cached native-method singletons -------------------
 AptNativeFunction* AptKey::spMethod_isDown               = 0;   // off_8324E394
@@ -459,7 +459,7 @@ AptValue* AptKey::sMethod_getAnalogStickInfo()
 
     AptObject* pResult = AptObject::Create(8);
 
-    pResult->Set(gAptKeyControllerKey, AptInteger::Create(nPad - 2));
+    pResult->Set(StringPool::saConstant[StringPool::KU_NAME_CONTROLLER], AptInteger::Create(nPad - 2));
 
     // Select the left (501) or right (502) stick snapshot record, indexed by pad
     // -- the live 16-byte AptAnalogInputEvent records AddAnalogInput memcpy's
@@ -498,7 +498,7 @@ AptValue* AptKey::sMethod_getAnalogTriggerInfo()
 
     AptObject* pResult = AptObject::Create(8);
 
-    pResult->Set(gAptKeyControllerKey, AptInteger::Create(nPad - 2));
+    pResult->Set(StringPool::saConstant[StringPool::KU_NAME_CONTROLLER], AptInteger::Create(nPad - 2));
 
     // The per-pad axis record (X360 &flt_8324E200[4*pad]): axis0 @+0 is the left
     // trigger, axis1 @+4 the right -- the live gAptAnalogAxis0/1 views

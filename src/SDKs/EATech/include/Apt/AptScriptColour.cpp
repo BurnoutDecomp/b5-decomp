@@ -80,11 +80,11 @@ AptScriptColour::AptScriptColour(AptValue* pTarget)
     {
         // The character type tag lives in the top 6 bits of the char inst's flags.
         AptCharacterInst* pCharInst = static_cast<AptCIH*>(pTarget)->mpCharacterInst;
-        const uint32_t nCharType = pCharInst->mTypeFlags & 0x3Fu;   // x64 low-6-bit tag
+        const uint32_t nCharType = pCharInst->mnType;   // x64 low-6-bit tag
 
         // Accept movie-clip-like characters only (sprite / movieclip / type 2).
         bBind = (nCharType == 5) || (nCharType == 16)
-                || (pCharInst->mTypeFlags & 0x3Fu) == 2u;   // dyn-text; x64 low-6-bit tag (X360 form 0x08000000)
+                || (pCharInst->mnType) == 2;   // dyn-text; x64 low-6-bit tag (X360 form 0x08000000)
     }
 
     if (bBind)

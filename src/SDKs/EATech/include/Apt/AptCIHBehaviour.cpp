@@ -84,7 +84,7 @@ extern AptActionInterpreter gAptActionInterpreter;
 // ---------------------------------------------------------------------------
 AptCIH* AptCIH::GetFirstChild() const
 {
-    const uint32_t nType = mpCharacterInst->GetTypeTag();
+    const int nType = mpCharacterInst->GetTypeTag();
     const bool bSpriteBase = (nType == 5 || nType == 9);   // IsSpriteInstBase
     if (!bSpriteBase)
         return 0;
@@ -275,7 +275,7 @@ void AptCIH::SetCharacterInst(AptCharacterInst* pCharacterInst, bool bMoveRender
 
         // The freshly installed instance is an animation node (type tag 9) -> drop its
         // registered per-frame timer functions from the animation director.
-        if ((mpCharacterInst->GetTypeTag() == 9u) && gpAptTarget != 0)
+        if ((mpCharacterInst->GetTypeTag() == 9) && gpAptTarget != 0)
             gpAptTarget->mpAnimationTarget->RemoveTimerFunctions(this);
 
         // GC-tear-down + free the old instance (the X360's DestroyGCPointers + the
@@ -371,7 +371,7 @@ AptCIH* AptCIH::ReplaceZombieChild(AptCIH* pNewChild, AptCIH* pZombie)
 {
     AptDisplayListState* pChildList = 0;
     AptCharacterInst* pCharInst = mpCharacterInst;
-    const uint32_t nType = pCharInst->GetTypeTag();
+    const int nType = pCharInst->GetTypeTag();
     if (nType == 5 || nType == 9)   // movie-clip / animation == IsSpriteInstBase
     {
         AptCharacterSpriteInstBase* pSpriteInst =
@@ -449,7 +449,7 @@ bool AptCIH::GetIsPlaying() const
 {
     const AptCharacterSpriteInstBase* pSpriteInst =
         static_cast<const AptCharacterSpriteInstBase*>(mpCharacterInst);
-    return (pSpriteInst->mnClipActionFlags & 0x2000000u) != 0;
+    return pSpriteInst->mbIsPlaying != 0;
 }
 
 // SetIsPlaying (PS3 @0x7EE474 -- the X360 build INLINES this member into each of its
@@ -466,8 +466,7 @@ void AptCIH::SetIsPlaying(bool bPlaying)
 {
     AptCharacterSpriteInstBase* const pSpriteInst =
         static_cast<AptCharacterSpriteInstBase*>(mpCharacterInst);
-    pSpriteInst->mnClipActionFlags =
-        (pSpriteInst->mnClipActionFlags & ~0x2000000u) | (bPlaying ? 0x2000000u : 0u);
+    pSpriteInst->mbIsPlaying = bPlaying;
     if (bPlaying)
         SetDirtyState(true, true);
 }
@@ -833,7 +832,7 @@ AptRect* AptCIH::GetBoundingRect(int nMode, const AptMatrix* pParentTransform, A
         AptMatrix scratch;
         AptRenderingContext::multMatrix(pParentTransform, pPos, &scratch);
 
-        const uint32_t nType = pCharInst->GetTypeTag();
+        const int nType = pCharInst->GetTypeTag();
         if (nType == 5 || nType == 9)   // movie-clip / animation -> recurse into the child display list
         {
             AptCharacterSpriteInstBase* pSprite = static_cast<AptCharacterSpriteInstBase*>(pCharInst);
@@ -878,7 +877,7 @@ bool AptCIH::HasMouseEvent()
 {
     const AptCharacterSpriteInstBase* pSpriteInst =
         static_cast<const AptCharacterSpriteInstBase*>(mpCharacterInst);
-    if ((pSpriteInst->mnClipActionFlags & KU_AptMouseEventClipMask) != 0)
+    if ((pSpriteInst->mnClipActions & KU_AptMouseEventClipMask) != 0)
         return true;
 
     return HasEventMember(static_cast<int>(KU_AptMouseEventHandlerMask)) != 0;
@@ -1336,7 +1335,7 @@ extern intptr_t gAptEmptyTextRenderDataZID;
 // ---------------------------------------------------------------------------
 bool AptCIH::ProcessTextInst(AptCIH* /*pRoot*/)
 {
-    if (mpCharacterInst->GetTypeTag() != 2u)   // (mTypeFlags & 0xFC000000) != 0x08000000
+    if (mpCharacterInst->GetTypeTag() != 2)   // (mTypeFlags & 0xFC000000) != 0x08000000
         return false;
 
     if (IsVisible())
@@ -1430,8 +1429,7 @@ bool AptCIH::HasClipEvent(int nEventMask)
 {
     const AptCharacterSpriteInstBase* pSpriteInst =
         static_cast<const AptCharacterSpriteInstBase*>(mpCharacterInst);
-    return (((static_cast<int32_t>(pSpriteInst->mnClipActionFlags << 8)) >> 8)
-            & nEventMask) != 0;
+    return (pSpriteInst->mnClipActions & nEventMask) != 0;
 }
 
 // HasEvent @0x82B02838 -- a packed clip-event flag OR an AS __proto__ handler matches.
@@ -1658,7 +1656,7 @@ AptValue* AptCIH::queueClipEvents(int nEventMask, unsigned int nFrameId, int bDe
 
     // Dynamic-text nodes (type tag 2) never carry clip events; and a node with no
     // matching handler at all short-circuits to 0.
-    if (pInst->GetTypeTag() == 2u || !HasEvent(nEventMask))
+    if (pInst->GetTypeTag() == 2 || !HasEvent(nEventMask))
         return reinterpret_cast<AptValue*>(0);
 
     // The faithful record-table scan + the AS byte-code execution / __proto__ dispatch
@@ -1716,7 +1714,7 @@ unsigned int AptCIH::GeneralisedProcess(AptCIH* pRoot, void* pContext)
     if (AptCIH_sCIHProcessCb2)
         nResult = static_cast<unsigned int>((this->*AptCIH_sCIHProcessCb2)(pRoot)) | nResult;
 
-    const uint32_t nType = mpCharacterInst->GetTypeTag();
+    const int nType = mpCharacterInst->GetTypeTag();
     if (nType == 5u || nType == 9u)
     {
         ++AptCIH_snGeneralisedProcessTreeDepth;
@@ -1860,7 +1858,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
     AptClearCIHDrainQueuesAndZombie(this, bClearGCRoots);
 
     // Animation node (type tag 9) -> remove its per-frame timer functions.
-    if (mpCharacterInst->GetTypeTag() == 9u && gpAptTarget != 0)
+    if (mpCharacterInst->GetTypeTag() == 9 && gpAptTarget != 0)
         gpAptTarget->mpAnimationTarget->RemoveTimerFunctions(this);
 
     // ---- mask MASTER teardown: this node owns a mask (render item hasMask + a slave) --
@@ -1924,7 +1922,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
         {
             AptCharacterSpriteInstBase* const pSprite =
                 static_cast<AptCharacterSpriteInstBase*>(pInstU);
-            if ((pSprite->mnClipActionFlags & 0x4u) != 0u ||   // unload clip event; x64 low-24 mask
+            if ((pSprite->mnClipActions & 0x4) != 0 ||   // unload clip event; x64 low-24 mask
                 HasEventMember(4) != 0)
             {
                 queueClipEvents(4, 0, 0);
@@ -1961,7 +1959,7 @@ void AptCIH::ClearCIH(bool bClearGCRoots)
     bool bBecameZombie = false;
     if (!gbAptInShutdown
         && GetZombieCount() > 0
-        && (mpCharacterInst->mTypeFlags & 0x3Fu) == 9u
+        && (mpCharacterInst->mnType) == 9
         && this != AptGetAnimationAtLevel(0))
     {
         if (gpAptZombieVector == 0 ||
@@ -2250,7 +2248,7 @@ bool AptCIH::ProcessCustomControls(AptCIH* /*pRoot*/)
     AptCharacterSpriteInstBase* pSprite = static_cast<AptCharacterSpriteInstBase*>(pInst);
 
     // ---- classify once (bits 26-27 == 0 -> derive from the clip's variables) ----
-    if ((pSprite->mnClipActionFlags & 0x0C000000u) == 0)
+    if (pSprite->mnIsCustomControl == 0)
     {
         // X360: EAStringC::InitFromBuffer(&v26, "_CustomControlType"); the `_type`
         // key is the pooled constant (unk_8324E5C8 == StringPool "_type").
@@ -2263,31 +2261,30 @@ bool AptCIH::ProcessCustomControls(AptCIH* /*pRoot*/)
             ? pInst->mpProperties->Lookup(strCustomControlTypeKey)
             : 0;
 
-        const uint32_t uFlags = pSprite->mnClipActionFlags;
         if (pTypeVar != 0)
         {
-            pSprite->mnClipActionFlags = (uFlags & ~0x0C000000u) | 0x04000000u;  // string-style
+            pSprite->mnIsCustomControl = 1;   // string-style
         }
         else if (pZidVar != 0)
         {
-            pSprite->mnClipActionFlags = uFlags | 0x0C000000u;                   // zid-style
+            pSprite->mnIsCustomControl = 3;   // zid-style
         }
         else
         {
-            pSprite->mnClipActionFlags = (uFlags & ~0x0C000000u) | 0x08000000u;  // NOT a control
+            pSprite->mnIsCustomControl = 2;   // NOT a control
             SetGeneralizedProcessDirtyState(false);
         }
     }
 
     // `if ((flags & 0x30) == 0x20) return 0` (console bits) -- a known non-control node.
-    if ((pSprite->mnClipActionFlags & 0x0C000000u) == 0x08000000u)
+    if (pSprite->mnIsCustomControl == 2)
         return false;
 
     SetGeneralizedProcessDirtyState(true);
 
     // ---- promote the render item once (the INSTANCE tag stays sprite) -----------
     // `if ((*(v2+8) & 0xFC000000) != 0x40000000)` -- instance tag != 16 (custom).
-    if (pInst->GetTypeTag() != 0x10u)
+    if (pInst->GetTypeTag() != 0x10)
     {
         AptRenderItem* pOriginal = pInst->mpRenderItem;
         // `(*(*(v2+4)+24) & 0xFC0000) == 0x140000` -- render-type SPRITE (x64
@@ -2331,7 +2328,7 @@ bool AptCIH::ProcessCustomControls(AptCIH* /*pRoot*/)
             + 0x20 /* == AptRenderHooks.cpp's KU_SHAPE_GEOMETRY_OFFSET */);
     }
 
-    const uint32_t uMode = (pSprite->mnClipActionFlags >> 26) & 3u;
+    const uint32_t uMode = pSprite->mnIsCustomControl;
     if (uMode == 1u)   // the string-descriptor control
     {
         AptValue* pModeTypeVar = (pInst->mpProperties != 0)

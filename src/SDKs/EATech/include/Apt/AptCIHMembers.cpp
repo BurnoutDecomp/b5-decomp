@@ -851,7 +851,7 @@ bool AptCIH::objectMemberSet(AptValue* const pThis,
                     // node leaves the input set.
                     AptCharacterSpriteInstBase* const pSpriteInst =
                         static_cast<AptCharacterSpriteInstBase*>(pInst);
-                    if ((pSpriteInst->mnClipActionFlags & 0x200C0u) == 0   // x64 low-24 mask (X360 <<8 form 0x200C000)
+                    if ((pSpriteInst->mnClipActions & 0x200C0) == 0   // x64 low-24 mask (X360 <<8 form 0x200C000)
                         && pNode->HasEventMember(0x200C0) == 0)
                         RemoveNodeFromInputSet(pNode);
                 }

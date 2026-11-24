@@ -129,8 +129,7 @@ void IDynamicMixer::InitMap(int* lpMapData)
 {
     if (mMixMaster)
     {
-        if (!mMixMaster->CreateMainMainMap(lpMapData, 0))
-            return;
+        mMixMaster->CreateMainMainMap(lpMapData, 0);  // result unused (no test at 0x82B44C68)
         mMixMaster->AssignSFXCallbacks(this);        // bind the SFX-callback owner
         mMixMaster->InitMixMap();                    // finish map setup
         if (mpSnapshot)

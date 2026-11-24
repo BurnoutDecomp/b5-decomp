@@ -163,11 +163,8 @@ AptScriptFunctionBase::AptScriptFunctionBase(AptVirtualFunctionTable_Indices eTy
     GetNativeHashVirtual()->Set__Proto__(pOtherHash->Get__Proto__());
 }
 
-// ~AptScriptFunctionBase (@0x82AF5B08 scalar-deleting-destructor thunk) -- the GC
-// pointers are released by DestroyGCPointers; the dtor chains to ~AptObject.
-AptScriptFunctionBase::~AptScriptFunctionBase()
-{
-}
+// ~AptScriptFunctionBase is header-inline (empty; the GC pointers are released by
+// DestroyGCPointers and the destructor chains to ~AptObject).
 
 // ===========================================================================
 // Pure-virtual script-function interface (base slots are _purecall @0x82C08F60)

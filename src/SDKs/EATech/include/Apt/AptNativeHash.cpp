@@ -27,6 +27,7 @@
 #endif
 
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
+#include "SDKs/EATech/include/Apt/AptString/StringPool.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"   // AddRef/Release (value refs)
 #include "SDKs/EATech/include/Apt/AptDefine.h"            // gpNonGCPoolManager
 #include "SDKs/EATech/Apt/DogmaAllocator.h"                // DOGMA_PoolManager
@@ -285,7 +286,7 @@ void AptNativeHash::Set(const EAStringC& key, AptValue* pValue)
         return;
 
     const uint16_t h = key.UpdateHashValue();            // compute the cached hash if needed
-    if (h == 1689 && key.EqualNoCase(gAptKeyPrototype))      { SetPrototype(pValue);  return; }
+    if (h == 1689 && key.EqualNoCase(StringPool::saConstant[StringPool::KU_NAME_PROTOTYPE]))      { SetPrototype(pValue);  return; }
     if (h == 27581 && key.EqualNoCase(StringPool::saConstant[0])) { Set__Proto__(pValue); return; }
 
     if (!mpTable)
@@ -317,7 +318,7 @@ void AptNativeHash::Unset(const EAStringC& key)
         }
     }
 
-    if (h == 1689 && key.EqualNoCase(gAptKeyPrototype))
+    if (h == 1689 && key.EqualNoCase(StringPool::saConstant[StringPool::KU_NAME_PROTOTYPE]))
         UnsetPrototype();
     else if (h == 27581 && key.EqualNoCase(StringPool::saConstant[0]))
         Unset__Proto__();
@@ -334,7 +335,7 @@ AptValue* AptNativeHash::Lookup(const EAStringC& key) const
             return item->mpValue;
     }
     if (h == 1689)
-        return key.EqualNoCase(gAptKeyPrototype) ? mpPrototype : 0;
+        return key.EqualNoCase(StringPool::saConstant[StringPool::KU_NAME_PROTOTYPE]) ? mpPrototype : 0;
     if (h == 27581)
         return key.EqualNoCase(StringPool::saConstant[0]) ? mp__Proto__ : 0;
     return 0;

@@ -64,7 +64,12 @@ struct AptCharacterInst
     void*          mpVTable_unused;   // +0x00 (x64: a REAL per-class vptr -- the ctors/dtors
                                       //  stamp off_140C17D88..DE0; modelled manually)
     AptRenderItem* mpRenderItem;      // +0x08
-    uint32_t       mTypeFlags;        // +0x10 (x64: char type tag in the LOW 6 bits)
+    // Console +0x08: bit-fields led by the character type tag. MSVC allocates them from the
+    // MSB on the X360 (ARTIST AptCIH::SetDirtyState 0x82AD76C8 reads the tag with
+    // `srawi 26` and compares it signed) and from the LSB on x64 (`and ecx,3Fh`). The
+    // other 26 bits are not read by any recovered function.
+    int32_t        mnType : 6;
+    uint32_t              : 26;
     AptNativeHash* mpProperties;      // +0x18
     // (the base ends here -- console word[4]+ belong to the SPRITE subclass:
     // AptCharacterSpriteInstBase::mnGotoFrame [4] / mnClipActionFlags [5] /
@@ -119,7 +124,7 @@ struct AptCharacterInst
     // reversal): 1 shape / 2 dynamic-text / 4 button / 5 sprite(movie-clip) /
     // 8 morph / 9 animation / 10 static-text / 15 level / 16 custom-control.
     // Drives the AptCIH::IsXxxInst predicates.
-    uint32_t GetTypeTag() const { return mTypeFlags & 0x3Fu; }
+    int GetTypeTag() const { return mnType; }
 
     AptCharacter*        SetCharacter(AptCharacter* pCharacter); // @0x80F324
 

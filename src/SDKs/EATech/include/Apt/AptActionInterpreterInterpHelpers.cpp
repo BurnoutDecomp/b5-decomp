@@ -31,6 +31,7 @@
 #endif
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
+#include "SDKs/EATech/include/Apt/AptString/StringPool.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptString.h"
 #include "SDKs/EATech/include/Apt/AptNativeHash.h"
@@ -363,7 +364,7 @@ bool AptActionInterpreter::SetVariableFallback(AptValue* pContext, const EAStrin
 
 // The two AS reserved member keys both _doEnumerate and _doCloneSprite skip: the
 // __proto__ key (StringPool::saConstant, console dword_8324E580) and the prototype
-// key (gAptKeyPrototype, console dword_8324E698). See AptNativeHash.h.
+// key (StringPool::saConstant[StringPool::KU_NAME_PROTOTYPE], console dword_8324E698). See AptNativeHash.h.
 
 // ---------------------------------------------------------------------------
 // AptActionInterpreter::valueToObject @0x82B07FB8 (X360) / 0xF563DC (PS3) -- coerce
@@ -498,7 +499,7 @@ void AptActionInterpreter::EnumerateMembers(AptValue* pScope, AptValue* pTarget)
              pItem = pHash->GetNextItem(pItem))
         {
             // console: skip the two reserved keys (dword_8324E580 / dword_8324E698).
-            if (pItem->mKey == StringPool::saConstant[0] || pItem->mKey == gAptKeyPrototype)
+            if (pItem->mKey == StringPool::saConstant[0] || pItem->mKey == StringPool::saConstant[StringPool::KU_NAME_PROTOTYPE])
                 continue;
 
             AptString* const pStr = AptString::Create("");           // console AptString::Create(&unk_820046A7)
@@ -643,7 +644,7 @@ AptValue* AptActionInterpreter::_doCloneSprite(AptCIH* pScope, AptValue* pTarget
                     for (AptHashItem* pItem = pHash->GetFirstItem(); pItem != 0;
                          pItem = pHash->GetNextItem(pItem))
                     {
-                        if (pItem->mKey == StringPool::saConstant[0] || pItem->mKey == gAptKeyPrototype)
+                        if (pItem->mKey == StringPool::saConstant[0] || pItem->mKey == StringPool::saConstant[StringPool::KU_NAME_PROTOTYPE])
                             continue;   // skip the two reserved keys
                         gAptActionInterpreter.setVariable(static_cast<AptValue*>(pClone), 0,
                                                           &pItem->mKey, pItem->mpValue, 1, 1, 0);
@@ -812,7 +813,7 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
                 const uint32_t nState   = pCIHNode->GetCIHState();                       // x64 (mFlagsA>>1)&3
                 if (nState == 3)
                     bReduced = true;
-                else if (pCIHNode->GetCharacterInst()->GetTypeTag() == 0xFu &&
+                else if (pCIHNode->GetCharacterInst()->GetTypeTag() == 0xF &&
                          (nState == 0 || nState == 1))
                     bReduced = true;
             }
@@ -860,7 +861,7 @@ AptValue* AptActionInterpreter::ExecuteScriptFunction(AptValue* pScope, AptValue
                 pNode = static_cast<AptCIH*>(pAnim);
                 for (;;)
                 {
-                    const uint32_t nT = pNode->GetCharacterInst()->GetTypeTag();
+                    const int nT = pNode->GetCharacterInst()->GetTypeTag();
                     if (nT == 9u || nT == 0xFu)
                         break;
                     pNode = pNode->GetDisplayListParent();                             // walk up (+0x1C)

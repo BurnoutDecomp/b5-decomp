@@ -17,7 +17,7 @@
 // 0x56/0x58/0x70/0x71 are EA's extended set.
 //
 // String-pool constants + the frame clock:
-//   gAptKeyThis (unk_8324E6C0 "this"), gAptKeyGlobal (unk_8324E59C "_global") are
+//   StringPool::saConstant[StringPool::KU_NAME_THIS] (unk_8324E6C0 "this"), StringPool::saConstant[StringPool::KU_NAME_GLOBAL] (unk_8324E59C "_global") are
 //   defined with their literal contents in AptGlobals.cpp. GetTimer reads
 //   dword_8324D820 -- the SAME counter AptUpdate advances per banked frame
 //   (`++dword_8324D820` @0x82B0DB68), whose one canonical PC symbol is
@@ -28,6 +28,7 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
+#include "SDKs/EATech/include/Apt/AptString/StringPool.h"
 #include "SDKs/EATech/include/Apt/AptTarget.h"            // gpAptTarget (the drag-state view)
 #include "SDKs/EATech/include/Apt/AptAnimationTarget.h"   // the director drag block
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
@@ -48,8 +49,6 @@
 
 // The pooled "this"/"_global" keys -- defined with their literal contents in
 // AptGlobals.cpp.
-extern const EAStringC& gAptKeyThis;     // unk_8324E6C0
-extern const EAStringC& gAptKeyGlobal;   // unk_8324E59C
 
 // The counter GetTimer reads (console dword_8324D820) IS the per-banked-frame tick
 // AptUpdate advances -- one dword, one PC symbol: gAptInputRecorderTag
@@ -64,7 +63,7 @@ void AptActionInterpreter::_FunctionAptActionPushThis(AptActionInterpreter* pInt
                                                       LocalContextT* /*pContext*/)
 {
     AptString* pStr = AptString::Create("");          // console seed @0x820046A7 ("" -- overwritten below)
-    *pStr->GetInternalString() = gAptKeyThis;
+    *pStr->GetInternalString() = StringPool::saConstant[StringPool::KU_NAME_THIS];
     pInterp->mpStack[pInterp->mnStackTop++] = pStr;    // inlined stackPush
     pStr->AddRef();
 }
@@ -76,7 +75,7 @@ void AptActionInterpreter::_FunctionAptActionPushGlobal(AptActionInterpreter* pI
                                                         LocalContextT* /*pContext*/)
 {
     AptString* pStr = AptString::Create("");          // console seed @0x820046A7 ("" -- overwritten below)
-    *pStr->GetInternalString() = gAptKeyGlobal;
+    *pStr->GetInternalString() = StringPool::saConstant[StringPool::KU_NAME_GLOBAL];
     pInterp->mpStack[pInterp->mnStackTop++] = pStr;
     pStr->AddRef();
 }
@@ -88,7 +87,7 @@ void AptActionInterpreter::_FunctionAptActionPushThisVariable(AptActionInterpret
                                                               LocalContextT* pContext)
 {
     AptValue* pResult = pInterp->getVariable(pContext->mpCIH, pContext->mpPendingReleaseValue,
-                                             &gAptKeyThis, 1, 1, 0);
+                                             &StringPool::saConstant[StringPool::KU_NAME_THIS], 1, 1, 0);
     pInterp->mpStack[pInterp->mnStackTop++] = pResult;
     pResult->AddRef();
 }
@@ -162,7 +161,6 @@ void AptActionInterpreter::_FunctionAptActionReturn(AptActionInterpreter* /*pInt
 
 // The clip's play-head "playing" bit (bIsPlaying, x64 mnClipActionFlags bit 25): set by Play,
 // cleared by Stop / NextFrame / GotoFrame. (Console *(spriteBase + 0x14) & 0x40.)
-static const uint32_t KU_CLIP_PLAYING = 0x2000000u;   // bIsPlaying, x64 bit 25 (X360 reversed bit 6)
 
 // The level-instance character type tag (mTypeFlags >> 26 == 15): the timeline ops
 // are no-ops on it. (Console: (mTypeFlags & 0xFC000000) == 0x3C000000.)
@@ -262,8 +260,7 @@ void AptActionInterpreter::_FunctionAptActionGotoFrame(AptActionInterpreter* pIn
     {
         pNode->jumpToFrame(*pFrame);          // real member (play-head seek)
         // clear the "playing" bit on the node's sprite instance.
-        static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst())->mnClipActionFlags
-            &= ~KU_CLIP_PLAYING;
+        static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst())->mbIsPlaying = 0;
     }
 
     // Flush the AptGC deferred-release vector once the operand stack has drained
@@ -284,7 +281,7 @@ void AptActionInterpreter::_FunctionAptActionNextFrame(AptActionInterpreter* /*p
         static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
 
     pNode->jumpToFrame(pSprite->mnGotoFrame + 1);          // real member (play-head seek)
-    pSprite->mnClipActionFlags &= ~KU_CLIP_PLAYING;
+    pSprite->mbIsPlaying = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -300,7 +297,7 @@ void AptActionInterpreter::_FunctionAptActionPrevFrame(AptActionInterpreter* /*p
         static_cast<AptCharacterSpriteInstBase*>(pNode->GetCharacterInst());
 
     pNode->jumpToFrame(pSprite->mnGotoFrame - 1);          // real member (play-head seek)
-    pSprite->mnClipActionFlags &= ~KU_CLIP_PLAYING;
+    pSprite->mbIsPlaying = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -324,13 +321,12 @@ void AptActionInterpreter::_FunctionAptActionPlay(AptActionInterpreter* /*pInter
     if (pTarget && IsClipHandleOrCIHNone(pTarget))
     {
         AptCIH* const pTargetNode = static_cast<AptCIH*>(pTarget);
-        static_cast<AptCharacterSpriteInstBase*>(pTargetNode->GetCharacterInst())->mnClipActionFlags
-            |= KU_CLIP_PLAYING;
+        static_cast<AptCharacterSpriteInstBase*>(pTargetNode->GetCharacterInst())->mbIsPlaying = 1;
         pTargetNode->SetDirtyState(true, true);
     }
     else if (IsClipHandleOrCIHNone(pNode))
     {
-        static_cast<AptCharacterSpriteInstBase*>(pInst)->mnClipActionFlags |= KU_CLIP_PLAYING;
+        static_cast<AptCharacterSpriteInstBase*>(pInst)->mbIsPlaying = 1;
         pNode->SetDirtyState(true, true);
     }
 }
@@ -348,7 +344,7 @@ void AptActionInterpreter::_FunctionAptActionStop(AptActionInterpreter* /*pInter
 
     AptCharacterInst* const pInst = pNode->GetCharacterInst();
     if (pInst->GetTypeTag() != KU_TYPETAG_LEVEL && pInst != 0)
-        static_cast<AptCharacterSpriteInstBase*>(pInst)->mnClipActionFlags &= ~KU_CLIP_PLAYING;
+        static_cast<AptCharacterSpriteInstBase*>(pInst)->mbIsPlaying = 0;
 }
 
 // ---------------------------------------------------------------------------

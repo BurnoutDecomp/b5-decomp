@@ -454,8 +454,8 @@ extern "C" void SFILTER_unpackfinit(FilterState* apState, VoiceStartParams* apPa
 {
     PcmFilter& lrFilter = *reinterpret_cast<PcmFilter*>(apState);
     lrFilter.mHeader.mpProcess = ProcessPcm;
-    lrFilter.muCursor = 0;
     lrFilter.mpSource = reinterpret_cast<const s16*>(apParams->mpSource);
+    lrFilter.muCursor = 0;
     lrFilter.muSampleCount = apParams->muSampleCount;
     apParams->mpPosition = ReadCursor<PcmFilter>;
     lrFilter.mHeader.mpRestore = 0;

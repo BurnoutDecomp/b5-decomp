@@ -414,7 +414,7 @@ void AptActionInterpreter::_FunctionAptActionTypeOf(AptActionInterpreter* pInter
         {
             const AptCharacterInst* pInst =
                 static_cast<const AptCIH*>(pTop)->GetCharacterInst();
-            const uint32_t nTag = pInst->GetTypeTag();   // mTypeFlags >> 26
+            const int nTag = pInst->GetTypeTag();   // mTypeFlags >> 26
             if (nTag == 5 || nTag == 16 || nTag == 9)
                 pTypeName = &gAptTypeName_MovieClip;
             else if (nTag == 15)

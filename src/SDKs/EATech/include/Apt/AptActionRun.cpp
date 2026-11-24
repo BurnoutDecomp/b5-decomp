@@ -26,6 +26,7 @@
 // ===========================================================================
 
 #include "SDKs/EATech/include/Apt/AptActionInterpreter.h"
+#include "SDKs/EATech/include/Apt/AptString/StringPool.h"
 #include "SDKs/EATech/include/Apt/AptValue/AptValue.h"
 #include "SDKs/EATech/include/Apt/AptCIH.h"   // AddRef/Release on the CIH
 
@@ -36,8 +37,7 @@ extern AptValue* gpUndefinedValue;
 // key (X360 runStream @0x82ADD440: `getVariable(a1, a3, 0, &unk_8324E6B8, 1, 1, 0)`
 // stored at ctx+0x10). ⚠ CORRECTED 2026-08-05: this was previously resolved as
 // "this" (gpAptThisKey), which broke CallMethod's supercall identity test (it
-// compares call receivers against this slot) -- see AptGlobals.cpp gAptKeySuper.
-extern const EAStringC& gAptKeySuper;   // unk_8324E6B8 -- "super"
+// compares call receivers against this slot) -- see AptGlobals.cpp StringPool::saConstant[StringPool::KU_NAME_SUPER].
 
 // The GC deferred-release drain (gValuesToRelease.ReleaseValues), homed in
 // AptGC.cpp; runStream's exit flush calls it under the console's stack-empty gate.
@@ -67,7 +67,7 @@ const unsigned char* AptActionInterpreter::runStream(
     ctx.mpPendingReleaseValue = 0;
     ctx.mpPendingReleaseEnd = 0;
     ctx.mpCIH                 = pCIH;
-    ctx.mpScopeVariable       = getVariable(pCIH, 0, &gAptKeySuper, 1, 1, 0);  // console: the "super" resolve @ctx+0x10
+    ctx.mpScopeVariable       = getVariable(pCIH, 0, &StringPool::saConstant[StringPool::KU_NAME_SUPER], 1, 1, 0);  // console: the "super" resolve @ctx+0x10
     ctx.mbStop                = false;
     ctx.mpCharacterInst       = pCharInst;
 

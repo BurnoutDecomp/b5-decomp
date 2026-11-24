@@ -221,12 +221,6 @@ extern const AptCXForm gAptNullCXForm  = AptMakeIdentityCXForm();   // off_82F73
 // 8. Named views of ARTIST's interned AS strings. StringPool::Initialize
 //    publishes their backing records after the Apt allocator is ready.
 // ===========================================================================
-extern const EAStringC& gAptKeyThis = StringPool::saConstant[StringPool::KU_NAME_THIS]; // 8324E6C0
-extern const EAStringC& gAptThisKey = StringPool::saConstant[StringPool::KU_NAME_THIS]; // 8324E6C0
-extern const EAStringC& gAptKeyGlobal = StringPool::saConstant[StringPool::KU_NAME_GLOBAL]; // 8324E59C
-extern const EAStringC& gAptKeySuper = StringPool::saConstant[StringPool::KU_NAME_SUPER]; // 8324E6B8
-extern const EAStringC& gAptKeyPrototype = StringPool::saConstant[StringPool::KU_NAME_PROTOTYPE]; // 8324E698
-extern const EAStringC& gAptKeyControllerKey = StringPool::saConstant[StringPool::KU_NAME_CONTROLLER]; // 8324E614
 extern const EAStringC& gAptEmptyMethodName = StringPool::saConstant[StringPool::KU_NAME_SUPER]; // 8324E6B8
 extern const EAStringC& gAptObjectClassName = StringPool::saConstant[StringPool::KU_NAME_OBJECT]; // 8324E650
 extern const EAStringC& gAptStringClassName = StringPool::saConstant[StringPool::KU_NAME_STRING]; // 8324E6B4
