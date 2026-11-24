@@ -10,7 +10,6 @@
 // Small SceneManagerIO interface members reconstructed from BURNOUT_X360_ARTIST.XEX
 // (semantic parity, not byte match):
 //   * SceneQueryInterface::HasData                        @ 0x82204E48
-//   * TriangleCacheInterface::GetNumCachedTriangleBatches @ 0x82277880
 //   * OutputBuffer::Construct                             @ 0x828C7CA0   (wave Q5)
 //   * OutputBuffer::Destruct                              @ 0x828BAD38   (wave Q5)
 // This IS the console's own CgsSceneManagerModuleIO.cpp: the two OutputBuffer bodies
@@ -61,24 +60,8 @@ bool CgsSceneManager::SceneManagerIO::SceneQueryInterface::HasData()
     return lbHasData;
 }
 
-// -----------------------------------------------------------------------------
-// CgsSceneManager::SceneManagerIO::TriangleCacheInterface::GetNumCachedTriangleBatches
-//   @ X360 0x82277880.
-// Asserts the cache manager has been set up (same "mpTriangleCacheManager != NULL" rodata
-// as the sibling GetCache, no trailing newline), then returns the cached slot's
-// miNumCachedTriangleBatches for the given slot index (the X360 reads
-// mpaCachedObjectSlots[index].miNumCachedTriangleBatches off the manager at +0x04 with the
-// 48-byte CacheSlot stride and the +0x28 field).
-// -----------------------------------------------------------------------------
-s32 CgsSceneManager::SceneManagerIO::TriangleCacheInterface::GetNumCachedTriangleBatches(
-    s32 liCacheSlotIndex) const
-{
-    CGS_ASSERT(mpTriangleCacheManager != 0,
-        CgsDev::Assert::MessageAt(
-            "mpTriangleCacheManager != NULL",
-            "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModuleIO.h", 1295 /* ARTIST 0x822778B0 */));
-    return mpTriangleCacheManager->mpaCachedObjectSlots[liCacheSlotIndex].miNumCachedTriangleBatches;
-}
+// (TriangleCacheInterface::GetNumCachedTriangleBatches @ 0x82277880 is header-inline, as in the
+// original: see CgsSceneManagerIO_TriangleCache.h.)
 
 // -----------------------------------------------------------------------------
 // CgsSceneManager::SceneManagerIO::OutputBuffer::Construct (X360 0x828C7CA0).

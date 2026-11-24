@@ -3,17 +3,23 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/SceneManager/CacheManager/CgsTriangleCacheManager.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // the inline members' ARTIST assert lines
+
+// The original header's __FILE__ as ARTIST bakes it into these inline members (0x82007B98 in the
+// TUs that include it relatively; SceneManagerModule's own TU bakes the absolute d:\p4 spelling).
+#define CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE \
+    "..\\..\\..\\GameShared\\GameClasses\\SceneManager/CgsSceneManagerModuleIO.h"
 
 // ============================================================================
 // CgsSceneManager::SceneManagerIO::TriangleCacheInterface
-// (CgsSceneManagerModuleIO.h:~1280 per the assert file/line rodata). A thin
-// client-facing wrapper holding a TriangleCacheManager* (+0x00) that forwards to
-// the manager once asserting it has been set up.
+// (declared in the original's CgsSceneManagerModuleIO.h, whose four inline members bake its
+// lines 1268 / 1277 / 1286 / 1295 into every copy). A thin client-facing wrapper holding a
+// TriangleCacheManager* (+0x00) that forwards to the manager once asserting it has been set up.
 //
-// GetCache @ X360 0x82277810; sibling GetNumCachedTriangleBatches @ 0x82277880
-// (its body lives in CgsSceneManagerModuleIO.cpp). Both assert *mpTriangleCacheManager
-// != NULL with the SAME message "mpTriangleCacheManager != NULL" (no trailing newline --
-// the X360 rodata has none) and a pointer-NULL guard (NOT an IOBuffer lock bit).
+// GetCache @ X360 0x82277810; sibling GetNumCachedTriangleBatches @ 0x82277880 (both out-of-line
+// copies emitted beside EffectsModule; the physics managers inline both). Both assert
+// mpTriangleCacheManager != NULL with the SAME message "mpTriangleCacheManager != NULL" (no
+// trailing newline -- the X360 rodata has none) and a pointer-NULL guard (NOT an IOBuffer lock bit).
 // ============================================================================
 
 namespace CgsSceneManager
@@ -30,15 +36,25 @@ namespace SceneManagerIO
         // ABI returns the forwarded pointer in r3; the return type is the manager's
         // GetTrianglesForCachedObject return (const Triangle4*), not s32 (an early
         // Hex-Rays int artifact -- corrected once that manager accessor was homed).
+        // h:1286 (li r5,0x506 at 0x82277840 and in the 8 physics callers that inline it).
         const CgsGeometric::Triangle4* GetCache(s32 liObjectIndex) const
         {
-            CGS_ASSERT(mpTriangleCacheManager != 0, "mpTriangleCacheManager != NULL");
+            CGS_ASSERT(mpTriangleCacheManager != 0,
+                       CgsDev::Assert::MessageAt("mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1286));
             return mpTriangleCacheManager->GetTrianglesForCachedObject(liObjectIndex);
         }
 
-        // @ X360 0x82277880 (body in CgsSceneManagerModuleIO.cpp). Asserts the manager is set
-        // up, then returns the cached-slot's miNumCachedTriangleBatches for the given slot index.
-        s32 GetNumCachedTriangleBatches(s32 liCacheSlotIndex) const;
+        // @ X360 0x82277880. Asserts the manager is set up, then returns the cached slot's
+        // miNumCachedTriangleBatches for the given slot index (the X360 reads
+        // mpaCachedObjectSlots[index].miNumCachedTriangleBatches off the manager at +0x04 with the
+        // 48-byte CacheSlot stride and the +0x28 field). Header-inline like GetCache: ARTIST bakes
+        // h:1295 into its copy and into every physics caller that inlines it.
+        s32 GetNumCachedTriangleBatches(s32 liCacheSlotIndex) const
+        {
+            CGS_ASSERT(mpTriangleCacheManager != 0,
+                       CgsDev::Assert::MessageAt("mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1295));
+            return mpTriangleCacheManager->mpaCachedObjectSlots[liCacheSlotIndex].miNumCachedTriangleBatches;
+        }
 
         // ⭐ ADDED 2026-08-11 (triangle-cache wiring wave). THE ONLY SEEDER OF THIS
         // INTERFACE IN THE WHOLE PROGRAM -- every other hop is an Append that adopts an
@@ -59,7 +75,8 @@ namespace SceneManagerIO
         // member's constness is a separate, tree-wide change).
         void SetTriangleCacheManager(TriangleCacheManager* lpTriangleCacheManager)
         {
-            CGS_ASSERT(lpTriangleCacheManager != 0, "lpTriangleCacheManager != NULL");
+            CGS_ASSERT(lpTriangleCacheManager != 0,
+                       CgsDev::Assert::MessageAt("lpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1268));
             mpTriangleCacheManager = lpTriangleCacheManager;
         }
 
@@ -67,11 +84,12 @@ namespace SceneManagerIO
         // CgsSceneManagerModuleIO.h:1277 in the original tree (the assert's baked
         // file/line); the X360 build inlines it into the world buffer's
         // AppendTriangleCacheInterface @ 0x8279BAF8 (assert-if-null then a single
-        // pointer store). Assert message verbatim from the X360 rodata (no newline).
+        // pointer store; li r5,0x4FD at 0x8279BB50). Assert message verbatim from the X360
+        // rodata (no newline).
         void Append(const TriangleCacheInterface* lpInterfaceToAppend)
         {
             CGS_ASSERT(lpInterfaceToAppend->mpTriangleCacheManager != 0,
-                       "lpInterfaceToAppend->mpTriangleCacheManager != NULL");
+                       CgsDev::Assert::MessageAt("lpInterfaceToAppend->mpTriangleCacheManager != NULL", CGS_SCENEMANAGERMODULEIO_H_ASSERT_FILE, 1277));
             mpTriangleCacheManager = lpInterfaceToAppend->mpTriangleCacheManager;
         }
     };

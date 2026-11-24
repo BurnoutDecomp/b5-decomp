@@ -18,54 +18,114 @@
 // `PropPartTypeData *[300]`, `VolRef::Volume *[2048]`, trailing `uint32_t muTimeStamp`), and
 // every one of those bounds is independently pinned by the array base offsets in the X360
 // FixUp @0x8267F570: +0x10, +0x7E0, +0xC90 -- i.e. 500 and 300 four-byte slots between them.
-// (An earlier revision sized mapPropPartTypes at 500 from a placeholder constant, which put
-// mapVolumeTypes 800 bytes past where the data has it.)
 //
 // LOADED IN PLACE: the native resource blob is this object. FixUp only adds
 // the resource load base to each serialised offset slot. _AssertLayout pins
 // the ARTIST table offsets and native 0x2C94-byte header.
 //
-// GetType @ 0x82277C50 is emitted OUT OF LINE by the shipped X360 build and its body overrides
-// the reference's inline version: TWO bounds asserts -- liTypeId < KU_MAX_PROP_TYPES (0x1F4 == 500)
-// and liTypeId < muNumberOfPropTypes -- then `return mapPropTypes[liTypeId];` unconditionally
-// (no null-on-overflow guard). Construct/Prepare/Release/Destruct/GetSizeInBytes/Refix are
-// declared per the DWARF and bodied by their own recon passes.
+// Line layout: the declarations sit on their DecFIGS DWARF lines (KU_MAX_PROP_PHYSICS_VOLUMES
+// h:41, class h:55, methods h:60..h:102, members h:131..h:142) and GetType's two asserts on
+// h:173/h:174, the lines ARTIST bakes into its out-of-line copy (0x82277C50) and every inlined
+// one (PropCellManager::ActivateCell, PropEntityModule::GenerateDispatchLists, ...).
 
 namespace BrnPhysics
 {
+
 namespace Props
 {
 
+
+
+
+
 static const uint32_t KU_MAX_PROP_PHYSICS_VOLUMES = 2 * 1024;
+
+// GetType @ 0x82277C50 (an out-of-line copy of the header inline) overrides the LegacySrc
+// version: TWO bounds asserts -- liTypeId < KU_MAX_PROP_TYPES (0x1F4 == 500) and
+// liTypeId < muNumberOfPropTypes -- then `return mapPropTypes[liTypeId];` unconditionally
+// (no null-on-overflow guard). Construct/Prepare/Release/Destruct/GetSizeInBytes/Refix are
+// declared per the DWARF and bodied by their own recon passes.
+
+
+
+
+
 
 class PropPhysicsDataHeader
 {
 public:
+
+
+
     void Construct();
+
+
+
     bool Prepare();
+
+
+
     bool Release();
+
+
+
     void Destruct();
+
 
     inline uint32_t GetSizeInBytes() const;
 
+
+
     void FixUp(const rw::Resource& lBaseResource);
+
+
+
     void FixDown(const rw::Resource& lBaseResource);
+
+
+
+
     void Refix(const void* lpSrc, void* lpDest);
 
-    // 0x82277C50 - out-of-line. Asserts liTypeId is in [0, KU_MAX_PROP_TYPES) and
-    // [0, muNumberOfPropTypes), then returns the type pointer at that slot.
-    const PropTypeData* GetType(uint32_t liTypeId) const;
+
+
+    inline const PropTypeData* GetType(uint32_t liTypeId) const;
+
 
     inline uint32_t GetNumberOfPropTypes() const;
 
+
+
     inline const PropPartTypeData* GetPartType(uint32_t liPartTypeId) const;
 
-    // DWARF BrnPropPhysicsDataHeader.h:102. The data compiler's build stamp; the shipped
-    // resource carries 0x47AAE3EA == 2008-02-07, the ARTIST build window.
+    // The data compiler's build stamp; the shipped resource carries 0x47AAE3EA == 2008-02-07.
     inline uint32_t GetTimeStamp() const;
 
     // Compile-time-only layout pin (see the block at the bottom of this header).
     static void _AssertLayout();
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 private:
     uint32_t muNumberOfPropTypes;        // +0x00
@@ -79,39 +139,8 @@ private:
     PropPartTypeData* mapPropPartTypes[KU_MAX_PROP_PART_TYPES];       // native +0x7E0
 
     rw::collision::Volume* mapVolumeTypes[KU_MAX_PROP_PHYSICS_VOLUMES];  // native +0xC90
-
     uint32_t muTimeStamp;                // native +0x2C90
 };
-
-// 0x82277C50 - reconstructed store-for-store from the X360 asm (OVERRIDES the reference inline).
-inline const PropTypeData*
-PropPhysicsDataHeader::GetType(uint32_t liTypeId) const
-{
-    CGS_ASSERT(liTypeId < KU_MAX_PROP_TYPES, "liTypeId < KU_MAX_PROP_TYPES");
-    CGS_ASSERT(liTypeId < muNumberOfPropTypes, "liTypeId < muNumberOfPropTypes");
-    return mapPropTypes[liTypeId];
-}
-
-inline uint32_t
-PropPhysicsDataHeader::GetNumberOfPropTypes() const
-{
-    return muNumberOfPropTypes;
-}
-
-// Declared per the reference layout; left to its own recon pass to body. GetPartType's reference inline used
-// CgsDev::Assert::PrintStringed directly -- replaced by the project CGS_ASSERT front-end.
-inline const PropPartTypeData*
-PropPhysicsDataHeader::GetPartType(uint32_t liPartTypeId) const
-{
-    CGS_ASSERT(liPartTypeId < muNumberOfPartTypes, "liPartTypeId < muNumberOfPartTypes");
-    return mapPropPartTypes[liPartTypeId];
-}
-
-inline uint32_t
-PropPhysicsDataHeader::GetTimeStamp() const
-{
-    return muTimeStamp;
-}
 
 // DWARF BrnPropPhysicsDataHeader.h:75. The serialised total (header + record arena), which
 // is what PropPhysicsResourceType::GetSerialisedResourceDescriptor reports as entry0's size.
@@ -125,6 +154,40 @@ inline uint32_t
 PropPhysicsDataHeader::GetSizeInBytes() const
 {
     return muSizeInBytes;
+}
+
+inline uint32_t
+PropPhysicsDataHeader::GetTimeStamp() const
+{
+    return muTimeStamp;
+}
+
+
+
+
+// 0x82277C50 - reconstructed store-for-store from the X360 asm (OVERRIDES the reference inline).
+inline const PropTypeData*
+PropPhysicsDataHeader::GetType(uint32_t liTypeId) const
+{
+
+    CGS_ASSERT(liTypeId < KU_MAX_PROP_TYPES, "liTypeId < KU_MAX_PROP_TYPES");
+    CGS_ASSERT(liTypeId < muNumberOfPropTypes, "liTypeId < muNumberOfPropTypes");
+    return mapPropTypes[liTypeId];
+}
+
+inline uint32_t
+PropPhysicsDataHeader::GetNumberOfPropTypes() const
+{
+    return muNumberOfPropTypes;
+}
+
+// GetPartType's reference inline used CgsDev::Assert::PrintStringed directly -- replaced by the
+// project CGS_ASSERT front-end. (No ARTIST copy bakes its line.)
+inline const PropPartTypeData*
+PropPhysicsDataHeader::GetPartType(uint32_t liPartTypeId) const
+{
+    CGS_ASSERT(liPartTypeId < muNumberOfPartTypes, "liPartTypeId < muNumberOfPartTypes");
+    return mapPropPartTypes[liPartTypeId];
 }
 
 // Native table bases are used directly by ARTIST FixUp/FixDown @0x8267F570/658.
