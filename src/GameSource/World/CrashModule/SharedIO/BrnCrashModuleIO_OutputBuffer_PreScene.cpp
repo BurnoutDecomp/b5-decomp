@@ -1,4 +1,5 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 
 #include <cstddef>   // offsetof
 
@@ -59,7 +60,9 @@ namespace CrashIO
     const OutputBuffer_PreScene::VehicleInputInterface*
     OutputBuffer_PreScene::GetVehicleInputInterface() const   // 0x827A2488 read-lock
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 133));
         return &mVehicleInputInterface;
     }
 

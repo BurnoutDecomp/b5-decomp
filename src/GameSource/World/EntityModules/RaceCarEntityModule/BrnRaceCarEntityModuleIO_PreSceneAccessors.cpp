@@ -58,7 +58,9 @@ OutputBuffer_PreScene::IsRequestingRivalUpdate() const
 const RCEntityActiveRaceCarOutputInterface*
 OutputBuffer_PreScene::GetActiveRaceCarOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        "Not locked for reading\n",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnRaceCarEntityModuleIO.h", 288));
     return &mActiveRaceCarOutputInterface;
 }
 
@@ -71,7 +73,9 @@ OutputBuffer_PreScene::GetActiveRaceCarOutputInterface() const
 const RCEntityGlobalRaceCarOutputInterface*
 OutputBuffer_PreScene::GetGlobalRaceCarOutputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        "Not locked for reading\n",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnRaceCarEntityModuleIO.h", 291));
     return &mGlobalRaceCarOutputInterface;
 }
 
@@ -111,7 +115,9 @@ OutputBuffer_PreScene::GetReplayActiveRaceCarOutputInterface() const
 const OutputBuffer_PreScene::VehicleInputInterface*
 OutputBuffer_PreScene::GetVehicleInputInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+        "Not locked for reading\n",
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\racecarentitymodule\\BrnRaceCarEntityModuleIO.h", 282));
     return &mVehicleInputInterface;
 }
 

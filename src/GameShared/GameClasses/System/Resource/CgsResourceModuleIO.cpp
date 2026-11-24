@@ -2,6 +2,7 @@
 
 #include "GameShared/GameClasses/System/Resource/CgsResourceModuleIO.h"  // the 3 real-shape structs
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // original append lock diagnostic
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX.
@@ -99,7 +100,9 @@ namespace CgsResource
         // Read-lock gate, then return the embedded status interface (X360 this+1).
         const FileSystemStatusInterface* OutputBuffer::GetFileSystemStatusInterface() const
         {
-            CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+            CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+                "Not locked for reading\n",
+                "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceModuleIO.h", 110));
             return &mFileSystemStatusInterface;
         }
 

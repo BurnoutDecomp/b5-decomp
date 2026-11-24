@@ -645,7 +645,9 @@ namespace BrnTrafficIO
     const OutputBuffer_PostScene::TrafficToRaceCarInterface_PostScene*
     OutputBuffer_PostScene::GetTrafficToRaceCarInterface_PostScene() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt(
+            "Not locked for reading\n",
+            "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 262));
         return &mTrafficToRaceCarInterface_PostScene;
     }
 
