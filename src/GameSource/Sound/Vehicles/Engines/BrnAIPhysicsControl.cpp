@@ -163,12 +163,11 @@ bool AIPhysicsControl::Attach()
 {
     if ( !PhysicsControl::Attach() )
         return false;
+    // ARTIST 0x826CE8AC..0x826CE8C0 stores the flags from mbInsideRadius back to the count.
     mfPassbyTriggered     = 0.0f;
     mfNearMissPassby      = 0.0f;
+    mbIsCurrentlyOccluded = mbEnableOcclusion = mbInsideRadius = false;
     mu8NotOccludedCount   = 0;
-    mbIsCurrentlyOccluded = false;
-    mbEnableOcclusion     = false;
-    mbInsideRadius        = false;
 
     return true;
 }

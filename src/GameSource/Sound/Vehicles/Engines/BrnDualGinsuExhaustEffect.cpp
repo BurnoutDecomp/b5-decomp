@@ -150,7 +150,10 @@ bool DualGinsuExhaustEffect::Attach()
     case E_ATTACHED:
         return true;
     default:
-        CGS_ASSERT(false, "Unhandled state");
+        // ARTIST 0x826F27A0: BrnDualGinsuEffect.cpp line 1375 in the original.
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unhandled state",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnDualGinsuEffect.cpp",
+            1375));
         return false;
     }
 }
@@ -172,7 +175,10 @@ bool DualGinsuExhaustEffect::Detach()
     case E_DETACHED:
         return true;
     default:
-        CGS_ASSERT(false, "Unhandled state");
+        // ARTIST 0x826F2804: this effect lives in BrnDualGinsuEffect.cpp in the original (line 1421).
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unhandled state",
+            "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Engines/BrnDualGinsuEffect.cpp",
+            1421));
         return false;
     }
 }

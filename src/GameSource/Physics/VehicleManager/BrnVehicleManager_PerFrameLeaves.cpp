@@ -195,10 +195,15 @@ namespace Vehicle
         const CgsSceneManager::SceneManagerIO::TriangleCacheInterface* lpTriCacheInterface,
         f32 lfTimeStep)
     {
-        CGS_ASSERT(lpContact != 0, "lpContact != NULL");                          // :7727
-        CGS_ASSERT(lpTriCacheInterface != 0, "lpTriCacheInterface != NULL");      // :7728
-        CGS_ASSERT(static_cast<u32>(lpContact->muVolumeInstanceIdA.muId >> 56) == 2u,
-                   "lpContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");   // :7730
+        // ARTIST's assert lines (0x825EAC60 / 0x825EAC84 / 0x825EACB4) in the unity-built
+        // BrnVehicleManager.cpp.
+        CGS_ASSERT(lpContact != 0, CgsDev::Assert::MessageAt("lpContact != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnVehicleManager.cpp", 7727));
+        CGS_ASSERT(lpTriCacheInterface != 0,
+                   CgsDev::Assert::MessageAt("lpTriCacheInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnVehicleManager.cpp", 7728));
+        CGS_ASSERT(lpContact->muVolumeInstanceIdA.GetEntityIDOwner() == 2u,
+                   CgsDev::Assert::MessageAt(
+                       "lpContact->muVolumeInstanceIdA.GetEntityIDOwner() == BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE",
+                       "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Physics/VehicleManager/BrnVehicleManager.cpp", 7730));
 
         return mPhysicalTrafficManager.ValidateTrafficContact(lpContact, lpTriCacheInterface, lfTimeStep);
     }

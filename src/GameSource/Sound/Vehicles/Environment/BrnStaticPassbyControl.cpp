@@ -138,21 +138,22 @@ bool StaticPassbyControl::PassbyHistory::Record( rw::math::vpu::Vector3 lvPositi
 // survives and we advance, otherwise it is Erase()d (order-preserving shift-down) and the
 // index is NOT advanced so the element shifted in is re-examined.
 // ---------------------------------------------------------------------------
-void StaticPassbyControl::PassbyHistory::Update( f32 lfDeltaTime )
+void StaticPassbyControl::PassbyHistory::Update( f32 lfTimeStep )
 {
-    u32 luIndex = 0;
-    while ( luIndex < mPassbyRecords.GetLength() )
+    // DWARF locals luCount (BrnStaticPassbyControl.h:228) and lRecord (h:232). ARTIST
+    // 0x8269AF9C: `bge` keeps the record (>= 0 or unordered); the fall-through erases it.
+    u32 luCount = 0;
+    while ( luCount < mPassbyRecords.GetLength() )
     {
-        PassbyRecord& lrRecord = mPassbyRecords[luIndex];
-        lrRecord.mfTimeStamp -= lfDeltaTime;
-        // 8269AF9C bge ->AFB0 retains >=0 OR unordered; <0 ->AFA0 erases.
-        if ( !(lrRecord.mfTimeStamp < 0.0f) )
+        PassbyRecord& lRecord = mPassbyRecords[luCount];
+        lRecord.mfTimeStamp -= lfTimeStep;
+        if ( lRecord.mfTimeStamp < 0.0f )
         {
-            ++luIndex;
+            mPassbyRecords.Erase(luCount);
         }
         else
         {
-            mPassbyRecords.Erase(luIndex);
+            ++luCount;
         }
     }
 }

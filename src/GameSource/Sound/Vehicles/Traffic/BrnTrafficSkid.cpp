@@ -61,21 +61,26 @@ const u32 KAU_TRAFFIC_SKID_SENDS[2] =
 
 const u32 KU_REVERB_SEND = static_cast<u32>( CgsSound::Playback::Name::MakeHash( "ReverbSend" ) );
 
-// The drift model: the lateral and longitudinal wheel speeds each count 1.0 at these
-// maxima, the drift parameter tops out at 1023, and the skid fades after 4 s physical.
-const f32 KF_SKID_MAX_EXPECTED_LATERAL = 12.0f;
-const f32 KF_SKID_MAX_EXPECTED_LONG    = 8.0f;
-const f32 KF_SKID_MAX_DRIFT            = 1023.0f;
-const f32 KF_SKID_MAX_TIME             = 4.0f;
-
-// The pitch scale for a car (class 0) and for anything bigger.
-const f32 KF_SKID_SMALL_PITCH = 1.12060546875f;
-const f32 KF_SKID_LARGE_PITCH = 0.8408203125f;
-
 u32 guSkidVoiceWitnesses = 0;
 u32 guSkidReleaseWitnesses = 0;
 u32 guSkidFinishedWitnesses = 0;
 } // namespace
+
+// BrnTrafficSkid.cpp:47..53 (DWARF): the drift model's tuning values are plain (non-const)
+// float32_t variables of namespace Traffic, so ARTIST reads them from .data (0x82F2CC00..
+// 0x82F2CC14 = 12.0, 8.0, 1023.0, 4.0, 1.12060546875, 0.8408203125; e.g. lfs at 0x826F0D80,
+// 0x82698AF4). The lateral and longitudinal wheel speeds each count 1.0 at these maxima, the
+// drift parameter tops out at 1023, and the skid fades after 4 s physical; the pitch scale is
+// for a car (class 0) and for anything bigger.
+f32 KF_SKID_MAX_EXPECTED_LATERAL = 12.0f;
+f32 KF_SKID_MAX_EXPECTED_LONG    = 8.0f;
+f32 KF_SKID_MAX_DRIFT            = 1023.0f;
+f32 KF_SKID_MAX_TIME             = 4.0f;
+f32 KF_SKID_SMALL_PITCH          = 1.12060546875f;
+f32 KF_SKID_LARGE_PITCH          = 0.8408203125f;
+
+#define KAC_TRAFFIC_SKID_FILE \
+    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Sound/Vehicles/Traffic/BrnTrafficSkid.cpp"
 
 // The console constructor inlines the BrnEffectObject base zero-inits and both leaf
 // vtables, constructs mSkidVoice and installs the functor's vtable.
@@ -171,10 +176,13 @@ bool TrafficSkid::Attach()
 // Only a physical car skids: the time as a physical body accumulates, the voice is
 // (re)started, and the drift parameter is read from the car's PhysicalTrafficState --
 // fading to zero over the two seconds after KF_SKID_MAX_TIME.
-void TrafficSkid::UpdateParams( f32 lfTimeStep )
+void TrafficSkid::UpdateParams( f32 lf32TimeStep )
 {
+    // DWARF locals BrnTrafficSkid.cpp:212 / 230 / 233 / 236 / 245; asserts on ARTIST's lines
+    // 213 and 231 (0x826F0C90, 0x826F0D34).
     const BrnTraffic::BrnTrafficIO::TrafficSoundEntity* lpTrafficSoundEntity = mpTrafficControl->GetTrafficEntity();
-    CGS_ASSERT( lpTrafficSoundEntity != 0, "lpTrafficSoundEntity" );
+    CGS_ASSERT( lpTrafficSoundEntity != 0,
+                CgsDev::Assert::MessageAt( "lpTrafficSoundEntity", KAC_TRAFFIC_SKID_FILE, 213 ) );
 
     if ( !lpTrafficSoundEntity->mbIsPhysical )
     {
@@ -183,31 +191,29 @@ void TrafficSkid::UpdateParams( f32 lfTimeStep )
         return;
     }
 
-    mfTimeAsPhysical += lfTimeStep;
+    mfTimeAsPhysical += lf32TimeStep;
     if ( mSkidVoice.GetUpdateStage() != CgsSound::Logic::VoiceWrapper::E_UPDATE_STAGE_PLAYING )
     {
         mSkidVoice.Play( 0 );
-
     }
 
-    BrnSound::Module::SoundLogicModule* lpModule =
-        static_cast<BrnSound::Module::SoundLogicModule*>( GetLogicModule() );
-    const BrnSound::Module::Io::LogicInputBuffer* lpInputBuffer = lpModule->GetBrnInputStructure();
-    CGS_ASSERT( lpInputBuffer != 0, "lpInputBuffer" );
+    BrnSound::Module::Io::LogicInputBuffer* lpInputBuffer =
+        static_cast<BrnSound::Module::SoundLogicModule*>( GetLogicModule() )->GetBrnInputStructure();
+    CGS_ASSERT( lpInputBuffer != 0, CgsDev::Assert::MessageAt( "lpInputBuffer", KAC_TRAFFIC_SKID_FILE, 231 ) );
     const BrnSound::Module::Io::RootInputBuffer::PhysicalTrafficStateQueue* lpPhysicalTrafficStates =
         lpInputBuffer->GetPhysicalTrafficStates();
 
-    const s32 liIndex = FindPhysicalTrafficState( lpPhysicalTrafficStates, lpTrafficSoundEntity->mEntityId );
-    if ( liIndex == -1 )
-        return;
-
-    const f32 lfDrift = CalculateDriftParameter( lpPhysicalTrafficStates->GetEvent( liIndex ) );
-    mfDriftFactor = lfDrift;
-    if ( mfTimeAsPhysical > KF_SKID_MAX_TIME )
+    const s32 liPhysicalIndex = FindPhysicalTrafficState( lpPhysicalTrafficStates, lpTrafficSoundEntity->mEntityId );
+    if ( liPhysicalIndex != -1 )
     {
-        f32 lfFade = ( KF_SKID_MAX_TIME + 2.0f ) - mfTimeAsPhysical;
-        lfFade = ( lfFade >= 0.0f ) ? lfFade : 0.0f;
-        mfDriftFactor = lfFade * 0.5f * lfDrift;
+        mfDriftFactor = CalculateDriftParameter( lpPhysicalTrafficStates->GetEvent( liPhysicalIndex ) );
+        if ( mfTimeAsPhysical > KF_SKID_MAX_TIME )
+        {
+            // Fade to zero over the two seconds after KF_SKID_MAX_TIME (rw::math::fpu::Max, fsel).
+            const f32 lfDriftFactorScale =
+                rw::math::fpu::Max<float>( ( KF_SKID_MAX_TIME + 2.0f ) - mfTimeAsPhysical, 0.0f ) * 0.5f;
+            mfDriftFactor = lfDriftFactorScale * mfDriftFactor;
+        }
     }
 }
 

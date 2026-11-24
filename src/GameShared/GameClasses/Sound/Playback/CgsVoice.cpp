@@ -342,18 +342,15 @@ void Slot::Release(Voice& arVoice)
 // the descriptor's offset into the send table (stride sizeof(Send)==12).
 bool Voice::Connect(Name akName, Handle<SubmixVoice>& arhSubmix)
 {
-    Send* lpSend = FindNamedSend(akName);       // v8=*a2 copied to stack Name; FindNamedSend
-    if (!lpSend)
-        return false;
-
-    // (NamedSend - GetSend(0)) / sizeof(Send): the descriptor's index in the table.
-    Send& lrFirst = GetSend(0);
-    u32 lu32Index = static_cast<u32>(
-        (reinterpret_cast<u8*>(lpSend) - reinterpret_cast<u8*>(&lrFirst)) / 12);
-
-    CGS_ASSERT(arhSubmix.GetObject() != 0, "mpObject");   // *a3 != 0 (CgsHandle.h:305)
-
-    return DoConnectSend(lu32Index, arhSubmix.GetObject());
+    // ARTIST 0x826ACC90: the found Send's element index (pointer difference, divw by 12) and the
+    // submix through Handle::operator* (its assert on CgsHandle.h:305 at 0x826ACCF0).
+    Send* lpSend = FindNamedSend(akName);
+    if (lpSend)
+    {
+        const u32 lu32Index = static_cast<u32>(lpSend - &GetSend(0));
+        return DoConnectSend(lu32Index, &*arhSubmix);
+    }
+    return false;
 }
 
 // @ 0x826ACAF8. Linear search the slot table for a name match.

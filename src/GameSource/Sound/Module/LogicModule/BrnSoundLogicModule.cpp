@@ -1548,19 +1548,6 @@ bool SoundLogicModule::PrepareStateManagersOnBoot(s32 liSkipBitfield)
     return true;
 }
 
-// X360 0x82682518. Return the attached sound logic input buffer, asserting it is
-// non-null first (the X360 fires CgsDev::Assert with the stringized member name
-// "mpBrnLogicInputBuffer" at BrnSoundLogicModule.h:432, then still returns the
-// pointer -- a non-gating tripwire).
-Io::LogicInputBuffer* SoundLogicModule::GetBrnInputStructure()
-{
-    CGS_ASSERT(mpBrnLogicInputBuffer,
-        CgsDev::Assert::MessageAt(
-            "mpBrnLogicInputBuffer",
-            "..\\..\\..\\GameSource\\Sound/Module/LogicModule/BrnSoundLogicModule.h", 432 /* ARTIST 0x82682540 */));
-    return mpBrnLogicInputBuffer;
-}
-
 // X360 0x826E1F10 (DWARF :152; bodied 2026-08-25, faithful-audio-engine phase C1).
 // Publish the module's accumulated pre-update output block into the caller's
 // scratch buffer: assert (cpp:495), write-lock, the SetPreUpdateOutput copy

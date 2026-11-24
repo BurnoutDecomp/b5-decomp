@@ -291,6 +291,19 @@ public:
 
 };
 
+// BrnSoundLogicModule.h:432: header inline in the original. ARTIST inlines it into most
+// callers (e.g. TrafficSkid::UpdateParams 0x826F0CF4..0x826F0D20) and keeps the out-of-line
+// copy 0x82682518 for the callers it does not inline (ProcessGameActionQueue, VehicleState::
+// UpdateParams, ...). The assert names the member, a non-gating tripwire.
+inline Io::LogicInputBuffer* SoundLogicModule::GetBrnInputStructure()
+{
+    CGS_ASSERT(mpBrnLogicInputBuffer,
+        CgsDev::Assert::MessageAt(
+            "mpBrnLogicInputBuffer",
+            "..\\..\\..\\GameSource\\Sound/Module/LogicModule/BrnSoundLogicModule.h", 432 /* ARTIST 0x82682540 */));
+    return mpBrnLogicInputBuffer;
+}
+
 } // namespace Module
 } // namespace BrnSound
 

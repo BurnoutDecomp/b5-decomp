@@ -59,9 +59,10 @@ namespace Vehicle
 
         if (lbActivateAISlowMo)
         {
-            mfCrashTimer         = 0.0f;
-            mInitialCrashAngVel  = GetAngularVelocity();
+            // ARTIST 0x825B8AC0..0x825B8AD0 reads the linear velocity (+0x50) before the angular (+0x60).
             mInitialCrashVel     = GetLinearVelocity();
+            mInitialCrashAngVel  = GetAngularVelocity();
+            mfCrashTimer         = 0.0f;
         }
     }
 
