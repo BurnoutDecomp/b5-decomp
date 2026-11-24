@@ -20,10 +20,10 @@
 // => sizeof(TimerStatus) == 24. TimerStatusInterface = { game @ +0, sim @ +24 },
 //    sizeof == 48 (Clear writes the sim block at +24..+44).
 //
-// CgsTimerStatusInterface.cpp owns TimerStatusInterface::Clear, operator=, StoreTimers,
-// IsSimTimerFrequency50Hz and TimerStatus::operator=. The four GetGameTimerStatus /
-// GetSimTimerStatus overloads, TimerStatus's accessors and TimerStatus::Clear are inline
-// below. IsGameTimerFrequency50Hz is the one declaration without a body.
+// CgsTimerStatusInterface.cpp owns TimerStatusInterface::Clear, StoreTimers and
+// IsSimTimerFrequency50Hz. The four GetGameTimerStatus / GetSimTimerStatus overloads,
+// TimerStatus's accessors, TimerStatus::Clear and both operator= are inline below.
+// IsGameTimerFrequency50Hz is the one declaration without a body.
 namespace CgsSystem
 {
     class Timer;   // fwd: StoreTimers param (declared-only here)
@@ -111,5 +111,30 @@ namespace CgsSystem
         mbRunning            = false;
         mTime.SetFraction(0.0f);   // CgsSystem::Time::SetFraction(this+16, 0.0)
         mTime.SetSeconds(0);       // *(this+16) = 0
+    }
+
+    // ---- the two assignment operators (header-inline) --------------------------
+    // DWARF declares both (h:77 TimerStatus, h:98 TimerStatusInterface) and the .cpp defines
+    // neither; ARTIST has no standalone body and inlines the memberwise copy at every
+    // assignment, e.g. BrnNetworkModuleIO::PreSimulationInputBuffer::SetTimerStatusInterface
+    // @0x823BB70C: per block lwz/stw miFrameCount, lfs/stfs the two steps, lbz/stb mbRunning,
+    // lwz/stw + lfs/stfs mTime; game block then sim block.
+    inline TimerStatus&
+    TimerStatus::operator=(const TimerStatus& lrOther)
+    {
+        miFrameCount         = lrOther.miFrameCount;
+        mfBaseTimeStep       = lrOther.mfBaseTimeStep;
+        mfTimeStepMultiplier = lrOther.mfTimeStepMultiplier;
+        mbRunning            = lrOther.mbRunning;
+        mTime                = lrOther.mTime;
+        return *this;
+    }
+
+    inline TimerStatusInterface&
+    TimerStatusInterface::operator=(const TimerStatusInterface& lrOther)
+    {
+        mGameTimerStatus = lrOther.mGameTimerStatus;
+        mSimTimerStatus  = lrOther.mSimTimerStatus;
+        return *this;
     }
 }

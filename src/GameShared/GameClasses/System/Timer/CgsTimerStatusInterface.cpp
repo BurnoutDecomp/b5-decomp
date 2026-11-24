@@ -14,30 +14,8 @@ CgsSystem::TimerStatusInterface::Clear()
     mSimTimerStatus.Clear();
 }
 
-// CgsSystem::TimerStatusInterface::operator=
-// The console never emits a standalone body for this: every assignment site inlines it as a
-// flat copy of the whole 48-byte object (BrnGameModule::BridgeTimers @0x823BD150 does exactly
-// twelve 4-byte loads/stores from +0 to +44). Reconstructed as the memberwise copy of the two
-// TimerStatus blocks, which is the same twelve words.
-CgsSystem::TimerStatusInterface&
-CgsSystem::TimerStatusInterface::operator=(const TimerStatusInterface& lrOther)
-{
-    mGameTimerStatus = lrOther.mGameTimerStatus;
-    mSimTimerStatus  = lrOther.mSimTimerStatus;
-    return *this;
-}
-
-// CgsSystem::TimerStatus::operator= -- the per-block half of the copy above (six words).
-CgsSystem::TimerStatus&
-CgsSystem::TimerStatus::operator=(const TimerStatus& lrOther)
-{
-    miFrameCount         = lrOther.miFrameCount;
-    mfBaseTimeStep       = lrOther.mfBaseTimeStep;
-    mfTimeStepMultiplier = lrOther.mfTimeStepMultiplier;
-    mbRunning            = lrOther.mbRunning;
-    mTime                = lrOther.mTime;
-    return *this;
-}
+// TimerStatusInterface::operator= and TimerStatus::operator= are header-inline (DWARF h:98 / h:77,
+// no CgsTimerStatusInterface.cpp definition): see CgsTimerStatusInterface.h.
 
 // CgsSystem::TimerStatusInterface::IsSimTimerFrequency50Hz  @ 0x8230E990
 // X360: return (*(a1+32) * *(a1+28)) == 0.02;
