@@ -904,11 +904,11 @@ namespace BrnGui
                 // The console tests AFTER the pair of stores, so the guard is one row late.
                 // It cannot be reached in practice -- maOptions holds at most 75 entries in
                 // total -- and it is kept where the console put it.
-                // The original line (BrnOnlineGameOptions.cpp:1387, ARTIST li r5,0x56B @0x8248EC20);
-                // this partfile cannot sit on it.
+                // ARTIST passes the filename at 0x82060B60 and line 1387.
+                // Keep the original diagnostic location after folding the source.
                 CGS_ASSERT(liNumOptions <= KI_MAX_TOGGLE_OPTIONS,
-                           CgsDev::Assert::MessageAt("Too many options specified", __FILE__,
-                                                     1387 /* ARTIST 0x8248EC20 */));
+                           CgsDev::Assert::MessageAt("Too many options specified",
+                               "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineGameOptions.cpp", 1387));
 
                 ++liRowIndex;
                 leRowOption = maOptions.GetItem(static_cast<u32>(liRowIndex)).meOption;

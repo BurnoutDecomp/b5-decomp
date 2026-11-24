@@ -2,7 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Containers/CgsArray.h"   // Array<T,N>
-#include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (constructed / non-empty invariants)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // CgsAlgorithms::BubbleSort - the fixed-array bubble sort the director utilities
 // run over their small tables (DWARF home CgsBubbleSort.h; the DecFIGS dump also
@@ -17,6 +17,8 @@
 // whole live window [0, length-1].
 namespace CgsAlgorithms
 {
+    static const char KAC_BUBBLE_SORT_ASSERT_FILE[] = "..\\..\\..\\GameShared\\GameClasses\\Algorithms\\CgsBubbleSort.h"; // ARTIST 0x82007558
+
     // ------------------------------------------------------------------------
     // 3-arg range variant (X360 ___BubbleSort_<T>_Array<T,N>(Array&, int, int) -- the tail
     // callee of the 1-arg entry below).
@@ -42,28 +44,29 @@ namespace CgsAlgorithms
     // is a plain 3-word record copy in the instantiated asm; written here as T assignment so
     // it stays correct for any element type. The console's only assert is the range guard.
     // ------------------------------------------------------------------------
-    template <typename T, s32 TI_SIZE>
-    void BubbleSort(CgsContainers::Array<T, TI_SIZE>& lrArray, s32 liFirst, s32 liLast)
+    template <typename T, typename ArrayType>
+    void BubbleSort(ArrayType& lrArray, s32 liStart, s32 liEnd)
     {
-        CGS_ASSERT(liFirst <= liLast, "liStart <= liEnd");   // CgsBubbleSort.h:93
+        CGS_ASSERT(liStart <= liEnd,
+            CgsDev::Assert::MessageAt("liStart <= liEnd", KAC_BUBBLE_SORT_ASSERT_FILE, 93));
 
-        for (s32 liEnd = liLast; liEnd != liFirst; --liEnd)
+        for (s32 liLast = liEnd; liLast != liStart; --liLast)
         {
-            s32 liSwaps = 0;
+            u32 luNumSwaps = 0;
 
-            for (s32 li = liFirst; li != liEnd; ++li)
+            for (s32 li = liStart; li != liLast; ++li)
             {
                 if (lrArray[li] > lrArray[li + 1])
                 {
                     const T lTemp     = lrArray[li];
                     lrArray[li]       = lrArray[li + 1];
                     lrArray[li + 1]   = lTemp;
-                    ++liSwaps;
+                    ++luNumSwaps;
                 }
             }
 
             // Already ordered: the console breaks out rather than running the remaining passes.
-            if (liSwaps == 0)
+            if (luNumSwaps == 0)
             {
                 break;
             }
@@ -78,8 +81,9 @@ namespace CgsAlgorithms
         // *(a1+96) == -1 guard: GetLength() itself asserts miCount != KI_UNCONSTRUCTED(-1)
         // ("Array used before Construct/Clear was called").
         const s32 liLast = static_cast<s32>(lrArray.GetLength()) - 1;   // v2 = length - 1
-        CGS_ASSERT(liLast >= 0, "Array is too large to sort, or it is zero size!");  // v2 < 0 guard
+        CGS_ASSERT(liLast >= 0,
+            CgsDev::Assert::MessageAt("Array is too large to sort, or it is zero size!", KAC_BUBBLE_SORT_ASSERT_FILE, 158));
 
-        BubbleSort<T, TI_SIZE>(lrArray, 0, liLast);   // ___BubbleSort_...(a1, 0, v2)
+        BubbleSort<T>(lrArray, 0, liLast);
     }
 }

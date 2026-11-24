@@ -68,7 +68,7 @@
 #include "GameSource/GameState/BrnGameStateTypes.h"     // BrnGameState::LandmarkIndex (mPlayerCurrentLandmark)
 #include "GameSource/BurnoutConstants.h"                // EGlobalRaceCarIndex / EActiveRaceCarIndex (the 35 / 8 car spaces)
 #include "GameShared/GameClasses/Containers/CgsBitArray.h" // CgsContainers::BitArray<35> (the two reached-sets)
-#include "GameShared/GameClasses/Core/CgsAssert.h"      // CGS_ASSERT (house assert macro)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // -- embedded sub-objects, by value (console offsets in the member run below) -----------------------
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystem.h"   // ScoringSystem                @+3504
@@ -187,8 +187,10 @@ namespace GameStateModuleIO
 //  Layout is the console's: liGridPosition at +0x00, lpCarData at +0x04, 8-byte stride (the
 //  Array<GridPositionAndScoreData,8> element accessor strides by 8, and the sort swaps two words).
 // ===================================================================================================
-struct GridPositionAndScoreData
+// ARTIST uses the class type in the BubbleSort and Shuffle instantiations.
+class GridPositionAndScoreData
 {
+public:
     s32                           liGridPosition;
     const CarData*                lpCarData;
 
@@ -199,8 +201,9 @@ struct GridPositionAndScoreData
     // to the sort or to its caller.
     bool operator>(const GridPositionAndScoreData& lRhs) const
     {
-        CGS_ASSERT(lpCarData != 0, "lpCarData");
-        CGS_ASSERT(lRhs.lpCarData != 0, "lRhs.lpCarData");
+        const char* const lpcAssertFile = "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp"; // ARTIST 0x82022AD8
+        CGS_ASSERT(lpCarData != 0, CgsDev::Assert::MessageAt("lpCarData", lpcAssertFile, 150));
+        CGS_ASSERT(lRhs.lpCarData != 0, CgsDev::Assert::MessageAt("lRhs.lpCarData", lpcAssertFile, 151));
         return lpCarData->GetCumulativePoints() > lRhs.lpCarData->GetCumulativePoints();
     }
 };

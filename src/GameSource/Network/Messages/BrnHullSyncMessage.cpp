@@ -1,8 +1,8 @@
 #include "types.hpp"
 
 #include "GameSource/Network/Messages/BrnHullSyncMessage.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"
-
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+static const char KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Network/Messages/BrnHullSyncMessage.cpp"; // ARTIST filename 0x82086260
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::HullSyncMessage::Construct       @ 0x8257DC38
 //   BrnNetwork::HullSyncMessage::PrepareForSend  @ 0x8257DC78
@@ -29,9 +29,9 @@ namespace BrnNetwork
                                          BufferedHullsToActivate* laBufferedHullActivates)
     {
         CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-                   "!ReliableMessage::IsMessageValid()");
+            CgsDev::Assert::MessageAt("!ReliableMessage::IsMessageValid()", KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE, 71));
         CGS_ASSERT(laBufferedHullActivates->GetLength() > 0,
-                   "laBufferedHullActivates->GetLength() > 0");
+            CgsDev::Assert::MessageAt("laBufferedHullActivates->GetLength() > 0", KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE, 74));
 
         mBufferedHullActivates = *laBufferedHullActivates;      // 48-byte memcpy in
         CgsNetwork::ReliableMessage::PrepareForSend(13, lu16FrameCount);
@@ -105,12 +105,12 @@ namespace BrnNetwork
         {
             *laBufferedHullActivates = mBufferedHullActivates;      // 48-byte memcpy out
             CGS_ASSERT(mBufferedHullActivates.GetLength() > 0,
-                       "maBufferedHullActivates.GetLength() > 0");
+                CgsDev::Assert::MessageAt("maBufferedHullActivates.GetLength() > 0", KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE, 134));
 
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
             mBufferedHullActivates.Clear();                          // live-count -> 0 (+0x54)
             CGS_ASSERT(mBufferedHullActivates.GetLength() == 0,
-                       "maBufferedHullActivates.GetLength() == 0");
+                CgsDev::Assert::MessageAt("maBufferedHullActivates.GetLength() == 0", KAC_BRN_HULL_SYNC_MESSAGE_ASSERT_FILE, 140));
             return true;
         }
         return false;

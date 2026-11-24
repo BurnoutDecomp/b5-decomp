@@ -5,7 +5,7 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"   // the streamed assert messages
 
 #include <cstdlib>   // std::qsort (Array<T,N>::QSort)
-
+#line 9 "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsArray.h"
 // CgsContainers::Array<T, N> - the fixed-capacity inline array of the Cgs containers.
 // Namespace, member set, names and lines from the DecFIGS DWARF
 // (references/DecFIGS/dwarfdump/GameShared/GameClasses/Containers/CgsArray.h); the shape of
@@ -21,7 +21,7 @@
 // specializations in other directories read them.
 //
 // SOURCE LINES: ARTIST bakes this header's line numbers into every inlined assert (li r5,
-// <line> before CgsDev::Assert::FireAssert, file string @0x82005634). The DWARF puts each
+// <line> before CgsDev::Assert::FireAssert, original source path @0x82005634). The DWARF puts each
 // definition on the line named below; its asserts sit ten lines lower, on the lines ARTIST
 // passes. The comment lines inside each body hold those positions.
 //

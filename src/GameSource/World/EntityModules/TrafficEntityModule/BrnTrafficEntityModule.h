@@ -120,7 +120,7 @@ namespace BrnTraffic
     // SharedClasses/Traffic/BrnTrafficSection.h.
     struct Section;
 
-    class TrafficData;
+    struct TrafficData;
     // The DWARF spells mpVehicleList's type unqualified (:943), but it is
     // BrnResource::VehicleList (home SharedClasses/DataLists/VehicleList.h), not a
     // BrnTraffic type: FindVehicleTypeAttribKey_EXPENSIVE @0x8273F0B8 calls

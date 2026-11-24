@@ -9,9 +9,8 @@
 //   CgsAlgorithms::BubbleSort<NearestCarInfo,8>  @ 0x8222D8F8  (AllVehicleData nearest-car queries)
 //
 // The Stack<T,N> element types are all committed (CgsStack.h); NearestCarInfo + its Array<,8>
-// come from the committed BrnDirectorAllVehicleData home. The 1-arg BubbleSort entry tail-calls
-// the un-attested 3-arg range worker (declared-only in CgsBubbleSort.h); only the attested
-// 1-arg entry is forced here.
+// come from BrnDirectorAllVehicleData.h. The 1-arg BubbleSort entry emits its
+// container-typed range worker, attested at ARTIST 0x82213F80.
 #include "GameShared/GameClasses/Algorithms/CgsShuffle.h"
 #include "GameShared/GameClasses/Algorithms/CgsBubbleSort.h"
 #include "GameShared/GameClasses/Containers/CgsStack.h"

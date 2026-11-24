@@ -38,7 +38,8 @@ INCLUDES = [
 ]
 FLAGS = [
     "/nologo", "/c", "/X", "/O2", "/Oi", "/Ob2", "/GR-", "/GS-",
-    "/EHs-c-", "/Gy", "/FAcs", "/D_XBOX", "/DD_PLATFORM_X360=1",
+    # Machine-code listings do not reopen historical filenames from #line.
+    "/EHs-c-", "/Gy", "/FAc", "/D_XBOX", "/DD_PLATFORM_X360=1",
     "/DCGS_PLATFORM_X360=1", "/FItypes.hpp",
 ]
 # Extra flags for the libraries ARTIST compiled with their own settings, by source folder
