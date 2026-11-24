@@ -36,7 +36,7 @@ namespace BrnGui
         miTimeLeft = liTimeLeft;
 
         // Past zero the clock hides; otherwise it ticks.
-        AddOutputAptViewState("apt_state", (liTimeLeft < 0) ? "invisible" : "tick", false);
+        if (liTimeLeft >= 0) AddOutputAptViewState("apt_state", "tick", false); else AddOutputAptViewState("apt_state", "invisible", false);   // two calls, cross-jumped (ARTIST 0x8241AF18 sets r6/r3 above the branch)
 
         char lacNumber[16];
         CgsCore::SnPrintf(lacNumber, 16, "%d", miTimeLeft);

@@ -35,7 +35,7 @@ namespace BrnGui
     void HudMessageDirector::SetCameraSequenceFilter(bool lbShowing)
     {
         mbStopFlagCamera = lbShowing;
-        if (lbShowing)
+        if (lbShowing == true)   // ARTIST 0x8250C848 cmplwi r11,1
         {
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {

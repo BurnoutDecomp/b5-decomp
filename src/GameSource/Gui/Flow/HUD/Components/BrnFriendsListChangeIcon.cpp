@@ -57,10 +57,10 @@ void FriendsListChangeIconComponent::ShowNow()
     }
 }
 
-// @ 0x82414D00 -- drop to "invisible" while shown (the asm's == 1 compare).
+// @ 0x82414D00 -- drop to "invisible" while shown (the asm's == 1 compare: cmplwi r11,1).
 void FriendsListChangeIconComponent::Hide()
 {
-    if (mbShowing)
+    if (mbShowing == true)
     {
         SetState("invisible");
         mbShowing = false;

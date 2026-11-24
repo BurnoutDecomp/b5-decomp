@@ -177,7 +177,7 @@ namespace BrnGui
         // @ 0x827DD5F0 - a state change dirties both the icon and its icon-state.
         void SetState(IconState leState)
         {
-            if (leState != meState)
+            if (meState != leState)   // ARTIST cmpw r(meState), r4
             {
                 meState = leState;
                 mbIsDirty = true;
@@ -350,7 +350,7 @@ namespace BrnGui
     // @ 0x827DD790 (see the in-class comment).
     inline void SatNavMapIcon::SetState(IconState leState)
     {
-        if (leState != meState)
+        if (meState != leState)   // ARTIST cmpw r(meState), r4
         {
             meState = leState;
             SatNavIconComponent* lpComponent = reinterpret_cast<SatNavIconComponent*>(

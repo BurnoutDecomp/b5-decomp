@@ -370,7 +370,7 @@ namespace BrnGui
         void UnloadResources(const CgsGui::sResourceTuple* lpResources, u32 luCount);
 
         f32 GetTime() const;
-        f32 GetTimeStep() const;
+        f32 GetTimeStep() const { return mfTimeStep; }   // DWARF h:821; header-inline (no ARTIST copy)
         bool IsLoadingScreenVisible() const { return mbIsLoadingScreenVisible; }
         // BrnGuiCache.h -- the GUI's shared random generator (+0x13B60), header inline.
         CgsNumeric::Random* GetRandomNumberGenerator() { return &mRandom; }
@@ -456,7 +456,7 @@ namespace BrnGui
         // car-selection path on it (X360 lwzx r,this,0xA9C8, compared == 1). Exposed by name as the
         // raw state word carved into the layout below. FLAG: consumer-named (no standalone DWARF
         // symbol for this member). Body links from the GuiCache TU.
-        s32 GetOnlineHostGameState() const;   // X360 far member @0xA9C8
+        s32 GetOnlineHostGameState() const { return miOnlineHostGameState; }   // X360 far member @0xA9C8
 
         // ADDITIVE GROW (BrnOnlinePreEventMessages TU): the cache holds the active game-mode
         // type the GUI reads to pick mode-specific apt key-frames (the X360 reads it as a far
@@ -465,7 +465,7 @@ namespace BrnGui
         // BrnGameState::GameStateModuleIO::EGameModeType value (s32) so this boundary header
         // does not need to pull in the heavy game-state enum header. Body links from the
         // GuiCache TU.
-        s32 GetCurrentGameModeType() const;
+        s32 GetCurrentGameModeType() const { return meGameModeType; }   // header-inline; duplicates the DWARF GetGameMode() (callers move with the templates claims)
 
         // ADDITIVE GROW (BrnOnlinePreEvent TU): resolve the fly-by line-up entry at the given
         // index to its pre-event info record. The online pre-event state indexes it with its
@@ -495,12 +495,12 @@ namespace BrnGui
         // as a player count (`> 1`) to gate the "you beat someone's record" HUD flash -- i.e.
         // it is the number of active players in the current race. Exposed below by an apt
         // name for that consumer; both accessors hit the one @0xAC74 member.
-        u32 GetFriendsListCachedField() const;   // X360 far member @0xAC74
+        u32 GetFriendsListCachedField() const { return muNumActivePlayers; }   // X360 far member @0xAC74
 
         // ADDITIVE GROW (BrnGuiBurnoutSkillsManager TU): the active-player count the
         // burnout-skills manager gates its HUD-message emission on. Same far member as
         // GetFriendsListCachedField (X360 lwzx r,this,0xAC74). Body links from the GuiCache TU.
-        s32 GetNumActivePlayers() const;         // X360 far member @0xAC74
+        s32 GetNumActivePlayers() const { return static_cast<s32>(muNumActivePlayers); }   // header-inline (DWARF name GetOnlinePlayerCount; rename pending the templates claims)         // X360 far member @0xAC74
 
         // ADDITIVE GROW (BrnGui::MapIconManager TU): the map-icon manager walks the cache's
         // drive-through / junkyard sat-nav icon list when building the on-map selection set
@@ -510,7 +510,7 @@ namespace BrnGui
         // inlines both at the call site; exposing them by name keeps the manager TU off raw
         // offsets. Bodies link from the GuiCache TU.
         const GuiEventUpdateSatNav::SatNavIconInfo* GetDriveThrough(s32 liIndex) const;
-        s32 GetNumberOfDriveThroughs() const;
+        s32 GetNumberOfDriveThroughs() const { return miNumDriveThroughs; }   // DWARF h:1485
 
         // ADDITIVE GROW (BrnGui::MapIconManager TU): UpdateSatNavIcons' network-rivals pass
         // (X360 AddTeamToNetworkRivals @0x824F4FF8) looks up the player's online team for the
@@ -542,7 +542,7 @@ namespace BrnGui
         // |iconPos - cameraPos|^2 (vsubfp128 + vmsum3fp128 over the first three lanes) to pick the
         // closest off-screen icon. Exposed by name as the leading 16-byte lane (xyz = camera
         // world position); body links from the GuiCache TU. X360-attested @0x4AE0.
-        const Vector4& GetWorldCameraPosition() const;   // X360 far member @0x4AE0
+        const Vector4& GetWorldCameraPosition() const { return mv4WorldCameraPosition; }   // X360 far member @0x4AE0
 
         // DecFIGS h:1149; ARTIST8250CA44 reads this actual contained owner.
         const GuiPFXHookEnumeration* GetPFXHookEnumeration() const
@@ -689,7 +689,7 @@ namespace BrnGui
 
         f32 GetCurrentTimeInEvent() const;          // X360 @0x8240F2C8 (mfEventTime,  >= 0)
         f32 GetTargetTimeInEvent() const;           // X360 @0x8240F330 (mfTargetTime, >= 0)
-        s32 GetOpponentsInEvent() const;            // X360 @0x8240F450 (miOpponentsInEvent, s8)
+        s8 GetOpponentsInEvent() const;             // X360 @0x8240F450; DWARF int8_t (callers extsb r3, e.g. 0x82421734)
         s32 GetEventDestinationDistrict() const;    // X360 @0x82472DB0 (mEventDestinationDistrict)
         s32 GetCheckpointReached() const;           // X360 @0x824EC468 (miCheckpointReached, >= 0)
         s32 GetCurrentTakedownsInEvent() const;     // X360 @0x8240F4B0 (miTakedownsCurrent, ROAD_RAGE)
@@ -1005,15 +1005,15 @@ namespace BrnGui
         // profile pointer from mpGuiCache+0x405C; Update @0x82424160 loads the distance float
         // from mpGuiCache+0x13B94), so exposing them by name keeps that leaf off raw offsets.
         // DECLARATION-ONLY per the far-member convention (bodies link from the GuiCache TU).
-        const BrnProgression::Profile* GetProfile() const;   // X360 far member @0x405C
-        f32 GetDistanceDriven() const;                        // X360 far member @0x13B94
+        const BrnProgression::Profile* GetProfile() const { return mpProfile; }   // X360 far member @0x405C
+        f32 GetDistanceDriven() const { return mfDistanceDriven; }   // header-inline (DWARF name GetDistanceDrivenInCurrentCar)                        // X360 far member @0x13B94
 
         // ADDITIVE GROW (CrashNavSettings wave, 2026-08-29). The non-const twin of
         // GetProfile above: CrashNavSettings::HandleControllerInput @0x824D916C WRITES
         // through the same far member (`lwz r11, 0x405C(cache) ; stbx r30, r11, 0x1CD14`
         // -- the credits-cheat unlock), so the const-only accessor cannot serve it.
         // Declaration-only, same far-member convention.
-        BrnProgression::Profile* GetProfile();               // X360 far member @0x405C
+        BrnProgression::Profile* GetProfile() { return mpProfile; }               // X360 far member @0x405C
 
         // ADDITIVE GROW (CrashNavSettings wave, 2026-08-29). The latched autosave-icon
         // flag -- see the member's own note at +0x12F09 for the producer
@@ -1027,7 +1027,7 @@ namespace BrnGui
         // inlines the raw far-member load and tests it against zero; exposing it by name is
         // what keeps those TUs off raw offsets.
         // DECLARATION-ONLY per the far-member convention (body links from the GuiCache TU).
-        s32 GetCamStatus() const;                            // X360 far member @0x13B58
+        s32 GetCamStatus() const { return miCamStatus; }                            // X360 far member @0x13B58
 
         // ADDITIVE GROW (BrnGui::FriendsListComponent TU). BuildShortcutOptions
         // @0x824145B0 gates the offline shortcut list's option-1 entry on this far byte
@@ -1092,7 +1092,7 @@ namespace BrnGui
         // modelled tail; both CrashNavOptions::SetSettingsFromProfile @0x824B8028 and
         // OnlineGameRoomPlayerInfo::ShowSettingsOptions @0x82485140 inline the fetch).
         // DECLARATION-ONLY per the far-member convention (body links from the GuiCache TU).
-        OptionsDataProfile* GetOptionsDataProfile();   // X360 far member @0xB878
+        OptionsDataProfile* GetOptionsDataProfile() { return &mOptionsData; }   // header-inline (DWARF name GetMenuOptionsData)   // X360 far member @0xB878
 
         // The live DLC1 options block that sits directly after it (X360 far member
         // @0x12BE8/76776; ReadProfileData @0x824FF298 inlines the fetch the same way).
@@ -1157,12 +1157,12 @@ namespace BrnGui
 
         // DWARF h:1277 (member meRoadRuleShotOpponentARCI, h:1817; X360
         // +0xAC48/44104). s32-typed per this header's ARCI house style.
-        s32 GetRoadRuleShotOpponentARCI() const;
+        s32 GetRoadRuleShotOpponentARCI() const { return meRoadRuleShotOpponentARCI; }
 
         // The +0xAC5A local-new-ruler flag also gates Snap's "CAPTURED_FOR" line.
         // Keep this accessor used by the existing component; the member name is
         // corroborated by DecFIGS BrnGuiCache.h:1815.
-        bool GetRoadRuleShotCapturedLineGate() const;
+        bool GetRoadRuleShotCapturedLineGate() const { return mbRoadRuleShotLocalPlayerNewRuler; }
 
         // One online player record by slot (DWARF h:788 GetOnlinePlayerInfoByIndex(int32_t),
         // non-const; maPlayerInfo[8] at X360 +0xAC80, 312-byte stride). ARTIST keeps an

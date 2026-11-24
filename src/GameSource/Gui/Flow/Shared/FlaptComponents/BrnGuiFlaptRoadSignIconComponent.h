@@ -123,6 +123,11 @@ namespace BrnGui
         bool                    mbShowPost;         // +0x42
         bool                    mbSignVisible;      // +0x43
         BrnFlapt::MovieClipRef  mPostMovieClip;     // +0x44
+
+        // DWARF BrnGuiFlaptRoadSignIconComponent.cpp:48 -- a plain `const char*` static (the
+        // pointer itself is not const): ARTIST loads it from .data 0x82F253F0 (`lwz r6`) in
+        // DisplayRoadFromCgsID @0x8242DC24 and DisplayRoad(ERoadIcon) @0x8242DBAC.
+        static const char*      mpRoadPrefix;
     };
 }
 

@@ -93,11 +93,27 @@ void HudMessageAnalyzer::HandleBurningHomeRunCheckpointReached(
 
     if (static_cast<s32>(lpEvent->meActiveRaceCarIndex) == mpGuiCache->GetPlayerActiveRaceCarIndex())
     {
-        lMessage.Construct(lpEvent->miNumCheckpointsToGo == 1 ? "OnlBHRYrLmk1" : "OnlBHRYrLdMk");
+        // One Construct per arm in both branches (ARTIST 0x8251B28C hoists r3 = &lMessage
+        // above the whole test and emits a call per arm: if/else, not a ternary argument).
+        if (lpEvent->miNumCheckpointsToGo == 1)
+        {
+            lMessage.Construct("OnlBHRYrLmk1");
+        }
+        else
+        {
+            lMessage.Construct("OnlBHRYrLdMk");
+        }
     }
     else
     {
-        lMessage.Construct(lpEvent->miNumCheckpointsToGo == 1 ? "OnlBHRTrLmk1" : "OnlBHRTrLdMk");
+        if (lpEvent->miNumCheckpointsToGo == 1)
+        {
+            lMessage.Construct("OnlBHRTrLmk1");
+        }
+        else
+        {
+            lMessage.Construct("OnlBHRTrLdMk");
+        }
 
         bool lbNameValid = true;   // the X360 seeds the out-flag true before the call
         const char* lpcOnlineName = GetOnlineName(lpEvent->meActiveRaceCarIndex, &lbNameValid);

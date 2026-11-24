@@ -104,7 +104,7 @@ namespace BrnGui
             // rather than relying on that.
             char lacNumber[16];
             CgsCore::SPrintf(lacNumber, KU_ROAD_ID_DIGITS, "%d",
-                             static_cast<s32>(BrnGameState::KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liRoad]));
+                             BrnGameState::KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liRoad]);   // the whole doubleword (ARTIST ld r6)
 
             // X360 r7 == 9 == E_FORMAT_ID_LOOKUP: resolve the digits as a database id.
             mpStateInterface->GetLanguageManager()->FormatText(

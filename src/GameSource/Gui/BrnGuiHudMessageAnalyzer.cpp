@@ -242,7 +242,16 @@ void HudMessageAnalyzer::HandleOnlineStuntRunElimination(
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpEliminatedPlayer =
             mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpEliminationEvent->mPlayerId);
 
-        lMessage.Construct(lpEliminationEvent->mbIsTeammate ? "OnlSRTpElim" : "OnlSrRiElim");
+        // One Construct per arm (ARTIST 0x8251FBBC: r3 = &lMessage above the branch, the
+        // call cross-jumped -- an if/else, not a ternary argument).
+        if (lpEliminationEvent->mbIsTeammate)
+        {
+            lMessage.Construct("OnlSRTpElim");
+        }
+        else
+        {
+            lMessage.Construct("OnlSrRiElim");
+        }
         lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0,
                           lpEliminatedPlayer->mPlayerName.macName);
     }
@@ -378,7 +387,14 @@ void HudMessageAnalyzer::HandleOnlineStuntRunMessage(
         const s32 liScoringPlayerTeam = mpGuiCache->GetCurrentOnlinePlayerTeam(
             static_cast<EActiveRaceCarIndex>(lpEliminatedPlayer->meActiveRaceCarIndex));
 
-        lMessage.Construct(liLocalPlayerTeam == liScoringPlayerTeam ? "OnlSrTpScore" : "OnlSrRiScore");
+        if (liLocalPlayerTeam == liScoringPlayerTeam)
+        {
+            lMessage.Construct("OnlSrTpScore");
+        }
+        else
+        {
+            lMessage.Construct("OnlSrRiScore");
+        }
         lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRING, 0,
                           lpEliminatedPlayer->mPlayerName.macName);
     }
@@ -512,21 +528,22 @@ bool HudMessageAnalyzer::AddGamerTagToMessage(GuiHudMessage* lpMessage, const ch
     CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                CgsDev::Assert::MessageAt("leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", __FILE__, 5920 /* ARTIST 0x824F35AC */));
 
-    bool lbNameValid = true;
-    const char* lpcOnlineName = GetOnlineName(leActiveRaceCarIndex, &lbNameValid);
+    // DWARF locals (BrnGuiHudMessageAnalyzer.cpp:5533/5535): lbSuccess, lpcGamertag.
+    bool lbSuccess = true;
+    const char* lpcGamertag = GetOnlineName(leActiveRaceCarIndex, &lbSuccess);
 
-    if (lbNameValid)
+    if (lbSuccess == true)   // ARTIST 0x824F35D8: cmplwi r11,1 / bne
     {
         // Register the resolved name as a runtime "GAMERTAG"-formatted string under
         // lpcStringID, then reference it by id from the message.
         mpAccessPointers->mpLanguageManager->FormatAndAddText(
             lpcStringID, "GAMERTAG",
             CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP, 1,
-            lpcOnlineName, CgsLanguage::LanguageManager::E_FORMAT_TEXT);
+            lpcGamertag, CgsLanguage::LanguageManager::E_FORMAT_TEXT);
         lpMessage->AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_STRINGID, 0, lpcStringID);
     }
 
-    return lbNameValid;
+    return lbSuccess;
 }
 
 // @ 0x8251C010
@@ -1281,7 +1298,16 @@ void HudMessageAnalyzer::HandleShowtimeModeSwitch(const GuiShowtimeModeSwitch* l
         && mpGuiCache->IsOnlineStartInProgress())
     {
         GuiHudMessage lMessage;
-        lMessage.Construct(lpEvent->mbEnteringShowtime ? "ShowStart" : "ShowStop");
+        // Two Construct calls, one per arm (DWARF lists GuiHudMessage::Construct twice; ARTIST
+        // 0x8251F2CC sets r3 = &lMessage above the branch and cross-jumps the call).
+        if (lpEvent->mbEnteringShowtime)
+        {
+            lMessage.Construct("ShowStart");
+        }
+        else
+        {
+            lMessage.Construct("ShowStop");
+        }
 
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerInfo =
             mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpEvent->mNetworkPlayerID);

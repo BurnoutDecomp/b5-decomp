@@ -3,35 +3,30 @@
 // ===================================================================================
 // BrnGui::ColourSelection  -- owning header
 //   b5-decomp/src/GameSource/Gui/Flow/Shared/Components/BrnColourSelection.h
-//   class:BrnGui::ColourSelection
 //
 // One colour picker: a BrnGui::SelectableGroup of up to 100 BrnGui::ColourSelectionItem
 // swatches, plus the two apt-driven BrnGui::ColourField panels that show the highlighted
-// swatch's colour (or its two-stop gradient) and its backing plate. Five of these make a
-// BrnGui::ColourMenuToggle.
-//
-// 2026-08-02 -- GROWN from the single static helper it used to carry. The class had no
-// member layout at all, so BrnGui::ColourMenuToggle modelled the five pickers as opaque
-// `u8 maStorage[0x1338]` slots and reached their methods through `*(void***)slot` -- a raw
-// vtable read on storage that nothing ever initialises. The real shape is settled by the
-// four recovered bodies:
+// swatch's colour (or its two-stop gradient) and its outline plate. Five of these make a
+// BrnGui::ColourMenuToggle. Recovered bodies:
 //   Construct                    @ 0x824E85D8  (asserts BrnColourSelection.cpp:44/:45)
 //   SetupColourSelectionGradient @ 0x824E9E58  (assert cpp:136)
 //   SetItemGradient              @ 0x824E8758  (assert cpp:220)
 //   Update                       @ 0x824E8840  (assert cpp:247)
-//   GetUint32ColourFromVector4   @ 0x824E8528  (static)
+//   GetUint32ColourFromVector4   @ 0x824E8528  (header-inline, h:129; assert h:131)
 //
-// Layout (X360 offsets documentary -- the x64 gate widens every pointer, so access is BY NAME):
-//   +0x000 SelectableGroup base (its maSelectables[100] ends at +0x238)
-//   +0x238 ColourSelectionItem maItems[100]   (stride 0x28 == 40; SetItemGradient's `&v5[10*i]`)
-//   +0x11D8 ColourField mColourField           (named after the picker itself)
-//   +0x1288 ColourField mBackgroundColourField ("<name>_bk")   -- sizeof == 0x1338 == 4920
-// The 0x1338 stride is independently confirmed by ColourMenuToggle::HighlightNeighbours
-// @0x824E8DE8, which walks the five pickers by exactly that step and reads each one's
-// miHighlightedIndex at +0xA5 and each ColourField's mbHidden at +4740 / +4916.
+// LINE LAYOUT: the DecFIGS DWARF places the struct on h:46, the two constants on h:103/110,
+// the members on h:112-114 and GetUint32ColourFromVector4 on h:129. ARTIST bakes that
+// function's assert line (li r5,0x83 == 131 @0x824E854C, file string 0x8206CB80 = this
+// header), so the declarations below sit on those lines; the blank lines keep them there.
+//
+// Layout (X360): +0x000 SelectableGroup base (maSelectables[100] ends at +0x238),
+// +0x238 maSelectionItems[100] (stride 0x28), +0x11D8 mColourField, +0x1288
+// mColourFieldOutline ("<name>_bk") -- sizeof == 0x1338, the stride
+// ColourMenuToggle::HighlightNeighbours @0x824E8DE8 walks the five pickers by.
 // ===================================================================================
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT (GetUint32ColourFromVector4)
 #include "GameSource/Gui/Flow/Shared/Components/BrnSelectableGroup.h"      // BrnGui::SelectableGroup (base)
 #include "GameSource/Gui/Flow/Shared/Components/BrnColourSelectionItem.h"  // BrnGui::ColourSelectionItem (by value)
 #include "GameSource/Gui/Flow/Shared/Components/BrnColourField.h"          // BrnGui::ColourField (by value)
@@ -40,14 +35,18 @@ namespace CgsGui { struct StateInterface; }
 
 namespace BrnGui
 {
+
+
+
+
+
+
+
+
     struct ColourSelection : public SelectableGroup
     {
-        // SetItemGradient's bound (X360 `cmplwi r4, 0x64`) and SetupColourSelectionGradient's
-        // clamp -- the same 100 the SelectableGroup base can hold.
-        static const s32 KI_MAX_ITEMS = 100;
-
         // @ 0x824E85D8 -- base Construct, then bring up the swatch panel under this picker's
-        // own name and the backing plate under "<name>_bk".
+        // own name and the outline plate under "<name>_bk".
         void Construct(const char* lpacName, CgsGui::StateInterface* lpStateInterface,
                        const char* lpacParentName, u64 lu64AptId);
 
@@ -68,14 +67,74 @@ namespace BrnGui
         // (or gradient) into the swatch panel, then run the group update.
         virtual void Update();
 
-        // @ 0x824E8528 - pack a normalised colour vector (lpv4Colour[0..2] = R,G,B in 0..1)
-        // into 0x00RRGGBB. Each channel is scaled by 255.0 and truncated toward zero; the
-        // alpha lane (lpv4Colour[3]) is not used.
-        static s32 GetUint32ColourFromVector4(const f32* lpv4Colour);
+        // ---- layout (DWARF private; kept public: ColourMenuToggle reads the fields) -----
 
-        // ---- layout ------------------------------------------------------------------
-        ColourSelectionItem maItems[KI_MAX_ITEMS];   // +0x238  (stride 0x28)
-        ColourField         mColourField;            // +0x11D8 (4568)
-        ColourField         mBackgroundColourField;  // +0x1288 (4744)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        static const u32 KU_MAX_COLOUR_SELECTION_NAME_LEN = 128;   // DWARF h:103
+
+
+
+
+
+
+        static const s32 KI_MAX_ITEMS_PER_SELECTION = 100;          // DWARF h:110 (SetItemGradient `cmplwi r4, 0x64`)
+
+        ColourSelectionItem maSelectionItems[KI_MAX_ITEMS_PER_SELECTION];   // +0x238  (stride 0x28)
+        ColourField         mColourField;                                  // +0x11D8 (4568)
+        ColourField         mColourFieldOutline;                           // +0x1288 (4744) "<name>_bk"
+
+
+
+
+
+
+
+
+
+
+
+    private:
+        // @ 0x824E8528 -- pack a normalised colour (x, y, z = R, G, B in 0..1) into 0x00RRGGBB:
+        // each channel scaled by 255.0 and truncated to uint32_t (fctidz); w is not used.
+        uint32_t GetUint32ColourFromVector4(const rw::math::vpu::Vector4* lpv4Colour)
+        {
+            CGS_ASSERT(lpv4Colour != 0, "lpv4Colour");   // h:131 (ARTIST 0x824E854C)
+
+            const uint32_t luRed   = static_cast<uint32_t>(lpv4Colour->GetX() * 255.0f);
+            const uint32_t luGreen = static_cast<uint32_t>(lpv4Colour->GetY() * 255.0f);
+            const uint32_t luBlue  = static_cast<uint32_t>(lpv4Colour->GetZ() * 255.0f);
+
+            return ((luRed << 8) | luGreen) << 8 | luBlue;
+        }
     };
 }

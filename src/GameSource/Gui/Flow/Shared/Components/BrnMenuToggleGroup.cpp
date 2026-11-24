@@ -179,12 +179,13 @@ namespace BrnGui
         MenuToggle* lpToggle = GetSelectable(liIndex);
 
         // The row's embedded option selection (+0xA8), vtable slot 12 == HighlightIndex.
-        if (!lpToggle->mItemText.HighlightIndex(liItem))
+        // Success arm first, `return false` last (ARTIST 0x824284E0 beq to the li r3,0 tail).
+        if (lpToggle->mItemText.HighlightIndex(liItem))
         {
-            return false;
+            lpToggle->SetDirty();                        // row +0xC |= 0x10
+            return true;
         }
-        lpToggle->SetDirty();                            // row +0xC |= 0x10
-        return true;
+        return false;
     }
 
     // ---------------------------------------------------------------------------------

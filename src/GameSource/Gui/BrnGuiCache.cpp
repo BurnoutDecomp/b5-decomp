@@ -1170,15 +1170,15 @@ namespace BrnGui
     }
 
     // The one @0xAC74 far member behind both header accessors (see the header note).
-    u32 GuiCache::GetFriendsListCachedField() const
-    {
-        return muNumActivePlayers;
-    }
+    // u32 GuiCache::GetFriendsListCachedField() const: header-inline (BrnGuiCache.h).
 
-    s32 GuiCache::GetNumActivePlayers() const
-    {
-        return static_cast<s32>(muNumActivePlayers);
-    }
+
+
+
+    // s32 GuiCache::GetNumActivePlayers() const: header-inline (BrnGuiCache.h).
+
+
+
 
     // Replace the flow layer's expected-component list wholesale (the header's
     // ADDITIVE-GROW declaration; ImageGalleryState @0x82484720 and FBurnMainHudState
@@ -2737,10 +2737,10 @@ namespace BrnGui
     // GetTimeStep -- no standalone X360 symbol (header-inline; the cache's leading
     // GuiEventTimeInfo delta word). Declared out-of-line in the committed header, so
     // the body lives here.
-    f32 GuiCache::GetTimeStep() const
-    {
-        return mfTimeStep;
-    }
+    // f32 GuiCache::GetTimeStep() const: header-inline (BrnGuiCache.h).
+
+
+
 
     // The per-frame time latch (see the header note). Copies GUI event 26's two words into
     // the cache's leading GuiEventTimeInfo pair.
@@ -2759,10 +2759,10 @@ namespace BrnGui
     // named PC face of that far member). The block is reserved opaque in the
     // header (see the layout note there); it is typed here, in the one TU that
     // can safely see the profile header.
-    OptionsDataProfile* GuiCache::GetOptionsDataProfile()
-    {
-        return &mOptionsData;
-    }
+    // OptionsDataProfile* GuiCache::GetOptionsDataProfile(): header-inline (BrnGuiCache.h).
+
+
+
 
     // @ 0x824EC008
     void StateLoadingHelper::IncrementUnloadPending()
@@ -2819,7 +2819,7 @@ namespace BrnGui
     }
 
     // @ 0x8240F450
-    s32 GuiCache::GetOpponentsInEvent() const
+    s8 GuiCache::GetOpponentsInEvent() const
     {
         CGS_ASSERT(-1 < miOpponentsInEvent, CgsDev::Assert::MessageAt("-1 < miOpponentsInEvent", KAC_ARTIST_ASSERT_FILE, 3030 /* ARTIST 0x8240F490 */));
         return miOpponentsInEvent;
@@ -2964,10 +2964,10 @@ namespace BrnGui
     // The sat-nav renderer's world-camera lane (@0x4AE0; header note). [H2 wave
     // 2026-08-25: same link round -- the header promised "body links from the GuiCache
     // TU" but none had landed.]
-    const Vector4& GuiCache::GetWorldCameraPosition() const
-    {
-        return mv4WorldCameraPosition;
-    }
+    // const Vector4& GuiCache::GetWorldCameraPosition() const: header-inline (BrnGuiCache.h).
+
+
+
 
     // @ 0x8240F168
     const FreeburnChallengeManager* GuiCache::GetFreeburnChallengeManager() const
@@ -3036,29 +3036,29 @@ namespace BrnGui
 
     // @ (far member +40536) -- the active game-mode the GUI reads to pick mode-specific
     // apt key-frames. Plain read, no assert in the X360 path.
-    s32 GuiCache::GetCurrentGameModeType() const
-    {
-        return meGameModeType;
-    }
+    // s32 GuiCache::GetCurrentGameModeType() const: header-inline (BrnGuiCache.h).
+
+
+
 
     // @ (far member +0xA9C8 / 43464) -- the online lobby's vehicle-choice / host-game state
     // word. Plain read, no assert in the X360 path (every reader inlines a bare `lwzx`).
     // First mounted caller: CarSelectVehicle::HandleLobbyPlayerList (BrnCarSelectVehicle_Input.cpp,
     // event 244); the other caller, BrnCarSelectOnlineEnd.cpp, is still unmounted.
-    s32 GuiCache::GetOnlineHostGameState() const
-    {
-        return miOnlineHostGameState;
-    }
+    // s32 GuiCache::GetOnlineHostGameState() const: header-inline (BrnGuiCache.h).
+
+
+
 
     // @ (far member +0x13B58 / 80728) -- the latched BrnGui::GuiEventCamStatus word.
     // Every X360 reader inlines a bare `lwzx` of this slot and tests it against zero; there
     // is no out-of-line accessor in the image, so this one exists purely to keep the
     // component TUs off a raw offset. Plain read, no assert (none of the fifteen X360 read
     // sites guards it).
-    s32 GuiCache::GetCamStatus() const
-    {
-        return miCamStatus;
-    }
+    // s32 GuiCache::GetCamStatus() const: header-inline (BrnGuiCache.h).
+
+
+
 
     // [gateui] @ (far member +0x405C / 16476) -- the player profile the cache latches.
     // Same situation as GetCamStatus: there is NO out-of-line X360 accessor (every reader
@@ -3067,28 +3067,28 @@ namespace BrnGui
     // to keep those TUs off a raw offset. Plain read, no assert -- none of the X360 read
     // sites guards it. The header has declared it since the odometer wave; the body was
     // never landed, which left HudMessageAnalyzer::Update unlinkable.
-    const BrnProgression::Profile* GuiCache::GetProfile() const
-    {
-        return mpProfile;
-    }
+    // const BrnProgression::Profile* GuiCache::GetProfile() const: header-inline (BrnGuiCache.h).
+
+
+
 
     // The non-const twin, for the one X360 site that WRITES through this far member:
     // CrashNavSettings::HandleControllerInput @0x824D916C stores the credits-cheat unlock
     // into `*(cache+0x405C) + 0x1CD14`. Same plain read of the same slot.
-    BrnProgression::Profile* GuiCache::GetProfile()
-    {
-        return mpProfile;
-    }
+    // BrnProgression::Profile* GuiCache::GetProfile(): header-inline (BrnGuiCache.h).
+
+
+
 
     // [H1] @ (far member +0x13B94 / 80788) -- the odometer's offline-distance readout
     // source (OdometerComponent::Update @0x82424160 is the attested reader; the header
     // member note carries the same cite). Same no-out-of-line-accessor situation as
     // GetProfile above: the header has declared it since the odometer wave, the body was
     // never landed, which left the odometer TU unlinkable the moment it was mounted.
-    f32 GuiCache::GetDistanceDriven() const
-    {
-        return mfDistanceDriven;
-    }
+    // f32 GuiCache::GetDistanceDriven() const: header-inline (BrnGuiCache.h).
+
+
+
 
     // ---- the player-name string ids -------------------------------------------------
     // Namespace-scope .data const char* pointers on X360 (off_82F278AC / off_82F278B0),
@@ -3808,10 +3808,10 @@ const GuiEventUpdateSatNav::SatNavIconInfo* GuiCache::GetDriveThrough(s32 liInde
     return &maDriveThroughInfo[liIndex];
 }
 
-s32 GuiCache::GetNumberOfDriveThroughs() const
-{
-    return miNumDriveThroughs;
-}
+// s32 GuiCache::GetNumberOfDriveThroughs() const: header-inline (BrnGuiCache.h).
+
+
+
 
 // Fill lpOutIconInfo with the online-landmark record at a position-in-list slot -- the
 // ONLINE_CHECKPOINTS (display type 2) source for the sat-nav and crash-nav icon renderers.
@@ -5014,8 +5014,10 @@ namespace BrnGui
     // @0x82450718: the 32-byte VehicleScoreData element, by its original type.
     const BrnTraffic::BrnTrafficIO::VehicleScoreData* GuiCache::GetScoringTrafficData(u32 luIndex) const
     {
+        // Header-inline on the console: the assert carries BrnGuiCache.h line 4020 (li r5 @0x82450778).
         CGS_ASSERT(luIndex < mTrafficCarInfo.mScoreTargets.GetLength(),
-                   "liIndex >= 0 && liIndex < mTrafficCarInfo.mScoreTargets.GetLength()");
+                   CgsDev::Assert::MessageAt("liIndex >= 0 && liIndex < mTrafficCarInfo.mScoreTargets.GetLength()",
+                                             KAC_ARTIST_ASSERT_FILE, 4020 /* ARTIST 0x82450778 */));
         return &mTrafficCarInfo.mScoreTargets.GetItem(luIndex);
     }
 }
@@ -5050,17 +5052,17 @@ namespace BrnGui
     // X360-inlined at Snap @0x82415620 (`lwz` of cache+44104, compared against each
     // online record's meActiveRaceCarIndex). Returns the raw latch -- the caller's scan
     // is what tolerates a stale / unmatched value.
-    s32 GuiCache::GetRoadRuleShotOpponentARCI() const
-    {
-        return meRoadRuleShotOpponentARCI;
-    }
+    // s32 GuiCache::GetRoadRuleShotOpponentARCI() const: header-inline (BrnGuiCache.h).
+
+
+
 
     // X360-inlined at Snap @0x82415620 (`lbz` of cache+44122, branch-if-zero straight to
     // the return). The whole "CAPTURED_FOR <ruler>" gamertag line hangs off this byte.
-    bool GuiCache::GetRoadRuleShotCapturedLineGate() const
-    {
-        return mbRoadRuleShotLocalPlayerNewRuler;
-    }
+    // bool GuiCache::GetRoadRuleShotCapturedLineGate() const: header-inline (BrnGuiCache.h).
+
+
+
 }
 
 // ============================================================================

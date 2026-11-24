@@ -89,10 +89,11 @@ namespace BrnGui
         {
             for (s8 liRow = 0; liRow < miNumRows; ++liRow)
             {
-                TableRow& lrRow = maRows[liRow];
-                if (lrRow.IsDirty())
+                // Indexed per use, no row local: ARTIST 0x824E48E8 tests the row's flag byte
+                // before it forms the row address for the call.
+                if (maRows[liRow].IsDirty())
                 {
-                    lrRow.Update();   // row component vtable slot 5 == SelectableGroup::Update
+                    maRows[liRow].Update();   // row component vtable slot 5 == SelectableGroup::Update
                 }
             }
         }

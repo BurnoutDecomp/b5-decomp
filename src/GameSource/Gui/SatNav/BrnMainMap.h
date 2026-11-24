@@ -344,6 +344,25 @@ namespace BrnGui
                           "mbIsActive closes the trailing bool run");
         }
     };
+
+}
+
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+namespace BrnGui
+{
+    // DWARF BrnMainMap.h:265 -- the ZoomFactor post-increment of the enum-operator pair (the
+    // original's one-line macro; DWARF lists operator-- on the same line). Its range assert is
+    // inlined into SetStandardDefZoomParams (ARTIST 0x82447F28: li r5,0x109, file string
+    // "..\..\..\GameSource\Gui/SatNav/BrnMainMap.h"), hence the explicit line below.
+    inline MainMapComponent::ZoomFactor operator++(MainMapComponent::ZoomFactor& leEnumIndex, int)
+    {
+        const MainMapComponent::ZoomFactor leOldEnumIndex = leEnumIndex;
+        leEnumIndex = static_cast<MainMapComponent::ZoomFactor>(static_cast<s32>(leEnumIndex) + 1);
+        CGS_ASSERT(leEnumIndex <= MainMapComponent::E_ZOOMFACTOR_COUNT,
+                   CgsDev::Assert::MessageAt("leEnumIndex <= MainMapComponent::E_ZOOMFACTOR_COUNT", __FILE__, 265));
+        return leOldEnumIndex;
+    }
 }
 
 #endif // BRN_MAIN_MAP_H

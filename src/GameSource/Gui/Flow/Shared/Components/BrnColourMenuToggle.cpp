@@ -212,7 +212,7 @@ namespace BrnGui
                  maColourSelection[liInner].miHighlightedIndex);
 
             maColourSelection[li].mColourField.SetHidden(lbCollided);
-            maColourSelection[li].mBackgroundColourField.SetHidden(lbCollided);
+            maColourSelection[li].mColourFieldOutline.SetHidden(lbCollided);
         }
     }
 

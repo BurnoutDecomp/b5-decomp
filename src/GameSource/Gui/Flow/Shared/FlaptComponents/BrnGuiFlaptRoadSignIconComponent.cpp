@@ -74,7 +74,7 @@ namespace BrnGui
 
     // off_82F253F0[0] (X360) == "RD_" -- the road-sign label prefix DisplayRoadFromCgsID
     // prepends to the special "EXIT" road name (DWARF mpRoadPrefix, .cpp:48).
-    static const char* const KPC_ROAD_PREFIX = "RD_";
+    const char* FlaptRoadSignIconComponent::mpRoadPrefix = "RD_";
 
     // The EXIT road's CgsID. The X360 builds this 64-bit literal inline
     // (0x684561A1 << 32 | 0x68000000) and compares the incoming road id against it;
@@ -144,7 +144,7 @@ namespace BrnGui
                 mPostMovieClip.SetVisible(lbVisible);
             }
 
-            if (mAptRef.mpMovieClipInst != 0 && !mbSignVisible)
+            if (mAptRef.mpMovieClipInst != 0 && mbSignVisible != true)   // ARTIST 0x82427F08 cmplwi r11,1 / beq
             {
                 mAptRef.SetVisible(true);
                 mbSignVisible = true;
@@ -162,7 +162,7 @@ namespace BrnGui
         if (lRoadId == KID_ROAD_EXIT)
         {
             CgsCore::SPrintf(lacRoadName, KU_ROAD_NAME_BUFFER_LEN, "%s%s",
-                             KPC_ROAD_PREFIX, "EXIT");
+                             mpRoadPrefix, "EXIT");
             DisplayRoad(lacRoadName, lbVisible);
         }
         else
@@ -210,7 +210,7 @@ namespace BrnGui
 
         char lacRoadName[KU_ROAD_NAME_BUFFER_LEN];
         CgsCore::SPrintf(lacRoadName, KU_ROAD_NAME_BUFFER_LEN, "%s%s",
-                         KPC_ROAD_PREFIX, gapcRoadIconNames[leRoadIcon]);
+                         mpRoadPrefix, gapcRoadIconNames[leRoadIcon]);
         DisplayRoad(lacRoadName, lbVisible);
     }
 

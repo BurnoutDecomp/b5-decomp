@@ -117,11 +117,11 @@ namespace BrnGui
         bool lbHandled = false;
         if (strcmp(GetName(), lpAptTrigger->mpacComponentName) == 0)
         {
+            lbHandled = true;   // ARTIST 0x8241B9CC sets it before the state test
             if (meCurrentState == E_INTERNAL_STATE_SHOWING)
             {
                 SetState("transIn");
             }
-            lbHandled = true;
         }
         return lbHandled;
     }

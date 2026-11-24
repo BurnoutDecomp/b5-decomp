@@ -293,14 +293,14 @@ namespace BrnGui
     // -------------------------------------------------------------------------
     void MainMapComponent::SetStandardDefZoomParams()
     {
-        s32 liEnumIndex = 0;
-        for (s32 liZoom = 0; liZoom < E_ZOOMFACTOR_COUNT; ++liZoom)
+        // ZoomFactor loop through the header's operator++ (DWARF BrnMainMap.h:265, inlined).
+        for (ZoomFactor leZoom = E_ZOOMFACTOR_LOW; leZoom < E_ZOOMFACTOR_COUNT; leZoom++)
         {
-            ++liEnumIndex;
-            mfZoomScalFactors[liZoom] = mfStandardDefZoomScalFactors[liZoom];
-            CGS_ASSERT(liEnumIndex <= E_ZOOMFACTOR_COUNT,
-                       "leEnumIndex <= MainMapComponent::E_ZOOMFACTOR_COUNT");
+            mfZoomScalFactors[leZoom] = mfStandardDefZoomScalFactors[leZoom];
         }
+
+
+
     }
 
     // -------------------------------------------------------------------------

@@ -69,7 +69,16 @@ const char* HudMessageAnalyzer::GetOnlineName(s32 liNetworkPlayerID, bool* lpbVa
 void HudMessageAnalyzer::HandleComboPerformed(const GuiHUDMessageComboPerformed* lpEvent)
 {
     GuiHudMessage lMessage;
-    lMessage.Construct(lpEvent->mbBestScore ? "StuntCmbBst" : "StuntCmb");
+    // One Construct per arm (ARTIST 0x8251BE40 sets r3 = &lMessage above the branch and
+    // cross-jumps the call, the shape of an if/else, not a ternary argument).
+    if (lpEvent->mbBestScore)
+    {
+        lMessage.Construct("StuntCmbBst");
+    }
+    else
+    {
+        lMessage.Construct("StuntCmb");
+    }
     lMessage.AddParam(CgsGui::E_HUDMESSAGEPARAMTYPES_INT, 1, lpEvent->miScore);
     TriggerMessage(&lMessage);
 }
