@@ -23,9 +23,8 @@
 //
 // SCOPE: this TU bodies the X360-attested CompleteAllChallenges, GetName, and OnActivate methods,
 // plus the ICF-folded StartChallenge latch write. GetPath is an inline override because the ARTIST
-// vtable at 0x820CE034 points slot +0x10 to 0x82312480, the Gameplay-return leaf. The other
-// DWARF-listed methods (Construct/Destruct/RenderHUD/DebugStartChallenge) remain undeclared here
-// without X360 body/call-site evidence.
+// vtable at 0x820CE034 points slot +0x10 to 0x82312480, the Gameplay-return leaf. RenderHUD and
+// DebugStartChallenge remain without X360 body or call-site evidence.
 
 namespace BrnGameState
 {
@@ -36,11 +35,20 @@ namespace BrnGameState
     public:
         ChallengeManagerDebugComponent() : CgsDev::DebugComponent(CgsDev::DebugComponent::GameStateConstructorTag()) {}
 
-        // X360 ChallengeManager::Construct (0x82332DB0) / Destruct (0x8233A9C0) initialise the
-        // embedded component's back-pointer / index / pending flag INLINE (stw this,+0x1010;
-        // stw 0,+0x1014; stb 0,+0x1018) before calling DebugComponent::Register/Destruct on it,
-        // so the enclosing manager reaches these private members directly.
-        friend class ChallengeManager;
+        // Inlined at ARTIST 0x82332FAC..0x82332FB8 and 0x8233AAE4..0x8233AAE8.
+        void Construct(ChallengeManager* lpChallengeManager)
+        {
+            mpChallengeManager = lpChallengeManager;
+            mbDebugBeginChallengePending = false;
+            miChallengeIndex = 0;
+            Register();
+        }
+
+        void Destruct()
+        {
+            mpChallengeManager = 0;
+            CgsDev::DebugComponent::Destruct();
+        }
 
     protected:
         // Menu label (X360 0x823171E0). Overrides CgsDev::DebugComponent::GetName.

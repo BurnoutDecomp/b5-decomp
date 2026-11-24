@@ -2127,35 +2127,36 @@ void SteeringFan::GenerateFanVectors(AICar* lpCar)
 void SteeringFan::CachePointAhead(RacingLineGenerator* lpRacingLineGenerator,
                                   RacingLine* lpRacingLine)
 {
-    if (!lpRacingLine->mbIsInitialised)
+    if (lpRacingLine->mbIsInitialised)
+    {
+        if (kfBias[meBiasMode][eFan_DriftFinalLocation]  != 0.0f ||
+            kfBias[meBiasMode][eFan_DriftFinalDirection] != 0.0f)
+        {
+#if BRN_AI_RACINGLINE_STACK_PRESENT
+            mbPointAheadKnown = lpRacingLineGenerator->GetPointFarAhead(lpRacingLine,
+                                                                        KF_FAN_POINT_AHEAD_DISTANCE,
+                                                                        mFanOrigin2D,
+                                                                        mCentreFarAhead,
+                                                                        mCentreAheadFarAhead);
+#else
+#endif
+        }
+
+#if BRN_AI_RACINGLINE_STACK_PRESENT
+        mbCentreHereKnown = lpRacingLineGenerator->GetCentreCentreLineHere(lpRacingLine,
+                                                                           mCentreTarget,
+                                                                           mCentreTarget,
+                                                                           mCentreHere,
+                                                                           mCentreAhead);
+#else
+        mbCentreHereKnown = false;
+#endif
+    }
+    else
     {
         mbPointAheadKnown = false;      // stb 0, 0x808
         mbCentreHereKnown = false;      // stb 0, 0x809
-        return;
     }
-
-    if (kfBias[meBiasMode][eFan_DriftFinalLocation]  != 0.0f ||
-        kfBias[meBiasMode][eFan_DriftFinalDirection] != 0.0f)
-    {
-#if BRN_AI_RACINGLINE_STACK_PRESENT
-        mbPointAheadKnown = lpRacingLineGenerator->GetPointFarAhead(lpRacingLine,
-                                                                    KF_FAN_POINT_AHEAD_DISTANCE,
-                                                                    mFanOrigin2D,
-                                                                    mCentreFarAhead,
-                                                                    mCentreAheadFarAhead);
-#else
-#endif
-    }
-
-#if BRN_AI_RACINGLINE_STACK_PRESENT
-    mbCentreHereKnown = lpRacingLineGenerator->GetCentreCentreLineHere(lpRacingLine,
-                                                                       mCentreTarget,
-                                                                       mCentreTarget,
-                                                                       mCentreHere,
-                                                                       mCentreAhead);
-#else
-    mbCentreHereKnown = false;
-#endif
 }
 
 // ========================================================================================

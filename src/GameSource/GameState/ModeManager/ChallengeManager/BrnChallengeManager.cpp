@@ -67,6 +67,7 @@
 #include "GameSource/GameState/RoadRules/BrnRoadRulesManager.h"     // RoadRulesManager::GetCurrentRoadID
 #include "GameSource/Math/BrnMathUtils.h"                           // BrnMath::Flatten / BrnMath::IsPointInsideBox
 #include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h" // BrnPhysics::Vehicle::RaceCarState members
+#include "rw/math/fpu/scalar_operation.h"
 #include "rw/math/vpu/vector3_operation.h"                          // operator- / operator* / MagnitudeSquared
 #include "GameSource/GameState/ModeManager/Scoring/BrnScoringSystemEventQueues.h"
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"
@@ -138,7 +139,7 @@ void ChallengeManager::Construct(GameStateModule*                    lpGameState
     // finalised flag (X360 loop base +0x5C8, stride 0x108: 32 std, stw -1 @+0x100, stb 0 @+0x104).
     for (s32 liSlot = 0; liSlot < KI_MAX_REMOTE_PLAYERS; ++liSlot)
     {
-        maChallengeCompletionData[liSlot].mCompletedChallenges.UnSetAll();
+        maChallengeCompletionData[liSlot].mCompletedChallenges.Construct();
         maChallengeCompletionData[liSlot].mNetworkPlayerID = -1;
         maChallengeCompletionData[liSlot].mbFinalised      = false;
     }
@@ -146,16 +147,16 @@ void ChallengeManager::Construct(GameStateModule*                    lpGameState
     // Per-player success-update masks (X360 loop base +0x3A8: 2 std per player).
     for (s32 liPlayer = 0; liPlayer < KI_MAX_CHALLENGE_PLAYERS; ++liPlayer)
     {
-        maPlayerSuccessUpdateArray[liPlayer].UnSetAll();
+        maPlayerSuccessUpdateArray[liPlayer].Construct();
     }
 
     ClearPlayerSuccessData();
 
-    mLocalChallengeCompletionData.UnSetAll();  // X360 loop base +0xD00: 32 std
-    mLastSecondSuccessStatus.UnSetAll();       // X360 std 0,+0xE00
+    mLocalChallengeCompletionData.Construct();  // X360 loop base +0xD00: 32 std
+    mLastSecondSuccessStatus.Construct();       // X360 std 0,+0xE00
     mPotentiallyLeaptCars.Construct();         // X360 std 0,+0x100 (occupancy only; Prepare Clear()s)
     miNumCarsLeapt = 0;                        // X360 re-clears +0x114
-    maBillboardsCollected.Construct();         // X360 stw 0,+0x3A0 (miCount = 0)
+    maBillboardsCollected.Clear();         // X360 stw 0,+0x3A0 (miCount = 0)
 
     // Back-pointer non-null asserts (X360 order + message strings; BrnChallengeManager.cpp:265-269).
     CGS_ASSERT(lpProgression != 0, CGS_ASSERT_MESSAGE_AT("lpProgression", CGS_ARTIST_FILE, 265));
@@ -170,11 +171,7 @@ void ChallengeManager::Construct(GameStateModule*                    lpGameState
     mpRoadRulesManager   = lpRoadRulesManager;    // X360 stw,+0xE3C
     mpTriggerQueryManager = lpTriggerQueryManager; // X360 stw,+0xE40
 
-    // Embedded debug component init (X360 inline stores over +0x1004..+0x1018) + registration.
-    mChallengeManagerDebugComponent.mpChallengeManager = this;             // stw this,+0x1010
-    mChallengeManagerDebugComponent.mbDebugBeginChallengePending = false;  // stb 0,+0x1018
-    mChallengeManagerDebugComponent.miChallengeIndex = 0;                  // stw 0,+0x1014
-    mChallengeManagerDebugComponent.Register();
+    mChallengeManagerDebugComponent.Construct(this);
 
     // Re-clear the two debug "make all challenges N-player" globals (X360 stb 0,byte_82FAD9C0/C1).
     mbChallengesAreAllOnePlayer = false;
@@ -201,7 +198,7 @@ void ChallengeManager::Construct(GameStateModule*                    lpGameState
 // ----------------------------------------------------------------------------
 // UpdateResultsTimer -- X360 0x82323408. Arms the results countdown on first call
 // (5.5s when the local challenge finished with SUCCESS, else 0.0), then counts it down one
-// frame and returns true once it has expired. The X360 uses fsel to clamp at 0.0.
+// frame. Returns false once the running timer has expired so UpdateResults can post its action.
 // ----------------------------------------------------------------------------
 bool ChallengeManager::UpdateResultsTimer(f32 lfTimeStep)
 {
@@ -218,25 +215,14 @@ bool ChallengeManager::UpdateResultsTimer(f32 lfTimeStep)
         mbResultsTimerRunning = true;
     }
 
-    const bool lbWasRunning = mbResultsTimerRunning;
-    if (!lbWasRunning)
+    if (mbResultsTimerRunning && mfResultsTimer > 0.0f)
     {
-        return true;   // X360 LABEL_11 path: v5==0 -> v5==0 returns 1
+        // ARTIST 0x82323460 uses the negated difference as the Max selector.
+        mfResultsTimer = rw::math::fpu::Max(0.0f, mfResultsTimer - lfTimeStep);
     }
 
-    if (mfResultsTimer > 0.0f)
-    {
-        // f0 = timer - dt; fsel(-(timer-dt), 0.0, f0) clamps the result at 0.0 (X360 fsel f0,f12,f13,f0).
-        const f32 lfNew = mfResultsTimer - lfTimeStep;
-        mfResultsTimer = (lfNew >= 0.0f) ? lfNew : 0.0f;
-    }
-
-    // Expired iff the timer is running AND has reached <= 0.0 (X360: v8=0 unless still >0.0).
-    if (mfResultsTimer > 0.0f)
-    {
-        return false;
-    }
-    return true;
+    const bool lbTimerElapsed = mbResultsTimerRunning && mfResultsTimer <= 0.0f;
+    return !lbTimerElapsed;
 }
 
 // ----------------------------------------------------------------------------
@@ -948,11 +934,11 @@ namespace BrnGameState
 
             for (s32 liAction = 0; liAction < KI_MAX_CHALLENGE_ACTIONS; liAction++)
             {
-                maafCurrentActionsScores[liPlayer][liAction]   = 0.0f;
                 maaePlayersSuccessStatus[liPlayer][liAction]   = GameStateModuleIO::E_FREEBURN_CHALLENGE_SUCCESS_NONE;
+                maafCurrentActionsScores[liPlayer][liAction]   = 0.0f;
                 maafCumulativeContributions[liPlayer][liAction] = 0.0f;
-                maiRemainingTarget[liAction]                   = 0;
                 mafCumulativeActionScores[liAction]            = 0.0f;
+                maiRemainingTarget[liAction]                   = 0;
                 mabIsLocationOk[liAction]                      = 0;
                 mabIndividualActionsSuccessUpdateSent[liAction] = 0;
 
@@ -1059,7 +1045,7 @@ void ChallengeManager::Destruct()
     miNumCarsLeapt = 0;                           // X360 stw 0,+0x114
 
     mLocalChallengeCompletionData.UnSetAll();     // X360 loop base +0xD00: 32 std of 0 (PITFALL 1)
-    maBillboardsCollected.Construct();            // X360 stw 0,+0x3A0 (miCount = 0)
+    maBillboardsCollected.Clear();                // X360 stw 0,+0x3A0 (miCount = 0)
     mLastSecondSuccessStatus.UnSetAll();          // X360 std 0,+0xE00 (PITFALL 1)
     mPotentiallyLeaptCars.Construct();            // X360 std 0,+0x100 (occupancy only; PITFALL 1)
 
@@ -1085,9 +1071,7 @@ void ChallengeManager::Destruct()
 
     mScoresSetThisFrameBitArray.UnSetAll();       // X360 std 0,+0xFD0 (PITFALL 1)
 
-    // Embedded debug component owner clear. The X360 then calls 0x8284CB38, whose body is only `blr`;
-    // do not substitute the port's DebugComponent::Destruct(), which also clears mbActive.
-    mChallengeManagerDebugComponent.mpChallengeManager = 0;   // X360 stw 0,+0x1010
+    mChallengeManagerDebugComponent.Destruct();
 }
 
 // ARTIST ModeManager::ApplyVehicleList @0x8231E5D8 inlines this method.
@@ -1563,9 +1547,10 @@ void ChallengeManager::CancelFreeburnChallenge(TGameActionQueue* lpActionQueue)
 {
     if (meChallengeManagerStatus != E_CHALLENGE_MANAGER_STATUS_NONE)   // X360 lwz +0xE08; cmpwi 0; bne
     {
-        // X360 computes (status == 2 || status == 3) into a bool, then branches on == 1.
-        if (meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING ||   // X360 cmpwi 2
-            meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RESULTS)     // X360 cmpwi 3
+        // ARTIST 0x82350710..0x8235073C materializes the running status and compares it to 1.
+        const bool lbChallengeRunning = meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING ||
+                                        meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RESULTS;
+        if (lbChallengeRunning == true)
         {
             EndChallenge(E_CHALLENGE_STATUS_ABORTED, lpActionQueue, false);              // X360 li r4,2
         }
@@ -1696,9 +1681,10 @@ void ChallengeManager::Disconnected(TGameActionQueue* lpActionQueue)
 
     if (meChallengeManagerStatus != E_CHALLENGE_MANAGER_STATUS_NONE)   // X360 lwz +0xE08; cmpwi 0; beqlr
     {
-        // X360 folds (status == 2 || status == 3) into a bool, then selects 2 vs 4.
-        if (meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING ||   // X360 cmpwi 2
-            meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RESULTS)     // X360 cmpwi 3
+        // ARTIST 0x8234E5A4 materializes and tests the running status.
+        const bool lbChallengeRunning = meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING ||
+                                        meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RESULTS;
+        if (lbChallengeRunning)
         {
             EndChallenge(E_CHALLENGE_STATUS_ABORTED, lpActionQueue, false);              // X360 li r4,2
         }

@@ -1116,11 +1116,16 @@ ProfileEvent* Profile::FindProfileEventByRaceEventId(CgsID lEventId)
 // ====================================================================================
 bool Profile::AreAllDriveThrusCompleted()
 {
-    return mJunkYardsDriveThruSet.GetLength()   == 5  &&
-           mBodyShopsDriveThruSet.GetLength()   == 11 &&
-           mPaintShopsDriveThruSet.GetLength()  == 5  &&
-           mGasStationsDriveThruSet.GetLength() == 14 &&
-           mCarParksDriveThruSet.GetLength()    == 11;
+    // ARTIST 0x82361938..0x82361940 writes a literal true or false to the return register.
+    if (mJunkYardsDriveThruSet.GetLength()   == 5  &&
+        mBodyShopsDriveThruSet.GetLength()   == 11 &&
+        mPaintShopsDriveThruSet.GetLength()  == 5  &&
+        mGasStationsDriveThruSet.GetLength() == 14 &&
+        mCarParksDriveThruSet.GetLength()    == 11)
+    {
+        return true;
+    }
+    return false;
 }
 
 // ====================================================================================
@@ -1462,13 +1467,12 @@ f32 Profile::GetPlayerBaseDeformAmount(CgsID lCarId) const
 // Clear the stored deform/damage of the just-repaired owned car (the X360 inlines the
 // FindCar loop, asserts the record exists, then zeroes the deform amount @ +0x0C).
 // ====================================================================================
-CarData* Profile::RepairUnlockedVehicle(CgsID lCarId)
+void Profile::RepairUnlockedVehicle(CgsID lCarId)
 {
     CarData* lpCarData = FindCar(lCarId);
 
-    CGS_ASSERT(lpCarData, CGS_ASSERT_MESSAGE_AT("lpCarData", CGS_ARTIST_FILE, 671));
-    lpCarData->mfUnlockDeformedAmount = 0.0f;   // the X360 stores through even after a failed assert
-    return lpCarData;
+    CGS_ASSERT(lpCarData, CGS_ASSERT_MESSAGE_AT("lpCarData", CGS_ARTIST_FILE_BRNPROFILE, 3154));  // ARTIST 0x82361F1C..0x82361F28
+    lpCarData->mfUnlockDeformedAmount = 0.0f;
 }
 
 // ====================================================================================
@@ -1613,11 +1617,11 @@ void Profile::SetDeveloperChallengeComplete(s32 liChallengeIndex)
 // checked live count every iteration -- the Array<>::GetLength constructed-assert,
 // CgsArray.h:336, fires from the loop guard).
 // ====================================================================================
-BrnGameState::GameStateModuleIO::TargetEventScore* Profile::GetTargetEvent(CgsID lEventId)
+const BrnGameState::GameStateModuleIO::TargetEventScore* Profile::GetTargetEvent(CgsID lEventId) const
 {
     for (u32 luIndex = 0; luIndex < maTargetEventScores.GetLength(); ++luIndex)
     {
-        if (maTargetEventScores[luIndex].mEventId == lEventId)
+        if (lEventId == maTargetEventScores[luIndex].mEventId)
             return &maTargetEventScores[luIndex];
     }
     return 0;
@@ -1636,7 +1640,7 @@ void Profile::SetTargetEventScore(BrnGameState::GameStateModuleIO::TargetEventSc
 
     for (u32 luIndex = 0; luIndex < maTargetEventScores.GetLength(); ++luIndex)
     {
-        if (maTargetEventScores[luIndex].mEventId == lEventId)
+        if (lEventId == maTargetEventScores[luIndex].mEventId)
         {
             lpTargetEventScore = &maTargetEventScores[luIndex];
             break;

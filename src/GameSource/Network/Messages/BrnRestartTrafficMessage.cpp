@@ -6,7 +6,8 @@
 #include "GameSource/BurnoutConstants.h"                 // EActiveRaceCarIndex + range-guarded operator++
 #include "GameShared/GameClasses/Core/CgsAssert.h"       // CGS_ASSERT
 
-#include <cstring>                                        // memcpy (the X360 XMemCpy payload copy)
+#include <cstring>
+#include <xtl.h>
 
 // Reconstructed from BURNOUT_X360_ARTIST.XEX
 //   BrnNetwork::RestartTrafficMessage::Construct           @ 0x8257BB90
@@ -31,6 +32,8 @@
 // and, for each active-race-car slot, the hull value and the player id -- exactly the
 // X360 OR-accumulation (0 == success). The per-iteration index guard is the inlined
 // EActiveRaceCarIndex operator++ range assert.
+
+#define CGS_ARTIST_FILE "..\\..\\..\\GameSource\\Network/Messages/BrnRestartTrafficMessage.cpp"
 
 namespace BrnNetwork
 {
@@ -62,16 +65,16 @@ namespace BrnNetwork
     {
         CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CGS_ASSERT_MESSAGE_AT(
             "!CgsNetwork::ReliableMessage::IsMessageValid()",
-            __FILE__, 85 /* ARTIST 0x8257BC1C */));
+            CGS_ARTIST_FILE, 85 /* ARTIST 0x8257BC1C */));
 
         mu16FrameSinceStartToResetTraffic = lu16FrameSinceStartToResetTraffic;   // +0x58
-        memcpy(mau16ActiveTrafficHulls,   lpau16ActiveTrafficHulls,   16);        // +0x48, 8 x u16
-        memcpy(maPlayerIDsForActiveHulls, lpaPlayerIDsForActiveHulls, 32);        // +0x28, 8 x s32
+        XMemCpy(mau16ActiveTrafficHulls,   lpau16ActiveTrafficHulls,   sizeof(mau16ActiveTrafficHulls));        // +0x48, 8 x u16
+        XMemCpy(maPlayerIDsForActiveHulls, lpaPlayerIDsForActiveHulls, sizeof(maPlayerIDsForActiveHulls));        // +0x28, 8 x s32
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_RESTART_TRAFFIC_MESSAGE_TYPE, lu16CurrentFrame);
         CGS_ASSERT(IsReliable(), CGS_ASSERT_MESSAGE_AT(
             "IsReliable()",
-            __FILE__, 94 /* ARTIST 0x8257BC8C */));
+            CGS_ARTIST_FILE, 94 /* ARTIST 0x8257BC8C */));
     }
 
     s32 RestartTrafficMessage::GetPackedMessageSize()
@@ -82,8 +85,8 @@ namespace BrnNetwork
         // GetPackedMessageSize in the X360 image; the source calls the ReliableMessage
         // base per the DWARF (RestartTrafficMessage : ReliableMessage).
         mu16FrameSinceStartToResetTraffic = 0;                             // sth 0, +0x58
-        memset(mau16ActiveTrafficHulls,   0, 16);                          // +0x48, 8 x u16
-        memset(maPlayerIDsForActiveHulls, 0, 32);                          // +0x28, 8 x s32
+        XMemSet(mau16ActiveTrafficHulls,   0, sizeof(mau16ActiveTrafficHulls));                          // +0x48, 8 x u16
+        XMemSet(maPlayerIDsForActiveHulls, 0, sizeof(maPlayerIDsForActiveHulls));                          // +0x28, 8 x s32
         return CgsNetwork::ReliableMessage::GetPackedMessageSize();
     }
 
@@ -106,7 +109,7 @@ namespace BrnNetwork
         mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
         CGS_ASSERT(!IsMessageValid(), CGS_ASSERT_MESSAGE_AT(
             "!CgsNetwork::ReliableMessage::IsMessageValid()",
-            "..\\..\\..\\GameSource\\Network/Messages/BrnRestartTrafficMessage.cpp", 126 /* ARTIST 0x8257EC38 */));
+            CGS_ARTIST_FILE, 126 /* ARTIST 0x8257EC38 */));
         return true;
     }
 
@@ -140,3 +143,5 @@ namespace BrnNetwork
         return lxResult;
     }
 } // namespace BrnNetwork
+
+#undef CGS_ARTIST_FILE

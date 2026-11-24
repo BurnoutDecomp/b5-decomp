@@ -21,7 +21,10 @@
 #include "GameShared/GameClasses/Development/CgsStrStream.h"            // CgsDev::StrStream (streamed asserts)
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // CgsDev::PerfMonCpu
 
+#include <xtl.h>
 #include <cstring>   // std::memset / std::memcpy (the X360 XMemSet / XMemCpy)
+
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Utilities\\CgsNetworkImageConverter.cpp"
 
 // Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network\\Utilities\\CgsNetworkImageConverter.cpp".
 
@@ -117,15 +120,15 @@ namespace CgsNetwork
 
         CGS_ASSERT(lpDstTexture->GetWidth()  >= lpSrcTexture->GetWidth(), CGS_ASSERT_MESSAGE_AT(
             "lpDstTexture->GetWidth() >= lpSrcTexture->GetWidth()",
-            __FILE__, 588 /* ARTIST 0x82871B54 */));
+            CGS_ARTIST_FILE, 588 /* ARTIST 0x82871B54 */));
         CGS_ASSERT(lpDstTexture->GetHeight() >= lpSrcTexture->GetHeight(), CGS_ASSERT_MESSAGE_AT(
             "lpDstTexture->GetHeight() >= lpSrcTexture->GetHeight()",
-            __FILE__, 589 /* ARTIST 0x82871B80 */));
+            CGS_ARTIST_FILE, 589 /* ARTIST 0x82871B80 */));
         CGS_ASSERT(lpDstTexture->GetFormat() == lpSrcTexture->GetFormat(), CGS_ASSERT_MESSAGE_AT(
             "lpDstTexture->GetFormat() == lpSrcTexture->GetFormat()",
-            __FILE__, 590 /* ARTIST 0x82871BAC */));
+            CGS_ARTIST_FILE, 590 /* ARTIST 0x82871BAC */));
 
-        std::memcpy(lpDstTexture->GetTexture(), lpSrcTexture->GetTexture(),
+        XMemCpy(lpDstTexture->GetTexture(), lpSrcTexture->GetTexture(),
                     static_cast<usize>(lpSrcTexture->GetTextureSize()));
 
         CgsDev::PerfMonCpu::StopMonitor(miCopyPM);
@@ -476,3 +479,5 @@ namespace CgsNetwork
 
     }
 }
+
+#undef CGS_ARTIST_FILE

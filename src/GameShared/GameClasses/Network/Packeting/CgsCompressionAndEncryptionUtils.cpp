@@ -6,6 +6,7 @@
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsSignalMessage.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                         // CgsDev::Log::gpDebugPrint
 
+#include <xtl.h>
 #include <cstring>   // memcpy, memset
 
 // CgsNetwork::CompressionAndEncryptionUtils -- the packet packer and the shared bandwidth
@@ -20,6 +21,8 @@
 //
 // Log lines stream through CgsDev::Log::gpDebugPrint; assert messages the console built in
 // the assert buffer keep their literal text.
+
+#define CGS_ARTIST_FILE "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsCompressionAndEncryptionUtils.cpp"
 
 // Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsCompressionAndEncryptionUtils.cpp".
 
@@ -92,12 +95,12 @@ void CompressionAndEncryptionUtils::UpdateBandwidthHistory()
 {
     CGS_ASSERT(miHistoricalIndex >= 0, CGS_ASSERT_MESSAGE_AT(
         "miHistoricalIndex >= 0",
-        __FILE__, 668 /* ARTIST 0x8286FEC8 */));
+        CGS_ARTIST_FILE, 668 /* ARTIST 0x8286FEC8 */));
     CGS_ASSERT(miHistoricalIndex < KI_MAX_BANDWIDTH_HISTORY, CGS_ASSERT_MESSAGE_AT(
         "miHistoricalIndex < KI_MAX_BANDWIDTH_HISTORY",
-        __FILE__, 669 /* ARTIST 0x8286FEF0 */));
+        CGS_ARTIST_FILE, 669 /* ARTIST 0x8286FEF0 */));
 
-    memcpy(maaaaiHistoricalBitsTransmitted[miHistoricalIndex], maaaiBitsTransmitted,
+    XMemCpy(maaaaiHistoricalBitsTransmitted[miHistoricalIndex], maaaiBitsTransmitted,
            sizeof(maaaiBitsTransmitted));
 
     miHistoricalIndex = (miHistoricalIndex + 1) % KI_MAX_BANDWIDTH_HISTORY;
@@ -167,11 +170,11 @@ void CompressionAndEncryptionUtils::Update(const CgsSystem::TimerStatus* lpTimer
     if (lpTimerStatus->GetTime() > mLastAverageTime + K_TIME_FOR_AVERAGE)
     {
         mLastAverageTime = lpTimerStatus->GetTime();
-        memcpy(maaaaiAvgBitsTransmitted[E_AVERAGE_OVER_SECOND], maaaiBitsTransmitted,
+        XMemCpy(maaaaiAvgBitsTransmitted[E_AVERAGE_OVER_SECOND], maaaiBitsTransmitted,
                sizeof(maaaiBitsTransmitted));
         UpdateMaxBandwidth();
         UpdateBandwidthHistory();
-        memset(maaaiBitsTransmitted, 0, sizeof(maaaiBitsTransmitted));
+        XMemSet(maaaiBitsTransmitted, 0, sizeof(maaaiBitsTransmitted));
     }
 }
 
@@ -560,3 +563,5 @@ NetworkPlayerID CompressionAndEncryptionUtils::ExtractSendingPlayerID(u8* lpacBu
 }
 
 }
+
+#undef CGS_ARTIST_FILE

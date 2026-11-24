@@ -416,8 +416,8 @@ void BoostBurnout3::OnPlayerAttacksRival(BrnPhysics::Vehicle::EImpactType leImpa
 {
     switch (leImpactType)
     {
-    case BrnPhysics::Vehicle::E_IMPACT_TRADING_PAINT:   // 1
-        AddBoost(mfTradingPaintEarning);                // +0x38
+    case BrnPhysics::Vehicle::E_IMPACT_BOOST_SLAM:      // 5
+        AddBoost(mfBoostSlamStrength);                  // +0x4C
         break;
 
     case BrnPhysics::Vehicle::E_IMPACT_NUDGE:           // 2 -- no reward
@@ -432,8 +432,8 @@ void BoostBurnout3::OnPlayerAttacksRival(BrnPhysics::Vehicle::EImpactType leImpa
         AddBoost(mfShuntEarning);                       // +0x2C
         break;
 
-    case BrnPhysics::Vehicle::E_IMPACT_BOOST_SLAM:      // 5
-        AddBoost(mfBoostSlamStrength);                  // +0x4C
+    case BrnPhysics::Vehicle::E_IMPACT_TRADING_PAINT:   // 1
+        AddBoost(mfTradingPaintEarning);                // +0x38
         break;
 
     case BrnPhysics::Vehicle::E_IMPACT_GRINDING:        // 7
@@ -849,13 +849,8 @@ const f32 BoostBurnout3::KF_BOOST_CHUNK_AMOUNT = 26.666666f;
 //   0x822C1D30  beq    cr6, loc_822C1D38        ; cr6 still holds `arg == 0`
 //   0x822C1D34  stfs   f0,  0xA0(r31)           ; mfBoostAmount = mfMaxBoost
 //
-// The two fsels are the compiler's branch-free rendering of the source-level
-// clamp (de-optimised back to ifs per the project rule). They are NOT a hand-
-// written NaN-polarity branch: fsel picks its FALSE operand on unordered, so a
-// NaN mfBoostAmount would come out of the pair as mfMaxBoost, whereas the two
-// ifs leave it NaN. mfBoostAmount is never NaN at this point in any reachable
-// path (every writer -- Prepare, AddBoost, SetBoostAmount, OnEnterInfiniteBoost
-// -- stores a clamped finite value), so the source form is the faithful one.
+// Use the RenderWare scalar clamp. Its two fsel tests at 0x822C1D14..0x822C1D28
+// choose positive zero on a signed-zero amount and mfMaxBoost on an unordered amount.
 //
 // DIVERGENCES FROM LegacySrc:
 //   * LegacySrc: `mfMaxBoost = (miBoostLevel + 1) * mfMaxMaxBoost / KI_BOOST_LEVELS;`
@@ -893,15 +888,7 @@ void BoostBurnout3::UpdateMaxBoost(bool lbFillBoost)
         mfMaxBoost = 1.0f;
     }
 
-    if( mfBoostAmount < 0.0f )
-    {
-        mfBoostAmount = 0.0f;
-    }
-
-    if( mfBoostAmount > mfMaxBoost )
-    {
-        mfBoostAmount = mfMaxBoost;
-    }
+    mfBoostAmount = rw::math::fpu::Clamp(mfBoostAmount, 0.0f, mfMaxBoost);
 
     if( lbFillBoost )
     {

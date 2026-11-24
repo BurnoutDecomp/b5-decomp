@@ -659,7 +659,7 @@ public:
     void SetSeenTrophyUnlockSequence(s32 leUnlockType);                             // 0x824BAA30
 
     // Target-event-score records (Burning Route / Stunt Attack targets; X360 DLC-era tail).
-    BrnGameState::GameStateModuleIO::TargetEventScore* GetTargetEvent(CgsID lEventId);          // 0x82371458
+    const BrnGameState::GameStateModuleIO::TargetEventScore* GetTargetEvent(CgsID lEventId) const;
     void SetTargetEventScore(BrnGameState::GameStateModuleIO::TargetEventScore::OpaqueHead lHead,
                              CgsID lEventId, s32 liScore);                          // 0x823714F8
     void RemoveTargetEventScore(CgsID lEventId);                                    // 0x82371600
@@ -766,9 +766,8 @@ public:
     f32 GetInCarTimePlayed() const;
 
     // X360: ProgressionManager::RepairUnlockedVehicle delegates to Profile::RepairUnlockedVehicle
-    // (this+0x170, lCarId) -- clears the just-repaired car's stored deform/damage. Returns the
-    // updated CarData record (the X360 hands a pointer back in r3).
-    CarData* RepairUnlockedVehicle(CgsID lCarId);
+    // (this+0x170, lCarId) -- clears the just-repaired car's stored deform/damage.
+    void RepairUnlockedVehicle(CgsID lCarId);
 
     // X360: ProgressionManager::SetRoadRuleNetworkHighScores -> Profile::SetRoadRuleNetworkHighScores.
     // Wholesale 3584-byte copy of the 64-entry ChallengeHighScoreEntry table into maNetworkChallengeData.
