@@ -30,6 +30,7 @@
 // big-endian high 32 bits, then `ld; or; std` re-ORs against the preserved low
 // half). Store order / bit-fields are reproduced exactly in the .cpp.
 #include "types.hpp"
+#include "GameShared/GameClasses/SceneManager/CgsEntityId.h"   // EntityId::GetOwner (GetEntityIDOwner)
 
 namespace CgsSceneManager
 {
@@ -111,9 +112,14 @@ namespace CgsSceneManager
         // tripwire (BrnPropEntityID.h:455) compares. The same fold appears in
         // InSceneUpdateInterface::AddVolumeInstance @0x822CB664/0x822CB66C, there compared
         // against KU_MAX_ENTITY_TYPE instead.
+        //
+        // The owner is read off the 32-bit entity word, not the byte in memory: ARTIST's inlined
+        // copies load the doubleword and shift twice (`ld; rldicl 32,32; srwi 24`, e.g.
+        // VehicleManager::ValidateTrafficContact 0x825EAC98..0x825EACA0), as LegacySrc's
+        // `((EntityId*)&mEntityID)->GetOwner()` does on the entity id.
         u8 GetEntityIDOwner() const
         {
-            return static_cast<u8>(muId >> (KU_ENTITY_ID_START_INDEX + KU_OWNER_BASE));
+            return EntityId(static_cast<u32>(muId >> KU_ENTITY_ID_START_INDEX)).GetOwner();
         }
 
         // ---- the VOLUME-INDEX field (bits [0..7]) ------------------------------------------
