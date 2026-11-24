@@ -101,14 +101,14 @@ namespace AIModuleIO
     // X360 0x8276D728 (R, :124) -- the pre-scene race-car AI view (console +0x10).
     const RaceCarAIInterface* InputBuffer::GetRaceCarAIInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 366));
         return &mRaceCarAIInterface;
     }
 
     // X360 0x8276D7D0 (R, :127) -- the traffic-AI interface (console +0x43E0).
     const InputBuffer::TrafficAIInterface* InputBuffer::GetTrafficAIInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 373));
         return &mTrafficAIInterface;
     }
 
@@ -128,7 +128,7 @@ namespace AIModuleIO
     // X360 0x8276D878 (R, :133) -- the AI-module request interface (console +0xFBB0).
     const AIModuleRequestInterface* InputBuffer::GetAIModuleRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 387));
         return &mAIModuleRequestInterface;
     }
 
@@ -144,7 +144,7 @@ namespace AIModuleIO
     // Callers: BrnAI::AIModule::PausedUpdate / Update.
     const InputBuffer::RaceRouteRequestQueue* InputBuffer::GetRaceRouteRequestQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 138));
         return &mRaceRouteRequestQueue;
     }
 
@@ -178,7 +178,7 @@ namespace AIModuleIO
     // X360 0x8276D530 (R, :148) -- the game-action queue (console +0x103BC).
     const InputBuffer::GameActionQueue* InputBuffer::GetGameActionQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 148));
         return &mGameActionQueue;
     }
 
@@ -187,7 +187,7 @@ namespace AIModuleIO
     // IDA truncates this symbol to "InputBuffer::Get"; Get() below is that spelling.
     InputBuffer::GameActionQueue* InputBuffer::GetGameActionQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 149));
         return &mGameActionQueue;
     }
 
@@ -262,7 +262,7 @@ namespace AIModuleIO
     // X360 0x827A9560 (W, :140) -- Append the race-route request queue (console +0x137D0).
     void InputBuffer::AppendRaceRouteRequestQueue(const RaceRouteRequestQueue* lpQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 140));
         mRaceRouteRequestQueue.Append(*lpQueue);
     }
 
@@ -280,7 +280,7 @@ namespace AIModuleIO
     // EventQueue<TakedownEvent,8>::Append (console +0x1B898).
     void InputBuffer::SetTakedownEventQueue(const TakedownEventQueue* lpQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/BrnAIModuleIO.h", 152));
         mTakedownEventQueue.Clear();
         mTakedownEventQueue.Append(*lpQueue);
     }

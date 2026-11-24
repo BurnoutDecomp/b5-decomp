@@ -1,4 +1,5 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 #include <cstddef>   // offsetof
 #include <cstring>   // memcpy (the blind-copy setters model the Xbox XMemCpy intrinsic)
@@ -89,7 +90,7 @@ namespace CrashIO
     // stores). Caller WorldModule::BridgeInputToCrashModule.
     void InputBuffer_PreScene::SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 76));
         mTimerStatusInterface = *lpInterface;
     }
 
@@ -98,7 +99,7 @@ namespace CrashIO
     // Caller WorldModule::BridgeInputToCrashModule.
     void InputBuffer_PreScene::SetNetworkInputInterface(const NetworkInputInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 79));
         mNetworkInputInterface = *lpInterface;
     }
 
@@ -111,7 +112,7 @@ namespace CrashIO
     // Caller WorldModule::BridgeInputToCrashModule (0x827ADF4C).
     void InputBuffer_PreScene::SetVehicleDriverInterface(const VehicleDriverInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 82));
         mVehicleDriverInterface = *lpInterface;
     }
 
@@ -122,7 +123,7 @@ namespace CrashIO
     void InputBuffer_PreScene::SetActiveRaceCarInterface(
         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 85));
         // [crash exit 2026-08-25] was `memcpy(&member, lpInterface, sizeof(member))` over a
         // 10480-byte console-sized blob. The member is the real type now, so the copy is the
         // interface's own operator= -- which is what the X360 inlines here (the same field-by-field
@@ -134,7 +135,7 @@ namespace CrashIO
     // into mGameActionQueue (X360 this+0x7A70). Caller WorldModule::BridgeInputToCrashModule.
     void InputBuffer_PreScene::SetGameActionQueue(const GameActionQueue* lpQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 88));
         mGameActionQueue.Append(*lpQueue);
     }
 
@@ -220,7 +221,7 @@ namespace CrashIO
     // (X360 this+0x8) via TrafficInputInterface::operator= (per-queue copy + bit-mask copy).
     void InputBuffer_PostPhysics::SetTrafficInputInterface(const TrafficInputInterface* lpTrafficInputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 169));
         mTrafficInputInterface = *lpTrafficInputInterface;
     }
 
@@ -228,7 +229,7 @@ namespace CrashIO
     // (X360 this+0xDA0) via VehicleOutputInterface::operator=.
     void InputBuffer_PostPhysics::SetVehicleOutputInterface(const VehicleOutputInterface* lpVehicleOutputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 172));
         mVehicleOutputInterface = *lpVehicleOutputInterface;
     }
 
@@ -236,7 +237,7 @@ namespace CrashIO
     // (X360 this+0x79B0) via VehicleManagerOutputInterface::operator=.
     void InputBuffer_PostPhysics::SetVehicleManagerOutputInterface(const VehicleManagerOutputInterface* lpVehicleManagerOutputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 175));
         mVehicleManagerOutputInterface = *lpVehicleManagerOutputInterface;
     }
 

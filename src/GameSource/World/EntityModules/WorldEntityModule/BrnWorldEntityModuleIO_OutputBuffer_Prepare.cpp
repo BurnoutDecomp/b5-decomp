@@ -1,4 +1,5 @@
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModuleIO.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 #include <cstddef>   // offsetof
 
@@ -31,7 +32,7 @@ namespace WorldEntityIO
     ResourceRequestInterface*
     OutputBuffer_Prepare::GetResourceRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 73));
         return &mResourceRequestInterface;
     }
 
@@ -42,7 +43,7 @@ namespace WorldEntityIO
     const ResourceRequestInterface*
     OutputBuffer_Prepare::GetResourceRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 72));
         return &mResourceRequestInterface;
     }
 

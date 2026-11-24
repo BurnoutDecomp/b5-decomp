@@ -1,5 +1,6 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 // BrnTraffic::BrnTrafficIO input-buffer GETTERS, reconstructed from BURNOUT_X360_ARTIST.XEX.
 // Companions to the committed setters (BrnTrafficEntityModuleIO_InputBuffer_PostPhysics.cpp) --
@@ -78,7 +79,7 @@ namespace BrnTrafficIO
     // Consumers: TrafficEntityModule::HandleCrashingNetworkTraffic / CleanUpCrashedVehicles.
     const InputBuffer_PostScene::CrashTrafficOutputInterface* InputBuffer_PostScene::GetCrashTrafficOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 232));
         return &mCrashTrafficOutputInterface;
     }
 
@@ -94,7 +95,7 @@ namespace BrnTrafficIO
     // Consumer: TrafficEntityModule::PostSceneUpdate.
     const InputBuffer_PostScene::RaceCarToTrafficInterface* InputBuffer_PostScene::GetRaceCarToTrafficInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 238));
         return &mRaceCarToTrafficInterface;
     }
 
@@ -102,7 +103,7 @@ namespace BrnTrafficIO
     // Consumers: TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults / HandleExternalResponses.
     const InputBuffer_PostPhysics::VehicleOutputInterface* InputBuffer_PostPhysics::GetVehicleOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 350));
         return &mVehicleOutputInterface;
     }
 
@@ -110,7 +111,7 @@ namespace BrnTrafficIO
     // Consumers: TrafficEntityModule::HandleExternalResponses / HandleResetRaceCarEvents / PostPhysicsUpdate.
     const InputBuffer_PostPhysics::VehicleManagerOutputInterface* InputBuffer_PostPhysics::GetVehicleManagerOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 356));
         return &mVehicleManagerOutputInterface;
     }
 
@@ -118,7 +119,7 @@ namespace BrnTrafficIO
     // Consumer: TrafficEntityModule::HandleExternalRequests.
     const InputBuffer_PostPhysics::GameActionQueueStorage* InputBuffer_PostPhysics::GetGameActionQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 359));
         return &mGameActionQueue;
     }
 
@@ -126,7 +127,7 @@ namespace BrnTrafficIO
     // Producers: WorldModule::BridgeActionsToTrafficModule / UpdateForBootUpVideo.
     InputBuffer_PostPhysics::GameActionQueueStorage* InputBuffer_PostPhysics::GetGameActionQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 360));
         return &mGameActionQueue;
     }
 

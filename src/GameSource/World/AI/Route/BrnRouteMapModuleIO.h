@@ -36,6 +36,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h" // CgsModule::Event (empty event base)
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"          // CgsModule::IOBuffer base
 #include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT (the lock-bit tripwires)
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 #include "GameShared/GameClasses/Containers/CgsArray.h"         // Array<T,N> (block-section list)
 #include "GameSource/World/AI/Route/BrnAStar.h"                 // AStarQuality / AStarDistanceFunction
 #include "GameSource/World/AI/Route/BrnRoute.h"                 // BrnAI::Route (response view target)
@@ -317,7 +318,7 @@ namespace BrnAI
             // transient "Route" output buffer.
             const RouteResponseQueue* GetRouteResponseQueue() const
             {
-                CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+                CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/AI/Route/BrnRouteMapModuleIO.h", 624));
                 return &mRouteResponseQueue;
             }
 

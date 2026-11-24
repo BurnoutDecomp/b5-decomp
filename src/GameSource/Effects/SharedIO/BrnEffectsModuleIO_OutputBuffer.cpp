@@ -36,21 +36,21 @@ void OutputBuffer::Construct()
 // X360 0x823BABF0 (:291): read-lock handle to the resource-request interface.
 const OutputBuffer::EffectsModuleResourceQueue* OutputBuffer::GetResourceRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 291));
     return &mResourceRequestInterface;
 }
 
 // X360 0x823BAC98 (:296): read-lock handle to the vault-request interface.
 const OutputBuffer::VaultRequestInterface* OutputBuffer::GetVaultRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 295));
     return &mVaultRequestInterface;
 }
 
 // X360 0x823BAD40 (:298): read-lock handle to the replay-request interface.
 const OutputBuffer::ReplayRequestInterface* OutputBuffer::GetReplayRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 298));
     return &mReplayRequestInterface;
 }
 
@@ -59,21 +59,21 @@ const OutputBuffer::ReplayRequestInterface* OutputBuffer::GetReplayRequestInterf
 // X360 0x8227E130 (:292).
 OutputBuffer::EffectsModuleResourceQueue* OutputBuffer::GetResourceRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 292));
     return &mResourceRequestInterface;
 }
 
 // X360 0x8227E1D8 (:295).
 OutputBuffer::VaultRequestInterface* OutputBuffer::GetVaultRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 296));
     return &mVaultRequestInterface;
 }
 
 // X360 0x8227E280 (:300).
 OutputBuffer::ReplayRequestInterface* OutputBuffer::GetReplayRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 300));
     return &mReplayRequestInterface;
 }
 

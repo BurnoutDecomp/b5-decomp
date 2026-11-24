@@ -1,6 +1,7 @@
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 #include <cstddef>   // offsetof
 
@@ -36,7 +37,7 @@ namespace WorldEntityIO
     ResourceRequestInterface*
     OutputBuffer_PostPhysics::GetResourceRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 246));
         return &mResourceRequestInterface;
     }
 
@@ -53,7 +54,7 @@ namespace WorldEntityIO
     const StatusInterface*
     OutputBuffer_PostPhysics::GetStatusInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 248));
         return &mStatusInterface;
     }
 
@@ -61,7 +62,7 @@ namespace WorldEntityIO
     StatusInterface*
     OutputBuffer_PostPhysics::GetStatusInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 249));
         return &mStatusInterface;
     }
 
@@ -70,7 +71,7 @@ namespace WorldEntityIO
     SceneInputInterface*
     OutputBuffer_PostPhysics::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 252));
         return &mSceneInputInterface;
     }
 

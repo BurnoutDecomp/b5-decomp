@@ -143,7 +143,7 @@ const EffectsEnvironmentInterface* InputBuffer::GetEffectsEnvironmentInterface()
 // X360 0x823BA708 (:142) -- the game-action queue for the bridge's Append.
 InputBuffer::GameActionQueue* InputBuffer::GetGameActionQueue()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 137));
     return &mGameActionQueue;
 }
 
@@ -153,14 +153,14 @@ InputBuffer::GameActionQueue* InputBuffer::GetGameActionQueue()
 // console copies the interface bitwise; the host copy is the same object bitwise.
 void InputBuffer::SetActiveRaceCarInterface(const RCEntityActiveRaceCarOutputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 109));
     std::memcpy(&mActiveRaceCarInterface, lpInterface, sizeof(mActiveRaceCarInterface));
 }
 
 // X360 0x823C96B8 (:91) -- `stw 0, 8(queue)` (Clear) then BaseEventQueue::Append(source).
 void InputBuffer::SetVehiclePhysicalStateQueue(const PhysicalTrafficStateQueue* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 113));
     mVehiclePhysicalStateQueue.Clear();
     mVehiclePhysicalStateQueue.Append(*lpQueue);
 }
@@ -175,7 +175,7 @@ void InputBuffer::SetCameraInput(const BrnDirector::Camera::Camera* lpCameraInpu
 // X360 0x823BA548 (:109) -- the 48-byte (two 24-byte TimerStatus) copy.
 void InputBuffer::SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpTimer)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 121));
     std::memcpy(&mTimerStatusInterface, lpTimer, sizeof(mTimerStatusInterface));
 }
 
@@ -189,7 +189,7 @@ void InputBuffer::SetContactSpyInterface(const BrnPhysics::ContactSpy::ContactSp
 // X360 0x823C9820 (:127) -- mDeformationInterface = *lpInterface (its operator=).
 void InputBuffer::SetDeformationInterface(const BrnPhysics::Deformation::DeformationOutputInterface* lpInterface)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 129));
     mDeformationInterface = *lpInterface;
 }
 
@@ -218,7 +218,7 @@ void InputBuffer::SetEffectsEnvironmentInterface(const EffectsEnvironmentInterfa
 // X360 0x823C98D0 (:163) -- `stw 0, 8(queue)` (Clear) then BaseEventQueue::Append(source).
 void InputBuffer::SetPropVFXLocatorQueue(const PropVFXLocatorQueue* lpQueue)
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\effects\\EffectsModuleIO.h", 147));
     mPropVFXLocatorQueue.Clear();
     mPropVFXLocatorQueue.Append(*lpQueue);
 }

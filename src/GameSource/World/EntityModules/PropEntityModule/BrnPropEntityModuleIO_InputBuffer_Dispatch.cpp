@@ -11,6 +11,7 @@
 // (295/296/301/302/304/305) are intentionally not reproduced.
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 #include <cstddef>   // offsetof
 
@@ -66,28 +67,28 @@ namespace PropEntityIO
     // X360 0x822B8EA8 (R, :295) -- read-lock; return the dispatch frame (console word @this+4).
     CgsGraphics::DispatchFrame* InputBuffer_Dispatch::GetDispatchFrame() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 295));
         return mpDispatchFrame;
     }
 
     // X360 0x827A1180 (W, :296) -- write-lock; set the dispatch frame (console word @this+4).
     void InputBuffer_Dispatch::SetDispatchFrame(CgsGraphics::DispatchFrame* lpDispatchFrame)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 296));
         mpDispatchFrame = lpDispatchFrame;
     }
 
     // X360 0x822B8F50 (R, :301) -- read-lock; return the shadow map (console word @this+8).
     ShadowMap* InputBuffer_Dispatch::GetShadowMap() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 301));
         return mpShadowMap;
     }
 
     // X360 0x827A1228 (W, :302) -- write-lock; set the shadow map (console word @this+8).
     void InputBuffer_Dispatch::SetShadowMap(ShadowMap* lpShadowMap)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 302));
         mpShadowMap = lpShadowMap;
     }
 
@@ -96,7 +97,7 @@ namespace PropEntityIO
     // GenerateShadowMapDispatchLists (WorldModule::GenerateDispatchLists path).
     InputBuffer_Dispatch::SceneResultQueueStorage* InputBuffer_Dispatch::GetSceneResultQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 299));
         return &mSceneResultQueue;
     }
 
@@ -104,7 +105,7 @@ namespace PropEntityIO
     // (this+0x801C).
     BrnCoronaManager::BrnSubmissionInterface* InputBuffer_Dispatch::GetCoronaSubmissionInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 304));
         return mpCoronaSubmissionInterface;
     }
 
@@ -113,7 +114,7 @@ namespace PropEntityIO
     void InputBuffer_Dispatch::SetCoronaSubmissionInterface(
             BrnCoronaManager::BrnSubmissionInterface* lpCoronaSubmissionInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 305));
         mpCoronaSubmissionInterface = lpCoronaSubmissionInterface;
     }
 }

@@ -19,6 +19,7 @@
 // closest committed sibling BrnAIModuleIO_InputBuffer_Accessors keeps "Not locked for writing\n").
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 #include <cstddef>   // offsetof
 
@@ -66,7 +67,7 @@ namespace PropEntityIO
     // embedded mPotentialContactQueue (this+0x10).
     void InputBuffer_PrePhysics::AppendPotentialContactQueue(const OutPotentialContactQueue* lpQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 548));
         mPotentialContactQueue.Append(*lpQueue);
     }
 
@@ -84,7 +85,7 @@ namespace PropEntityIO
     // ========================================================================
     const InputBuffer_PrePhysics::OutPotentialContactQueue* InputBuffer_PrePhysics::GetPotentialContactQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 547));
         return &mPotentialContactQueue;
     }
 
@@ -119,7 +120,7 @@ namespace PropEntityIO
     // Rodata carries a trailing newline (VERBATIM, per LegacySrc reference source).
     const InputBuffer_PrePhysics::ResetOnTrackResultQueue* InputBuffer_PrePhysics::GetResetOnTrackResultQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 550));
         return &mResetOnTrackResultQueue;
     }
 }

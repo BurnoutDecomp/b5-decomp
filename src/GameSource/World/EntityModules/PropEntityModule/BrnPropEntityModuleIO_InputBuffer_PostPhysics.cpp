@@ -20,6 +20,7 @@
 // body order is the call order, independent of declaration order).
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 #include <cstddef>   // offsetof
 
@@ -50,7 +51,7 @@ namespace PropEntityIO
     // Called by BrnWorld::PropEntityModule::ProcessContacts. (class:BrnWorld::PropEntityIO TU; no \n.)
     const InputBuffer_PostPhysics::ContactSpyInterface* InputBuffer_PostPhysics::GetContactSpyInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 576));
         return &mContactSpyInterface;
     }
 
@@ -60,7 +61,7 @@ namespace PropEntityIO
     // The rodata assert string carries a trailing newline (VERBATIM).
     InputBuffer_PostPhysics::ContactSpyInterface* InputBuffer_PostPhysics::GetContactSpyInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 579));
         return &mContactSpyInterface;
     }
 
@@ -69,7 +70,7 @@ namespace PropEntityIO
     // The rodata assert string carries a trailing newline (VERBATIM).
     void InputBuffer_PostPhysics::AppendUpdatedPropQueue(const UpdatePropEventQueue* lpQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 580));
         mUpdatedPropQueue.Append(*lpQueue);
     }
 
@@ -79,7 +80,7 @@ namespace PropEntityIO
     // Rodata carries a trailing newline (VERBATIM, per LegacySrc reference source).
     const InputBuffer_PostPhysics::UpdatePropEventQueue* InputBuffer_PostPhysics::GetUpdatedPropQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 577));
         return &mUpdatedPropQueue;
     }
 }

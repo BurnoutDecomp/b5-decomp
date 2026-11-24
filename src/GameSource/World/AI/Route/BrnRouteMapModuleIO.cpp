@@ -1,5 +1,6 @@
 #include "GameSource/World/AI/Route/BrnRouteMapModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 // Out-of-line body of the write-lock-checked byte-offset accessor of
 // BrnAI::RouteMapModuleIO::OutputBuffer that the X360 ARTIST build emitted
@@ -31,7 +32,7 @@ namespace RouteMapModuleIO
     // Caller RouteMapModule::Update. Faithfully tests the WRITE bit (do not "fix" to read).
     u8* OutputBuffer::GetRouteResponseQueueForWrite()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/AI/Route/BrnRouteMapModuleIO.h", 617));
         return reinterpret_cast<u8*>(&mRouteResponseQueue);
     }
 }

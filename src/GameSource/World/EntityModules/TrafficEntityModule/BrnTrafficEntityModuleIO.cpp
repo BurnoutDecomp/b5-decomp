@@ -1,5 +1,6 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 #include <cstddef>   // offsetof
 #include <cstring>   // std::memcpy (InputBuffer_PostScene::SetActiveRaceCarOutputInterface)
@@ -86,14 +87,14 @@ namespace BrnTrafficIO
     // X360 0x827A0830 (:387): read-lock; return &mCrashTrafficInputInterface (this + 8).
     const OutputBuffer_PostPhysics::CrashTrafficInputInterface* OutputBuffer_PostPhysics::GetCrashTrafficInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 391));
         return &mCrashTrafficInputInterface;
     }
 
     // X360 0x82711A48 (:392): write-lock; return &mCrashTrafficInputInterface (this + 8).
     OutputBuffer_PostPhysics::CrashTrafficInputInterface* OutputBuffer_PostPhysics::GetCrashTrafficInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 392));
         return &mCrashTrafficInputInterface;
     }
 
@@ -101,7 +102,7 @@ namespace BrnTrafficIO
     // read-lock; return &mTrafficSoundOutputInterface (this + 3632).
     const TrafficSoundOutputInterface* OutputBuffer_PostPhysics::GetTrafficSoundOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 397));
         return &mTrafficSoundOutputInterface;
     }
 
@@ -109,14 +110,14 @@ namespace BrnTrafficIO
     // Producer: BrnTraffic::TrafficEntityModule::ProcessNearbyTrafficSceneQueryResults.
     TrafficSoundOutputInterface* OutputBuffer_PostPhysics::GetTrafficSoundOutputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 398));
         return &mTrafficSoundOutputInterface;
     }
 
     // X360 0x827A08D8 (baked 394): read-lock; return &mNetworkInterface (this + 3488).
     const TrafficNetworkOutputInterface* OutputBuffer_PostPhysics::GetNetworkInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 394));
         return &mNetworkInterface;
     }
 
@@ -137,7 +138,7 @@ namespace BrnTrafficIO
     // accessor is 0x827A0AD0 (baked 403) at +0x2660 == 9824.
     const TrafficDirectorOutputInterface* OutputBuffer_PostPhysics::GetTrafficDirectorOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 400));
         return &mTrafficDirectorOutputInterface;
     }
 
@@ -165,7 +166,7 @@ namespace BrnTrafficIO
     // X360 0x827A0AD0 (baked 403): read-lock; return &mGameEventQueue (this + 9824).
     const OutputBuffer_PostPhysics::GameEventQueue* OutputBuffer_PostPhysics::GetGameEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 403));
         return &mGameEventQueue;
     }
 
@@ -173,21 +174,21 @@ namespace BrnTrafficIO
     // Producers: BrnTraffic::TrafficEntityModule::HandleExternalRequests / ::PostPhysicsUpdate.
     OutputBuffer_PostPhysics::GameEventQueue* OutputBuffer_PostPhysics::GetGameEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 404));
         return &mGameEventQueue;
     }
 
     // X360 0x827A0B78 (baked 406): read-lock; return the replay request interface (this + 834784).
     const OutputBuffer_PostPhysics::ReplayRequestInterface* OutputBuffer_PostPhysics::GetReplayRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 406));
         return &mReplayRequestInterface;
     }
 
     // X360 0x82711D90 (baked 407): write-lock; same member (this + 834784).
     OutputBuffer_PostPhysics::ReplayRequestInterface* OutputBuffer_PostPhysics::GetReplayRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 407));
         return &mReplayRequestInterface;
     }
 
@@ -213,7 +214,7 @@ namespace BrnTrafficIO
     // X360 0x827A0CC8 (baked 412): read-lock; return &mTrafficTypeResponseQueue (this + 830144).
     const OutputBuffer_PostPhysics::TrafficTypeResponseQueue* OutputBuffer_PostPhysics::GetTrafficTypeResponseQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 412));
         return &mTrafficTypeResponseQueue;
     }
 
@@ -247,14 +248,14 @@ namespace BrnTrafficIO
     // X360 0x827A0E18 (baked 418): read-lock; return &mGuiEventQueue (this + 834828).
     const OutputBuffer_PostPhysics::GuiEventInputQueue* OutputBuffer_PostPhysics::GetGuiEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 418));
         return &mGuiEventQueue;
     }
 
     // X360 0x82712030 (baked 419): write-lock; return &mGuiEventQueue (this + 834828).
     OutputBuffer_PostPhysics::GuiEventInputQueue* OutputBuffer_PostPhysics::GetGuiEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 419));
         return &mGuiEventQueue;
     }
 
@@ -284,7 +285,7 @@ namespace BrnTrafficIO
     // (BrnTrafficEntityModuleIO.h:150); the dossier's 'GetTimerS' is a truncated Hex-Rays symbol.
     const CgsSystem::TimerStatusInterface* InputBuffer_PreScene::GetTimerStatusInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 154));
         return &mTimerStatusInterface;
     }
 
@@ -297,7 +298,7 @@ namespace BrnTrafficIO
     void InputBuffer_PreScene::SetTimerStatusInterface(
         const CgsSystem::TimerStatusInterface* lpTimerStatusInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 155));
         mTimerStatusInterface = *lpTimerStatusInterface;
     }
 
@@ -321,7 +322,7 @@ namespace BrnTrafficIO
     const InputBuffer_PreScene::ActiveRaceCarOutputInterface*
     InputBuffer_PreScene::GetActiveRaceCarOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 157));
         return &mActiveRaceCarOutputInterface;
     }
 
@@ -333,7 +334,7 @@ namespace BrnTrafficIO
     void InputBuffer_PreScene::SetActiveRaceCarOutputInterface(
         const ActiveRaceCarOutputInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 158));
         mActiveRaceCarOutputInterface = *lpInterface;
     }
 
@@ -344,7 +345,7 @@ namespace BrnTrafficIO
     void InputBuffer_PreScene::SetGlobalRaceCarOutputInterface(
         const GlobalRaceCarOutputInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 161));
         mGlobalRaceCarOutputInterface = *lpInterface;
     }
 
@@ -391,7 +392,7 @@ namespace BrnTrafficIO
     void InputBuffer_PreScene::SetTrafficNetworkInputInterface(
         const TrafficNetworkInputInterface* lpTrafficNetworkInputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 164));
         TrafficNetworkInputInterface::ActivateHullQueue& lrQueue =
             const_cast<TrafficNetworkInputInterface::ActivateHullQueue&>(
                 mTrafficNetworkInputInterface.GetActivateHullQueue());
@@ -419,7 +420,7 @@ namespace BrnTrafficIO
         // can see the private member. sizeof(RCEntityActiveRaceCarOutputInterface) == 0x28F0 == 10480.
         CGS_STATIC_ASSERT((offsetof(InputBuffer_PostScene, mActiveRaceCarOutputInterface) == 1648),
                       "mActiveRaceCarOutputInterface @1648");
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 236));
         std::memcpy(&mActiveRaceCarOutputInterface, lpInterface,
                     sizeof(InputBuffer_PostScene::ActiveRaceCarOutputInterface));
     }
@@ -436,7 +437,7 @@ namespace BrnTrafficIO
         // after the 1-byte IOBuffer status). Pinned so the +8 base of both queues is exact.
         CGS_STATIC_ASSERT((offsetof(InputBuffer_PostScene, mCrashTrafficOutputInterface) == 8),
                       "mCrashTrafficOutputInterface @8");
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 233));
 
         // Cleanup-traffic queue: clear then append the source's live events (X360 stw 0,miLength +
         // BaseEventQueue<CleanupTrafficEvent>::Append @0x827A8490).
@@ -540,7 +541,7 @@ namespace BrnTrafficIO
 
     void InputBuffer_PrePhysics::SetPotentialContactQueue(const PotentialContactQueue* lpPotentialContactQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 282));
         mPotentialContactQueue.Clear();             // stw r28,8(&mPotentialContactQueue) -> miLength = 0
         mPotentialContactQueue.Append(*lpPotentialContactQueue);
     }
@@ -550,7 +551,7 @@ namespace BrnTrafficIO
     // BaseEventQueue<OutOverlapPair>::Append (committed instantiation @0x827A6FE8, 24B stride).
     void InputBuffer_PrePhysics::SetOverlapPairsQueue(const OverlapPairsQueue* lpOverlapPairsQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 285));
         mOverlapPairsQueue.Clear();                 // stw r28,8(&mOverlapPairsQueue) -> miLength = 0
         mOverlapPairsQueue.Append(*lpOverlapPairsQueue);
     }
@@ -572,21 +573,21 @@ namespace BrnTrafficIO
     // 32B: alignas(16) Vector3 mRestPos + bool, padded up).
     void InputBuffer_PrePhysics::SetPlayerResetInterface(const RCEntityPlayerResetInterface* lpPlayerResetInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 288));
         mPlayerResetInterface = *lpPlayerResetInterface;
     }
 
     // X360 0x827113B8 (:289): read-lock; return &mPropToTrafficInterface (this+199776).
     const InputBuffer_PrePhysics::PropToTrafficInterface* InputBuffer_PrePhysics::GetPropToTrafficInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 293));
         return &mPropToTrafficInterface;
     }
 
     // X360 0x827A02D0 (:290): write-lock; return &mPropToTrafficInterface (this+199776).
     InputBuffer_PrePhysics::PropToTrafficInterface* InputBuffer_PrePhysics::GetPropToTrafficInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 294));
         return &mPropToTrafficInterface;
     }
 
@@ -614,7 +615,7 @@ namespace BrnTrafficIO
     // X360 0x82711118: write-lock; return &mSceneCoarseQueryQueue (this + 4, first member).
     OutputBuffer_PostScene::SceneCoarseQueryQueue* OutputBuffer_PostScene::GetSceneCoarseQueryQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 257));
         return &mSceneCoarseQueryQueue;
     }
 
@@ -630,7 +631,7 @@ namespace BrnTrafficIO
     // X360 0x827A0008 (:255): read-lock; return &mTrafficAIInterface (this + 16416).
     const TrafficAIInterface* OutputBuffer_PostScene::GetTrafficAIInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 259));
         return &mTrafficAIInterface;
     }
 
@@ -721,7 +722,7 @@ namespace BrnTrafficIO
     OutputBuffer_PreScene::SceneInputInterface*
     OutputBuffer_PreScene::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 187));
         return &mSceneInputInterface;
     }
 
@@ -731,7 +732,7 @@ namespace BrnTrafficIO
     const OutputBuffer_PreScene::TrafficToRaceCarInterface_PreScene*
     OutputBuffer_PreScene::GetTrafficToRaceCarInterface_PreScene() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 189));
         return &mTrafficToRaceCarInterface_PreScene;
     }
 
@@ -739,7 +740,7 @@ namespace BrnTrafficIO
     OutputBuffer_PreScene::TrafficToRaceCarInterface_PreScene*
     OutputBuffer_PreScene::GetTrafficToRaceCarInterface_PreScene()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 190));
         return &mTrafficToRaceCarInterface_PreScene;
     }
 
@@ -748,7 +749,7 @@ namespace BrnTrafficIO
     const OutputBuffer_PreScene::TriggerManagementInputInterface*
     OutputBuffer_PreScene::GetTriggerManagementInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 192));
         return &mTriggerManagementInputInterface;
     }
 
@@ -756,7 +757,7 @@ namespace BrnTrafficIO
     OutputBuffer_PreScene::TriggerManagementInputInterface*
     OutputBuffer_PreScene::GetTriggerManagementInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 193));
         return &mTriggerManagementInputInterface;
     }
 
@@ -842,28 +843,28 @@ namespace BrnTrafficIO
     // X360 0x8279F988: read-lock; return &mSceneInputInterface (this + 16).
     const OutputBuffer_Prepare::SceneInputInterface* OutputBuffer_Prepare::GetSceneInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 126));
         return &mSceneInputInterface;
     }
 
     // X360 0x827109E0: write-lock; return &mSceneInputInterface (this + 16).
     OutputBuffer_Prepare::SceneInputInterface* OutputBuffer_Prepare::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 127));
         return &mSceneInputInterface;
     }
 
     // X360 0x8279FA30 (:125): read-lock; return &mResourceRequestInterface (this + 818784).
     const OutputBuffer_Prepare::ResourceRequestInterface* OutputBuffer_Prepare::GetResourceRequestInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 129));
         return &mResourceRequestInterface;
     }
 
     // X360 0x82710A88 (:130): write-lock; return &mResourceRequestInterface (this + 818784).
     OutputBuffer_Prepare::ResourceRequestInterface* OutputBuffer_Prepare::GetResourceRequestInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 130));
         return &mResourceRequestInterface;
     }
 
@@ -901,7 +902,7 @@ namespace BrnTrafficIO
     // X360 0x827A0378 (:310): read-lock; return &mVehicleInputInterface (this + 16).
     const OutputBuffer_PrePhysics::VehicleInputInterface* OutputBuffer_PrePhysics::GetVehicleInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 314));
         return &mVehicleInputInterface;
     }
 
@@ -915,7 +916,7 @@ namespace BrnTrafficIO
     // X360 0x827A0420 (:313): read-lock; return &mVehicleEffectsInterface (this + 142192).
     const OutputBuffer_PrePhysics::VehicleEffectsInputInterface* OutputBuffer_PrePhysics::GetVehicleEffectsInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 317));
         return &mVehicleEffectsInterface;
     }
 
@@ -929,14 +930,14 @@ namespace BrnTrafficIO
     // X360 0x827A04C8 (:316): read-lock; return &mVehicleDriverInterface (this + 143984).
     const OutputBuffer_PrePhysics::VehicleDriverInputInterface* OutputBuffer_PrePhysics::GetVehicleDriverInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 320));
         return &mVehicleDriverInterface;
     }
 
     // X360 0x82711508 (:317): write-lock; return &mVehicleDriverInterface (this + 143984).
     OutputBuffer_PrePhysics::VehicleDriverInputInterface* OutputBuffer_PrePhysics::GetVehicleDriverInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\trafficentitymodule\\BrnTrafficEntityModuleIO.h", 321));
         return &mVehicleDriverInterface;
     }
 

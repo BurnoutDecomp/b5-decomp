@@ -13,6 +13,7 @@
 // CGS_ASSERT stamps __FILE__/__LINE__, so the X360-baked d:\p4 path/line is not reproduced.
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 namespace BrnWorld
 {
@@ -107,7 +108,7 @@ InputBuffer_PreScene::Construct()
 const InputBuffer_PreScene::PropGraphicsLoadedQueue*
 InputBuffer_PreScene::GetPropGraphicsLoadedQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 452));
     return &mPropGraphicsLoadedQueue;
 }
 
@@ -124,7 +125,7 @@ InputBuffer_PreScene::GetPropGraphicsLoadedQueue()
 const InputBuffer_PreScene::PropGraphicsUnloadedQueue*
 InputBuffer_PreScene::GetPropGraphicsUnloadedQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 455));
     return &mPropGraphicsUnloadedQueue;
 }
 
@@ -142,7 +143,7 @@ InputBuffer_PreScene::GetPropGraphicsUnloadedQueue()
 const InputBuffer_PreScene::PropInstancesNeededForZoneQueue*
 InputBuffer_PreScene::GetPropInstancesNeededForZoneQueue() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 458));
     return &mPropInstancesNeededForZoneQueue;
 }
 

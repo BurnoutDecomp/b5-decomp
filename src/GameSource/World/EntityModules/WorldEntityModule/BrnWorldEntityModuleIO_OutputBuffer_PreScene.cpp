@@ -1,6 +1,7 @@
 #include "GameSource/World/EntityModules/WorldEntityModule/BrnWorldEntityModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 #include <cstddef>   // offsetof
 
@@ -35,7 +36,7 @@ namespace WorldEntityIO
     const SceneInputInterface*
     OutputBuffer_PreScene::GetSceneInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 120));
         return &mSceneInputInterface;
     }
 
@@ -43,7 +44,7 @@ namespace WorldEntityIO
     SceneInputInterface*
     OutputBuffer_PreScene::GetSceneInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 121));
         return &mSceneInputInterface;
     }
 
@@ -51,7 +52,7 @@ namespace WorldEntityIO
     // BrnWorld::WorldEntityModule::UpdateStream.
     OutputBuffer_PreScene::GameEventQueue* OutputBuffer_PreScene::GetGameEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 124));
         return &mGameEventQueue;
     }
 
@@ -77,7 +78,7 @@ namespace WorldEntityIO
     OutputBuffer_PreScene::PropGraphicsLoadedQueue*
     OutputBuffer_PreScene::GetPropGraphicsLoadedQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 127));
         return &mPropGraphicsLoadedQueue;
     }
 
@@ -87,7 +88,7 @@ namespace WorldEntityIO
     OutputBuffer_PreScene::PropGraphicsUnloadedQueue*
     OutputBuffer_PreScene::GetPropGraphicsUnloadedQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 133));
         return &mPropGraphicsUnloadedQueue;
     }
 
@@ -98,7 +99,7 @@ namespace WorldEntityIO
     OutputBuffer_PreScene::SoundWorldLoadInterface*
     OutputBuffer_PreScene::GetSoundWorldLoadInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 136));
         return &mSoundWorldLoadInterface;
     }
 
@@ -122,7 +123,7 @@ namespace WorldEntityIO
     const OutputBuffer_PreScene::PropInstancesNeededForZoneQueue*
     OutputBuffer_PreScene::GetPropInstancesNeededForZoneQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 129));
         return &mPropInstancesNeededForZoneQueue;
     }
 
@@ -130,7 +131,7 @@ namespace WorldEntityIO
     const OutputBuffer_PreScene::PropGraphicsLoadedQueue*
     OutputBuffer_PreScene::GetPropGraphicsLoadedQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 126));
         return &mPropGraphicsLoadedQueue;
     }
 
@@ -138,7 +139,7 @@ namespace WorldEntityIO
     const OutputBuffer_PreScene::PropGraphicsUnloadedQueue*
     OutputBuffer_PreScene::GetPropGraphicsUnloadedQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\entitymodules\\worldentitymodule\\BrnWorldEntityModuleIO.h", 132));
         return &mPropGraphicsUnloadedQueue;
     }
 

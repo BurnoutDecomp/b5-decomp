@@ -1,5 +1,6 @@
 #include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 // BrnTraffic::BrnTrafficIO::InputBuffer_PostPhysics setters, reconstructed from
 // BURNOUT_X360_ARTIST.XEX. Each tests the IOBuffer write-lock bit (status>>3 &1 ==
@@ -17,14 +18,14 @@ namespace BrnTrafficIO
     // X360 0x827A9F50 (:347): write-lock; VehicleOutputInterface::operator= on this+0x10.
     void InputBuffer_PostPhysics::SetVehicleOutputInterface(const VehicleOutputInterface* lpVehicleOutputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 351));
         mVehicleOutputInterface = *lpVehicleOutputInterface;
     }
 
     // X360 0x827AA000 (:353): write-lock; VehicleManagerOutputInterface::operator= on this+0xEC30.
     void InputBuffer_PostPhysics::SetVehicleManagerOutputInterface(const VehicleManagerOutputInterface* lpVehicleManagerOutputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 357));
         mVehicleManagerOutputInterface = *lpVehicleManagerOutputInterface;
     }
 
@@ -32,14 +33,14 @@ namespace BrnTrafficIO
     // into RCEntityActiveRaceCarOutputInterface::operator=.
     void InputBuffer_PostPhysics::SetActiveRaceCarOutputInterface(const ActiveRaceCarOutputInterface* lpActiveRaceCarOutputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 363));
         mActiveRaceCarOutputInterface = *lpActiveRaceCarOutputInterface;
     }
 
     // X360 0x827AA0B8 (:362): write-lock; DeformationOutputInterfaceForEntityModules::operator= on this+0x151B0.
     void InputBuffer_PostPhysics::SetDeformationOutputInterfaceForEntityModules(const DeformationOutputInterfaceForEntityModules* lpDeformationOutputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 366));
         mDeformationOutputInterfaceForEntityModules = *lpDeformationOutputInterface;
     }
 
@@ -47,7 +48,7 @@ namespace BrnTrafficIO
     // (this+0x19EF0). ContactSpyInterface is a 4-byte type, so the store is the whole memberwise copy.
     void InputBuffer_PostPhysics::SetContactSpyInterface(const ContactSpyInterface* lpContactSpyInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/TrafficEntityModule/BrnTrafficEntityModuleIO.h", 370));
         mContactSpyInterface = *lpContactSpyInterface;
     }
 }

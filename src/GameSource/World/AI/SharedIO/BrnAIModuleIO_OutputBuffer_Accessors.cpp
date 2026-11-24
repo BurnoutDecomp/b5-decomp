@@ -1,5 +1,6 @@
 #include "GameSource/World/AI/SharedIO/BrnAIModuleIO_OutputBuffer.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 // Out-of-line body for the OutputBuffer accessor the X360 build emitted in its own
 // function group (@0x8276DB18). Same idiom as the sibling
@@ -25,7 +26,7 @@ namespace AIModuleIO
     // Faithfully tests the WRITE bit (do not "fix" to read).
     u8* OutputBuffer::GetRouteResponseQueueForWrite()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\ai\\BrnAIModuleIO.h", 430));
         return reinterpret_cast<u8*>(&mRouteResponseQueue);
     }
 }

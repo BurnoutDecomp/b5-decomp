@@ -1,6 +1,7 @@
 #include "GameSource/World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 #include <cstddef>   // offsetof
 
@@ -93,14 +94,14 @@ namespace PropEntityIO
     // X360 0x827A1B68 (own TU): read-lock; return this + 4.
     const OutputBuffer_PrePhysics::PropInputInterfaceStorage* OutputBuffer_PrePhysics::GetPropInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 701));
         return &mPropInputInterface;
     }
 
     // X360 0x822B99D8 (own TU): write-lock; return this + 4.
     OutputBuffer_PrePhysics::PropInputInterfaceStorage* OutputBuffer_PrePhysics::GetPropInputInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 703));
         return &mPropInputInterface;
     }
 
@@ -108,7 +109,7 @@ namespace PropEntityIO
     // Called by WorldModule::BridgePropModuleToTrafficModule_PrePhysics.
     const OutputBuffer_PrePhysics::PropToTrafficInterfaceStorage* OutputBuffer_PrePhysics::GetPropToTrafficInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 705));
         return &mPropToTrafficInterface;
     }
 
@@ -117,7 +118,7 @@ namespace PropEntityIO
     //           BrnWorld::PropEntityModule::ChangePropState.
     OutputBuffer_PrePhysics::PropToTrafficInterfaceStorage* OutputBuffer_PrePhysics::GetPropToTrafficInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\World/EntityModules/PropEntityModule/BrnPropEntityModuleIO.h", 706));
         return &mPropToTrafficInterface;
     }
 }

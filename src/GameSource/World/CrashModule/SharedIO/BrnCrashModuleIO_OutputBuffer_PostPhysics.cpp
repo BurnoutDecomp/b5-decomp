@@ -1,5 +1,6 @@
 #include "GameSource/World/CrashModule/SharedIO/BrnCrashModuleIO.h"   // OutputBuffer_PostPhysics
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 #include <cstddef>   // offsetof
 
@@ -19,7 +20,7 @@ namespace CrashIO
     // ARTIST sub_827BBA68: bit3 write-lock assertion, return member at console+0x7A0.
     OutputBuffer_PostPhysics::GameEventQueue* OutputBuffer_PostPhysics::GetGameEventQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\world\\crashmodule\\BrnCrashModuleIO.h", 211));
         return &mGameEventQueue;
     }
 
