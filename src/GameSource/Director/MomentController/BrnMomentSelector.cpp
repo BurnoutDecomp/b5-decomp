@@ -145,7 +145,7 @@ bool MomentSelector::Prepare(MomentController& lrMomentController,
                         // The console inlines MomentHandle::GetMoment (with its
                         // "mbIsAllocated" assert) then Moment::Inhibit (raise
                         // mbIsInhibited; vtable +0x10 Release(); meState = SEARCHING).
-                        mMomentHandleArray[luLoop].GetMoment()->Inhibit();
+                        mMomentHandleArray[luLoop].GetMoment().Inhibit();
                     }
                 }
             }
@@ -185,8 +185,8 @@ bool MomentSelector::Prepare(MomentController& lrMomentController,
 // it is live AND valid AND currently switchable to:
 //     for each registered description index i:
 //         if (!mMomentHandleArray[i].IsAllocated()) continue;
-//         if (mMomentHandleArray[i].GetMoment()->GetState() != E_STATE_VALID) continue;
-//         if ( mMomentHandleArray[i].GetMoment()->CanSwitchToMeNow()) ++muValidMoments;
+//         if (mMomentHandleArray[i].GetMoment().GetState() != E_STATE_VALID) continue;
+//         if ( mMomentHandleArray[i].GetMoment().CanSwitchToMeNow()) ++muValidMoments;
 //
 // ⚠️ The loop bound is the DESCRIPTION array's length (`*(this+160)` == +0xA0), not the handle
 // array's -- the console runs the description array's own "Array used before Construct/Clear
@@ -207,7 +207,7 @@ u32 MomentSelector::SnoopNumValidMoments()
             continue;
         }
 
-        const Moment* lpMoment = mMomentHandleArray[luLoop].GetMoment();
+        const Moment* lpMoment = &mMomentHandleArray[luLoop].GetMoment();
 
         if (lpMoment->GetState() == Moment::E_STATE_VALID && lpMoment->CanSwitchToMeNow())
         {
@@ -249,7 +249,7 @@ void MomentSelector::Update(f32 lfTimestep)
             continue;
         }
 
-        Moment* lpMoment = mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment();
+        Moment* lpMoment = &mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment();
         const MomentDescription& lrDescription = mMomentDescriptionArray[static_cast<u32>(liLoop)];
 
         // (A) running, and the policy is allowed to inhibit it.
@@ -299,7 +299,7 @@ void MomentSelector::Update(f32 lfTimestep)
         {
             lpMoment->SetInhibited(false);
             CGS_ASSERT(!lpMoment->IsInhibited(),
-                       "!mMomentHandleArray[liLoop].GetMoment()->IsInhibited()");
+                       CgsDev::Assert::MessageAt("!mMomentHandleArray[liLoop].GetMoment().IsInhibited()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 167));
             --luUninhibited;
         }
     }
@@ -341,7 +341,7 @@ void MomentSelector::Update(f32 lfTimestep)
                 {
                     break;
                 }
-                mMomentHandleArray[luMomentToUninhibit].GetMoment()->SetInhibited(false);
+                mMomentHandleArray[luMomentToUninhibit].GetMoment().SetInhibited(false);
    // [DIAG]
                 --luInhibitedCandidate;
                 ++luUninhibited;
@@ -360,7 +360,7 @@ void MomentSelector::Update(f32 lfTimestep)
                 {
                     break;
                 }
-                mMomentHandleArray[luMomentToUninhibit].GetMoment()->SetInhibited(false);
+                mMomentHandleArray[luMomentToUninhibit].GetMoment().SetInhibited(false);
    // [DIAG]
                 ++luUninhibited;
             }
@@ -375,12 +375,12 @@ void MomentSelector::Update(f32 lfTimestep)
             u32 luMomentToUninhibit = 0;
             const bool lbPickedBest = PickBestInhibitedMoment(&luMomentToUninhibit, E_PICK_BEST_FUSSY);
             CGS_ASSERT(lbPickedBest, CgsDev::Assert::MessageAt("PickBestInhibitedMoment(&luMomentToUninhibit)", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 207));   // cpp:207
-            mMomentHandleArray[luMomentToUninhibit].GetMoment()->SetInhibited(false);
+            mMomentHandleArray[luMomentToUninhibit].GetMoment().SetInhibited(false);
 
             u32 luMomentInhibit = 0;
             const bool lbPickedWorst = PickWorstUninhibitedMoment(&luMomentInhibit, E_PICK_WORST_FUSSY);
             CGS_ASSERT(lbPickedWorst, CgsDev::Assert::MessageAt("PickWorstUninhibitedMoment(&luMomentInhibit)", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 210));   // cpp:210
-            mMomentHandleArray[luMomentInhibit].GetMoment()->Inhibit();
+            mMomentHandleArray[luMomentInhibit].GetMoment().Inhibit();
    // [DIAG]
       // [DIAG]
 
@@ -402,7 +402,7 @@ void MomentSelector::Update(f32 lfTimestep)
 // *lpuIndex is written even when nothing is found (the seed's 0). Returns whether anything was found.
 bool MomentSelector::PickBestInhibitedMoment(u32* lpuIndex, EPickBestInhibitedOptions leOptions)
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");   // cpp:456
+    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 456));   // cpp:456
 
     bool lbTakeAny = false;   // r22
     if (static_cast<u32>(leOptions) == E_PICK_BEST_ANY)
@@ -424,7 +424,7 @@ bool MomentSelector::PickBestInhibitedMoment(u32* lpuIndex, EPickBestInhibitedOp
         {
             continue;
         }
-        const Moment* lpMoment = mMomentHandleArray[luLoop].GetMoment();
+        const Moment* lpMoment = &mMomentHandleArray[luLoop].GetMoment();
         if ((!lbFound && lpMoment->IsInhibited() && lpMoment->ConditionsAreMet()) || lbTakeAny)
         {
             luBest  = luLoop;
@@ -458,7 +458,7 @@ bool MomentSelector::PickBestInhibitedMoment(u32* lpuIndex, EPickBestInhibitedOp
 //   Any other option streams "Unknown option: " << option (cpp:545) and runs as FUSSY.
 bool MomentSelector::PickWorstUninhibitedMoment(u32* lpuIndex, EPickWorstUninhibitedOptions leOptions)
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");   // cpp:526
+    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.cpp", 526));   // cpp:526
 
     bool lbTakeAny = false;   // r21
     if (static_cast<u32>(leOptions) == E_PICK_WORST_ANY)
@@ -480,7 +480,7 @@ bool MomentSelector::PickWorstUninhibitedMoment(u32* lpuIndex, EPickWorstUninhib
         {
             continue;
         }
-        const Moment* lpMoment = mMomentHandleArray[luLoop].GetMoment();
+        const Moment* lpMoment = &mMomentHandleArray[luLoop].GetMoment();
         const bool lbIdle = !lpMoment->IsInhibited() && !lpMoment->ConditionsAreMet();
         if ((!lbFound && lbIdle) || (lbTakeAny && mMomentDescriptionArray[luLoop].mbCanBeInhibited))
         {
@@ -672,13 +672,13 @@ bool MomentSelector::SelectBestLRUMomentWithExclusion(s32 liExclusion)
             continue;
         }
 
-        if (mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment()->GetState() !=
+        if (mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment().GetState() !=
             Moment::E_STATE_VALID)                                   // +0x174 == 3
         {
             continue;
         }
 
-        if (!mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment()->CanSwitchToMeNow())
+        if (!mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment().CanSwitchToMeNow())
         {                                                            // +0x178
             continue;
         }
@@ -755,13 +755,13 @@ bool MomentSelector::SelectBestRandomMomentWithExclusion(CgsNumeric::Random& lRa
             continue;
         }
 
-        if (mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment()->GetState() !=
+        if (mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment().GetState() !=
             Moment::E_STATE_VALID)                                   // +0x174 == 3
         {
             continue;
         }
 
-        if (!mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment()->CanSwitchToMeNow())
+        if (!mMomentHandleArray[static_cast<u32>(liLoop)].GetMoment().CanSwitchToMeNow())
         {                                                            // +0x178
             continue;
         }
@@ -828,7 +828,7 @@ void MomentSelector::ActualDebugRender(DebugPrinter& lrDebugPrinter) const
             continue;
         }
 
-        const Moment& lrMoment = *mMomentHandleArray[luI].GetMoment();
+        const Moment& lrMoment = mMomentHandleArray[luI].GetMoment();
 
         if (lrMoment.GetState() == Moment::E_STATE_VALID && lrMoment.CanSwitchToMeNow())
         {

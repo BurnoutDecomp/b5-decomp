@@ -1,4 +1,5 @@
 #include "GameSource/Director/Camera/Utils/BrnVehicleCollisionPredictor.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cmath>     // std::sqrt
 #include <cstring>   // std::memcpy (lane bits)
@@ -127,7 +128,7 @@ void VehicleCollisionPredictor::Update(const AllVehicleData& lAllVehicleData, Ve
 
     // GetTraffic, inlined with its BrnDirectorAllVehicleData.h:96 assert (0x822230FC..0x82223128).
     const CgsContainers::Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* lpTraffic = lAllVehicleData.GetTraffic();
-    CGS_ASSERT(lpTraffic != 0, "mpTrafficVehicleArray != NULL");
+    CGS_ASSERT(lpTraffic != 0, CgsDev::Assert::MessageAt("mpTrafficVehicleArray != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorAllVehicleData.h", 96));
 
     mbHasPredictedCollision = false;                                   // stb r28 (0), 0(r27) @0x82223144
 
@@ -233,7 +234,7 @@ void VehicleCollisionPredictor::Update(const AllVehicleData& lAllVehicleData, Ve
                                      && IsNumber(lapRows[luRow]->v[2]);
                 lbValid = lbValid && lbRowValid;
             }
-            CGS_ASSERT(lbValid, "IsValid(lInverseEllipsoidToWorldScaled)");          // :54
+            CGS_ASSERT(lbValid, CgsDev::Assert::MessageAt("IsValid(lInverseEllipsoidToWorldScaled)", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\geometric\\intersection\\CgsLineTests.cpp", 54));          // :54
         }
 
         // ---- TestInfiniteLineEllipsoid: the line in the unit sphere's space (0x82223670..0x82223734) ----

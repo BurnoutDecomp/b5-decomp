@@ -188,7 +188,7 @@ namespace BrnMassive
                 return 1;
 
             default:
-                CGS_ASSERT(false, "false");
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("false", "..\\..\\..\\GameSource\\X360/BrnSystemHWX360Massive.cpp", 214));
                 return 1;
         }
     }

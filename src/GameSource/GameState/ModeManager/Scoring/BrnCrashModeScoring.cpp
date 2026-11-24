@@ -892,11 +892,11 @@ namespace BrnGameState
     {
         // The console's own two asserts, with their baked line numbers. Neither gates: it fires
         // and dereferences anyway.
-        CGS_ASSERT(lpActiveRaceCarInterface != 0, "lpActiveRaceCarInterface != NULL");  // :189
+        CGS_ASSERT(lpActiveRaceCarInterface != 0, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 189));  // :189
 
         const BrnPhysics::Vehicle::RaceCarState* const lpPlayerState =
             lpActiveRaceCarInterface->GetPlayerRaceCarState();
-        CGS_ASSERT(lpPlayerState != 0, "lpPlayerState != NULL");                        // :193
+        CGS_ASSERT(lpPlayerState != 0, CgsDev::Assert::MessageAt("lpPlayerState != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnCrashModeScoring.cpp", 193));                        // :193
 
         // ---- 0x823208C4..0x82320948: the two speeds, computed BEFORE the clocks store ------
         // The console's VMX form is `vmsum3fp128` + two Newton-Raphson rsqrt refinements + a

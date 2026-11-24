@@ -200,7 +200,7 @@ bool KeyAnimController::Prepare(const DirectorResourceManager& lrResourceManager
 // ============================================================================
 void KeyAnimController::Update(const ShotContext& lrContext, Camera::Camera* lpCamera)
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");                                     // cpp:226
+    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.cpp", 226));                                     // cpp:226
 
     if (!mbPaused)
     {
@@ -533,10 +533,10 @@ void KeyAnimController::UpdateFocus(const ICE::ICETake& lrTake, Camera::Camera* 
 // ============================================================================
 void KeyAnimController::SetParametricTime0To1(f32 lfParametricTime0To1)
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");                                                // cpp:333
+    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.cpp", 333));                                                // cpp:333
     CGS_ASSERT(lfParametricTime0To1 >= 0.0f && lfParametricTime0To1 <= 1.0f,
                CgsDev::Assert::MessageAt("lfParametricTime0To1 >= 0.0f && lfParametricTime0To1 <= 1.0f", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.cpp", 334));          // cpp:334
-    CGS_ASSERT(GetLength() > 0.0f, "GetLength() > 0.0f");                                // cpp:335
+    CGS_ASSERT(GetLength() > 0.0f, CgsDev::Assert::MessageAt("GetLength() > 0.0f", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.cpp", 335));                                // cpp:335
 
     mfPlaybackTimer = mbReversed ? ((1.0f - lfParametricTime0To1) * GetLength())
                                  : (GetLength() * lfParametricTime0To1);
@@ -547,7 +547,7 @@ void KeyAnimController::SetParametricTime0To1(f32 lfParametricTime0To1)
 // ============================================================================
 f32 KeyAnimController::GetParametricTime0To1() const
 {
-    CGS_ASSERT(GetLength() > 0.0f, "GetLength() > 0.0f");                                // cpp:361
+    CGS_ASSERT(GetLength() > 0.0f, CgsDev::Assert::MessageAt("GetLength() > 0.0f", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.cpp", 361));                                // cpp:361
 
     const f32 lfPlayed = mfPlaybackTimer / GetLength();
     const f32 lfParametricTime0To1 = mbReversed ? (1.0f - lfPlayed) : lfPlayed;
@@ -592,7 +592,7 @@ rw::math::vpu::Vector3 KeyAnimController::GetLookPos() const
 // ============================================================================
 bool KeyAnimController::HasFinished() const
 {
-    CGS_ASSERT(mbPrepared, "mbPrepared");
+    CGS_ASSERT(mbPrepared, CgsDev::Assert::MessageAt("mbPrepared", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimController.h", 157));
 
     if (mbReversed)
         return mfPlaybackTimer <= 0.0f;

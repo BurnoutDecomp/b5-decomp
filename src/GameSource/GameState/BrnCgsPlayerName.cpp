@@ -1,5 +1,6 @@
 #include "GameSource/GameState/BrnCgsPlayerName.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CgsDev::Assert Begin/Fire/End + KI_MESSAGEBUFFERSIZE
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/CgsStrStream.h" // CgsDev::StrStream (over-length assert message)
 #include <cstring>                                           // std::strlen / std::strncpy
 
@@ -19,7 +20,7 @@ namespace CgsNetwork
 
 void PlayerName::Construct(const char* lpcPlayerName)
 {
-    CGS_ASSERT(lpcPlayerName, "lpcPlayerName");
+    CGS_ASSERT(lpcPlayerName, CgsDev::Assert::MessageAt("lpcPlayerName", "..\\..\\..\\GameShared\\GameClasses\\Network/Players/CgsPlayerName.h", 86));
     if (std::strlen(lpcPlayerName) >= static_cast<u32>(KI_USERNAME_LENGTH))
     {
         CgsDev::Assert::BeginAssert();

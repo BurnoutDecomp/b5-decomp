@@ -52,7 +52,7 @@ namespace BrnReplays
 
             // The X360 fetches the layout a second time after the reset branch.
             GuiModuleStaticLayout* lpStaticLayout = GetStaticLayout();
-            CGS_ASSERT(lpStaticLayout != 0, "lpStaticLayout");
+            CGS_ASSERT(lpStaticLayout != 0, CgsDev::Assert::MessageAt("lpStaticLayout", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayGuiModuleSerialiser.cpp", 166));
             BaseSerialiser::Write(lpStaticLayout, 992);
         }
 

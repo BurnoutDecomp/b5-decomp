@@ -311,7 +311,7 @@ bool AchievementManagerX360::GetAchievementsFromX360Api(GameStateModuleIO::Outpu
     }
 
     CGS_ASSERT(mAchievementsToWrite.GetFirstNonZeroBit() == CgsContainers::BitArray<KU_NUM_ACHIEVEMENTS>::KI_INVALID_BITINDEX,
-               "mAchievementsToWrite.GetFirstNonZeroBit() == -1");
+               CgsDev::Assert::MessageAt("mAchievementsToWrite.GetFirstNonZeroBit() == -1", "^h^<NULLSTRING>", 318));
     mAchievementsToWrite.UnSetAll();
     mAchievementsEarnt.UnSetAll();
 

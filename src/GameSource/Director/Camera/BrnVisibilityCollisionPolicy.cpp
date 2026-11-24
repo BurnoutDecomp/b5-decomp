@@ -181,7 +181,7 @@ f32 VisibilityCollisionPolicy::TimeUntilCollisionWithVehicle() const
 void VisibilityCollisionPolicy::GenerateSceneQueries(const CollisionPolicySharedInfo& lrSharedInfo,
                                                      Camera& lrCamera)
 {
-    CGS_ASSERT(mbTargetSet, "mbTargetSet");                                          // :807
+    CGS_ASSERT(mbTargetSet, CgsDev::Assert::MessageAt("mbTargetSet", "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.cpp", 807));                                          // :807
 
     mbDoingVisibilityTestThisTime      = (lrSharedInfo.mpRandom->RandomInt(0, 100) < 20) || mbFirstFrame;
     mbDoingCollisionPredictionThisTime = (lrSharedInfo.mpRandom->RandomInt(0, 100) < 20) || mbFirstFrame;
@@ -267,7 +267,7 @@ void VisibilityCollisionPolicy::GenerateSceneQueries(const CollisionPolicyShared
 void VisibilityCollisionPolicy::ProcessSceneQueryResults(const CollisionPolicySharedInfo& lrSharedInfo,
                                                          Camera& lrCamera)
 {
-    CGS_ASSERT(mbTargetSet, "mbTargetSet");                                          // :867
+    CGS_ASSERT(mbTargetSet, CgsDev::Assert::MessageAt("mbTargetSet", "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.cpp", 867));                                          // :867
 
     if (mbUseGroundConstraint
         && !mGroundConstraint.ProcessSceneQueryResults(lrSharedInfo.mTimestep.Get(Timestep::E_WORLD), lrCamera))
@@ -351,7 +351,7 @@ void GroundConstraint::GenerateSceneQueries(const Camera& lrCamera, f32 lfTimest
     // bge is "not less than", which an unordered compare satisfies, so a NaN height SKIPS the assert
     // on the console -- only a height below 0 fires it. (FX-GATE's NaN sweep, 2026-09-25: this read
     // `h >= 0.0f`, which fires on NaN.)
-    CGS_ASSERT(!(mfDesiredHeight < 0.0f), "mfDesiredHeight >= 0.0f");               // :719
+    CGS_ASSERT(!(mfDesiredHeight < 0.0f), CgsDev::Assert::MessageAt("mfDesiredHeight >= 0.0f", "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.cpp", 719));               // :719
 
     const rw::math::vpu::Vector3& lrCameraPosition = lrCamera.mTransform.wAxis;
 
@@ -378,8 +378,8 @@ bool GroundConstraint::ProcessSceneQueryResults(f32 lfTimestep, Camera& lrCamera
     (void)lfTimestep;
     // `fcmpu cr6, f13(+0x50), flt_82001CC0 (0.0f) ; bge 0x8220E3EC` (0x8220E3C4..0x8220E3CC): the
     // same NaN-skipping polarity as GenerateSceneQueries above.
-    CGS_ASSERT(!(mfDesiredHeight < 0.0f), "mfDesiredHeight >= 0.0f");               // :738
-    CGS_ASSERT(mLineTest.HasPackage(), "mLineTest.HasPackage()");                   // :739
+    CGS_ASSERT(!(mfDesiredHeight < 0.0f), CgsDev::Assert::MessageAt("mfDesiredHeight >= 0.0f", "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.cpp", 738));               // :738
+    CGS_ASSERT(mLineTest.HasPackage(), CgsDev::Assert::MessageAt("mLineTest.HasPackage()", "..\\..\\..\\GameSource\\Director/Camera/BrnCollisionPolicy.cpp", 739));                   // :739
 
     const bool lbFoundGround = mLineTest.GetPackage().mbIntersection;
     if (lbFoundGround)

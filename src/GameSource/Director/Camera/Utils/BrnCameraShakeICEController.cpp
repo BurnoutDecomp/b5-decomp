@@ -25,6 +25,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Utils/BrnCameraShake.h"      // THE home for this class
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/AttribSys/Generated/classes/iceanim.h"
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"
 #include "rw/math/vpu/matrix44affine_operation.h"
@@ -224,7 +225,7 @@ void CameraShakeICEController::Update(const BrnDirector::DirectorResourceManager
     // the procedural pitch vibration and its focal-plane compensation.
     const Attrib::RefSpec ref(*lpDirectorResourceManager->GetShakeAnimGroup().ShotList(lu8ShakeType - 1));
     CGS_ASSERT(ref.GetClassKey() == static_cast<u64>(Attrib::Gen::iceanim::ClassKey()),
-               "lShakeParams.GetClassKey() == Attrib::Gen::iceanim::ClassKey()");
+               CgsDev::Assert::MessageAt("lShakeParams.GetClassKey() == Attrib::Gen::iceanim::ClassKey()", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraShake.cpp", 261));
     if (mu8ActiveShake != lu8ShakeType)
     {
         const Attrib::Gen::iceanim anim(ref, 0);

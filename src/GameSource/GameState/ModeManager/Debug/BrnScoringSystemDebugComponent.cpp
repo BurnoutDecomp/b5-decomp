@@ -95,8 +95,8 @@ namespace BrnGameState
                                                              char* lpcOutBuffer,
                                                              u32* lpuOutColour)
     {
-        CGS_ASSERT(mpScoringSystem != 0, "mpScoringSystem");
-        CGS_ASSERT(lpPlayerStatusInterface != 0, "lpPlayerStatusInterface");
+        CGS_ASSERT(mpScoringSystem != 0, CgsDev::Assert::MessageAt("mpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.cpp", 267));
+        CGS_ASSERT(lpPlayerStatusInterface != 0, CgsDev::Assert::MessageAt("lpPlayerStatusInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.cpp", 268));
 
         // Default: an empty cell drawn in the default (white) colour.
         *lpuOutColour = KU_CELL_DEFAULT_COLOUR;
@@ -205,7 +205,7 @@ namespace BrnGameState
                                                                  s32 liMaxMultiplier,
                                                                  bool lbSimTimerAt50Hz)
     {
-        CGS_ASSERT(mpScoringSystem != 0, "mpScoringSystem");
+        CGS_ASSERT(mpScoringSystem != 0, CgsDev::Assert::MessageAt("mpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.cpp", 195));
 
         // Only render when the toggle is on AND the mode has at least one car.
         if (!mbShowChainableStunts)

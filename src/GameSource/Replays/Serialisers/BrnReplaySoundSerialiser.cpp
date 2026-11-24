@@ -65,9 +65,9 @@ namespace BrnReplays
     // the parallel scrape-vector array (base +0x7D0, stride 16), then bump the count.
     SoundSerialiserStaticLayout* SoundSerialiser::AddScrape(const void* lpScrape, SoundVec128 lvPosition)
     {
-        CGS_ASSERT(GetNumScrapes() >= 0, "GetNumScrapes() >= 0");
+        CGS_ASSERT(GetNumScrapes() >= 0, CgsDev::Assert::MessageAt("GetNumScrapes() >= 0", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h", 317));
         CGS_ASSERT(GetNumScrapes() < SoundSerialiserStaticLayout::KI_MAX_SCRAPES,
-                   "GetNumScrapes() < SoundSerialiserStaticLayout::KI_MAX_SCRAPES");
+                   CgsDev::Assert::MessageAt("GetNumScrapes() < SoundSerialiserStaticLayout::KI_MAX_SCRAPES", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h", 318));
 
         const s32 liIndex = GetStaticLayout()->GetNumScrapes();
 
@@ -91,9 +91,9 @@ namespace BrnReplays
     // 0.0, then bump the count.
     SoundSerialiserStaticLayout* SoundSerialiser::AddTrafficEntity(const void* lpEntity)
     {
-        CGS_ASSERT(GetNumTrafficEntities() >= 0, "GetNumTrafficEntities() >= 0");
+        CGS_ASSERT(GetNumTrafficEntities() >= 0, CgsDev::Assert::MessageAt("GetNumTrafficEntities() >= 0", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h", 411));
         CGS_ASSERT(static_cast<u32>(GetNumTrafficEntities()) < KU_MAX_TRAFFIC_ENTITIES,
-                   "GetNumTrafficEntities() < SoundSerialiserFrame::KI_MAX_TRAFFIC_ENTITIES");
+                   CgsDev::Assert::MessageAt("GetNumTrafficEntities() < SoundSerialiserFrame::KI_MAX_TRAFFIC_ENTITIES", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplaySoundSerialiser.h", 412));
 
         const s32 liIndex = GetStaticLayout()->GetNumTrafficEntities();
 

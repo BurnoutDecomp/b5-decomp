@@ -101,13 +101,14 @@ bool ModeManager::IsOnlineGameMode() const
 // X360 0x823113D0. True when the current mode is in one of its post-event states (3/5/4).
 bool ModeManager::IsInPostEvent() const
 {
-    if (mpCurrentGameMode == 0)
+    if (mpCurrentGameMode != 0)
     {
-        return false;
+        const s32 leState = mpCurrentGameMode->GetCurrentState();   // X360 mode+0x28 (meCurrentState)
+        // The X360 returns true for state == 3, 5 or 4 (the three post-event states).
+        return (leState == 3) || (leState == 5) || (leState == 4);
     }
-    const s32 leState = mpCurrentGameMode->GetCurrentState();   // X360 mode+0x28 (meCurrentState)
-    // The X360 returns true for state == 3, 5 or 4 (the three post-event states); false otherwise.
-    return (leState == 3) || (leState == 5) || (leState == 4);
+    // ARTIST branches forward to this shared exit (0x823113D8 beq -> 0x82311408).
+    return false;
 }
 
 // ----------------------------------------------------------------------------
@@ -216,7 +217,7 @@ bool ModeManager::HasRaceCarHitValidCheckpoint(s16 luLandmarkId, EGlobalRaceCarI
     if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_BURNING_HOME_RUN)
     {
         CGS_ASSERT((leActiveRaceCarIndex > -1) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+                   CgsDev::Assert::MessageAt("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex<E_ACTIVE_RACE_CAR_INDEX_COUNT)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1549));
         CarData* lpCarData = mScoringSystem.GetCarData(leActiveRaceCarIndex);
         // 0x82329910 checks the current team (+0x13C) for the blue runner.
         if ((lpCarData == 0) || (lpCarData->GetTeam() != GameStateModuleIO::E_PLAYER_TEAM_BLUE_TEAM))
@@ -283,7 +284,7 @@ bool ModeManager::HasPlayerWon()
 void ModeManager::SetupStuntChallenge()
 {
     StuntModeScoringOnline* lpStuntModeScoring = mScoringSystem.GetOnlineStuntScorer();
-    CGS_ASSERT(lpStuntModeScoring != 0, "lpStuntModeScoring");
+    CGS_ASSERT(lpStuntModeScoring != 0, CgsDev::Assert::MessageAt("lpStuntModeScoring", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5584));
     // The reset is the virtual at vtable +0x10 (0x8231EB44..0x8231EB54 `lwz r11,0(r31) ; lwz r11,0x10(r11)
     // ; bctrl`). The object at ss+0x2620 carries the StuntModeScoringOnline vtable 0x820CF9EC (ScoringSystem
     // ctor 0x827E0998), whose +0x10 entry is StuntModeScoringOnline::ClearData 0x82321968.
@@ -348,7 +349,7 @@ void ModeManager::SetNetworkStuntScore(BrnNetwork::NetworkPlayerID lNetworkPlaye
 // X360 0x82327388. Returns the checkpoint's world position via the mode's checkpoint TriggerData.
 Vector3 ModeManager::GetCheckpointPosition(u32 luCheckpointId) const
 {
-    CGS_ASSERT(luCheckpointId < muNumLandmarks, "luCheckpointIndex < muNumLandmarks");
+    CGS_ASSERT(luCheckpointId < muNumLandmarks, CgsDev::Assert::MessageAt("luCheckpointIndex < muNumLandmarks", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\BrnModeManager.h", 1748));
 
     // The X360 loads the region-table index for this checkpoint, then resolves the owning landmark
     // through the trigger data and reads its box-region position.
@@ -406,7 +407,7 @@ void ModeManager::FillInRaceDistanceInterface(GameStateModuleIO::RaceCarRaceDist
     // X360 assert (BrnGameStateSharedIO.h:1421); BrnWorld::KI_MAX_ACTIVE_RACE_CARS == the active-car
     // count == E_ACTIVE_RACE_CAR_INDEX_COUNT (8) in this codebase. Message kept verbatim.
     CGS_ASSERT(mScoringSystem.GetNumberOfActiveCars() <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "liNumActiveRaceCars <= BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+               CgsDev::Assert::MessageAt("liNumActiveRaceCars <= BrnWorld::KI_MAX_ACTIVE_RACE_CARS", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 1421));
 
     lpRaceDistanceInterface->SetNumActiveRaceCars(mScoringSystem.GetNumberOfActiveCars());   // X360 *(out+0x24) = *(this+0x5C98)
     lpRaceDistanceInterface->SetTotalRaceDistance(mScoringSystem.GetTotalRaceDistance());   // X360 *(out+0x20) = *(this+0x6A94)

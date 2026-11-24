@@ -258,7 +258,7 @@ const CgsNetwork::PlayerName* OnlineFlybyManager::GetRivalName(BrnNetwork::Netwo
 // GetCarData result is dereferenced directly, matching the original continuation.
 void OnlineFlybyManager::CalculateDisconnectRating(FlybyManager::RivalRating* lpRating)
 {
-    CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
+    CGS_ASSERT(mpScoringSystem, CgsDev::Assert::MessageAt("mpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\flybymanager\\BrnGameStateFlybyManager.h", 247));
     if (mpScoringSystem->GetCarData(lpRating->mPlayerID)->GetScoreData()->GetDisconnected())
         lpRating->miRivalWeighting = -1;
 }
@@ -285,7 +285,7 @@ void OnlineFlybyManager::CalculateTeamRating(FlybyManager::RivalRating* lpRating
 // ---------------------------------------------------------------------------
 void OnlineFlybyManager::CalculatePointsLeaderRating(FlybyManager::RivalRating* lpRating)
 {
-    CGS_ASSERT(mpScoringSystem, "mpScoringSystem");
+    CGS_ASSERT(mpScoringSystem, CgsDev::Assert::MessageAt("mpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\flybymanager\\BrnGameStateFlybyManager.h", 247));
 
     const BrnNetwork::NetworkPlayerID lPointsLeader = mpScoringSystem->GetPointsLeader();
 
@@ -365,7 +365,7 @@ void OnlineFlybyManager::CalculateNewOrOngoingRivalryRating(FlybyManager::RivalR
 // ---------------------------------------------------------------------------
 void OnlineFlybyManager::CalculateRivalryRating(FlybyManager::RivalRating* lpRating)
 {
-    CGS_ASSERT(lpRating, "lpRating");
+    CGS_ASSERT(lpRating, CgsDev::Assert::MessageAt("lpRating", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 583));
 
     CalculateDisconnectRating(lpRating);
 
@@ -376,11 +376,11 @@ void OnlineFlybyManager::CalculateRivalryRating(FlybyManager::RivalRating* lpRat
         CalculateTeamRating(lpRating);
 
         CGS_ASSERT(lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-                   "lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+                   CgsDev::Assert::MessageAt("lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 604));
 
         const BrnNetwork::LiveRevengeRelationship* lpRelationship =
             GetLiveRevengeRelationship(lpRating->mPlayerID);
-        CGS_ASSERT(lpRelationship, "lpRelationship");
+        CGS_ASSERT(lpRelationship, CgsDev::Assert::MessageAt("lpRelationship", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 607));
 
         const s32 liTotalTakedowns = lpRelationship->GetTotalTakedowns();
         lpRating->mbHasValidRelationship = (liTotalTakedowns > 0);
@@ -597,7 +597,7 @@ void OnlineFlybyManager::CalculateOnlineRivals()
     {
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerStatusData =
             mPlayerInputInterface.GetPlayerStatusData(liPlayer);
-        CGS_ASSERT(lpPlayerStatusData, "lpPlayerStatusData");
+        CGS_ASSERT(lpPlayerStatusData, CgsDev::Assert::MessageAt("lpPlayerStatusData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 359));
 
         const BrnNetwork::NetworkPlayerID lThisId = lpPlayerStatusData->mNetworkPlayerID;
 
@@ -671,9 +671,9 @@ void OnlineFlybyManager::CalculateOnlineRivals()
             lpFlybyData->AddMessage("PRERACE_POINTS_LEADER", NULL);
             // The X360 then re-validates the car count and tags the just-added car as the
             // style 2; bounds asserts preserved verbatim.
-            CGS_ASSERT(lpFlybyData->miNumberOfCars > 0, "miNumberOfCars > 0");
+            CGS_ASSERT(lpFlybyData->miNumberOfCars > 0, CgsDev::Assert::MessageAt("miNumberOfCars > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp", 305));
             CGS_ASSERT(lpFlybyData->miNumberOfCars <= 3,
-                       "miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY");
+                       CgsDev::Assert::MessageAt("miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp", 306));
             lpFlybyData->mRivalsToShow[lpFlybyData->miNumberOfCars - 1].meMessageStyle =
                 static_cast<GameStateModuleIO::FlybyRivalData::EMessageStyle>(2);
         }
@@ -708,9 +708,9 @@ void OnlineFlybyManager::CalculateOnlineRivals()
 // ---------------------------------------------------------------------------
 void OnlineFlybyManager::AddNoRivalryFlybyMessage(FlybyManager::RivalRating* lpRating)
 {
-    CGS_ASSERT(lpRating, "lpRating");
+    CGS_ASSERT(lpRating, CgsDev::Assert::MessageAt("lpRating", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 736));
     CGS_ASSERT(lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-               "lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+               CgsDev::Assert::MessageAt("lpRating->mPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/FlybyManager/BrnGameStateOnlineFlybyManager.cpp", 737));
 
     CgsContainers::FastBitArray<E_NO_RIVALRY_COUNT> lNotZeroMessage;
     lNotZeroMessage.Construct();
@@ -726,9 +726,9 @@ void OnlineFlybyManager::AddNoRivalryFlybyMessage(FlybyManager::RivalRating* lpR
     {
         GameStateModuleIO::FlybyData* lpFlybyData = GetFlybyData();
         lpFlybyData->AddMessage("PRERACE_NO_RIVALRY_RANK_NONE", NULL);
-        CGS_ASSERT(lpFlybyData->miNumberOfCars > 0, "miNumberOfCars > 0");
+        CGS_ASSERT(lpFlybyData->miNumberOfCars > 0, CgsDev::Assert::MessageAt("miNumberOfCars > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp", 305));
         CGS_ASSERT(lpFlybyData->miNumberOfCars <= 3,
-                   "miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY");
+                   CgsDev::Assert::MessageAt("miNumberOfCars <= FlybyRivalData::KI_MAX_CARS_IN_FLYBY", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateSharedIO.cpp", 306));
         lpFlybyData->mRivalsToShow[lpFlybyData->miNumberOfCars - 1].meMessageStyle =
             GameStateModuleIO::FlybyRivalData::E_MESSAGE_STYLE_NEUTRAL;
         return;

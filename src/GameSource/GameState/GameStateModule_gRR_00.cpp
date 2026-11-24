@@ -37,6 +37,7 @@
 #include "GameSource/GameState/BrnGameStateModule.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                // CgsModule::EventQueue<TakedownEvent,8>
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/System/Timer/CgsTimerStatusInterface.h" // CgsSystem::TimerStatusInterface / Time
@@ -149,7 +150,7 @@ void GameStateModule::ProcessTakedownEvents(
                 const CarDataByActiveIndexFn lpfnGetCarData = &ScoringSystem::GetCarData;
                 ScoringSystem* lpScoringSystem = mModeManager.GetScoringSystem();
                 CarData* lpCarData = (lpScoringSystem->*lpfnGetCarData)(leVictimIndex);
-                CGS_ASSERT(lpCarData != 0, "lpCarData");   // BrnGameStateModule.cpp:4940
+                CGS_ASSERT(lpCarData != 0, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 4940));   // BrnGameStateModule.cpp:4940
 
                 // [GUARD] the console asserts and then dereferences anyway; a null here is a crash
                 // in a retail build. Early-out added behind the reproduced assert, as the sibling
@@ -266,7 +267,7 @@ void GameStateModule::ProcessTakedownEvents(
             mTrainingManager.IsTipAllowedInGameMode(BrnProgression::E_TRAINING_TYPE_TAKEN_DOWN_IN_MARKED_MAN))
         {
             BrnProgression::Profile* lpProfile = mTrainingManager.GetProfile();
-            CGS_ASSERT(lpProfile != 0, "lpProfile");   // BrnTrainingManager.cpp:382
+            CGS_ASSERT(lpProfile != 0, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp", 382));   // BrnTrainingManager.cpp:382
             if (lpProfile != 0 &&
                 !lpProfile->HasPlayerSeenTrainingType(BrnProgression::E_TRAINING_TYPE_TAKEN_DOWN_IN_MARKED_MAN) &&
                 mTrainingManager.GetTimeSinceLastTip() >= KF_TRAINING_TIP_SETTLE_TIME)   // fcmpu/blt @0x823900AC

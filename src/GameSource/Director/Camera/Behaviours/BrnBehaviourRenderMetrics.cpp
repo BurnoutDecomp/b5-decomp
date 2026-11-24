@@ -359,7 +359,7 @@ void BehaviourRenderMetrics::GameTalkMessageReceiver(EA::GameTalk::GameTalkMessa
         {
             const f32* lpfContent = static_cast<const f32*>(lpMessage->GetContent(liIndex));
             CGS_ASSERT(lpMessage->GetSize(liIndex) >= (int)(6 * sizeof(f32)),
-                       "lpMessage->GetSize(luIndex) >= (int)(6 * sizeof(float32_t))");
+                       CgsDev::Assert::MessageAt("lpMessage->GetSize(luIndex) >= (int)(6 * sizeof(float32_t))", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRenderMetrics.cpp", 132));
 
             {
                 const Vector3 lAggregateValue(lpfContent[0], lpfContent[1], lpfContent[2]);

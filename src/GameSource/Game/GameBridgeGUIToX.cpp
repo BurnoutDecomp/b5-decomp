@@ -37,7 +37,7 @@ namespace BrnGame
 
         const CgsModule::VariableEventQueue<18432, 16>* lpGuiEventQueue =
             GetGuiOutEventQueue(lpGuiOutputBuffer);
-        CGS_ASSERT(lpGuiEventQueue != 0, "lpGuiEventQueue");
+        CGS_ASSERT(lpGuiEventQueue != 0, CgsDev::Assert::MessageAt("lpGuiEventQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGUIToX.cpp", 1726));
 
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;

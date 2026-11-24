@@ -1,6 +1,7 @@
 #include "GameSource/Replays/BrnReplayQuantisedVector4.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsBitStream.h"
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsFloatQuantiser.h"
@@ -43,10 +44,10 @@ namespace BrnReplays
         maBitCounts[3] = luBitsW;
 
         // Per-lane range sanity: lMin[i] < lMax[i] (X360: vcmpgtfp lMax[i] > lMin[i]).
-        CGS_ASSERT(static_cast<float>(lrMin.GetX()) < static_cast<float>(lrMax.GetX()), "lMin[0] < lMax[0]");
-        CGS_ASSERT(static_cast<float>(lrMin.GetY()) < static_cast<float>(lrMax.GetY()), "lMin[1] < lMax[1]");
-        CGS_ASSERT(static_cast<float>(lrMin.GetZ()) < static_cast<float>(lrMax.GetZ()), "lMin[2] < lMax[2]");
-        CGS_ASSERT(static_cast<float>(lrMin.GetW()) < static_cast<float>(lrMax.GetW()), "lMin[3] < lMax[3]");
+        CGS_ASSERT(static_cast<float>(lrMin.GetX()) < static_cast<float>(lrMax.GetX()), CgsDev::Assert::MessageAt("lMin[0] < lMax[0]", "..\\..\\..\\GameSource\\Replays/BrnReplayQuantisedVector4.h", 132));
+        CGS_ASSERT(static_cast<float>(lrMin.GetY()) < static_cast<float>(lrMax.GetY()), CgsDev::Assert::MessageAt("lMin[1] < lMax[1]", "..\\..\\..\\GameSource\\Replays/BrnReplayQuantisedVector4.h", 133));
+        CGS_ASSERT(static_cast<float>(lrMin.GetZ()) < static_cast<float>(lrMax.GetZ()), CgsDev::Assert::MessageAt("lMin[2] < lMax[2]", "..\\..\\..\\GameSource\\Replays/BrnReplayQuantisedVector4.h", 134));
+        CGS_ASSERT(static_cast<float>(lrMin.GetW()) < static_cast<float>(lrMax.GetW()), CgsDev::Assert::MessageAt("lMin[3] < lMax[3]", "..\\..\\..\\GameSource\\Replays/BrnReplayQuantisedVector4.h", 135));
 
         // +16 / +32: stvx128 v127(lMin)/v126(lMax)
         mMin = lrMin;
@@ -89,7 +90,7 @@ namespace BrnReplays
         if (!lbInRange)
         {
             QuantisedVector4::PrintVector4(lrValue);
-            CGS_ASSERT(lbInRange, "Unable to quantise vec4");
+            CGS_ASSERT(lbInRange, CgsDev::Assert::MessageAt("Unable to quantise vec4", "..\\..\\..\\GameSource\\Replays/BrnReplayQuantisedVector4.h", 220));
         }
 
         // Total packed length: sum the per-lane bit counts, round up to whole bytes,
@@ -166,7 +167,7 @@ namespace BrnReplays
         if (!lbInRange)
         {
             QuantisedVector4::PrintVector4(lValue);
-            CGS_ASSERT(lbInRange, "Unable to quantise vec4");
+            CGS_ASSERT(lbInRange, CgsDev::Assert::MessageAt("Unable to quantise vec4", "..\\..\\..\\GameSource\\Replays/BrnReplayQuantisedVector4.h", 220));
         }
 
         *static_cast<Vector4*>(lpDest) = lValue;

@@ -1293,7 +1293,7 @@ CgsID GameStateModule::FindNearestJunkyardID(Vector3 lPosition) const
         }
     }
 
-    CGS_ASSERT(lJunkyardId != 0, "lJunkyardId != kCGSID_NULL");
+    CGS_ASSERT(lJunkyardId != 0, CgsDev::Assert::MessageAt("lJunkyardId != kCGSID_NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 6723));
     return lJunkyardId;
 }
 
@@ -1348,8 +1348,8 @@ s32 GameStateModule::GetPlayerGlobalRaceCarIndex()
 bool GameStateModule::IsRaceCarCrashing(::EActiveRaceCarIndex leRaceCarIndex)
 {
     CGS_ASSERT(mbIsUpdating, "Can not use this function unless module is updating\n");
-    CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+    CGS_ASSERT(leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, CgsDev::Assert::MessageAt("leRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModule.h", 1038));
+    CGS_ASSERT(leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, CgsDev::Assert::MessageAt("leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateModule.h", 1039));
     return maRaceCarCrashing[leRaceCarIndex];
 }
 
@@ -2788,7 +2788,7 @@ void GameStateModule::SendRouteRequestAction(const GameStateModuleIO::LandmarkRo
 {
     typedef GameStateModuleIO::LandmarkRouteRequestEvent RouteRequest;
 
-    CGS_ASSERT(lpRouteRequestEvent != 0, "lpRouteRequestEvent");   // BrnGameStateModule.cpp:5899 (0x170B)
+    CGS_ASSERT(lpRouteRequestEvent != 0, CgsDev::Assert::MessageAt("lpRouteRequestEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5899));   // BrnGameStateModule.cpp:5899 (0x170B)
     CGS_ASSERT(lpOutputActionQueue != 0, CgsDev::Assert::MessageAt("lpOutputActionQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5797));   // BrnGameStateModule.cpp:5900 (0x170C)
 
     GameStateModuleIO::RequestRouteInfoAction lRouteRequestAction;

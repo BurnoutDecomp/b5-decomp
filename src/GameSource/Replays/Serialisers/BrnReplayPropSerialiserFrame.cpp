@@ -64,6 +64,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Replays/Serialisers/BrnReplayPropSerialiserFrame.h"
 
 // includes folded in from the BrnReplayPropSerialiserFrame_w*.cpp partfiles (2026-09-15)
@@ -155,7 +156,7 @@ namespace BrnReplays
             }
         }
 
-        CGS_ASSERT(false, "Zone not loaded");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Zone not loaded", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 952));
     }
 
     // ---- SetPropAddedToScene @0x822BBC28 (94 insns) --------------------------------------
@@ -176,7 +177,7 @@ namespace BrnReplays
     void PropSerialiserFrame::SetPropAddedToScene(s32 liZoneId, u32 luPropIndex, s32 liAddedToScene)
     {
         PropLoadedZoneRecord* lpZone = GetZone(liZoneId);
-        CGS_ASSERT(lpZone != 0, "lpZone != NULL");
+        CGS_ASSERT(lpZone != 0, CgsDev::Assert::MessageAt("lpZone != NULL", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 1026));
 
         if (static_cast<u8>(liAddedToScene) != 0)
         {
@@ -185,7 +186,7 @@ namespace BrnReplays
         }
         else
         {
-            CGS_ASSERT(luPropIndex < KU_PROPS_PER_ZONE, "luIndex < NUMBITS");
+            CGS_ASSERT(luPropIndex < KU_PROPS_PER_ZONE, CgsDev::Assert::MessageAt("luIndex < NUMBITS", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\containers\\./CgsBitArray.h", 241));
             lpZone->maPropsAddedToScene.UnSetBit(luPropIndex);
         }
     }

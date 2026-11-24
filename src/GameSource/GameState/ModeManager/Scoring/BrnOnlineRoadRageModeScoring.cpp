@@ -116,7 +116,7 @@ void OnlineRoadRageModeScoring::InitialisePlayerArrayData(RedTeamSortData* lpaRe
         lRed.miEliminations    = 0;
 
         CGS_ASSERT(leEnumIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                   CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
     }
 }
 
@@ -148,7 +148,7 @@ void OnlineRoadRageModeScoring::CalculateRedTeamEliminations(const ScoringSystem
         }
 
         CGS_ASSERT(leEnumIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                   CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
     }
 }
 
@@ -236,8 +236,8 @@ bool OnlineRoadRageModeScoring::CheckForRedTeamWin(const ScoringSystem* lpScorin
 // with the row pointer ordering as the final deterministic tie-break.
 int OnlineRoadRageModeScoring::_CompareForTablePosition(const void* lpPlayer1, const void* lpPlayer2)
 {
-    CGS_ASSERT(lpPlayer1, "lpPlayer1");
-    CGS_ASSERT(lpPlayer2, "lpPlayer2");
+    CGS_ASSERT(lpPlayer1, CgsDev::Assert::MessageAt("lpPlayer1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRoadRageModeScoring.cpp", 167));
+    CGS_ASSERT(lpPlayer2, CgsDev::Assert::MessageAt("lpPlayer2", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRoadRageModeScoring.cpp", 168));
 
     const TablePositionData* lpP1 = static_cast<const TablePositionData*>(lpPlayer1);
     const TablePositionData* lpP2 = static_cast<const TablePositionData*>(lpPlayer2);
@@ -388,8 +388,8 @@ int OnlineRoadRageModeScoring::_BlueTeamPlayerCompare(const void* lpPlayer1, con
 {
     s32 liResult = 0;
 
-    CGS_ASSERT(lpPlayer1, "lpPlayer1");
-    CGS_ASSERT(lpPlayer2, "lpPlayer2");
+    CGS_ASSERT(lpPlayer1, CgsDev::Assert::MessageAt("lpPlayer1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRoadRageModeScoring.cpp", 777));
+    CGS_ASSERT(lpPlayer2, CgsDev::Assert::MessageAt("lpPlayer2", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnOnlineRoadRageModeScoring.cpp", 778));
 
     const BlueTeamSortData* lpP1 = static_cast<const BlueTeamSortData*>(lpPlayer1);
     const BlueTeamSortData* lpP2 = static_cast<const BlueTeamSortData*>(lpPlayer2);
@@ -535,7 +535,7 @@ void OnlineRoadRageModeScoring::CalculatePositionsInResultsTable(ScoringSystem* 
                                                 : GameStateModuleIO::E_PLAYER_TEAM_NONE;
 
         CGS_ASSERT(leEnumIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                   CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
     }
 
     qsort(laRows, E_ACTIVE_RACE_CAR_INDEX_COUNT, sizeof(TablePositionData),

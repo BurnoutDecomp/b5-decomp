@@ -341,7 +341,7 @@ LightTriggerId OnlineStuntRunMode::GetBestStartGridID(LightTriggerId luTriggerId
     const BrnTraffic::Hull* lpHull = lpTrafficData->GetHull(luHull);
 
     CGS_ASSERT(lpHull->muNumLightTriggers == lpHull->muNumLightTriggersStartData,
-               "lpHull->muNumLightTriggers == lpHull->muNumLightTriggersStartData");
+               CgsDev::Assert::MessageAt("lpHull->muNumLightTriggers == lpHull->muNumLightTriggersStartData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.cpp", 165));
 
     // The junction byte from the trigger id is itself an index into the per-light junction-lookup
     // table; the entry there is the JUNCTION-GROUP id whose lights we gather. The X360 reads
@@ -364,7 +364,7 @@ LightTriggerId OnlineStuntRunMode::GetBestStartGridID(LightTriggerId luTriggerId
         }
 
         CGS_ASSERT(liNumLightsFound < KI_MAX_LIGHTS_IN_ONE_JUNCTION,
-                   "liNumLightsFound < KI_MAX_LIGHTS_IN_ONE_JUNCTION");
+                   CgsDev::Assert::MessageAt("liNumLightsFound < KI_MAX_LIGHTS_IN_ONE_JUNCTION", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.cpp", 175));
         CGS_ASSERT(luHull < KU_MAX_HULLS, "luHull < KU_MAX_HULLS");
         CGS_ASSERT(luLight < KU_MAX_LIGHT_TRIGGER_INDEX, "luLightTriggerIndex < 256");
 
@@ -376,7 +376,7 @@ LightTriggerId OnlineStuntRunMode::GetBestStartGridID(LightTriggerId luTriggerId
         ++liNumLightsFound;
     }
 
-    CGS_ASSERT(liNumLightsFound > 0, "liNumLightsFound > 0");
+    CGS_ASSERT(liNumLightsFound > 0, CgsDev::Assert::MessageAt("liNumLightsFound > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.cpp", 185));
 
     // Pick the gathered light whose start direction best aligns with the reference: the X360 SIMD
     // block normalises the start direction and the (reference - start position) delta and takes the
@@ -405,7 +405,7 @@ LightTriggerId OnlineStuntRunMode::GetBestStartGridID(LightTriggerId luTriggerId
         }
     }
 
-    CGS_ASSERT(liBestLightIndex >= 0, "liBestLightIndex >= 0");
+    CGS_ASSERT(liBestLightIndex >= 0, CgsDev::Assert::MessageAt("liBestLightIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineStuntRunMode.cpp", 204));
 
     return aPackedIds[liBestLightIndex];
 }

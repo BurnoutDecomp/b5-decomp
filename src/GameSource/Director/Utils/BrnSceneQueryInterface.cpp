@@ -1,5 +1,6 @@
 #include "GameSource/Director/Utils/BrnSceneQueryInterface.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/SceneManager/CgsSceneManagerIO_EventLineTestNearest.h"   // ENearestExclusionMode
 
 // =============================================================================
@@ -49,8 +50,8 @@ namespace BrnDirector
                                            CgsSceneManager::EntityId                        lExcludeEntityId,
                                            CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
     {
-        CGS_ASSERT(mpSceneQueryInterface != 0,    "mpSceneQueryInterface != NULL");      // h:188
-        CGS_ASSERT(mpLineTestFinePostOffice != 0, "mpLineTestFinePostOffice != NULL");   // h:189
+        CGS_ASSERT(mpSceneQueryInterface != 0,    CgsDev::Assert::MessageAt("mpSceneQueryInterface != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnSceneQueryInterface.h", 188));      // h:188
+        CGS_ASSERT(mpLineTestFinePostOffice != 0, CgsDev::Assert::MessageAt("mpLineTestFinePostOffice != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnSceneQueryInterface.h", 189));   // h:189
 
         CgsSceneManager::SceneQueryId lQueryId;
         lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpLineTestFinePostOffice->AddPostBox(lrPostBox));
@@ -74,8 +75,8 @@ namespace BrnDirector
                                               CgsSceneManager::EntityId                        lExcludeEntityId,
                                               CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
     {
-        CGS_ASSERT(mpSceneQueryInterface != 0,       "mpSceneQueryInterface != NULL");        // h:216
-        CGS_ASSERT(mpLineTestNearestPostOffice != 0, "mpLineTestNearestPostOffice != NULL");  // h:217
+        CGS_ASSERT(mpSceneQueryInterface != 0,       CgsDev::Assert::MessageAt("mpSceneQueryInterface != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnSceneQueryInterface.h", 216));        // h:216
+        CGS_ASSERT(mpLineTestNearestPostOffice != 0, CgsDev::Assert::MessageAt("mpLineTestNearestPostOffice != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnSceneQueryInterface.h", 217));  // h:217
 
         CgsSceneManager::SceneQueryId lQueryId;
         lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpLineTestNearestPostOffice->AddPostBox(lrPostBox));
@@ -101,8 +102,8 @@ namespace BrnDirector
                                                 CgsSceneManager::EntityId                        lExcludeEntityId,
                                                 CgsSceneManager::SceneManagerIO::EExclusionMode leExclusionMode) const
     {
-        CGS_ASSERT(mpSceneQueryInterface != 0,         "mpSceneQueryInterface != NULL");          // h:316
-        CGS_ASSERT(mpVolumeTestDeepestPostOffice != 0, "mpVolumeTestDeepestPostOffice != NULL");  // h:317
+        CGS_ASSERT(mpSceneQueryInterface != 0,         CgsDev::Assert::MessageAt("mpSceneQueryInterface != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnSceneQueryInterface.h", 316));          // h:316
+        CGS_ASSERT(mpVolumeTestDeepestPostOffice != 0, CgsDev::Assert::MessageAt("mpVolumeTestDeepestPostOffice != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnSceneQueryInterface.h", 317));  // h:317
 
         CgsSceneManager::SceneQueryId lQueryId;
         lQueryId.Set(KU_DIRECTOR_QUERY_OWNER, mpVolumeTestDeepestPostOffice->AddPostBox(lrPostBox));

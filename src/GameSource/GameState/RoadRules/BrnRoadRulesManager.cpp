@@ -34,7 +34,7 @@ CgsID BrnGameState::RoadRulesManager::GetCurrentRoadID() const
     const BrnStreetData::Road*       lpRoad       = lpStreetData->GetRoad( miLastRoadIndex );
 
     // baked "lpRoad".
-    CGS_ASSERT( lpRoad, "lpRoad" );
+    CGS_ASSERT( lpRoad, CgsDev::Assert::MessageAt("lpRoad", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\RoadRules/BrnRoadRulesManager.h", 396) );
 
     // X360 reads *(Road+16) == Road::mId; the inlined Road::GetId().
     return lpRoad->GetId();

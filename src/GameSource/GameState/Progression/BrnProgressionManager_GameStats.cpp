@@ -85,7 +85,7 @@ u32 ProgressionManager::GetTotalWinsForNextRank()
 {
     // `cmplwi r11, 0x80 / blt` -- an UNSIGNED compare of the raw byte against 0x80, i.e. "the
     // signed byte is not negative".
-    CGS_ASSERT(mi8ProgressionRank >= 0, "mi8CurrentProgressionRank >= 0");   // cpp:4156
+    CGS_ASSERT(mi8ProgressionRank >= 0, CgsDev::Assert::MessageAt("mi8CurrentProgressionRank >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 4156));   // cpp:4156
 
     const ProgressionData* lpProgressionData = GetProgressionData();
     if (lpProgressionData == 0)
@@ -94,7 +94,7 @@ u32 ProgressionManager::GetTotalWinsForNextRank()
 
     const s32 liRank = static_cast<s32>(mi8ProgressionRank);
     CGS_ASSERT(static_cast<u32>(liRank) < lpProgressionData->GetProgressionRankCount(),
-               "luIndex < muProgressionRankCount");                         // BrnProgressionData.h:330
+               CgsDev::Assert::MessageAt("luIndex < muProgressionRankCount", "..\\..\\..\\SharedClasses\\Progression/BrnProgressionData.h", 330));                         // BrnProgressionData.h:330
 
     const ProgressionRankData* lpProgressionRank =
         lpProgressionData->GetProgressionRankData(static_cast<u32>(liRank));

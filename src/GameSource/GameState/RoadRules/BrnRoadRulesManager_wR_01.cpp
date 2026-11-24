@@ -182,7 +182,7 @@ namespace BrnGameState
             }
 
             default:
-                CGS_ASSERT(false, "Unknown road rule type");
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown road rule type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 1140));
                 break;
         }
 
@@ -271,7 +271,7 @@ namespace BrnGameState
     {
         GameStateModuleIO::RoadRulesEndRuleAction lEndRuleAction;
 
-        CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
+        CGS_ASSERT(lpOutputBuffer, CgsDev::Assert::MessageAt("lpOutputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 1182));
         GameStateModuleIO::GameActionQueue* lpGameActionQueue = lpOutputBuffer->GetGameActionQueue();
 
         switch (leScoreType)
@@ -293,7 +293,7 @@ namespace BrnGameState
                 break;
 
             default:
-                CGS_ASSERT(false, "Unknown road rule type");
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown road rule type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 1217));
                 break;
         }
 

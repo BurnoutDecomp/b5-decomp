@@ -318,7 +318,7 @@ s32 ModeManager::GetPlayersFinishPosition()
 // override is armed (in which case the console swallows the broadcast entirely).
 void ModeManager::SendFinishedModeAction(GameStateModuleIO::GameActionQueue* lpGameActionQueue)
 {
-    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");   // BrnModeManager.cpp:3258
+    CGS_ASSERT(mpGameStateModule != 0, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3258));   // BrnModeManager.cpp:3258
 
     // The console calls GetPlayerActiveRaceCarIndex here and leaves the answer in r3 (it becomes
     // the suppressed path's return value; this method is void in the DWARF signature). The call
@@ -602,7 +602,7 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
         // ---- jumptable default, cases 1,4,6,9 -----------------------------------------------
         default:
             liFinishType = KI_FINISH_TYPE_UNKNOWN;                        // console sets 0xB FIRST
-            CGS_ASSERT(false, "Unknown or unsupported game mode type");   // :1646
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown or unsupported game mode type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1646));   // :1646
             break;
     }
 
@@ -686,7 +686,7 @@ void ModeManager::FinishCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuf
     SendModeResults(lpOutputBuffer->GetGameActionQueue());        // BrnModeManager.cpp:347
     SendFinishedModeAction(lpOutputBuffer->GetGameActionQueue()); // this file
 
-    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");   // :1670
+    CGS_ASSERT(mpGameStateModule != 0, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1670));   // :1670
 
     // ✅ LANDED 2026-09-10 (was: PARKED CALL, conductor decision #6). Console: `GameStateModule::
     // OnModeFinish(mpGameStateModule, lpOutputBuffer)` @0x82390EE0 -- the module-level end-of-mode
@@ -906,7 +906,7 @@ void ModeManager::ShowModeResults(
         lAction.mfField0C = ((lfFinishTime - mfModeTimeLimit) >= 0.0f) ? mfModeTimeLimit : lfFinishTime;
     }
 
-    CGS_ASSERT(lpGameModeParams != 0, "lpGameModeParams");   // :3388
+    CGS_ASSERT(lpGameModeParams != 0, CgsDev::Assert::MessageAt("lpGameModeParams", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3388));   // :3388
 
     // ---- THE PROGRESSION PAYOFF -----------------------------------------------------------------
     // Console gate: `if (!record[+0xE1] || meCurrentGameModeType == 3)` -- i.e. run the progression
@@ -972,7 +972,7 @@ void ModeManager::ShowModeResults(
                                                                              leGameModeType);
                 }
 
-                CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");            // :3449
+                CGS_ASSERT(mpGameStateModule != 0, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3449));            // :3449
                 CGS_ASSERT(mpGameStateModule->GetDeveloperChallengeManager() != 0,
                            CgsDev::Assert::MessageAt("mpGameStateModule->GetDeveloperChallengeManager()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3450));          // :3450
                 mpGameStateModule->GetDeveloperChallengeManager()->OnEventEnd(

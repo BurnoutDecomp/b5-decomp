@@ -1,6 +1,7 @@
 #include "GameSource/GameState/Offences/BrnStuntManagerDebugComponent.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug2DImmediateRender.h"
 #include "GameShared/GameClasses/Development/DebugSystem/Render/CgsDebug3DImmediateRender.h"
 #include "GameSource/GameState/Offences/BrnStuntManager.h"
@@ -193,7 +194,7 @@ namespace BrnGameState
             leRegionType = BrnTrigger::GenericRegion::E_TYPE_OVERDRIVE_BOOST;
             break;
         default:
-            CGS_ASSERT(false, "Unknown stunt type.");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown stunt type.", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Offences/BrnStuntManagerDebugComponent.cpp", 245));
             return;
         }
 

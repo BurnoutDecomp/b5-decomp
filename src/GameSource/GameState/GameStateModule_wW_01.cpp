@@ -19,6 +19,7 @@
 
 #include "GameSource/GameState/BrnGameStateModule.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                       // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h"                   // PostWorldInputBuffer
 #include "GameSource/GameState/BrnGameStateModule.h"              // mpTakedownCache's queues
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"             // ModeManager::PostWorldUpdate
@@ -99,7 +100,7 @@ void GameStateModule::PostWorldUpdate(CgsModule::IOBufferStack*                 
             lpPostWorldInputBuffer->GetGlobalRaceCarOutputInterface()->GetPlayerGlobalRaceCarIndex();
 
         const BrnProgression::Profile* lpProfile = mProgressionManager.GetProfile();
-        CGS_ASSERT(lpProfile != NULL, "lpProfile != NULL");
+        CGS_ASSERT(lpProfile != NULL, CgsDev::Assert::MessageAt("lpProfile != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 1736));
         (void)lpProfile;
 
         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveRaceCarOutput =

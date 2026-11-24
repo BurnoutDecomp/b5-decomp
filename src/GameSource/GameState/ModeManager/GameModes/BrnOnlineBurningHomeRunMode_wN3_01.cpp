@@ -31,8 +31,8 @@ void OnlineBurningHomeRunMode::PickNewBurningHomeRunRunner(
         const BrnWorld::RaceCarEntityModuleIO::RCEntityActiveRaceCarOutputInterface* lpActiveCarInterface,
         GameStateModuleIO::GameActionQueue* lpActionQueue)
 {
-    CGS_ASSERT(lpActionQueue != NULL, "lpActionQueue");
-    CGS_ASSERT(mpModeManager != NULL, "mpModeManager");
+    CGS_ASSERT(lpActionQueue != NULL, CgsDev::Assert::MessageAt("lpActionQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineBurningHomeRunMode.cpp", 344));
+    CGS_ASSERT(mpModeManager != NULL, CgsDev::Assert::MessageAt("mpModeManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineBurningHomeRunMode.cpp", 345));
     CGS_ASSERT(mpModeManager->GetScoringSystem() != NULL, CgsDev::Assert::MessageAt("mpModeManager->GetScoringSystem()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineBurningHomeRunMode.cpp", 249));
 
     ScoringSystem* lpScoringSystem = mpModeManager->GetScoringSystem();
@@ -52,7 +52,7 @@ void OnlineBurningHomeRunMode::PickNewBurningHomeRunRunner(
         leActiveRaceCarIndex = ::E_ACTIVE_RACE_CAR_INDEX_INVALID;
     }
     CGS_ASSERT(leActiveRaceCarIndex != ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
-               "leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID");
+               CgsDev::Assert::MessageAt("leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineBurningHomeRunMode.cpp", 350));
 
     const Vector3 lRunnerPosition =
         lpActiveCarInterface->GetRaceCarState(leActiveRaceCarIndex)->mTransform.Pos();
@@ -92,7 +92,7 @@ void OnlineBurningHomeRunMode::PickNewBurningHomeRunRunner(
     if (leNewRunnerIndex != ::E_ACTIVE_RACE_CAR_INDEX_INVALID)
     {
         const CarData* lpCarData = lpConstScoringSystem->GetCarData(leNewRunnerIndex);
-        CGS_ASSERT(lpCarData != NULL, "lpCarData");
+        CGS_ASSERT(lpCarData != NULL, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnOnlineBurningHomeRunMode.cpp", 400));
 
         GameStateModuleIO::SwitchBurningHomeRunRunnerAction lAction;
         lAction.mNewRunnerPlayerID = lpCarData->GetNetworkPlayerID();

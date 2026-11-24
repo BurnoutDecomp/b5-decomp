@@ -98,9 +98,9 @@ void SetupNetworkCarAction::Construct(EPlayerScoringIndex lePlayerScoringIndex,
                                       CgsID               lWheelModelId,
                                       f32                 lfBaseDeformationAmount)
 {
-    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-    CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
-    CGS_ASSERT(lModelId != 0, "lModelId != kCGSID_NULL");
+    CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 783));
+    CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 784));
+    CGS_ASSERT(lModelId != 0, CgsDev::Assert::MessageAt("lModelId != kCGSID_NULL", "..\\..\\..\\GameSource\\GameState/BrnGameActions.h", 785));
 
     mfBaseDeformationAmount = lfBaseDeformationAmount;   // stfs f31, 0x38(r31) @0x82355140
     mWorldSpacePosition  = lPos;
@@ -298,7 +298,7 @@ void OnlineRoundResults::SetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerI
 s32 OnlineRoundResults::GetPosition(BrnNetwork::NetworkPlayerID lNetworkPlayerID) const
 {
     CGS_ASSERT(lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID,
-               "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+               CgsDev::Assert::MessageAt("lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameActions.h", 6670));
 
     for (s32 liIndex = 0; liIndex < maDisconnectedPlayers.GetCount(); ++liIndex)
     {
@@ -355,7 +355,7 @@ void OnlineGameResults::Clear()
 // "index: N rounds M" message through CgsStrStream, matching the X360).
 void OnlineGameResults::SetRaceResults(s32 liRoundIndex, const f32* lpfRoundTime, f32 lfRoundDistance)
 {
-    CGS_ASSERT(E_MODE_ONLINE_RACE == miEventType, "E_MODE_ONLINE_RACE == meEventType");
+    CGS_ASSERT(E_MODE_ONLINE_RACE == miEventType, CgsDev::Assert::MessageAt("E_MODE_ONLINE_RACE == meEventType", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 2131));
 
     if (liRoundIndex >= miNumberOfRounds)
     {
@@ -372,7 +372,7 @@ void OnlineGameResults::SetRaceResults(s32 liRoundIndex, const f32* lpfRoundTime
 // X360 0x82580C60. Read back an online-race round result (same guards as SetRaceResults).
 void OnlineGameResults::GetRaceResults(s32 liRoundIndex, f32* lpfRoundTime, f32* lpfRoundDistance) const
 {
-    CGS_ASSERT(E_MODE_ONLINE_RACE == miEventType, "E_MODE_ONLINE_RACE == meEventType");
+    CGS_ASSERT(E_MODE_ONLINE_RACE == miEventType, CgsDev::Assert::MessageAt("E_MODE_ONLINE_RACE == meEventType", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 2159));
 
     if (liRoundIndex >= miNumberOfRounds)
     {
@@ -393,7 +393,7 @@ void OnlineGameResults::GetRaceResults(s32 liRoundIndex, f32* lpfRoundTime, f32*
 void OnlineGameResults::SetStuntResults(s32 liRoundIndex, s32 liScore, s32 liMultiplier)
 {
     CGS_ASSERT(miEventType == E_MODE_ONLINE_FUGITIVE || miEventType == E_MODE_ONLINE_FREE_BURN ||
-               miEventType == E_MODE_ONLINE_MODE_END, "IsOnlineStuntRun( meEventType )");
+               miEventType == E_MODE_ONLINE_MODE_END, CgsDev::Assert::MessageAt("IsOnlineStuntRun( meEventType )", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 2145));
 
     if (liRoundIndex >= miNumberOfRounds)
     {
@@ -411,7 +411,7 @@ void OnlineGameResults::SetStuntResults(s32 liRoundIndex, s32 liScore, s32 liMul
 void OnlineGameResults::GetStuntResults(s32 liRoundIndex, s32* lpiScore, s32* lpiMultiplier) const
 {
     CGS_ASSERT(miEventType == E_MODE_ONLINE_FUGITIVE || miEventType == E_MODE_ONLINE_FREE_BURN ||
-               miEventType == E_MODE_ONLINE_MODE_END, "IsOnlineStuntRun( meEventType )");
+               miEventType == E_MODE_ONLINE_MODE_END, CgsDev::Assert::MessageAt("IsOnlineStuntRun( meEventType )", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 2173));
 
     if (liRoundIndex >= miNumberOfRounds)
     {

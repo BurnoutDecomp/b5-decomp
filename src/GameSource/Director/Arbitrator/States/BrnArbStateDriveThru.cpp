@@ -237,7 +237,7 @@ namespace BrnDirector
 
             const Attrib::Gen::shotgroup& lrShotGroup = *lpShotGroup;
 
-            CGS_ASSERT(lrShotGroup.Num_ShotList() > 0, "lpShotGroup->Num_ShotList()>0");
+            CGS_ASSERT(lrShotGroup.Num_ShotList() > 0, CgsDev::Assert::MessageAt("lpShotGroup->Num_ShotList()>0", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateDriveThru.cpp", 117));
 
             // When the group has at least two shots and the approach is reversed, use the
             // second shot (the group's reverse-approach take); otherwise the first.
@@ -246,7 +246,7 @@ namespace BrnDirector
 
             if (lbUseSecondShot)
             {
-                CGS_ASSERT(lrShotGroup.Num_ShotList() >= 2, "lpShotGroup->Num_ShotList() >= 2");
+                CGS_ASSERT(lrShotGroup.Num_ShotList() >= 2, CgsDev::Assert::MessageAt("lpShotGroup->Num_ShotList() >= 2", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateDriveThru.cpp", 124));
             }
 
             const void* lpShotData = lrShotGroup.GetShotListData(lbUseSecondShot);

@@ -536,7 +536,7 @@ void StuntModeScoringOnline::UpdateCarsAroundPlayerAtTakeoff(const ActiveRaceCar
                 continue;
             }
             // Skip the player's own car.
-            CGS_ASSERT(static_cast<s32>(lePlayerIdx) != -1, "Player car index hasn't been set");
+            CGS_ASSERT(static_cast<s32>(lePlayerIdx) != -1, CgsDev::Assert::MessageAt("Player car index hasn't been set", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 980));
             if (static_cast<s32>(lePlayerIdx) == liCar)
             {
                 continue;

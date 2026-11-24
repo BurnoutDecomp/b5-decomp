@@ -157,7 +157,7 @@ namespace BrnGameState
 
             leWheelIndex = static_cast<BrnPhysics::Vehicle::EVehicleDrivenWheel>(leWheelIndex + 1);
             CGS_ASSERT(leWheelIndex <= BrnPhysics::Vehicle::eNumDrivenWheels,
-                       "leEnumIndex <= eNumDrivenWheels");
+                       CgsDev::Assert::MessageAt("leEnumIndex <= eNumDrivenWheels", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\vehiclemanager\\vehiclephysics\\BrnSimpleVehiclePhysics.h", 332));
         }
         while (leWheelIndex < BrnPhysics::Vehicle::eNumDrivenWheels);
 
@@ -429,7 +429,7 @@ namespace BrnGameState
                         CGS_ASSERT(leSurfaceListIndex <= eNumDrivenWheels, "leEnumIndex <= eNumDrivenWheels");
                     }
                     CGS_ASSERT(leSurfaceListIndex < eNumDrivenWheels,
-                               "leSurfaceListIndex < BrnPhysics::Vehicle::eNumDrivenWheels");   // :433
+                               CgsDev::Assert::MessageAt("leSurfaceListIndex < BrnPhysics::Vehicle::eNumDrivenWheels", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RumbleManager/BrnRumbleManager.cpp", 433));   // :433
                 }
             }
             leWheelIndex = static_cast<EVehicleDrivenWheel>(leWheelIndex + 1);

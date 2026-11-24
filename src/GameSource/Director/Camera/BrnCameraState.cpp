@@ -112,7 +112,7 @@ void CameraState::SetFlag(u32 luIndex, bool lbValue)
 // ----------------------------------------------------------------------------
 void CameraState::ClearFlag(u32 luIndex)
 {
-    CGS_ASSERT(luIndex < KU_NUM_FLAGS, "luIndex < NUMBITS");
+    CGS_ASSERT(luIndex < KU_NUM_FLAGS, CgsDev::Assert::MessageAt("luIndex < NUMBITS", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 241));
     mCurrentFlags.UnSetBit(luIndex);                   // ldx/andc/stdx @ this+8
 }
 
@@ -155,7 +155,7 @@ void CameraState::Clear()
     mCurrentFlags.UnSetAll();     // std 0, this+0x08
     mPreviousFlags.UnSetAll();    // std 0, this+0x10
 
-    CGS_ASSERT(sbFailFlagMaskSet, "sbFailFlagMaskSet");   // :193 (non-gating)
+    CGS_ASSERT(sbFailFlagMaskSet, CgsDev::Assert::MessageAt("sbFailFlagMaskSet", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\director\\camera\\BrnCameraValidityAccount.h", 193));   // :193 (non-gating)
 
     // mHeadFlags &= sFailFlagMask (single-qword AND on the X360).
     for (u32 luFlag = 0; luFlag < KU_NUM_FLAGS; ++luFlag)

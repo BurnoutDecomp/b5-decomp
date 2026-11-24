@@ -433,13 +433,13 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
         lEyePosition.mV.z - (lrVehiclePosition.mV.z - lEyePosition.mV.z) * KF_STEP_BACK_DISTANCE,
         0.0f ));
 
-    CGS_ASSERT(IsValid(lMovedBackPos), "IsValid(lMovedBackPos)");                   // .cpp:171
+    CGS_ASSERT(IsValid(lMovedBackPos), CgsDev::Assert::MessageAt("IsValid(lMovedBackPos)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.cpp", 171));                   // .cpp:171
     lrCamera.mTransform.wAxis = lMovedBackPos;   // stvx128 v127, r0, r19 (camera +0x30)
 
     // ---- 5. aim at the car and fit the FOV -----------------------------------
     const Matrix44Affine lLookAtCarTransform = Utils::CreateLookAt(lMovedBackPos,
                                                                   lrVehiclePosition);
-    CGS_ASSERT(IsValid(lLookAtCarTransform), "IsValid(lLookAtCarTransform)");       // .cpp:183
+    CGS_ASSERT(IsValid(lLookAtCarTransform), CgsDev::Assert::MessageAt("IsValid(lLookAtCarTransform)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.cpp", 183));       // .cpp:183
 
     lrCamera.mTransform = lLookAtCarTransform;
     lrCamera.ValidateTransformWithDebugInfo();
@@ -471,7 +471,7 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
                                                                       lrCamera.mfFOV,
                                                                       lrCamera.mfAspectRatio,
                                                                       lTargetScreenOffset);
-    CGS_ASSERT(IsValid(lAdjustedLookAt), "IsValid(lAdjustedLookAt)");               // .cpp:201
+    CGS_ASSERT(IsValid(lAdjustedLookAt), CgsDev::Assert::MessageAt("IsValid(lAdjustedLookAt)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.cpp", 201));               // .cpp:201
 
     lrCamera.mTransform = lAdjustedLookAt;
     lrCamera.ValidateTransformWithDebugInfo();
@@ -538,7 +538,7 @@ bool BehaviourRotateAboutVehicle::Update(Camera& lrCamera, const BehaviourShared
 
     const Matrix44Affine lShakenCamera = rw::math::vpu::Mult(mLastShakeTransform,
                                                              lrCamera.mTransform);
-    CGS_ASSERT(IsValid(lShakenCamera), "IsValid(lShakenCamera)");                   // .cpp:234
+    CGS_ASSERT(IsValid(lShakenCamera), CgsDev::Assert::MessageAt("IsValid(lShakenCamera)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourRotateAboutVehicle.cpp", 234));                   // .cpp:234
 
     lrCamera.mTransform = lShakenCamera;
     lrCamera.ValidateTransformWithDebugInfo();

@@ -900,7 +900,7 @@ CollisionPolicy* BehaviourIceAnim::GetCollisionPolicy()
 f32 BehaviourIceAnim::GetTimeRemaining()
 {
     const ICE::ICETakeData* lpTakeData = mKeyAnimController.GetTake().GetData();
-    f32 lfLength = lpTakeData ? lpTakeData->GetLength() : 0.0f;
+    f32 lfLength = (lpTakeData == 0) ? 0.0f : lpTakeData->GetLength();   // ARTIST 0x822197A0
     return (1.0f - mKeyAnimController.GetParametricTime0To1()) * lfLength;
 }
 

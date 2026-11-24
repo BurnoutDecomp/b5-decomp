@@ -258,7 +258,7 @@ void Profile::Construct()
         maaMugshotInfo[liIndex].Construct();
         maAvailableMugshotFileIDs[liIndex].UnSetAll();   // X360 `std r31(0), 0(r11)`
         maAvailableMugshotFileIDs[liIndex].SetAll();     // X360 `std r26(-1), 0(r10)`
-        CGS_ASSERT(liIndex + 1 <= 5, "leEnumIndex <= E_IMAGE_GALLERY_TYPE_COUNT");
+        CGS_ASSERT(liIndex + 1 <= 5, CgsDev::Assert::MessageAt("leEnumIndex <= E_IMAGE_GALLERY_TYPE_COUNT", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedEnums.h", 237));
     }
 
     // The two milestone dates: asm writes mbIsLocal=1 (byte @+0) + the two FILETIME words = 0
@@ -415,14 +415,10 @@ RivalData* Profile::AddRival(CgsID lRivalId, CgsID lCarId)
 // ====================================================================================
 CarData* Profile::FindCar(CgsID lCarId)
 {
-    s32 liCount = miCarCount;
-    if (liCount <= 0)
-        return 0;
-
-    for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+    for (s32 liCarIndex = 0; liCarIndex < miCarCount; ++liCarIndex)     // DWARF :300
     {
-        if (maCars[liIndex].mId == lCarId)
-            return &maCars[liIndex];
+        if (maCars[liCarIndex].mId == lCarId)
+            return &maCars[liCarIndex];
     }
     return 0;
 }
@@ -435,14 +431,10 @@ CarData* Profile::FindCar(CgsID lCarId)
 // ====================================================================================
 RivalData* Profile::FindRival(CgsID lRivalId)
 {
-    s32 liCount = miRivalCount;
-    if (liCount <= 0)
-        return 0;
-
-    for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+    for (s32 liRivalIndex = 0; liRivalIndex < miRivalCount; ++liRivalIndex)   // DWARF :341
     {
-        if (maRivals[liIndex].mRivalId == lRivalId)
-            return &maRivals[liIndex];
+        if (maRivals[liRivalIndex].mRivalId == lRivalId)
+            return &maRivals[liRivalIndex];
     }
     return 0;
 }
@@ -453,11 +445,7 @@ RivalData* Profile::FindRival(CgsID lRivalId)
 // ====================================================================================
 LiveryData* Profile::GetChosenLiveryDataForBaseCar(CgsID lBaseCarId)
 {
-    s32 liCount = miLiveryDataCount;
-    if (liCount <= 0)
-        return 0;
-
-    for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+    for (s32 liIndex = 0; liIndex < miLiveryDataCount; ++liIndex)         // DWARF :517
     {
         if (maLiveryChoices[liIndex].mBaseCarId == lBaseCarId)
             return &maLiveryChoices[liIndex];
@@ -600,7 +588,7 @@ void Profile::ClearTrainingFlags()
 bool Profile::HasPlayerSeenTrainingType(ETrainingType leTrainingType) const
 {
     CGS_ASSERT(leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT,
-               "leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT");  // :2769
+               CgsDev::Assert::MessageAt("leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 2769));  // :2769
     CGS_ASSERT(static_cast<u32>(leTrainingType) < 256u, "invalid index : ");      // CgsBitArray.h:203
 
     return maHasPlayerSeenTraining.IsBitSet(static_cast<u32>(leTrainingType));
@@ -799,7 +787,7 @@ s32 Profile::AddMugshot(s32 leMugshotType, MugshotInfo::UniquePlayerID lUniqueID
     const s32 liFreeFileIdBit = lrFileIds.GetFirstNonZeroBit();
     if (liFreeFileIdBit != CgsContainers::BitArray<20u>::KI_INVALID_BITINDEX)
     {
-        CGS_ASSERT(static_cast<u32>(liFreeFileIdBit) < 20u, "luIndex < NUMBITS");   // CgsBitArray.h:241
+        CGS_ASSERT(static_cast<u32>(liFreeFileIdBit) < 20u, CgsDev::Assert::MessageAt("luIndex < NUMBITS", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 241));   // CgsBitArray.h:241
         lrFileIds.UnSetBit(static_cast<u32>(liFreeFileIdBit));                      // X360 `andc`
 
         // X360 `mulli r8, r28, 0x3E8 ; add r30, r8, r31` -- the file id is namespaced per gallery.
@@ -1297,7 +1285,7 @@ void Profile::AddStuntElement(BrnGameState::StuntElementType leStuntElementType,
                               BrnWorld::ECounty leCounty)
 {
     CGS_ASSERT(leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT,
-               "leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT");
+               CgsDev::Assert::MessageAt("leStuntElementType < BrnGameState::E_STUNT_ELEMENT_TYPE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 2328));
 
     if (maStuntElements[leStuntElementType].Find(lId) == CgsContainers::Set<CgsID, 512u>::KU_INVALID &&
         leCounty < BrnWorld::E_COUNTY_VALID_COUNT)
@@ -1508,8 +1496,8 @@ void Profile::RecordPropHit(s32 liZoneIndex, s32 liPropIndex)
 // ====================================================================================
 bool Profile::GetSeenAllEventTypeWonMessage(s32 leModeType) const
 {
-    CGS_ASSERT(leModeType > -1, "leModeType > RaceEventData::E_MODE_INVALID");   // :3320
-    CGS_ASSERT(leModeType < 6,  "leModeType < RaceEventData::E_MODE_COUNT");     // :3321
+    CGS_ASSERT(leModeType > -1, CgsDev::Assert::MessageAt("leModeType > RaceEventData::E_MODE_INVALID", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3320));   // :3320
+    CGS_ASSERT(leModeType < 6,  CgsDev::Assert::MessageAt("leModeType < RaceEventData::E_MODE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3321));     // :3321
     CGS_ASSERT(static_cast<u32>(leModeType) < 6u, "invalid index : < 6");        // CgsBitArray.h:203 Get guard
 
     return mSeenCompleteAllEventTypeArray.IsBitSet(static_cast<u32>(leModeType));
@@ -1520,8 +1508,8 @@ bool Profile::GetSeenAllEventTypeWonMessage(s32 leModeType) const
 // ====================================================================================
 void Profile::SetSeenAllEventTypeWonMessage(s32 leModeType)
 {
-    CGS_ASSERT(leModeType > -1, "leModeType > RaceEventData::E_MODE_INVALID");   // :3336
-    CGS_ASSERT(leModeType < 6,  "leModeType < RaceEventData::E_MODE_COUNT");     // :3337
+    CGS_ASSERT(leModeType > -1, CgsDev::Assert::MessageAt("leModeType > RaceEventData::E_MODE_INVALID", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3336));   // :3336
+    CGS_ASSERT(leModeType < 6,  CgsDev::Assert::MessageAt("leModeType < RaceEventData::E_MODE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3337));     // :3337
     CGS_ASSERT(static_cast<u32>(leModeType) < 6u, "Index: ");                    // CgsBitArray.h:222 SetBit guard
 
     mSeenCompleteAllEventTypeArray.SetBit(static_cast<u32>(leModeType));
@@ -1534,8 +1522,8 @@ void Profile::SetSeenAllEventTypeWonMessage(s32 leModeType)
 // ====================================================================================
 bool Profile::GetSeenTrophyUnlockSequence(s32 leUnlockType) const
 {
-    CGS_ASSERT(leUnlockType > 0,  "leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE");  // :3287
-    CGS_ASSERT(leUnlockType < 35, "leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT"); // :3288
+    CGS_ASSERT(leUnlockType > 0,  CgsDev::Assert::MessageAt("leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3287));  // :3287
+    CGS_ASSERT(leUnlockType < 35, CgsDev::Assert::MessageAt("leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3288)); // :3288
     CGS_ASSERT(static_cast<u32>(leUnlockType) < 35u, "invalid index : < 35");    // CgsBitArray.h:203 Get guard
 
     return mSeenTrophyAwardBitArray.IsBitSet(static_cast<u32>(leUnlockType));
@@ -1546,8 +1534,8 @@ bool Profile::GetSeenTrophyUnlockSequence(s32 leUnlockType) const
 // ====================================================================================
 void Profile::SetSeenTrophyUnlockSequence(s32 leUnlockType)
 {
-    CGS_ASSERT(leUnlockType > 0,  "leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE");  // :3303
-    CGS_ASSERT(leUnlockType < 35, "leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT"); // :3304
+    CGS_ASSERT(leUnlockType > 0,  CgsDev::Assert::MessageAt("leUnlockType > BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_NONE", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3303));  // :3303
+    CGS_ASSERT(leUnlockType < 35, CgsDev::Assert::MessageAt("leUnlockType < BrnProgression::TrophyUnlockData::E_UNLOCKTYPE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3304)); // :3304
     CGS_ASSERT(static_cast<u32>(leUnlockType) < 35u, "Index: ");                 // CgsBitArray.h:222 SetBit guard
 
     mSeenTrophyAwardBitArray.SetBit(static_cast<u32>(leUnlockType));
@@ -1560,7 +1548,7 @@ void Profile::SetSeenTrophyUnlockSequence(s32 leUnlockType)
 void Profile::SetTrainingAlreadySeen(ETrainingType leTrainingType)
 {
     CGS_ASSERT(leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT,
-               "leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT");  // :2761
+               CgsDev::Assert::MessageAt("leTrainingType >= 0 && leTrainingType < E_TRAINING_TYPE_COUNT", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 2761));  // :2761
     CGS_ASSERT(static_cast<u32>(leTrainingType) < 256u, "Index: ");               // CgsBitArray.h:222 SetBit guard
 
     maHasPlayerSeenTraining.SetBit(static_cast<u32>(leTrainingType));

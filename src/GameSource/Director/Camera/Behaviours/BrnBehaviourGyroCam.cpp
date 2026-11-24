@@ -57,7 +57,7 @@ void AttachmentTruck::Update(rw::math::vpu::Vector3 lPosition, rw::math::vpu::Ve
 {
     using namespace rw::math::vpu;
     CGS_ASSERT(std::fabs(lrParams.mfConvergenceTimeSecs) > 1.1920929e-7f,
-               "!rw::math::fpu::IsZero(lParams.mfConvergenceTimeSecs)");
+               CgsDev::Assert::MessageAt("!rw::math::fpu::IsZero(lParams.mfConvergenceTimeSecs)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.cpp", 76));
     if (mbFirstFrame)
     {
         Set(VecFloat(0.0f), lVelocity, lPosition);
@@ -115,7 +115,7 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
     mVisibilityCollisionPolicy.SetTarget(vehicle.mRaceCarState.mTransform, vehicle.mAABB, CgsSceneManager::EntityId(vehicle.mRaceCarState.mEntityId.muValue));
     mVehicleAttachmentCollisionPolicy.SetVehicleRef(mAttachedTo);
     CGS_ASSERT(std::fabs(mpParameters->mfHeightDistanceVelocityRange) > 1.1920929e-7f,
-               "!rw::math::fpu::IsZero(mpParameters->mfHeightDistanceVelocityRange)");
+               CgsDev::Assert::MessageAt("!rw::math::fpu::IsZero(mpParameters->mfHeightDistanceVelocityRange)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.cpp", 289));
     const f32 ratio = (std::min)(speed / mpParameters->mfHeightDistanceVelocityRange, 1.0f);
     if (!mbIsWorldSpaceVectorSet)
     {
@@ -155,7 +155,7 @@ bool BehaviourGyroCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInf
             mDesiredWorldSpaceNormalizedVectorFromCar, VecFloat(mfBlendFactor)));
     }
     CGS_ASSERT(!IsZero(mWorldSpaceNormalizedVectorFromCar), "!IsZero(mWorldSpaceNormalizedVectorFromCar)");
-    CGS_ASSERT(std::fabs(mfDistance) > 1.1920929e-7f, "!rw::math::fpu::IsZero(mfDistance)");
+    CGS_ASSERT(std::fabs(mfDistance) > 1.1920929e-7f, CgsDev::Assert::MessageAt("!rw::math::fpu::IsZero(mfDistance)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourGyroCam.cpp", 400));
     const rw::math::vpu::Vector3 eye = target.Pos() + mWorldSpaceNormalizedVectorFromCar * mfDistance;
     if (IsPrepared()) mTransform.Pos() = eye;
     else { mTransform = Utils::CreateLookAt(eye, target.Pos()); lrCamera.mTransform = mTransform; }

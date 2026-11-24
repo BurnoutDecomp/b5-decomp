@@ -2,6 +2,7 @@
 
 #include "GameSource/Replays/BrnReplayBaseSerialiser.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include "types.hpp"
 
@@ -58,7 +59,7 @@ namespace ReplayIO
     {
         ESerialiserId leId = lpSerialiser->GetId();
 
-        CGS_ASSERT(leId < E_ID_COUNT, "lpSerialiser->GetId() < E_ID_COUNT");
+        CGS_ASSERT(leId < E_ID_COUNT, CgsDev::Assert::MessageAt("lpSerialiser->GetId() < E_ID_COUNT", "..\\..\\..\\GameSource\\Replays/BrnReplayRequestInterface.h", 104));
         CGS_ASSERT(mapSerialisers[leId] == 0,
                    "Serialiser with id already registered\n");
 

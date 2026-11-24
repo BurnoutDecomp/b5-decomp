@@ -46,6 +46,7 @@
 #include "SharedClasses/Trigger/BrnTriggerData.h"             // TriggerData::GetGenericRegion / count
 #include "SharedClasses/Trigger/BrnGenericRegion.h"           // GenericRegion::IsDriveThru / GetType
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGameState
 {
@@ -54,7 +55,7 @@ void GameStateModule::SendSetUpAllDriveThrusMessage(GameStateModuleIO::GameActio
 {
     // (the console brackets the body in a CPU perf-monitor start/stop pair on a member this
     //  build does not model)
-    CGS_ASSERT(lpOutputActionQueue != 0, "lpOutputActionQueue");   // the console's own, non-gating
+    CGS_ASSERT(lpOutputActionQueue != 0, CgsDev::Assert::MessageAt("lpOutputActionQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5797));   // the console's own, non-gating
 
     const BrnTrigger::TriggerData* lpTriggerData = mTriggerQueryManager.GetTriggerData();
 

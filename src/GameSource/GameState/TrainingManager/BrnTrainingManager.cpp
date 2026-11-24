@@ -287,7 +287,7 @@ void TrainingManager::SendTrainingTickerMessage(GameStateModuleIO::GameActionQue
         KI_GAME_ACTION_TRAINING_TICKER, (s32)sizeof(leTrainingType));
 
     BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-    CGS_ASSERT(lpProfile, "lpProfile");   // BrnTrainingManager.cpp:794
+    CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp", 794));   // BrnTrainingManager.cpp:794
     lpProfile->SetTrainingAlreadySeen(meCurrentTrainingType);
 }
 
@@ -540,7 +540,7 @@ void TrainingManager::RequestTraining(BrnProgression::ETrainingType leTrainingTy
     }
 
     BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
-    CGS_ASSERT(lpProfile, "lpProfile");   // :382
+    CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TrainingManager/BrnTrainingManager.cpp", 382));   // :382
 
     u32 luResolvedType = luType;
     if (luType == 50u)

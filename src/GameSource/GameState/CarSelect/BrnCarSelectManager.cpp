@@ -5,6 +5,7 @@
 #include <cstdlib>   // std::getenv ([car-audio] BRN_DEBUG_UNLOCK_CARS harness arm)
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CgsDev::Assert Begin/Fire/EndAssert
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // CgsModule::VariableEventQueue<13312,16> (game-action queue)
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"         // CgsDev::Log::gpDebugPrint / Message::gxMessageFilterFlags
 
@@ -137,8 +138,8 @@ void CarSelectManager::Construct(const TriggerQueryManager* lpTriggerQueryManage
                                  GameStateModule* lpGameStateModule,
                                  BrnProgression::ProgressionManager* lpProgressionManager)
 {
-    CGS_ASSERT(lpTriggerQueryManager, "lpTriggerQueryManager");
-    CGS_ASSERT(lpGameStateModule, "lpGameStateModule");
+    CGS_ASSERT(lpTriggerQueryManager, CgsDev::Assert::MessageAt("lpTriggerQueryManager", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnCarSelectManager.h", 319));
+    CGS_ASSERT(lpGameStateModule, CgsDev::Assert::MessageAt("lpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnCarSelectManager.h", 320));
 
     mpGameStateModule.Set(lpGameStateModule);
     mpTriggerQueryManager.Set(lpTriggerQueryManager);

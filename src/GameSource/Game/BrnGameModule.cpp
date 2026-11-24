@@ -1201,12 +1201,13 @@ namespace BrnGame
             lpGameStateOutputBuffer, lpGuiOutputBuffer, lpReplayOutputBuffer,
             lpSoundPreUpdateOutputBuffer);
         CgsDev::PerfMonCpu::StopMonitor(mCpuMonitors.miUT_World);
-        if ((lUpdateSet & 0x20) != 0)
-            mWorldModule.UpdateForBootUpVideo(lUpdateSet, lpUpdateInputBufferStack,
-                lpUpdateOutputBufferStack, lpWorldInput, lpWorldUpdateOutputBuffer);
-        else
+        // ARTIST falls through to Update and branches on bit 0x20 (0x823E8D48 bne -> 0x823E8D6C).
+        if ((lUpdateSet & 0x20) == 0)
             mWorldModule.Update(lUpdateSet, lpUpdateInputBufferStack, lpUpdateOutputBufferStack,
                 lpWorldInput, lpWorldUpdateOutputBuffer, mpReusableLoadingScreenAllocator);
+        else
+            mWorldModule.UpdateForBootUpVideo(lUpdateSet, lpUpdateInputBufferStack,
+                lpUpdateOutputBufferStack, lpWorldInput, lpWorldUpdateOutputBuffer);
         lpWorldUpdateOutputBuffer->LockForRead();
         mbWorldStreamingRequestedStall =
             !lpWorldUpdateOutputBuffer->GetWorldEntityStatusInterface()->GetImmediateStreamed();
@@ -1788,7 +1789,7 @@ namespace BrnGame
 
         // ARTIST 823DD180 reads pad 0 action 3's pressed bit.
         const CgsInput::InputIO::PadOutputInformation* lpPad = lpInputOutputBuffer->GetPadInfo(0);
-        if ((lpPad->maActionInfo[3].muStatus & 2u) != 0)
+        if (lpPad->maActionInfo[3].IsPressed())
             mEffectsModule.RestartEffects();
 
         BridgeEntityToEffects(lpWorldOutputBuffer, lEffectsInput, leUpdateSet);
@@ -3227,9 +3228,9 @@ namespace BrnGame
         const CgsInput::InputIO::PadOutputInformation* lpPadInfo =
             GetPadInfoForPlayer0(lpInputOutputBuffer, &liControllerPort);
         if (lpPadInfo != 0 &&
-            (lpPadInfo->maActionInfo[21].muStatus & 2u) != 0 &&
-            (lpPadInfo->maActionInfo[57].muStatus & 1u) != 0 &&
-            (lpPadInfo->maActionInfo[56].muStatus & 1u) != 0)
+            lpPadInfo->maActionInfo[21].IsPressed() &&
+            lpPadInfo->maActionInfo[57].IsDown() &&
+            lpPadInfo->maActionInfo[56].IsDown())
         {
             if (mbSteppingFrames)
                 mbRequestDoPlayFrame = true;

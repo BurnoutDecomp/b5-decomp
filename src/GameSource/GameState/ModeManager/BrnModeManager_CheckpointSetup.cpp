@@ -74,7 +74,7 @@ void ModeManager::SetUpCheckPointsForGameMode(const StartGameModeParams* lpStart
     }
 
     const BrnTrigger::TriggerData* lpTriggerData = GetTriggerData();
-    CGS_ASSERT(lpTriggerData != 0, "lpTriggerData != NULL");   // BrnModeManager.cpp:4912
+    CGS_ASSERT(lpTriggerData != 0, CgsDev::Assert::MessageAt("lpTriggerData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4912));   // BrnModeManager.cpp:4912
 
     const BrnProgression::RaceEventData* lpRaceEventData = lpStartGameModeParams->GetEventData();
     const s32 liCheckPointCount = lpRaceEventData->GetCheckpointCount();
@@ -317,7 +317,7 @@ void ModeManager::SetupOpponentData(const StartGameModeParams* lpStartGameModePa
             const s32 liCarOpponentIndex = static_cast<s32>(
                 lpStartGridSlot->GetOpponentIndex() % static_cast<u32>(liOpponentCount));
             CGS_ASSERT(liCarOpponentIndex >= 0 && liCarOpponentIndex < liOpponentCount,
-                       "liCarOpponentIndex >= 0 && liCarOpponentIndex < miOpponentCount");
+                       CgsDev::Assert::MessageAt("liCarOpponentIndex >= 0 && liCarOpponentIndex < miOpponentCount", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\progression\\BrnOpponentData.h", 224));
                                                                               // BrnOpponentData.h:224
             const BrnProgression::CarOpponent* lpCarOpponent =
                 lpOpponentSet->GetCarOpponent(liCarOpponentIndex);

@@ -1,6 +1,7 @@
 #include "GameSource/GameState/BrnGameStateSharedIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 // =============================================================================
 // BrnGameState::GameStateModuleIO::SetUpAllEventStartsInterface
@@ -56,14 +57,14 @@ SetUpAllEventStartsInterface::AddEventStart(Vector3 lv3Position, s32 liEventInde
         {
             // Found: the event id must match the one already recorded.
             CGS_ASSERT(liEventID == lrExisting.GetEventID(),
-                       "luEventID == maEventStarts.GetItem( luEventIndex ).GetEventID()");
+                       CgsDev::Assert::MessageAt("luEventID == maEventStarts.GetItem( luEventIndex ).GetEventID()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateSharedIO.h", 1723));
             return &lrExisting;
         }
     }
 
     // Not found: assert room then build a fresh record from the caller's fields and append it.
     CGS_ASSERT(maEventStarts.GetLength() < maEventStarts.GetSize(),
-               "maEventStarts.GetLength() < maEventStarts.GetCapacity()");
+               CgsDev::Assert::MessageAt("maEventStarts.GetLength() < maEventStarts.GetCapacity()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\BrnGameStateSharedIO.h", 1728));
 
     EventStart lEventStart;
     // The X360 stack-builds the record at var_90 in exactly this order: `stvx128 v127` (the

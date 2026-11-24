@@ -31,6 +31,7 @@
 #include "GameShared/GameClasses/Module/CgsBaseEventQueue.h"             // BaseEventQueue<T>::GetLength/GetEvent
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"         // VariableEventQueue<13312,16>::AddEvent
 #include "GameShared/GameClasses/Core/CgsAssert.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGameState
 {
@@ -123,7 +124,7 @@ namespace BrnGameState
 
                 if ( lbIsNewHighScore )
                 {
-                    CGS_ASSERT( mpRoadRulesManager, "mpRoadRulesManager" );
+                    CGS_ASSERT( mpRoadRulesManager, CgsDev::Assert::MessageAt("mpRoadRulesManager", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2055) );
 
                     if ( mpRoadRulesManager->GetCurrentRoadID() == KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liRoadIndex] )
                     {
@@ -133,7 +134,7 @@ namespace BrnGameState
                         lAction.mRoadId = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liRoadIndex];
 
                         CGS_ASSERT( lpOutput, "lpOutput" );
-                        CGS_ASSERT( lpOutput->GetGameActionQueue() != NULL, "lpOutput->GetGameActionQueue()" );
+                        CGS_ASSERT( lpOutput->GetGameActionQueue() != NULL, CgsDev::Assert::MessageAt("lpOutput->GetGameActionQueue()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2068) );
 
                         lpOutput->GetGuiOutputQueue()->AddEvent(
                             reinterpret_cast<const CgsModule::Event*>( &lAction ),

@@ -336,7 +336,7 @@ void GameMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
     if (meCurrentState != -1)
     {
         CGS_ASSERT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT,
-                   "meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT");
+                   CgsDev::Assert::MessageAt("meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnGameMode.cpp", 159));
 
         maGameModeStates[meCurrentState]->Update();
     }
@@ -552,13 +552,13 @@ f32 GameMode::GetOutroTimeout() const
 // ===========================================================================
 void GameMode::SetCurrentState(s32 liState)
 {
-    CGS_ASSERT(liState >= 0 && liState < KI_GMS_COUNT, "leState >=0 && leState < GameStateModuleIO::E_GMS_COUNT");
+    CGS_ASSERT(liState >= 0 && liState < KI_GMS_COUNT, CgsDev::Assert::MessageAt("leState >=0 && leState < GameStateModuleIO::E_GMS_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnGameMode.h", 483));
 
     if (meCurrentState != liState)
     {
         if (meCurrentState != -1)
         {
-            CGS_ASSERT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT, "meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT");
+            CGS_ASSERT(meCurrentState >= 0 && meCurrentState < KI_GMS_COUNT, CgsDev::Assert::MessageAt("meCurrentState >=0 && meCurrentState < GameStateModuleIO::E_GMS_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnGameMode.h", 489));
 
             maGameModeStates[meCurrentState]->OnLeave();
         }
@@ -634,7 +634,7 @@ bool GameMode::HasCountdownDisplayChanged(s32* lpiNewCountdownDisplay)
         return false;
     }
 
-    CGS_ASSERT(lpiNewCountdownDisplay != 0, "lpiNewCountdownDisplay != NULL");
+    CGS_ASSERT(lpiNewCountdownDisplay != 0, CgsDev::Assert::MessageAt("lpiNewCountdownDisplay != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\gamemodes\\BrnGameMode.h", 449));
 
     *lpiNewCountdownDisplay = miCountdownDisplay;
     mbCountdownDisplayChanged = false;

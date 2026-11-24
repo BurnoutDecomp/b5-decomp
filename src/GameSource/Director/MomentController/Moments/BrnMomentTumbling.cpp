@@ -356,7 +356,7 @@ void MomentTumbling::Update(f32 lfTimeStep, void* lrBehaviourController,
         break;
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");   //  (non-gating)
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentTumbling.cpp", 250));   //  (non-gating)
         return;
     }
 

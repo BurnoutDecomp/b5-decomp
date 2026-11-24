@@ -64,6 +64,7 @@
 #include "GameShared/GameClasses/Numeric/CgsRandom.h"                  // CgsNumeric::Random
 #include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h" // CgsResource::BinaryFileResource::GetData
 #include "GameShared/GameClasses/Core/CgsAssert.h"                     // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace
 {
@@ -125,7 +126,7 @@ void StreetManager::SetupParRivals( const TriggerQueryManager* lpTriggerQueryMan
                          KV2_DISTRICT_MAP_WORLD_SIZE );
 
     CGS_ASSERT( mpStreetData->GetRoadCount() <= KI_MAX_CHALLENGES,
-                "mpStreetData->GetRoadCount() <= KI_MAX_CHALLENGES" );
+                CgsDev::Assert::MessageAt("mpStreetData->GetRoadCount() <= KI_MAX_CHALLENGES", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3978) );
 
     for ( BrnStreetData::RoadIndex liRoadIndex = 0;
           liRoadIndex < mpStreetData->GetRoadCount();

@@ -149,7 +149,7 @@ bool BehaviourSpirallingDeathcam::Prepare(const BehaviourSharedPrepareReleaseInf
 // ----------------------------------------------------------------------------
 bool BehaviourSpirallingDeathcam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");                              // cpp:129
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourSpirallingDeathCam.cpp", 129));                              // cpp:129
     const Parameters& lrParams = *mpParameters;
 
     // 1. the collision policy hangs off the same car (16-byte copy +0x2D4 -> +0x240).
@@ -257,7 +257,7 @@ bool BehaviourSpirallingDeathcam::Update(Camera& lrCamera, const BehaviourShared
     lrCamera.GetEffects().mu8BlendCurve = 1;                      // stb 1, camera +0xB5
 
     // 11. the screen hook.
-    CGS_ASSERT(lrInfo.mpEffectInterface != 0, "lrSharedInfo.mpEffectInterface");    // cpp:210
+    CGS_ASSERT(lrInfo.mpEffectInterface != 0, CgsDev::Assert::MessageAt("lrSharedInfo.mpEffectInterface", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourSpirallingDeathCam.cpp", 210));    // cpp:210
     EnsureEffectIsPlaying(lrCamera, *lrInfo.mpEffectInterface, "Player_Shutdown", 1.0f);
 
     // 12. the clock.

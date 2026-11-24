@@ -402,7 +402,7 @@ namespace BrnGameState
         }
 
         CGS_ASSERT(lpActive->maCarsInTheRace.GetLength() == muCarsInCurrentMode,
-                   "lpActiveRaceCarInterface->maCarsInTheRace.GetLength() == muCarsInCurrentMode"); // :693
+                   CgsDev::Assert::MessageAt("lpActiveRaceCarInterface->maCarsInTheRace.GetLength() == muCarsInCurrentMode", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 693)); // :693
 
         // --- SORT: best (closest-to-finish) car first ---
         // X360 qsort(&maRaceCarPositioningData, 8, sizeof(RaceCarPositioningData),
@@ -431,9 +431,9 @@ namespace BrnGameState
                 continue;
 
             ++liPosition;   // 1-based race position
-            CGS_ASSERT(leIdx >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= 0");           // :732
+            CGS_ASSERT(leIdx >= E_ACTIVE_RACE_CAR_INDEX_0, CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 732));           // :732
             CGS_ASSERT(leIdx <  E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       "leActiveRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");                // :733
+                       CgsDev::Assert::MessageAt("leActiveRaceCarIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 733));                // :733
 
             GameStateModuleIO::CarScoreData* lpScore = lpCarData->GetScoreData();
 

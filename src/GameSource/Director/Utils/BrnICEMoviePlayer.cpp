@@ -657,8 +657,8 @@ void ICEMoviePlayer::InterpolateFrom(Camera::BehaviourManager& lrBehaviourManage
                                      const Camera::BehaviourInterpolate::Parameters* lpParams,
                                      bool lbUpdatesDuringPause)
 {
-    CGS_ASSERT(!mbIsPlaying, "Asking to interpolate while already playing");
-    CGS_ASSERT(!mbInterpolateIn, "Already interpolating in");
+    CGS_ASSERT(!mbIsPlaying, CgsDev::Assert::MessageAt("Asking to interpolate while already playing", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.h", 448));
+    CGS_ASSERT(!mbInterpolateIn, CgsDev::Assert::MessageAt("Already interpolating in", "..\\..\\..\\GameSource\\Director/Utils/BrnICEMoviePlayer.h", 449));
 
     mpInterpolateInParams     = lpParams;
     mfInterpolateInDuration   = lfDuration;
@@ -681,21 +681,21 @@ void ICEMoviePlayer::InterpolateFrom(Camera::BehaviourManager& lrBehaviourManage
     CGS_ASSERT(mInInterpolator.IsAllocated(), "IsAllocated()");
     {
         Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.GetBehaviour();
-        CGS_ASSERT(!lpInterpolate->HasFinished(), "Can't setup duration after Setup() has been called");
+        CGS_ASSERT(!lpInterpolate->HasFinished(), CgsDev::Assert::MessageAt("Can't setup duration after Setup() has been called", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 304));
         lpInterpolate->SetupDuration(mfInterpolateInDuration);
     }
 
     CGS_ASSERT(mInInterpolator.IsAllocated(), "IsAllocated()");
     {
         Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.GetBehaviour();
-        CGS_ASSERT(!lpInterpolate->HasFinished(), "Can't setup camera A after Setup() has been called");
+        CGS_ASSERT(!lpInterpolate->HasFinished(), CgsDev::Assert::MessageAt("Can't setup camera A after Setup() has been called", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 313));
         lpInterpolate->SetupCameraAFromHelper(mFromBehaviourHelperIndex, lrBehaviourManager);
     }
 
     CGS_ASSERT(mInInterpolator.IsAllocated(), "IsAllocated()");
     {
         Camera::BehaviourInterpolate* lpInterpolate = mInInterpolator.GetBehaviour();
-        CGS_ASSERT(!lpInterpolate->HasFinished(), "Can't setup camera B after Setup() has been called");
+        CGS_ASSERT(!lpInterpolate->HasFinished(), CgsDev::Assert::MessageAt("Can't setup camera B after Setup() has been called", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourInterpolate.h", 322));
         // Camera B is the ICE wrapper's live take camera. (SETTLED 2026-08-01: the old FLAG
         // here -- "the source passes a pointer to the wrapper" -- was reading the console's
         // POINTER-returning ICEWrapper::GetCamera, DWARF ICEWrapper.hpp:198; the accessor is

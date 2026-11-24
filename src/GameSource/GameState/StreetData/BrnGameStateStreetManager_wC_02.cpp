@@ -60,7 +60,7 @@ void StreetManager::ProcessScoreRequestEvent(
         return;
     }
 
-    CGS_ASSERT( lpOutput, "lpOutput" );
+    CGS_ASSERT( lpOutput, CgsDev::Assert::MessageAt("lpOutput", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3128) );
     CGS_ASSERT( lpScoreRequestEvent, CgsDev::Assert::MessageAt("lpRequestEvent", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3129) );
 
     GameStateModuleIO::RoadRulesRoadScoreAction lResponse;
@@ -171,7 +171,7 @@ void StreetManager::ProcessScoreRequestEvent(
         lResponse.mbAIRulesRoadOnline = true;
     }
 
-    CGS_ASSERT( lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()" );
+    CGS_ASSERT( lpOutput->GetGameActionQueue(), CgsDev::Assert::MessageAt("lpOutput->GetGameActionQueue()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3272) );
 
     CgsModule::VariableEventQueue<13312, 16>* lpQueue = lpOutput->GetGuiOutputQueue();
     lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lResponse ),

@@ -511,7 +511,7 @@ namespace BrnGameState
     PaybackManager::HandleWaitForPaybackAggressorToCrash(
         const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface)
     {
-        CGS_ASSERT(lpVehicleOutputInterface, "lpVehicleOutputInterface");
+        CGS_ASSERT(lpVehicleOutputInterface, CgsDev::Assert::MessageAt("lpVehicleOutputInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/PaybackManager/BrnPaybackManager.cpp", 355));
 
         BrnPhysics::Vehicle::CrashingRaceCarInterface lCrashingRaceCars;
         lCrashingRaceCars.SetFromVehicleOutputInterface(lpVehicleOutputInterface);
@@ -552,7 +552,7 @@ namespace BrnGameState
     PaybackManager::HandleWaitingToAwardPayback(
         const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface)
     {
-        CGS_ASSERT(lpVehicleOutputInterface, "lpVehicleOutputInterface");
+        CGS_ASSERT(lpVehicleOutputInterface, CgsDev::Assert::MessageAt("lpVehicleOutputInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/PaybackManager/BrnPaybackManager.cpp", 378));
 
         BrnPhysics::Vehicle::CrashingRaceCarInterface lCrashingRaceCars;
         lCrashingRaceCars.SetFromVehicleOutputInterface(lpVehicleOutputInterface);
@@ -613,7 +613,7 @@ namespace BrnGameState
                                           const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface,
                                           GameStateModuleIO::EGameModeType /*leGameModeType*/)
     {
-        CGS_ASSERT(lpVehicleOutputInterface, "lpVehicleOutputInterface");
+        CGS_ASSERT(lpVehicleOutputInterface, CgsDev::Assert::MessageAt("lpVehicleOutputInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/PaybackManager/BrnPaybackManager.cpp", 404));
 
         BrnPhysics::Vehicle::CrashingRaceCarInterface lCrashingRaceCars;
         lCrashingRaceCars.SetFromVehicleOutputInterface(lpVehicleOutputInterface);
@@ -636,7 +636,7 @@ namespace BrnGameState
 
         if (lCrashingRaceCars.IsCrashing(static_cast<s32>(mpGameStateModule->GetPlayerActiveRaceCarIndex())))
         {
-            CGS_ASSERT(lpOutput, "lpOutput");
+            CGS_ASSERT(lpOutput, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/PaybackManager/BrnPaybackManager.cpp", 437));
 
             PaybackLostAction lPaybackLost;
             lpOutput->GetGuiOutputQueue()->AddEvent(
@@ -672,7 +672,7 @@ namespace BrnGameState
         mpGameStateModule->GetOutputGuiEventQueue()->AddEvent(
             &lHide, KI_GUI_EVENT_PAYBACK_STATE_CHANGE, sizeof(s32));
 
-        CGS_ASSERT(lpOutput, "lpOutput");
+        CGS_ASSERT(lpOutput, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/PaybackManager/BrnPaybackManager.cpp", 464));
 
         // PaybackVictimLeftGameAction (X360 game-action tag 0xD4, 1-byte payload).
         HavePaybackEvent lVictimLeft;
@@ -755,7 +755,7 @@ namespace BrnGameState
     PaybackManager::HandleReceivingPayback(GameStateModuleIO::OutputBuffer* lpOutput,
                                            const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface)
     {
-        CGS_ASSERT(lpVehicleOutputInterface, "lpVehicleOutputInterface");
+        CGS_ASSERT(lpVehicleOutputInterface, CgsDev::Assert::MessageAt("lpVehicleOutputInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/PaybackManager/BrnPaybackManager.cpp", 519));
 
         BrnPhysics::Vehicle::CrashingRaceCarInterface lCrashingRaceCars;
         lCrashingRaceCars.SetFromVehicleOutputInterface(lpVehicleOutputInterface);
@@ -770,8 +770,8 @@ namespace BrnGameState
         DirtyTrickTriggered(lpOutput, mePaybackAggressorRaceCarIndex,
                             mpGameStateModule->GetPlayerActiveRaceCarIndex(), meActiveDirtyTrickType);
 
-        CGS_ASSERT(lpOutput, "lpOutput");
-        CGS_ASSERT(lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()");
+        CGS_ASSERT(lpOutput, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/PaybackManager/BrnPaybackManager.cpp", 539));
+        CGS_ASSERT(lpOutput->GetGameActionQueue(), CgsDev::Assert::MessageAt("lpOutput->GetGameActionQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/PaybackManager/BrnPaybackManager.cpp", 540));
 
         // PaybackActivatedAction (DWARF record, BrnGameActions.h): {type, aggressor, victim} in
         // THIS order (`stw +0x254, var_50 ; stw +0x240, var_4C ; stw player, var_48`), 12 bytes.
@@ -842,8 +842,8 @@ namespace BrnGameState
                                      mpGameStateModule->GetPlayerActiveRaceCarIndex(),
                                      meActiveDirtyTrickType, KE_DIRTY_TRICK_STATUS_CRASHED);
 
-        CGS_ASSERT(lpOutput, "lpOutput");
-        CGS_ASSERT(lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()");
+        CGS_ASSERT(lpOutput, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/PaybackManager/BrnPaybackManager.cpp", 609));
+        CGS_ASSERT(lpOutput->GetGameActionQueue(), CgsDev::Assert::MessageAt("lpOutput->GetGameActionQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/PaybackManager/BrnPaybackManager.cpp", 610));
 
         PaybackOverAction lPaybackOver;
         lpOutput->GetGuiOutputQueue()->AddEvent(
@@ -874,8 +874,8 @@ namespace BrnGameState
                                      mpGameStateModule->GetPlayerActiveRaceCarIndex(),
                                      meActiveDirtyTrickType, KE_DIRTY_TRICK_STATUS_SURVIVED);
 
-        CGS_ASSERT(lpOutput, "lpOutput");
-        CGS_ASSERT(lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()");
+        CGS_ASSERT(lpOutput, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/PaybackManager/BrnPaybackManager.cpp", 650));
+        CGS_ASSERT(lpOutput->GetGameActionQueue(), CgsDev::Assert::MessageAt("lpOutput->GetGameActionQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/PaybackManager/BrnPaybackManager.cpp", 651));
 
         PaybackOverAction lPaybackOver;
         lpOutput->GetGuiOutputQueue()->AddEvent(

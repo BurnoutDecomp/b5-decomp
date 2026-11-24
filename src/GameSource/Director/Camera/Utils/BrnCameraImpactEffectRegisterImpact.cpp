@@ -28,6 +28,7 @@
 // ============================================================================
 
 #include "GameSource/Director/Camera/Utils/BrnCameraImpactEffect.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Camera.h"   // Camera::mTransform (Update shakes it in place)
 
 namespace BrnDirector
@@ -42,7 +43,7 @@ namespace Utils
 // `fsel(mfImpactFactor - lfImpulseMagnitude, mfImpactFactor, lfImpulseMagnitude)`).
 void CameraImpactEffect::RegisterImpact(f32 lfImpulseMagnitude)
 {
-    CGS_ASSERT(lfImpulseMagnitude >= 0.0f, "lfImpulseMagnitude >= 0.0f");   // :221
+    CGS_ASSERT(lfImpulseMagnitude >= 0.0f, CgsDev::Assert::MessageAt("lfImpulseMagnitude >= 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnCameraShake.h", 221));   // :221
 
     if (mfImpactFactor - lfImpulseMagnitude < 0.0f)
     {

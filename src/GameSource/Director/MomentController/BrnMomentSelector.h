@@ -139,11 +139,11 @@ public:
     // (its own "mbIsAllocated" assert, then the moment pointer read from the handle's +0x04).
     // FLAG: the declaration spells the return `Moment&`; kept as `Moment*` to match this tree's
     // established MomentController::MomentHandle::GetMoment() pointer convention. Same read.
-    Moment* GetSelectedMoment() const
+    Moment* GetSelectedMoment()   // DWARF :182 non-const
     {
         CGS_ASSERT(HasSelectedMoment(), CgsDev::Assert::MessageAt(
             "HasSelectedMoment()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentSelector.h", 182 /* ARTIST 0x82219868 */));
-        return mMomentHandleArray[static_cast<u32>(miSelectedMoment)].GetMoment();
+        return &mMomentHandleArray[static_cast<u32>(miSelectedMoment)].GetMoment();
     }
 
     // Assert a moment is selected, then drop the flag

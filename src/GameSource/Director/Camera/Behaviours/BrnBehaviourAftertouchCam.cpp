@@ -367,7 +367,7 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
         mDesiredWorldSpaceNormalizedVectorFromCar = -Scale(lDesiredVector,
             RefinedReciprocalSqrt(Utils::ConsoleVpu::Dot3(lDesiredVector, lDesiredVector)));
         CGS_ASSERT(!IsZeroVmx(mDesiredWorldSpaceNormalizedVectorFromCar, KF_EPSILON),
-                   "!IsZero(mDesiredWorldSpaceNormalizedVectorFromCar)");                                // :348
+                   CgsDev::Assert::MessageAt("!IsZero(mDesiredWorldSpaceNormalizedVectorFromCar)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp", 348));                                // :348
     }
 
     if (lfPlayerSpeed < mpParameters->mfHeightDistanceVelocityRange)
@@ -425,7 +425,7 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
             {
                 const f32 lfAgreement = (lfControlAgreementWithCamera > 1.0f) ? 1.0f : lfControlAgreementWithCamera;
 
-                CGS_ASSERT(!IsZeroVmx(lNormalisedPlayerVel, KF_EPSILON), "!IsZero(lNormalisedPlayerVel)");     // :404
+                CGS_ASSERT(!IsZeroVmx(lNormalisedPlayerVel, KF_EPSILON), CgsDev::Assert::MessageAt("!IsZero(lNormalisedPlayerVel)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp", 404));     // :404
                 mWorldSpaceNormalizedVectorFromCar = Utils::SafeSLerp(
                     mWorldSpaceNormalizedVectorFromCar, -lNormalisedPlayerVel, VecFloat(lfT * lfAgreement));
                 mWorldSpaceNormalizedVectorFromCar = Utils::SafeSLerp(
@@ -451,9 +451,9 @@ bool BehaviourAftertouchCam::Update(Camera& lrCamera, const BehaviourSharedInfo&
     CGS_ASSERT(!IsZeroVmx(mWorldSpaceNormalizedVectorFromCar, KF_EPSILON),
                "!IsZero(mWorldSpaceNormalizedVectorFromCar)");                                           // :432
     // `fcmpu d, eps ; bgt` then `fcmpu d, -eps ; bge`: a NaN distance fires it, as on the console.
-    CGS_ASSERT(mfDistance > KF_EPSILON || mfDistance < -KF_EPSILON, "!rw::math::fpu::IsZero(mfDistance)"); // :433
+    CGS_ASSERT(mfDistance > KF_EPSILON || mfDistance < -KF_EPSILON, CgsDev::Assert::MessageAt("!rw::math::fpu::IsZero(mfDistance)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp", 433)); // :433
     CGS_ASSERT(!IsZeroVmx(Scale(mWorldSpaceNormalizedVectorFromCar, mfDistance), KF_EPSILON),
-               "!IsZero(mWorldSpaceNormalizedVectorFromCar * mfDistance)");                             // :434
+               CgsDev::Assert::MessageAt("!IsZero(mWorldSpaceNormalizedVectorFromCar * mfDistance)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourAftertouchCam.cpp", 434));                             // :434
 
     Matrix44Affine lTransform = Utils::CreateLookAt(
         Utils::ConsoleVpu::MultiplyAdd(mWorldSpaceNormalizedVectorFromCar, mfDistance, lCarPosition), lCarPosition);

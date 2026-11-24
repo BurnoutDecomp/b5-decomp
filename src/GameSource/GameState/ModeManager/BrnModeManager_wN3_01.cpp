@@ -164,7 +164,7 @@ void ModeManager::ProcessNewRoadScore(GameStateModuleIO::OutputBuffer* lpOutputB
     if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_FREE_BURN_LOBBY ||
         meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)
     {
-        CGS_ASSERT(mpGameStateModule != NULL, "mpGameStateModule");
+        CGS_ASSERT(mpGameStateModule != NULL, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5324));
 
         if (meCurrentGameModeType == GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME ||
             meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME)

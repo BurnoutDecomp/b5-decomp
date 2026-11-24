@@ -3,6 +3,7 @@
 #include "types.hpp"
 #include "GameShared/GameClasses/Module/CgsIOBufferStack.h"   // CgsModule::IOBufferStack::CreateIOBuffer<T>
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // ARTIST assert locations (h:52 / h:57)
 
 // ============================================================================
 // GameShared/GameClasses/Module/CgsModuleIOHelper.h
@@ -35,8 +36,11 @@ namespace CgsModule
         IOHelper(IOBufferStack* lpStack, const char* lpcName)
         {
             mpStack = lpStack;
+            // ARTIST bakes CgsModuleIOHelper.h:52 into every inlined copy (81 sites, e.g.
+            // BrnGameModule::DoUpdate_Effects 0x823DD118 `li r5, 0x34`).
             CGS_ASSERT(mpStack->CreateIOBuffer(&mpBuffer, lpcName),
-                "mpStack->CreateIOBuffer( &mpBuffer, lpcName )");
+                CgsDev::Assert::MessageAt("mpStack->CreateIOBuffer( &mpBuffer, lpcName )",
+                    "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleIOHelper.h", 52));
         }
 
         // CgsModuleIOHelper.h:55. Pops the buffer back off the stack. The X360 dtor
@@ -44,8 +48,10 @@ namespace CgsModule
         // asserts the DestroyIOBuffer result (CgsModuleIOHelper.h:57).
         ~IOHelper()
         {
+            // CgsModuleIOHelper.h:57 (60 sites, e.g. DoUpdate_Effects 0x823DD284 `li r5, 0x39`).
             CGS_ASSERT(mpStack->DestroyIOBuffer(&mpBuffer),
-                "mpStack->DestroyIOBuffer( &mpBuffer )");
+                CgsDev::Assert::MessageAt("mpStack->DestroyIOBuffer( &mpBuffer )",
+                    "..\\..\\..\\GameShared\\GameClasses\\Module/CgsModuleIOHelper.h", 57));
         }
 
         // CgsModuleIOHelper.h:60 / :65 — access the borrowed buffer.

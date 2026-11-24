@@ -759,7 +759,7 @@ void FrustrumCollisionResolver::ResolveVehicleCollisions(const AllVehicleData* l
     Vector3 lCurrentCameraPos = lCameraPos;
 
     const CgsContainers::Array<BrnTraffic::BrnTrafficIO::TrafficDirectorEntity, 32u>* lpAllTraffic = lpAllVehicles->GetTraffic();
-    CGS_ASSERT(lpAllTraffic != 0, "mpTrafficVehicleArray != NULL");
+    CGS_ASSERT(lpAllTraffic != 0, CgsDev::Assert::MessageAt("mpTrafficVehicleArray != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorAllVehicleData.h", 96));
     const s32 liNumTrafficVehicles = static_cast<s32>(lpAllTraffic->GetLength());
     for (s32 liTrafficIndex = 0; liTrafficIndex < liNumTrafficVehicles; ++liTrafficIndex)
     {

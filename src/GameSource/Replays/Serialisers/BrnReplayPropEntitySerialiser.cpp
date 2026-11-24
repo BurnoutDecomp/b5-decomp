@@ -178,9 +178,9 @@ namespace BrnReplays
         CGS_ASSERT(meMode != E_MODE_PLAYING_PREPARING &&
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
-                   "!IsPlaying()");
+                   CgsDev::Assert::MessageAt("!IsPlaying()", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 619));
 
-        CGS_ASSERT(mbPreviousFrameInitialized, "mbPreviousFrameInitialized");
+        CGS_ASSERT(mbPreviousFrameInitialized, CgsDev::Assert::MessageAt("mbPreviousFrameInitialized", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 620));
 
         PropSerialiserFrame* lpFrame = &GetStaticLayout()->mLiveFrame;
         PropLoadedZoneRecord* lpRecord = lpFrame->AllocateLoadedZoneRecord();
@@ -197,7 +197,7 @@ namespace BrnReplays
         CGS_ASSERT(meMode != E_MODE_PLAYING_PREPARING &&
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
-                   "!IsPlaying()");
+                   CgsDev::Assert::MessageAt("!IsPlaying()", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 632));
 
         if (!HasStaticLayout()) { return; }
         GetStaticLayout()->mLiveFrame.RemoveLoadedZone(liZoneId);
@@ -208,7 +208,7 @@ namespace BrnReplays
         CGS_ASSERT(meMode != E_MODE_PLAYING_PREPARING &&
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
-                   "!IsPlaying()");
+                   CgsDev::Assert::MessageAt("!IsPlaying()", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 733));
 
         if (!HasStaticLayout()) { return; }
         // asm: `stb 0,0x4008(staticBase)` -- the live frame's loaded-zone COUNT (frame +0x5E8).
@@ -221,7 +221,7 @@ namespace BrnReplays
         CGS_ASSERT(meMode != E_MODE_PLAYING_PREPARING &&
                    meMode != E_MODE_PLAYING &&
                    meMode != E_MODE_PLAYING_STALLED,
-                   "!IsPlaying()");
+                   CgsDev::Assert::MessageAt("!IsPlaying()", "..\\..\\..\\GameSource\\Replays/Serialisers/BrnReplayPropEntitySerialiser.h", 689));
 
         if (!HasStaticLayout()) { return; }
         GetStaticLayout()->mLiveFrame.SetPropAddedToScene(liArg2, luArg3, liArg4);

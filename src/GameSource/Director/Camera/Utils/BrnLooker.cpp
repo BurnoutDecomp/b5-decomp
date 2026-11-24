@@ -25,6 +25,7 @@
 #include "GameSource/Director/Camera/Utils/BrnLooker.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"             // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/vector3_operation.h"                     // Dot/Normalize/NormalizeFast/SqrtFast/operator-
 #include "rw/math/vpu/vector4_operation.h"                     // VecFloat lane ops
 #include "rw/math/vpu/matrix44affine_operation.h"              // SLerp / IsValid
@@ -227,7 +228,7 @@ void Looker::Zoom(VecFloat lvTimeStep,
         // The asm asserts ONLY for an out-of-range zoom type (meZoomType >= 3, the
         // `cmplwi r11,3 / blt` at 0x82222B0C); type 0 (perceived distance) is silently
         // valid and falls into the same path the >=3 case fails through to.
-        CGS_ASSERT(lrParams.meZoomType < 3, "Unhandled case");
+        CGS_ASSERT(lrParams.meZoomType < 3, CgsDev::Assert::MessageAt("Unhandled case", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnLooker.cpp", 210));
         // Perceived-distance: the ideal FOV is derived from the ratio of the actual distance
         // to the desired perceived distance (LABEL_5 in the asm).
         lfIdealFOV = GetFOVDegsFromZoom(lfDistanceToTarget / lrParams.mfDesiredPerceivedDistance);
@@ -277,7 +278,7 @@ void Looker::Zoom(VecFloat lvTimeStep,
 
     // The per-frame FOV ideal-velocity smoothing requires a non-zero timestep (asm 0x82222D38,
     // BrnLooker.cpp:273).
-    CGS_ASSERT(!rw::math::fpu::IsZero(lfTimeStep), "!rw::math::fpu::IsZero(lTimeStep.GetFloat())");
+    CGS_ASSERT(!rw::math::fpu::IsZero(lfTimeStep), CgsDev::Assert::MessageAt("!rw::math::fpu::IsZero(lTimeStep.GetFloat())", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnLooker.cpp", 273));
 
     // Smooth the ideal-FOV velocity (the d(idealFOV)/dt lerped by mfIdealFOVVelocityLerpAmount).
     const f32  lfIdealVelocity      = (lfIdealFOV - mfLastIdealFOV) / lfTimeStep;
@@ -395,7 +396,7 @@ void Looker::Zoom(VecFloat lvTimeStep,
 
     // The FOV writeback (asm 0x82222FA4 `stfs f31,0x58`). SetFOV carries the X360-inlined
     // `lfFOV > 0.0f` tripwire (Camera.h:424).
-    CGS_ASSERT(lfFOV > 0.0f, "lfFOV > 0.0f");
+    CGS_ASSERT(lfFOV > 0.0f, CgsDev::Assert::MessageAt("lfFOV > 0.0f", "..\\..\\..\\GameSource\\Director/Camera/Camera.h", 424));
     lrCamera.SetFOV(lfFOV);
 
     (void)lTargetVel;
@@ -414,7 +415,7 @@ void Looker::Update(VecFloat lvTimeStep,
                     Vector3 lTargetVel,
                     AABBox lAABB)
 {
-    CGS_ASSERT(mbConstructed, "mbConstructed");
+    CGS_ASSERT(mbConstructed, CgsDev::Assert::MessageAt("mbConstructed", "..\\..\\..\\GameSource\\Director/Camera/Utils/BrnLooker.cpp", 112));
 
     Track(lvTimeStep, lRandom, lrParams, lrCamera, lTarget, lTargetVel);
 

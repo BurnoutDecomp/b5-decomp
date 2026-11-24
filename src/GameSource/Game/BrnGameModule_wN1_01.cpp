@@ -17,6 +17,7 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"                          // CgsModule::Event, VariableEventQueue<14000,16>::AddEvent
 #include "GameShared/GameClasses/SceneManager/CgsEntityId.h"                              // CgsSceneManager::EntityId (crasher owner / index)
 #include "GameSource/Network/BrnNetworkModuleIO.h"                                        // PostSimulationInputBuffer
@@ -125,7 +126,7 @@ namespace BrnGame
                 default:
                     // The console leaves the telemetry record unconstructed on this arm.
                     leCrasherIndex = E_ACTIVE_RACE_CAR_INDEX_INVALID;
-                    CGS_ASSERT(false, "Unknown crash type");
+                    CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unknown crash type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToX.cpp", 437));
                     break;
             }
 

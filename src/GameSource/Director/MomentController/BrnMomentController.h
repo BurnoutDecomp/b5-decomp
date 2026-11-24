@@ -18,6 +18,8 @@
 // (count word @+0xA0 == 10*0x10; per-element copy of four 4-byte words).
 
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT (GetMoment)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"          // ARTIST assert locations
 #include "GameSource/Director/Utils/BrnAbstractPool.h"               // AbstractPool<>, AbstractPoolVoidHandle
 #include "GameSource/Director/MomentController/BrnMoment.h"           // Moment, Moment::EType
 #include "GameSource/Director/MomentController/BrnMomentParameterBank.h" // MomentParameterBank
@@ -72,10 +74,10 @@ namespace BrnDirector
             // Prepare() to fill.
             void Construct() { mbIsAllocated = false; }
 
-            // console (GetMoment). Asserts mbIsAllocated
-            // then returns the held moment -- the pool handle's object pointer at this+0x04
-            // (== mMomentPoolHandle.mpObject). Bodied in BrnMomentController.cpp.
-            Moment* GetMoment() const;
+            // DWARF h:105 / h:108, header inline (bodies below the class): assert mbIsAllocated,
+            // then the held moment -- the pool handle's object pointer at this+0x04.
+            Moment&       GetMoment();
+            const Moment& GetMoment() const;
 
             // @0x821F7298 (DWARF BrnMomentController.cpp:235). Take ownership of a freshly placed
             // pool slot -- stash the parent / the allocated flag / the handle -- then bring the
@@ -139,5 +141,20 @@ namespace BrnDirector
             CGS_STATIC_ASSERT((sizeof(MomentController) == 0x5840), "ARTIST moment controller extent");
         }
     };
+
+    // ARTIST inlines both overloads into most callers, asserting at h:141 / h:150 (e.g.
+    // MomentSelector::SnoopNumValidMoments); MomentSelector::Update calls the non-const copy
+    // (0x821F5740) and ActualDebugRender the const one (0x821F5798) out of line.
+    inline Moment& MomentController::MomentHandle::GetMoment()
+    {
+        CGS_ASSERT(mbIsAllocated, CgsDev::Assert::MessageAt("mbIsAllocated", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.h", 141));
+        return *static_cast<Moment*>(mMomentPoolHandle.Get());
+    }
+
+    inline const Moment& MomentController::MomentHandle::GetMoment() const
+    {
+        CGS_ASSERT(mbIsAllocated, CgsDev::Assert::MessageAt("mbIsAllocated", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.h", 150));
+        return *static_cast<const Moment*>(mMomentPoolHandle.Get());
+    }
 
 } // namespace BrnDirector

@@ -210,7 +210,7 @@ s32 GameModeParams::GetStartLocationCount() const
 Vector3 GameModeParams::GetStartPosition(s32 liStartLocationIndex) const
 {
     CGS_ASSERT(static_cast<u32>(liStartLocationIndex) < KU_MAX_ACTIVE_RACE_CARS,
-               "liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+               CgsDev::Assert::MessageAt("liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h", 1177));
     return maStartLocations.Ge(static_cast<u32>(liStartLocationIndex)).mPosition;
 }
 
@@ -220,7 +220,7 @@ Vector3 GameModeParams::GetStartPosition(s32 liStartLocationIndex) const
 Vector3 GameModeParams::GetStartDirection(s32 liStartLocationIndex) const
 {
     CGS_ASSERT(static_cast<u32>(liStartLocationIndex) < KU_MAX_ACTIVE_RACE_CARS,
-               "liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS");
+               CgsDev::Assert::MessageAt("liOpponentIndex >= 0 && liOpponentIndex < BrnWorld::KI_MAX_ACTIVE_RACE_CARS", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h", 1185));
     return maStartLocations.Ge(static_cast<u32>(liStartLocationIndex)).mDirection;
 }
 
@@ -287,7 +287,7 @@ void StartGameModeParams::Construct(GameStateModuleIO::EGameModeType leGameModeT
                                     Vector3                          lPlayerPosition,
                                     EGameModeStartMechanism          leStartMechanism)
 {
-    CGS_ASSERT(static_cast<u32>(leStartMechanism) < E_GAMEMODESTARTMECHANISM_COUNT, "(uint32_t)leStartMechanism < E_GAMEMODESTARTMECHANISM_COUNT");
+    CGS_ASSERT(static_cast<u32>(leStartMechanism) < E_GAMEMODESTARTMECHANISM_COUNT, CgsDev::Assert::MessageAt("(uint32_t)leStartMechanism < E_GAMEMODESTARTMECHANISM_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h", 700));
 
     meGameModeType   = leGameModeType;        // [180] +720
     meStartMechanism = leStartMechanism;      // [196] +784
@@ -338,7 +338,7 @@ LightTriggerId StartGameModeParams::GetTrafficLightTriggerId() const
 {
     const bool lbIsValid = !(((mTrafficLightTriggerId & 0xFFFF00u) == 0xFFFF00u) ||
                              (mTrafficLightTriggerId == 255u));
-    CGS_ASSERT(lbIsValid, "mTrafficLightTriggerId.IsValid()");
+    CGS_ASSERT(lbIsValid, CgsDev::Assert::MessageAt("mTrafficLightTriggerId.IsValid()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h", 854));
     return mTrafficLightTriggerId;
 }
 
@@ -350,7 +350,7 @@ void StartGameModeParams::SetTrafficLightTriggerId(LightTriggerId lTriggerId)
 {
     const bool lbIsValid = !(((lTriggerId & 0xFFFF00u) == 0xFFFF00u) ||
                              (lTriggerId == 255u));
-    CGS_ASSERT(lbIsValid, "lTriggerId.IsValid()");
+    CGS_ASSERT(lbIsValid, CgsDev::Assert::MessageAt("lTriggerId.IsValid()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\ModeManager/GameModes/BrnGameModeParams.h", 847));
     mTrafficLightTriggerId = lTriggerId;
 }
 

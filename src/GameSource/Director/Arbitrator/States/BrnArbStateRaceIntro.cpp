@@ -150,7 +150,7 @@ namespace BrnDirector
                 }
 
                 CGS_ASSERT(mpRaceStartShotGroup->Num_ShotList() > 0,
-                           "mpRaceStartShotGroup->Num_ShotList()>0");
+                           CgsDev::Assert::MessageAt("mpRaceStartShotGroup->Num_ShotList()>0", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateRaceIntro.cpp", 84));
 
                 // ---- allocate + configure the ICE-anim behaviour --------------------------
                 lrSharedInfo.mpBehaviourManager->NewBehaviour<Camera::BehaviourIceAnim>(

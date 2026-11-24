@@ -61,7 +61,7 @@ namespace BrnReplays
     // =====================================================================================
     s32 GPUDiskWriteStream::AllocateGlobalBlock()
     {
-        CGS_ASSERT(miGlobalBlocksFree > 0, "miGlobalBlocksFree > 0");
+        CGS_ASSERT(miGlobalBlocksFree > 0, CgsDev::Assert::MessageAt("miGlobalBlocksFree > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\replays\\stream\\BrnReplayGPUDiskWriteStream.h", 252));
         --miGlobalBlocksFree;
         ++miGlobalBlocksUsed;
         return maGlobalBlockFreeList[miGlobalBlocksFree];
@@ -72,7 +72,7 @@ namespace BrnReplays
     // =====================================================================================
     void GPUDiskWriteStream::FreeGlobalBlock(s32 liGlobalBlock)
     {
-        CGS_ASSERT(miGlobalBlocksUsed > 0, "miGlobalBlocksUsed > 0");
+        CGS_ASSERT(miGlobalBlocksUsed > 0, CgsDev::Assert::MessageAt("miGlobalBlocksUsed > 0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\replays\\stream\\BrnReplayGPUDiskWriteStream.h", 270));
         maGlobalBlockFreeList[miGlobalBlocksFree] = liGlobalBlock;
         ++miGlobalBlocksFree;
         --miGlobalBlocksUsed;

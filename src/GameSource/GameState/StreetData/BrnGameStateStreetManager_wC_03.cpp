@@ -35,6 +35,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"   // VariableEventQueue<13312,16>::AddEvent / CgsModule::Event
 #include "GameShared/GameClasses/Core/CgsID.h"                     // CgsIDCompress
 #include "GameShared/GameClasses/Core/CgsAssert.h"                 // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 #include <cstring>   // memcpy
 
@@ -71,8 +72,8 @@ namespace BrnGameState
     // -----------------------------------------------------------------------
     void StreetManager::OnProfileLoaded( GameStateModuleIO::OutputBuffer* lpOutput )
     {
-        CGS_ASSERT( mpProgressionManager, "mpProgressionManager" );
-        CGS_ASSERT( mpProgressionManager->GetProfile(), "mpProgressionManager->GetProfile()" );
+        CGS_ASSERT( mpProgressionManager, CgsDev::Assert::MessageAt("mpProgressionManager", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2938) );
+        CGS_ASSERT( mpProgressionManager->GetProfile(), CgsDev::Assert::MessageAt("mpProgressionManager->GetProfile()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2939) );
 
         BrnProgression::Profile* lpProfile = mpProgressionManager->GetProfile();
 
@@ -98,8 +99,8 @@ namespace BrnGameState
             GameStateModuleIO::OutputBuffer* lpOutput,
             const GameStateModuleIO::OnlineRoadRulesConnectInfoEvent* lpConnectInfoEvent )
     {
-        CGS_ASSERT( mpProgressionManager, "mpProgressionManager" );
-        CGS_ASSERT( mpProgressionManager->GetProfile(), "mpProgressionManager->GetProfile()" );
+        CGS_ASSERT( mpProgressionManager, CgsDev::Assert::MessageAt("mpProgressionManager", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3084) );
+        CGS_ASSERT( mpProgressionManager->GetProfile(), CgsDev::Assert::MessageAt("mpProgressionManager->GetProfile()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3085) );
 
         if ( mpProgressionManager->GetProfile()->GetLastRoadRulesResetTime()
              != lpConnectInfoEvent->muLastRoadRulesResetTime )
@@ -142,8 +143,8 @@ namespace BrnGameState
 
         if ( lpQueue->GetLength() > 0 )
         {
-            CGS_ASSERT( mpProgressionManager, "mpProgressionManager" );
-            CGS_ASSERT( mpProgressionManager->GetProfile(), "mpProgressionManager->GetProfile()" );
+            CGS_ASSERT( mpProgressionManager, CgsDev::Assert::MessageAt("mpProgressionManager", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2198) );
+            CGS_ASSERT( mpProgressionManager->GetProfile(), CgsDev::Assert::MessageAt("mpProgressionManager->GetProfile()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2199) );
 
             for ( s32 liRecord = 0; liRecord < lpQueue->GetLength(); ++liRecord )
             {

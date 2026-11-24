@@ -101,7 +101,7 @@ void OnlineRaceMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
             }
 
             CGS_ASSERT(leEnumIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                       "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                       CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
         }
 
         // A winner exists -> cap the remaining racers' clock at the winner's time + the grace window.
@@ -134,7 +134,7 @@ void OnlineRaceMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
 f32 OnlineRaceMode::GetOutroTimeout() const
 {
     GameStateModule* lpGameStateModule = GetModeManager()->GetGameStateModule();
-    CGS_ASSERT(lpGameStateModule, "mpGameStateModule");
+    CGS_ASSERT(lpGameStateModule, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5700));
 
     const EActiveRaceCarIndex leLocalPlayerActiveRaceCarIndex =
         lpGameStateModule->GetPlayerActiveRaceCarIndex();
@@ -168,7 +168,7 @@ f32 OnlineRaceMode::GetOutroTimeout() const
         }
 
         CGS_ASSERT(leActiveRaceCarIndex + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                   CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
     }
 
     // The local player's own finish time.

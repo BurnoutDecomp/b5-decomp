@@ -27,6 +27,7 @@
 #include "rw/math/vpu/vector3_operation.h"                                      // Magnitude, operator*(Vector3, VecFloat)
 #include "rw/math/vpu/matrix44affine_operation.h"                               // Mult(Matrix44Affine, Matrix44Affine)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                              // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                      // the opt-in witnesses
 
 #include <cmath>     // std::sqrt (the quaternion's scalar part)
@@ -393,7 +394,7 @@ void KeyAnimShakeController::Update(f32 lfTimeStep, Camera::Camera* lpCamera)
     }
     else
     {
-        CGS_ASSERT(false, "Unsupported ShakeType found in ShakeGroup");   // .cpp:151
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Unsupported ShakeType found in ShakeGroup", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnKeyAnimShakeController.cpp", 151));   // .cpp:151
     }
 
     mu8ActiveShake = static_cast<u8>(luShakeType);

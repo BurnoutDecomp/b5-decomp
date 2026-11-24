@@ -274,8 +274,8 @@ void MugshotManager::UpdateCameraStatusData(const GameStateModuleIO::PreWorldInp
     {
         // The console reads the player record directly; the bounds asserts below mirror its
         // GetPlayerStatusData asserts (file BrnNetworkModuleInGamePlayerStatusInterface.h).
-        CGS_ASSERT(liIndex >= 0, "liIndex >= 0");
-        CGS_ASSERT(liIndex < liNumPlayers, "liIndex < miNumPlayers");
+        CGS_ASSERT(liIndex >= 0, CgsDev::Assert::MessageAt("liIndex >= 0", "..\\..\\..\\GameSource\\Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h", 256));
+        CGS_ASSERT(liIndex < liNumPlayers, CgsDev::Assert::MessageAt("liIndex < miNumPlayers", "..\\..\\..\\GameSource\\Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h", 257));
 
         const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusData* lpPlayerData =
             lpPlayerStatusInterface->GetPlayerStatusData(liIndex);
@@ -418,7 +418,7 @@ void MugshotManager::ProcessTakedownEvents(const GameStateModuleIO::PreWorldInpu
                    && leTakedownVictimRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                    CgsDev::Assert::MessageAt("leTakedownVictimRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0 && leTakedownVictimRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/MugshotManager/BrnMugshotManager.cpp", 330));
 
-        CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
+        CGS_ASSERT(mpGameStateModule != 0, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/MugshotManager/BrnMugshotManager.cpp", 333));
 
         // Only react when the local player is the aggressor or the victim.
         const bool lbPlayerIsParty =
@@ -609,8 +609,8 @@ void MugshotManager::HandleCapturingTheirMugshot(GameStateModuleIO::OutputBuffer
         lAction.mbFlagA         = true;
         lAction.mbBroadcast     = (meShowMugshotType == GameStateModuleIO::E_IMAGE_TYPE_VICTORY_MUGSHOT);
 
-        CGS_ASSERT(lpOutput != 0, "lpOutput");
-        CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, "lpOutput->GetGameActionQueue()");
+        CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/MugshotManager/BrnMugshotManager.cpp", 775));
+        CGS_ASSERT(lpOutput->GetGameActionQueue() != 0, CgsDev::Assert::MessageAt("lpOutput->GetGameActionQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/MugshotManager/BrnMugshotManager.cpp", 776));
         AsVeq(lpOutput->GetGameActionQueue())->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lAction),
             KI_GAME_ACTION_START_MUGSHOT, (s32)sizeof(StartMugshotGameAction));
@@ -752,8 +752,8 @@ void MugshotManager::Update(const GameStateModuleIO::PreWorldInputBuffer* lpInpu
 void MugshotManager::ProcessImageReceivedEvent(const OnlineImageReceivedEvent* lpImageReceivedEvent)
 {
     CGS_ASSERT(lpImageReceivedEvent != 0, CgsDev::Assert::MessageAt("lpImageReceivedEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/MugshotManager/BrnMugshotManager.cpp", 853));
-    CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");
-    CGS_ASSERT(mpGameStateModule->GetModeManager() != 0, "mpGameStateModule->GetModeManager()");
+    CGS_ASSERT(mpGameStateModule != 0, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/MugshotManager/BrnMugshotManager.cpp", 854));
+    CGS_ASSERT(mpGameStateModule->GetModeManager() != 0, CgsDev::Assert::MessageAt("mpGameStateModule->GetModeManager()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/MugshotManager/BrnMugshotManager.cpp", 855));
 
     // console gate: proceed when the show FSM is idle, OR it is in the capture-their state AND the
     // current mode is NOT in a blocked post-event camera state.

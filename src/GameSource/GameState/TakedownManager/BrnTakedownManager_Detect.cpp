@@ -348,7 +348,7 @@ namespace BrnGameState
         }
 
         CGS_ASSERT(leAggressorActiveRaceCarIndex != leVictimActiveRaceCarIndex,
-                   "leAggressorActiveRaceCarIndex != leVictimActiveRaceCarIndex");                 // :533
+                   CgsDev::Assert::MessageAt("leAggressorActiveRaceCarIndex != leVictimActiveRaceCarIndex", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 533));                 // :533
         CGS_ASSERT(leAggressorActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
                    CgsDev::Assert::MessageAt("leAggressorActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 534));            // :534
 
@@ -515,7 +515,7 @@ namespace BrnGameState
         RaceCarData* lpVictimRaceCarData    = GetRaceCarData(leVictimActiveRaceCarIndex);
 
         CGS_ASSERT(leAggressorActiveRaceCarIndex != leVictimActiveRaceCarIndex,
-                   "leAggressorActiveRaceCarIndex != leVictimActiveRaceCarIndex");                     // :728
+                   CgsDev::Assert::MessageAt("leAggressorActiveRaceCarIndex != leVictimActiveRaceCarIndex", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/TakedownManager/BrnTakedownManager.cpp", 728));                     // :728
 
         // Was the victim the aggressor's marked man? (Not in the online lobby / online showtime.)
         BrnNetwork::BrnNetworkModuleIO::MarkedManInterface lMarkedManInterface;

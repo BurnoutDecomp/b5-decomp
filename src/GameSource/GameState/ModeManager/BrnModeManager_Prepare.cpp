@@ -240,7 +240,7 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     // 0x8234B1B4 and 0x8234B1D4 -- two Begin/Fire/End sequences sharing r30). Reproduced verbatim.
     CGS_ASSERT(lpGameModeParams != NULL, "lpGameModeParams != NULL");
     CGS_ASSERT(lpGameModeParams != NULL, "lpGameModeParams != NULL");
-    CGS_ASSERT(lpStartGameModeParams != NULL, "lpStartGameModeParams != NULL");
+    CGS_ASSERT(lpStartGameModeParams != NULL, CgsDev::Assert::MessageAt("lpStartGameModeParams != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1164));
     CGS_ASSERT(lpTriggerData != NULL, "lpTriggerData != NULL");
     CGS_ASSERT(!mpCurrentGameMode->IsOnline()
                    || (liCurrentRound >= 0
@@ -341,7 +341,7 @@ void ModeManager::SetupGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
         const s32 liTakedownTarget = static_cast<s32>(GetRoadRageTakedownTarget());
 
         const BrnProgression::ProgressionData* lpProgressionData = mpProgressionManager->GetProgressionData();
-        CGS_ASSERT(lpProgressionData != NULL, "lpProgressionData != NULL");
+        CGS_ASSERT(lpProgressionData != NULL, CgsDev::Assert::MessageAt("lpProgressionData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1236));
 
         // --------------------------------------------------------------------------------------
         // [X] FRONTIER -- THE ROAD-RAGE PROGRESSION SEED IS PARKED. Console (asm 0x8234B544..
@@ -510,9 +510,9 @@ void ModeManager::PrepareForMode(GameStateModuleIO::GameActionQueue* lpGameActio
                                  s32                                 liCurrentRound,
                                  StartGameModeParams*                lpStartGameModeParams)
 {
-    CGS_ASSERT(lpGameModeParams != NULL, "lpGameModeParams != NULL");
-    CGS_ASSERT(lpGameActionQueue != NULL, "lpGameActionQueue != NULL");
-    CGS_ASSERT(lpStartGameModeParams != NULL, "lpStartGameModeParams != NULL");
+    CGS_ASSERT(lpGameModeParams != NULL, CgsDev::Assert::MessageAt("lpGameModeParams != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2919));
+    CGS_ASSERT(lpGameActionQueue != NULL, CgsDev::Assert::MessageAt("lpGameActionQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2920));
+    CGS_ASSERT(lpStartGameModeParams != NULL, CgsDev::Assert::MessageAt("lpStartGameModeParams != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2921));
 
     mbAbortedDuringIntro        = false;   // +0x94FA  (Construct does NOT zero this one)
     mbPlayerFinishedCarDestroyed = false;   // +0x94FE

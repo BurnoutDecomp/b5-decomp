@@ -229,7 +229,7 @@ void MomentBystanderSeesAction::Update(f32 /*lfTimeStep*/, void* lrBehaviourCont
 // the zoom re-snap its FOV band continuously.
 void MomentBystanderSeesAction::SetPerceivedDistanceModificationFactor(f32 lfFactor)
 {
-    CGS_ASSERT(mBystander.IsAllocated(), "IsAllocated()");
+    CGS_ASSERT(mBystander.IsAllocated(), CgsDev::Assert::MessageAt("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 589));
 
     mBystander.GetBehaviour()->SetPerceivedDistanceModificationFactor(lfFactor);
 }

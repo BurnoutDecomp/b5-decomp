@@ -1,6 +1,7 @@
 #include "GameSource/Director/DirectorModule/BrnDirectorModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // [DIAG] the [takedown-cam] director-read witness
 
@@ -338,7 +339,7 @@ namespace DirectorIO
     const BrnGui::GuiPFXHookEnumeration* InputBuffer::GetHookEnumeration() const
     {
         CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading");
-        CGS_ASSERT(mbHasGotHookEnumeration, "mbHasGotHookEnumeration");
+        CGS_ASSERT(mbHasGotHookEnumeration, CgsDev::Assert::MessageAt("mbHasGotHookEnumeration", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 888));
         return &mHookEnumeration;
     }
 
@@ -547,8 +548,8 @@ namespace DirectorIO
 
     void InputBuffer::SetVehicleTeam(EActiveRaceCarIndex leIndex, s32 liTeam)
     {
-        CGS_ASSERT(leIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID");
-        CGS_ASSERT(leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,    "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+        CGS_ASSERT(leIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID, CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_INVALID", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 638));
+        CGS_ASSERT(leIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,    CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 639));
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         // X360 @0x823B2938: `stw team, 0x3238 + 4 * index` -- the index'th per-car team word
         // (BridgeGameStateToDirector's last leg passes OnlineScoringOutputInterface::maePlayerTeam[i]).

@@ -25,6 +25,7 @@
 #include "GameSource/Game/BrnGameModule.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Module/CgsModuleIOHelper.h"         // CgsModule::IOHelper<T>
 #include "GameShared/GameClasses/Module/CgsModuleUtils.h"            // CgsModule::LockBuffersForIO / UnlockBuffersForIO
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"     // VariableEventQueue<18432,16>::Append
@@ -156,18 +157,18 @@ namespace BrnGame
     void BrnGameModule::BridgeNetworkToGameState(BrnGameState::GameStateModuleIO::PreWorldInputBuffer* lpGameStateInput,
                                                  const BrnNetwork::BrnNetworkModuleIO::OutputBuffer* lpNetworkOutput)
     {
-        CGS_ASSERT(lpGameStateInput, "lpGameStateInput");
-        CGS_ASSERT(lpNetworkOutput, "lpNetworkOutput");
+        CGS_ASSERT(lpGameStateInput, CgsDev::Assert::MessageAt("lpGameStateInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 223));
+        CGS_ASSERT(lpNetworkOutput, CgsDev::Assert::MessageAt("lpNetworkOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 224));
 
-        CGS_ASSERT(lpNetworkOutput->GetGameEventQueue(), "lpNetworkOutput->GetGameEventQueue()");
+        CGS_ASSERT(lpNetworkOutput->GetGameEventQueue(), CgsDev::Assert::MessageAt("lpNetworkOutput->GetGameEventQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 230));
         lpGameStateInput->GetGameEventQueue()->Append(*lpNetworkOutput->GetGameEventQueue());
 
-        CGS_ASSERT(lpNetworkOutput->GetTakedownEventOutputQueue(), "lpNetworkOutput->GetTakedownEventOutputQueue()");
+        CGS_ASSERT(lpNetworkOutput->GetTakedownEventOutputQueue(), CgsDev::Assert::MessageAt("lpNetworkOutput->GetTakedownEventOutputQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 233));
         lpGameStateInput->GetTakedownEventInputQueue()->Append(*lpNetworkOutput->GetTakedownEventOutputQueue());
 
-        CGS_ASSERT(lpNetworkOutput->GetNetworkToGameStateInterface(), "lpNetworkOutput->GetNetworkToGameStateInterface()");
-        CGS_ASSERT(lpNetworkOutput->GetInGamePlayerStatusInterface(), "lpNetworkOutput->GetInGamePlayerStatusInterface()");
-        CGS_ASSERT(lpNetworkOutput->GetPlayerResultsInterface(), "lpNetworkOutput->GetPlayerResultsInterface()");
+        CGS_ASSERT(lpNetworkOutput->GetNetworkToGameStateInterface(), CgsDev::Assert::MessageAt("lpNetworkOutput->GetNetworkToGameStateInterface()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 236));
+        CGS_ASSERT(lpNetworkOutput->GetInGamePlayerStatusInterface(), CgsDev::Assert::MessageAt("lpNetworkOutput->GetInGamePlayerStatusInterface()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 237));
+        CGS_ASSERT(lpNetworkOutput->GetPlayerResultsInterface(), CgsDev::Assert::MessageAt("lpNetworkOutput->GetPlayerResultsInterface()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 238));
 
         lpGameStateInput->AppendGetNetworkToGameStateInterface(lpNetworkOutput->GetNetworkToGameStateInterface());
         lpGameStateInput->SetPlayerStatusInterface(lpNetworkOutput->GetInGamePlayerStatusInterface());
@@ -208,7 +209,7 @@ namespace BrnGame
         namespace GsIO  = BrnGameState::GameStateModuleIO;
 
         const NetIO::NetworkEventQueue* lpNetworkEventQueue = lpNetworkOutput->GetNetworkEventQueue();
-        CGS_ASSERT(lpNetworkEventQueue, "lpNetworkEventQueue");
+        CGS_ASSERT(lpNetworkEventQueue, CgsDev::Assert::MessageAt("lpNetworkEventQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 349));
 
         const CgsModule::Event* lpEvent = 0;
         s32 liSize = 0;
@@ -222,7 +223,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutPlayerChangedCarColourEvent* lpPlayerChangedCarColourEvent =
                         reinterpret_cast<const NetIO::NetworkOutPlayerChangedCarColourEvent*>(lpEvent);
-                    CGS_ASSERT(lpPlayerChangedCarColourEvent, "lpPlayerChangedCarColourEvent");
+                    CGS_ASSERT(lpPlayerChangedCarColourEvent, CgsDev::Assert::MessageAt("lpPlayerChangedCarColourEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 394));
                     const EActiveRaceCarIndex leActiveRaceCarIndex = lpPlayerChangedCarColourEvent->GetActiveRaceCarIndex();
                     if (static_cast<u32>(leActiveRaceCarIndex) <= 7u)
                     {
@@ -269,7 +270,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutRestartTrafficEvent* lpRestartTrafficEvent =
                         reinterpret_cast<const NetIO::NetworkOutRestartTrafficEvent*>(lpEvent);
-                    CGS_ASSERT(lpRestartTrafficEvent, "lpRestartTrafficEvent");
+                    CGS_ASSERT(lpRestartTrafficEvent, CgsDev::Assert::MessageAt("lpRestartTrafficEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 365));
                     GsIO::RestartTrafficAction lRestartTrafficAction;
                     std::memcpy(lRestartTrafficAction.mau16ActveHulls, lpRestartTrafficEvent->mau16ActveHulls,
                                 sizeof(lRestartTrafficAction.mau16ActveHulls));
@@ -282,7 +283,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutPlayerCarSelectStatus* lpPlayerCarSelectStatus =
                         reinterpret_cast<const NetIO::NetworkOutPlayerCarSelectStatus*>(lpEvent);
-                    CGS_ASSERT(lpPlayerCarSelectStatus, "lpPlayerCarSelectStatus");
+                    CGS_ASSERT(lpPlayerCarSelectStatus, CgsDev::Assert::MessageAt("lpPlayerCarSelectStatus", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 429));
                     lpWorldInput->SetCarSelectStatus(lpPlayerCarSelectStatus->meActiveRaceCarIndex,
                                                      lpPlayerCarSelectStatus->mbInCarSelect);
                     break;

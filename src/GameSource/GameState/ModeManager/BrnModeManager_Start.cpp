@@ -253,7 +253,7 @@ void ModeManager::StartGameMode(GameStateModuleIO::OutputBuffer* lpOutputBuffer,
     // hazards H3: slots 6 (E_MODE_ELIMINATOR) and 9 (E_MODE_TRAFFIC_ATTACK) are AUTHORED NULLS.
     // Dispatching into them is a null call and THIS is the assert the console fires. Keep it.
     mpCurrentGameMode = mapGameModes[meCurrentGameModeType];
-    CGS_ASSERT(mpCurrentGameMode != NULL, "mpCurrentGameMode");
+    CGS_ASSERT(mpCurrentGameMode != NULL, CgsDev::Assert::MessageAt("mpCurrentGameMode", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1075));
 
     // asm 0x8234FDE4..0x8234FDF4. The console's argument is
     // OutputBuffer::GetTriggerManagementInputInterface() (0x8231D758, write-locked, returns
@@ -459,8 +459,8 @@ void ModeManager::ExitCurrentMode(GameStateModuleIO::OutputBuffer* lpOutputBuffe
          meCurrentGameModeType == GameStateModuleIO::E_MODE_ONLINE_SHOWTIME) &&
         mbHasCrashedOut)   // `lbzx r11, r29, 0x94FC` -- see the FLAG below
     {
-        CGS_ASSERT(lpOutputBuffer != NULL, "lpOutput");
-        CGS_ASSERT(lpOutputBuffer->GetGameActionQueue() != NULL, "lpOutput->GetGameActionQueue()");
+        CGS_ASSERT(lpOutputBuffer != NULL, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1744));
+        CGS_ASSERT(lpOutputBuffer->GetGameActionQueue() != NULL, CgsDev::Assert::MessageAt("lpOutput->GetGameActionQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 1745));
 
         GameStateModuleIO::StopModeIntroAction lStopModeIntro;
         lStopModeIntro.meGameMode = meCurrentGameModeType;
@@ -706,7 +706,7 @@ void ModeManager::SendModeStopMessages(GameStateModuleIO::GameActionQueue* lpGam
                         lRoundResults.SetPosition(lPlayerID, liPosition);
                     }
                     CGS_ASSERT(liCar + 1 <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                               "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                               CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
                 }
                 lpGameActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRoundResults),
                     GameStateModuleIO::E_ACTION_ONLINE_ROUND_RESULT, static_cast<s32>(sizeof(lRoundResults)));

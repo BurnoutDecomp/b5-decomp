@@ -78,7 +78,7 @@ bool ChallengeHighScoreEntry::IsWholeChallengeOwnedBySamePlayer()
                           maPlayerNames[liScoreType + 1].macName) == 0)
     {
         ++liScoreType;
-        CGS_ASSERT(liScoreType <= E_SCORE_TYPE_COUNT, "leEnumIndex <= E_SCORE_TYPE_COUNT");
+        CGS_ASSERT(liScoreType <= E_SCORE_TYPE_COUNT, CgsDev::Assert::MessageAt("leEnumIndex <= E_SCORE_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\streetdata\\BrnChallengeData.h", 56));
 
         if (liScoreType >= 1)
         {
@@ -165,7 +165,7 @@ bool ChallengeHighScoreEntry::UpdateEntry(const ChallengeHighScoreEntry* lpEntry
             }
         }
 
-        CGS_ASSERT(liScoreType + 1 <= E_SCORE_TYPE_COUNT, "leEnumIndex <= E_SCORE_TYPE_COUNT");
+        CGS_ASSERT(liScoreType + 1 <= E_SCORE_TYPE_COUNT, CgsDev::Assert::MessageAt("leEnumIndex <= E_SCORE_TYPE_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\streetdata\\BrnChallengeData.h", 56));
     }
 
     return lbUpdated;

@@ -160,7 +160,7 @@ void CameraReference::Prepare(const BehaviourControllerLockInterface& lLockInter
 // @ 0x822524A8 -- cpp:155. Unlock (if locked) and invalidate the reference.
 void CameraReference::Release(const BehaviourControllerLockInterface& lLockInterface)
 {
-    CGS_ASSERT(IsValid(), "IsValid()");   // :157 (non-gating)
+    CGS_ASSERT(IsValid(), CgsDev::Assert::MessageAt("IsValid()", "..\\..\\..\\GameSource\\Director/Camera/BrnCameraReference.cpp", 157));   // :157 (non-gating)
 
     if (meType == E_TYPE_BEHAVIOUR && mbBehaviourLocked)
     {

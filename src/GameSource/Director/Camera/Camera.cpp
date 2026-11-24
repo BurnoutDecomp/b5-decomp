@@ -478,7 +478,8 @@ f32 Camera::GetNearClipDistance() const
     {
         return mfCustomNearClipDistance;
     }
-    if ((mState_uFlags & 0x10000) != 0)
+    // CameraState::IsFlagSet's materialised bool (ARTIST 0x82205B88..0x82205B98).
+    if (mState.IsFlagSet(CameraState::E_FLAG_SMALL_NEAR_CLIP))
     {
         return KF_SMALL_NEAR_CLIP_DISTANCE;
     }

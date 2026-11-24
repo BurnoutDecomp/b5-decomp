@@ -365,8 +365,8 @@ namespace BrnResource
     // clearing any real (non-zero-mask) pack zeroes the whole availability mask. Reproduced faithfully.
     void DLCFeatureAvailability::SetPackAvailabilityState(s32 liPack, bool lbAvailable)
     {
-        CGS_ASSERT(liPack >= E_DLC_DATA_PACK_START, "lPack >= E_DLC_DATA_PACK_START");
-        CGS_ASSERT(liPack < E_DLC_DATA_PACK_COUNT,  "lPack < E_DLC_DATA_PACK_COUNT");
+        CGS_ASSERT(liPack >= E_DLC_DATA_PACK_START, CgsDev::Assert::MessageAt("lPack >= E_DLC_DATA_PACK_START", "..\\..\\..\\GameSource\\Resource/BrnDLCManager.h", 362));
+        CGS_ASSERT(liPack < E_DLC_DATA_PACK_COUNT,  CgsDev::Assert::MessageAt("lPack < E_DLC_DATA_PACK_COUNT", "..\\..\\..\\GameSource\\Resource/BrnDLCManager.h", 363));
 
         const u32 luMask = GetPackMask(liPack);
         if (lbAvailable)

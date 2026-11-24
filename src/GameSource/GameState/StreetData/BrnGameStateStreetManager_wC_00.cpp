@@ -175,7 +175,7 @@ void StreetManager::ProcessNewRoadScore( GameStateModuleIO::OutputBuffer* lpOutp
                 lUserScore.SetScore( leScoreType, liNewScore );
 
                 CGS_ASSERT( mpProgressionManager, "mpProgressionManager" );
-                CGS_ASSERT( mpProgressionManager->GetProfile(), "mpProgressionManager->GetProfile()" );
+                CGS_ASSERT( mpProgressionManager->GetProfile(), CgsDev::Assert::MessageAt("mpProgressionManager->GetProfile()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2656) );
 
                 const ::CgsID lActivePlayerCarId = mpGameStateModule->GetActivePlayerCarId();
                 lUserScore.SetCarID( leScoreType, lActivePlayerCarId );
@@ -309,7 +309,7 @@ void StreetManager::UpdateBufferedHighScores( f32 lfSimTimeStep,
                                               bool lbIsAnythingPaused,
                                               GameStateModuleIO::OutputBuffer* lpOutput )
 {
-    CGS_ASSERT( lpOutput, "lpOutput" );
+    CGS_ASSERT( lpOutput, CgsDev::Assert::MessageAt("lpOutput", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 2311) );
 
     if ( lbIsAnythingPaused )
     {

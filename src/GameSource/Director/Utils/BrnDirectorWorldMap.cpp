@@ -415,7 +415,7 @@ namespace BrnDirector
     const BrnTraffic::TrafficData* WorldMap::GetTrafficData() const
     {
         CGS_ASSERT(meLoadingState == E_LOADING_STATE_LOADED,
-                   "meLoadingState == E_LOADING_STATE_LOADED");
+                   CgsDev::Assert::MessageAt("meLoadingState == E_LOADING_STATE_LOADED", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.h", 90));
         return mpTrafficData.GetMemoryResource();
     }
 
@@ -454,8 +454,8 @@ namespace BrnDirector
             if (luNeighbour == 0xFFFFu)
                 break;
 
-            CGS_ASSERT(lpHull->mpaNeighbourData != 0, "mpaNeighbourData");
-            CGS_ASSERT(luNeighbour < lpHull->muNumNeighbours, "luIndex < muNumNeighbours");
+            CGS_ASSERT(lpHull->mpaNeighbourData != 0, CgsDev::Assert::MessageAt("mpaNeighbourData", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 247));
+            CGS_ASSERT(luNeighbour < lpHull->muNumNeighbours, CgsDev::Assert::MessageAt("luIndex < muNumNeighbours", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\traffic\\BrnTrafficHull.h", 248));
             const BrnTraffic::Neighbour* lpNeighbour = &lpHull->mpaNeighbourData[luNeighbour];
 
             // Cross into the neighbour section (GetSection asserts luIndex < muNumSections).
@@ -486,8 +486,8 @@ namespace BrnDirector
                                            Vector3* lpExtentsOut,
                                            Matrix44Affine* lpTransformOut) const
     {
-        CGS_ASSERT(lpExtentsOut  != 0, "lpExtentsOut != NULL");
-        CGS_ASSERT(lpTransformOut != 0, "lpTransformOut != NULL");
+        CGS_ASSERT(lpExtentsOut  != 0, CgsDev::Assert::MessageAt("lpExtentsOut != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 451));
+        CGS_ASSERT(lpTransformOut != 0, CgsDev::Assert::MessageAt("lpTransformOut != NULL", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 452));
 
         const s32 liGenericRegionCount =
             mpTriggerData.operator->()->GetGenericRegionCount();
@@ -523,7 +523,7 @@ namespace BrnDirector
     bool WorldMap::GetSafePositionNearest(Vector3 lPosition, Vector3& lOut) const
     {
         CGS_ASSERT(meLoadingState == E_LOADING_STATE_LOADED,
-                   "meLoadingState == E_LOADING_STATE_LOADED");
+                   CgsDev::Assert::MessageAt("meLoadingState == E_LOADING_STATE_LOADED", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 205));
 
         lOut = lPosition;   // stvx128 v127 -> lOut (initial store, overwritten below)
 
@@ -601,7 +601,7 @@ namespace BrnDirector
                                                                Vector3& lOut) const
     {
         CGS_ASSERT(meLoadingState == E_LOADING_STATE_LOADED,
-                   "meLoadingState == E_LOADING_STATE_LOADED");
+                   CgsDev::Assert::MessageAt("meLoadingState == E_LOADING_STATE_LOADED", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorWorldMap.cpp", 278));
 
         lOut = lPosition;   // stvx128 v126 -> lOut (initial store)
 

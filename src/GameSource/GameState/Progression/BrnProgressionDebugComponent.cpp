@@ -308,7 +308,7 @@ namespace BrnProgression
         {
             CGS_ASSERT(static_cast<u32>(liEventIndex) <
                            static_cast<u32>(lpProfile->miEventCount),
-                       "luIndex < static_cast<uint32_t>(miEventCount)");
+                       CgsDev::Assert::MessageAt("luIndex < static_cast<uint32_t>(miEventCount)", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3004));
             ProfileEvent& lrEvent = lpProfile->maEvents[liEventIndex];
             const ProgressionData* lpProgressionData =
                 GetLoadedProgressionData(mpProgressionManager->mpProgressionData);
@@ -918,7 +918,7 @@ namespace BrnProgression
                 for (s32 liOpponent = 0; liOpponent < lrSet.GetOpponentCount(); ++liOpponent)
                 {
                     CGS_ASSERT(liOpponent >= 0 && liOpponent < lrSet.GetOpponentCount(),
-                               "liCarOpponentIndex >= 0 && liCarOpponentIndex < miOpponentCount");
+                               CgsDev::Assert::MessageAt("liCarOpponentIndex >= 0 && liCarOpponentIndex < miOpponentCount", "d:\\p4\\b5_main\\burnout\\main\\code\\sharedclasses\\progression\\BrnOpponentData.h", 224));
                     CgsIDUnCompress(lrSet.GetCarOpponent(liOpponent)->GetCarId(), lacCarId);
                     lStream << lacCarId;
                     lStream << " ";
@@ -947,7 +947,7 @@ namespace BrnProgression
 
         for (u32 luEvent = 0; luEvent < static_cast<u32>(lpProfile->miEventCount); ++luEvent)
         {
-            CGS_ASSERT(luEvent < static_cast<u32>(lpProfile->miEventCount), "luIndex < static_cast<uint32_t>(miEventCount)");
+            CGS_ASSERT(luEvent < static_cast<u32>(lpProfile->miEventCount), CgsDev::Assert::MessageAt("luIndex < static_cast<uint32_t>(miEventCount)", "..\\..\\..\\GameSource\\GameState/Progression/BrnProfile.h", 3004));
             ProfileEvent& lrEvent = lpProfile->maEvents[luEvent];
 
             const ProgressionData* lpProgressionData = GetLoadedProgressionData(mpProgressionManager->mpProgressionData);

@@ -39,7 +39,7 @@ const f32 KF_MAX_CAR_SELECT_DURATION = 30.0f;
 void OnlineCarSelectManager::Construct(GameStateModule* lpGameStateModule,
                                        BrnProgression::ProgressionManager* lpProgressionManager)
 {
-    CGS_ASSERT(lpGameStateModule, "lpGameStateModule");
+    CGS_ASSERT(lpGameStateModule, CgsDev::Assert::MessageAt("lpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\CarSelect/BrnOnlineCarSelectManager.h", 252));
 
     meInternalState = E_INTERNAL_STATE_NONE;
     mpGameStateModule.Set(lpGameStateModule);
@@ -176,13 +176,13 @@ void OnlineCarSelectManager::EnterOnlineCarSelect(GameStateModuleIO::GameActionQ
     if (lCars.FindFirstInstanceOf(mStartCarId) == -1)
     {
         const BrnResource::VehicleListEntry* lpCurrentVehicleData = mpVehicleList.Get()->GetVehicleData(mStartCarId);
-        CGS_ASSERT(lpCurrentVehicleData != 0, "lpCurrentVehicleData != NULL");
+        CGS_ASSERT(lpCurrentVehicleData != 0, CgsDev::Assert::MessageAt("lpCurrentVehicleData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 210));
 
         bool lbParentIsSelectable = false;
         if (lpCurrentVehicleData->IsLiveryColour())
         {
             CGS_ASSERT(lpCurrentVehicleData->GetParentId() != 0,
-                       "lpCurrentVehicleData->GetParentId() != kCGSID_NULL");
+                       CgsDev::Assert::MessageAt("lpCurrentVehicleData->GetParentId() != kCGSID_NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 214));
             const CgsID lParentId = lpCurrentVehicleData->GetParentId();
             lbParentIsSelectable = lCars.FindFirstInstanceOf(lParentId) != -1;
         }
@@ -190,7 +190,7 @@ void OnlineCarSelectManager::EnterOnlineCarSelect(GameStateModuleIO::GameActionQ
         if (!lbParentIsSelectable)
         {
             const BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
-            CGS_ASSERT(lpProfile, "lpProfile");
+            CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 225));
 
             for (u32 luCar = 0; luCar < lCars.GetLength(); ++luCar)
             {
@@ -199,7 +199,7 @@ void OnlineCarSelectManager::EnterOnlineCarSelect(GameStateModuleIO::GameActionQ
                 if (lpVehicleData->GetUnlockRank() == miVehicleClassLimit)
                 {
                     mStartCarId = lpProfile->GetChosenLiveryIdForBaseCar(lCars[luCar]);
-                    CGS_ASSERT(mpGameStateModule.Get(), "mpGameStateModule");
+                    CGS_ASSERT(mpGameStateModule.Get(), CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 234));
                     mpGameStateModule.Get()->OnSpecialEventPlayerCarChange(mStartCarId, 0, lpActionQueue, false);
                     break;
                 }
@@ -444,7 +444,7 @@ void OnlineCarSelectManager::UpdateChangeCarState(GameStateModuleIO::GameActionQ
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lCarSelectOnlineAction),
                             KI_ACTION_CAR_SELECTION_CHANGED_ONLINE, sizeof(lCarSelectOnlineAction));
 
-    CGS_ASSERT(mpGameStateModule.Get(), "mpGameStateModule");
+    CGS_ASSERT(mpGameStateModule.Get(), CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 540));
     mpGameStateModule.Get()->OnSpecialEventPlayerCarChange(mDesiredCarId, 0, lpActionQueue, false);
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)

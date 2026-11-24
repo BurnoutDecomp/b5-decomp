@@ -15,6 +15,7 @@
 // ============================================================================
 
 #include "GameSource/GameState/BrnGameStateModule.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h"
 #include "GameSource/GameState/BrnGameStateModule.h"
 #include "GameSource/GameState/TakedownManager/BrnTakedownManager.h"
@@ -66,7 +67,7 @@ namespace BrnGameState
 void GameStateModule::CacheTakedownManagerPostWorldInputData(
         const GameStateModuleIO::PostWorldInputBuffer* lpInput)
 {
-    CGS_ASSERT(lpInput, "lpInput");
+    CGS_ASSERT(lpInput, CgsDev::Assert::MessageAt("lpInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 6258));
 
     mRaceCarCrashEventQueue.Clear();
     mContactSpyInterface.Construct();

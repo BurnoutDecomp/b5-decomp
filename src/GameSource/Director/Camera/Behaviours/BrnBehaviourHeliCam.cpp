@@ -8,6 +8,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/Camera/Camera.h"                        // Camera::SetFOV / ValidateTransformWithDebugInfo
 #include "GameSource/Director/Camera/BrnCameraState.h"                // CameraState::E_FLAG_VALID
 #include "GameSource/Director/Camera/SharedIO/BrnPlayerInfo.h"        // VehicleInfo (the player car)
@@ -57,7 +58,7 @@ bool BehaviourHeliCam::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo
 // ----------------------------------------------------------------------------
 bool BehaviourHeliCam::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
-    CGS_ASSERT(mpParameters, "mpParameters");
+    CGS_ASSERT(mpParameters, CgsDev::Assert::MessageAt("mpParameters", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourHeliCam.cpp", 105));
 
     lrCamera.mState_uFlags |= (1 << CameraState::E_FLAG_VALID);
 

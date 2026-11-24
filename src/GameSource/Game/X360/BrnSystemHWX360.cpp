@@ -116,7 +116,7 @@ namespace BrnHW
             return true;
         }
 
-        CGS_ASSERT(false, "false");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("false", "..\\..\\..\\GameSource\\X360/BrnSystemHWX360.cpp", 119));
         return true;
     }
 

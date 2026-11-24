@@ -30,6 +30,7 @@
 #include <stdio.h>                                                      // optional harness ready-file gate
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                      // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"              // CgsDev::Log::gpDebugPrint
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"        // VariableEventQueue<1536,16>
 
@@ -221,7 +222,7 @@ void GameStateModule::CheckForTailingRivals(GameStateModuleIO::OutputBuffer* lpO
     }
 
     const ScoringSystem* lpScoringSystem = mModeManager.GetScoringSystem();
-    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");
+    CGS_ASSERT(lpScoringSystem != NULL, CgsDev::Assert::MessageAt("lpScoringSystem != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 6473));
 
     const f32 lfPlayerDistanceToFinish =
         lpScoringSystem->GetRaceCarDistanceToFinish(GetPlayerActiveRaceCarIndex());

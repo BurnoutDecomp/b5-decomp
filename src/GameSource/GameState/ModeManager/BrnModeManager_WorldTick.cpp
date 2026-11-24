@@ -582,7 +582,7 @@ ModeManager::PreWorldUpdate(GameStateModuleIO::OutputBuffer*              lpOutp
         lpPreWorldInputBuffer->GetPlayerStatusInterface();
     const GameStateModuleIO::NetworkToGameStateInterface* lpNetworkInput =
         lpPreWorldInputBuffer->GetNetworkToGameStateInterface();
-    CGS_ASSERT(lpActiveRaceCarOutput != NULL, "lpActiveCarInterface");
+    CGS_ASSERT(lpActiveRaceCarOutput != NULL, CgsDev::Assert::MessageAt("lpActiveCarInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.cpp", 135));
     CGS_ASSERT(lpPlayerStatusInterface != NULL, CgsDev::Assert::MessageAt("lpPlayerStatusInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4388));
     CGS_ASSERT(lpNetworkInput != NULL, "lpNetworkToGameStateInterface");
     mScoringSystemDebugComponent.DebugRenderChainableStunts(
@@ -759,7 +759,7 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
         else if (meCurrentGameModeType == GameStateModuleIO::E_MODE_ROAD_RAGE)
         {
             // The whole console arm is one assert -- BrnRoadRageModeScoring.cpp:91, verbatim.
-            CGS_ASSERT(lpActiveRaceCarOutput != NULL, "lpActiveRaceCarInterface != NULL");
+            CGS_ASSERT(lpActiveRaceCarOutput != NULL, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnRoadRageModeScoring.cpp", 91));
         }
         else if (meCurrentGameModeType == GameStateModuleIO::E_MODE_STUNT_ATTACK &&
                  IsGameModeInProgress(mpCurrentGameMode))
@@ -804,7 +804,7 @@ ModeManager::PostWorldUpdate(const GameStateModuleIO::PostWorldInputBuffer* lpPo
             OnlineFreeBurnLobbyMode* lpFreeburnLobbyMode =
                 static_cast<OnlineFreeBurnLobbyMode*>(mpCurrentGameMode);
             CGS_ASSERT(lpFreeburnLobbyMode != NULL, CgsDev::Assert::MessageAt("lpFreeburnLobbyMode", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 887));
-            CGS_ASSERT(mpGameStateModule != NULL, "mpGameStateModule");
+            CGS_ASSERT(mpGameStateModule != NULL, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5700));
 
             const ::EActiveRaceCarIndex leLocalPlayerIndex =
                 mpGameStateModule->GetPlayerActiveRaceCarIndex();

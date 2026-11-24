@@ -116,21 +116,6 @@ void MomentController::UpdateAllMoments(Camera::BehaviourManager& lrBehaviourMan
     }
 }
 
-// Asserts mbIsAllocated (+0x00), then returns the held moment pointer read from +0x04.
-// With the declared layout
-// that word is mMomentPoolHandle.mpObject -- the moment object the
-// pool handed out -- so GetMoment returns the pool handle's stored object.
-Moment* MomentController::MomentHandle::GetMoment() const
-{
-    CGS_ASSERT(mbIsAllocated,
-        CgsDev::Assert::MessageAt(
-            "mbIsAllocated",
-            "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.h", 141 /* ARTIST 0x821F5768 */));
-    // The const handle's Get() yields const void*; the console build GetMoment returns the stored
-    // moment pointer as a mutable Moment* (it only reads the slot's object-pointer word).
-    return static_cast<Moment*>(const_cast<void*>(mMomentPoolHandle.Get()));
-}
-
 // Hand the held slot back to the owning pool
 // and clear the allocated flag; a no-op when nothing is held. Returns TRUE unconditionally
 // (both the taken and the not-taken branch reach the same `return true` tail).
@@ -144,7 +129,7 @@ bool MomentController::MomentHandle::Release()
 {
     if (mbIsAllocated)
     {
-        CGS_ASSERT(GetMoment()->Release(), CgsDev::Assert::MessageAt("GetMoment().Release()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.cpp", 281));   //  (non-gating)
+        CGS_ASSERT(GetMoment().Release(), CgsDev::Assert::MessageAt("GetMoment().Release()", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.cpp", 281));   //  (non-gating)
         mMomentPoolHandle.Release();
         mbIsAllocated = false;
     }
@@ -198,7 +183,7 @@ bool MomentController::MomentHandle::Prepare(AbstractPoolVoidHandle lVoidHandle,
 
     static_cast<Moment*>(const_cast<void*>(mMomentPoolHandle.Get()))->Construct();
 
-    CGS_ASSERT(GetMoment()->Prepare(&lrBehaviourManager),
+    CGS_ASSERT(GetMoment().Prepare(&lrBehaviourManager),
         CgsDev::Assert::MessageAt(
             "GetMoment().Prepare(lBehaviourManager)",
             "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.cpp", 242 /* ARTIST 0x821F7358 */));
@@ -286,13 +271,13 @@ bool MomentController::NewMoment(Moment::EType leMomentType,
     lrMomentHandleInOut.Prepare(lVoidHandle, *this, lrBehaviourManager);
 
     CGS_ASSERT(lrMomentHandleInOut.IsAllocated(), "mbIsAllocated");
-    CGS_ASSERT(lrMomentHandleInOut.GetMoment()->GetType() == leMomentType,
+    CGS_ASSERT(lrMomentHandleInOut.GetMoment().GetType() == leMomentType,
                CgsDev::Assert::MessageAt("lrMomentHandleInOut.GetMoment().GetType() == leMomentType", "..\\..\\..\\GameSource\\Director/MomentController/BrnMomentController.cpp", 211));
 
     Moment::Parameters* lpParameters = mMomentParameterBank.GetParameters(leMomentParamID);
 
     CGS_ASSERT(lrMomentHandleInOut.IsAllocated(), "mbIsAllocated");
-    lrMomentHandleInOut.GetMoment()->SetParameters(lpParameters);
+    lrMomentHandleInOut.GetMoment().SetParameters(lpParameters);
 
     // [DIAG] NOT IN THE console BINARY. One line per moment TYPE the factory really allocates (the
     // selectors' Prepares call NewMoment a handful of times and then never again), so a log shows

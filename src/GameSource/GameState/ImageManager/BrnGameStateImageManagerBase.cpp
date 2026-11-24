@@ -411,9 +411,9 @@ void GameStateImageManagerBase::HandleImageSaveEvent(const ImageToSaveEvent* lpI
         return;
     }
 
-    CGS_ASSERT(mpProgression != 0, "mpProgression");
+    CGS_ASSERT(mpProgression != 0, CgsDev::Assert::MessageAt("mpProgression", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ImageManager/BrnGameStateImageManagerBase.cpp", 473));
     CGS_ASSERT(lpImageSaveEvent != 0, CgsDev::Assert::MessageAt("lpImageSaveEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ImageManager/BrnGameStateImageManagerBase.cpp", 474));
-    CGS_ASSERT(lpOutput != 0, "lpOutput");
+    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ImageManager/BrnGameStateImageManagerBase.cpp", 475));
 
     const GameStateModuleIO::EImageGalleryType leImageGalleryType =
         KAE_IMAGE_TYPE_TO_GALLERY_TYPE_MAPPING[lpImageSaveEvent->meImageType];
@@ -917,7 +917,7 @@ void GameStateImageManagerBase::ProcessDeleteRequest(const ImageGalleryRequestEv
 
     // Clear the now-trailing slot texture.
     CgsNetwork::NetworkTexture& lLastSlot = maImageGalleryMugshots[KI_NUM_PICTURES - 1];
-    CGS_ASSERT(lLastSlot.GetTexture() != 0, "mpcTexture");
+    CGS_ASSERT(lLastSlot.GetTexture() != 0, CgsDev::Assert::MessageAt("mpcTexture", "..\\..\\..\\GameShared\\GameClasses\\Network/CgsNetworkTexture.h", 227));
     std::memset(lLastSlot.GetTexture(), 0, static_cast<size_t>(lLastSlot.GetTextureSize()));
 
     // If a freshly-uncovered image exists past the deletion, prepare it for render (type 295).
@@ -993,7 +993,7 @@ void GameStateImageManagerBase::UpdateNewImageRequests(GameStateModuleIO::Output
         const ImageLoadRequest& lrImageLoadRequest = maImageLoadRequests[static_cast<u32>(liNumProcessed)];
         const s32 liSlotIndex = lrImageLoadRequest.miSlotIndex;
 
-        CGS_ASSERT(static_cast<u32>(liSlotIndex) < static_cast<u32>(KI_NUM_PICTURES), "luIndex < NUMBITS");
+        CGS_ASSERT(static_cast<u32>(liSlotIndex) < static_cast<u32>(KI_NUM_PICTURES), CgsDev::Assert::MessageAt("luIndex < NUMBITS", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsBitArray.h", 241));
         if (liSlotIndex >= 0 && liSlotIndex < KI_NUM_PICTURES)
         {
             mImagesToRenderBitArray.UnSetBit(static_cast<u32>(liSlotIndex));

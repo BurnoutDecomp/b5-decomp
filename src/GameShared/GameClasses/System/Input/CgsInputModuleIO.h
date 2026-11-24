@@ -157,6 +157,14 @@ namespace InputIO
     // the two analogue stick deflections at its head (the >0.25 / >0.1 magnitude tests).
     struct ActionInfo
     {
+        // DWARF CgsInputModuleIO.h:281..297. Each reads one status bit as a shifted single-bit
+        // field: ARTIST tests the pressed bit as `rlwinm rN, rN, 31, 31, 31` ((x >> 1) & 1), e.g.
+        // BrnGameModule::DoUpdate_Effects 0x823DD18C and QueryRequestDoStepFrame 0x823C55D8.
+        bool IsDown() const     { return (muStatus & 1) != 0; }          // :285
+        bool IsPressed() const  { return ((muStatus >> 1) & 1) != 0; }   // :289
+        bool IsReleased() const { return ((muStatus >> 2) & 1) != 0; }   // :293
+        f32  GetValue() const   { return mfValue; }                      // :297
+
         f32 mfValue;    // +0x00 analogue / axis magnitude for this action slot
         u32 muStatus;   // +0x04 bit0 held, bit1 pressed-this-frame, bit2 released-this-frame
     };

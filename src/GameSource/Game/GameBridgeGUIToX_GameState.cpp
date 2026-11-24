@@ -2,6 +2,7 @@
 #include "GameSource/Game/GameBridgeGUIToX.h"
 #include "GameSource/GameState/BrnGameStateModuleIO.h" // typed PostWorldInputBuffer owner
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsID.h"                        // CgsIDCompress ("GMInvAccept" / "GMStrOffline")
 #include "GameShared/GameClasses/Development/CgsStrStream.h"          // CgsDev::StrStream (the formatted default-case assert)
 #include "GameSource/GameState/Progression/BrnProfile.h"
@@ -231,7 +232,7 @@ namespace BrnGame
 
                 // ---- switch C (329..580) ----
                 case 329:
-                    CGS_ASSERT(lp != 0, "lpScoreRequestEvent");
+                    CGS_ASSERT(lp != 0, CgsDev::Assert::MessageAt("lpScoreRequestEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGUIToX.cpp", 655));
                     reinterpret_cast<s32*>(lpOut)[0] = lpW[0];
                     liType = 97; liSize = 4; lbEmit = true;
                     break;
@@ -240,7 +241,7 @@ namespace BrnGame
                     liType = 100; liSize = 1; lbEmit = true;
                     break;
                 case 331:
-                    CGS_ASSERT(lp != 0, "lpRequest");
+                    CGS_ASSERT(lp != 0, CgsDev::Assert::MessageAt("lpRequest", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGUIToX.cpp", 562));
                     *reinterpret_cast<u64*>(lpOut) = *reinterpret_cast<const u64*>(lp);
                     liType = 104; liSize = 8; lbEmit = true;
                     break;
@@ -254,7 +255,7 @@ namespace BrnGame
                     break;
                 case 357:
                 {
-                    CGS_ASSERT(lp != 0, "lpAutosaveCompletedEvent");
+                    CGS_ASSERT(lp != 0, CgsDev::Assert::MessageAt("lpAutosaveCompletedEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGUIToX.cpp", 670));
                     const s32 liCount = lpW[0];
                     if (liCount <= 0)
                         break;
@@ -264,7 +265,7 @@ namespace BrnGame
                     break;
                 }
                 case 360:
-                    CGS_ASSERT(lp != 0, "lpImagesLoadedEvent");
+                    CGS_ASSERT(lp != 0, CgsDev::Assert::MessageAt("lpImagesLoadedEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGUIToX.cpp", 695));
                     std::memcpy(lpOut, lp, 48);
                     liType = 161; liSize = 48; lbEmit = true;
                     break;
@@ -350,7 +351,7 @@ namespace BrnGame
                     break;   // no standard emit
                 }
                 case 517:
-                    CGS_ASSERT(lp != 0, "lpGuiImageGalleryRequest");
+                    CGS_ASSERT(lp != 0, CgsDev::Assert::MessageAt("lpGuiImageGalleryRequest", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGUIToX.cpp", 607));
                     std::memcpy(lpOut, lp, 16);
                     liType = 158; liSize = 16; lbEmit = true;
                     break;
@@ -371,7 +372,7 @@ namespace BrnGame
                     break;
                 case 573:
                 {
-                    CGS_ASSERT(lp != 0, "lpChallengeSelectedEvent");
+                    CGS_ASSERT(lp != 0, CgsDev::Assert::MessageAt("lpChallengeSelectedEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeGUIToX.cpp", 727));
                     *reinterpret_cast<u64*>(lpOut) = *reinterpret_cast<const u64*>(lp);
                     reinterpret_cast<s32*>(lpOut)[3] = lpW[3];
                     const s32 liSelector = lpW[2];

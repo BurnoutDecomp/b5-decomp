@@ -308,7 +308,7 @@ namespace BrnDirector
         // ⭐ REAL (was held back for host size): the camera-behaviour manager.
         mBehaviourManager.Construct();
 
-        CGS_ASSERT(lpResourceManager != 0, "lpDirectorResourceManager != NULL");
+        CGS_ASSERT(lpResourceManager != 0, CgsDev::Assert::MessageAt("lpDirectorResourceManager != NULL", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 168));
         mBehaviourManager.SetDirectorResourceManager(lpResourceManager);
 
         // ⭐ REAL (2026-09-24, FX-DIRECTOR moment tick): the moment controller -- its pool's
@@ -1409,7 +1409,7 @@ namespace BrnDirector
         if (lpInput->GetPlayerTakenDown())
         {
             maGameState.mbPlayerWasTakenDown = true;                        // +0x1C3
-            CGS_ASSERT(lpInput->GetPlayerTakenDown(), "mbPlayerTakenDown");
+            CGS_ASSERT(lpInput->GetPlayerTakenDown(), CgsDev::Assert::MessageAt("mbPlayerTakenDown", "..\\..\\..\\GameSource\\Director/DirectorModule/BrnDirectorModuleIO.h", 232));
             maGameState.mePlayerKillerIndex = lpInput->GetPlayerKillerCarIndex();  // +0x1C4
         }
 
@@ -3242,7 +3242,7 @@ namespace BrnDirector
         if (!maGameState.mbCanUseSlomo)
         {
             CGS_ASSERT(!(mbDebugAssertNoIllegalSlomo && lCamera.GetEffects().mfSimTimeScale != 1.0f),
-                       "Trying to use slomo when not allowed");
+                       CgsDev::Assert::MessageAt("Trying to use slomo when not allowed", "..\\..\\..\\GameSource\\Director/BrnMainDirector.cpp", 711));
             lCamera.GetEffects().mfSimTimeScale = 1.0f;
         }
 

@@ -267,7 +267,7 @@ namespace BrnGameState
             mbWasInAirLastFrame = false;
         }
 
-        CGS_ASSERT(lePlayerIndex != -1, "Player car index hasn't been set");
+        CGS_ASSERT(lePlayerIndex != -1, CgsDev::Assert::MessageAt("Player car index hasn't been set", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 980));
 
         // --- landing pass: rate accumulated spin / barrel-roll ---
         // GetCurrentInAirRotations -> a Vector3 of per-axis rotation; the X360 takes the

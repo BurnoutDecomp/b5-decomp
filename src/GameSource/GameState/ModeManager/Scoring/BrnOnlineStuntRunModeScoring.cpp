@@ -165,7 +165,7 @@ void OnlineStuntRunModeScoring::UpdatePlayerPoints(ScoringSystem* lpScoringSyste
             ++liNumContestingTeams;
         }
 
-        CGS_ASSERT(leTeam + 1 <= KI_MAX_PLAYER_TEAMS, "leEnumIndex <= E_PLAYER_TEAM_COUNT");
+        CGS_ASSERT(leTeam + 1 <= KI_MAX_PLAYER_TEAMS, CgsDev::Assert::MessageAt("leEnumIndex <= E_PLAYER_TEAM_COUNT", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedEnums.h", 112));
     }
 
     qsort(laPlayerData, liNumberOfCars, sizeof(PlayerSortData), Compare);

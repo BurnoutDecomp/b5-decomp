@@ -71,7 +71,7 @@ void StreetManager::ProcessNetworkHighScoreEvent(
 
             if ( lbIsNewHighScore )
             {
-                CGS_ASSERT( mpRoadRulesManager, "mpRoadRulesManager" );
+                CGS_ASSERT( mpRoadRulesManager, CgsDev::Assert::MessageAt("mpRoadRulesManager", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3004) );
 
                 if ( mpRoadRulesManager->GetCurrentRoadID() == KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liSlotIndex] )
                 {
@@ -80,8 +80,8 @@ void StreetManager::ProcessNetworkHighScoreEvent(
                     GetChallengeFriendHighScore( liSlotIndex, &lRecord.mFriendScores, false );
                     lRecord.mRoadId = KAA_SAVE_GAME_CHALLENGE_ROAD_IDS[liSlotIndex];
 
-                    CGS_ASSERT( lpOutput, "lpOutput" );
-                    CGS_ASSERT( lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()" );
+                    CGS_ASSERT( lpOutput, CgsDev::Assert::MessageAt("lpOutput", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3016) );
+                    CGS_ASSERT( lpOutput->GetGameActionQueue(), CgsDev::Assert::MessageAt("lpOutput->GetGameActionQueue()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3017) );
 
                     CgsModule::VariableEventQueue<13312, 16>* lpQueue = lpOutput->GetGuiOutputQueue();
                     lpQueue->AddEvent( reinterpret_cast<const CgsModule::Event*>( &lRecord ),
@@ -100,12 +100,12 @@ void StreetManager::ProcessBuddyRemoved(
         GameStateModuleIO::OutputBuffer* lpOutput,
         const GameStateModuleIO::BuddyRemovedEvent* lpBuddyRemovedEvent )
 {
-    CGS_ASSERT( lpOutput, "lpOutput" );
-    CGS_ASSERT( lpOutput->GetGameActionQueue(), "lpOutput->GetGameActionQueue()" );
+    CGS_ASSERT( lpOutput, CgsDev::Assert::MessageAt("lpOutput", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 4217) );
+    CGS_ASSERT( lpOutput->GetGameActionQueue(), CgsDev::Assert::MessageAt("lpOutput->GetGameActionQueue()", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 4218) );
 
     const bool lbScoresCleared = ClearAllChallengeDataForBuddy( &lpBuddyRemovedEvent->mRemovedBuddyName );
 
-    CGS_ASSERT( mpRoadRulesManager, "mpRoadRulesManager" );
+    CGS_ASSERT( mpRoadRulesManager, CgsDev::Assert::MessageAt("mpRoadRulesManager", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 4225) );
 
     if ( lbScoresCleared )
     {

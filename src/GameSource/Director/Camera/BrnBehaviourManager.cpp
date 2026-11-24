@@ -277,7 +277,7 @@ namespace Camera
         const BehaviourHelperIndex lBehaviourIndex(static_cast<s32>(luAllocationKey));
 
         CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex),
-                   "mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)");
+                   CgsDev::Assert::MessageAt("mBehaviourHelperPool.IsObjectAllocated(lBehaviourIndex)", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 218));
         CGS_ASSERT(luAllocationKey < mBehaviourNeedsPreparingFlags.GetCapacity(),
                    "invalid index : luAllocationKey < capacity");
 
@@ -310,13 +310,13 @@ namespace Camera
         const BehaviourHelperIndex lBehaviourHelperIndex(static_cast<s32>(luAllocationKey));
 
         CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
-                   "mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)");      // :928
+                   CgsDev::Assert::MessageAt("mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 928));      // :928
         CGS_ASSERT(mBehaviourRefCounts[luAllocationKey] == 0,
-                   "mBehaviourRefCounts[lBehaviourHelperIndex] == 0");                    // :929
+                   CgsDev::Assert::MessageAt("mBehaviourRefCounts[lBehaviourHelperIndex] == 0", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 929));                    // :929
         CGS_ASSERT(!mBehaviourNeedsReleasingFlags.IsBitSet(luAllocationKey),
-                   "mBehaviourNeedsReleasingFlags.IsBitSet(lBehaviourHelperIndex) == false"); // :930
+                   CgsDev::Assert::MessageAt("mBehaviourNeedsReleasingFlags.IsBitSet(lBehaviourHelperIndex) == false", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 930)); // :930
         CGS_ASSERT(!mBehaviourUsedByHandleFlags.IsBitSet(luAllocationKey),
-                   "mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == false");   // :931
+                   CgsDev::Assert::MessageAt("mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == false", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 931));   // :931
 
         mBehaviourUsedByHandleFlags.SetBit(luAllocationKey);
     }
@@ -326,9 +326,9 @@ namespace Camera
         const BehaviourHelperIndex lBehaviourHelperIndex(static_cast<s32>(luAllocationKey));
 
         CGS_ASSERT(mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex),
-                   "mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)");      // :942
+                   CgsDev::Assert::MessageAt("mBehaviourHelperPool.IsObjectAllocated(lBehaviourHelperIndex)", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 942));      // :942
         CGS_ASSERT(mBehaviourUsedByHandleFlags.IsBitSet(luAllocationKey),
-                   "mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == true");    // :943
+                   CgsDev::Assert::MessageAt("mBehaviourUsedByHandleFlags.IsBitSet(lBehaviourHelperIndex) == true", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 943));    // :943
 
         mBehaviourUsedByHandleFlags.UnSetBit(luAllocationKey);
 

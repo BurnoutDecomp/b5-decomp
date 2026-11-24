@@ -365,8 +365,8 @@ void StuntAttackMode::PreWorldUpdate(GameStateModuleIO::OutputBuffer* lpOutput,
                                      bool lbPaused,
                                      const ScoringSystem* lpScoringSystem)
 {
-    CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");   // :161
-    CGS_ASSERT(lpInput  != 0, "lpInput != NULL");    // :162
+    CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnStuntAttackMode.cpp", 161));   // :161
+    CGS_ASSERT(lpInput  != 0, CgsDev::Assert::MessageAt("lpInput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/GameModes/BrnStuntAttackMode.cpp", 162));    // :162
 
     // ---- 0x82344F74..0x82344FE4 : the one-shot boost fill ----------------------------------
     if (mbNeedToFillBoost)

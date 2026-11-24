@@ -1760,7 +1760,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
         char lacResourceName[128];
         strncpy(lacResourceName, lacVehicleID + 4, 9);
         CGS_ASSERT(strlen(lacResourceName) + 10 < 0x7F,
-                   "(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1");
+                   CgsDev::Assert::MessageAt("(strlen(lpcSource)+strlen(lpcDest))<luBytes - 1", "..\\..\\..\\GameShared\\GameClasses\\Core/CgsStringUtils.h", 75));
         strcat(lacResourceName, "_AttribSys");
 
         CgsResource::Events::AcquireResourceRequest lRequest;
@@ -2080,7 +2080,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
                 const VehicleListEntry* lpVehicleListEntry =
                     mVehicleList.GetVehicleData(CgsIDCompress(lacVehicleID + 4));
-                CGS_ASSERT(lpVehicleListEntry != 0, "lpVehicleListEntry");   // X360 line 4689
+                CGS_ASSERT(lpVehicleListEntry != 0, CgsDev::Assert::MessageAt("lpVehicleListEntry", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 4689));   // X360 line 4689
                 if (lpVehicleListEntry == 0)
                     return;   // [marked deviation] see ProcessLoadVehicleRequest
 
@@ -2680,7 +2680,7 @@ void GameDataModule::ProcessSwapInCollisionWorldRequest(
 
         // X360 line 4155 (message-less assert: the stringized condition is the message).
         CGS_ASSERT(strncmp(lacResourceName, "PRP_INST_", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0,
-                   "strncmp(lacResourceName, \"PRP_INST_\", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0");
+                   CgsDev::Assert::MessageAt("strncmp(lacResourceName, \"PRP_INST_\", KU_STRING_INDEX_OF_ZONE_NUMBER) == 0", "..\\..\\..\\GameSource\\Resource/BrnGameDataModule.cpp", 4155));
 
         const u32 luZoneId = static_cast<u32>(atoi(&lacResourceName[KU_STRING_INDEX_OF_ZONE_NUMBER]));
         // X360 fires this guard TWICE (lines 4157 and 4160) inside one out-of-range branch;

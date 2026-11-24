@@ -149,7 +149,7 @@ void AchievementManagerBase::OnSetRoadRule(BrnStreetData::ScoreType leScoreType,
     }
     else
     {
-        CGS_ASSERT(false, "dodgy road rule type!");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("dodgy road rule type!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 252));
     }
 }
 
@@ -339,7 +339,7 @@ void AchievementManagerBase::OnCollectAllStunts(StuntElementType leStuntType)
     }
     else if (leStuntType >= E_STUNT_ELEMENT_TYPE_COUNT)
     {
-        CGS_ASSERT(false, "dodgy stunt type!");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("dodgy stunt type!", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/AchievementManager/BrnGameStateAchievementManagerBase.cpp", 585));
     }
     else // E_STUNT_ELEMENT_TYPE_BILLBOARD
     {

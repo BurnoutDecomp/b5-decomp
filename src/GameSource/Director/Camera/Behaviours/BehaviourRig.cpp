@@ -302,7 +302,7 @@ BehaviourRig::Update(Camera& lrCamera, const BehaviourSharedInfo& lrInfo)
 {
     using namespace rw::math::vpu;
 
-    CGS_ASSERT(mpParameters != NULL, "mpParameters != NULL");                // :136
+    CGS_ASSERT(mpParameters != NULL, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourRig.cpp", 136));                // :136
 
     if (!HasFailed())
     {

@@ -141,7 +141,7 @@ void ProgressionManager::DefeatRivalAndUnlockCar(s32 liRivalIndex, EUnlockSequen
             lpSavedRival = mProfile.AddRival(lRivalId, lCarId);
         }
     }
-    CGS_ASSERT(lpSavedRival != 0, "lpSavedRival");   // BrnProgressionManager.cpp:2465
+    CGS_ASSERT(lpSavedRival != 0, CgsDev::Assert::MessageAt("lpSavedRival", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 2465));   // BrnProgressionManager.cpp:2465
 
     if ((CgsDev::Message::gxMessageFilterFlags & 1) && CgsDev::Log::gpDebugPrint != 0)
     {
@@ -218,7 +218,7 @@ void ProgressionManager::OnPursuitWon(CgsID lRivalId, BrnGameState::GameStateMod
     CGS_ASSERT(lpRival != 0, CgsDev::Assert::MessageAt("lpRival != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 2410));   // :2410
 
     RivalData* lpSavedRival = mProfile.FindRival(lRivalId);
-    CGS_ASSERT(lpSavedRival != 0, "lpSavedRival");   // :2413
+    CGS_ASSERT(lpSavedRival != 0, CgsDev::Assert::MessageAt("lpSavedRival", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/Progression/BrnProgressionManager.cpp", 2413));   // :2413
 
     DefeatRivalAndUnlockCar(liRivalIndex, E_UNLOCK_SEQUENCE_TYPE_DEFAULT);
 

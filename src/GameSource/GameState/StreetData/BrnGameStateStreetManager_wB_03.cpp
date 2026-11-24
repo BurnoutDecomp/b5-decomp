@@ -38,7 +38,7 @@ namespace BrnGameState
                                                const BrnStreetData::ChallengePlayerScoreEntry* lpEntry,
                                                bool lbUpdateHighScore )
     {
-        CGS_ASSERT( lpEntry, "lpData" );
+        CGS_ASSERT( lpEntry, CgsDev::Assert::MessageAt("lpData", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3654) );
 
         if ( lbUpdateHighScore )
         {
@@ -61,7 +61,7 @@ namespace BrnGameState
         if ( liRoadIndex >= 0 )
         {
             CGS_ASSERT( liRoadIndex < KI_MAX_CHALLENGES,
-                        "liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES" );
+                        CgsDev::Assert::MessageAt("liChallengeIndex < BrnGameState::KI_MAX_CHALLENGES", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 3665) );
             maChallengeData[liRoadIndex].Copy( lpEntry );
         }
     }

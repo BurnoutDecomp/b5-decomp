@@ -166,7 +166,7 @@ void ScoringSystem::SetTimeLimitPerKm(f32 lfSecondsPerKm)
 // X360 0x823109E8. Extend an already-active time limit by lfSeconds.
 void ScoringSystem::IncreaseTimeLimit(f32 lfSeconds)
 {
-    CGS_ASSERT(IsTimeLimitActive(), "IsTimeLimitActive()");
+    CGS_ASSERT(IsTimeLimitActive(), CgsDev::Assert::MessageAt("IsTimeLimitActive()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 1532));
 
     mEndTime += CgsSystem::Time(lfSeconds);
 }
@@ -224,7 +224,7 @@ const CgsSystem::Time ScoringSystem::GetElapsedTime(const CgsSystem::Time& lTime
 // in mTimeRemaining and returns it by value.
 const CgsSystem::Time ScoringSystem::GetModeTimeRemaining(const CgsSystem::Time& lTime)
 {
-    CGS_ASSERT(IsTimeLimitActive(), "IsTimeLimitActive()");
+    CGS_ASSERT(IsTimeLimitActive(), CgsDev::Assert::MessageAt("IsTimeLimitActive()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 1600));
 
     mTimeRemaining = mEndTime - lTime;
     return mTimeRemaining;
@@ -346,7 +346,7 @@ void ScoringSystem::StopModeTimer(const CgsSystem::Time& lTime, EActiveRaceCarIn
                CgsDev::Assert::MessageAt("(leLocalPlayerActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0) && (leLocalPlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 876));
 
     CarData* lpCarData = GetCarData(leRaceCarIndex);
-    CGS_ASSERT(lpCarData != NULL, "lpCarData");
+    CGS_ASSERT(lpCarData != NULL, CgsDev::Assert::MessageAt("lpCarData", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 885));
 
     // Elapsed mode time = now - mode-start. Cached in the system's mTotalTime slot (X360 a1+0x10).
     mTotalTime = lTime - mStartTime;
@@ -387,7 +387,7 @@ void ScoringSystem::StopModeTimer(const CgsSystem::Time& lTime, EActiveRaceCarIn
         BrnNetwork::NetworkRounder::RoundDistanceToNetworkAccuracy(&lfRoundedDistance);
         lpScoreData->SetDistanceToFinish(lfRoundedDistance);
 
-        CGS_ASSERT(mpCurrentOnlineModeScoring != NULL, "mpCurrentOnlineModeScoring");
+        CGS_ASSERT(mpCurrentOnlineModeScoring != NULL, CgsDev::Assert::MessageAt("mpCurrentOnlineModeScoring", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 923));
         // X360 dispatches BaseOnlineModeScoring vtable slot 6 (== UpdatePlayerPoints) on the current
         // online scorer, passing this scoring system + the active-car count (ss+0x4EE8).
         mpCurrentOnlineModeScoring->UpdatePlayerPoints(this, static_cast<s32>(muCarsInCurrentMode));
@@ -405,7 +405,7 @@ void ScoringSystem::StopModeTimer(const CgsSystem::Time& lTime, EActiveRaceCarIn
             {
                 lpScoreData->SetFinishTime(mTotalTime);
             }
-            CGS_ASSERT(liEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT, "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CGS_ASSERT(liEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT, CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
         }
     }
 

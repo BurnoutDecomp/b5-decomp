@@ -97,7 +97,7 @@ void ModeManager::Construct(GameStateModule*                      lpGameStateMod
     mModeManagerDebugComponent.Register();
 
     ScoringSystem* lpScoringSystem = GetScoringSystem();
-    CGS_ASSERT(lpScoringSystem != 0, "lpScoringSystem");
+    CGS_ASSERT(lpScoringSystem != 0, CgsDev::Assert::MessageAt("lpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Debug/BrnScoringSystemDebugComponent.cpp", 99));
     mScoringSystemDebugComponent.Construct(lpScoringSystem);
     mScoringSystemDebugComponent.Register();
 

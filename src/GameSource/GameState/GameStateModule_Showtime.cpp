@@ -43,6 +43,7 @@
 #include "GameSource/GameState/CarSelect/BrnCarSelectManager.h"             // GetJunkyardId
 #include "GameShared/GameClasses/System/Timer/CgsTimerRequestInterface.h"   // CgsSystem::TimerRequests
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"
 // [FX-SHOWTIME2 2026-09-24] UpdateShowtimeMode's action records, its scorer and its answer queue.
 #include "GameSource/GameState/BrnGameActions.h"                            // Toggle/TrafficTypeRequest/VehicleHit actions
@@ -136,12 +137,12 @@ namespace
         // declaration -- that IS the asm's -1-sentinel do-while at 0x8236B594.
         StartGameModeParams lStartGameModeParams;
 
-        CGS_ASSERT(lpInput  != 0, "lpInput != NULL");    // :5579
-        CGS_ASSERT(lpOutput != 0, "lpOutput != NULL");   // :5580
+        CGS_ASSERT(lpInput  != 0, CgsDev::Assert::MessageAt("lpInput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5579));    // :5579
+        CGS_ASSERT(lpOutput != 0, CgsDev::Assert::MessageAt("lpOutput != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5580));   // :5580
         CGS_ASSERT(!IsOnlineGameMode() ||
                        GameStateModuleIO::IsOnlineFreeBurnLobby(
                            mModeManager.GetCurrentGameModeType()),
-                   "!IsOnlineGameMode() || mModeManager.IsOnlineFreeBurnLobby()");   // :5582
+                   CgsDev::Assert::MessageAt("!IsOnlineGameMode() || mModeManager.IsOnlineFreeBurnLobby()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5582));   // :5582
 
         (void)lpInput;   // asserted above and then never read -- see the banner
 
@@ -386,7 +387,7 @@ namespace
     // =============================================================================================
     f32 GameStateModule::GetShowtimeIntroSteering() const
     {
-        CGS_ASSERT(IsInShowtimeIntro(), "IsInShowtimeIntro()");   // :5050
+        CGS_ASSERT(IsInShowtimeIntro(), CgsDev::Assert::MessageAt("IsInShowtimeIntro()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 5050));   // :5050
         return mfShowtimeIntroSteering;
     }
 
@@ -501,7 +502,7 @@ namespace
             }
 
             CGS_ASSERT(muShowtimeRequestedTrafficIndex == K_INVALID_VEHICLE_INDEX,
-                       "muShowtimeRequestedTrafficIndex == K_INVALID_VEHICLE_INDEX");   // :1611 (li r5, 0x64B)
+                       CgsDev::Assert::MessageAt("muShowtimeRequestedTrafficIndex == K_INVALID_VEHICLE_INDEX", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/BrnGameStateModule.cpp", 1611));   // :1611 (li r5, 0x64B)
             muShowtimeRequestedTrafficIndex = K_INVALID_VEHICLE_INDEX;
         }
 
@@ -509,7 +510,7 @@ namespace
         // The inlined IsEmpty's constructed-check (CgsStack.h:177, li r5, 0xB1) is the console's
         // own; this tree's Stack::IsEmpty() carries no assert, so it is spelled at the call site.
         CGS_ASSERT(mShowtimePendingTrafficIndexStack.GetLength() != CgsContainers::KI_STACK_UNCONSTRUCTED,
-                   "Stack used before Construct/Clear was called");                   // CgsStack.h:177
+                   CgsDev::Assert::MessageAt("Stack used before Construct/Clear was called", "..\\..\\..\\GameShared\\GameClasses\\Containers/CgsStack.h", 177));                   // CgsStack.h:177
         if (!mShowtimePendingTrafficIndexStack.IsEmpty())
         {
             --miShowtimePendingFrameDelay;

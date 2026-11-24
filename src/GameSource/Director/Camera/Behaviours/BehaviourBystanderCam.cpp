@@ -194,7 +194,7 @@ bool BehaviourBystanderCam::Update(Camera& lrCamera, const BehaviourSharedInfo& 
 {
     using namespace rw::math::vpu;
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");   // cpp:272
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BehaviourBystanderCam.cpp", 272));   // cpp:272
 
     if (!mTarget.IsValid(*lrInfo.GetWorld()))
     {

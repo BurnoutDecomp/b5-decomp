@@ -405,7 +405,7 @@ MomentPlayerJumping::EStatus MomentPlayerJumping::GetCameraStatus()
             leStatus = E_STATUS_READY;
         break;
     default:
-        CGS_ASSERT(false, "invalid type");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("invalid type", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentPlayerJumping.cpp", 543));
         break;
     }
     return leStatus;

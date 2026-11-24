@@ -886,7 +886,7 @@ void ModeManager::PlayerFinishedMode(const GameStateModuleIO::PlayerFinishedMode
         // + 24 + 16 / +20) straight into the RegisterFinishForCar argument.
         const CgsSystem::Time lFinishTime = mTimerStatusInterface.GetSimTimerStatus()->GetTime();
 
-        CGS_ASSERT(mpGameStateModule != 0, "mpGameStateModule");   // BrnModeManager.cpp:5700
+        CGS_ASSERT(mpGameStateModule != 0, CgsDev::Assert::MessageAt("mpGameStateModule", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 5700));   // BrnModeManager.cpp:5700
         const EActiveRaceCarIndex lePlayerActiveRaceCarIndex = mpGameStateModule->GetPlayerActiveRaceCarIndex();
 
         mScoringSystem.RegisterFinishForCar(true, lePlayerActiveRaceCarIndex, lFinishTime);
@@ -951,14 +951,14 @@ void ModeManager::HandleOnlineTeamModes(const GameStateModuleIO::PreWorldInputBu
     }
 
     CGS_ASSERT(lpInput != NULL, CgsDev::Assert::MessageAt("lpInput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4383));     // BrnModeManager.cpp:4383
-    CGS_ASSERT(lpOutput != NULL, "lpOutput");   // BrnModeManager.cpp:4384
+    CGS_ASSERT(lpOutput != NULL, CgsDev::Assert::MessageAt("lpOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4384));   // BrnModeManager.cpp:4384
 
     const BrnNetwork::BrnNetworkModuleIO::InGamePlayerStatusInterface* lpPlayerStatusInterface =
         lpInput->GetPlayerStatusInterface();
     GameStateModuleIO::GameActionQueue* lpActionQueue = lpOutput->GetGameActionQueue();
 
     CGS_ASSERT(lpPlayerStatusInterface != NULL, CgsDev::Assert::MessageAt("lpPlayerStatusInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4388));   // BrnModeManager.cpp:4388
-    CGS_ASSERT(lpActionQueue != NULL, "lpActionQueue");                       // BrnModeManager.cpp:4389
+    CGS_ASSERT(lpActionQueue != NULL, CgsDev::Assert::MessageAt("lpActionQueue", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4389));                       // BrnModeManager.cpp:4389
 
     HandleOnlineTeamTakedowns(lpPlayerStatusInterface, lpTakedownQueue, lpActionQueue);
 

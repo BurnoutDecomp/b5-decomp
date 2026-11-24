@@ -12,6 +12,7 @@
 #include "GameSource/Game/BrnLUACall.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h" // CgsDev::Assert::BeginAssert / FireAssert / EndAssert
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
 namespace BrnGame
 {
@@ -60,7 +61,7 @@ namespace BrnGame
             return E_BOOL;
 
         // Unconditional fall-through: fire the assert then return E_UNKNOWN.
-        CGS_ASSERT(false, "Could not derive arg type");
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("Could not derive arg type", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\game\\BrnLUACall.h", 198));
         return E_UNKNOWN;
     }
 
@@ -70,7 +71,7 @@ namespace BrnGame
         // subf r4, r11, r30 -- ResultIndexToStackIndex(liResultIndex) inlined.
         const s32 liStackIndex = liResultIndex - miNumResults;
 
-        CGS_ASSERT(lua_isnumber(mpLuaHandle, liStackIndex), "IsNumber(liResultIndex)");
+        CGS_ASSERT(lua_isnumber(mpLuaHandle, liStackIndex), CgsDev::Assert::MessageAt("IsNumber(liResultIndex)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\game\\BrnLUACall.h", 149));
 
         // fctiwz f0, f1 ; stfiwx -- truncate the Lua number to a 32-bit int.
         return static_cast<s32>(lua_tonumber(mpLuaHandle, liStackIndex));
@@ -82,7 +83,7 @@ namespace BrnGame
         // subf r4, r11, r30 -- ResultIndexToStackIndex(liResultIndex) inlined.
         const s32 liStackIndex = liResultIndex - miNumResults;
 
-        CGS_ASSERT(lua_isstring(mpLuaHandle, liStackIndex), "IsString(liResultIndex)");
+        CGS_ASSERT(lua_isstring(mpLuaHandle, liStackIndex), CgsDev::Assert::MessageAt("IsString(liResultIndex)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\game\\BrnLUACall.h", 156));
 
         // li r5, 0 -- length out-param is null.
         return lua_tolstring(mpLuaHandle, liStackIndex, 0);

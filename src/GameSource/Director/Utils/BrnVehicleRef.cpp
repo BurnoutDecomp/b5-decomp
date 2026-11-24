@@ -49,7 +49,7 @@ namespace BrnDirector
             break;
 
         default:
-            CGS_ASSERT(false, "unknown type");          // BrnVehicleRef.h:195 (non-gating)
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unknown type", "..\\..\\..\\GameSource\\Director/Utils/BrnVehicleRef.h", 195));          // BrnVehicleRef.h:195 (non-gating)
             break;
         }
     }

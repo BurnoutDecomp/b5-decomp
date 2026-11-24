@@ -196,7 +196,7 @@ namespace BrnGameState
     {
         const EActiveRaceCarIndex lePlayerIndex = lpRaceCar->GetPlayerActiveRaceCarIndex();
         CGS_ASSERT(lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                   CgsDev::Assert::MessageAt("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 967));
 
         bool lbPlayerCarActive = false;
         if (lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
@@ -407,7 +407,7 @@ namespace BrnGameState
                                     lfSpinDegrees * KF_FLAT_SPIN_DEGREES_PER_SPIN + KF_SPIN_COUNT_ROUNDING_BIAS;
                                 mRecentStunt.muFlatSpins =
                                     static_cast<u16>(static_cast<s32>(lfSpins));
-                                CGS_ASSERT(mRecentStunt.muFlatSpins >= 1, "mRecentStunt.muFlatSpins >= 1");
+                                CGS_ASSERT(mRecentStunt.muFlatSpins >= 1, CgsDev::Assert::MessageAt("mRecentStunt.muFlatSpins >= 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 408));
                             }
                         }
 
@@ -425,7 +425,7 @@ namespace BrnGameState
                                     lfRollDegrees * KF_BARREL_ROLL_DEGREES_PER_ROLL + KF_SPIN_COUNT_ROUNDING_BIAS;
                                 mRecentStunt.muBarrelRolls =
                                     static_cast<u16>(static_cast<s32>(lfRolls));
-                                CGS_ASSERT(mRecentStunt.muBarrelRolls >= 1, "mRecentStunt.muBarrelRolls >= 1");
+                                CGS_ASSERT(mRecentStunt.muBarrelRolls >= 1, CgsDev::Assert::MessageAt("mRecentStunt.muBarrelRolls >= 1", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnStuntModeScoring.cpp", 420));
                             }
                         }
 
@@ -511,7 +511,7 @@ namespace BrnGameState
     {
         const EActiveRaceCarIndex lePlayerIndex = lpRaceCar->GetPlayerActiveRaceCarIndex();
         CGS_ASSERT(lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                   CgsDev::Assert::MessageAt("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 967));
 
         bool lbPlayerCarActive = false;
         if (lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)

@@ -31,6 +31,7 @@
 
 #include "GameSource/GameState/StreetData/BrnStreetManagerDebugComponent.h"  // the embedded component
 #include "GameShared/GameClasses/Core/CgsAssert.h"                           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                   // [diagnostic] gpDebugPrint
 #include "GameShared/GameClasses/System/Resource/CgsBinaryFileResource.h"    // [diagnostic] BinaryFileResource::GetData
 
@@ -59,8 +60,8 @@ namespace BrnGameState
     bool StreetManager::Prepare( GameStateModuleIO::OutputBuffer* lpOutput,
                                  CgsModule::EventReceiverQueue<3072,16>* lpReceiverQueue )
     {
-        CGS_ASSERT( lpOutput, "lpOutput" );
-        CGS_ASSERT( lpReceiverQueue, "lpReceiverQueue" );
+        CGS_ASSERT( lpOutput, CgsDev::Assert::MessageAt("lpOutput", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 281) );
+        CGS_ASSERT( lpReceiverQueue, CgsDev::Assert::MessageAt("lpReceiverQueue", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 282) );
 
         if ( LoadAIData( lpOutput, lpReceiverQueue ) && LoadDistrictMap( lpOutput, lpReceiverQueue ) )
         {

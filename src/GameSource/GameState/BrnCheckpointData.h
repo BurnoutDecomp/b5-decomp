@@ -39,8 +39,9 @@ public:
     {
         muLandmarkIndex  = luLandmarkIndex;
         muAISectionIndex = luAISectionIndex;
+        mauBlockSectionIds.Construct();     // X360: trailing count word -> 0 (before the district,
+                                            // AddCheckpoint 0x8236AAE4 / 0x8236AAE8)
         meDistrict       = 18;              // BrnWorld::E_DISTRICT_INVALID (BrnWorldRegion.h:36)
-        mauBlockSectionIds.Construct();     // X360: trailing count word -> 0
     }
 
     void                  AddBlockSectionId(u32 luBlockSectionId) { mauBlockSectionIds.Append(luBlockSectionId); } // ARTIST0x82329314

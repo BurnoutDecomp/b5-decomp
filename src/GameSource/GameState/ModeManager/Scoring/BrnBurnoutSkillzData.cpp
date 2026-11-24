@@ -84,8 +84,8 @@ namespace BrnGameState
     // either way; FLAGGED for the consolidator rather than retyping the committed home.
     f32 BurnoutSkillzData::GetSkillAccuracy(EBurnoutSkillType eSkill)
     {
-        CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START, "leSkillType >= E_BURNOUT_SKILL_START");
-        CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT, "leSkillType < E_BURNOUT_SKILL_COUNT");
+        CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START, CgsDev::Assert::MessageAt("leSkillType >= E_BURNOUT_SKILL_START", "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 161));
+        CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT, CgsDev::Assert::MessageAt("leSkillType < E_BURNOUT_SKILL_COUNT", "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 162));
 
         return 0.0049999999f;
     }
@@ -128,8 +128,8 @@ namespace BrnGameState
     // three, confirming the home's (EBurnoutSkillType eSkill, f32 fVal) signature.
     void BurnoutSkillzData::SetBurnoutSkill(EBurnoutSkillType eSkill, f32 fVal)
     {
-        CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START, "leSkillType >= E_BURNOUT_SKILL_START");
-        CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT, "leSkillType < E_BURNOUT_SKILL_COUNT");
+        CGS_ASSERT(eSkill >= E_BURNOUT_SKILL_START, CgsDev::Assert::MessageAt("leSkillType >= E_BURNOUT_SKILL_START", "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 147));
+        CGS_ASSERT(eSkill < E_BURNOUT_SKILL_COUNT, CgsDev::Assert::MessageAt("leSkillType < E_BURNOUT_SKILL_COUNT", "..\\..\\..\\GameSource\\GameState/ModeManager/Scoring/BrnBurnoutSkillzData.h", 148));
 
         const f32 lfAccuracy = GetSkillAccuracy(eSkill);
 

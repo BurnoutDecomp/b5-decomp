@@ -11,6 +11,7 @@
 #include "GameSource/Director/MomentController/BrnMoment.h"                // Moment::EState / EType
 #include "GameSource/Network/SharedIO/BrnNetworkSharedIO.h"                // BrnNetwork::EPaybackType
 #include "GameShared/GameClasses/Core/CgsAssert.h"                         // CGS_ASSERT (Update's default arm)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"                 // [DIAG] gpDebugPrint (bring-up only)
 #include <cstring>                                                         // strcmp (payback name compares)
 #include <cstdlib>                                                         // [DIAG] getenv (bring-up only)
@@ -547,7 +548,7 @@ namespace BrnDirector
 
         // ---- default @0x822655B0 -- reached by E_STATE_RELEASING (16) and anything above.
         default:
-            CGS_ASSERT(false, "unhandled state");   // BrnArbStateRoaming.cpp:643 (0x283)
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateRoaming.cpp", 643));   // BrnArbStateRoaming.cpp:643 (0x283)
             break;
         }
     }
@@ -611,7 +612,7 @@ namespace BrnDirector
             {
                 // The console re-asserts this every iteration (EffectTrigger.h:112, the
                 // GetCurrentEffectName tripwire re-emitted inline at 0x82208CD4).
-                CGS_ASSERT(lrEffects.HasCurrentEffectName(), "HasCurrentEffectName()");
+                CGS_ASSERT(lrEffects.HasCurrentEffectName(), CgsDev::Assert::MessageAt("HasCurrentEffectName()", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h", 112));
 
                 if (strcmp(lrEffects.GetCurrentEffectName(),
                            KAPC_PAYBACK_EFFECT_NAMES[liEnumIndex]) == 0)
@@ -625,7 +626,7 @@ namespace BrnDirector
                 // `cmpwi r25, 3` while this tree's BrnNetworkSharedIO.h carries
                 // E_PAYBACK_TYPE_COUNT == 4. The asm's number is kept (it can never fire from
                 // this 3-iteration loop either way); the enum discrepancy is not resolved here.
-                CGS_ASSERT((liEnumIndex + 1) <= 3, "leEnumIndex <= E_PAYBACK_TYPE_COUNT");
+                CGS_ASSERT((liEnumIndex + 1) <= 3, CgsDev::Assert::MessageAt("leEnumIndex <= E_PAYBACK_TYPE_COUNT", "..\\..\\..\\GameSource\\Network/SharedIO/BrnNetworkSharedIO.h", 182));
             }
         }
     }

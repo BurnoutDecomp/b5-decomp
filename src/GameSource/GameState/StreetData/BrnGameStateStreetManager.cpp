@@ -555,7 +555,7 @@ BrnStreetData::RoadIndex StreetManager::GetRoadIndexFromAISectionIndex(u16 secti
 // ARTIST 0x8230F8F8 (64-bit ID return).
 CgsID StreetManager::GetParRivalId(s32 road, BrnStreetData::ScoreType type)
 {
-    CGS_ASSERT(static_cast<u32>(road) < KI_MAX_CHALLENGES, "liRoadIndex >= 0 && liRoadIndex < KI_MAX_CHALLENGES");
+    CGS_ASSERT(static_cast<u32>(road) < KI_MAX_CHALLENGES, CgsDev::Assert::MessageAt("liRoadIndex >= 0 && liRoadIndex < KI_MAX_CHALLENGES", "..\\..\\..\\GameSource\\GameState/StreetData/BrnGameStateStreetManager.h", 972));
     CGS_ASSERT(static_cast<u32>(type) < BrnStreetData::E_SCORE_TYPE_COUNT, "Invalid score type");
     return maaParRivalIds[road][type];
 }
@@ -1885,7 +1885,7 @@ namespace BrnGameState
         bool lbFoundRoad = false;
 
         CGS_ASSERT( lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                    "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT" );
+                    CgsDev::Assert::MessageAt("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 967) );
 
         const ::EActiveRaceCarIndex lePlayerActiveRaceCarIndex = lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex();
         bool lbPlayerCarActive = false;
@@ -1897,7 +1897,7 @@ namespace BrnGameState
         if ( lbPlayerCarActive )
         {
             CGS_ASSERT( lePlayerActiveRaceCarIndex != ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
-                        "Player car index hasn't been set" );
+                        CgsDev::Assert::MessageAt("Player car index hasn't been set", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 980) );
             CGS_ASSERT( lePlayerActiveRaceCarIndex > ::E_ACTIVE_RACE_CAR_INDEX_INVALID,
                         CgsDev::Assert::MessageAt("lePlayerActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID", "..\\..\\..\\GameSource\\Gamestate/StreetData/BrnGameStateStreetManager.cpp", 561) );
             CGS_ASSERT( lePlayerActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT,

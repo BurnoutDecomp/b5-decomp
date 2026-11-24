@@ -53,6 +53,7 @@
 #include "GameSource/Director/Camera/Camera.h"                 // Camera::Camera (mTransform)
 #include "GameSource/Director/Camera/Utils/CameraUtils.h"      // Utils::CreateLookAt
 #include "GameShared/GameClasses/Core/CgsAssert.h"             // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/matrix44affine_operation.h"              // Mult / InverseOfMatrixWithOrthonormal3x3
 #include "rw/math/vpu/vector3_operation.h"                     // Magnitude / Mult
 #include "GameSource/Director/Camera/BrnCameraState.h"          // CameraState::Interpolate
@@ -302,7 +303,7 @@ Matrix44Affine CameraInterpolationController::RotateAboutPivot(
         Camera::Utils::Interpolater& lrLookAtInterpolater,
         f32                          lfT)
 {
-    CGS_ASSERT(lfT >= KF_ZERO && lfT <= KF_ONE, "lT >= 0.0f && lT <= 1.0f");   // cpp:212
+    CGS_ASSERT(lfT >= KF_ZERO && lfT <= KF_ONE, CgsDev::Assert::MessageAt("lT >= 0.0f && lT <= 1.0f", "..\\..\\..\\GameSource\\Director/Shots/ShotControllers/BrnCameraInterpolationController.cpp", 212));   // cpp:212
 
     const Matrix44Affine lInversePivot =
         rw::math::vpu::InverseOfMatrixWithOrthonormal3x3(lrPivot);

@@ -59,7 +59,7 @@ namespace BrnDirector
     // Non-gating guard, then the staged blend.
     f32 BackgroundEffectRequest::GetBackgroundStartRequestBlendAmount() const
     {
-        CGS_ASSERT(HasBackgroundStartRequest(), "HasBackgroundStartRequest()");   // non-gating
+        CGS_ASSERT(HasBackgroundStartRequest(), CgsDev::Assert::MessageAt("HasBackgroundStartRequest()", "..\\..\\..\\GameSource\\Director/Utils/BrnDirectorEffectTrigger.h", 249));   // non-gating
         return mfBlendAmount;
     }
 

@@ -547,7 +547,7 @@ void HUDMessageLogic::GenerateFirstOrLastMessage(
     ScoringSystem* lpScoringSystem, f32 lfTimeStep, EActiveRaceCarIndex lePlayerActiveRaceCarIndex,
     const StuntModeScoring::ActiveRaceCarOutputInterface* lpLastActiveRaceCarInterface)
 {
-    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem != NULL");   // .cpp:1612
+    CGS_ASSERT(lpScoringSystem != NULL, CgsDev::Assert::MessageAt("lpScoringSystem != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 1612));   // .cpp:1612
 
     if (!lpScoringSystem->HasAnyCarFinished())
     {
@@ -945,7 +945,7 @@ void HUDMessageLogic::GenerateOnlineStuntRunEliminationMessages(
     {
         // Report the individual eliminated rival.
         const CarData* lpCarData = lpScoringSystem->GetCarData(meEliminationRaceCarIndex);
-        CGS_ASSERT(lpCarData != NULL, "lpCarData != NULL");
+        CGS_ASSERT(lpCarData != NULL, CgsDev::Assert::MessageAt("lpCarData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Hud/BrnHUDMessageLogic.cpp", 1026));
 
         lMessage.mNetworkPlayerID = lpCarData->GetNetworkPlayerID();
         lMessage.miTeam = 0;
@@ -1158,7 +1158,7 @@ void HUDMessageLogic::GenerateOnlineBlueTeamEscapingMessage(
                 if (liActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_COUNT)
                 {
                     CGS_ASSERT(liActiveRaceCarIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                               "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                               CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
                 }
             }
 
@@ -1228,7 +1228,7 @@ void HUDMessageLogic::GenerateOnlineBlueTeamAreBehindYouMessage(
                 if (liActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_COUNT)
                 {
                     CGS_ASSERT(liActiveRaceCarIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                               "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                               CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
                 }
             }
 
@@ -1277,7 +1277,7 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
                 static_cast<EActiveRaceCarIndex>(liActiveRaceCarIndex);
             CGS_ASSERT((leCandidateIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                        (leCandidateIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                       "(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)");
+                       CgsDev::Assert::MessageAt("(leActiveRaceCarIndex>E_ACTIVE_RACE_CAR_INDEX_INVALID) && (leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT)", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 2027));
 
             const CarData* lpCandidateCarData = lpScoringSystem->GetCarData(leCandidateIndex);
             s32 liCandidateRacePosition = 8;
@@ -1306,7 +1306,7 @@ void HUDMessageLogic::GenerateOnlineLeaderMilestoneMessage(
             if (liActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_COUNT)
             {
                 CGS_ASSERT(liActiveRaceCarIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                           "leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                           CgsDev::Assert::MessageAt("leEnumIndex <= E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\BurnoutConstants.h", 39));
             }
         }
 
@@ -1449,9 +1449,9 @@ void HUDMessageLogic::GenerateOnlineTeamChangeMessages(
 void HUDMessageLogic::OnlineTeamChange(EActiveRaceCarIndex leActiveRaceCarIndex)
 {
     CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
-               "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
+               CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Hud/BrnHUDMessageLogic.h", 465));
     CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+               CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Hud/BrnHUDMessageLogic.h", 466));
 
     CGS_ASSERT(static_cast<u32>(leActiveRaceCarIndex) < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                "luIndex < NUMBITS");

@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 #include "GameShared/GameClasses/Core/CgsAssert.h"                          // CGS_ASSERT (unhandled-state assert)
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/Director/DirectorModule/BrnDirectorGameState.h"        // BrnDirector::GameState
 #include "GameSource/Director/Utils/BrnDirectorEffectTrigger.h"             // Camera effect-hook free functions
 #include "GameSource/Director/BrnDirectorICEWrapper.h"                      // ICEWrapper::PlayMovie / ICEPlayingMovie
@@ -544,7 +545,7 @@ namespace BrnDirector
         }
 
         default:
-            CGS_ASSERT(false, "unhandled state");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled state", "..\\..\\..\\GameSource\\Director/Arbitrator/States/BrnArbStateCrashNav.cpp", 274));
             break;
         }
 

@@ -281,7 +281,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
         const EGlobalRaceCarIndex lePlayerGlobalIndex =
             lpWorldOutputBuffer->GetPlayerGlobalRaceCarIndex();
         CGS_ASSERT(lePlayerGlobalIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT,
-                   "lePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT");   // :319
+                   CgsDev::Assert::MessageAt("lePlayerGlobalRaceCarIndex < E_GLOBAL_RACE_CAR_INDEX_COUNT", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToGui.cpp", 319));   // :319
 
         BrnGui::GuiPlayerRaceCarIdEvent lIdEvent;
         lIdEvent.mePlayerActiveRaceCarIndex = static_cast<s32>(lePlayerIndex);
@@ -459,7 +459,7 @@ void BrnGameModule::BridgeWorldVehicleDataToGui(
 
         const RCEntityGlobalRaceCarOutputInterface* lpGlobalInterface =
             lpWorldOutputBuffer->GetRaceCarGlobalOutputInterface();
-        CGS_ASSERT(lpGlobalInterface != 0, "lpGlobalRaceCarOutput");            // :410
+        CGS_ASSERT(lpGlobalInterface != 0, CgsDev::Assert::MessageAt("lpGlobalRaceCarOutput", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeWorldToGui.cpp", 410));            // :410
 
         if (lpGlobalInterface != 0)
         {

@@ -1,4 +1,5 @@
 #include "GameSource/GameState/TakedownManager/BrnTakedownManagerDebugComponent.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameSource/GameState/TakedownManager/BrnTakedownManager.h"   // TakedownManager + RaceCarData
 #include "GameSource/GameState/BrnGameStateModule.h"                          // GameStateModule::GetLastActiveRaceCarInterface (RecordTakedown)
 #include "GameSource/GameState/ModeManager/BrnModeManager.h"                  // ModeManager::GetGameStateModule
@@ -105,7 +106,7 @@ namespace BrnGameState
             {
                 lePlayerActiveRaceCarIndex = lpActiveCarInterface->GetPlayerActiveRaceCarIndex();
                 CGS_ASSERT(lePlayerActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID,
-                           "Player car index hasn't been set");
+                           CgsDev::Assert::MessageAt("Player car index hasn't been set", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 980));
                 const TakedownManager::RaceCarData* lpPlayerRaceCarData =
                     mpTakedownManager->GetRaceCarData(lePlayerActiveRaceCarIndex);
 

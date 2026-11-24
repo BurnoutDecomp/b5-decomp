@@ -164,13 +164,13 @@ const BrnProgression::CarData* OnlineCarSelectManager::GetProfileCarData(CgsID& 
 void OnlineCarSelectManager::SaveChosenLiveryForCar(CgsID lCarId)
 {
     BrnProgression::Profile* lpProfile = mpProgressionManager.Get()->GetProfile();
-    CGS_ASSERT(lpProfile, "lpProfile");
+    CGS_ASSERT(lpProfile, CgsDev::Assert::MessageAt("lpProfile", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 771));
 
     const BrnResource::VehicleList* lpVehicleList = mpVehicleList.Get();
     const s32 liVehicleIndex = lpVehicleList->GetVehicleIndex(lCarId);
     const BrnResource::VehicleListEntry* lpVehicleListEntry =
         (liVehicleIndex < 0) ? 0 : lpVehicleList->GetVehicleData(liVehicleIndex);
-    CGS_ASSERT(lpVehicleListEntry, "lpVehicleListEntry");
+    CGS_ASSERT(lpVehicleListEntry, CgsDev::Assert::MessageAt("lpVehicleListEntry", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/CarSelect/BrnOnlineCarSelectManager.cpp", 774));
 
     const u8 luLiveryType = lpVehicleListEntry->GetLiveryType();
     if (luLiveryType == 1 || luLiveryType == 3 || luLiveryType == 4)

@@ -2,6 +2,7 @@
 
 #include <cmath>                                                      // fabsf (the rotation wrap test)
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "rw/math/vpu/vector3_operation.h"                            // rw::math::vpu::Dot
 #include "GameSource/AttribSys/Generated/classes/shotgroup.h"         // Attrib::Gen::shotgroup (Num_ShotList / GetShotListData)
 // NOTE: the DirectorResourceManager reached below is BrnBehaviourIceAnim.h's
@@ -150,7 +151,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
                 : lpResourceManager->GetAfterCrashSafe();   // rm +1464
 
             CGS_ASSERT(lrShotGroup.Num_ShotList() > 0,
-                       "lpShotGroup->Num_ShotList() > 0");   //  (non-gating)
+                       CgsDev::Assert::MessageAt("lpShotGroup->Num_ShotList() > 0", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentStationaryCrash.cpp", 110));   //  (non-gating)
 
             // The group's first ShotList block (the console build builds a stack
             // Gen::iceanim over it; the 24-byte null-element fallback is the
@@ -162,7 +163,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
             ICE::ICETakeData* lpTakeData =
                 MomentSharedInfo_GetDirectorResourceManager(lSharedInfo)
                     ->GetKeyAnimFromGuid(IceAnimShotData_GetAnimGuid(lpShotData));
-            CGS_ASSERT(lpTakeData != 0, "lpTakeData != NULL");   //  (non-gating)
+            CGS_ASSERT(lpTakeData != 0, CgsDev::Assert::MessageAt("lpTakeData != NULL", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentStationaryCrash.cpp", 114));   //  (non-gating)
 
             if (ICETakeData_GetDuration(lpTakeData) - 0.1f
                 < MomentSharedInfo_GetTimeCrashing(lSharedInfo))
@@ -229,7 +230,7 @@ void MomentStationaryCrash::Update(f32 /*lfTimeStep*/, void* lrBehaviourControll
         break;
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");   //  (non-gating)
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentStationaryCrash.cpp", 183));   //  (non-gating)
         break;
     }
 }

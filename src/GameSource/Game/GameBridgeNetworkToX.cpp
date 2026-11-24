@@ -635,7 +635,7 @@ namespace BrnGame
                 {
                     const NetIO::NetworkOutActiveFburnChallengeEvent* lpActiveFreeburnChallengeEvent =
                         reinterpret_cast<const NetIO::NetworkOutActiveFburnChallengeEvent*>(lpEvent);
-                    CGS_ASSERT(lpActiveFreeburnChallengeEvent != 0, "lpActiveFreeburnChallengeEvent");
+                    CGS_ASSERT(lpActiveFreeburnChallengeEvent != 0, CgsDev::Assert::MessageAt("lpActiveFreeburnChallengeEvent", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 955));
                     GsIO::ActiveFburnChallengeEvent lActiveChallenge;
                     lActiveChallenge.mChallengeID            = lpActiveFreeburnChallengeEvent->mChallengeID;
                     lActiveChallenge.miNumPlayersInChallenge = lpActiveFreeburnChallengeEvent->miNumPlayersInChallenge;
@@ -1167,7 +1167,7 @@ namespace BrnGame
         const InGamePlayerStatusInterface* lpStatusInterface       = lpNetworkOutput->GetInGamePlayerStatusInterface();
 
         CGS_ASSERT(lpNetworkOutput->GetInGamePlayerStatusInterface() != 0,
-                   "lpNetworkOutput->GetInGamePlayerStatusInterface()");
+                   CgsDev::Assert::MessageAt("lpNetworkOutput->GetInGamePlayerStatusInterface()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 59));
         CGS_ASSERT(lpNetworkToGuiInterface != 0, CgsDev::Assert::MessageAt("lpNetworkToGuiInterface", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 60));
         CGS_ASSERT(lpNetworkOutput->GetGuiEventQueue() != 0, CgsDev::Assert::MessageAt("lpNetworkOutput->GetGuiEventQueue()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Game/GameBridgeNetworkToX.cpp", 61));
 

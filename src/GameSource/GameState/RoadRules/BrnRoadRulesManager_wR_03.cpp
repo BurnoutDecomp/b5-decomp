@@ -35,7 +35,7 @@ void RoadRulesManager::OnRoadLimit(CgsID lRoadLimitId, bool lbEntryDirection,
 {
     CgsID lOtherRoadLimitId = 0;
 
-    CGS_ASSERT(lpOutputBuffer, "lpOutputBuffer");
+    CGS_ASSERT(lpOutputBuffer, CgsDev::Assert::MessageAt("lpOutputBuffer", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/RoadRules/BrnRoadRulesManager.cpp", 799));
     GameStateModuleIO::GameActionQueue* lpGameActionQueue = lpOutputBuffer->GetGameActionQueue();
 
     // The road count is re-read through the street-data resource on every test, as the console does.

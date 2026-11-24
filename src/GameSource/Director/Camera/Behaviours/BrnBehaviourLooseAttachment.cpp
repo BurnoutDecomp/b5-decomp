@@ -43,12 +43,12 @@ bool BehaviourLooseAttachment::Update(Camera& lrCamera, const BehaviourSharedInf
     {
         if (mTarget.mbSet)
         {
-            CGS_ASSERT(mTarget != mAttachment, "mTarget != mAttachment");
+            CGS_ASSERT(mTarget != mAttachment, CgsDev::Assert::MessageAt("mTarget != mAttachment", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourLooseAttachment.cpp", 135));
             const rw::math::vpu::Vector3 target = mTarget.Get(lrInfo.GetWorld())->mRaceCarState.mTransform.Pos();
             mWorldSpaceOffsetFromCar = attachment.mRaceCarState.mTransform.Pos() - target;
             if (mpParameters->mbLookFromTarget) mWorldSpaceOffsetFromCar = -mWorldSpaceOffsetFromCar;
             mWorldSpaceOffsetFromCar.SetY(0.0f);
-            CGS_ASSERT(!IsZero(mWorldSpaceOffsetFromCar, 1.1920929e-7f), "!IsZero(mWorldSpaceOffsetFromCar)");
+            CGS_ASSERT(!IsZero(mWorldSpaceOffsetFromCar, 1.1920929e-7f), CgsDev::Assert::MessageAt("!IsZero(mWorldSpaceOffsetFromCar)", "..\\..\\..\\GameSource\\Director/Camera/Behaviours/BrnBehaviourLooseAttachment.cpp", 147));
             mWorldSpaceOffsetFromCar = Normalize(mWorldSpaceOffsetFromCar) * mpParameters->mfDistance;
             if (mbTargetVectorLock) SetPrepared();
         }

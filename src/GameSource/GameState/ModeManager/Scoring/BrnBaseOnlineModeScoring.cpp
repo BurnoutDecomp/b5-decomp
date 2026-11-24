@@ -125,7 +125,7 @@ void BaseOnlineModeScoring::WriteDataToOutput(OnlineScoringOutputInterface* lpOu
 // (.cpp line 1028) but never early-returns.
 void BaseOnlineModeScoring::CompareDistanceToFinish(f32 lfDistance1, f32 lfDistance2, s32* lpiResult)
 {
-    CGS_ASSERT(lpiResult != NULL, "lpiResult != NULL");
+    CGS_ASSERT(lpiResult != NULL, CgsDev::Assert::MessageAt("lpiResult != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.cpp", 1028));
 
     if (*lpiResult == 0)
     {
@@ -150,7 +150,7 @@ void BaseOnlineModeScoring::CompareNetworkPlayerID(BrnNetwork::NetworkPlayerID l
                                                    BrnNetwork::NetworkPlayerID lID2,
                                                    s32* lpiResult)
 {
-    CGS_ASSERT(lpiResult != NULL, "lpiResult != NULL");
+    CGS_ASSERT(lpiResult != NULL, CgsDev::Assert::MessageAt("lpiResult != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.cpp", 1063));
 
     if (*lpiResult == 0)
     {
@@ -178,7 +178,7 @@ void BaseOnlineModeScoring::CompareFinishTime(const CgsSystem::Time* lpTime1,
                                               const CgsSystem::Time* lpTime2,
                                               s32* lpiResult)
 {
-    CGS_ASSERT(lpiResult != NULL, "lpiResult != NULL");
+    CGS_ASSERT(lpiResult != NULL, CgsDev::Assert::MessageAt("lpiResult != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.cpp", 1097));
     CGS_ASSERT(lpTime1->GetFloatVal() > 0.0f, CgsDev::Assert::MessageAt("lpPlayer1FinishTime->GetFloatVal() > 0.0f", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.cpp", 1098));
     CGS_ASSERT(lpTime2->GetFloatVal() > 0.0f, CgsDev::Assert::MessageAt("lpPlayer2FinishTime->GetFloatVal() > 0.0f", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.cpp", 1099));
 
@@ -302,7 +302,7 @@ void BaseOnlineModeScoring::CompareTimeAsRunner(CgsSystem::Time lTime1, CgsSyste
 void BaseOnlineModeScoring::UpdatePlayerTeams(const ScoringSystem* lpScoringSystem,
                                               s32 /*liNumberOfCars*/)
 {
-    CGS_ASSERT(lpScoringSystem != NULL, "lpScoringSystem");
+    CGS_ASSERT(lpScoringSystem != NULL, CgsDev::Assert::MessageAt("lpScoringSystem", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnBaseOnlineModeScoring.cpp", 212));
 
     for (s32 liSlot = 0; liSlot < KI_MAX_ACTIVE_RACE_CARS; ++liSlot)
     {

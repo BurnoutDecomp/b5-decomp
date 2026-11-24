@@ -61,9 +61,9 @@ namespace BrnGameState
     void ScoringSystem::SetCheckpointDistances(u32 luCheckpoint, f32 lfDistance)
     {
         CGS_ASSERT(lfDistance == lfDistance,
-                   "RwMathFPU::IsValid( lfDistanceToFinish )");
+                   CgsDev::Assert::MessageAt("RwMathFPU::IsValid( lfDistanceToFinish )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 1793));
         CGS_ASSERT(luCheckpoint < static_cast<u32>(GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE),
-                   "( luCheckpointIndexFromFinish >= 0 ) && ( luCheckpointIndexFromFinish < (uint32_t)KI_MAX_LANDMARKS_IN_MODE )");
+                   CgsDev::Assert::MessageAt("( luCheckpointIndexFromFinish >= 0 ) && ( luCheckpointIndexFromFinish < (uint32_t)KI_MAX_LANDMARKS_IN_MODE )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 1794));
 
         mafCheckpointSeparations[luCheckpoint] = lfDistance;
     }
@@ -76,7 +76,7 @@ namespace BrnGameState
     f32 ScoringSystem::GetCheckpointDistanceToFinish(u32 luCheckpoint) const
     {
         CGS_ASSERT(luCheckpoint < static_cast<u32>(GameStateModuleIO::KI_MAX_LANDMARKS_IN_MODE),
-                   "luCheckpointIndex < (uint32_t)KI_MAX_LANDMARKS_IN_MODE");
+                   CgsDev::Assert::MessageAt("luCheckpointIndex < (uint32_t)KI_MAX_LANDMARKS_IN_MODE", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\gamestate\\modemanager\\Scoring/BrnScoringSystem.h", 1821));
         CGS_ASSERT(mbCheckPointDistancesToFinishReady,
                    "Distance to finish not ready");
 

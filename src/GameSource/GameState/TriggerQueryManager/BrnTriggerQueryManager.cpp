@@ -233,7 +233,7 @@ void TriggerQueryManager::UpdateTriggers(
     // nothing further but set mbTriggersUpdated=true -- it does NOT rebuild even on the first
     // un-updated frame.
     CGS_ASSERT(lpActiveRaceCarInterface->GetPlayerActiveRaceCarIndex() < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-               "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+               CgsDev::Assert::MessageAt("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 967));
 
     const bool lbPlayerCarActive = lpActiveRaceCarInterface->IsPlayerCarActive();
     if (lbPlayerCarActive)
@@ -473,7 +473,7 @@ void TriggerQueryManager::PreWorldUpdate(
         const u16 luRegionIndex = maLastPlayerTriggers.GetItem(luTrigger);
 
         CGS_ASSERT(static_cast<s32>(luRegionIndex) < lpTriggerData->GetRegionCount(),
-                   "liRegionIndex < miRegionCount");   // BrnTriggerData.h:624
+                   CgsDev::Assert::MessageAt("liRegionIndex < miRegionCount", "..\\..\\..\\SharedClasses\\Trigger/BrnTriggerData.h", 624));   // BrnTriggerData.h:624
 
         const BrnTrigger::TriggerRegion* lpRegion = lpTriggerData->GetRegion(luRegionIndex);
 
@@ -555,7 +555,7 @@ bool TriggerQueryManager::AddLandmarkIndexForGameMode(LandmarkIndex lLandmarkInd
 // X360 0x82355D78.
 LightTriggerId TriggerQueryManager::GetPlayerCurrentTrafficLightId() const
 {
-    CGS_ASSERT(IsPlayerInTrafficLightRegion(), "IsPlayerInTrafficLightRegion()");
+    CGS_ASSERT(IsPlayerInTrafficLightRegion(), CgsDev::Assert::MessageAt("IsPlayerInTrafficLightRegion()", "..\\..\\..\\GameSource\\GameState/TriggerQueryManager/BrnTriggerQueryManager.h", 318));
     return mPlayerCurrentTrafficLightId;
 }
 
@@ -642,7 +642,7 @@ void PackedIndex::SetGlobalRaceCarIndex(EGlobalRaceCarIndex leGlobalRaceCarIndex
                (leGlobalRaceCarIndex != E_GLOBAL_RACE_CAR_INDEX_INVALID),
                "Bad Global Race Car Index Set : ");
     CGS_ASSERT((static_cast<s32>(leGlobalRaceCarIndex) & 0xff) == static_cast<s32>(leGlobalRaceCarIndex),
-               "(leGlobalRaceCarIndex & 0xff) == leGlobalRaceCarIndex");
+               CgsDev::Assert::MessageAt("(leGlobalRaceCarIndex & 0xff) == leGlobalRaceCarIndex", "..\\..\\..\\GameSource\\GameState/TriggerQueryManager/BrnTriggerQueryManager.h", 434));
 
     // X360: stw (a2 & 0xff) @ this+0 (meGlobalRaceCarIndex).
     meGlobalRaceCarIndex = static_cast<EGlobalRaceCarIndex>(static_cast<s32>(leGlobalRaceCarIndex) & 0xff);
@@ -662,7 +662,7 @@ void PackedIndex::SetActiveRaceCarIndex(EActiveRaceCarIndex leActiveRaceCarIndex
                (leActiveRaceCarIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID),
                "Bad Active Race Car Index Set : ");
     CGS_ASSERT((static_cast<s32>(leActiveRaceCarIndex) & 0xff) == static_cast<s32>(leActiveRaceCarIndex),
-               "(leActiveRaceCarIndex & 0xff) == leActiveRaceCarIndex");
+               CgsDev::Assert::MessageAt("(leActiveRaceCarIndex & 0xff) == leActiveRaceCarIndex", "..\\..\\..\\GameSource\\GameState/TriggerQueryManager/BrnTriggerQueryManager.h", 443));
 
     // X360: stw (a2 & 0xff) @ this+4 (meActiveRaceCarIndex).
     meActiveRaceCarIndex = static_cast<EActiveRaceCarIndex>(static_cast<s32>(leActiveRaceCarIndex) & 0xff);

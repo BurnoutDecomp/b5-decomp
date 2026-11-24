@@ -248,7 +248,7 @@ namespace BrnGameState
 
         if (lbFinal)
         {
-            CGS_ASSERT(mpCurrentOnlineModeScoring, "mpCurrentOnlineModeScoring");
+            CGS_ASSERT(mpCurrentOnlineModeScoring, CgsDev::Assert::MessageAt("mpCurrentOnlineModeScoring", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1271));
 
             // X360: result = (*(**(this+19912)+28))(mpCurrentOnlineModeScoring, this, luRound);
             // vtable+0x1C == BaseOnlineModeScoring slot 7 == AwardNetworkRatings, dispatched on the
@@ -277,7 +277,7 @@ namespace BrnGameState
         CGS_ASSERT(lpOutput != NULL, CgsDev::Assert::MessageAt("lpActiveRaceCarInterface != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1932));
 
         const ::EActiveRaceCarIndex lePlayerIndex = lpOutput->GetPlayerActiveRaceCarIndex();
-        CGS_ASSERT(lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID, "Player car index hasn't been set");
+        CGS_ASSERT(lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID, CgsDev::Assert::MessageAt("Player car index hasn't been set", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 980));
         CGS_ASSERT(lpOutput->IsRaceCarActive(lePlayerIndex),
                    CgsDev::Assert::MessageAt("lpActiveRaceCarInterface->IsRaceCarActive( lePlayerActiveRaceCarIndex )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/Scoring/BrnScoringSystem.cpp", 1936));
 
@@ -322,7 +322,7 @@ namespace BrnGameState
 
         const ::EActiveRaceCarIndex lePlayerIndex = lpOutput->GetPlayerActiveRaceCarIndex();
         CGS_ASSERT(lePlayerIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
-                   "mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+                   CgsDev::Assert::MessageAt("mePlayerActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 967));
 
         bool lbPlayerCarActive = false;
         if (lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID)
@@ -332,7 +332,7 @@ namespace BrnGameState
 
         if (lbPlayerCarActive)
         {
-            CGS_ASSERT(lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID, "Player car index hasn't been set");
+            CGS_ASSERT(lePlayerIndex != E_ACTIVE_RACE_CAR_INDEX_INVALID, CgsDev::Assert::MessageAt("Player car index hasn't been set", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 980));
 
             mfPlayerTimeStationary  += lfDeltaTime;
             mfPlayerTimeWithoutInput += lfDeltaTime;
@@ -521,8 +521,8 @@ namespace BrnGameState
             const ::EActiveRaceCarIndex leActiveRaceCarIndex = lpOutput->maCarsInTheRace[i].meActiveRaceCarIndex;
             CarData* lpCar = GetCarData(leActiveRaceCarIndex);
 
-            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0");
-            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT");
+            CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0, CgsDev::Assert::MessageAt("leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 854));
+            CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT, CgsDev::Assert::MessageAt("leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT", "..\\..\\..\\GameSource\\World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarEntityModuleOutputInterface.h", 855));
 
             if (lpOutput->IsRaceCarActive(leActiveRaceCarIndex) && lpCar)
             {
@@ -718,7 +718,7 @@ namespace BrnGameState
                 {
                     GameStateModuleIO::CarScoreData::ChainableMultiplierInfo* lpInfo =
                         laChainableMultipliers.AddNew();
-                    CGS_ASSERT(lpInfo != NULL, "lpChainableMultiplierInfo");
+                    CGS_ASSERT(lpInfo != NULL, CgsDev::Assert::MessageAt("lpChainableMultiplierInfo", "..\\..\\..\\GameSource\\GameState/BrnGameStateSharedIO.h", 1547));
 
                     lpInfo->miChainableScore = lpScore->GetChainableScore();
                     lpInfo->miChainableField = lpScore->GetChainableField();

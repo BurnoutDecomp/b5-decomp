@@ -630,7 +630,7 @@ namespace BrnDirector
     void Arbitrator::DebugCameraFlyWorldLookAt(rw::math::vpu::Vector3 lEye,
                                                rw::math::vpu::Vector3 lLookAt)
     {
-        CGS_ASSERT(mDebugCameraFlyWorld.IsAllocated(), "IsAllocated()");   // BrnBehaviourManager.h:589 (non-gating)
+        CGS_ASSERT(mDebugCameraFlyWorld.IsAllocated(), CgsDev::Assert::MessageAt("IsAllocated()", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 589));   // BrnBehaviourManager.h:589 (non-gating)
         mDebugCameraFlyWorld.GetBehaviour()->WarpToLookAt(lEye, lLookAt);
     }
 }

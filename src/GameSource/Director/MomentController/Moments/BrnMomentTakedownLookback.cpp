@@ -1,6 +1,7 @@
 #include "GameSource/Director/MomentController/Moments/BrnMomentTakedownLookback.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                    // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "BrnCommonTypes.h"                                           // Vector3
 #include "GameSource/BurnoutConstants.h"                              // EActiveRaceCarIndex
 #include "GameSource/Director/Camera/Camera.h"                        // Camera::Camera (SetCamera / operator=)
@@ -122,7 +123,7 @@ void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, void* lrBehaviourControl
     Camera::BehaviourManager& lrBehaviourManager = *static_cast<Camera::BehaviourManager*>(lrBehaviourController);
     const MomentSharedInfo&   lrSharedInfo       = *static_cast<const MomentSharedInfo*>(lSharedInfo);
 
-    CGS_ASSERT(mpParameters != 0, "mpParameters != NULL");   // :74
+    CGS_ASSERT(mpParameters != 0, CgsDev::Assert::MessageAt("mpParameters != NULL", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentTakedownLookback.cpp", 74));   // :74
 
     switch (GetState())
     {
@@ -203,7 +204,7 @@ void MomentTakedownLookback::Update(f32 /*lfTimeStep*/, void* lrBehaviourControl
     }
 
     default:
-        CGS_ASSERT(false, "unhandled case in switch");   // :158
+        CGS_ASSERT(false, CgsDev::Assert::MessageAt("unhandled case in switch", "..\\..\\..\\GameSource\\Director/MomentController/Moments/BrnMomentTakedownLookback.cpp", 158));   // :158
         break;
     }
 }

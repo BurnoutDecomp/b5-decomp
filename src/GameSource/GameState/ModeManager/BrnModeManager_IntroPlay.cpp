@@ -208,7 +208,7 @@ const BrnTraffic::LightTriggerStartData* ModeManager::GetStartDataForTrafficLigh
 // ============================================================================
 void ModeManager::SetStartingGrid(GameModeParams* lpGameModeParams, s32 liCarCount, bool lbPushForwards) const
 {
-    CGS_ASSERT(lpGameModeParams != 0, "lpGameModeParams != NULL");   // BrnModeManager.cpp:4147
+    CGS_ASSERT(lpGameModeParams != 0, CgsDev::Assert::MessageAt("lpGameModeParams != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4147));   // BrnModeManager.cpp:4147
 
     // X360 @0x82328674 `lwz r11, 0x40(r30)`. +0x40 == 64 == GameModeParams::mTrafficLightTriggerId
     // on the console layout (miNumRivals/miNumNetworkPlayers 0..1, mfProgressionRankAsRatio +4,
@@ -219,11 +219,11 @@ void ModeManager::SetStartingGrid(GameModeParams* lpGameModeParams, s32 liCarCou
     if (IsLightTriggerIdValid(lTriggerId))
     {
         const BrnTraffic::LightTriggerStartData* lpStartData = GetStartDataForTrafficLight(lTriggerId);
-        CGS_ASSERT(lpStartData != 0, "lpStartData != NULL");   // :4155
+        CGS_ASSERT(lpStartData != 0, CgsDev::Assert::MessageAt("lpStartData != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4155));   // :4155
 
         // X360 @0x823286D8 `lbz r11, 0x190(r29)` -- an UNSIGNED byte compare against liCarCount.
         CGS_ASSERT(lpStartData->GetNumStartPositions() >= static_cast<u32>(liCarCount),
-                   "lpStartData->GetNumStartPositions() >= static_cast<uint32_t>( liCarCount )");   // :4156
+                   CgsDev::Assert::MessageAt("lpStartData->GetNumStartPositions() >= static_cast<uint32_t>( liCarCount )", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 4156));   // :4156
 
         for (s32 liIndex = 0; liIndex < liCarCount; ++liIndex)
         {
@@ -281,7 +281,7 @@ void ModeManager::SetStartingGrid(GameModeParams* lpGameModeParams, s32 liCarCou
 // ============================================================================
 void ModeManager::StartModeIntro(GameStateModuleIO::GameActionQueue* lpGameActionQueue)
 {
-    CGS_ASSERT(lpGameActionQueue != 0, "lpGameActionQueue != NULL");   // :3069
+    CGS_ASSERT(lpGameActionQueue != 0, CgsDev::Assert::MessageAt("lpGameActionQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3069));   // :3069
 
     // ---- action 44, size 4: "the player is no longer in a mode-start region" ----------------
     // X360 @0x82343058..0x8234307C. The console writes ONLY the half-word at +0 and the byte at
@@ -475,7 +475,7 @@ void ModeManager::StopModeIntro(GameStateModuleIO::GameActionQueue* lpGameAction
 // ============================================================================
 void ModeManager::StartPlayingMode(GameStateModuleIO::GameActionQueue* lpGameActionQueue)
 {
-    CGS_ASSERT(lpGameActionQueue != 0, "lpGameActionQueue != NULL");   // :3167
+    CGS_ASSERT(lpGameActionQueue != 0, CgsDev::Assert::MessageAt("lpGameActionQueue != NULL", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 3167));   // :3167
 
     // [x] header_request R3 (LANDED -- see the STATUS stamp at the top of this file): GameStateModuleIO::StartPlayingModeAction (id 34 -- already in the
     // enum -- 16 bytes; DWARF BrnGameActions.h:1330-1333).
@@ -532,7 +532,7 @@ void ModeManager::FinishOfflineModeIntro()
     // `lwz 0xD98` + null-test (== IsInGameMode()) and then the
     // `mode ? mode->mbIsOnline(+0xAC) : 0` ladder (== IsOnlineGameMode(), the COMMITTED body at
     // BrnModeManager.cpp:37). De-inlined to both accessors.
-    CGS_ASSERT(IsInGameMode(), "IsInGameMode()");             // :2521
+    CGS_ASSERT(IsInGameMode(), CgsDev::Assert::MessageAt("IsInGameMode()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2521));             // :2521
     CGS_ASSERT(!IsOnlineGameMode(), CgsDev::Assert::MessageAt("!IsOnlineGameMode()", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../GameState/ModeManager/BrnModeManager.cpp", 2522));   // :2522
 
     mpCurrentGameMode->SendEvent(E_GME_NEXT);
