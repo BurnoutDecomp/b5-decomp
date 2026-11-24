@@ -152,8 +152,8 @@ void GuiOverlaysDirector::SetUpOverlayInfo(GuiOverlayFullInfoResponse* lpOverlay
                                            const GuiOverlayRequest* lpEvent)
 {
     lpOverlay->mNameId            = lpEvent->mOverlayID;
-    lpOverlay->mbButon1ParamUsed  = lpEvent->IsButton1ParamUsed();
-    lpOverlay->mbButon2ParamUsed  = lpEvent->IsButton2ParamUsed();
+    lpOverlay->mbButon1ParamUsed  = lpEvent->mbButton1Used != 0;
+    lpOverlay->mbButon2ParamUsed  = lpEvent->mbButton2Used != 0;
     lpOverlay->miMessageParamsUsed = lpEvent->GetMessageParamCount();
 
     for (s32 liIter = 0; liIter < lpOverlay->miMessageParamsUsed; ++liIter)
