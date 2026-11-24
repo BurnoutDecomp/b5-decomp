@@ -2154,20 +2154,10 @@ void MapIconManager::UpdateCrashNavIcons()
     // pointer is 8 bytes here), exactly as the SatNavComponent 212 post does.
     if (mpStateInterface != 0)
     {
-        struct GuiEventMapIconStatusRecord : public CgsGui::GuiEvent<561>
-        {
-            GuiEventMapIconStatus mPayload;
-            GuiEventMapIconStatusRecord(CrashNavIconComponent* lpBank, s32 liCount)
-                : CgsGui::GuiEvent<561>(static_cast<u32>(sizeof(GuiEventMapIconStatus)),
-                                        static_cast<u32>(offsetof(GuiEventMapIconStatusRecord, mPayload)))
-            {
-                mPayload.lpSatNavIcons   = lpBank;
-                mPayload.liNumberOfIcons = liCount;
-            }
-        } lRecord(&mCrashNavIcons[0], miNumUsedIcons);   // lwz +0x990 / addi +0x9A0
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord),
-            40 /* KI_CHANNEL_GUI_EVENT_OUT */, static_cast<s32>(sizeof(lRecord)));
+        GuiEventMapIconStatus lStatus;
+        lStatus.lpSatNavIcons   = &mCrashNavIcons[0];   // addi +0x9A0
+        lStatus.liNumberOfIcons = miNumUsedIcons;       // lwz +0x990
+        mpStateInterface->OutputGuiEvent(lStatus);      // {8, 561, 12} + payload, channel 40
     }
 }
 

@@ -117,27 +117,21 @@ namespace BrnGui
 
         // ---- out-queue wire records -------------------------------------------------
         // { 288, 184, 16, <pad>, the 288-byte request }, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+        struct GuiOverlayRequestWire
         {
-            u32               muPad0C;
             GuiOverlayRequest mRequest;
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
             {
             }
         };
 
         // { 8, 188, 16, <pad>, the compressed overlay id }, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
+        struct GuiOverlayWaitFinishWire
         {
-            u32                         muPad0C;
             GuiOverlayWaitFinishRequest mRequest;
 
             GuiOverlayWaitFinishWire()
-                : CgsGui::GuiEvent<188>(static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)), 16)
-                , muPad0C(0)
             {
             }
         };
@@ -153,25 +147,21 @@ namespace BrnGui
             s32 GetEventType() const { return 457; }
         };
 
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayWaitFinishWire) == 24), "overlay wait-finish record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayWaitFinishRequest>) == 24), "overlay wait-finish record is 24 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerPayload457) == 100), "audio trigger payload is 100 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventScoreboardRequestGamercardEvent) == 28), "gamercard record is 28 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventScoreboardRequestGamercardEvent>) == 28), "gamercard record is 28 bytes");
 
         void PostOverlayRequest(CgsGui::StateInterface* lpStateInterface, GuiOverlayRequestWire& lrWire)
         {
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lrWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lrWire)));
+            lpStateInterface->OutputGuiEvent(lrWire.mRequest);   // {288, 184, 16} + 288 on channel 40
         }
 
         void PostOverlayWaitFinish(CgsGui::StateInterface* lpStateInterface, const char* lpacOverlayName)
         {
             GuiOverlayWaitFinishWire lWaitFinish;
             lWaitFinish.mRequest.Construct(lpacOverlayName);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWaitFinish), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWaitFinish)));
+            lpStateInterface->OutputGuiEvent(lWaitFinish.mRequest);
         }
 
         void PostAudioTrigger(CgsGui::StateInterface* lpStateInterface, s32 leAction,
@@ -183,10 +173,7 @@ namespace BrnGui
             GuiAudioTriggerPayload457 lPayload;
             std::memcpy(&lPayload, lAudioTrigger.macComponent, sizeof(lPayload));
 
-            CgsGui::GuiEventWrapper<GuiAudioTriggerPayload457, KI_CHANNEL_GUI_OUT> lRecord(lPayload);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord), lRecord.GetChannel(),
-                static_cast<s32>(sizeof(lRecord)));
+            lpStateInterface->OutputGuiEvent(lPayload);
         }
 
         // OutputGuiEvent<GuiEventScoreboardRequestGamercardEvent>: the committed type
@@ -195,9 +182,7 @@ namespace BrnGui
         {
             GuiEventScoreboardRequestGamercardEvent lRequest;
             lRequest.mPlayerName.Construct(lpcPlayerName);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lRequest)));
+            lpStateInterface->OutputGuiEvent(lRequest);
         }
     }
 

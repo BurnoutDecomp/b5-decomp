@@ -335,7 +335,8 @@ namespace BrnGui
                 // Leaving while an online start is pending also suspends the network.
                 if (mpGuiCache->IsOnlineStartPending())
                 {
-                    CgsGui::GuiEventNetworkSuspension lSuspend(false);
+                    CgsGui::GuiEventNetworkSuspension lSuspend;
+                    lSuspend.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
                     mpStateInterface->OutputGuiEvent(lSuspend);
                     mpGuiCache->SetOnlineStartPending(false);
                     SendStateEvent("GO_BACK_EASY");

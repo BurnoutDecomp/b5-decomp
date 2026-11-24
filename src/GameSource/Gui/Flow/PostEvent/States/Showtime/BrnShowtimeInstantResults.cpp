@@ -252,12 +252,9 @@ namespace BrnGui
 
         GuiEventShowHideHud lHideHud;
         lHideHud.maData[0] = 0;
-        CgsGui::GuiEventWrapper<GuiEventShowHideHud, KI_CHANNEL_GUI_OUT> lRecord(lHideHud);
-        CGS_STATIC_ASSERT((sizeof(lRecord) == 16),
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHud>) == 16),
                       "ARTIST ShowHideHud record is {1,148,12} plus one byte");
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord),
-            KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lRecord)));
+        mpStateInterface->OutputGuiEvent(lHideHud);
 
         // ---- the components -----------------------------------------------------------------
         for (s32 liHelpItem = 0; liHelpItem < KI_HELPITEMS; ++liHelpItem)
@@ -305,15 +302,10 @@ namespace BrnGui
             lRunFsm.mInitialStateId = static_cast<CgsID>(0);
             lRunFsm.meFsmToRun      = E_GUI_HUD_FREEBURN;
             lRunFsm.meFlowToUse     = E_GUIFLOW_HUD;
-            // ARTIST 0x824938D0 boxes this raw payload on channel 40. The
-            // direct-pass OutputGuiEvent template cannot carry GuiEventRunFsm:
-            // the flow drain needs its inner event id and aligned payload offset.
-            CgsGui::GuiEventWrapper<GuiEventRunFsm, 40> lRunFsmRecord(lRunFsm);
-            CGS_STATIC_ASSERT((sizeof(lRunFsmRecord) == 40),
+            // ARTIST 0x824938D0 boxes this payload on channel 40 (offset 16: align 8).
+            CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventRunFsm>) == 40),
                           "RunFsm record contains a 16-byte header and 24-byte payload");
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRunFsmRecord),
-                lRunFsmRecord.GetChannel(), sizeof(lRunFsmRecord));
+            mpStateInterface->OutputGuiEvent(lRunFsm);
         }
 
         mpGuiCache = 0;
@@ -374,12 +366,10 @@ namespace BrnGui
 
                 GuiEventShowHideHud lHideHud;
                 lHideHud.maData[0] = 0;
-                CgsGui::GuiEventWrapper<GuiEventShowHideHud, KI_CHANNEL_GUI_OUT> lRecord(lHideHud);
-                CGS_STATIC_ASSERT((sizeof(lRecord) == 16),
+                CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHud>) == 16),
                               "ARTIST ShowHideHud record is {1,148,12} plus one byte");
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                    KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lRecord)));            }
+                mpStateInterface->OutputGuiEvent(lHideHud);
+            }
             break;
 
         case E_RESULTS_STATE_ACTIVE:

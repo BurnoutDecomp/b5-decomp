@@ -181,43 +181,30 @@ namespace BrnGui
         // record by hand. Both carry payload 6.
         struct GuiNetworkNewsAndTosWire266 : public CgsGui::GuiEvent<KI_EVENT_NETWORK_NEWS_TOS>
         {
-            u32 muSelector;   // +0x0C
+            u32 muSelector;   // payload +0x00
             explicit GuiNetworkNewsAndTosWire266(u32 luSelector)
-                : CgsGui::GuiEvent<KI_EVENT_NETWORK_NEWS_TOS>(4, 12)
-                , muSelector(luSelector)
+                : muSelector(luSelector)
             {
             }
+            GuiNetworkNewsAndTosWire266() {}
         };
         CGS_STATIC_ASSERT((KI_EVENT_NETWORK_NEWS_TOS == 266), "ARTIST event id is 266");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEvent<KI_EVENT_NETWORK_NEWS_TOS>) == 12),
-                      "event 266 record header is 12 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiNetworkNewsAndTosWire266) == 16),
-                      "event 266 record is 12-byte header plus 4-byte payload");
-        CGS_STATIC_ASSERT((offsetof(GuiNetworkNewsAndTosWire266, muSelector) == 12),
-                      "event 266 selector begins at record offset 12");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiNetworkNewsAndTosWire266>) == 16),
+                      "event 266 record is the three wrapper words plus the 4-byte payload");
 
         // { 288, 184, 16, <GuiOverlayRequest> } -- 304 bytes on channel 40. ARTIST
         // copies the 0x120-byte request to the explicitly measured +0x10 payload offset
-        // (`li r11, 0x10 ; stw r11, +8`). Add the word at +0x0C: the PC request type is
-        // only 4-aligned, so its natural placement after the 12-byte header would be +0x0C.
-        // Verified at 0x824CD59C / 0x824CD638.
-        struct GuiOverlayRequestWire184 : public CgsGui::GuiEvent<KI_EVENT_OVERLAY_REQUEST>
+        // (`li r11, 0x10 ; stw r11, +8`): GuiOverlayRequest is 8-aligned (its CgsID), so
+        // GuiEventOut places it at +0x10. Verified at 0x824CD59C / 0x824CD638.
+        struct GuiOverlayRequestWire184
         {
-            u32 muPad0C;                  // +0x0C, explicit wire padding
-            GuiOverlayRequest mRequest;   // +0x10
+            GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
             GuiOverlayRequestWire184()
-                : CgsGui::GuiEvent<KI_EVENT_OVERLAY_REQUEST>(
-                      static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
             {
             }
         };
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEvent<KI_EVENT_OVERLAY_REQUEST>) == 12),
-                      "ARTIST overlay request has a three-word channel-40 header");
         CGS_STATIC_ASSERT((sizeof(GuiOverlayRequest) == 288), "ARTIST overlay request payload size");
-        CGS_STATIC_ASSERT((offsetof(GuiOverlayRequestWire184, mRequest) == 16),
-                      "ARTIST overlay request payload begins at +0x10");
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire184) == 304),
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304),
                       "ARTIST overlay request output record size");
 
     }
@@ -293,9 +280,7 @@ namespace BrnGui
         if (meState != E_STATE_MAIN)
         {
             GuiNetworkNewsAndTosWire266 lNews(KU_NEWS_TOS_PAYLOAD_SETTINGS);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lNews), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lNews)));
+            mpStateInterface->OutputGuiEvent(lNews);
         }
     }
 
@@ -355,9 +340,8 @@ namespace BrnGui
     // response (event 142) arrives.
     void CrashNavSettings::InputSponsorProductCode()
     {
-        CgsGui::GuiEvent<KI_EVENT_KEYBOARD_REQUEST> lRequest(1, 12);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT, 16);
+        CgsGui::GuiEvent<KI_EVENT_KEYBOARD_REQUEST> lRequest;   // { 1, 141, 12 } ch40 16
+        mpStateInterface->OutputGuiEvent(lRequest);
 
         mpGuiKeyboard                     = 0;      // `stw r11, 0x1284`
         mKeyboardListener.mbKeyboardClosed = false; // `stb r11, 0x12A0`
@@ -419,9 +403,7 @@ namespace BrnGui
         // GuiOverlayRequest::Construct("CNSpnsrUnlkF") -> { 288, 184, 16, request }, ch 40.
         GuiOverlayRequestWire184 lWire;
         lWire.mRequest.Construct("CNSpnsrUnlkF");
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lWire)));
+        mpStateInterface->OutputGuiEvent(lWire.mRequest);
     }
 
     // ---- HandleControllerInput @0x824D90E8 -----------------------------------------
@@ -462,19 +444,17 @@ namespace BrnGui
             // two records that restart the simulation, then the "screen done" marker.
             SendStateEvent("GO_BACK");                 // CN_SETTINGS(8) -> INGAME(4)
 
-            CgsGui::GuiEventNetworkSuspension lResume(false);
+            CgsGui::GuiEventNetworkSuspension lResume;
+            lResume.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
             mpStateInterface->OutputGuiEvent(lResume);
 
-            GuiEventActivateCrashNav lActivate(true);  // <- THE UNPAUSE
-            // This object already carries ARTIST's {8,191,12}+payload record.
-            // Keep those bytes and put the record on GuiEventOut for the PC drain.
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lActivate),
-                KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lActivate)));
+            GuiEventActivateCrashNav lActivate;  // <- THE UNPAUSE
+            lActivate.muActivate = 1u;
+            lActivate.muParam = 0;
+            mpStateInterface->OutputGuiEvent(lActivate);   // {8, 191, 12} + payload, channel 40
 
-            CgsGui::GuiEvent<KI_EVENT_SCREEN_CLOSED_533> lDone(1, 12);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lDone), KI_CHANNEL_GUI_OUT, 16);
+            CgsGui::GuiEvent<KI_EVENT_SCREEN_CLOSED_533> lDone;
+            mpStateInterface->OutputGuiEvent(lDone);
             break;
         }
 
@@ -517,9 +497,7 @@ namespace BrnGui
                     {
                         GuiOverlayRequestWire184 lWire;
                         lWire.mRequest.Construct("PRONoSaveLd");
-                        mpStateInterface->GetOutputEventQueue()->AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                            static_cast<s32>(sizeof(lWire)));
+                        mpStateInterface->OutputGuiEvent(lWire.mRequest);
                     }
                     break;
 
@@ -654,9 +632,7 @@ namespace BrnGui
                 meState = E_STATE_MAIN;
 
                 GuiNetworkNewsAndTosWire266 lNews(KU_NEWS_TOS_PAYLOAD_SETTINGS);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lNews), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lNews)));
+                mpStateInterface->OutputGuiEvent(lNews);
             }
         }
 

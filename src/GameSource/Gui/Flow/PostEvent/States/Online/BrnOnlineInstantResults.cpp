@@ -186,25 +186,12 @@ namespace BrnGui
         template <class T>
         void OutputGuiEvent(CgsGui::StateInterface* lpStateInterface, T& lrEvent)
         {
-            CgsGui::GuiEventWrapper<T, KI_CHANNEL_GUI_OUT> lRecord(lrEvent);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                                                              KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lRecord)));
+            lpStateInterface->OutputGuiEvent(lrEvent);
         }
 
-        // ARTIST184 uses an explicit offset16 even though the committed request's
-        // byte-array representation is only4-aligned. Preserve its304-byte wrapper.
-        void OutputGuiEvent(CgsGui::StateInterface* lpInterface, GuiOverlayRequest& lrRequest)
-        {
-            struct OverlayRequestWire : CgsGui::GuiEvent<184>
-            {
-                u32 muPad0C;
-                GuiOverlayRequest mRequest;
-                explicit OverlayRequestWire(const GuiOverlayRequest& lrSource)
-                    : CgsGui::GuiEvent<184>(288, 16), muPad0C(0), mRequest(lrSource) {}
-            } lWire(lrRequest);
-            CGS_STATIC_ASSERT((sizeof(OverlayRequestWire) == 304), "ARTIST184 wrapper");
-            lpInterface->GetOutputEventQueue()->AddEvent(&lWire, 40, sizeof(lWire));
-        }
+        // ARTIST 184: {288, 184, 16} + the request; GuiOverlayRequest is 8-aligned (its CgsID),
+        // so GuiEventOut seats it at offset 16 in the 304-byte record.
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "ARTIST184 wrapper");
     }
 
     // Clear the ticker. In the standings-update sub-state, post one looping ticker message per

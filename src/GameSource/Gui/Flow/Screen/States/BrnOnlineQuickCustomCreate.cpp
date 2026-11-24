@@ -120,21 +120,19 @@ namespace BrnGui
             bool mbShowHud;   // +0x0C
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : CgsGui::GuiEvent<148>(
-                      static_cast<u32>(sizeof(bool)),
-                      static_cast<u32>(offsetof(GuiEventShowHideHudWire, mbShowHud)))
-                , mbShowHud(lbShowHud)
+                : mbShowHud(lbShowHud)
             {
             }
+            GuiEventShowHideHudWire() {}
         };
 
         // { 2072, 537, 12, the ticker message }, channel 40, 2084 bytes.
-        typedef CgsGui::GuiEventWrapper<GuiEventTickerCustomMessage, 40> GuiEventTickerCustomMessageWire;
+        typedef CgsGui::GuiEventOut<GuiEventTickerCustomMessage> GuiEventTickerCustomMessageWire;
         // { 2, 536, 12, <two zero bytes> }, channel 40, 16 bytes.
-        typedef CgsGui::GuiEventWrapper<GuiEventTickerClearMessages, 40> GuiEventTickerClearMessagesWire;
+        typedef CgsGui::GuiEventOut<GuiEventTickerClearMessages> GuiEventTickerClearMessagesWire;
 
-        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventShowHideHudWire) == 16), "show/hide-hud record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHudWire>) == 16), "show/hide-hud record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventTickerCustomMessageWire) == 2084), "ticker record is 2084 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventTickerClearMessagesWire) == 16), "ticker-clear record is 16 bytes");
     }
@@ -154,15 +152,13 @@ namespace BrnGui
         meInternalState = E_INTERNALSTATE_GETCACHE;
 
         // The menu owns the screen: CrashNav down, HUD hidden.
-        GuiEventActivateCrashNav lDeactivateCrashNav(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lDeactivateCrashNav), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lDeactivateCrashNav)));
+        GuiEventActivateCrashNav lDeactivateCrashNav;
+        lDeactivateCrashNav.muActivate = 0u;
+        lDeactivateCrashNav.muParam = 0;
+        mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
-        const GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lHideHud), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lHideHud)));
+        GuiEventShowHideHudWire lHideHud(false);
+        mpStateInterface->OutputGuiEvent(lHideHud);
 
         mhNotifyListener = XNotifyCreateListener(KU64_NOTIFY_AREA_SYSTEM);
     }
@@ -182,10 +178,7 @@ namespace BrnGui
         mMainMenuComponent.Clear();
 
         GuiEventTickerClearMessages lClearTicker = {};
-        const GuiEventTickerClearMessagesWire lClearTickerWire(lClearTicker);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lClearTickerWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lClearTickerWire)));
+        mpStateInterface->OutputGuiEvent(lClearTicker);
 
         if (mhNotifyListener != 0)
         {
@@ -313,10 +306,7 @@ namespace BrnGui
                 }
                 lTicker.AddString(lpacTickerText, KI_TICKER_STRING_TYPE);
 
-                const GuiEventTickerCustomMessageWire lTickerWire(lTicker);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lTickerWire), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lTickerWire)));
+                mpStateInterface->OutputGuiEvent(lTicker);
                 break;
             }
         }

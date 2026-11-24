@@ -87,9 +87,7 @@ namespace
     void PostPaybackBeginAward(CgsGui::StateInterface* lpStateInterface)
     {
         GuiEventPaybackBeginAward lEvent;   // payload left uninitialised, matching the binary
-        CgsGui::GuiEventWrapper<GuiEventPaybackBeginAward, 40> lRecord(lEvent);
-        lpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord), 40, static_cast<s32>(sizeof(lRecord)));
+        lpStateInterface->OutputGuiEvent(lEvent);
     }
 }
 

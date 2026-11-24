@@ -2,7 +2,7 @@
 #include <cstddef>
 
 #include "types.hpp"
-#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"      // CgsGui::GuiEvent<N> (12-byte event header)
+#include "GameShared/GameClasses/Gui/CgsGuiEvent.h"      // CgsGui::GuiEvent<N> (empty event base)
 #include "GameShared/GameClasses/Language/CgsSku.h"       // CgsLanguage::ELanguage / ESku enums
 
 // CgsGui::GuiEventTimeInfo - the per-frame time payload carried on GUI update events.
@@ -63,9 +63,10 @@ namespace CgsGui
     //
     // LAYOUT SOURCE: references/DecFIGS/dwarfdump/GameShared/GameClasses/Gui/
     // CgsGuiEventTypeDefs.h names every member and the GuiEvent<N> event-type id (the
-    // template id is the on-queue record type tag). The existing controller input
-    // wrappers retain their 12-byte adapter header. SetSku and SetLanguageNotification
-    // below are the original four-byte output payloads (ARTIST82866148/82866200).
+    // template id is the on-queue record type tag). GuiEvent<N> is empty, so each record
+    // is its payload alone (ARTIST AddGuiEvent<GuiEventControllerInputPressed> 0x823DA8A8
+    // queues 8 bytes as event 6). SetSku and SetLanguageNotification below are the
+    // original four-byte output payloads (ARTIST82866148/82866200).
     // These are plain payload PODs (no out-of-line bodies in this header's X360 image);
     // they are homed for layout so producers/consumers can reference them BY NAME.
     // ===============================================================================
@@ -216,20 +217,21 @@ namespace CgsGui
 
     // ARTIST output publishers82866148/82866200 copy a four-byte enum
     // directly from the object start. Sku's own member offsets do not prepend
-    // any event header. Other input wrappers keep their existing adapter seats.
+    // any event header.
     CGS_STATIC_ASSERT((sizeof(GuiEventSetSku) == 4), "SetSku is a four-byte payload");
     CGS_STATIC_ASSERT((sizeof(GuiEventSetLanguageNotification) == 4), "language notification is a four-byte payload");
     CGS_STATIC_ASSERT((offsetof(GuiEventSetSku, meSku) == 0), "SKU enum at payload start");
     CGS_STATIC_ASSERT((offsetof(GuiEventSetLanguageNotification, meLanguage) == 0), "language enum at payload start");
-    CGS_STATIC_ASSERT((offsetof(GuiEventSetLanguage, meLanguage)             == 0x0C), "GuiEventSetLanguage::meLanguage @+0x0C");
-    CGS_STATIC_ASSERT((offsetof(GuiEventActiveUserIndex, miActiveUserIndex)  == 0x0C), "GuiEventActiveUserIndex::miActiveUserIndex @+0x0C");
-    CGS_STATIC_ASSERT((offsetof(GuiEventControllerInputPressed, miPadId)     == 0x0C), "controller pad id @+0x0C");
-    CGS_STATIC_ASSERT((offsetof(GuiEventControllerInputPressed, miButtonId)  == 0x10), "controller button id @+0x10");
-    CGS_STATIC_ASSERT((offsetof(GuiEventControllerAxis, miAxis)              == 0x0C), "axis id @+0x0C");
-    CGS_STATIC_ASSERT((offsetof(GuiEventControllerAxis, mfXAxis)             == 0x10), "axis x @+0x10");
-    CGS_STATIC_ASSERT((offsetof(GuiEventControllerAxis, mfYAxis)             == 0x14), "axis y @+0x14");
-    CGS_STATIC_ASSERT((offsetof(GuiControllerDisconnected, miPlayer)         == 0x0C), "disconnect player @+0x0C");
-    CGS_STATIC_ASSERT((offsetof(GuiControllerDisconnected, miPort)           == 0x10), "disconnect port @+0x10");
+    CGS_STATIC_ASSERT((offsetof(GuiEventSetLanguage, meLanguage)             == 0x00), "GuiEventSetLanguage::meLanguage @+0x00");
+    CGS_STATIC_ASSERT((offsetof(GuiEventActiveUserIndex, miActiveUserIndex)  == 0x00), "GuiEventActiveUserIndex::miActiveUserIndex @+0x00");
+    CGS_STATIC_ASSERT((offsetof(GuiEventControllerInputPressed, miPadId)     == 0x00), "controller pad id @+0x00");
+    CGS_STATIC_ASSERT((offsetof(GuiEventControllerInputPressed, miButtonId)  == 0x04), "controller button id @+0x04");
+    CGS_STATIC_ASSERT((sizeof(GuiEventControllerInputPressed)                == 8), "AddGuiEvent 0x823DA8A8 queues 8 bytes");
+    CGS_STATIC_ASSERT((offsetof(GuiEventControllerAxis, miAxis)              == 0x00), "axis id @+0x00");
+    CGS_STATIC_ASSERT((offsetof(GuiEventControllerAxis, mfXAxis)             == 0x04), "axis x @+0x04");
+    CGS_STATIC_ASSERT((offsetof(GuiEventControllerAxis, mfYAxis)             == 0x08), "axis y @+0x08");
+    CGS_STATIC_ASSERT((offsetof(GuiControllerDisconnected, miPlayer)         == 0x00), "disconnect player @+0x00");
+    CGS_STATIC_ASSERT((offsetof(GuiControllerDisconnected, miPort)           == 0x04), "disconnect port @+0x04");
 
     // The disconnect record is header-free, so its own two fields sit at +0 and +4 and the
     // whole object is the 132-byte record. Every member is a scalar or a char array, so

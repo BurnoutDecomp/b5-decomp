@@ -132,12 +132,10 @@ namespace BrnGui
             s32 miPlayerIndex;   // payload +0x04 (every emit site passes -1)
 
             GuiEventNetworkOutputPlayerTextureRecord(s32 leMode, s32 liPlayerIndex)
-                : CgsGui::GuiEvent<264>(), meMode(leMode), miPlayerIndex(liPlayerIndex)
+                : meMode(leMode), miPlayerIndex(liPlayerIndex)
             {
-                const size_t luOffset = offsetof(GuiEventNetworkOutputPlayerTextureRecord, meMode);
-                muHeader0 = static_cast<u32>(sizeof(*this) - luOffset);   // X360 8
-                muHeader2 = static_cast<u32>(luOffset);                   // X360 12
             }
+            GuiEventNetworkOutputPlayerTextureRecord() {}
         };
 
         // ---- BrnGui::GuiEventRequestCompressedCamPic (id 568) ---------------------
@@ -154,13 +152,10 @@ namespace BrnGui
 
             GuiEventRequestCompressedCamPicRecord(renderengine::PixelFormat lePixelFormat,
                                                   CgsNetwork::NetworkTexture* lpTargetTexture)
-                : CgsGui::GuiEvent<568>()
-                , miReserved0(0), mePixelFormat(lePixelFormat), mpTargetTexture(lpTargetTexture)
+                : miReserved0(0), mePixelFormat(lePixelFormat), mpTargetTexture(lpTargetTexture)
             {
-                const size_t luOffset = offsetof(GuiEventRequestCompressedCamPicRecord, miReserved0);
-                muHeader0 = static_cast<u32>(sizeof(*this) - luOffset);   // X360 12
-                muHeader2 = static_cast<u32>(luOffset);                   // X360 12
             }
+            GuiEventRequestCompressedCamPicRecord() {}
         };
 
         // ---- BrnGui::GuiEventNetworkPlayerImage (id 258) --------------------------
@@ -174,12 +169,10 @@ namespace BrnGui
             s32                               miIndex;     // payload +0x08 x64 (+0x04 console)
 
             GuiEventNetworkPlayerImageRecord(const CgsNetwork::NetworkTexture* lpTexture, s32 liIndex)
-                : CgsGui::GuiEvent<258>(), mpTexture(lpTexture), miIndex(liIndex)
+                : mpTexture(lpTexture), miIndex(liIndex)
             {
-                const size_t luOffset = offsetof(GuiEventNetworkPlayerImageRecord, mpTexture);
-                muHeader0 = static_cast<u32>(sizeof(*this) - luOffset);   // X360 8
-                muHeader2 = static_cast<u32>(luOffset);                   // X360 12
             }
+            GuiEventNetworkPlayerImageRecord() {}
         };
 
         // ---- BrnGui::GuiEventCamPicCompressed (id 569) ----------------------------
@@ -200,8 +193,7 @@ namespace BrnGui
         void PostPlayerTextureEvent(CgsGui::StateInterface* lpStateInterface, s32 leMode)
         {
             GuiEventNetworkOutputPlayerTextureRecord lRecord(leMode, -1);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(&lRecord, KI_CHANNEL_GUI_OUT,
-                                                             static_cast<s32>(sizeof(lRecord)));
+            lpStateInterface->OutputGuiEvent(lRecord);
         }
     }
 
@@ -480,8 +472,7 @@ namespace BrnGui
 
             GuiEventRequestCompressedCamPicRecord lRecord(renderengine::PIXELFORMAT_DXT1,
                                                           &mCachedPicture);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lRecord, KI_CHANNEL_GUI_OUT,
-                                                             static_cast<s32>(sizeof(lRecord)));
+            mpStateInterface->OutputGuiEvent(lRecord);
             mePhotoState = E_PHOTOSTATE_WAITINGFORSTILL;
             return false;
         }
@@ -637,8 +628,7 @@ namespace BrnGui
         case E_PHOTOSTATE_CACHEDSTILLIMAGE:
         {
             GuiEventNetworkPlayerImageRecord lRecord(&mCachedPicture, 0);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lRecord, KI_CHANNEL_VIEW_STATE,
-                                                              static_cast<s32>(sizeof(lRecord)));
+            mpStateInterface->OutputViewState(lRecord);
             break;
         }
 

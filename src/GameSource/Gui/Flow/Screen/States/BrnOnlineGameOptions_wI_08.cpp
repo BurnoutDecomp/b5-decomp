@@ -81,10 +81,7 @@ namespace BrnGui
             u8  maPad[3];    // +0x15 (the record is 24 bytes on the wire)
 
             GuiEventShowHideWire(s32 liShow, f32 lfValue, u8 lu8Flag)
-                : ShowHideHeader(static_cast<u32>(sizeof(GuiEventShowHideWire) -
-                                                  sizeof(ShowHideHeader)),
-                                 static_cast<u32>(sizeof(ShowHideHeader)))
-                , miShow(liShow)
+                : miShow(liShow)
                 , mfValue(lfValue)
                 , mu8Flag(lu8Flag)
             {
@@ -92,11 +89,12 @@ namespace BrnGui
                 maPad[1] = 0;
                 maPad[2] = 0;
             }
+            GuiEventShowHideWire() {}
         };
 
         // Record-size pin. The payload is pointer-free, so the X360's AddEvent size
         // immediate must survive unchanged on the x64 host.
-        CGS_STATIC_ASSERT((sizeof(GuiEventShowHideWire) == 24), "show/hide record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideWire>) == 24), "show/hide record is 24 bytes");
     }
 
     // ---- ShowLoadScreen @ 0x8249C760 -----------------------------------------------
@@ -168,14 +166,10 @@ namespace BrnGui
 
         // The view-state pair: the same record on the view-state channel and then on the
         // internal one, with the trailing flag set (the load page's form of the record).
-        const GuiEventShowHideWire lShowHide(0, 0.0f, 1);
+        GuiEventShowHideWire lShowHide(0, 0.0f, 1);
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lShowHide), KI_CHANNEL_VIEW_STATE,
-            static_cast<s32>(sizeof(lShowHide)));
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lShowHide), KI_CHANNEL_GUI_INTERNAL,
-            static_cast<s32>(sizeof(lShowHide)));
+        mpStateInterface->OutputViewState(lShowHide);
+        mpStateInterface->OutputInternalState(lShowHide);
     }
 
     // ---- ShowLoadOptions @ 0x8248C878 ----------------------------------------------

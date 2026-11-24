@@ -182,15 +182,12 @@ namespace BrnGui
         struct GuiEventShowHideHudWire : public ShowHideHudHeader
         {
             u8 mu8Show;      // +0x0C
-            u8 maPad[3];
 
             explicit GuiEventShowHideHudWire(u8 lu8Show)
-                : ShowHideHudHeader(static_cast<u32>(sizeof(u8)),
-                                    static_cast<u32>(sizeof(ShowHideHudHeader)))
-                , mu8Show(lu8Show)
+                : mu8Show(lu8Show)
             {
-                maPad[0] = maPad[1] = maPad[2] = 0;
             }
+            GuiEventShowHideHudWire() {}
         };
     }
 
@@ -208,10 +205,7 @@ namespace BrnGui
         if (mpGuiCache != 0 && !mpGuiCache->GetInEventColouringGate())
         {
             GuiEventShowHideHudWire lHideHud(0);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lHideHud),
-                KI_CHANNEL_GUI_INTERNAL,
-                static_cast<s32>(sizeof(lHideHud)));          // X360 record size 16
+            mpStateInterface->OutputInternalState(lHideHud);          // X360 record size 16
 
             SendStateEvent(mpGuiCache->IsJunkyardCarUnlockPending() ? "TO_CUNLOCK"
                                                                     : "TO_CSELECT");

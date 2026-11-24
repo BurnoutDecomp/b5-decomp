@@ -50,28 +50,28 @@
 #include "SharedClasses/Progression/BrnProgressionData.h"                 // GetProgressionRankCount
 #include "GameSource/Gui/Flow/Shared/Components/BrnButtonIcon.h"         // ButtonIconComponent::EPadButton
 
-typedef CgsGui::GuiEventWrapper<BrnGui::GuiEvent100PerCentComplete, 40>
+typedef CgsGui::GuiEventOut<BrnGui::GuiEvent100PerCentComplete>
     GuiEvent100PerCentCompleteRecord40;
 CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEvent100PerCentComplete) == 1),
               "ARTIST 0x824C31C8 copies one payload byte");
-CGS_STATIC_ASSERT((offsetof(GuiEvent100PerCentCompleteRecord40, mOutEvent) == 12),
-              "ARTIST 0x824C31C8 payload offset is 12");
+// SetRawEvent writes miOutEventOffset 12: the payload follows the three wrapper
+// words (ARTIST 0x824C31C8).
 CGS_STATIC_ASSERT((sizeof(GuiEvent100PerCentCompleteRecord40) == 16),
               "ARTIST 0x824C31C8 channel-40 record is 16 bytes");
-typedef CgsGui::GuiEventWrapper<BrnGui::GuiAutosaveRequestEvent, 40>
+typedef CgsGui::GuiEventOut<BrnGui::GuiAutosaveRequestEvent>
     GuiAutosaveRequestEventRecord40;
 CGS_STATIC_ASSERT((sizeof(BrnGui::GuiAutosaveRequestEvent) == 1),
               "ARTIST 0x824937E0 copies one autosave-request byte");
-CGS_STATIC_ASSERT((offsetof(GuiAutosaveRequestEventRecord40, mOutEvent) == 12),
-              "ARTIST 0x824937E0 payload offset is 12");
+// SetRawEvent writes miOutEventOffset 12: the payload follows the three wrapper
+// words (ARTIST 0x824937E0).
 CGS_STATIC_ASSERT((sizeof(GuiAutosaveRequestEventRecord40) == 16),
               "ARTIST 0x824937E0 channel-40 record is 16 bytes");
-typedef CgsGui::GuiEventWrapper<BrnGui::GuiEventAudioVoiceOver, 40>
+typedef CgsGui::GuiEventOut<BrnGui::GuiEventAudioVoiceOver>
     GuiEventAudioVoiceOverRecord40;
 CGS_STATIC_ASSERT((sizeof(BrnGui::GuiEventAudioVoiceOver) == 4),
               "ARTIST 0x824C3178 copies a four-byte voice-over name hash");
-CGS_STATIC_ASSERT((offsetof(GuiEventAudioVoiceOverRecord40, mOutEvent) == 12),
-              "ARTIST 0x824C3178 payload offset is 12");
+// SetRawEvent writes miOutEventOffset 12: the payload follows the three wrapper
+// words (ARTIST 0x824C3178).
 CGS_STATIC_ASSERT((sizeof(GuiEventAudioVoiceOverRecord40) == 16),
               "ARTIST 0x824C3178 channel-40 record is 16 bytes");
 
@@ -137,7 +137,7 @@ namespace
     {
         u8 mucPad;   // +0x0C (the 1-byte empty payload; the console leaves it unwritten)
 
-        GuiEventSuppressPostEventPresentation() : CgsGui::GuiEvent<304>(1, 12), mucPad(0) {}
+        GuiEventSuppressPostEventPresentation() : mucPad(0) {}
     };
     const s32 KI_CHANNEL_GUI_OUT = 40;
 
@@ -352,10 +352,7 @@ void CompletedGame::Update()
         GuiEvent100PerCentComplete lCompleteEvent;
         lCompleteEvent.maData[0] = 1;
         // ARTIST 0x824C31C8 requires {1,469,12}+1 on channel 40 (16 bytes).
-        GuiEvent100PerCentCompleteRecord40 lCompleteRecord(lCompleteEvent);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lCompleteRecord), 40,
-            static_cast<s32>(sizeof(lCompleteRecord)));
+        mpStateInterface->OutputGuiEvent(lCompleteEvent);
 
         meFirstFinishedSubstate = E_FINISHED_FIRST_LICENSE_PRESENTATION_LOAD_RESOURCES;
         meCompletionType        = E_COMPLETION_JUST_HIT_100_PERCENT;
@@ -491,12 +488,12 @@ void CompletedGame::UpdateBurnoutLicensePresentation()
 // an autosave.
 void CompletedGame::UpdateEliteLicensePresentation()
 {
-    typedef CgsGui::GuiEventWrapper<GuiEventAudioGenericSequence, 40>
+    typedef CgsGui::GuiEventOut<GuiEventAudioGenericSequence>
         GuiAudioGenericSequenceRecord40;
     CGS_STATIC_ASSERT((sizeof(GuiEventAudioGenericSequence) == 4),
                   "ARTIST 0x824C2DA8 copies one four-byte payload");
-    CGS_STATIC_ASSERT((offsetof(GuiAudioGenericSequenceRecord40, mOutEvent) == 12),
-                  "ARTIST 0x824C2DA8 payload offset is 12");
+    // SetRawEvent writes miOutEventOffset 12: the payload follows the three wrapper
+    // words (ARTIST 0x824C2DA8).
     CGS_STATIC_ASSERT((sizeof(GuiAudioGenericSequenceRecord40) == 16),
                   "ARTIST 0x824C2DA8 channel-40 record is 16 bytes");
 
@@ -527,10 +524,7 @@ void CompletedGame::UpdateEliteLicensePresentation()
             *reinterpret_cast<u32*>(lAudioEvent.maData) =
                 static_cast<u32>(CgsSound::Playback::Name::MakeHash("GoldAward"));
             // ARTIST 0x824C2DA8 builds {4,468,12}+4 on channel 40 (16 bytes).
-            GuiAudioGenericSequenceRecord40 lAudioRecord(lAudioEvent);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lAudioRecord), 40,
-                static_cast<s32>(sizeof(lAudioRecord)));
+            mpStateInterface->OutputGuiEvent(lAudioEvent);
 
             mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
             mRewardCarsStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
@@ -625,10 +619,7 @@ void CompletedGame::UpdateEliteLicensePresentation()
         GuiAutosaveRequestEvent lAutosaveEvent;
         lAutosaveEvent.maData[0] = 1;
         // ARTIST 0x824937E0 requires {1,356,12}+1 on channel 40 (16 bytes).
-        GuiAutosaveRequestEventRecord40 lAutosaveRecord(lAutosaveEvent);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAutosaveRecord), 40,
-            static_cast<s32>(sizeof(lAutosaveRecord)));
+        mpStateInterface->OutputGuiEvent(lAutosaveEvent);
 
         if (!mLicense.IsVisible())
         {
@@ -694,10 +685,7 @@ void CompletedGame::UpdateOneHundredPercentPartOnePresentation()
                 *reinterpret_cast<u32*>(lVoiceOverEvent.maData) =
                     static_cast<u32>(CgsSound::Playback::Name::MakeHash("Elite_Then_100_Percent"));
                 // ARTIST 0x824C3178 requires {4,466,12}+4 on channel 40.
-                GuiEventAudioVoiceOverRecord40 lVoiceOverRecord(lVoiceOverEvent);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lVoiceOverRecord), 40,
-                    static_cast<s32>(sizeof(lVoiceOverRecord)));
+                mpStateInterface->OutputGuiEvent(lVoiceOverEvent);
             }
 
             meFirstFinishedSubstate = E_FINISHED_FIRST_LICENSE_PRESENTATION_RUNNING;
@@ -803,12 +791,12 @@ void CompletedGame::UpdateOneHundredPercentPartOnePresentation()
 // ZERO payload byte this time, against part one's 1).
 void CompletedGame::UpdateOneHundredPercentPartTwoPresentation()
 {
-    typedef CgsGui::GuiEventWrapper<GuiEventAudioGenericSequence, 40>
+    typedef CgsGui::GuiEventOut<GuiEventAudioGenericSequence>
         GuiAudioGenericSequenceRecord40;
     CGS_STATIC_ASSERT((sizeof(GuiEventAudioGenericSequence) == 4),
                   "ARTIST 0x824C2DA8 copies one four-byte payload");
-    CGS_STATIC_ASSERT((offsetof(GuiAudioGenericSequenceRecord40, mOutEvent) == 12),
-                  "ARTIST 0x824C2DA8 payload offset is 12");
+    // SetRawEvent writes miOutEventOffset 12: the payload follows the three wrapper
+    // words (ARTIST 0x824C2DA8).
     CGS_STATIC_ASSERT((sizeof(GuiAudioGenericSequenceRecord40) == 16),
                   "ARTIST 0x824C2DA8 channel-40 record is 16 bytes");
 
@@ -839,10 +827,7 @@ void CompletedGame::UpdateOneHundredPercentPartTwoPresentation()
             *reinterpret_cast<u32*>(lAudioEvent.maData) =
                 static_cast<u32>(CgsSound::Playback::Name::MakeHash("PlatinumAward"));
             // ARTIST 0x824C2DA8 builds {4,468,12}+4 on channel 40 (16 bytes).
-            GuiAudioGenericSequenceRecord40 lAudioRecord(lAudioEvent);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lAudioRecord), 40,
-                static_cast<s32>(sizeof(lAudioRecord)));
+            mpStateInterface->OutputGuiEvent(lAudioEvent);
 
             mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
             mRewardCarsStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
@@ -889,18 +874,12 @@ void CompletedGame::UpdateOneHundredPercentPartTwoPresentation()
             GuiAutosaveRequestEvent lAutosaveEvent;
             lAutosaveEvent.maData[0] = 1;
             // ARTIST 0x824937E0 requires {1,356,12}+1 on channel 40 (16 bytes).
-            GuiAutosaveRequestEventRecord40 lAutosaveRecord(lAutosaveEvent);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lAutosaveRecord), 40,
-                static_cast<s32>(sizeof(lAutosaveRecord)));
+            mpStateInterface->OutputGuiEvent(lAutosaveEvent);
 
             GuiEvent100PerCentComplete lCompleteEvent;
             lCompleteEvent.maData[0] = 0;
             // ARTIST 0x824C31C8 requires {1,469,12}+1 on channel 40 (16 bytes).
-            GuiEvent100PerCentCompleteRecord40 lCompleteRecord(lCompleteEvent);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lCompleteRecord), 40,
-                static_cast<s32>(sizeof(lCompleteRecord)));
+            mpStateInterface->OutputGuiEvent(lCompleteEvent);
         }
 
         meCompletedGameState = E_COMPLETEDGAMESTATE_DONE;
@@ -1075,8 +1054,8 @@ void CompletedGame::HandleControllerInput(const CgsModule::Event* lpEvent, s32 l
 void CompletedGame::TriggerExitState()
 {
     GuiEventSuppressPostEventPresentation lSuppressEvent;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lSuppressEvent), KI_CHANNEL_GUI_OUT, 16);
+    mpStateInterface->OutputGuiEvent(lSuppressEvent);   // {1, 304, 12} + 1 on channel 40
+
 
     SendStateEvent(meCompletionType == E_COMPLETION_JUST_HIT_100_PERCENT ? "TO_CREDITS"
                                                                         : "ADVANCE");

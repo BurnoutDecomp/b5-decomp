@@ -105,36 +105,30 @@ namespace BrnGui
 
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> record: { 288, 184, 16, <pad>,
         // the 288-byte request }, channel 40, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+        struct GuiOverlayRequestWire
         {
-            u32               muPad0C;    // +0x0C (the payload is 16-aligned past the header)
-            GuiOverlayRequest mRequest;   // +0x10
+            GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
             {
             }
         };
 
         // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> record:
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
+        struct GuiOverlayWaitFinishWire
         {
-            u32                         muPad0C;    // +0x0C (the payload is 8-aligned)
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10
+            GuiOverlayWaitFinishRequest mRequest;   // the OutputGuiEvent payload
 
             GuiOverlayWaitFinishWire()
-                : CgsGui::GuiEvent<188>(static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)), 16)
-                , muPad0C(0)
             {
             }
         };
 
         // Record-size pins: both payloads are pointer-free, so the X360's AddEvent size
         // immediates must survive unchanged on the x64 host.
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayWaitFinishWire) == 24), "overlay wait-finish record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayWaitFinishRequest>) == 24), "overlay wait-finish record is 24 bytes");
 
         // ---- overlay / state-event vocabularies (the asm's rodata literals) --------
         const char KAC_OVERLAY_LOBBY_DELETED[]   = "CNLobbyDlted";   // lobby went away under us
@@ -178,9 +172,7 @@ namespace BrnGui
             GuiOverlayRequestWire lWire;
             lWire.mRequest.Construct(KAC_OVERLAY_LOBBY_DELETED);
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWire)));
+            mpStateInterface->OutputGuiEvent(lWire.mRequest);
         }
 
         if (lpPayload->miReason == KI_LEFT_GAME_REASON_KICKED)
@@ -191,17 +183,13 @@ namespace BrnGui
                 GuiOverlayWaitFinishWire lWaitGame;
                 lWaitGame.mRequest.Construct(KAC_OVERLAY_LEAVE_GAME_QN);
 
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lWaitGame), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lWaitGame)));
+                mpStateInterface->OutputGuiEvent(lWaitGame.mRequest);
             }
             {
                 GuiOverlayWaitFinishWire lWaitChallenge;
                 lWaitChallenge.mRequest.Construct(KAC_OVERLAY_LEAVE_CHAL_QN);
 
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lWaitChallenge), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lWaitChallenge)));
+                mpStateInterface->OutputGuiEvent(lWaitChallenge.mRequest);
             }
 
             // cpp:2433 -- SIGNED bound check (asm: blt on 0, then blt on 5). The X360
@@ -213,9 +201,7 @@ namespace BrnGui
             GuiOverlayRequestWire lWire;
             lWire.mRequest.Construct(KAPC_KICKED_POPUP[lpPayload->miKickReason]);
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWire)));
+            mpStateInterface->OutputGuiEvent(lWire.mRequest);
 
             mbKicked = true;
         }
@@ -255,9 +241,7 @@ namespace BrnGui
             lWire.mRequest.AddMessageParam(KU_LAUNCH_FAILED_MESSAGE_PARAM,
                                            KPC_LAUNCH_FAILED_STRINGIDS[lpPayload->miResult]);
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWire)));
+            mpStateInterface->OutputGuiEvent(lWire.mRequest);
 
             // Tab title. The X360 tests the two panels' visibility state words directly
             // (mPlayerStatsDisplay.meState @+0x11E4 and mRouteInfoDisplay.meState

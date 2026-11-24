@@ -38,18 +38,22 @@ namespace BrnGui
         template <s32 N>
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
-            u8 mu8Flag;    // +0x0C (the X360 stores a single byte then leaves the record at 16)
-            u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            u8 mu8Flag;    // payload +0x00 (sizeof 1: the {1, N, 12} record) (the X360 stores a single byte then leaves the record at 16)
+            GuiCommandEvent16(u8 lu8Flag = 0) : mu8Flag(lu8Flag) {}
         };
 
         template <s32 N>
-        void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel)
+        void PostCommand16(CgsGui::StateInterface* lpInterface)
         {
             GuiCommandEvent16<N> lEvent(0);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+            lpInterface->OutputGuiEvent(lEvent);
+        }
+
+        template <s32 N>
+        void PostInternalState16(CgsGui::StateInterface* lpInterface)
+        {
+            GuiCommandEvent16<N> lEvent(0);
+            lpInterface->OutputInternalState(lEvent);
         }
     }
 
@@ -296,9 +300,9 @@ namespace BrnGui
                 break;
             // Phase complete: 70 on the GUI-out channel (the game main flow advances on
             // it), then the preload-done command 72 on the internal + GUI-out channels.
-            PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
-            PostCommand16<72>(mpStateInterface, KI_CHANNEL_INTERNAL);
-            PostCommand16<72>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            PostCommand16<70>(mpStateInterface);
+            PostInternalState16<72>(mpStateInterface);
+            PostCommand16<72>(mpStateInterface);
             meUpdateStage = E_PRELOAD_DRAIN;
             mpInGuiEventQueue->Clear();
             return;

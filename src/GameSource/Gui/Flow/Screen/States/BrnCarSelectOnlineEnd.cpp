@@ -110,30 +110,27 @@ namespace BrnGui
             u32 muCarSelectType;   // +0x10
 
             GuiActivateCarSelectWire(u32 luAction, u32 luCarSelectType)
-                : CgsGui::GuiEvent<192>(8, 12)
-                , muAction(luAction)
+                : muAction(luAction)
                 , muCarSelectType(luCarSelectType)
             {
             }
+            GuiActivateCarSelectWire() {}
         };
 
         // { 8, 415, 16, <pad>, the car id }, channel 40, 24 bytes: change the local car.
         struct GuiChangeCarWire : public CgsGui::GuiEvent<415>
         {
-            u32   muPad0C;   // +0x0C
             CgsID mCarID;    // +0x10
 
             explicit GuiChangeCarWire(CgsID lCarID)
-                : CgsGui::GuiEvent<415>(static_cast<u32>(sizeof(CgsID)),
-                                        static_cast<u32>(offsetof(GuiChangeCarWire, mCarID)))
-                , muPad0C(0)
-                , mCarID(lCarID)
+                : mCarID(lCarID)
             {
             }
+            GuiChangeCarWire() {}
         };
 
-        CGS_STATIC_ASSERT((sizeof(GuiActivateCarSelectWire) == 20), "activate car-select record is 20 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiChangeCarWire) == 24), "change-car record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiActivateCarSelectWire>) == 20), "activate car-select record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiChangeCarWire>) == 24), "change-car record is 24 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventNetworkLobbyPlayerListPayload) >= 0x1C4),
                       "lobby roster count sits at +0x1C0");
     }
@@ -157,11 +154,9 @@ namespace BrnGui
         mOnlinePlayerList.Construct(KAC_ONLINE_PLAYER_LIST, mpStateInterface, 0);
         mHostChoosingAnimator.Construct(KAC_HOST_CHOOSING_ANIMATOR_NAME, mpStateInterface, 0);
 
-        const GuiActivateCarSelectWire lActivateCarSelect(KU_CAR_SELECT_ACTION_ONLINE_ENTER,
+        GuiActivateCarSelectWire lActivateCarSelect(KU_CAR_SELECT_ACTION_ONLINE_ENTER,
                                                           KU_CAR_SELECT_TYPE_ONLINE);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lActivateCarSelect), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lActivateCarSelect)));
+        mpStateInterface->OutputGuiEvent(lActivateCarSelect);
 
         meInternalState = E_INTERNALSTATE_LOADRESOURCES;
         mLastHostCarID  = 0;
@@ -178,11 +173,9 @@ namespace BrnGui
         // clears the level.
         mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
 
-        const GuiActivateCarSelectWire lExitCarSelect(KU_CAR_SELECT_ACTION_EXIT,
+        GuiActivateCarSelectWire lExitCarSelect(KU_CAR_SELECT_ACTION_EXIT,
                                                       KU_CAR_SELECT_TYPE_ONLINE);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lExitCarSelect), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lExitCarSelect)));
+        mpStateInterface->OutputGuiEvent(lExitCarSelect);
 
         meInternalState = E_INTERNALSTATE_LEFT;
     }
@@ -395,10 +388,8 @@ namespace BrnGui
                     if (lrPlayer.mbFinalSelection)
                     {
                         CGS_ASSERT(mLastHostCarID != 0, "Trying to select a car will null id");
-                        const GuiChangeCarWire lChangeCar(mLastHostCarID);
-                        mpStateInterface->GetOutputEventQueue()->AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>(&lChangeCar),
-                            KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lChangeCar)));
+                        GuiChangeCarWire lChangeCar(mLastHostCarID);
+                        mpStateInterface->OutputGuiEvent(lChangeCar);
                     }
                 }
             }
@@ -410,10 +401,8 @@ namespace BrnGui
         if (lbHostDisconnected)
         {
             CGS_ASSERT(lLocalPlayerCarID != 0, "Trying to select a car will null id");
-            const GuiChangeCarWire lChangeCar(lLocalPlayerCarID);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lChangeCar), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lChangeCar)));
+            GuiChangeCarWire lChangeCar(lLocalPlayerCarID);
+            mpStateInterface->OutputGuiEvent(lChangeCar);
         }
 
         // Take down the tail, from the first row the roster did not fill up to the first

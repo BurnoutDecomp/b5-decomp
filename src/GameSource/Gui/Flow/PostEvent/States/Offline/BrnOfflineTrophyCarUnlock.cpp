@@ -92,23 +92,20 @@ namespace
     struct GuiEventCarbonCarSequence : public CgsGui::GuiEvent<470>
     {
         bool mbEntered;    // +0x0C
-        u8   mau8Pad[3];
 
         explicit GuiEventCarbonCarSequence(bool lbEntered)
-            : CgsGui::GuiEvent<470>(1, 12), mbEntered(lbEntered)
+            : mbEntered(lbEntered)
         {
-            mau8Pad[0] = mau8Pad[1] = mau8Pad[2] = 0;
         }
+        GuiEventCarbonCarSequence() {}
     };
-    CGS_STATIC_ASSERT((sizeof(GuiEventCarbonCarSequence) == 16),
+    CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventCarbonCarSequence>) == 16),
                   "the console posts a 16-byte record for GUI 470");
 
     void PostCarbonCarSequence(CgsGui::StateInterface* lpStateInterface, bool lbEntered)
     {
         GuiEventCarbonCarSequence lEvent(lbEntered);
-        lpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lEvent)));
+        lpStateInterface->OutputGuiEvent(lEvent);
     }
 
     // The console streams the fixed prefix, the offending value and a suffix into the global

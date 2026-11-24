@@ -22,21 +22,21 @@ namespace CgsGui
 {
     namespace
     {
-        // DecFIGS CgsGuiEventTypes.h: GuiEventStateChange derives GuiEvent<1> and
+        // DecFIGS CgsGuiEventTypeDefs.h:55: GuiEventStateChange derives GuiEvent<1> and
         // carries the pending state's fixed 16-byte event name. ARTIST PostUpdate
-        // builds its header as {16, 1, 12} and queues the 28-byte record on channel 40.
+        // publishes it through OutputGuiEvent: a {16, 1, 12} + 16-byte channel-40 record.
         struct GuiEventStateChange : public GuiEvent<1>
         {
             char macStateChangeEvent[16];
 
-            GuiEventStateChange() : GuiEvent<1>(16, 12)
-            {
-                macStateChangeEvent[0] = 0;
-            }
+            // DWARF declares no constructor, and ARTIST 0x8285BA00 never pre-writes the
+            // name: CgsCore::SPrintf fills the local, which SetRawEvent then copies
+            // (memcpy 16 at 0x8285BAD8).
+
         };
 
-        CGS_STATIC_ASSERT((sizeof(GuiEventStateChange) == 28),
-                      "GuiEventStateChange must match the ARTIST 28-byte wire record");
+        CGS_STATIC_ASSERT((sizeof(GuiEventStateChange) == 16),
+                      "GuiEventStateChange is the ARTIST 16-byte payload");
     }
 
     void State::Construct(CgsID liId, CgsFsm::ScriptedFsm* lpFsm)
@@ -75,10 +75,10 @@ namespace CgsGui
             GuiEventStateChange lStateChangeEvent;
             CgsCore::SPrintf(lStateChangeEvent.macStateChangeEvent,
                              sizeof(lStateChangeEvent.macStateChangeEvent), macEvent);
-            lStateChangeEvent.macStateChangeEvent[
-                sizeof(lStateChangeEvent.macStateChangeEvent) - 1] = 0;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                &lStateChangeEvent, 40, static_cast<s32>(sizeof(lStateChangeEvent)));
+            // ARTIST stores no terminator after the SPrintf: the next instruction copies the
+            // name into the channel-40 wrapper (OutputGuiEvent inlined, CgsGuiStateInterface.h:404).
+            mpStateInterface->OutputGuiEvent(lStateChangeEvent);
+
 
             CgsFsm::Event lEvent;
             lEvent.Construct(CgsIDCompress(macEvent));

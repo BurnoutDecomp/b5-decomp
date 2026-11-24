@@ -102,21 +102,17 @@ namespace BrnGui
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
             u8 mu8Flag;    // +0x0C (the empty payload's byte; X360 leaves it untouched)
-            u8 maPad[3];   // +0x0D
 
-            GuiCommandEvent16() : CgsGui::GuiEvent<N>(1, 12), mu8Flag(0)
+            GuiCommandEvent16() : mu8Flag(0)
             {
-                maPad[0] = maPad[1] = maPad[2] = 0;
             }
         };
 
         template <s32 N>
-        void PostCommand16(CgsGui::StateInterface* lpStateInterface, s32 liChannel)
+        void PostCommand16(CgsGui::StateInterface* lpStateInterface)
         {
             GuiCommandEvent16<N> lEvent;
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel,
-                static_cast<s32>(sizeof(lEvent)));   // X360 record size 16
+            lpStateInterface->OutputGuiEvent(lEvent);   // X360 record {1, N, 12}, size 16
         }
 
         // The two payload-less command ids this file posts. FLAG: neither id carries a
@@ -144,30 +140,23 @@ namespace BrnGui
         // its three header words are sizeof(T) / T::GetEventType() / offsetof(mOutEvent),
         // so the console's 0x1E0 / 0x101 / 0xC immediates come out as host expressions and
         // no local record type is forked.
-        typedef CgsGui::GuiEventWrapper<GuiEventNetworkGameParams, KI_CHANNEL_GUI_OUT>
-            GuiEventNetworkGameParamsWire;
+        typedef CgsGui::GuiEventOut<GuiEventNetworkGameParams> GuiEventNetworkGameParamsWire;
 
         void OutputNetworkGameParams(CgsGui::StateInterface* lpStateInterface,
                                      GuiEventNetworkGameParams& lrParams)
         {
-            GuiEventNetworkGameParamsWire lWire(lrParams);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), lWire.GetChannel(),
-                static_cast<s32>(sizeof(lWire)));   // X360 record size 492
+            lpStateInterface->OutputGuiEvent(lrParams);   // X360 record size 492
         }
 
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> wire record:
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes -- the same
         // record BrnInGame.cpp's PostOverlayRequest builds. The two header words are HOST
         // expressions (sizeof / the 16-aligned payload offset), not the console immediates.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+        struct GuiOverlayRequestWire
         {
-            u32               muPad0C;    // +0x0C (payload is 16-aligned past the header)
-            GuiOverlayRequest mRequest;   // +0x10
+            GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
             {
             }
         };
@@ -186,7 +175,7 @@ namespace BrnGui
                                mpGuiCache->meOnlineGameMode)),
                        "!GsmIO::IsOnlineFreeBurnLobby(mpGuiCache->GetOnlineGameModeOptions()->meGameMode)");
 
-            PostCommand16<KI_EVENT_LAUNCH_ONLINE_GAME>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            PostCommand16<KI_EVENT_LAUNCH_ONLINE_GAME>(mpStateInterface);
             HideMenusAndReturnToHUD();
             break;
 
@@ -197,7 +186,7 @@ namespace BrnGui
         case KI_PAUSE_OPTION_CHANGE_TEAMS:
             if (mpGuiCache->meOnlineGameMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_ROAD_RAGE)
             {
-                PostCommand16<KI_EVENT_CHANGE_TEAMS>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                PostCommand16<KI_EVENT_CHANGE_TEAMS>(mpStateInterface);
             }
             break;
 
@@ -333,9 +322,7 @@ namespace BrnGui
         GuiOverlayRequestWire lWire;
         lWire.mRequest.Construct(lpacOverlayId);
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(GuiOverlayRequestWire)));   // X360 record size 304
+        mpStateInterface->OutputGuiEvent(lWire.mRequest);   // X360 record size 304
 
     }
 
@@ -346,7 +333,7 @@ namespace BrnGui
     {
         if (liLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK)
         {
-            PostCommand16<KI_EVENT_LAUNCH_QUESTION_ACCEPT>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            PostCommand16<KI_EVENT_LAUNCH_QUESTION_ACCEPT>(mpStateInterface);
         }
         else if (liLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_CANCEL)
         {

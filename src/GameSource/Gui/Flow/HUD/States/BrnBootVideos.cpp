@@ -57,19 +57,16 @@ namespace BrnGui
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
             u8 mu8Flag;
-            u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            GuiCommandEvent16(u8 lu8Flag = 0) : mu8Flag(lu8Flag) {}
         };
 
         template <s32 N>
-        void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
+        void PostCommand16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
         {
             if (lpInterface == 0)
                 return;
             GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+            lpInterface->OutputGuiEvent(lEvent);
         }
 
         // [loading-fade seat 2026-08-27] the 20-byte clear-screen record OnEnter posts on
@@ -84,7 +81,8 @@ namespace BrnGui
             s32 miMode;    // 0 == enable the black clear, 1 == disable
             f32 mfAlpha;   // the clear alpha (1.0f == opaque black)
             explicit GuiClearScreenEvent20(s32 liMode)
-                : CgsGui::GuiEvent<25>(8, 12), miMode(liMode), mfAlpha(1.0f) {}
+                : miMode(liMode), mfAlpha(1.0f) {}
+            GuiClearScreenEvent20() {}
         };
 
         // Emit a GuiEventPlayVideo at the MovieManager (via the StateInterface output queue).
@@ -145,13 +143,12 @@ namespace BrnGui
         if (mpStateInterface != 0)
         {
             mpStateInterface->RegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
-            PostCommand16<20>(mpStateInterface, KI_CHANNEL_GUI_OUT);      // stop the loading screen
+            PostCommand16<20>(mpStateInterface);      // stop the loading screen
             // {8, 25, 12, 0, 1.0f} ch 41 size 20 (@0x82478738-58): black clear ON under the
             // loading screen's hide fade, so the fade lands on black and the logo fades in
             // from it -- the console's fade-out-into-the-first-video look.
             GuiClearScreenEvent20 lClearOn(0);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lClearOn), KI_CHANNEL_VIEW_STATE, 20);
+            mpStateInterface->OutputViewState(lClearOn);
         }
     }
 
@@ -197,7 +194,7 @@ namespace BrnGui
         if (meUpdateStage == E_UPDATE_STAGE_LOADING &&
             gpBurnoutGame->HasGameBeenSoftRebooted())
         {
-            PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            PostCommand16<70>(mpStateInterface);
             meUpdateStage = E_UPDATE_STAGE_DONE;
             mpInGuiEventQueue->Clear();
             return;
@@ -257,13 +254,13 @@ namespace BrnGui
                     if (lpTrigger->meEventType == CgsGui::GuiEventAptTrigger::E_APT_EVENT_TRANSITION_COMPLETE &&
                         std::strcmp(lpTrigger->mpacComponentName, "EA_Criterion_Logo") == 0)
                     {
-                        PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                        PostCommand16<70>(mpStateInterface);
                         meUpdateStage = E_UPDATE_STAGE_DONE;
                     }
                 }
                 if (liEventId == KI_EVENT_VIDEO_FINISHED)
                 {
-                    PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                    PostCommand16<70>(mpStateInterface);
                     meUpdateStage = E_UPDATE_STAGE_DONE;
                 }
                 break;

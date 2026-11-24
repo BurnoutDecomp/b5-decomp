@@ -122,9 +122,9 @@ namespace
     template <s32 N>
     struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
     {
-        u8  mu8Flag;        // +0x0C (the X360 stores a single byte then leaves the record at 16)
-        u8  maPad[3];
-        GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag) { maPad[0] = maPad[1] = maPad[2] = 0; }
+        u8  mu8Flag;        // payload +0x00: the one byte ARTIST stores (sizeof 1, record {1, N, 12})
+
+        GuiCommandEvent16(u8 lu8Flag = 0) : mu8Flag(lu8Flag) {}
     };
 
     // 20-byte GuiEvent<25> "set option" command: header { 8, 25, 12 } then a 1.0f payload word
@@ -134,7 +134,7 @@ namespace
     {
         s32 miReserved;     // +0x0C (0 in OnEnter, 1 in OnLeave's first post)
         f32 mfValue;        // +0x10 (1.0f)
-        explicit GuiOptionEvent20(s32 liReserved = 0) : CgsGui::GuiEvent<25>(8, 12), miReserved(liReserved), mfValue(1.0f) {}
+        explicit GuiOptionEvent20(s32 liReserved = 0) : miReserved(liReserved), mfValue(1.0f) {}
     };
 
     // 20-byte GuiEvent<18> "apt name + flag" command: header { 8, 18, 12 } then a (const char*,
@@ -143,19 +143,17 @@ namespace
     // shape (event type 18, not 25).
     struct GuiAptNameFlagEvent20 : public CgsGui::GuiEvent<18>
     {
-        const char* mpacAptName;   // +0x0C (&unk_820046A7, the empty-name sentinel)
-        s32         miFlag;        // +0x10 (1)
-        explicit GuiAptNameFlagEvent20(const char* lpacAptName, s32 liFlag)
-            : CgsGui::GuiEvent<18>(8, 12), mpacAptName(lpacAptName), miFlag(liFlag) {}
+        const char* mpacAptName;   // payload +0x00 (&unk_820046A7, the empty-name sentinel)
+        s32         miFlag;        // payload +0x04 (1)
     };
 
-    // Post a 16-byte GuiEvent<N> { 1, N, 12 } command on the given channel.
+    // Post a 16-byte GuiEvent<N> { 1, N, 12 } command: OutputGuiEvent (channel 40) or
+    // OutputViewState (channel 41) box the one-byte payload in their wrapper.
     template <s32 N>
-    void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
+    void PostCommand16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
     {
         GuiCommandEvent16<N> lEvent(lu8Flag);
-        lpInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+        lpInterface->OutputGuiEvent(lEvent);
     }
 
     // ----------------------------------------------------------------------------------
@@ -172,10 +170,10 @@ namespace
         u8 mu8Mute;
         s32 GetEventType() const { return 88; }
     };
-    typedef CgsGui::GuiEventWrapper<MuteDacPayload, 40> MuteDacRecord40;
+
     CGS_STATIC_ASSERT((sizeof(MuteDacPayload) == 1 && offsetof(MuteDacPayload, mu8Mute) == 0),
                   "ARTIST event 88 payload is one byte");
-    CGS_STATIC_ASSERT((offsetof(MuteDacRecord40, mOutEvent) == 12 && sizeof(MuteDacRecord40) == 16),
+    CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<MuteDacPayload>) == 16),
                   "ARTIST event 88 channel-40 record is {1,88,12}+1");
 
     // ARTIST event143 payload: the saved player-0 controller port word.
@@ -183,15 +181,15 @@ namespace
     {
         s32 miPort;
         s32 GetEventType() const { return 143; }
-        explicit SetPlayer0ControllerPortPayload(s32 liPort) : miPort(liPort) {}
     };
-    typedef CgsGui::GuiEventWrapper<SetPlayer0ControllerPortPayload, 40> SetPlayer0ControllerPortRecord40;
+
+
     CGS_STATIC_ASSERT((sizeof(SetPlayer0ControllerPortPayload) == 4 &&
                   offsetof(SetPlayer0ControllerPortPayload, miPort) == 0),
                   "ARTIST event 143 payload is one word");
-    CGS_STATIC_ASSERT((offsetof(SetPlayer0ControllerPortRecord40, mOutEvent) == 12 &&
-                  sizeof(SetPlayer0ControllerPortRecord40) == 16),
+    CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<SetPlayer0ControllerPortPayload>) == 16),
                   "ARTIST event 143 channel-40 record is {4,143,12}+4");
+
 
 }   // anonymous namespace
 }   // namespace BrnGui
@@ -235,12 +233,14 @@ namespace BrnGui
         //   ch 41 (view-state) GuiEvent<214> { 1, 214, 12 } flag 0     (16 bytes)
         //   ch 40 (gui-out)    GuiEvent<20>  { 1, 20, 12 }            (16 bytes)
         //   ch 41 (view-state) GuiEvent<25>  { 8, 25, 12, 0, 1.0f }   (20 bytes)
-        PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
-        PostCommand16<20>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+        {
+            GuiCommandEvent16<214> lBoostBar(0);
+            mpStateInterface->OutputViewState(lBoostBar);
+        }
+        PostCommand16<20>(mpStateInterface);
         {
             GuiOptionEvent20 lOption;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE, 20);
+            mpStateInterface->OutputViewState(lOption);
         }
 
         // Build the five apt animator components + the title-screen menu (the X360 calls each
@@ -265,10 +265,8 @@ namespace BrnGui
         {
             GuiOverlayRequest lOverlay;
             lOverlay.Construct("SignOut");
-            CgsGui::GuiEventWrapper<GuiOverlayRequest, 40> lOverlayRecord(lOverlay);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lOverlayRecord), 40, sizeof(lOverlayRecord));
-            PostCommand16<88>(mpStateInterface, KI_CHANNEL_GUI_OUT, 1);
+            mpStateInterface->OutputGuiEvent(lOverlay);
+            PostCommand16<88>(mpStateInterface, 1);
         }
     }
 
@@ -281,8 +279,8 @@ namespace BrnGui
         // unregister the observed events.
         {
             GuiOptionEvent20 lOption(1);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE, 20);
+            mpStateInterface->OutputViewState(lOption);
+
         }
         mSelectionMenu.Clear();
         mpStateInterface->UnRegisterForEvents(KAI_OBSERVED_EVENTS, KI_NUM_OBSERVED_EVENTS);
@@ -294,10 +292,10 @@ namespace BrnGui
         // copy truncates the pointer and drops the level word, which the view-module
         // dispatch then reads as garbage).
         {
-            GuiAptNameFlagEvent20 lOption("", 1);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE,
-                static_cast<s32>(sizeof(GuiAptNameFlagEvent20)));
+            GuiAptNameFlagEvent20 lOption; lOption.mpacAptName = ""; lOption.miFlag = 1;
+            mpStateInterface->OutputViewState(lOption);
+
+
         }
 
         // Unload the legal screen's resources from the cache and clear its expected apt list.
@@ -466,12 +464,15 @@ namespace BrnGui
             mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mBackgroundAnimator.GetName());
             mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_HUD, mSelectionMenuAnimator.GetName());
 
-            PostCommand16<589>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            PostCommand16<589>(mpStateInterface);
             mpStateInterface->PlayAptMovie(KAC_TITLE_MOVIE, 1);
 
             {
                 // GuiEventPlayMusicOnMenuStream { hash = MakeHash("GunsAndRoses") } (ch via OutputGuiEvent).
-                CgsGui::GuiEventPlayMusicOnMenuStream lMusic(CgsSound::Playback::Name::MakeHash("Guns_And_Roses"));
+                CgsGui::GuiEventPlayMusicOnMenuStream lMusic;
+                lMusic.muStreamNameHash = CgsSound::Playback::Name::MakeHash("Guns_And_Roses");
+                lMusic.mbFlagA = false;
+                lMusic.mbFlagB = false;
                 mpStateInterface->OutputGuiEvent(lMusic);
             }
 
@@ -480,10 +481,7 @@ namespace BrnGui
             {
                 MuteDacPayload lMute;
                 lMute.mu8Mute = 0;
-                MuteDacRecord40 lMuteRecord(lMute);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lMuteRecord), 40,
-                    static_cast<s32>(sizeof(lMuteRecord)));
+                mpStateInterface->OutputGuiEvent(lMute);
             }
 
             meUpdateStage = E_STAGE_FADE_IN;
@@ -514,7 +512,7 @@ namespace BrnGui
             if (mbSignOutPending ||
                 mpGuiCache->GetTime() <= (mfStageStartTime + KF_WAIT_START_DWELL))
                 break;
-            PostCommand16<90>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            PostCommand16<90>(mpStateInterface);
             meUpdateStage = E_STAGE_PRESTART_OR_IDLE;
             break;
 
@@ -544,7 +542,10 @@ namespace BrnGui
         case E_STAGE_ATTRACT_PREPARE:
             // Prepare + play the attract video, then wait for it to finish.
             {
-                CgsGui::GuiEventPlayMusicOnMenuStream lMusic(0);   // dword_830082A8
+                CgsGui::GuiEventPlayMusicOnMenuStream lMusic;
+                lMusic.muStreamNameHash = 0   /* dword_830082A8 */;
+                lMusic.mbFlagA = false;
+                lMusic.mbFlagB = false;
                 mpStateInterface->OutputGuiEvent(lMusic);
 
                 // The X360 Prepare()s a MovieManager VideoDefinition and fills its video
@@ -619,12 +620,9 @@ namespace BrnGui
             {
                 const BrnHW::System360HW* lpSoftRebootData = gpBurnoutGame->GetSoftRebootData();
                 CGS_ASSERT(lpSoftRebootData != 0, "lpLaunchData");
-                SetPlayer0ControllerPortPayload lPort(
-                    static_cast<s32>(lpSoftRebootData->mLaunchData.mdwUserIndex));
-                SetPlayer0ControllerPortRecord40 lPortRecord(lPort);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lPortRecord), 40,
-                    static_cast<s32>(sizeof(lPortRecord)));
+                SetPlayer0ControllerPortPayload lPort;
+                lPort.miPort = static_cast<s32>(lpSoftRebootData->mLaunchData.mdwUserIndex);
+                mpStateInterface->OutputGuiEvent(lPort);
                 mpInGuiEventQueue->Clear();
                 return;
             }
@@ -636,7 +634,7 @@ namespace BrnGui
             // play the accept sound, latch the chosen DLC mode, and advance to the dwell stage.
             if (lbBackRequested)
             {
-                PostCommand16<590>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                PostCommand16<590>(mpStateInterface);
                 mfAcceptTime = mpGuiCache->GetTime();
 
                 {
@@ -649,7 +647,7 @@ namespace BrnGui
                     BrnResource::g_DLCFeatureAvailability.mBeatTheTeamGame.SetEnabledState(true);
 
                 meUpdateStage = E_STAGE_ACCEPT_DWELL;
-                PostCommand16<71>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                PostCommand16<71>(mpStateInterface);
                 mpInGuiEventQueue->Clear();
                 return;
             }
@@ -660,7 +658,7 @@ namespace BrnGui
             // After the accept dwell, post the final load command and advance to ACCEPTED.
             if ((mpGuiCache->GetTime() - mfAcceptTime) <= KF_ACCEPT_DWELL)
                 break;
-            PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            PostCommand16<70>(mpStateInterface);
             meUpdateStage = E_STAGE_ACCEPTED;
             break;
 

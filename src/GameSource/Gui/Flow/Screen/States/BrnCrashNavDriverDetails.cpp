@@ -212,16 +212,14 @@ namespace
     // { 1, 539, 12 } ch 40 / 16 bytes -- posted when the photo booth is cancelled.
     struct GuiEventPhotoBoothCancelled : public CgsGui::GuiEvent<539>
     {
-        u32 muReserved;   // +0x0C (X360 leaves the gap word uninitialised; record size 16)
-        GuiEventPhotoBoothCancelled() : CgsGui::GuiEvent<539>(1, 12), muReserved(0) {}
+        GuiEventPhotoBoothCancelled() {}
     };
 
     // { 1, 533, 12 } ch 40 / 16 bytes -- the "front-end screen closed" record, the same
     // one BrnPauseScreen and CrashNavMapMain post on the way back into the game.
     struct GuiEventScreenClosed : public CgsGui::GuiEvent<533>
     {
-        u32 muReserved;   // +0x0C
-        GuiEventScreenClosed() : CgsGui::GuiEvent<533>(1, 12), muReserved(0) {}
+        GuiEventScreenClosed() {}
     };
 
     // { 1, 435, 12 } and { 1, 437, 12 } ch 40 / 16 bytes -- the two data requests the
@@ -229,13 +227,11 @@ namespace
     // 436 / 438 responses UpdatePermanent and UpdateSetupLicense consume).
     struct GuiEventStatsRequest : public CgsGui::GuiEvent<435>
     {
-        u32 muReserved;
-        GuiEventStatsRequest() : CgsGui::GuiEvent<435>(1, 12), muReserved(0) {}
+        GuiEventStatsRequest() {}
     };
     struct GuiEventRankProgressRequest : public CgsGui::GuiEvent<437>
     {
-        u32 muReserved;
-        GuiEventRankProgressRequest() : CgsGui::GuiEvent<437>(1, 12), muReserved(0) {}
+        GuiEventRankProgressRequest() {}
     };
 
     // { 2, 536, 12, 0 } ch 40 / 16 bytes -- HideTickerMessage's record.
@@ -253,8 +249,7 @@ namespace
     struct GuiEventHideTickerMessage : public CgsGui::GuiEvent<536>
     {
         u16 mu16Reserved;   // +0x0C (the X360 stores a halfword 0 here)
-        u16 mu16Pad;
-        GuiEventHideTickerMessage() : CgsGui::GuiEvent<536>(2, 12), mu16Reserved(0), mu16Pad(0) {}
+        GuiEventHideTickerMessage() : mu16Reserved(0) {}
     };
 
     // The channel-41 apt-movie record UpdateLoadResources posts. The X360 stack-builds it
@@ -282,15 +277,14 @@ void CrashNavDriverDetails::OnEnter()
     // GameBridgeGUIToX_GameState's case 191 turns the 191{0} into game event 93 payload 1
     // -> RequestPause(4) -> action 86 -> mbSimPaused, and ConstructUpdateSetFromFsm then
     // ORs bit 0x1 into the in-game update set.
-    GuiEventActivateCrashNav lDeactivate(false);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lDeactivate), KI_CHANNEL_GUI_OUT,
-        static_cast<s32>(sizeof(GuiEventActivateCrashNav)));
+    GuiEventActivateCrashNav lDeactivate;
+    lDeactivate.muActivate = 0u;
+    lDeactivate.muParam = 0;
+    mpStateInterface->OutputGuiEvent(lDeactivate);
 
-    CgsGui::GuiEventNetworkSuspension lResume(true);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lResume), KI_CHANNEL_GUI_OUT,
-        static_cast<s32>(sizeof(CgsGui::GuiEventNetworkSuspension)));
+    CgsGui::GuiEventNetworkSuspension lResume;
+    lResume.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_RESUME;
+    mpStateInterface->OutputGuiEvent(lResume);
 
     // The 33 stat fields, then the three district columns in lock-step (the X360 runs one
     // loop over the stat names and a second, 5-iteration loop that constructs one field
@@ -336,9 +330,7 @@ void CrashNavDriverDetails::OnEnter()
     // { 1, 539, 12 } -- the screen's own "opened" record (the same id the photo-booth
     // cancel arm posts; the console posts it here unconditionally).
     GuiEventPhotoBoothCancelled lOpened;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lOpened), KI_CHANNEL_GUI_OUT,
-        static_cast<s32>(sizeof(lOpened)));
+    mpStateInterface->OutputGuiEvent(lOpened);
 
     meInternalState = E_INTERNALSTATE_GETCACHE;                  // stw 0, +0x3844
 }
@@ -349,9 +341,7 @@ void CrashNavDriverDetails::OnEnter()
 void CrashNavDriverDetails::HideTickerMessage()
 {
     GuiEventHideTickerMessage lHide;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lHide), KI_CHANNEL_GUI_OUT,
-        static_cast<s32>(sizeof(lHide)));
+    mpStateInterface->OutputGuiEvent(lHide);
 }
 
 // ---------------------------------------------------------------- OnLeave @0x824CEF18
@@ -469,14 +459,10 @@ bool CrashNavDriverDetails::UpdateInitSetup()
         mpGuiCache = lpCacheEvent->mpCachePointer;
 
         GuiEventStatsRequest lStatsRequest;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lStatsRequest), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lStatsRequest)));
+        mpStateInterface->OutputGuiEvent(lStatsRequest);
 
         GuiEventRankProgressRequest lRankRequest;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRankRequest), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lRankRequest)));
+        mpStateInterface->OutputGuiEvent(lRankRequest);
 
         // The two component-side latches (each carries its own assert on the console --
         // BrnLicenseComponent.h:366 and BrnPhotoBoothComponent.h:262).
@@ -900,29 +886,26 @@ void CrashNavDriverDetails::HandleControllerInputPressed(const CgsModule::Event*
             if (mLicenseComponent.IsFirstResourceLoaded() && mPhotoBoothComponent.Cancel())
             {
                 GuiEventPhotoBoothCancelled lCancelled;
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lCancelled), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lCancelled)));
+                mpStateInterface->OutputGuiEvent(lCancelled);
                 mbShowLicense = true;
             }
         }
         else
         {
             // ⭐ THE RESUME, in the console's own order.
-            CgsGui::GuiEventNetworkSuspension lResume(false);
+            CgsGui::GuiEventNetworkSuspension lResume;
+            lResume.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
             mpStateInterface->OutputGuiEvent(lResume);
 
             GuiEventScreenClosed lClosed;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lClosed), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lClosed)));
+            mpStateInterface->OutputGuiEvent(lClosed);
 
-            GuiEventActivateCrashNav lActivate(true);
+            GuiEventActivateCrashNav lActivate;
+            lActivate.muActivate = 1u;
+            lActivate.muParam = 0;
             // This object already carries ARTIST's {8,191,12}+payload record.
             // Keep those bytes and put the record on GuiEventOut for the PC drain.
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lActivate),
-                KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lActivate)));
+            mpStateInterface->OutputGuiEvent(lActivate);
 
             SendStateEvent("GO_BACK");             // CN_D_DETAIL(111) -> INGAME(4)
         }

@@ -68,13 +68,12 @@ namespace BrnGui
         {
             u8 mu8Byte0;   // +0x0C (X360 stores 0)
             u8 mu8Byte1;   // +0x0D (X360 stores 0)
-            u8 maPad[2];   // +0x0E (untouched by the X360; modelled zeroed)
 
             GuiEventTickerClearMessages16(u8 lu8Byte0, u8 lu8Byte1)
-                : CgsGui::GuiEvent<536>(2, 12), mu8Byte0(lu8Byte0), mu8Byte1(lu8Byte1)
+                : mu8Byte0(lu8Byte0), mu8Byte1(lu8Byte1)
             {
-                maPad[0] = maPad[1] = 0;
             }
+            GuiEventTickerClearMessages16() {}
         };
     }
 
@@ -87,9 +86,7 @@ namespace BrnGui
     void OnlineGameRoomPlayerInfo::UnloadChallengeResources()
     {
         GuiEventTickerClearMessages16 lClearTicker(0, 0);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lClearTicker), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lClearTicker)));   // X360 record size 16
+        mpStateInterface->OutputGuiEvent(lClearTicker);   // X360 record size 16
 
         mpStateInterface->PlayAptMovie(KAC_EMPTY_MOVIE, KI_APT_MOVIE_LEVEL);
 

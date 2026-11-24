@@ -79,11 +79,10 @@ namespace BrnGui
             u8 muPayload;   // +0x0C
 
             explicit GuiEventCancelLoginWire(u8 luPayload)
-                : CgsGui::GuiEventCancelLogin(static_cast<u32>(sizeof(u8)),
-                                              static_cast<u32>(sizeof(CgsGui::GuiEventCancelLogin)))
-                , muPayload(luPayload)
+                : muPayload(luPayload)
             {
             }
+            GuiEventCancelLoginWire() {}
         };
     }
 
@@ -232,10 +231,7 @@ namespace BrnGui
                 // header words on the stack and hands AddEvent 16 bytes -- so the byte it
                 // sends is whatever was left in that stack slot. The host sends 0.
                 GuiEventCancelLoginWire lCancelLogin(0);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lCancelLogin),
-                    KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lCancelLogin)));   // X360 record size 16
+                mpStateInterface->OutputGuiEvent(lCancelLogin);   // X360 record size 16
                 break;
             }
 

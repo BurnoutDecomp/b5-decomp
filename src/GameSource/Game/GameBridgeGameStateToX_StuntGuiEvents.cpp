@@ -2691,9 +2691,9 @@ namespace
                 const BrnGameState::GameStateModuleIO::TargetEventDataResponse* lpResponse = reinterpret_cast<const
                     BrnGameState::GameStateModuleIO::TargetEventDataResponse*>(lpAction);
                 BrnGui::GuiEventChallengedEventDataResponse lEvent;
-                std::memcpy(&lEvent, &lpResponse->mEventId, sizeof(lpResponse->mEventId));
-                lEvent.muHeader2 = static_cast<u32>(lpResponse->miScore);
-                std::memcpy(lEvent.maPayload, &lpResponse->mPlayerName, sizeof(lpResponse->mPlayerName));
+                std::memcpy(&lEvent.mu64EventID, &lpResponse->mEventId, sizeof(lpResponse->mEventId));
+                lEvent.miScore = lpResponse->miScore;
+                std::memcpy(lEvent.maPlayerName, &lpResponse->mPlayerName, sizeof(lpResponse->mPlayerName));
                 PushGuiEvent(lEvent, lpGuiInput);
                 break;
             }

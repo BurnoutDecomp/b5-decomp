@@ -73,17 +73,21 @@ namespace BrnGui
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
             u8 mu8Flag;
-            u8 maPad[3];
-            explicit GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            explicit GuiCommandEvent16(u8 lu8Flag = 0) : mu8Flag(lu8Flag) {}
         };
 
         template <s32 N>
-        void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
+        void PostCommand16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
         {
             GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+            lpInterface->OutputGuiEvent(lEvent);
+        }
+
+        template <s32 N>
+        void PostViewState16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
+        {
+            GuiCommandEvent16<N> lEvent(lu8Flag);
+            lpInterface->OutputViewState(lEvent);
         }
 
         // The 12-byte id-213 show/hide PAYLOAD (GuiEventShowHideSatNav's real body:
@@ -100,6 +104,7 @@ namespace BrnGui
             SatNavShowHidePayload(s32 liMapType, f32 lfFadeTime, u8 lu8Show)
                 : miMapType(liMapType), mfFadeTime(lfFadeTime), mu8Show(lu8Show)
             { mau8Pad[0] = mau8Pad[1] = mau8Pad[2] = 0; }
+            SatNavShowHidePayload() {}
         };
 
         // The 24-byte wire record StateInterface::OutputViewState<GuiEventShowHideSatNav>
@@ -110,15 +115,15 @@ namespace BrnGui
         {
             SatNavShowHidePayload mPayload;
             GuiShowHideEvent24(const SatNavShowHidePayload& lPayload)
-                : CgsGui::GuiEvent<213>(12, 12), mPayload(lPayload) {}
+                : mPayload(lPayload) {}
+            GuiShowHideEvent24() {}
         };
 
         void PostShowHideSatNav24(CgsGui::StateInterface* lpInterface,
                                   const SatNavShowHidePayload& lPayload)
         {
             GuiShowHideEvent24 lEvent(lPayload);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_VIEW_STATE, 24);
+            lpInterface->OutputViewState(lEvent);
         }
 
         // OnLeave's 16-byte type-2 id-536 record. The X360 builds the trailing pair as two
@@ -129,21 +134,18 @@ namespace BrnGui
         {
             u8 mu8A;   // +0x0C == 0
             u8 mu8B;   // +0x0D == 1
-            u8 mau8Pad[2];
-            GuiEvent536() : CgsGui::GuiEvent<536>(2, 12), mu8A(0), mu8B(1)
-            { mau8Pad[0] = mau8Pad[1] = 0; }
+            GuiEvent536() : mu8A(0), mu8B(1)
+            {}
         };
 
         // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> wire record OnLeave
         // stack-builds inline (@0x82479894..0x824798B8): { 8, 188, 16, <pad>, CgsID },
         // channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
+        struct GuiOverlayWaitFinishWire
         {
-            u32                         muPad0C;    // +0x0C (the 8-aligned payload slot)
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10
+            GuiOverlayWaitFinishRequest mRequest;   // the OutputGuiEvent payload
 
             explicit GuiOverlayWaitFinishWire(const char* lpcOverlayName)
-                : CgsGui::GuiEvent<188>(8, 16), muPad0C(0)
             {
                 mRequest.Construct(lpcOverlayName);
             }
@@ -152,13 +154,10 @@ namespace BrnGui
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> wire record (@0x82436BE0):
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes. Same shape
         // the BrnInGame.cpp precedent posts.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+        struct GuiOverlayRequestWire
         {
-            u32               muPad0C;    // +0x0C
-            GuiOverlayRequest mRequest;   // +0x10
-            GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0) {}
+            GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
+            GuiOverlayRequestWire() {}
         };
 
         // The pre-event overlay's district message-parameter ids (@0x82F27718, image-read;
@@ -601,7 +600,7 @@ namespace BrnGui
         mFriendsListChangeIcon.Prepare(macFriendsListChangeIconName, lFile);
         mFriendsList.Prepare(macFriendListName, lFile);
 
-        PostCommand16<94>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+        PostCommand16<94>(mpStateInterface, 0);
 
         // The two "EventHud_Animator" halves. NOTE the divergence from the FBurn sibling,
         // which passes 0 as the flapt animator's debug name: RACE_MAIN passes the string to
@@ -665,10 +664,10 @@ namespace BrnGui
         mChallengeOnComponent.Prepare(KAC_CHALLENGE_ON_COMPONENT_NAME, lFile, 0);
 
         mbChallengeOnShowing = false;   // stb r30(=0), 0x7908(r31)
-        PostCommand16<580>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+        PostCommand16<580>(mpStateInterface, 0);
 
         mbInRaceHud = true;             // stb 1, 0x144(r31)
-        PostCommand16<96>(mpStateInterface, KI_CHANNEL_GUI_OUT, 1);
+        PostCommand16<96>(mpStateInterface, 1);
     }
 
     // =======================================================================
@@ -706,8 +705,7 @@ namespace BrnGui
             // The record is { 8, 188, 16, <pad>, id } posted on the gui-out channel at
             // 24 bytes; Construct compresses the name into the id word.
             GuiOverlayWaitFinishWire lWire(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT, 24);
+            mpStateInterface->OutputGuiEvent(lWire.mRequest);
         }
 
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
@@ -753,12 +751,11 @@ namespace BrnGui
             }
         }
 
-        PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
-        PostCommand16<94>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+        PostViewState16<214>(mpStateInterface, 0);
+        PostCommand16<94>(mpStateInterface, 0);
         {
             GuiEvent536 lEvent;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT, 16);
+            mpStateInterface->OutputGuiEvent(lEvent);
         }
 
         if (mbRoadRuleComponent)
@@ -1131,12 +1128,12 @@ namespace BrnGui
                 static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(leGameModeType));
         }
 
-        PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
+        PostViewState16<214>(mpStateInterface, 0);
         if (mbPlayerPositionTable)
         {
             mPlayerPositionTable.SetCache(mpCache);
         }
-        PostCommand16<215>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
+        PostViewState16<215>(mpStateInterface, 0);
 
         if (mbRoadRuleComponent)
         {
@@ -1160,9 +1157,7 @@ namespace BrnGui
                 CgsGui::E_POPUPPARAMTYPES_STRING_ID, KAPC_DISTRICT_OVERLAY_MESSAGE_IDS[liDestinationDistrict]);
             lWire.mRequest.AddMessageParam(
                 CgsGui::E_POPUPPARAMTYPES_STRING_ID, KAPC_DISTRICT_OVERLAY_MESSAGE_IDS[liDestinationDistrict]);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(GuiOverlayRequestWire)));
+            mpStateInterface->OutputGuiEvent(lWire.mRequest);
 
             mbOverlayInProgress    = true;
             meModeOverlayDisplayed = leGameModeType;
@@ -1267,15 +1262,13 @@ namespace BrnGui
         // The 24-byte road-rule bring-up record { 8, 327, 16 } + a zeroed 8-byte tail.
         // X360 @0x82480460..0x82480490: `li r11,8 -> var_70`, `li r11,0x147 -> var_6C`,
         // `li r11,0x10 -> var_68`, `std r23(==0) -> var_60`, size 0x18, channel 0x28.
-        // FLAG (console-uninitialised word): the console never writes var_64 (payload +12),
-        // so its byte-4..7 are whatever the caller's frame held. Zeroed here -- the same
-        // choice BrnFBurnMainHudState.cpp:717 already made for the identical record.
+        // var_64 (record +12) is the wrapper's alignment gap, never written; the payload is
+        // GuiEventRoadRuleDataRequest's 8-aligned CgsID (DWARF BrnGuiEventTypeDefs.h:1291
+        // mRoadId), the `std r23` zero at record +16 -- as in BrnFBurnMainHudState.cpp.
         struct GuiEvent327 : public CgsGui::GuiEvent<327>
         {
-            s32 miPadA;   // +0x0C -- console-uninitialised (see FLAG above)
-            s32 miPadB;   // +0x10 -- console `std r23` low word (0)
-            s32 miPadC;   // +0x14 -- console `std r23` high word (0)
-            GuiEvent327() : CgsGui::GuiEvent<327>(8, 16), miPadA(0), miPadB(0), miPadC(0) {}
+            CgsID mRoadId;
+            GuiEvent327() : mRoadId(0) {}
         };
 
         // (2026-08-27 verify round: the TU-local KAPC_PRE_EVENT_OVERLAYS[18] copy that stood
@@ -1480,7 +1473,7 @@ namespace BrnGui
             // FLAG (console-uninitialised byte): the console writes only the three header
             // words of that record -- its flag byte at +12 is left holding whatever the frame
             // had. Sent as 0 here; the record's consumer reads the id, not the flag.
-            PostCommand16<236>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+            PostCommand16<236>(mpStateInterface, 0);
             lbRevealNow = true;
             lbImmediate = false;
         }
@@ -1517,8 +1510,7 @@ namespace BrnGui
             // The road-rule bring-up post, then the show-time latch, then the replay of any
             // rule the cache already has live (@0x82480460..0x82480518).
             GuiEvent327 lEvent;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT, 24);
+            mpStateInterface->OutputGuiEvent(lEvent);
 
             // @0x82480494..0x824804B4: `stb r11, 0x646C(r31)` -- +0x646C is
             // mRoadRuleComponent (+0x5F60) + 0x50C == RoadRuleComponent::mbInShowTime, with
@@ -1553,7 +1545,7 @@ namespace BrnGui
         // post { 1, 433, 12 } on channel 0x28. Same console-uninitialised flag byte as the
         // 236 post above.
         if (mpCache->IsEventPreparedForModeStart() && mpCache->GetGameMode() == 4)
-            PostCommand16<433>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+            PostCommand16<433>(mpStateInterface, 0);
 
         if (mbFriendsList)
         {
@@ -1679,7 +1671,7 @@ namespace BrnGui
         // stunt attack / marked man / traffic attack). If A3 lands the other name instead,
         // this identifier is the single token that has to change.
         if (mbAboveCarIcons)
-            PostCommand16<215>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1);
+            PostViewState16<215>(mpStateInterface, 1);
     }
 
     // =======================================================================
@@ -1812,15 +1804,12 @@ namespace BrnGui
                     {
                         u8 mbForceFadeOut;            // +0x0C == 0
                         u8 mbDeleteChallengeMessages; // +0x0D == 1
-                        u8 mau8Pad[2];
                         GuiTickerClearWire536()
-                            : CgsGui::GuiEvent<536>(2, 12)
-                            , mbForceFadeOut(0), mbDeleteChallengeMessages(1)
-                        { mau8Pad[0] = mau8Pad[1] = 0; }
+                            : mbForceFadeOut(0), mbDeleteChallengeMessages(1)
+                        {}
                     };
                     GuiTickerClearWire536 lClear;
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lClear), 40, 16);
+                    mpStateInterface->OutputGuiEvent(lClear);
                 }
                 break;
 
@@ -1850,8 +1839,7 @@ namespace BrnGui
                        "KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]");   // cpp:3737 (li r5, 0xE99)
 
             GuiOverlayWaitFinishWire lWire(KAPC_PRE_EVENT_OVERLAYS[meModeOverlayDisplayed]);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT, 24);
+            mpStateInterface->OutputGuiEvent(lWire.mRequest);
         }
 
         if (mbFriendsList)
@@ -1945,7 +1933,8 @@ namespace BrnGui
             s32 miReserved;   // +0x0C (the console's `stw r18` zero)
             f32 mfCrashScore; // +0x10
             explicit GuiRoadRuleCrashEvent20(f32 lfCrashScore)
-                : CgsGui::GuiEvent<465>(8, 12), miReserved(0), mfCrashScore(lfCrashScore) {}
+                : miReserved(0), mfCrashScore(lfCrashScore) {}
+            GuiRoadRuleCrashEvent20() {}
         };
 
         // 24-byte OutputGuiEvent<BrnGui::GuiAudioEvent> WRAPPER record -- header
@@ -2027,19 +2016,16 @@ namespace BrnGui
                 if (mbBurnoutSkillz && lpiPayload[1] == 38 &&
                     !mpCache->IsFriendsListOpen())
                 {
-                    PostCommand16<543>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                    PostCommand16<543>(mpStateInterface);
                     GuiEventRoadRuleModeRequest lModeRequest;
                     lModeRequest.maData[0] = 0; lModeRequest.maData[1] = 0;
                     lModeRequest.maData[2] = 0; lModeRequest.maData[3] = 0;
                     lModeRequest.maData[4] = 0; lModeRequest.maData[5] = 0;
                     lModeRequest.maData[6] = 0; lModeRequest.maData[7] = 0;
-                    typedef CgsGui::GuiEventWrapper<GuiEventRoadRuleModeRequest, 40> RoadRuleModeOutRecord;
+                    typedef CgsGui::GuiEventOut<GuiEventRoadRuleModeRequest> RoadRuleModeOutRecord;
                     CGS_STATIC_ASSERT((sizeof(RoadRuleModeOutRecord) == 20),
                                   "ARTIST channel-40 event 326 is {8,326,12}+8");
-                    RoadRuleModeOutRecord lModeRequestOut(lModeRequest);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lModeRequestOut), 40,
-                        static_cast<s32>(sizeof(lModeRequestOut)));
+                    mpStateInterface->OutputGuiEvent(lModeRequest);
                 }
                 if (mbFreeburnChallengeButtonStart)
                     mChallengeComponent.HandleButtonPress(lpiPayload[1]);
@@ -2054,7 +2040,7 @@ namespace BrnGui
                     if (lbChallengeLive && !mpCache->IsFriendsListOpen() &&
                         lpiPayload[1] == 38)
                     {
-                        PostCommand16<544>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                        PostCommand16<544>(mpStateInterface);
                     }
                 }
                 if (lpiPayload[1] == 53)
@@ -2232,10 +2218,10 @@ namespace BrnGui
                 }
                 break;
             case 226:
-                PostCommand16<60>(mpStateInterface, KI_CHANNEL_VIEW_STATE);
+                PostViewState16<60>(mpStateInterface);
                 break;
             case 227:
-                PostCommand16<61>(mpStateInterface, KI_CHANNEL_VIEW_STATE);
+                PostViewState16<61>(mpStateInterface);
                 break;
             case 234:
                 UpdateEventCountdown(lpEvent);
@@ -2325,7 +2311,7 @@ namespace BrnGui
                 {
                     mGeneralTransitionComponentApt.AddOutputAptViewState("apt_Transition", "transout", false);
                     mGeneralTransitionComponentFlapt.Run("transout");
-                    PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
+                    PostViewState16<214>(mpStateInterface, 0);
                     lShowHide.Construct(GuiEventShowHideSatNav::E_MAPTYPE_GPS, false, 0.0f);
                     mpStateInterface->OutputViewState(lShowHide);
                     mpStateInterface->OutputInternalState(lShowHide);
@@ -2334,7 +2320,7 @@ namespace BrnGui
                 {
                     mGeneralTransitionComponentApt.AddOutputAptViewState("apt_Transition", "transin", false);
                     mGeneralTransitionComponentFlapt.Run("transin");
-                    PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1);
+                    PostViewState16<214>(mpStateInterface, 1);
                     lShowHide.Construct(GuiEventShowHideSatNav::E_MAPTYPE_GPS, true, 0.0f);
                     mpStateInterface->OutputViewState(lShowHide);
                     mpStateInterface->OutputInternalState(lShowHide);
@@ -2459,15 +2445,12 @@ namespace BrnGui
                     {
                         u8 mbForceFadeOut;            // +0x0C == 0
                         u8 mbDeleteChallengeMessages; // +0x0D == 1
-                        u8 mau8Pad[2];
                         GuiTickerClearWire536()
-                            : CgsGui::GuiEvent<536>(2, 12)
-                            , mbForceFadeOut(0), mbDeleteChallengeMessages(1)
-                        { mau8Pad[0] = mau8Pad[1] = 0; }
+                            : mbForceFadeOut(0), mbDeleteChallengeMessages(1)
+                        {}
                     };
                     GuiTickerClearWire536 lClear;
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lClear), 40, 16);
+                    mpStateInterface->OutputGuiEvent(lClear);
                 }
                 break;
             default:
@@ -2582,8 +2565,7 @@ namespace BrnGui
             mRoadRuleComponent.UpdateRoadSignDistances(lv3Camera);
 
             GuiRoadRuleCrashEvent20 lCrash(mRoadRuleComponent.mfCurrentCrashScore);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lCrash), KI_CHANNEL_GUI_OUT, 20);
+            mpStateInterface->OutputGuiEvent(lCrash);
         }
         if (mbPaybackComponent)
         {
@@ -2707,8 +2689,8 @@ namespace BrnGui
 
                 PostCountdownAudio(mpStateInterface, 0);
                 RevealHud(false);
-                PostCommand16<236>(mpStateInterface, KI_CHANNEL_GUI_OUT);
-                PostCommand16<533>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                PostCommand16<236>(mpStateInterface);
+                PostCommand16<533>(mpStateInterface);
             }
             break;
         case 4:
@@ -2826,17 +2808,15 @@ namespace BrnGui
         {
             u8 mbForceFadeOut;            // +0x0C == 0
             u8 mbDeleteChallengeMessages; // +0x0D == 1
-            u8 mau8Pad[2];
             GuiTickerClearWire536()
-                : CgsGui::GuiEvent<536>(2, 12), mbForceFadeOut(0), mbDeleteChallengeMessages(1)
-            { mau8Pad[0] = mau8Pad[1] = 0; }
+                : mbForceFadeOut(0), mbDeleteChallengeMessages(1)
+            {}
         };
 
         void PostTickerClear536(CgsGui::StateInterface* lpInterface)
         {
             GuiTickerClearWire536 lEvent;
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT, 16);
+            lpInterface->OutputGuiEvent(lEvent);
         }
 
         // ---- the id-537 custom ticker message ---------------------------------------
@@ -2915,8 +2895,6 @@ namespace BrnGui
         {
             GuiTickerCustomMessagePayload537 mMessage;   // +0x0C
             GuiTickerCustomMessageWire537()
-                : CgsGui::GuiEvent<537>(
-                      static_cast<u32>(sizeof(GuiTickerCustomMessagePayload537)), 12)
             {
                 std::memset(&mMessage, 0, sizeof(mMessage));
             }
@@ -2934,9 +2912,7 @@ namespace BrnGui
             {
                 GuiTickerCustomMessageWire537 lWire;
                 lWire.mMessage = lMessage;   // the console's `memcpy(dst, src, 0x818)`
-                lpInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lWire)));
+                lpInterface->OutputGuiEvent(lWire);
             }
         }
 

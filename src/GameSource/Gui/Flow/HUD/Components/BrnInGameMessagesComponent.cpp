@@ -132,10 +132,9 @@ namespace
     // Construct's own post: {1, 157, 12} + one trailing word, 16 bytes, channel 40.
     struct GuiCommandEvent16_157 : public CgsGui::GuiEvent<157>
     {
-        u8 mu8Flag;
-        u8 maPad[3];
-        GuiCommandEvent16_157() : CgsGui::GuiEvent<157>(1, 12), mu8Flag(0)
-        { maPad[0] = maPad[1] = maPad[2] = 0; }
+        u8 mu8Flag;   // the one payload byte (sizeof 1: {1, 157, 12})
+        GuiCommandEvent16_157() : mu8Flag(0)
+        {}
     };
 
     // StartMessage / EndMessage's post: the 40-byte OutputGuiEvent<BrnGui::GuiAudioEvent>
@@ -554,8 +553,7 @@ namespace
 
         {
             GuiCommandEvent16_157 lEvent;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT, 16);
+            mpStateInterface->OutputGuiEvent(lEvent);
         }
 
         mpInGameMessagesQueue = NULL;

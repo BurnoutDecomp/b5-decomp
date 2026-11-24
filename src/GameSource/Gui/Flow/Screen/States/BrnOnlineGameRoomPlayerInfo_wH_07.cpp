@@ -86,11 +86,10 @@ namespace BrnGui
             bool mbEnableCarControl;   // +0x0C
 
             explicit GuiRequestCarControlChangeWire(bool lbEnableCarControl)
-                : RequestCarControlChangeHeader(static_cast<u32>(sizeof(bool)),
-                                                static_cast<u32>(sizeof(RequestCarControlChangeHeader)))
-                , mbEnableCarControl(lbEnableCarControl)
+                : mbEnableCarControl(lbEnableCarControl)
             {
             }
+            GuiRequestCarControlChangeWire() {}
         };
 
         // Id 533 -- the screen-flow command the online back-out paths post (the committed
@@ -114,9 +113,7 @@ namespace BrnGui
             u8 muPayload;   // +0x0C (never stored by the X360; inherited value is 0)
 
             GuiScreenFlowCommandWire()
-                : ScreenFlowCommandHeader(static_cast<u32>(sizeof(u8)),
-                                          static_cast<u32>(sizeof(ScreenFlowCommandHeader)))
-                , muPayload(0)
+                : muPayload(0)
             {
             }
         };
@@ -128,11 +125,10 @@ namespace BrnGui
             bool mbShowHud;   // +0x0C
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : ShowHideHudHeader(static_cast<u32>(sizeof(bool)),
-                                    static_cast<u32>(sizeof(ShowHideHudHeader)))
-                , mbShowHud(lbShowHud)
+                : mbShowHud(lbShowHud)
             {
             }
+            GuiEventShowHideHudWire() {}
         };
     }
 
@@ -246,9 +242,7 @@ namespace BrnGui
 
         // 1. Hand car control back to the player (X360 record size 16, channel 40).
         GuiRequestCarControlChangeWire lCarControl(true);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lCarControl), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lCarControl)));
+        mpStateInterface->OutputGuiEvent(lCarControl);
 
         // 2. Unmount the lobby apt movie: the inlined CgsGui::GuiEventPlayAptMovie record
         //    { 8, 18, 12, "", 3 } on channel 41 (the empty name is the &unk_820046A7
@@ -256,21 +250,17 @@ namespace BrnGui
         mpStateInterface->PlayAptMovie("", 3);
 
         // 3. Re-activate CrashNav (X360 record { 8, 191, 12, 1, 0 }, size 20, channel 40).
-        GuiEventActivateCrashNav lActivateCrashNav(true);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lActivateCrashNav), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lActivateCrashNav)));
+        GuiEventActivateCrashNav lActivateCrashNav;
+        lActivateCrashNav.muActivate = 1u;
+        lActivateCrashNav.muParam = 0;
+        mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
         // 4. The id-533 screen-flow command (X360 record size 16, channel 40).
         GuiScreenFlowCommandWire lScreenFlowCommand;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lScreenFlowCommand), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lScreenFlowCommand)));
+        mpStateInterface->OutputGuiEvent(lScreenFlowCommand);
 
         // 5. Show the HUD again (X360 record size 16, channel 40).
         GuiEventShowHideHudWire lShowHud(true);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lShowHud), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lShowHud)));
+        mpStateInterface->OutputGuiEvent(lShowHud);
     }
 }

@@ -134,9 +134,7 @@ void BaseOverlayState::OnLeave()
     // meLeaveMethod} -- 32 bytes on channel 40 of the state's output queue.
     GuiOverlayCompleteEvent lCompleteEvent;
     lCompleteEvent.Construct(mCurrentOverlayId, meLeaveMethod);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lCompleteEvent), 40,
-        static_cast<s32>(sizeof(GuiOverlayCompleteEvent)));
+    mpStateInterface->OutputGuiEvent(lCompleteEvent);
 
     // Release the priority claim on the full-info event and the observed set.
     mpStateInterface->PriorityUnRegisterForEvent(KI_EVENT_OVERLAY_FULL_INFO);
@@ -181,9 +179,7 @@ void BaseOverlayState::Update()
         // Ask the overlays director for the full overlay description (header-only
         // record {1, 186, 12}, 16 bytes on channel 40).
         GuiOverlayFullInfoRequest lRequest;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRequest), 40,
-            static_cast<s32>(sizeof(GuiOverlayFullInfoRequest)));
+        mpStateInterface->OutputGuiEvent(lRequest);
     }
         // fall through
     case E_OVERLAYINTERNALSTATE_SETUPOVERLAY:
@@ -204,10 +200,7 @@ void BaseOverlayState::Update()
             // ARTIST824B2938 publishes {8, 190, 16, payload} on channel 40.
             // The generic publisher queues raw 190, which the PC observer drain
             // drops before the director can replay an early wait-finish 188.
-            CgsGui::GuiEventWrapper<GuiOverlayShowingNotification, 40> lShowingRecord(lShowing);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lShowingRecord),
-                40, static_cast<s32>(sizeof(lShowingRecord)));
+            mpStateInterface->OutputGuiEvent(lShowing);
         }
         // fall through
     case E_OVERLAYINTERNALSTATE_RUNNING:

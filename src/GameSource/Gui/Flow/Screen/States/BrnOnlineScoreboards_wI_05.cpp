@@ -50,18 +50,17 @@ namespace BrnGui
             bool mbShowHud;   // +0x0C
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : ShowHideHudHeader(static_cast<u32>(sizeof(bool)),
-                                    static_cast<u32>(sizeof(ShowHideHudHeader)))
-                , mbShowHud(lbShowHud)
+                : mbShowHud(lbShowHud)
             {
             }
+            GuiEventShowHideHudWire() {}
         };
 
         // Record-size pins. Both payloads are pointer-free, so the X360's AddEvent size
         // immediates (20 and 16) must survive unchanged on the x64 host; if a host layout
         // ever drifts, it is caught here rather than on the wire.
-        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventShowHideHudWire) == 16), "show/hide-hud record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHudWire>) == 16), "show/hide-hud record is 16 bytes");
     }
 
     // ---- UpdateSetupComponents @ 0x824918C8 ----------------------------------------
@@ -144,16 +143,14 @@ namespace BrnGui
         mCurrentTargetScorePlayerName.macName[0] = 0;
 
         // { 8, 191, 12, 0, 0 } on channel 40, X360 record size 20: leave the CrashNav map.
-        GuiEventActivateCrashNav lDeactivateCrashNav(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lDeactivateCrashNav),
-            KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lDeactivateCrashNav)));
+        GuiEventActivateCrashNav lDeactivateCrashNav;
+        lDeactivateCrashNav.muActivate = 0u;
+        lDeactivateCrashNav.muParam = 0;
+        mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
         // { 1, 148, 12, 0 } on channel 40, X360 record size 16: take the HUD down.
         GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lHideHud),
-            KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lHideHud)));
+        mpStateInterface->OutputGuiEvent(lHideHud);
 
         BuildAlphabeticalRoadIndexes();
     }

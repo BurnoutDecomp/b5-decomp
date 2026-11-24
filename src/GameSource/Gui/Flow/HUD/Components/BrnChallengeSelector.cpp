@@ -51,9 +51,7 @@ static const s32 KI_SELECTOR_ACTION_HIDE = 3;
 static void PostChallengeSelected(CgsGui::StateInterface* lpStateInterface,
                                   GuiChallengeSelectedEvent& lrEvent)
 {
-    CgsGui::GuiEventWrapper<GuiChallengeSelectedEvent, 40> lRecord(lrEvent);
-    lpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lRecord), 40, static_cast<s32>(sizeof(lRecord)));
+    lpStateInterface->OutputGuiEvent(lrEvent);
 }
 
 // DWARF: extern const char[8] KAC_TEXT_FIELD_NAME (BrnChallengeSelector.cpp:23); "Text_mc".

@@ -176,33 +176,28 @@ namespace BrnGui
         // { 1, 148, 12, <show byte> }: 16 bytes.
         struct GuiShowHideHudWire : public CgsGui::GuiEvent<KI_GUI_EVENT_SHOW_HIDE_HUD>
         {
-            u8 mu8Show;   // +0x0C
-            u8 maPad[3];
+            u8 mu8Show;   // the one payload byte (OutputGuiEvent: {1, 148, 12})
 
             explicit GuiShowHideHudWire(bool lbShow)
-                : CgsGui::GuiEvent<KI_GUI_EVENT_SHOW_HIDE_HUD>(static_cast<u32>(sizeof(u8)), 12)
-                , mu8Show(lbShow ? 1 : 0)
+                : mu8Show(lbShow ? 1 : 0)
             {
-                maPad[0] = maPad[1] = maPad[2] = 0;
             }
+            GuiShowHideHudWire() {}
         };
 
         // { 288, 184, 16, <pad>, the 288-byte request }: 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+        struct GuiOverlayRequestWire
         {
-            u32               muPad0C;    // +0x0C
-            GuiOverlayRequest mRequest;   // +0x10
+            GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
             {
             }
         };
 
-        CGS_STATIC_ASSERT((sizeof(GuiShowHideHudWire) == 16), "show/hide hud record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiShowHideHudWire>) == 16), "show/hide hud record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerEvent) == 100), "ARTIST audio trigger payload is100 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40>) == 112),
                           "ARTIST audio trigger wrapper is112 bytes");
@@ -210,18 +205,15 @@ namespace BrnGui
         template <class TPayload>
         void PostWrapped(CgsGui::StateInterface* lpStateInterface, TPayload& lrPayload)
         {
-            CgsGui::GuiEventWrapper<TPayload, KI_CHANNEL_GUI_OUT> lWrapper(lrPayload);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWrapper), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWrapper)));
+            lpStateInterface->OutputGuiEvent(lrPayload);
         }
 
+        // OutputGuiEvent takes the event by non-const reference: box a copy (channel 40).
         template <class TRecord>
         void PostRecord(CgsGui::StateInterface* lpStateInterface, const TRecord& lrRecord)
         {
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lrRecord), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lrRecord)));
+            TRecord lRecord = lrRecord;
+            lpStateInterface->OutputGuiEvent(lRecord);
         }
 
         void PostImageGalleryRequest(CgsGui::StateInterface* lpStateInterface, s32 liImageIndex,
@@ -249,7 +241,7 @@ namespace BrnGui
         {
             GuiOverlayRequestWire lWire;
             lWire.mRequest.Construct(lpcOverlayId);
-            PostRecord(lpStateInterface, lWire);
+            PostRecord(lpStateInterface, lWire.mRequest);
         }
 
         // "%d" of liValue through the integer formatter into lrField.
@@ -330,7 +322,12 @@ namespace BrnGui
 
         meInternalState = E_INTERNALSTATE_LOADRESOURCES;
 
-        PostRecord(mpStateInterface, GuiEventActivateCrashNav(false));
+        {
+            GuiEventActivateCrashNav lDeactivate;
+            lDeactivate.muActivate = 0u;
+            lDeactivate.muParam = 0;
+            mpStateInterface->OutputGuiEvent(lDeactivate);
+        }
         PostRecord(mpStateInterface, GuiShowHideHudWire(false));
 
         mbSelectedImageValid = false;
@@ -697,7 +694,8 @@ namespace BrnGui
             case E_GAMEINPUTACTIONS_GUI_CANCEL:
                 if (mpGuiCache->IsOnlineStartPending())
                 {
-                    CgsGui::GuiEventNetworkSuspension lSuspension(false);
+                    CgsGui::GuiEventNetworkSuspension lSuspension;
+                    lSuspension.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
                     mpStateInterface->OutputGuiEvent(lSuspension);
                     mpGuiCache->SetOnlineStartPending(false);
                     SendStateEvent("GO_BACK_EASY");

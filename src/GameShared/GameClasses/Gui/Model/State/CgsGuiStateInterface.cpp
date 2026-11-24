@@ -61,25 +61,21 @@ namespace CgsGui
         GuiEventPlayAptMovie lEvent;
         lEvent.mpacMovieName = lpacMovieName;
         lEvent.miLevelNum    = liLevelNum;
-        mOutEventQueue.AddEvent(&lEvent, 41, sizeof(lEvent));   // X360 size 20
+        OutputViewState(lEvent);   // ARTIST: {8, 18, 12} + 8 bytes on channel 41, size 20
     }
 
     // @ 0x82476F98 - queue a "play apt loading movie" event (type 19, channel 40).
     void StateInterface::PlayLoadingScreen()
     {
         GuiEventPlayAptLoadingMovie lEvent;
-        GuiEventWrapper<GuiEventPlayAptLoadingMovie, 40> lWrapper(lEvent);
-        mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper),
-                                40, static_cast<s32>(sizeof(lWrapper)));   // X360 size 16
+        OutputGuiEvent(lEvent);   // ARTIST: {1, 19, 12} on channel 40, size 16
     }
 
     // @ 0x82476FE0 - queue a "stop apt loading movie" event (type 20, channel 40).
     void StateInterface::StopLoadingScreen()
     {
         GuiEventStopAptLoadingMovie lEvent;
-        GuiEventWrapper<GuiEventStopAptLoadingMovie, 40> lWrapper(lEvent);
-        mOutEventQueue.AddEvent(reinterpret_cast<const CgsModule::Event*>(&lWrapper),
-                                40, static_cast<s32>(sizeof(lWrapper)));   // X360 size 16
+        OutputGuiEvent(lEvent);   // ARTIST: {1, 20, 12} on channel 40, size 16
     }
 
     // @ 0x82436E40 - queue a resource load/unload request (channel 39).

@@ -225,16 +225,21 @@ namespace BrnGui
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
             u8 mu8Flag;
-            u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            GuiCommandEvent16(u8 lu8Flag = 0) : mu8Flag(lu8Flag) {}
         };
 
         template <s32 N>
-        void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
+        void PostCommand16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
         {
             GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->GetOutputEventQueue()->AddEvent(&lEvent, liChannel, sizeof(lEvent));
+            lpInterface->OutputGuiEvent(lEvent);
+        }
+
+        template <s32 N>
+        void PostInternalState16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
+        {
+            GuiCommandEvent16<N> lEvent(lu8Flag);
+            lpInterface->OutputInternalState(lEvent);
         }
 
         // ---- voice-over ------------------------------------------------------------
@@ -278,6 +283,7 @@ namespace BrnGui
 
             explicit GuiEventAudioVoiceOverPayload(u32 luNameHash) : muNameHash(luNameHash) {}
             s32 GetEventType() const { return KI_EVENT_VOICEOVER_STARTED; }
+            GuiEventAudioVoiceOverPayload() {}
         };
 
         const char* const KAC_VO_INTRO_NEED_PICTURE   = "Intro_Need_Picture";    // -> 0x82FB4A80
@@ -292,11 +298,7 @@ namespace BrnGui
             // The hash word is stored NATIVELY (the console's big-endian bytes are that
             // platform's native order; the consumer reads a u32, not a byte string).
             GuiEventAudioVoiceOverPayload lEvent(VoiceOverNameHash(lpacVoiceOverName));
-            CgsGui::GuiEventWrapper<GuiEventAudioVoiceOverPayload, KI_CHANNEL_GUI_OUT>
-                lWrapper(lEvent);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWrapper), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWrapper)));
+            lpInterface->OutputGuiEvent(lEvent);
         }
 
         // ================================================================================
@@ -349,7 +351,7 @@ namespace BrnGui
 
         // The internal-channel command 148 the state announces itself with (the record
         // {1, 148, 12} plus one zero byte, channel 42, 16 bytes).
-        PostCommand16<148>(mpStateInterface, KI_CHANNEL_GUI_INTERNAL, 0);
+        PostInternalState16<148>(mpStateInterface, 0);
 
         mScreenAnim.Construct(KAC_SCREENANIM_NAME, mpStateInterface, 0);
         // X360: LicenseComponent::Construct @0x8241A610 (its own virtual override of
@@ -837,7 +839,7 @@ namespace BrnGui
             {
                 mfFlybyTimer = 0.0f;
                 meIntroState = E_INTROSTATE_WAIT_FOR_FLYBY_FINISH;
-                PostCommand16<KI_COMMAND_FLYBY_START>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                PostCommand16<KI_COMMAND_FLYBY_START>(mpStateInterface);
             }
             break;
 
@@ -848,7 +850,7 @@ namespace BrnGui
                 mfFlybyTimer += mpGuiCache->GetTimeStep();
                 if (mfFlybyTimer >= KF_INTRO_FLYBY_DURATION)
                 {
-                    PostCommand16<KI_COMMAND_FLYBY_END>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                    PostCommand16<KI_COMMAND_FLYBY_END>(mpStateInterface);
                     PostVoiceOver(mpStateInterface, KAC_VO_INTRO_SHOW_CAR);
                     SendStateEvent(mpProfile->GetIsNewProfile() ? "ADVANCE" : "GO_BACK");
                 }

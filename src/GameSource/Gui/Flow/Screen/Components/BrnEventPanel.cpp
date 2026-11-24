@@ -150,7 +150,6 @@ namespace BrnGui
     // ---------------------------------------------------------------------------------
     struct GuiEventRankProgressRequest : public CgsGui::GuiEvent<437>
     {
-        GuiEventRankProgressRequest() : CgsGui::GuiEvent<437>(1, 12) {}
     };
     static const s32 KI_OUT_CHANNEL_GUI_EVENT = 40;
     static const s32 KI_REQUEST_RECORD_SIZE   = 16;
@@ -192,9 +191,7 @@ namespace BrnGui
         meCurrentGameMode        = E_EVENT_TYPE_COUNT;                // stw 6,  0x8AC
 
         GuiEventRankProgressRequest lRankRequest;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRankRequest),
-            KI_OUT_CHANNEL_GUI_EVENT, KI_REQUEST_RECORD_SIZE);
+        mpStateInterface->OutputGuiEvent(lRankRequest);
 
         mbActive = false;   // stb 0, 0x8D8 -- after the post, exactly as the asm orders it
     }

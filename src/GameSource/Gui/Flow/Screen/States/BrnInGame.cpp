@@ -113,17 +113,21 @@ namespace BrnGui
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
             u8 mu8Flag;
-            u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            GuiCommandEvent16(u8 lu8Flag = 0) : mu8Flag(lu8Flag) {}
         };
 
         template <s32 N>
-        void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
+        void PostCommand16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
         {
             GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+            lpInterface->OutputGuiEvent(lEvent);
+        }
+
+        template <s32 N>
+        void PostInternalState16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
+        {
+            GuiCommandEvent16<N> lEvent(lu8Flag);
+            lpInterface->OutputInternalState(lEvent);
         }
 
         // ⛔ `GuiViewStateEvent20` DELETED 2026-09-06 (hud lane). It was the OnEnter
@@ -168,41 +172,33 @@ namespace BrnGui
 
             GuiEventNetworkPlayerImageWire(const CgsNetwork::NetworkTexture* lpTexture,
                                            s32 liTextureIndex)
-                : CgsGui::GuiEvent<258>(), mpTexture(lpTexture), miTextureIndex(liTextureIndex)
+                : mpTexture(lpTexture), miTextureIndex(liTextureIndex)
             {
-                const size_t luOffset = offsetof(GuiEventNetworkPlayerImageWire, mpTexture);
-                muHeader0 = static_cast<u32>(sizeof(*this) - luOffset);   // X360 8
-                muHeader2 = static_cast<u32>(luOffset);                   // X360 12
             }
+            GuiEventNetworkPlayerImageWire() {}
         };
 
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> wire record (@0x82436BE0):
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+        struct GuiOverlayRequestWire
         {
-            u32               muPad0C;    // +0x0C (payload is 16-aligned past the header)
-            GuiOverlayRequest mRequest;   // +0x10
-            GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0) {}
+            GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
+            GuiOverlayRequestWire() {}
         };
 
         void PostOverlayRequest(CgsGui::StateInterface* lpInterface, const char* lpcOverlayId)
         {
             GuiOverlayRequestWire lWire;
             lWire.mRequest.Construct(lpcOverlayId);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(GuiOverlayRequestWire)));
+            lpInterface->OutputGuiEvent(lWire.mRequest);
         }
 
         // The OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> wire record
         // (@0x82476E98): { 8, 188, 16, <pad>, CgsID }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
+        struct GuiOverlayWaitFinishWire
         {
-            u32                         muPad0C;    // +0x0C (8-aligned payload)
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10 (the compressed overlay id)
-            GuiOverlayWaitFinishWire() : CgsGui::GuiEvent<188>(8, 16), muPad0C(0) {}
+            GuiOverlayWaitFinishRequest mRequest;   // the OutputGuiEvent payload
+            GuiOverlayWaitFinishWire() {}
         };
 
         void PostOverlayWaitFinishRequest(CgsGui::StateInterface* lpInterface,
@@ -210,9 +206,7 @@ namespace BrnGui
         {
             GuiOverlayWaitFinishWire lWire;
             lWire.mRequest.Construct(lpcOverlayId);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(GuiOverlayWaitFinishWire)));
+            lpInterface->OutputGuiEvent(lWire.mRequest);
         }
 
         // The OutputGuiEvent<BrnGui::GuiEventNetworkSplashEvent> wire record
@@ -221,7 +215,8 @@ namespace BrnGui
         {
             u32 muSplashState;   // +0x0C (ESplashState)
             explicit GuiNetworkSplashWire16(u32 luSplashState)
-                : CgsGui::GuiEvent<269>(4, 12), muSplashState(luSplashState) {}
+                : muSplashState(luSplashState) {}
+            GuiNetworkSplashWire16() {}
         };
 
         // ---- GuiCache boundary (X360 members past the committed layout tail; the
@@ -353,7 +348,7 @@ namespace BrnGui
 
         // { 1, 148, 12, flag=1 } on the internal channel -- HUD components up (the
         // flag=0 twin is ShutDownHudComponents).
-        PostCommand16<148>(mpStateInterface, KI_CHANNEL_GUI_INTERNAL, 1);
+        PostInternalState16<148>(mpStateInterface, 1);
 
         // The view-channel player-image CLEAR: GuiEventNetworkPlayerImage { null, -1 } on
         // channel 41, i.e. "no picture for any slot" -- NetworkPlayerImageRenderer::RecvEvent
@@ -363,19 +358,17 @@ namespace BrnGui
         // two-word helper stood); OutputViewState<T> builds the identical wrapper at host
         // width, which is the whole point of using it here.
         GuiEventNetworkPlayerImageWire lViewReset(0, -1);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lViewReset), KI_CHANNEL_VIEW_STATE,
-            static_cast<s32>(sizeof(lViewReset)));
+        mpStateInterface->OutputViewState(lViewReset);
 
         // { 8, 191, 12, 1, 0 } -- activate the CrashNav (front-end map) flow.
-        GuiEventActivateCrashNav lActivateCrashNav(true);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lActivateCrashNav), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(GuiEventActivateCrashNav)));
+        GuiEventActivateCrashNav lActivateCrashNav;
+        lActivateCrashNav.muActivate = 1u;
+        lActivateCrashNav.muParam = 0;
+        mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
-        PostCommand16<261>(mpStateInterface, KI_CHANNEL_GUI_OUT);
-        PostCommand16<145>(mpStateInterface, KI_CHANNEL_GUI_OUT);
-        PostCommand16<65>(mpStateInterface, KI_CHANNEL_GUI_OUT, 1);
+        PostCommand16<261>(mpStateInterface);
+        PostCommand16<145>(mpStateInterface);
+        PostCommand16<65>(mpStateInterface, 1);
 
         // The wait-finish registrations: each overlay that must finish hiding before
         // its flow transition proceeds (X360 posts the 24-byte 188 record per name).
@@ -562,8 +555,7 @@ namespace BrnGui
                 lpComplete->mOverlayId == CgsIDCompress("OnSplshFreeB"))
             {
                 GuiNetworkSplashWire16 lFinished(KU_SPLASH_STATE_FINISHED);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lFinished), KI_CHANNEL_GUI_OUT, 16);
+                mpStateInterface->OutputGuiEvent(lFinished);
             }
         }
     }
@@ -625,7 +617,7 @@ namespace BrnGui
     // and hand the flow to the main map.
     void InGame::OpenMainMap()
     {
-        PostCommand16<148>(mpStateInterface, KI_CHANNEL_GUI_INTERNAL, 0);
+        PostInternalState16<148>(mpStateInterface, 0);
         SendStateEvent("MAP_MAIN");
     }
 
@@ -634,21 +626,21 @@ namespace BrnGui
     {
         if (!mbIsInEventStartLocation)
             return;
-        PostCommand16<148>(mpStateInterface, KI_CHANNEL_GUI_INTERNAL, 0);
+        PostInternalState16<148>(mpStateInterface, 0);
         SendStateEvent("MAP_EVENT");
     }
 
     // @ 0x824DA700 -- as OpenMainMap, into the driver-details screen.
     void InGame::OpenDriverDetails()
     {
-        PostCommand16<148>(mpStateInterface, KI_CHANNEL_GUI_INTERNAL, 0);
+        PostInternalState16<148>(mpStateInterface, 0);
         SendStateEvent("TO_D_DETAIL");
     }
 
     // @ 0x824D0AB0 -- the {1,148,12,0} internal command (flag=0 == shut down).
     void InGame::ShutDownHudComponents()
     {
-        PostCommand16<148>(mpStateInterface, KI_CHANNEL_GUI_INTERNAL, 0);
+        PostInternalState16<148>(mpStateInterface, 0);
     }
 
     // @ 0x824B8EF8 -- the non-network options (gallery / challenges / scoreboards /
@@ -726,7 +718,7 @@ namespace BrnGui
         if (lbJoinRequest)
         {
             mpGuiCache->SetResetOnlineGameOptions(true);
-            PostCommand16<268>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            PostCommand16<268>(mpStateInterface);
         }
 
         CacheSetEnteredOnlineViaEasyDrive(mpGuiCache);
@@ -854,7 +846,8 @@ namespace BrnGui
                 CGS_ASSERT(lpEvent != 0, "lpInviteCompleteEvent");   // cpp:587
                 if (*reinterpret_cast<const u32*>(lpEvent) == 0)
                 {
-                    CgsGui::GuiEventNetworkSuspension lSuspension(false);
+                    CgsGui::GuiEventNetworkSuspension lSuspension;
+                    lSuspension.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
                     mpStateInterface->OutputGuiEvent(lSuspension);
                 }
                 break;
@@ -866,7 +859,7 @@ namespace BrnGui
                 break;
 
             case 134:  // loading-screen handshake -> command 135
-                PostCommand16<135>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                PostCommand16<135>(mpStateInterface);
                 break;
 
             case 136:
@@ -880,7 +873,7 @@ namespace BrnGui
             case 228:  // open-main-map request (state event first on the X360, then the
                        // HUD shutdown command -- kept in that order)
                 SendStateEvent("MAP_MAIN");
-                PostCommand16<148>(mpStateInterface, KI_CHANNEL_GUI_INTERNAL, 0);
+                PostInternalState16<148>(mpStateInterface, 0);
                 break;
 
             case 229:
@@ -1033,7 +1026,7 @@ namespace BrnGui
         {
             mfTimeUntilNextEATrack -= mpGuiCache->GetTimeStep();
             if (mfTimeUntilNextEATrack <= 0.0f)
-                PostCommand16<461>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                PostCommand16<461>(mpStateInterface);
         }
 
         // ---- the first-boot intro gate (X360 Update tail: `lwz mpProfile` ->
@@ -1041,7 +1034,7 @@ namespace BrnGui
         if (mpProfile != 0 && ProfileIsNew(mpProfile))
         {
             SendStateEvent("TO_INTRO");
-            PostCommand16<476>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            PostCommand16<476>(mpStateInterface);
         }
 
         // ---- the system guide forces the pause path ----------------------------------

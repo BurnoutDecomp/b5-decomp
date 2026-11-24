@@ -19,15 +19,11 @@
 namespace BrnGui
 {
 
-// The GUI event PausedHudState publishes when it is entered. The X360 fills a GuiEvent<532>
-// header { muHeader0 = 1, muEventType = 532, muHeader2 = 12 } and pushes a 16-byte record
-// (channel id 40 = GuiEventOut); the trailing payload word is left uninitialised. Type id 532
-// is the X360 GuiEvent<N> template id; the payload semantics beyond the header are not recovered.
+// The GUI event PausedHudState publishes when it is entered, through OutputGuiEvent: the X360
+// record is { 1, 532, 12 } on channel 40 (GuiEventOut), 16 bytes, so the payload is the empty
+// event's one unwritten byte. Type id 532 is the X360 GuiEvent<N> template id.
 struct GuiEventPausedHudEnter : public CgsGui::GuiEvent<532>
 {
-    u32 muReserved;   // +0x0C (X360 leaves this gap word uninitialised; record size is 16)
-
-    GuiEventPausedHudEnter() : CgsGui::GuiEvent<532>(1, 12) {}
 };
 
 // The 3 observed event ids (dword_8205B060). The FLAG that stood here -- "the exports carry no
@@ -48,8 +44,7 @@ void PausedHudState::OnEnter()
     mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
     GuiEventPausedHudEnter lEvent;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lEvent), 40, 16);
+    mpStateInterface->OutputGuiEvent(lEvent);
 }
 
 // @ 0x82475390
@@ -141,10 +136,7 @@ void PausedHudState::Update()
             SendStateEvent("UNPAUSE");
 
             GuiPausedHudUnpausePayload lPayload;
-            CgsGui::GuiEventWrapper<GuiPausedHudUnpausePayload, 40> lRecord(lPayload);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord), 40,
-                static_cast<s32>(sizeof(lRecord)));
+            mpStateInterface->OutputGuiEvent(lPayload);
 
             if (CgsDev::Log::gpDebugPrint != 0)
             {

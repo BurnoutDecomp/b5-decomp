@@ -131,9 +131,6 @@ namespace BrnGui
             u8 mu8Payload;   // +0x0C (not written by the X360)
 
             GuiCommandWire16()
-                : CgsGui::GuiEvent<TI_EVENT_ID>(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(sizeof(CgsGui::GuiEvent<TI_EVENT_ID>)))
             {
             }
         };
@@ -191,10 +188,7 @@ namespace BrnGui
             case E_LEADERBOARD_REQUEST_STATE_GET_CATEGORIES:
             {
                 GuiCommandWire16<KI_EVENT_SCOREBOARD_REQUEST_CATEGORIES> lCategoriesRequest;
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lCategoriesRequest),
-                    KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lCategoriesRequest)));   // X360 record size 16
+                mpStateInterface->OutputGuiEvent(lCategoriesRequest);   // X360 record size 16
 
                 mTable.SetupScoreboard(0);
                 // SetLoading(true) inlined, DWARF cpp:1362
@@ -214,11 +208,9 @@ namespace BrnGui
 
             case E_LEADERBOARD_REQUEST_STATE_GET_INDEX:
             {
-                GuiEventScoreboardRequestIndexEvent lIndexRequest(miCurrentCategory);
-                // Full {4,111,12}+4 ARTIST record: queue on channel 40 without another wrapper.
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lIndexRequest), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lIndexRequest)));
+                GuiEventScoreboardRequestIndexEvent lIndexRequest;
+                lIndexRequest.miCategory = miCurrentCategory;   // OutputGuiEvent: {4,111,12}+4
+                mpStateInterface->OutputGuiEvent(lIndexRequest);
 
                 mTable.SetupScoreboard(0);
                 // SetLoading(true) inlined, DWARF cpp:1362
@@ -236,11 +228,9 @@ namespace BrnGui
 
             case E_LEADERBOARD_REQUEST_STATE_GET_VARIATIONS:
             {
-                GuiEventScoreboardRequestVariationEvent lVariationRequest(miCurrentIndex);
-                // Full {4,112,12}+4 ARTIST record: queue on channel 40 without another wrapper.
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lVariationRequest), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lVariationRequest)));
+                GuiEventScoreboardRequestVariationEvent lVariationRequest;
+                lVariationRequest.miIndex = miCurrentIndex;   // OutputGuiEvent: {4,112,12}+4
+                mpStateInterface->OutputGuiEvent(lVariationRequest);
 
                 mTable.SetupScoreboard(0);
                 // SetLoading(true) inlined, DWARF cpp:1362
@@ -265,24 +255,22 @@ namespace BrnGui
                     ? maiAlphabeticalRoadIndex[miCurrentVariation]
                     : miCurrentVariation;
 
-                GuiEventScoreboardRequestTableEvent lTableRequest(liTargetVariation);
-                // Full {4,113,12}+4 ARTIST record: queue on channel 40 without another wrapper.
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lTableRequest), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lTableRequest)));
+                GuiEventScoreboardRequestTableEvent lTableRequest;
+                lTableRequest.miVariation = liTargetVariation;   // OutputGuiEvent: {4,113,12}+4
+                mpStateInterface->OutputGuiEvent(lTableRequest);
 
                 // ...and log which board was asked for. The telemetry record's parameter
                 // buffer starts one word past its type, and TelemetryData is the accessor for
                 // that buffer, so the builder addresses the record through it.
-                CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEvent<323>) == 12),
-                              "event 323 record header is 12 bytes");
-                CGS_STATIC_ASSERT((sizeof(GuiTelemetryEvent) == 32),
-                              "event 323 record is 12-byte header plus 20-byte payload");
-                CGS_STATIC_ASSERT((offsetof(GuiTelemetryEvent, miTelemetryType) == 12),
-                              "event 323 payload begins at record offset 12");
-                CGS_STATIC_ASSERT((offsetof(GuiTelemetryEvent, macParams) == 16),
+                CGS_STATIC_ASSERT((sizeof(GuiTelemetryEvent) == 20),
+                              "event 323 payload is 20 bytes");
+                CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiTelemetryEvent>) == 32),
+                              "event 323 record is the three wrapper words plus the payload");
+                CGS_STATIC_ASSERT((offsetof(GuiTelemetryEvent, macParams) == 4),
                               "event 323 parameter string follows the payload type word");
-                GuiTelemetryEvent lTelemetry(KI_TELEMETRY_TYPE_SCOREBOARD_TABLE);
+                GuiTelemetryEvent lTelemetry;
+                lTelemetry.miTelemetryType = KI_TELEMETRY_TYPE_SCOREBOARD_TABLE;
+                lTelemetry.macParams[0] = 0;
                 BrnNetwork::BrnNetworkModuleIO::TelemetryData* lpTelemetry =
                     reinterpret_cast<BrnNetwork::BrnNetworkModuleIO::TelemetryData*>(
                         &lTelemetry.miTelemetryType);
@@ -291,9 +279,7 @@ namespace BrnGui
                 AddIntTelemetryParameter(lpTelemetry, miCurrentIndex);
                 AddIntTelemetryParameter(lpTelemetry, liTargetVariation);
 
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lTelemetry), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lTelemetry)));
+                mpStateInterface->OutputGuiEvent(lTelemetry);
             }
             // fall through
             case E_LEADERBOARD_REQUEST_STATE_WF_TABLE:
@@ -363,11 +349,9 @@ namespace BrnGui
                     {
                         // A session start was already in flight, so let the network layer run
                         // again on the way out and take the quiet exit.
-                        CgsGui::GuiEventNetworkSuspension lResumeNetwork(false);
-                        mpStateInterface->GetOutputEventQueue()->AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>(&lResumeNetwork),
-                            KI_CHANNEL_GUI_OUT,
-                            static_cast<s32>(sizeof(lResumeNetwork)));   // X360 record size 16
+                        CgsGui::GuiEventNetworkSuspension lResumeNetwork;
+                        lResumeNetwork.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
+                        mpStateInterface->OutputGuiEvent(lResumeNetwork);   // X360 record size 16
 
                         mpGuiCache->SetOnlineStartPending(false);
                         SendStateEvent(KAC_STATE_EVENT_GO_BACK_EASY);

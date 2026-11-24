@@ -119,14 +119,14 @@ namespace BrnGui
 
         // ---- out-queue wire records ------------------------------------------------------
         // { 4, 266, 12, the request }, channel 40, 16 bytes.
-        typedef CgsGui::GuiEventWrapper<GuiEventNetworkNewsAndTOS, 40> GuiEventNetworkNewsAndTOSWire;
+        typedef CgsGui::GuiEventOut<GuiEventNetworkNewsAndTOS> GuiEventNetworkNewsAndTOSWire;
         // { 1, 356, 12, <the byte> }, channel 40, 16 bytes.
-        typedef CgsGui::GuiEventWrapper<GuiAutosaveRequestEvent, 40> GuiAutosaveRequestEventWire;
+        typedef CgsGui::GuiEventOut<GuiAutosaveRequestEvent> GuiAutosaveRequestEventWire;
 
         CGS_STATIC_ASSERT((sizeof(GuiEventNetworkNewsAndTOSWire) == 16), "news/TOS record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiAutosaveRequestEventWire) == 16), "autosave record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiTelemetryEvent) == 32), "telemetry record is 32 bytes");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventNetworkSuspension) == 16), "suspension record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiTelemetryEvent>) == 32), "telemetry record is 32 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<CgsGui::GuiEventNetworkSuspension>) == 16), "suspension record is 16 bytes");
     }
 
     // ================================================================================
@@ -150,16 +150,13 @@ namespace BrnGui
         // Ask for the news.
         GuiEventNetworkNewsAndTOS lRequestNews;
         lRequestNews.meEventType = GuiEventNetworkNewsAndTOS::E_EVENT_TYPE_REQUEST_NEWS;
-        const GuiEventNetworkNewsAndTOSWire lRequestNewsWire(lRequestNews);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRequestNewsWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lRequestNewsWire)));
+        mpStateInterface->OutputGuiEvent(lRequestNews);
 
         // Log the visit (no parameters).
-        GuiTelemetryEvent lTelemetry(KI_TELEMETRY_TYPE_NEWS);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lTelemetry), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lTelemetry)));
+        GuiTelemetryEvent lTelemetry;
+        lTelemetry.miTelemetryType = KI_TELEMETRY_TYPE_NEWS;
+        lTelemetry.macParams[0] = 0;
+        mpStateInterface->OutputGuiEvent(lTelemetry);
     }
 
     // ================================================================================
@@ -236,10 +233,9 @@ namespace BrnGui
                 {
                     // This flow armed the online start: lift the network suspension it put
                     // in place, then back out on the quiet path.
-                    CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
-                        KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lNetworkSuspension)));
+                    CgsGui::GuiEventNetworkSuspension lNetworkSuspension;
+                    lNetworkSuspension.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
+                    mpStateInterface->OutputGuiEvent(lNetworkSuspension);
 
                     mpGuiCache->SetOnlineStartPending(false);
                     SendStateEvent(KAC_GO_BACK_EASY_EVENT);
@@ -341,10 +337,9 @@ namespace BrnGui
         {
             // This flow armed the online start: lift the network suspension it put in place,
             // then back out on the quiet path.
-            CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
-                KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lNetworkSuspension)));
+            CgsGui::GuiEventNetworkSuspension lNetworkSuspension;
+            lNetworkSuspension.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
+            mpStateInterface->OutputGuiEvent(lNetworkSuspension);
 
             mpGuiCache->SetOnlineStartPending(false);
             SendStateEvent(KAC_GO_BACK_EASY_EVENT);
@@ -457,10 +452,7 @@ namespace BrnGui
                 lpOptions->SetUnreadNews(false);
 
                 CGS_ASSERT(mpStateInterface != 0, "mpStateInterface");
-                const GuiAutosaveRequestEventWire lAutosaveWire(lAutosaveEvent);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lAutosaveWire), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lAutosaveWire)));
+                mpStateInterface->OutputGuiEvent(lAutosaveEvent);
             }
         }
     }

@@ -160,10 +160,8 @@ void OnlineInviteMessageComponent::Update()
     if (mbOutputFinishEvent == true)
     {
         CgsGui::GuiEvent<106> lFinished;
-        CgsGui::GuiEventWrapper<CgsGui::GuiEvent<106>, 40> lRecord(lFinished);
-        CGS_STATIC_ASSERT((sizeof(lRecord) == 16), "original invite-finished channel40 record");
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord), 40, sizeof(lRecord));
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<CgsGui::GuiEvent<106> >) == 16), "original invite-finished channel40 record");
+        mpStateInterface->OutputGuiEvent(lFinished);
         mbOutputFinishEvent = false;
     }
     if (!mpGuiCache)

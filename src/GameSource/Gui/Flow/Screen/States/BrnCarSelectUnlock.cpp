@@ -121,7 +121,7 @@ namespace BrnGui
             u8 mbFlagA;   // +0x0C
             u8 mbFlagB;   // +0x0D
             GuiTickerFlagsWire536()
-                : CgsGui::GuiEvent<536>(2, 12), mbFlagA(1), mbFlagB(0) {}
+                : mbFlagA(1), mbFlagB(0) {}
         };
 
         // The custom ticker message payload (0x818 bytes) -- layout recovered from
@@ -164,7 +164,6 @@ namespace BrnGui
         {
             GuiTickerCustomMessagePayload mMessage;   // +0x0C
             GuiTickerCustomMessageWire()
-                : CgsGui::GuiEvent<537>(static_cast<u32>(sizeof(GuiTickerCustomMessagePayload)), 12)
             {
                 std::memset(&mMessage, 0, sizeof(mMessage));
                 mMessage.maFlags[2] = 1;   // the one non-zero seed (+0x813)
@@ -178,10 +177,8 @@ namespace BrnGui
         // writes the payload byte; zeroed here rather than shipped as stack garbage.
         struct GuiCarSelectTickerClosedWire77 : public CgsGui::GuiEvent<77>
         {
-            u8 maPad[4];   // +0x0C (record tail up to the 16 bytes AddEvent copies)
             GuiCarSelectTickerClosedWire77()
-                : CgsGui::GuiEvent<77>(1, 12)
-            { maPad[0] = 0; maPad[1] = 0; maPad[2] = 0; maPad[3] = 0; }
+ {}
         };
 
         // KF_SCREENSKIPTIMEOUT (DWARF cpp:55) -- MEASURED: flt_82065B68 == 10.0f, the one
@@ -465,9 +462,7 @@ namespace BrnGui
                             lpButton->miButtonId == KI_ACTION_GUI_SELECT)
                         {
                             GuiTickerFlagsWire536 lTickerClear;
-                            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                                &lTickerClear, KI_CHANNEL_GUI_OUT,
-                                static_cast<s32>(sizeof(lTickerClear)));
+                            mpStateInterface->OutputGuiEvent(lTickerClear);
                         }
                     }
                     break;
@@ -479,9 +474,7 @@ namespace BrnGui
 
                     {
                         GuiTickerFlagsWire536 lTickerClear;
-                        mpStateInterface->GetOutputEventQueue()->AddEvent(
-                            &lTickerClear, KI_CHANNEL_GUI_OUT,
-                            static_cast<s32>(sizeof(lTickerClear)));
+                        mpStateInterface->OutputGuiEvent(lTickerClear);
                     }
 
                     const CgsID lUnlockedCarId = *reinterpret_cast<const CgsID*>(lpEvent);
@@ -496,8 +489,7 @@ namespace BrnGui
                     // Format type 2 -- the same pass-through word the SetTicker sibling posts.
                     GuiTickerCustomMessageWire lTicker;
                     lTicker.mMessage.AddString(lacBlurbKey, 2);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        &lTicker, KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lTicker)));
+                    mpStateInterface->OutputGuiEvent(lTicker);
 
                     mbTickerVisible = true;
                     break;
@@ -515,9 +507,7 @@ namespace BrnGui
                                                                        "transout", false);
 
                         GuiCarSelectTickerClosedWire77 lTickerClosed;
-                        mpStateInterface->GetOutputEventQueue()->AddEvent(
-                            &lTickerClosed, KI_CHANNEL_GUI_OUT,
-                            static_cast<s32>(sizeof(lTickerClosed)));
+                        mpStateInterface->OutputGuiEvent(lTickerClosed);
                     }
                     break;
                 }

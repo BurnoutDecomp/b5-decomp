@@ -97,13 +97,11 @@ namespace BrnGui
                     liConnectType = KI_CONNECT_TYPE_FULL;
                 }
 
-                // The console posts { 4, 272, 12, type } on channel 40 (16 bytes). The type
-                // carries its own GuiEvent header, so it goes straight onto the out-queue on
-                // channel 40; the OutputGuiEvent template would queue it under id 272.
-                GuiEventNetworkConnect lConnect(liConnectType);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lConnect), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lConnect)));
+                // The console posts { 4, 272, 12, type } on channel 40 (16 bytes): the
+                // inlined OutputGuiEvent<GuiEventNetworkConnect>.
+                GuiEventNetworkConnect lConnect;
+                lConnect.miConnectType = liConnectType;
+                mpStateInterface->OutputGuiEvent(lConnect);
             }
         }
     }

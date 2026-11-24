@@ -77,11 +77,10 @@ namespace BrnGui
             u32 muEventID;   // +0x0C (X360 stores 0)
 
             explicit GuiEventSetInspectedEventIconWire(u32 luEventID)
-                : SetInspectedEventIconHeader(static_cast<u32>(sizeof(u32)),
-                                              static_cast<u32>(sizeof(SetInspectedEventIconHeader)))
-                , muEventID(luEventID)
+                : muEventID(luEventID)
             {
             }
+            GuiEventSetInspectedEventIconWire() {}
         };
     }
 
@@ -164,15 +163,9 @@ namespace BrnGui
             muInspectingEventID = 0;
 
             GuiEventSetInspectedEventIconWire lClearInspected(0);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lClearInspected),
-                KI_CHANNEL_VIEW_STATE,
-                static_cast<s32>(sizeof(lClearInspected)));      // X360 record size 16
+            mpStateInterface->OutputViewState(lClearInspected);      // X360 record size 16
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lClearInspected),
-                KI_CHANNEL_GUI_INTERNAL,
-                static_cast<s32>(sizeof(lClearInspected)));      // X360 record size 16
+            mpStateInterface->OutputInternalState(lClearInspected);      // X360 record size 16
         }
 
         // r4 == 1 == E_ZOOMFACTOR_MEDIUM, f1 == flt_82001CC0 == 0.0f, r6 == 0.

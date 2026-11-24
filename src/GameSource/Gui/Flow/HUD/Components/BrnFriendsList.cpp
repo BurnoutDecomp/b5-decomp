@@ -1062,9 +1062,7 @@ namespace
     // Original StateInterface::OutputGuiEvent wraps raw payloads on channel 40.
     template<class T> void FriendsOutput(CgsGui::StateInterface* state, T& event)
     {
-        CgsGui::GuiEventWrapper<T, 40> wrapper(event);
-        state->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&wrapper), 40, sizeof(wrapper));
+        state->OutputGuiEvent(event);
     }
 
     void FriendsShown(CgsGui::StateInterface* state, bool shown)

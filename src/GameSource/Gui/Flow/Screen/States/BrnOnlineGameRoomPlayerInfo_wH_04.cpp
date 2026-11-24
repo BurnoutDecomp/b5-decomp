@@ -92,11 +92,10 @@ namespace BrnGui
             s32 miPlayerID;   // +0x0C
 
             explicit GuiEventPlayerHighlightedWire(s32 liPlayerID)
-                : PlayerHighlightedHeader(static_cast<u32>(sizeof(s32)),
-                                          static_cast<u32>(sizeof(PlayerHighlightedHeader)))
-                , miPlayerID(liPlayerID)
+                : miPlayerID(liPlayerID)
             {
             }
+            GuiEventPlayerHighlightedWire() {}
         };
 
         // ---- icon state indices -------------------------------------------------------
@@ -342,10 +341,7 @@ namespace BrnGui
                 mpGuiCache->maLobbyPlayerInfo[liHighlightedIndex]);
 
         GuiEventPlayerHighlightedWire lPlayerHighlighted(lpLobbyPlayerInfo->mPlayerID);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lPlayerHighlighted),
-            KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lPlayerHighlighted)));   // X360 record size 16
+        mpStateInterface->OutputGuiEvent(lPlayerHighlighted);   // X360 record size 16
 
         mbHighlightedNewPlayer = true;
 

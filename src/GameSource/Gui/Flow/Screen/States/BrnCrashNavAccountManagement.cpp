@@ -170,7 +170,7 @@ namespace BrnGui
         struct GuiEventNewsAndTOSRequest : public CgsGui::GuiEvent<266>
         {
             s32 miRequest;   // +0x0C
-            GuiEventNewsAndTOSRequest() : CgsGui::GuiEvent<266>(4, 12), miRequest(1) {}
+            GuiEventNewsAndTOSRequest() : miRequest(1) {}
         };
 
         // OnEnter's second post: { 1, 124, 12 } + ONE byte.
@@ -185,10 +185,9 @@ namespace BrnGui
         // and wants a 1 here, re-read 0x824CE1F4..0x824CE218 before changing it.
         struct GuiEventAccountSettingsRequest : public CgsGui::GuiEvent<124>
         {
-            u8  mbRequest;   // +0x0C
-            u8  maPad[3];    // +0x0D (the rest of the leftover word; never read, size == 1)
+            u8  mbRequest;   // the one payload byte (the wrapper's tail padding is the leftover)
             GuiEventAccountSettingsRequest()
-                : CgsGui::GuiEvent<124>(1, 12), mbRequest(0) { maPad[0] = 0; maPad[1] = 0; maPad[2] = 1; }
+                : mbRequest(0) {}
         };
 
         // ApplyAndSaveSettings's post: { 3, 126, 12 } + the three answer bytes.
@@ -197,31 +196,23 @@ namespace BrnGui
             u8 mbShareInfo1;   // +0x0C
             u8 mbShareInfo2;   // +0x0D
             u8 mbTelemetry;    // +0x0E
-            u8 mPad0F;         // +0x0F
             GuiEventAccountSettingsUpdate()
-                : CgsGui::GuiEvent<126>(3, 12)
-                , mbShareInfo1(0), mbShareInfo2(0), mbTelemetry(0), mPad0F(0) {}
+                : mbShareInfo1(0), mbShareInfo2(0), mbTelemetry(0) {}
         };
 
         // The OutputGuiEvent<GuiOverlayRequest> wire record: { 288, 184, 16, <pad>, request },
         // channel 40, 304 bytes -- the shape BrnRaceMainHudState.cpp already posts.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+        struct GuiOverlayRequestWire
         {
-            u32               muPad0C;    // +0x0C
-            GuiOverlayRequest mRequest;   // +0x10
-            GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0) {}
+            GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
+            GuiOverlayRequestWire() {}
         };
 
         // The wait-finish wire record: { 8, 188, 16, <pad>, id }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
+        struct GuiOverlayWaitFinishWire
         {
-            u32                        muPad0C;    // +0x0C
-            GuiOverlayWaitFinishRequest mRequest;  // +0x10
-            GuiOverlayWaitFinishWire()
-                : CgsGui::GuiEvent<188>(static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)), 16)
-                , muPad0C(0) {}
+            GuiOverlayWaitFinishRequest mRequest;  // the OutputGuiEvent payload
+            GuiOverlayWaitFinishWire() {}
         };
 
         // The state's in-event queue (CgsGui::State +0x18).
@@ -285,11 +276,11 @@ namespace BrnGui
         // replies come back as events 266 and 125, both of which this state observes.
         {
             GuiEventNewsAndTOSRequest lRequest;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lRequest, KI_CHANNEL_GUI_OUT, 16);
+            mpStateInterface->OutputGuiEvent(lRequest);
         }
         {
             GuiEventAccountSettingsRequest lRequest;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lRequest, KI_CHANNEL_GUI_OUT, 16);
+            mpStateInterface->OutputGuiEvent(lRequest);
         }
 
     }
@@ -486,15 +477,11 @@ namespace BrnGui
                 {
                     GuiOverlayWaitFinishWire lWait;
                     lWait.mRequest.Construct(KAC_OVERLAY_ACCT);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        &lWait, KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(GuiOverlayWaitFinishWire)));
+                    mpStateInterface->OutputGuiEvent(lWait.mRequest);
 
                     GuiOverlayRequestWire lRequest;
                     lRequest.mRequest.Construct(KAC_OVERLAY_DISC);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        &lRequest, KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(GuiOverlayRequestWire)));
+                    mpStateInterface->OutputGuiEvent(lRequest.mRequest);
                 }
                 break;
 
@@ -694,8 +681,7 @@ namespace BrnGui
 
         GuiOverlayWaitFinishWire lWait;
         lWait.mRequest.Construct(KAC_OVERLAY_ACCT);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            &lWait, KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(GuiOverlayWaitFinishWire)));
+        mpStateInterface->OutputGuiEvent(lWait.mRequest);
 
         mMenuToggleGroup.Unloaded();
         SendStateEvent("GO_BACK");
@@ -727,14 +713,13 @@ namespace BrnGui
             lUpdate.mbShareInfo1 = labAnswers[E_TOGGLEROW_SHARE_INFO_1] ? 1 : 0;
             lUpdate.mbShareInfo2 = labAnswers[E_TOGGLEROW_SHARE_INFO_2] ? 1 : 0;
             lUpdate.mbTelemetry  = labAnswers[E_TOGGLEROW_TELEMETRY]    ? 1 : 0;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&lUpdate, KI_CHANNEL_GUI_OUT, 16);
+            mpStateInterface->OutputGuiEvent(lUpdate);
         }
 
         {
             GuiOverlayRequestWire lRequest;
             lRequest.mRequest.Construct(KAC_OVERLAY_ACCT);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                &lRequest, KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(GuiOverlayRequestWire)));
+            mpStateInterface->OutputGuiEvent(lRequest.mRequest);
         }
 
         meState = E_STATE_SAVING;

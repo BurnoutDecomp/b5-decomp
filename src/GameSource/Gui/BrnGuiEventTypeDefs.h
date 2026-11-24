@@ -822,18 +822,17 @@ struct GuiOptionsBrightnessContrastPostFxControl : public CgsModule::Event
 
 // The "activate / deactivate the CrashNav (front-end map) flow" GUI event. X360-attested
 // by the OutputGuiEvent<BrnGui::GuiEventActivateCrashNav> instantiation @0x82493938: the
-// queued record is { muHeader0 = 8 (payload bytes), muEventType = 191, muHeader2 = 12
-// (payload offset) } + two payload words, channel 40, 20 bytes. BrnGui::PauseScreen posts
+// queued wrapper is { 8 (payload bytes), 191, 12 (payload offset) } + two payload words,
+// channel 40, 20 bytes. BrnGui::PauseScreen posts
 // it as { 1, 0 } when the player picks the pause option that quits to CrashNav. ADDITIVE
 // GROW (BrnPauseScreen TU): the second payload word's role is not recovered (the pause
 // screen leaves it 0).
 struct GuiEventActivateCrashNav : public CgsGui::GuiEvent<191>
 {
-    u32 muActivate;   // +0x0C payload word 0: nonzero = activate CrashNav
-    u32 muParam;      // +0x10 payload word 1 (role not recovered; posted as 0)
-
-    explicit GuiEventActivateCrashNav(bool lbActivate)
-        : CgsGui::GuiEvent<191>(8, 12), muActivate(lbActivate ? 1u : 0u), muParam(0) {}
+    // DWARF BrnGuiEventTypeDefs.h:985/986 (meActivateDeactivate, meCrashNavType; no
+    // constructor); ARTIST OutputGuiEvent<GuiEventActivateCrashNav> 0x82493938.
+    u32 muActivate;   // +0x00 payload word 0: nonzero = activate CrashNav
+    u32 muParam;      // +0x04 payload word 1 (role not recovered; posted as 0)
 };
 
 // Declaration mirror of the DWARF parent (BrnGuiEventTypeDefs.h:1902). Only the nested
@@ -1004,18 +1003,13 @@ public:
 
 // ===================================================================================
 // BrnGui::GuiOverlayFullInfoRequest -- "send me the current overlay's full info"
-// (posted by BaseOverlayState::Update's WFINIT phase @0x824B2BD8: a header-only
-// record {muHeader0=1, muEventType=186, muHeader2=12} on channel 40, 16 bytes;
-// answered by the overlays director's full-info response on 187).
+// (posted by BaseOverlayState::Update's WFINIT phase @0x824B2BD8 through OutputGuiEvent:
+// the record {1, 186, 12} on channel 40, 16 bytes (AddEvent size 0x10 @0x824B2BDC), so the
+// payload is the empty event's one unwritten byte; answered by the overlays director's
+// full-info response on 187).
 // ===================================================================================
 struct GuiOverlayFullInfoRequest : public CgsGui::GuiEvent<186>
 {
-    // +0x0C -- pads the wire record to the X360's 16 bytes (AddEvent size 0x10
-    // @0x824B2BDC). The X360 never writes this word (the queued copy carries stack
-    // garbage past the 12-byte header), so it is deliberately left uninitialised.
-    u32 muPad0C;
-
-    GuiOverlayFullInfoRequest() : CgsGui::GuiEvent<186>(1, 12) {}
 };
 
 // ===================================================================================
@@ -1039,12 +1033,10 @@ struct GuiOverlayCompleteEvent : public CgsGui::GuiEvent<189>
         E_LEAVEMETHOD_COUNT  = 3,
     };
 
-    CgsID       mOverlayId;     // +0x10 (DWARF h:5846; 8-aligned past the 12-byte header,
-                                //        matching the X360 record: payload offset 16)
-    LeaveMethod meLeaveMethod;  // +0x18 (DWARF h:5847)
+    CgsID       mOverlayId;     // +0x00 (DWARF h:5846; 8-aligned, so OutputGuiEvent's
+                                //        wrapper puts it at offset 16, as the X360 record)
+    LeaveMethod meLeaveMethod;  // +0x08 (DWARF h:5847)
 
-    // Headers per the OnLeave record: payload size 16, payload offset 16.
-    GuiOverlayCompleteEvent() : CgsGui::GuiEvent<189>(16, 16) {}
 
     // DWARF h:5859 Construct(CgsID, LeaveMethod) -- fill the payload (the string-keyed
     // h:5853 overload is its own ledger function; not attested in this slice).
@@ -2963,17 +2955,16 @@ CGS_STATIC_ASSERT((offsetof(GuiEventPrepareForModeStart, meGameModeType)        
 // Remaining reserved spans stay unnamed until their producer/consumer chain is pinned.
 // Do not assign them by DWARF order: ARTIST places win/crashed-out/timed-out at B1/B2/B3,
 // which differs from the PS3 declaration order. The named fields below cite their evidence.
-// ARTIST0x824C5BE4..0x824C5C0C: native event298 carries the sequence name and voice key.
-// DecFIGS names this sequence-start record but numbers it296; ARTIST uses298.
+// ARTIST 0x824C5BE4..0x824C5C0C (an inline OutputGuiEvent): event 298 carries the sequence name
+// and voice key, {16, 298, 16} + 16 payload bytes on channel 40, 32 bytes. DecFIGS
+// (BrnGuiEventTypeDefs.h:2424/2425: Name mRivalUnlockName, Attribute::Key mVoiceOver) numbers it
+// 296; ARTIST uses 298.
 struct GuiEventPostEventNewRivalSequenceStart : public CgsGui::GuiEvent<298>
 {
-    u32 muHeaderPadding;
-    u32 mRivalUnlockName;
-    u32 muPayloadPadding;
-    u64 mVoiceOver;
-    GuiEventPostEventNewRivalSequenceStart() : CgsGui::GuiEvent<298>(16, 16) {}
+    u32 mRivalUnlockName;   // +0x00
+    u64 mVoiceOver;         // +0x08
 };
-CGS_STATIC_ASSERT((sizeof(GuiEventPostEventNewRivalSequenceStart) == 32), "rival sequence event size");
+CGS_STATIC_ASSERT((sizeof(GuiEventPostEventNewRivalSequenceStart) == 16), "rival sequence payload size");
 
 // The other platform numbers it GuiEvent<315>; console id 317. The online finishing order: the active
 // race-car index in each finish position. GuiCache::RecEvent copies the record word for

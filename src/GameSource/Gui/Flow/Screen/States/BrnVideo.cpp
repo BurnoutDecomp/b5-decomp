@@ -43,23 +43,20 @@ namespace
     struct GuiEventShowHideHud : public CgsGui::GuiEvent<148>
     {
         u8 mu8Show;    // +0x0C
-        u8 maPad[3];
 
         explicit GuiEventShowHideHud(bool lbShow)
-            : CgsGui::GuiEvent<148>(static_cast<u32>(sizeof(u8)), 12)
-            , mu8Show(lbShow ? 1u : 0u)
+            : mu8Show(lbShow ? 1u : 0u)
         {
-            maPad[0] = maPad[1] = maPad[2] = 0;
         }
+        GuiEventShowHideHud() {}
     };
 
     // { 1, 533, 12 }: the "front-end screen closed" record. The console leaves the payload
     // word unwritten.
     struct GuiEventScreenClosed : public CgsGui::GuiEvent<533>
     {
-        u32 muReserved;   // +0x0C
 
-        GuiEventScreenClosed() : CgsGui::GuiEvent<533>(1, 12), muReserved(0) {}
+        GuiEventScreenClosed() {}
     };
 }
 
@@ -75,13 +72,12 @@ void Video::OnEnter()
     meSubState = E_SUBSTATE_ENTERED;
 
     GuiEventShowHideHud lHideHud(false);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lHideHud), KI_CHANNEL_GUI_INTERNAL, 16);
+    mpStateInterface->OutputInternalState(lHideHud);
 
-    GuiEventActivateCrashNav lDeactivateCrashNav(false);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lDeactivateCrashNav), KI_CHANNEL_GUI_OUT,
-        static_cast<s32>(sizeof(GuiEventActivateCrashNav)));
+    GuiEventActivateCrashNav lDeactivateCrashNav;
+    lDeactivateCrashNav.muActivate = 0u;
+    lDeactivateCrashNav.muParam = 0;
+    mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 }
 
 // The skip action stops the movie (a StopVideo built from a freshly prepared video definition).
@@ -140,14 +136,13 @@ void Video::Update()
         }
         else if (liEventId == KI_EVENT_VIDEO_FINISHED)
         {
-            GuiEventActivateCrashNav lActivateCrashNav(true);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lActivateCrashNav), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(GuiEventActivateCrashNav)));
+            GuiEventActivateCrashNav lActivateCrashNav;
+            lActivateCrashNav.muActivate = 1u;
+            lActivateCrashNav.muParam = 0;
+            mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
             GuiEventScreenClosed lScreenClosed;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lScreenClosed), KI_CHANNEL_GUI_OUT, 16);
+            mpStateInterface->OutputGuiEvent(lScreenClosed);
 
             SendStateEvent("GO_BACK");
         }

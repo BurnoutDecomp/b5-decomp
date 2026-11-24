@@ -676,9 +676,7 @@ namespace BrnGui
         mpStateInterface->PlayAptMovie("", 2);
 
         GuiEventTickerClearMessages lClear = {{0, 0}};
-        CgsGui::GuiEventWrapper<GuiEventTickerClearMessages, 40> lClearRecord(lClear);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lClearRecord), 40, sizeof(lClearRecord));
+        mpStateInterface->OutputGuiEvent(lClear);
 
         mLicense.ReleaseResources();
         mPhotoBoothComponent.ReleaseResources();
@@ -697,9 +695,7 @@ namespace BrnGui
             GuiEventTickerCustomMessage lMessage = {};
             lMessage.Construct(false, false, true, false);
             lMessage.AddString("NO_LICENCE_WIN_ACQUIRED", 2);
-            CgsGui::GuiEventWrapper<GuiEventTickerCustomMessage, 40> lMessageRecord(lMessage);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lMessageRecord), 40, sizeof(lMessageRecord));
+            mpStateInterface->OutputGuiEvent(lMessage);
         }
 
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, KI_NUM_EVENTS_OBSERVED);
@@ -1609,13 +1605,11 @@ namespace BrnGui
         if (mResults.miPlayerNewRank != liBurnoutLicenseRank && !mResults.mbCompletedLastRank)
             return false;
 
-        CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent(
-            static_cast<u32>(CgsSound::Playback::Name::MakeHash(KAC_CREDITS_MUSIC_STREAM)),
-            true, false);
-        CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayMusicOnMenuStream, 40> lMusicRecord(lMusicEvent);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lMusicRecord), 40,
-            static_cast<s32>(sizeof(lMusicRecord)));
+        CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent;
+        lMusicEvent.muStreamNameHash = static_cast<u32>(CgsSound::Playback::Name::MakeHash(KAC_CREDITS_MUSIC_STREAM));
+        lMusicEvent.mbFlagA = true;
+        lMusicEvent.mbFlagB = false;
+        mpStateInterface->OutputGuiEvent(lMusicEvent);
         return true;
     }
 
@@ -1988,12 +1982,11 @@ namespace BrnGui
             static const u32 KU_NO_MUSIC_STREAM_HASH =
                 static_cast<u32>(CgsSound::Playback::Name::MakeHash(""));
 
-            CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent(KU_NO_MUSIC_STREAM_HASH,
-                                                              true, false);
-            CgsGui::GuiEventWrapper<CgsGui::GuiEventPlayMusicOnMenuStream, 40> lMusicRecord(lMusicEvent);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lMusicRecord), 40,
-                static_cast<s32>(sizeof(lMusicRecord)));
+            CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent;
+            lMusicEvent.muStreamNameHash = KU_NO_MUSIC_STREAM_HASH;
+            lMusicEvent.mbFlagA = true;
+            lMusicEvent.mbFlagB = false;
+            mpStateInterface->OutputGuiEvent(lMusicEvent);
         }
 
         // ---- 5. the post-event teardown, {1, 292, 12} on channel 40 ---------------------
@@ -2092,25 +2085,19 @@ namespace BrnGui
 
             GuiEventAudioGenericSequence lAudio;
             std::memcpy(lAudio.maData, &lpVehicle->mRivalUnlockName, sizeof(lAudio.maData));
-            CgsGui::GuiEventWrapper<GuiEventAudioGenericSequence, 40> lAudioRecord(lAudio);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lAudioRecord), 40, sizeof(lAudioRecord));
+            mpStateInterface->OutputGuiEvent(lAudio);
             if (mpGuiCache->GetProfile()->HasPlayerSeenTrainingType(BrnProgression::E_TRAINING_TYPE_LIVERY_WIN))
             {
                 GuiEventPostEventFreeCarSequenceStart lSequence;
                 const u64 luVoiceOver = lpVehicle->GetWonCarVoiceOverKeyHash();
                 std::memcpy(lSequence.maData, &luVoiceOver, sizeof(lSequence.maData));
-                CgsGui::GuiEventWrapper<GuiEventPostEventFreeCarSequenceStart, 40> lSequenceRecord(lSequence);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lSequenceRecord), 40, sizeof(lSequenceRecord));
+                mpStateInterface->OutputGuiEvent(lSequence);
             }
             else
             {
                 GuiEventRequestTraining lTraining;
                 lTraining.meTrainingType = BrnProgression::E_TRAINING_TYPE_LIVERY_WIN;
-                CgsGui::GuiEventWrapper<GuiEventRequestTraining, 40> lTrainingRecord(lTraining);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lTrainingRecord), 40, sizeof(lTrainingRecord));
+                mpStateInterface->OutputGuiEvent(lTraining);
             }
             meSubStateState = E_SUBSTATE_RUNNING;
             return;
@@ -2233,9 +2220,7 @@ namespace BrnGui
             CGS_ASSERT(lpVehicle != 0, "lpVehicleListEntry");
             GuiEventAudioGenericSequence lAudio;
             std::memcpy(lAudio.maData, &lpVehicle->mRivalUnlockName, sizeof(lAudio.maData));
-            CgsGui::GuiEventWrapper<GuiEventAudioGenericSequence, 40> lAudioRecord(lAudio);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lAudioRecord), 40, sizeof(lAudioRecord));
+            mpStateInterface->OutputGuiEvent(lAudio);
             meSubStateState = E_SUBSTATE_RUNNING;
             return;
         }
@@ -2280,9 +2265,7 @@ namespace BrnGui
             GuiEventPostEventFreeCarSequenceStart lSequence;
             const u64 luVoiceOver = lpVehicle->GetWonCarVoiceOverKeyHash();
             std::memcpy(lSequence.maData, &luVoiceOver, sizeof(lSequence.maData));
-            CgsGui::GuiEventWrapper<GuiEventPostEventFreeCarSequenceStart, 40> lSequenceRecord(lSequence);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lSequenceRecord), 40, sizeof(lSequenceRecord));
+            mpStateInterface->OutputGuiEvent(lSequence);
             meFreeCarPresentationStages = E_FREE_CAR_UNLOCK_PRESENTATION_SHOWING_CAR_SET_UP_ICON;
             break;
         }
@@ -2409,9 +2392,7 @@ namespace BrnGui
                 std::memset(lSequence.maData, 0, sizeof(lSequence.maData));
                 std::memcpy(lSequence.maData, &liSequenceRank, sizeof(liSequenceRank));
                 lSequence.maData[4] = mpGuiCache->GetProfile()->AreGoldCarsUnlocked();
-                CgsGui::GuiEventWrapper<GuiEventPostEventRankUpSequenceStart, 40> lRecord(lSequence);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lRecord), 40, sizeof(lRecord));
+                mpStateInterface->OutputGuiEvent(lSequence);
                 meRankUpPresentationStage = E_RANKUP_PRESENTATION_RUNNING;
             }
             break;
@@ -2496,7 +2477,7 @@ namespace BrnGui
             GuiEventPostEventNewRivalSequenceStart sequence;
             sequence.mRivalUnlockName = entry->mRivalUnlockName;
             sequence.mVoiceOver = entry->GetRivalReleasedVoiceOverKeyHash();
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&sequence, 40, sizeof(sequence));
+            mpStateInterface->OutputGuiEvent(sequence);
             mUnlockedRivalCarComponent.SetCarInfo(mPendingRivalId, static_cast<BrnGuiResourceId>(123));
             meSubStateState = E_SUBSTATE_RUNNING;
             return;

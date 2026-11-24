@@ -67,10 +67,8 @@ namespace BrnGui
         // { 0x818, 537, 12, <the message> }, channel 40.
         struct GuiTickerCustomMessageWire537 : public CgsGui::GuiEvent<537>
         {
-            GuiTickerCustomMessagePayload537 mMessage;   // +0x0C
+            GuiTickerCustomMessagePayload537 mMessage;   // +0x00 (OutputGuiEvent adds {0x818, 537, 12})
             GuiTickerCustomMessageWire537()
-                : CgsGui::GuiEvent<537>(
-                      static_cast<u32>(sizeof(GuiTickerCustomMessagePayload537)), 12)
             {
                 std::memset(&mMessage, 0, sizeof(mMessage));
             }
@@ -244,9 +242,7 @@ namespace BrnGui
                         // the X360 stack build is, with the one string added.
                         GuiTickerCustomMessageWire537 lTicker;
                         lTicker.mMessage.AddString("WINNING_WONT_CONTRIBUTE", 2);
-                        mpStateInterface->GetOutputEventQueue()->AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>(&lTicker),
-                            KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lTicker)));
+                        mpStateInterface->OutputGuiEvent(lTicker);
                     }
                 }
             }

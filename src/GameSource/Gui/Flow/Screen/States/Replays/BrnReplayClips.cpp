@@ -42,28 +42,29 @@ namespace
     struct GuiReplaySetModeWire : public CgsGui::GuiEvent<525>
     {
         s32 miMode;   // +0x0C
-        explicit GuiReplaySetModeWire(s32 liMode) : CgsGui::GuiEvent<525>(4, 12), miMode(liMode) {}
+        explicit GuiReplaySetModeWire(s32 liMode) : miMode(liMode) {}
+        GuiReplaySetModeWire() {}
     };
 
     // GuiReplayDeleteReelEvent (console id 527): { 4, 527, 12 } + the reel index, 16 bytes.
     struct GuiReplayDeleteReelWire : public CgsGui::GuiEvent<527>
     {
         s32 miReel;   // +0x0C
-        explicit GuiReplayDeleteReelWire(s32 liReel) : CgsGui::GuiEvent<527>(4, 12), miReel(liReel) {}
+        explicit GuiReplayDeleteReelWire(s32 liReel) : miReel(liReel) {}
+        GuiReplayDeleteReelWire() {}
     };
 
     // The screen-closed command (console id 533): { 1, 533, 12 }, 16 bytes; no payload written.
     struct GuiEventScreenClosedWire : public CgsGui::GuiEvent<533>
     {
         u8 muReserved;   // +0x0C (never written by the console)
-        GuiEventScreenClosedWire() : CgsGui::GuiEvent<533>(1, 12), muReserved(0) {}
+        GuiEventScreenClosedWire() : muReserved(0) {}
     };
 
     template <typename TWire>
     void PostOut(CgsGui::StateInterface* lpStateInterface, TWire& lrWire)
     {
-        lpStateInterface->GetOutputEventQueue()->AddEvent(
-            &lrWire, KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lrWire)));
+        lpStateInterface->OutputGuiEvent(lrWire);
     }
 }
 
@@ -260,10 +261,13 @@ bool ReplayClips::HandleControllerInputPressed(const CgsModule::Event* lpEvent)
         mpGuiCache->UnloadResources(maInfoResourcesToLoad, 1);
         mpGuiCache->miReplayCurrentSlot = -1;
 
-        CgsGui::GuiEventNetworkSuspension lSuspend(false);
+        CgsGui::GuiEventNetworkSuspension lSuspend;
+        lSuspend.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
         mpStateInterface->OutputGuiEvent(lSuspend);
 
-        GuiEventActivateCrashNav lActivate(true);
+        GuiEventActivateCrashNav lActivate;
+        lActivate.muActivate = 1u;
+        lActivate.muParam = 0;
         PostOut(mpStateInterface, lActivate);
 
         GuiEventScreenClosedWire lClosed;

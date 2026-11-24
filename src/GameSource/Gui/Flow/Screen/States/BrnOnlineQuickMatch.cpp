@@ -135,10 +135,7 @@ namespace BrnGui
             u8 muUnwrittenPayload;   // +0x0C
 
             CustomMatchSearchStopWire()
-                : CgsGui::GuiEvent<253>(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(offsetof(CustomMatchSearchStopWire, muUnwrittenPayload)))
-                , muUnwrittenPayload(0)
+                : muUnwrittenPayload(0)
             {
             }
         };
@@ -151,10 +148,7 @@ namespace BrnGui
             u8 muUnwrittenPayload;   // +0x0C
 
             GuiEvent533Wire()
-                : CgsGui::GuiEvent<533>(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(offsetof(GuiEvent533Wire, muUnwrittenPayload)))
-                , muUnwrittenPayload(0)
+                : muUnwrittenPayload(0)
             {
             }
         };
@@ -165,23 +159,21 @@ namespace BrnGui
             bool mbShowHud;   // +0x0C
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : CgsGui::GuiEvent<148>(
-                      static_cast<u32>(sizeof(bool)),
-                      static_cast<u32>(offsetof(GuiEventShowHideHudWire, mbShowHud)))
-                , mbShowHud(lbShowHud)
+                : mbShowHud(lbShowHud)
             {
             }
+            GuiEventShowHideHudWire() {}
         };
 
         // { 2, 251, 12, ranked, freeburn }, channel 40, 16 bytes: the quick-match request.
-        typedef CgsGui::GuiEventWrapper<GuiEventNetworkQuickMatch, 40> GuiEventNetworkQuickMatchWire;
+        typedef CgsGui::GuiEventOut<GuiEventNetworkQuickMatch> GuiEventNetworkQuickMatchWire;
 
-        CGS_STATIC_ASSERT((sizeof(CustomMatchSearchStopWire) == 16), "search-stop record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEvent533Wire) == 16), "id-533 record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventShowHideHudWire) == 16), "show/hide-hud record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<CustomMatchSearchStopWire>) == 16), "search-stop record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEvent533Wire>) == 16), "id-533 record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHudWire>) == 16), "show/hide-hud record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventNetworkQuickMatchWire) == 16), "quick-match record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventNetworkSuspension) == 16), "suspension record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<CgsGui::GuiEventNetworkSuspension>) == 16), "suspension record is 16 bytes");
     }
 
     // ================================================================================
@@ -202,15 +194,13 @@ namespace BrnGui
         mMessageText.SetAutoSize(true);
 
         // The quick-match page owns the screen: CrashNav down, HUD hidden.
-        GuiEventActivateCrashNav lDeactivateCrashNav(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lDeactivateCrashNav), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lDeactivateCrashNav)));
+        GuiEventActivateCrashNav lDeactivateCrashNav;
+        lDeactivateCrashNav.muActivate = 0u;
+        lDeactivateCrashNav.muParam = 0;
+        mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
-        const GuiEventShowHideHudWire lHideHud(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lHideHud), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lHideHud)));
+        GuiEventShowHideHudWire lHideHud(false);
+        mpStateInterface->OutputGuiEvent(lHideHud);
     }
 
     // ================================================================================
@@ -225,10 +215,8 @@ namespace BrnGui
         mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
 
         // Stop any search still in flight.
-        const CustomMatchSearchStopWire lStop;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lStop), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lStop)));
+        CustomMatchSearchStopWire lStop;
+        mpStateInterface->OutputGuiEvent(lStop);
 
         if (mpGuiCache != 0)
         {
@@ -267,15 +255,13 @@ namespace BrnGui
             {
                 // The quick match put the player in a game: raise the CrashNav flow again,
                 // hand the front end back and take the ADVANCE edge.
-                GuiEventActivateCrashNav lActivateCrashNav(true);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lActivateCrashNav), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lActivateCrashNav)));
+                GuiEventActivateCrashNav lActivateCrashNav;
+                lActivateCrashNav.muActivate = 1u;
+                lActivateCrashNav.muParam = 0;
+                mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
-                const GuiEvent533Wire lHandBack;
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lHandBack), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lHandBack)));
+                GuiEvent533Wire lHandBack;
+                mpStateInterface->OutputGuiEvent(lHandBack);
 
                 SendStateEvent(KAC_ADVANCE_EVENT);
                 break;
@@ -344,10 +330,7 @@ namespace BrnGui
                 lQuickMatch.mbRanked   = !mpGuiCache->IsOnline() && mpGuiCache->GetDoJoinOnlineRankedGame();
                 lQuickMatch.mbFreeburn = !mpGuiCache->IsOnline() && mpGuiCache->GetDoJoinOnlineFreeburnGame();
 
-                GuiEventNetworkQuickMatchWire lQuickMatchWire(lQuickMatch);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lQuickMatchWire), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lQuickMatchWire)));
+                mpStateInterface->OutputGuiEvent(lQuickMatch);
 
                 meSubState = E_SUBSTATE_SEARCHING;
                 ShowMessage(KAC_SEARCHING_STRING_ID);
@@ -389,10 +372,9 @@ namespace BrnGui
         {
             if (mpGuiCache->IsOnlineStartPending())
             {
-                CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lNetworkSuspension)));
+                CgsGui::GuiEventNetworkSuspension lNetworkSuspension;
+                lNetworkSuspension.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
+                mpStateInterface->OutputGuiEvent(lNetworkSuspension);
 
                 mpGuiCache->SetOnlineStartPending(false);
                 SendStateEvent(KAC_GO_BACK_EASY_EVENT);
@@ -483,10 +465,9 @@ namespace BrnGui
         case KI_ACTION_GUI_CANCEL:
             if (mpGuiCache->IsOnlineStartPending())
             {
-                CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lNetworkSuspension)));
+                CgsGui::GuiEventNetworkSuspension lNetworkSuspension;
+                lNetworkSuspension.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
+                mpStateInterface->OutputGuiEvent(lNetworkSuspension);
 
                 mpGuiCache->SetOnlineStartPending(false);
                 SendStateEvent(KAC_GO_BACK_EASY_EVENT);
@@ -533,10 +514,9 @@ namespace BrnGui
         case KI_ACTION_GUI_CANCEL:
             if (mpGuiCache->IsOnlineStartPending())
             {
-                CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lNetworkSuspension)));
+                CgsGui::GuiEventNetworkSuspension lNetworkSuspension;
+                lNetworkSuspension.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
+                mpStateInterface->OutputGuiEvent(lNetworkSuspension);
 
                 mpGuiCache->SetOnlineStartPending(false);
                 SendStateEvent(KAC_GO_BACK_EASY_EVENT);

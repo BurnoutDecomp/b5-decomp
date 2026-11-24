@@ -80,16 +80,11 @@ namespace BrnGui
         // (BrnOnlineGameRoomPlayerInfo_wH_00.cpp), re-declared here because the two screens
         // are separate translation units.
         typedef CgsGui::GuiEvent<188> OverlayWaitFinishHeader;
-        struct GuiOverlayWaitFinishWire : public OverlayWaitFinishHeader
+        struct GuiOverlayWaitFinishWire
         {
-            u32                         muPad0C;    // +0x0C (payload alignment pad)
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10 (the compressed overlay id)
+            GuiOverlayWaitFinishRequest mRequest;   // the OutputGuiEvent payload
 
             GuiOverlayWaitFinishWire()
-                : OverlayWaitFinishHeader(
-                      static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)),
-                      static_cast<u32>(sizeof(OverlayWaitFinishHeader) + sizeof(u32)))
-                , muPad0C(0)
             {
             }
         };
@@ -101,9 +96,7 @@ namespace BrnGui
         {
             GuiOverlayWaitFinishWire lWaitFinish;
             lWaitFinish.mRequest.Construct(lpacOverlayName);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWaitFinish), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWaitFinish)));   // X360 record size 24
+            lpStateInterface->OutputGuiEvent(lWaitFinish.mRequest);   // X360 record size 24
         }
     }
 
@@ -166,11 +159,9 @@ namespace BrnGui
             // straight onto the out-queue rather than through
             // StateInterface::OutputGuiEvent, whose committed body passes the event id as
             // the channel argument where the X360 passes 40.
-            CgsGui::GuiEventNetworkSuspension lNetworkSuspension(false);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lNetworkSuspension),
-                KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lNetworkSuspension)));   // X360 record size 16
+            CgsGui::GuiEventNetworkSuspension lNetworkSuspension;
+            lNetworkSuspension.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
+            mpStateInterface->OutputGuiEvent(lNetworkSuspension);   // X360 record size 16
 
             mpGuiCache->mbOnlineStartPending = false;
             SendStateEvent("GO_BACK_EASY");

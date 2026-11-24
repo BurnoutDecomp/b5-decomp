@@ -79,7 +79,7 @@ namespace BrnGui
         {
             GuiEventCrashNavCameraUserOption lEvent;
             lEvent.miCameraUserOption = meCameraUserOption;
-            lpQueue->AddEvent(&lEvent, 40, 16);
+            lpStateInterface->OutputGuiEvent(lEvent);
         }
 
         // (2) audio volumes (type 463) -- payload = { meMusicVolume(+0x08), meSFXVolume(+0x0C) }.
@@ -87,10 +87,10 @@ namespace BrnGui
             GuiEventCrashNavAudioVolumes lEvent;
             lEvent.miMusicVolume = static_cast<s32>(meMusicVolume);
             lEvent.miSFXVolume   = static_cast<s32>(meSFXVolume);
-            lpQueue->AddEvent(&lEvent, 40, 20);
+            lpStateInterface->OutputGuiEvent(lEvent);
 
             // (3) the X360 pushes the same {music,sfx} record a second time, byte-identical.
-            lpQueue->AddEvent(&lEvent, 40, 20);
+            lpStateInterface->OutputGuiEvent(lEvent);
         }
 
         // (4) controller toggles (type 472) -- payload = { showtime(+0x10), steering(+0x11), force(+0x12) }.
@@ -99,7 +99,7 @@ namespace BrnGui
             lEvent.mbSixAxisShowtime = mbSixAxisShowtime;
             lEvent.mbSixAxisSteering = mbSixAxisSteering;
             lEvent.mbForceFeedback   = mbForceFeedback;
-            lpQueue->AddEvent(&lEvent, 40, 16);
+            lpStateInterface->OutputGuiEvent(lEvent);
         }
 
         // (5) default-game-camera (type 475) -- payload = the RAW PROFILE word at +0x734C.
@@ -110,21 +110,21 @@ namespace BrnGui
             GuiEventCrashNavDefaultGameCamera lEvent;
             lEvent.miDefaultGameCamera = *reinterpret_cast<const s32*>(
                 reinterpret_cast<const u8*>(lpProfile) + 0x734C);   // profile mbDefaultGameCamera word
-            lpQueue->AddEvent(&lEvent, 40, 16);
+            lpStateInterface->OutputGuiEvent(lEvent);
         }
 
         // (6) tips (type 473) -- payload byte = mbTips (this+0x13).
         {
             GuiEventCrashNavTips lEvent;
             lEvent.mbTips = mbTips;
-            lpQueue->AddEvent(&lEvent, 40, 16);
+            lpStateInterface->OutputGuiEvent(lEvent);
         }
 
         // (7) commit marker (type 356) -- payload byte 0.
         {
             GuiEventCrashNavCommit lEvent;
             lEvent.mbFlag = 0;
-            lpQueue->AddEvent(&lEvent, 40, 16);
+            lpStateInterface->OutputGuiEvent(lEvent);
         }
     }
 
@@ -190,7 +190,6 @@ namespace BrnGui
         struct GuiEventCrashNavVoipVolume : public CgsGui::GuiEvent<474>
         {
             s32 miVoipVolume;   // +0x0C
-            GuiEventCrashNavVoipVolume() : CgsGui::GuiEvent<474>(4, 12) {}
         };
 
         // X360 `li r8, -1 ; clrldi r8, r8, 32` -- Selectable::K_INVALID_ID.
@@ -686,9 +685,7 @@ namespace BrnGui
         GuiEventCrashNavAudioVolumes lEvent;
         lEvent.miMusicVolume = static_cast<s32>(mOptionsData.GetMusicVolume());
         lEvent.miSFXVolume   = static_cast<s32>(mOptionsData.GetSFXVolume());
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lEvent)));
+        mpStateInterface->OutputGuiEvent(lEvent);
     }
 
     // ---- RestoreSoundSettings @0x824CDDA0 ------------------------------------------
@@ -703,9 +700,7 @@ namespace BrnGui
         GuiEventCrashNavAudioVolumes lEvent;
         lEvent.miMusicVolume = static_cast<s32>(lpProfile->GetMusicVolume());
         lEvent.miSFXVolume   = static_cast<s32>(lpProfile->GetSFXVolume());
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lEvent)));
+        mpStateInterface->OutputGuiEvent(lEvent);
     }
 
     // ---- RestoreVoipSettings @0x824CDE68 -------------------------------------------
@@ -717,9 +712,7 @@ namespace BrnGui
         GuiEventCrashNavVoipVolume lEvent;
         lEvent.miVoipVolume =
             static_cast<s32>(mpGuiCache->GetOptionsDataProfile()->GetVoipVolume());
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lEvent)));
+        mpStateInterface->OutputGuiEvent(lEvent);
     }
 
     // ---- PostAudioTrigger ----------------------------------------------------------

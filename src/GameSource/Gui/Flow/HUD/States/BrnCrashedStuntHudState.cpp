@@ -163,15 +163,10 @@ bool CrashedStuntHudState::UpdateSetupState()
     mbHudMessages = true;
     struct BoostVisibility : CgsGui::GuiEvent<214>
     {
-        u8 mbVisible; u8 maPad[3];
-        BoostVisibility() : CgsGui::GuiEvent<214>(1, 12), mbVisible(false)
-        {
-            maPad[0] = 0;
-            maPad[1] = 0;
-            maPad[2] = 0;
-        }
+        u8 mbVisible;   // the one payload byte: {1, 214, 12} on channel 41
+        BoostVisibility() : mbVisible(false) {}
     } lBoost;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBoost), 41, sizeof(lBoost));
+    mpStateInterface->OutputViewState(lBoost);
     miStartScore = mpCache->miLastStuntScore;
     miStartMultiplier = mpCache->miGameFlowResetWord_9FD8;
     miFinishMultiplier = 1;
@@ -295,9 +290,10 @@ void CrashedStuntHudState::UpdateCrashRunningState()
     struct TallyScore : CgsGui::GuiEvent<465>
     {
         s32 miScore; f32 mfTime;
-        TallyScore(s32 liScore) : CgsGui::GuiEvent<465>(8, 12), miScore(liScore), mfTime(0.0f) {}
-    } lTally(miCurrentScore);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lTally), 40, sizeof(lTally));
+    } lTally;
+    lTally.miScore = miCurrentScore;
+    lTally.mfTime = 0.0f;
+    mpStateInterface->OutputGuiEvent(lTally);
 }
 
 // ARTIST 0x8247DF68.

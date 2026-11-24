@@ -186,41 +186,24 @@ namespace
     void PostAudio(CgsGui::StateInterface* lpStateInterface, const char* lpacLabel)
     {
         GuiAudioTriggerEvent lEvent;
-        // ARTIST OutputGuiEvent<GuiAudioTriggerEvent> @0x82436890 posts this exact
-        // payload wrapper on channel 40. The PC event has a different 12-byte header;
-        // copy only its native 100-byte body into the console record.
+        // ARTIST OutputGuiEvent<GuiAudioTriggerEvent> @0x82436890: the 100-byte payload in a
+        // {100, 457, 12} channel-40 wrapper.
         lEvent.Construct(7, "", lpacLabel, "");
-        struct GuiAudioTriggerWire
-        {
-            s32 miSize;
-            s32 miType;
-            s32 miOffset;
-            GuiAudioTriggerWirePayload457 mPayload;
-        } lWire = { 100, 457, 12, {} };
-        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112),
-                      "ARTIST GUI audio trigger wrapper size");
-        std::memcpy(&lWire.mPayload, lEvent.macComponent, sizeof(lWire.mPayload));
-        lpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lWire)));
+        lpStateInterface->OutputGuiEvent(lEvent);
     }
     // The overlay request as the out-queue carries it: the GuiEvent<184> header sized to the
     // request, a pad word, then the request itself (304 bytes on the console).
-    struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+    struct GuiOverlayRequestWire
     {
-        u32               muPad0C;    // +0x0C
-        GuiOverlayRequest mRequest;   // +0x10
-        GuiOverlayRequestWire()
-            : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-            , muPad0C(0) {}
+        GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
+        GuiOverlayRequestWire() {}
     };
 
-    struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
+    struct GuiOverlayWaitFinishWire
     {
         GuiOverlayWaitFinishRequest mRequest;
 
         explicit GuiOverlayWaitFinishWire(const char* lpacOverlayName)
-            : CgsGui::GuiEvent<188>(static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)), 16)
         {
             mRequest.Construct(lpacOverlayName);
         }
@@ -521,10 +504,8 @@ namespace
                    "Invalid event sent to OnlineSelectRoute::HandleInGameEvent");
         CGS_ASSERT(lpEvent != 0, "lpInGameEvent");
 
-        const GuiOverlayWaitFinishWire lRequest(KAC_OVERLAY_ENTER_GAME);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lRequest)));
+        GuiOverlayWaitFinishWire lRequest(KAC_OVERLAY_ENTER_GAME);
+        mpStateInterface->OutputGuiEvent(lRequest.mRequest);
         SendStateEvent(KAC_STATE_ADVANCE);
     }
 
@@ -1558,11 +1539,8 @@ namespace
                 CGS_STATIC_ASSERT((sizeof(lCreatedRoute.maData) == sizeof(laiRouteParams)),
                               "custom-route-created payload");
                 std::memcpy(lCreatedRoute.maData, laiRouteParams, sizeof(laiRouteParams));
-                CgsGui::GuiEventWrapper<GuiNetworkCustomRouteCreated, 40> lWrapper(lCreatedRoute);
-                CGS_STATIC_ASSERT((sizeof(lWrapper) == 20), "custom-route-created wrapper");
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lWrapper), 40,
-                    static_cast<s32>(sizeof(lWrapper)));
+                CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiNetworkCustomRouteCreated>) == 20), "custom-route-created wrapper");
+                mpStateInterface->OutputGuiEvent(lCreatedRoute);
             }
             ShowMainMenu();
             return;
@@ -1744,8 +1722,6 @@ namespace
         lWire.mRequest.Construct("OnRouteShort");
         lWire.mRequest.AddMessageParam(CgsGui::E_POPUPPARAMTYPES_STRING_ID, "ONLINE_ROUTE_DISTANCE");
         lWire.mRequest.AddMessageParam(CgsGui::E_POPUPPARAMTYPES_STRING_ID, "ONLINE_ROUTE_MINIMUM_DISTANCE");
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(GuiOverlayRequestWire)));
+        mpStateInterface->OutputGuiEvent(lWire.mRequest);
     }
 }

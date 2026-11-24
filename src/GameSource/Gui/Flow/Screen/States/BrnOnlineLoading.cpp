@@ -142,10 +142,7 @@ namespace BrnGui
             u8 mu8Payload;   // +0x0C
 
             GuiCommandWire16()
-                : CgsGui::GuiEvent<TI_EVENT_ID>(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(sizeof(CgsGui::GuiEvent<TI_EVENT_ID>)))
-                , mu8Payload(0)
+                : mu8Payload(0)
             {
             }
         };
@@ -156,11 +153,11 @@ namespace BrnGui
             u8 mau8Payload[2];   // +0x0C
 
             GuiTickerClearWire(u8 lu8First, u8 lu8Second)
-                : CgsGui::GuiEvent<536>(2, 12)
             {
                 mau8Payload[0] = lu8First;
                 mau8Payload[1] = lu8Second;
             }
+            GuiTickerClearWire() {}
         };
 
         // { 1, 356, 12, <the byte> }, channel 40, 16 bytes: the autosave request.
@@ -168,45 +165,35 @@ namespace BrnGui
         {
             u8 mu8Payload;   // +0x0C
 
-            GuiAutosaveRequestWire() : CgsGui::GuiEvent<356>(1, 12), mu8Payload(0) {}
-        };
-
-        // { 100, 457, 12, the audio trigger }, channel 40, 112 bytes.
-        struct GuiAudioTriggerWire
-        {
-            s32 miSize;
-            s32 miType;
-            s32 miOffset;
-            GuiAudioTriggerWirePayload457 mPayload;
+            GuiAutosaveRequestWire() : mu8Payload(0) {}
         };
 
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+        struct GuiOverlayRequestWire
         {
-            u32               muPad0C;    // +0x0C
-            GuiOverlayRequest mRequest;   // +0x10
+            GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
             {
             }
         };
 
-        CGS_STATIC_ASSERT((sizeof(GuiCommandWire16<92>) == 16), "command record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiTickerClearWire) == 16), "ticker-clear record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiAutosaveRequestWire) == 16), "autosave record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
+        // The channel-40 records OutputGuiEvent's GuiEventOut<T> builds around these payloads.
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiCommandWire16<92> >) == 16), "command record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiTickerClearWire>) == 16), "ticker-clear record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiAutosaveRequestWire>) == 16), "autosave record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiAudioTriggerEvent>) == 112), "audio trigger record is 112 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiEventNetworkLobbyPlayerList) == 0x1C8), "the roster is 456 bytes");
         CGS_STATIC_ASSERT((sizeof(LobbyPlayerListPayload) <= 0x1C8), "the roster view fits the roster");
 
-        template <typename TWire>
-        void PostWire(CgsGui::StateInterface* lpStateInterface, const TWire& lrWire)
+        // Publish one payload through OutputGuiEvent (channel 40), which takes the event by
+        // non-const reference: the boxed copy is the record ARTIST builds inline.
+        template <typename TEvent>
+        void PostWire(CgsGui::StateInterface* lpStateInterface, const TEvent& lrEvent)
         {
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lrWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lrWire)));
+            TEvent lEvent = lrEvent;
+            lpStateInterface->OutputGuiEvent(lEvent);
         }
     }
 
@@ -243,9 +230,7 @@ namespace BrnGui
         // Start the online bed music.
         GuiAudioTriggerEvent lBedMusic;
         lBedMusic.Construct(0, KPC_EMPTY_STRING, KAC_BED_MUSIC_LABEL, KPC_EMPTY_STRING);
-        GuiAudioTriggerWire lBedMusicWire = { 100, 457, 12, {} };
-        std::memcpy(&lBedMusicWire.mPayload, lBedMusic.macComponent, sizeof(lBedMusicWire.mPayload));
-        PostWire(mpStateInterface, lBedMusicWire);
+        mpStateInterface->OutputGuiEvent(lBedMusic);   // {100, 457, 12} + 100 on channel 40
     }
 
     // ================================================================================
@@ -666,7 +651,7 @@ namespace BrnGui
         {
             GuiOverlayRequestWire lInviteFailedOverlay;
             lInviteFailedOverlay.mRequest.Construct(KAC_INVITE_FAILED_OVERLAY_ID);
-            PostWire(mpStateInterface, lInviteFailedOverlay);
+            mpStateInterface->OutputGuiEvent(lInviteFailedOverlay.mRequest);
         }
     }
 }

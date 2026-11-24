@@ -191,28 +191,22 @@ namespace BrnGui
 
         // ---- out-queue wire records ------------------------------------------------------
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
+        struct GuiOverlayWaitFinishWire
         {
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10
+            GuiOverlayWaitFinishRequest mRequest;   // the OutputGuiEvent payload
 
             explicit GuiOverlayWaitFinishWire(const char* lpcOverlayName)
-                : CgsGui::GuiEvent<188>(
-                      static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)),
-                      static_cast<u32>(offsetof(GuiOverlayWaitFinishWire, mRequest)))
             {
                 mRequest.Construct(lpcOverlayName);
             }
         };
 
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+        struct GuiOverlayRequestWire
         {
-            u32               muPad0C;    // +0x0C
-            GuiOverlayRequest mRequest;   // +0x10
+            GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
             {
             }
         };
@@ -224,10 +218,7 @@ namespace BrnGui
             u8 muUnwrittenPayload;   // +0x0C
 
             GuiEventReply135Wire()
-                : CgsGui::GuiEvent<135>(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(offsetof(GuiEventReply135Wire, muUnwrittenPayload)))
-                , muUnwrittenPayload(0)
+                : muUnwrittenPayload(0)
             {
             }
         };
@@ -238,19 +229,17 @@ namespace BrnGui
             bool mbShowHud;   // +0x0C
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : CgsGui::GuiEvent<148>(
-                      static_cast<u32>(sizeof(bool)),
-                      static_cast<u32>(offsetof(GuiEventShowHideHudWire, mbShowHud)))
-                , mbShowHud(lbShowHud)
+                : mbShowHud(lbShowHud)
             {
             }
+            GuiEventShowHideHudWire() {}
         };
 
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayWaitFinishWire) == 24), "wait-finish record is 24 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventReply135Wire) == 16), "id-135 record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventShowHideHudWire) == 16), "show/hide-hud record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayWaitFinishRequest>) == 24), "wait-finish record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventReply135Wire>) == 16), "id-135 record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHudWire>) == 16), "show/hide-hud record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
     }
 
     // The constructor. The console body stores the vtables of the nine by-value components
@@ -264,10 +253,8 @@ namespace BrnGui
     // stop observing the twelve events and drop the apt components the screen was waiting on.
     void CrashNavEnterOnlineBase::OnLeave()
     {
-        const GuiOverlayWaitFinishWire lWaitConnecting(KAC_CONNECTING_STRING_ID);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWaitConnecting), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lWaitConnecting)));
+        GuiOverlayWaitFinishWire lWaitConnecting(KAC_CONNECTING_STRING_ID);
+        mpStateInterface->OutputGuiEvent(lWaitConnecting.mRequest);
 
         // The console inlines StateInterface::PlayAptMovie here: { 8, 18, 12, name, level }
         // on channel 41.
@@ -350,10 +337,8 @@ namespace BrnGui
                 // Only once the screen is past its two loading sub-states.
                 if (meSubState > E_SUBSTATE_LOADING_COMPONENTS)
                 {
-                    const GuiOverlayWaitFinishWire lWaitConnecting(KAC_CONNECTING_STRING_ID);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lWaitConnecting), KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lWaitConnecting)));
+                    GuiOverlayWaitFinishWire lWaitConnecting(KAC_CONNECTING_STRING_ID);
+                    mpStateInterface->OutputGuiEvent(lWaitConnecting.mRequest);
 
                     if (mbJunkyardEntered)
                     {
@@ -387,10 +372,8 @@ namespace BrnGui
 
             case KI_EVENT_REQUEST_134:
             {
-                const GuiEventReply135Wire lReply;
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lReply), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lReply)));
+                GuiEventReply135Wire lReply;
+                mpStateInterface->OutputGuiEvent(lReply);
                 break;
             }
 
@@ -425,16 +408,14 @@ namespace BrnGui
             // The no-title flavour also takes the front end over: CrashNav down, HUD hidden.
             if (meSignInType == E_SIGN_IN_TYPE_NO_TITLE)
             {
-                GuiEventActivateCrashNav lDeactivateCrashNav(false);
+                GuiEventActivateCrashNav lDeactivateCrashNav;
+                lDeactivateCrashNav.muActivate = 0u;
+                lDeactivateCrashNav.muParam = 0;
                 lDeactivateCrashNav.muParam = KU_ACTIVATE_CRASHNAV_PARAM_SIGN_IN;
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lDeactivateCrashNav), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lDeactivateCrashNav)));
+                mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
-                const GuiEventShowHideHudWire lHideHud(false);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lHideHud), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lHideHud)));
+                GuiEventShowHideHudWire lHideHud(false);
+                mpStateInterface->OutputGuiEvent(lHideHud);
             }
         }
     }
@@ -492,9 +473,7 @@ namespace BrnGui
 
         GuiOverlayRequestWire lConnecting;
         lConnecting.mRequest.Construct(KAC_CONNECTING_STRING_ID);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lConnecting), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lConnecting)));
+        mpStateInterface->OutputGuiEvent(lConnecting.mRequest);
 
         mfTimeInState = KF_TIME_IN_STATE_MESSAGE_SHOWN;
     }

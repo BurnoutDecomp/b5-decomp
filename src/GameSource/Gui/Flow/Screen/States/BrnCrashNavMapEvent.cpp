@@ -252,16 +252,15 @@ namespace BrnGui
         // BrnGuiEventTypeDefs.h records muParam's role as unrecovered and its ctor zeroes
         // it, so the 1 is set explicitly -- it is a real, measured difference between the
         // two map screens, not a default.
-        GuiEventActivateCrashNav lDeactivate(false);
+        GuiEventActivateCrashNav lDeactivate;
+        lDeactivate.muActivate = 0u;
+        lDeactivate.muParam = 0;
         lDeactivate.muParam = 1;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lDeactivate), KI_CHANNEL_GUI_EVENT,
-            static_cast<s32>(sizeof(lDeactivate)));
+        mpStateInterface->OutputGuiEvent(lDeactivate);
 
         // 0x824CC730..0x824CC754 -- { 1, 141, 12 } ch 40, 16 bytes.
-        CgsGui::GuiEvent<KI_EVENT_MAP_EVENT_ENTER> lEnterRecord(1, 12);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEnterRecord), KI_CHANNEL_GUI_EVENT, 16);
+        CgsGui::GuiEvent<KI_EVENT_MAP_EVENT_ENTER> lEnterRecord;
+        mpStateInterface->OutputGuiEvent(lEnterRecord);
 
         // 0x824CC758..0x824CC77C -- nine stores with r29 == 1 and r30 == 0, in the
         // console's own order.
@@ -301,16 +300,15 @@ namespace BrnGui
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
         // { 8, 191, 12, 1, 1 } ch 40, 20 bytes -- again with the second payload word set.
-        GuiEventActivateCrashNav lActivate(true);
+        GuiEventActivateCrashNav lActivate;
+        lActivate.muActivate = 1u;
+        lActivate.muParam = 0;
         lActivate.muParam = 1;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lActivate), KI_CHANNEL_GUI_EVENT,
-            static_cast<s32>(sizeof(lActivate)));
+        mpStateInterface->OutputGuiEvent(lActivate);
 
         // { 1, 533, 12 } ch 40, 16 bytes.
-        CgsGui::GuiEvent<KI_EVENT_CRASHNAV_DONE> lDone(1, 12);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lDone), KI_CHANNEL_GUI_EVENT, 16);
+        CgsGui::GuiEvent<KI_EVENT_CRASHNAV_DONE> lDone;
+        mpStateInterface->OutputGuiEvent(lDone);
 
         CrashNavMap::OnLeave();
     }
@@ -412,12 +410,7 @@ namespace BrnGui
         // console inlines the OutputGuiEvent<GuiEventAcceptEventStart> body here (there is
         // no standalone instantiation for it), so the wrapper is spelled out -- same
         // idiom as CrashNavMap::Update's cache-accepted record.
-        CgsGui::GuiEventWrapper<GuiEventAcceptEventStart, KI_CHANNEL_GUI_EVENT>
-            lRecord(lAcceptEventStart);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord),
-            lRecord.GetChannel(),
-            static_cast<s32>(sizeof(lRecord)));
+        mpStateInterface->OutputGuiEvent(lAcceptEventStart);
     }
 
     // =================================================================================
@@ -676,12 +669,7 @@ namespace BrnGui
                     // 40. The console inlines the OutputGuiEvent body here.
                     GuiEventCustomeEventDelete lDeleteCustomEvent;                 // cpp:157
                     lDeleteCustomEvent.mRace = *lpPresetRace;
-                    CgsGui::GuiEventWrapper<GuiEventCustomeEventDelete, KI_CHANNEL_GUI_EVENT>
-                        lRecord(lDeleteCustomEvent);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                        lRecord.GetChannel(),
-                        static_cast<s32>(sizeof(lRecord)));
+                    mpStateInterface->OutputGuiEvent(lDeleteCustomEvent);
 
                     // Re-adopt event 0 next frame, which is what redraws the map.
                     mbUpdateNewEventInfo = true;

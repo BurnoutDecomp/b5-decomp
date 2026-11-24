@@ -89,15 +89,15 @@ namespace
 
         s32 GetEventType() const { return 22; }
     };
-    typedef CgsGui::GuiEventWrapper<GuiEventSoundTriggerPayload22, 40> GuiEventSoundTriggerRecord22;
+    // OutputGuiEvent boxes it in a GuiEventOut: {100, 22, 12} + 100 bytes.
     CGS_STATIC_ASSERT((sizeof(GuiEventSoundTriggerPayload22) == 100),
                   "ARTIST event 22 copies three 32-byte strings and the layer word");
     CGS_STATIC_ASSERT((offsetof(GuiEventSoundTriggerPayload22, miLayer) == 96),
                   "ARTIST GuiModule::Update reads the event-22 layer at payload +96");
-    CGS_STATIC_ASSERT((offsetof(GuiEventSoundTriggerRecord22, mOutEvent) == 12 &&
-                  sizeof(GuiEventSoundTriggerRecord22) == 112),
+    CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventSoundTriggerPayload22>) == 112),
                   "ARTIST event-22 channel-40 record is {100,22,12}+100");
-    typedef CgsGui::GuiEventWrapper<GuiEventRoadRuleFail, 40> GuiEventRoadRuleFailRecord40;
+
+
     CGS_STATIC_ASSERT((sizeof(GuiEventRoadRuleFail) == 48), "ARTIST event 337 payload is 48 bytes");
     CGS_STATIC_ASSERT((__alignof(GuiEventRoadRuleFail) == 8), "ARTIST event 337 payload is 8-aligned");
     CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleFail, mRoadID) == 0 &&
@@ -106,16 +106,16 @@ namespace
                   offsetof(GuiEventRoadRuleFail, mbRoadRuledByLocalPlayer) == 44 &&
                   offsetof(GuiEventRoadRuleFail, mbRoadRuledByAI) == 45),
                   "event 337 payload fields retain ARTIST/DWARF offsets");
-    CGS_STATIC_ASSERT((offsetof(GuiEventRoadRuleFailRecord40, mOutEvent) == 16 &&
-                  sizeof(GuiEventRoadRuleFailRecord40) == 64),
+    CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventRoadRuleFail>) == 64),
                   "ARTIST event 337 channel-40 record is {48,337,16}+48");
-    typedef CgsGui::GuiEventWrapper<GuiEventRequestTraining, 40> GuiEventRequestTrainingRecord40;
+
+
     CGS_STATIC_ASSERT((sizeof(GuiEventRequestTraining) == 4 &&
                   offsetof(GuiEventRequestTraining, meTrainingType) == 0),
                   "ARTIST event 572 payload is one word at offset 0");
-    CGS_STATIC_ASSERT((offsetof(GuiEventRequestTrainingRecord40, mOutEvent) == 12 &&
-                  sizeof(GuiEventRequestTrainingRecord40) == 16),
+    CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventRequestTraining>) == 16),
                   "ARTIST event 572 channel-40 record is {4,572,12}+4");
+
 
     // BrnRoadRuleComponent.h:277 (KI_MAX_ROAD_INDEX) -- the miRoadIndex bound the
     // X360 asserts against (cmpwi 0x42).
@@ -233,10 +233,7 @@ static void SendRoadRuleSoundTrigger(CgsGui::StateInterface* lpStateInterface,
     CopyFixedString32(lSound.macLabel,      KPC_SOUND_LABEL);
     lSound.miLayer = liParentAptLayerIndex;
 
-    GuiEventSoundTriggerRecord22 lRecord(lSound);
-    lpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lRecord),
-        lRecord.GetChannel(), static_cast<s32>(sizeof(lRecord)));
+    lpStateInterface->OutputGuiEvent(lSound);
 }
 
 // ---------------------------------------------------------------------------
@@ -514,10 +511,10 @@ void RoadRuleComponent::UpdateCurrentTime(f32 lfTime)
         GetNameOfRule(lacRuleName, 32, &mTransitionData, BrnStreetData::E_SCORE_TYPE_TIME);
         CopyFixedString32(lFail.macCurrentRulerName, lacRuleName);
         lFail.macCurrentRulerName[31] = '\0';
-        const GuiEventRoadRuleFailRecord40 lFailRecord(lFail);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lFailRecord), 40,
-            static_cast<s32>(sizeof(lFailRecord)));
+        // The inlined OutputGuiEvent<GuiEventRoadRuleFail> (CgsGuiStateInterface.h:404):
+        // a GuiEventOut {48, 337, 16} + the 48-byte payload, 64 bytes on channel 40.
+        mpStateInterface->OutputGuiEvent(lFail);
+
 
         if (!IsCurrentTimeLeaving())
             AnimateCurrentTime(E_ANIMATION_STATE_UNSUCCESSFUL_IDLE);
@@ -1313,10 +1310,10 @@ void RoadRuleComponent::SetUpcomingRoadAnimation(GuiEventRoadRuleUpcomingRoads::
         {
             GuiEventRequestTraining lTraining;
             lTraining.meTrainingType = 9;
-            const GuiEventRequestTrainingRecord40 lTrainingRecord(lTraining);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lTrainingRecord), 40,
-                static_cast<s32>(sizeof(lTrainingRecord)));
+            // The inlined OutputGuiEvent<GuiEventRequestTraining>: a GuiEventOut
+            // {4, 572, 12} + the payload word, 16 bytes on channel 40.
+            mpStateInterface->OutputGuiEvent(lTraining);
+
         }
     }
     else

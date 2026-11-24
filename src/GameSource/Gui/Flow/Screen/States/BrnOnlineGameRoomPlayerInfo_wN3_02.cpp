@@ -72,10 +72,7 @@ namespace BrnGui
         template <class TEvent>
         void OutputGuiEventRecord(CgsGui::StateInterface* lpStateInterface, TEvent& lrEvent)
         {
-            CgsGui::GuiEventWrapper<TEvent, KI_CHANNEL_GUI_OUT> lRecord(lrEvent);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord), lRecord.GetChannel(),
-                static_cast<s32>(sizeof(lRecord)));
+            lpStateInterface->OutputGuiEvent(lrEvent);
         }
 
         // The audio trigger's wire payload: the 100-byte body of GuiAudioTriggerEvent

@@ -745,10 +745,7 @@ namespace BrnGui
         // event id. The assembly itself fixes id437 and payload size1. Its reply
         // travels through the existing game event80/action181 -> GUI438 path.
         RankProgressRequestPayload437 lRankRequest = {};
-        CgsGui::GuiEventWrapper<RankProgressRequestPayload437, 40> lRankRecord(lRankRequest);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRankRecord),
-            lRankRecord.GetChannel(), static_cast<s32>(sizeof(lRankRecord)));
+        mpStateInterface->OutputGuiEvent(lRankRequest);
         return false;
     }
 

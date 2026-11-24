@@ -104,18 +104,15 @@ namespace BrnGui
             u8 muUnwrittenPayload;   // +0x0C
 
             OnlineStatsRequestWire()
-                : CgsGui::GuiEvent<241>(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(offsetof(OnlineStatsRequestWire, muUnwrittenPayload)))
-                , muUnwrittenPayload(0)
+                : muUnwrittenPayload(0)
             {
             }
         };
 
         // { 24, 242, 12, the six totals }, channel 40, 36 bytes.
-        typedef CgsGui::GuiEventWrapper<GuiEventOnlineStatsResponse, 40> OnlineStatsResponseWire;
+        typedef CgsGui::GuiEventOut<GuiEventOnlineStatsResponse> OnlineStatsResponseWire;
 
-        CGS_STATIC_ASSERT((sizeof(OnlineStatsRequestWire) == 16), "stats request record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<OnlineStatsRequestWire>) == 16), "stats request record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(OnlineStatsResponseWire) == 36), "stats response record is 36 bytes");
     }
 
@@ -256,10 +253,8 @@ namespace BrnGui
     // ================================================================================
     void OnlineStats::UpdateSetupComponents()
     {
-        const OnlineStatsRequestWire lRequest;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lRequest)));
+        OnlineStatsRequestWire lRequest;
+        mpStateInterface->OutputGuiEvent(lRequest);
     }
 
     // ================================================================================
@@ -290,10 +285,7 @@ namespace BrnGui
                 lResponse.miMugshots       = KI_CANNED_MUGSHOTS;
                 lResponse.miDisconnectRate = KI_CANNED_DISCONNECT_RATE;
 
-                const OnlineStatsResponseWire lResponseWire(lResponse);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lResponseWire), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lResponseWire)));
+                mpStateInterface->OutputGuiEvent(lResponse);
             }
             else if (liEventId == KI_EVENT_STATS_RESPONSE)
             {

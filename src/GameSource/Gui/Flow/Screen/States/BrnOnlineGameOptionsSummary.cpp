@@ -161,10 +161,7 @@ namespace BrnGui
             u8 mu8Payload;   // +0x0C
 
             GuiCommandWire16()
-                : CgsGui::GuiEvent<TI_EVENT_ID>(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(sizeof(CgsGui::GuiEvent<TI_EVENT_ID>)))
-                , mu8Payload(0)
+                : mu8Payload(0)
             {
             }
         };
@@ -175,10 +172,10 @@ namespace BrnGui
             bool mbShowHud;   // +0x0C
 
             explicit GuiEventShowHideHudWire(bool lbShowHud)
-                : CgsGui::GuiEvent<148>(1, 12)
-                , mbShowHud(lbShowHud)
+                : mbShowHud(lbShowHud)
             {
             }
+            GuiEventShowHideHudWire() {}
         };
 
         // { 1, 356, 12, <the byte> }, channel 40, 16 bytes: the autosave request.
@@ -186,64 +183,49 @@ namespace BrnGui
         {
             u8 mu8Payload;   // +0x0C
 
-            GuiAutosaveRequestWire() : CgsGui::GuiEvent<356>(1, 12), mu8Payload(0) {}
-        };
-
-        // { 100, 457, 12, the audio trigger }, channel 40, 112 bytes.
-        struct GuiAudioTriggerWire
-        {
-            s32 miSize;
-            s32 miType;
-            s32 miOffset;
-            GuiAudioTriggerWirePayload457 mPayload;
+            GuiAutosaveRequestWire() : mu8Payload(0) {}
         };
 
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+        struct GuiOverlayRequestWire
         {
-            u32               muPad0C;    // +0x0C
-            GuiOverlayRequest mRequest;   // +0x10
+            GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
             {
             }
         };
 
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
+        struct GuiOverlayWaitFinishWire
         {
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10
+            GuiOverlayWaitFinishRequest mRequest;   // the OutputGuiEvent payload
 
             explicit GuiOverlayWaitFinishWire(const char* lpcOverlayName)
-                : CgsGui::GuiEvent<188>(static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)), 16)
             {
                 mRequest.Construct(lpcOverlayName);
             }
         };
 
-        typedef CgsGui::GuiEventWrapper<GuiEventNetworkCreateGame, 40> GuiEventNetworkCreateGameWire;
-        typedef CgsGui::GuiEventWrapper<GuiEventNetworkGameParams, 40> GuiEventNetworkGameParamsWire;
-        typedef CgsGui::GuiEventWrapper<GuiChallengeSelectedEvent, 40> GuiChallengeSelectedWire;
+        // The channel-40 records OutputGuiEvent's GuiEventOut<T> builds around these payloads.
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiCommandWire16<175> >) == 16), "command record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHudWire>) == 16), "show/hide-hud record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiAutosaveRequestWire>) == 16), "autosave record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiAudioTriggerEvent>) == 112), "audio trigger record is 112 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayWaitFinishRequest>) == 24), "wait-finish record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventNetworkCreateGame>) == 492), "create-game record is 492 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventNetworkGameParams>) == 492), "game-params record is 492 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiChallengeSelectedEvent>) == 32), "challenge-selected record is 32 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
 
-        CGS_STATIC_ASSERT((sizeof(GuiCommandWire16<175>) == 16), "command record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventShowHideHudWire) == 16), "show/hide-hud record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiAutosaveRequestWire) == 16), "autosave record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayWaitFinishWire) == 24), "wait-finish record is 24 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkCreateGameWire) == 492), "create-game record is 492 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventNetworkGameParamsWire) == 492), "game-params record is 492 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiChallengeSelectedWire) == 32), "challenge-selected record is 32 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
-
-        template <typename TWire>
-        void PostWire(CgsGui::StateInterface* lpStateInterface, const TWire& lrWire)
+        // Publish one payload through OutputGuiEvent (channel 40), which takes the event by
+        // non-const reference: the boxed copy is the record ARTIST builds inline.
+        template <typename TEvent>
+        void PostWire(CgsGui::StateInterface* lpStateInterface, const TEvent& lrEvent)
         {
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lrWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lrWire)));
+            TEvent lEvent = lrEvent;
+            lpStateInterface->OutputGuiEvent(lEvent);
         }
 
         // The menu click: the audio trigger record with the cue's label.
@@ -251,9 +233,7 @@ namespace BrnGui
         {
             GuiAudioTriggerEvent lAudio;
             lAudio.Construct(KI_AUDIO_ACTION_MENU_CUE, KPC_EMPTY_STRING, lpacLabel, KPC_EMPTY_STRING);
-            GuiAudioTriggerWire lAudioWire = { 100, 457, 12, {} };
-            std::memcpy(&lAudioWire.mPayload, lAudio.macComponent, sizeof(lAudioWire.mPayload));
-            PostWire(lpStateInterface, lAudioWire);
+            lpStateInterface->OutputGuiEvent(lAudio);   // {100, 457, 12} + 100 on channel 40
         }
 
         // Show / hide the main map on both the view and the internal channels.
@@ -286,7 +266,12 @@ namespace BrnGui
         miCurrentRound = 0;
 
         // The summary owns the screen: CrashNav down, HUD hidden.
-        PostWire(mpStateInterface, GuiEventActivateCrashNav(false));
+        {
+            GuiEventActivateCrashNav lActivate;
+            lActivate.muActivate = 0u;
+            lActivate.muParam = 0;
+            mpStateInterface->OutputGuiEvent(lActivate);
+        }
         PostWire(mpStateInterface, GuiEventShowHideHudWire(false));
 
         miStartSaveItem = 0;
@@ -610,16 +595,16 @@ namespace BrnGui
         {
             GuiEventNetworkCreateGame lCreateGame;
             lCreateGame.SetFromGameParams(lpParams);
-            PostWire(mpStateInterface, GuiEventNetworkCreateGameWire(lCreateGame));
+            mpStateInterface->OutputGuiEvent(lCreateGame);
 
             GuiOverlayRequestWire lEnterGameOverlay;
             lEnterGameOverlay.mRequest.Construct(KAC_ENTER_GAME_OVERLAY_ID);
-            PostWire(mpStateInterface, lEnterGameOverlay);
+            mpStateInterface->OutputGuiEvent(lEnterGameOverlay.mRequest);
         }
         else
         {
             GuiEventNetworkGameParams lGameParams = *lpParams;
-            PostWire(mpStateInterface, GuiEventNetworkGameParamsWire(lGameParams));
+            mpStateInterface->OutputGuiEvent(lGameParams);
         }
 
         meSubState = E_SUBSTATE_WAIT_IN_GAME;
@@ -628,7 +613,12 @@ namespace BrnGui
         // front end back.
         mpStateInterface->PlayAptMovie(KPC_EMPTY_STRING, KI_APT_MOVIE_LEVEL);
         ShowHideMainMap(mpStateInterface, false);
-        PostWire(mpStateInterface, GuiEventActivateCrashNav(true));
+        {
+            GuiEventActivateCrashNav lActivate;
+            lActivate.muActivate = 1u;
+            lActivate.muParam = 0;
+            mpStateInterface->OutputGuiEvent(lActivate);
+        }
         PostWire(mpStateInterface, GuiCommandWire16<533>());
 
         const FreeburnChallengeManager* lpChallengeManager = mpGuiCache->GetFreeburnChallengeManager();
@@ -641,7 +631,7 @@ namespace BrnGui
             lChallengeSelected.miSelectorAction = KI_CHALLENGE_SELECTOR_ACTION_CREATE;
             lChallengeSelected.mChallengeID     = lpChallenge->GetChallengeID();
             lChallengeSelected.miChall          = static_cast<s32>(lpChallenge->GetChallengeStyle());
-            PostWire(mpStateInterface, GuiChallengeSelectedWire(lChallengeSelected));
+            mpStateInterface->OutputGuiEvent(lChallengeSelected);
         }
     }
 
@@ -654,7 +644,7 @@ namespace BrnGui
         CGS_ASSERT(lpInGameEvent != 0, "Invalid event sent to OnlineSelectRoute::HandleInGameEvent");
         CGS_ASSERT(lpInGameEvent != 0, "lpInGameEvent");
 
-        PostWire(mpStateInterface, GuiOverlayWaitFinishWire(KAC_ENTER_GAME_OVERLAY_ID));
+        PostWire(mpStateInterface, GuiOverlayWaitFinishWire(KAC_ENTER_GAME_OVERLAY_ID).mRequest);
         SendStateEvent(KAC_ADVANCE_EVENT);
         PostWire(mpStateInterface, GuiCommandWire16<175>());
     }
@@ -689,7 +679,12 @@ namespace BrnGui
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mDownArrowAnimator.GetName());
         mpGuiCache->AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mTitleText.GetName());
 
-        PostWire(mpStateInterface, GuiEventActivateCrashNav(false));
+        {
+            GuiEventActivateCrashNav lActivate;
+            lActivate.muActivate = 0u;
+            lActivate.muParam = 0;
+            mpStateInterface->OutputGuiEvent(lActivate);
+        }
         PostWire(mpStateInterface, GuiEventShowHideHudWire(false));
 
         miStartSaveItem = 0;
@@ -833,7 +828,7 @@ namespace BrnGui
             {
                 GuiOverlayRequestWire lOverwriteQuestion;
                 lOverwriteQuestion.mRequest.Construct(KAC_OVERWRITE_QUESTION_OVERLAY_ID);
-                PostWire(mpStateInterface, lOverwriteQuestion);
+                mpStateInterface->OutputGuiEvent(lOverwriteQuestion.mRequest);
             }
             else
             {

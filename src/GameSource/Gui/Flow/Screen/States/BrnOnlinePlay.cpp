@@ -52,14 +52,11 @@ namespace
 
 
     // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-    struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
+    struct GuiOverlayWaitFinishWire
     {
-        GuiOverlayWaitFinishRequest mRequest;   // +0x10
+        GuiOverlayWaitFinishRequest mRequest;   // the OutputGuiEvent payload
 
         GuiOverlayWaitFinishWire()
-            : CgsGui::GuiEvent<188>(
-                  static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)),
-                  static_cast<u32>(offsetof(GuiOverlayWaitFinishWire, mRequest)))
         {
         }
     };
@@ -70,12 +67,10 @@ namespace
         u32 muEventType;   // +0x0C
 
         explicit GuiEventNetworkNewsAndTOSWire(u32 luEventType)
-            : CgsGui::GuiEvent<266>(
-                  static_cast<u32>(sizeof(u32)),
-                  static_cast<u32>(offsetof(GuiEventNetworkNewsAndTOSWire, muEventType)))
-            , muEventType(luEventType)
+            : muEventType(luEventType)
         {
         }
+        GuiEventNetworkNewsAndTOSWire() {}
     };
 
     // GuiEventNetworkNewsAndTOS::E_EVENT_TYPE_RELEASE.
@@ -98,16 +93,11 @@ namespace
     //   AddEvent(iface+0xC, record, 40, 0x130=304)
     // (headless-IDA disasm, 2026-08-04). This wire mirrors the committed sibling
     // GuiOverlayRequestWire in BrnOnlineCustomMatch_wJ_04.cpp / BrnCarSelectMain_wG_02.cpp.
-    struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+    struct GuiOverlayRequestWire
     {
-        u32               muPad0C;    // +0x0C (payload is 16-aligned past the header)
-        GuiOverlayRequest mRequest;   // +0x10
+        GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
 
         GuiOverlayRequestWire()
-            : CgsGui::GuiEvent<184>(
-                  static_cast<u32>(sizeof(GuiOverlayRequest)),                  // X360 288
-                  static_cast<u32>(offsetof(GuiOverlayRequestWire, mRequest)))  // X360 16
-            , muPad0C(0)
         {
         }
     };
@@ -293,15 +283,15 @@ void OnlinePlay::HandleControllerInputMainMenu(const GuiEventControllerInputPres
         case '-':   // 0x2D
         case '2':   // 0x32 -- back out: suspend network, activate CrashNav, GO_BACK, post the leave cmd.
         {
-            CgsGui::GuiEventNetworkSuspension lSuspend(false);
+            CgsGui::GuiEventNetworkSuspension lSuspend;
+            lSuspend.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
             mpStateInterface->OutputGuiEvent(lSuspend);
 
-            GuiEventActivateCrashNav lActivateCrashNav(true);
-            // This object already carries ARTIST's {8,191,12}+payload record.
-            // Keep those bytes and put the record on GuiEventOut for the PC drain.
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lActivateCrashNav),
-                KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lActivateCrashNav)));
+            GuiEventActivateCrashNav lActivateCrashNav;
+            lActivateCrashNav.muActivate = 1u;
+            lActivateCrashNav.muParam = 0;
+            // ARTIST's {8,191,12} + payload record on channel 40.
+            mpStateInterface->OutputGuiEvent(lActivateCrashNav);
 
             SendStateEvent("GO_BACK");
 
@@ -324,9 +314,7 @@ void OnlinePlay::HandleControllerInputMainMenu(const GuiEventControllerInputPres
                 // channel 40, 304 bytes.
                 GuiOverlayRequestWire lRequest;
                 lRequest.mRequest.Construct("CNOnlPrivErr");
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lRequest), 40,
-                    static_cast<s32>(sizeof(lRequest)));
+                mpStateInterface->OutputGuiEvent(lRequest.mRequest);
                 break;
             }
 
@@ -347,9 +335,7 @@ void OnlinePlay::HandleControllerInputMainMenu(const GuiEventControllerInputPres
                     // channel 40, 304 bytes.
                     GuiOverlayRequestWire lRequest;
                     lRequest.mRequest.Construct("CNOnlStrtQn");
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lRequest), 40,
-                        static_cast<s32>(sizeof(lRequest)));
+                    mpStateInterface->OutputGuiEvent(lRequest.mRequest);
                 }
                 else
                 {
@@ -620,9 +606,7 @@ void OnlinePlay::CheckForCompletedLoads()
         {
             GuiOverlayWaitFinishWire lWaitFinish;
             lWaitFinish.mRequest.Construct(KAPC_OVERLAYS_TO_FINISH[luOverlay]);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWaitFinish), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWaitFinish)));
+            mpStateInterface->OutputGuiEvent(lWaitFinish.mRequest);
         }
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
@@ -643,9 +627,7 @@ void OnlinePlay::CheckForCompletedLoads()
             lRequest.mRequest.Construct(liDisconnectReason == KI_DISCONNECT_REASON_DEDICATED_POPUP
                                             ? "CNLobbyDiscD"
                                             : "CNLobbyDisc");
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lRequest)));
+            mpStateInterface->OutputGuiEvent(lRequest.mRequest);
             mpGuiCache->SetDoDisconnectPopup(NULL);
         }
 
@@ -653,17 +635,13 @@ void OnlinePlay::CheckForCompletedLoads()
         {
             GuiOverlayRequestWire lRequest;
             lRequest.mRequest.Construct("OnReqHDD");
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRequest), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lRequest)));
+            mpStateInterface->OutputGuiEvent(lRequest.mRequest);
         }
 
         ShowMainMenuOptions();
 
         GuiEventNetworkNewsAndTOSWire lRelease(KU_NEWS_AND_TOS_RELEASE);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRelease), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lRelease)));
+        mpStateInterface->OutputGuiEvent(lRelease);
     }
 }
 

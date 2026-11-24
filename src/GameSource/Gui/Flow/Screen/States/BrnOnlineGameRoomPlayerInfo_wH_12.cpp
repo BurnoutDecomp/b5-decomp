@@ -58,15 +58,13 @@ namespace BrnGui
         // ---- out-queue wire records ---------------------------------------------------
         // OutputGuiEvent<BrnGui::GuiEventNetworkSplashEvent> @0x82493880: sizeof 4 /
         // type 269 / offset 12, record size 16.
-        typedef CgsGui::GuiEventWrapper<GuiEventNetworkSplashEvent, KI_CHANNEL_GUI_OUT>
-            GuiEventNetworkSplashWire;
+        typedef CgsGui::GuiEventOut<GuiEventNetworkSplashEvent> GuiEventNetworkSplashWire;
 
         // OutputGuiEvent<BrnGui::GuiOverlayWaitFinishRequest> @0x82476E98: sizeof 8 /
         // type 188 / offset 16 (the 8-aligned CgsID leaves a 4-byte hole after the header
         // that the console never stores -- neither the callee nor the caller writes it --
         // so nothing is modelled there either).
-        typedef CgsGui::GuiEventWrapper<GuiOverlayWaitFinishRequest, KI_CHANNEL_GUI_OUT>
-            GuiOverlayWaitFinishWire;
+        typedef CgsGui::GuiEventOut<GuiOverlayWaitFinishRequest> GuiOverlayWaitFinishWire;
     }
 
     // ------------------------------------------------ ClearSplashScreenOverlay @0x82498E00
@@ -100,10 +98,7 @@ namespace BrnGui
                 GuiEventNetworkSplashEvent lFinished;
                 lFinished.meSplashState = GuiEventNetworkSplashEvent::E_SPLASH_STATE_FINISHED;
 
-                GuiEventNetworkSplashWire lWire(lFinished);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lWire), lWire.GetChannel(),
-                    static_cast<s32>(sizeof(lWire)));   // X360 record size 16
+                mpStateInterface->OutputGuiEvent(lFinished);   // X360 record size 16
             }
 
             mbNeedToClearSplashScreen = false;
@@ -177,10 +172,7 @@ namespace BrnGui
                 GuiEventNetworkSplashEvent lFinished;
                 lFinished.meSplashState = GuiEventNetworkSplashEvent::E_SPLASH_STATE_FINISHED;
 
-                GuiEventNetworkSplashWire lWire(lFinished);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lWire), lWire.GetChannel(),
-                    static_cast<s32>(sizeof(lWire)));   // X360 record size 16
+                mpStateInterface->OutputGuiEvent(lFinished);   // X360 record size 16
             }
             else
             {
@@ -199,10 +191,7 @@ namespace BrnGui
                 lWaitFinish.Construct(GetSplashScreenIDForGameMode(
                     static_cast<BrnGameState::GameStateModuleIO::EGameModeType>(leGameModeType)));
 
-                GuiOverlayWaitFinishWire lWire(lWaitFinish);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lWire), lWire.GetChannel(),
-                    static_cast<s32>(sizeof(lWire)));   // X360 record size 24
+                mpStateInterface->OutputGuiEvent(lWaitFinish);   // X360 record size 24
             }
         }
     }

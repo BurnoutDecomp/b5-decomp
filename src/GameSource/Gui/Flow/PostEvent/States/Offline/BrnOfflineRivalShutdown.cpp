@@ -121,9 +121,9 @@ namespace
     {
         u8 mucPad;   // +0x0C (the 1-byte empty payload)
 
-        GuiEventRivalShutdownDisplayFinished() : CgsGui::GuiEvent<295>(1, 12), mucPad(0) {}
+        GuiEventRivalShutdownDisplayFinished() : mucPad(0) {}
     };
-    CGS_STATIC_ASSERT((sizeof(GuiEventRivalShutdownDisplayFinished) == 16),
+    CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventRivalShutdownDisplayFinished>) == 16),
                   "the console posts a 16-byte record for GUI 295 (`li r6, 0x10`)");
 
     // The console streams the fixed prefix, the offending value and a suffix into the global
@@ -220,9 +220,7 @@ void OfflineRivalShutdown::OnLeave()
     meOfflineRivalShutdownState = E_OFFLINERIVALSHUTDOWNSTATE_NONE;
 
     GuiEventRivalShutdownDisplayFinished lDisplayFinished;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lDisplayFinished), KI_CHANNEL_GUI_OUT,
-        static_cast<s32>(sizeof(lDisplayFinished)));
+    mpStateInterface->OutputGuiEvent(lDisplayFinished);
 
     if (mpGuiCache != 0)
     {
@@ -432,10 +430,7 @@ void OfflineRivalShutdown::SetupComponents()
 
     GuiEventAudioGenericSequence lAudio;
     std::memcpy(lAudio.maData, &lpVehicleListEntry->mRivalUnlockName, sizeof(lAudio.maData));
-    CgsGui::GuiEventWrapper<GuiEventAudioGenericSequence, KI_CHANNEL_GUI_OUT> lAudioRecord(lAudio);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lAudioRecord), KI_CHANNEL_GUI_OUT,
-        static_cast<s32>(sizeof(lAudioRecord)));
+    mpStateInterface->OutputGuiEvent(lAudio);
 
     if (mpGuiCache->GetProfile()->HasPlayerSeenTrainingType(
             BrnProgression::E_TRAINING_TYPE_RIVAL_SHUTDOWN))
@@ -443,20 +438,13 @@ void OfflineRivalShutdown::SetupComponents()
         GuiEventPostEventFreeCarSequenceStart lSequence;
         const u64 luVoiceOver = lpVehicleListEntry->GetWonCarVoiceOverKeyHash();
         std::memcpy(lSequence.maData, &luVoiceOver, sizeof(lSequence.maData));
-        CgsGui::GuiEventWrapper<GuiEventPostEventFreeCarSequenceStart, KI_CHANNEL_GUI_OUT>
-            lSequenceRecord(lSequence);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lSequenceRecord), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lSequenceRecord)));
+        mpStateInterface->OutputGuiEvent(lSequence);
     }
     else
     {
         GuiEventRequestTraining lTraining;
         lTraining.meTrainingType = BrnProgression::E_TRAINING_TYPE_RIVAL_SHUTDOWN;
-        CgsGui::GuiEventWrapper<GuiEventRequestTraining, KI_CHANNEL_GUI_OUT> lTrainingRecord(lTraining);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lTrainingRecord), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lTrainingRecord)));
+        mpStateInterface->OutputGuiEvent(lTraining);
     }
 }
 

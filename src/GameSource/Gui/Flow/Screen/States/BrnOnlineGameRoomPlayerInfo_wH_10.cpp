@@ -82,7 +82,7 @@ namespace BrnGui
         // view restores the wire words (same view as partfiles 08 and 13). The in-tree
         // StateInterface::OutputGuiEvent posts the event on a channel equal to its id,
         // which is not the console record.
-        typedef CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40> GuiAudioTriggerWire;
+        typedef CgsGui::GuiEventOut<GuiAudioTriggerEvent> GuiAudioTriggerWire;
         CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
         const s32 KI_CHANNEL_AUDIO_GUI_OUT = 40;
 
@@ -329,10 +329,7 @@ namespace BrnGui
             GuiAudioTriggerEvent lAudioEventPayload;
             lAudioEventPayload.Construct(KI_AUDIO_ACTION_BACK, KAC_EMPTY_STRING,
                                   KAC_SOUND_GO_BACK, KAC_EMPTY_STRING);
-            GuiAudioTriggerWire lAudioEvent(lAudioEventPayload);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lAudioEvent), KI_CHANNEL_AUDIO_GUI_OUT,
-                static_cast<s32>(sizeof(lAudioEvent)));
+            mpStateInterface->OutputGuiEvent(lAudioEventPayload);
             ShowPauseScreen();
             break;
         }

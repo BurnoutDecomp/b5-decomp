@@ -209,19 +209,17 @@ namespace BrnGui
         // two call sites cannot drift; nothing about the emitted records changes.
         void PostExitToInGame(CgsGui::StateInterface* lpStateInterface)
         {
-            CgsGui::GuiEventNetworkSuspension lResume(false);              // { 4, 45, 12, 0 } ch40 16
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lResume), KI_CHANNEL_GUI_EVENT,
-                static_cast<s32>(sizeof(lResume)));
+            CgsGui::GuiEventNetworkSuspension lResume;              // { 4, 45, 12, 0 } ch40 16
+            lResume.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
+            lpStateInterface->OutputGuiEvent(lResume);
 
-            GuiEventActivateCrashNav lActivate(true);                      // { 8, 191, 12, 1, 0 } ch40 20
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lActivate), KI_CHANNEL_GUI_EVENT,
-                static_cast<s32>(sizeof(lActivate)));
+            GuiEventActivateCrashNav lActivate;                      // { 8, 191, 12, 1, 0 } ch40 20
+            lActivate.muActivate = 1u;
+            lActivate.muParam = 0;
+            lpStateInterface->OutputGuiEvent(lActivate);
 
-            CgsGui::GuiEvent<533> lDone(1, 12);                            // { 1, 533, 12 } ch40 16
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lDone), KI_CHANNEL_GUI_EVENT, 16);
+            CgsGui::GuiEvent<533> lDone;                                   // { 1, 533, 12 } ch40 16
+            lpStateInterface->OutputGuiEvent(lDone);
         }
     }
 
@@ -284,17 +282,16 @@ namespace BrnGui
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
         // 0x824CCA1C..0x824CCA40 -- { 8, 191, 12, 0, 0 } ch 40, 20 bytes.
-        GuiEventActivateCrashNav lDeactivate(false);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lDeactivate), KI_CHANNEL_GUI_EVENT,
-            static_cast<s32>(sizeof(lDeactivate)));
+        GuiEventActivateCrashNav lDeactivate;
+        lDeactivate.muActivate = 0u;
+        lDeactivate.muParam = 0;
+        mpStateInterface->OutputGuiEvent(lDeactivate);
 
         // 0x824CCA44..0x824CCA70 -- { 4, 45, 12, 1 } ch 40, 16 bytes. Id 45 ==
         // CgsGui::GuiEventNetworkSuspension; payload 1 is E_SUSPENSION_TYPE_RESUME.
-        CgsGui::GuiEventNetworkSuspension lResume(true);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lResume), KI_CHANNEL_GUI_EVENT,
-            static_cast<s32>(sizeof(lResume)));
+        CgsGui::GuiEventNetworkSuspension lResume;
+        lResume.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_RESUME;
+        mpStateInterface->OutputGuiEvent(lResume);
 
         // 0x824CCA84 / 0x824CCA88 -- the two stores the pause-wave partial could not
         // make. +24928 is this class's own byte; +56 is the base's meMapState.
@@ -515,9 +512,7 @@ namespace BrnGui
                 GuiEventScoreboardRequestGamercardEvent lRequest;
                 lRequest.mPlayerName.Construct(mCrashNavPanel.GetRoadRuleFriendSelectedName());
                 // lRequest already contains {16,120,12}+name[16]; post it on the original channel 40.
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lRequest), 40,
-                    static_cast<s32>(sizeof(lRequest)));
+                mpStateInterface->OutputGuiEvent(lRequest);
             }
             break;
 
@@ -613,11 +608,7 @@ namespace BrnGui
             GuiAudioTriggerPayload457 lPayload;
             std::memcpy(&lPayload, &lAudio.macComponent, sizeof(lPayload));
 
-            CgsGui::GuiEventWrapper<GuiAudioTriggerPayload457, KI_CHANNEL_GUI_EVENT>
-                lRecord(lPayload);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                lRecord.GetChannel(), static_cast<s32>(sizeof(lRecord)));
+            mpStateInterface->OutputGuiEvent(lPayload);
 
             meCursorMode = E_CURSORMODE_SELECTING_ICONS;   // `li r11, 1 ; stw 0x5F50`
         }

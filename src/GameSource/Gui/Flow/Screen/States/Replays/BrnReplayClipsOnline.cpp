@@ -42,21 +42,22 @@ namespace
     struct GuiReplaySetModeWire : public CgsGui::GuiEvent<525>
     {
         s32 miMode;   // +0x0C
-        explicit GuiReplaySetModeWire(s32 liMode) : CgsGui::GuiEvent<525>(4, 12), miMode(liMode) {}
+        explicit GuiReplaySetModeWire(s32 liMode) : miMode(liMode) {}
+        GuiReplaySetModeWire() {}
     };
 
     // GuiReplayDeleteReelEvent (console id 527): { 4, 527, 12 } + the reel index, 16 bytes.
     struct GuiReplayDeleteReelWire : public CgsGui::GuiEvent<527>
     {
         s32 miReel;   // +0x0C
-        explicit GuiReplayDeleteReelWire(s32 liReel) : CgsGui::GuiEvent<527>(4, 12), miReel(liReel) {}
+        explicit GuiReplayDeleteReelWire(s32 liReel) : miReel(liReel) {}
+        GuiReplayDeleteReelWire() {}
     };
 
     template <typename TWire>
     void PostOut(CgsGui::StateInterface* lpStateInterface, TWire& lrWire)
     {
-        lpStateInterface->GetOutputEventQueue()->AddEvent(
-            &lrWire, KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lrWire)));
+        lpStateInterface->OutputGuiEvent(lrWire);
     }
 }
 

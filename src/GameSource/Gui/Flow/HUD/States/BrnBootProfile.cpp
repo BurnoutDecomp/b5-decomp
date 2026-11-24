@@ -68,17 +68,14 @@ namespace BrnGui
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
             u8 mu8Flag;
-            u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            GuiCommandEvent16(u8 lu8Flag = 0) : mu8Flag(lu8Flag) {}
         };
 
         template <s32 N>
-        void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel)
+        void PostCommand16(CgsGui::StateInterface* lpInterface)
         {
             GuiCommandEvent16<N> lEvent(0);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+            lpInterface->OutputGuiEvent(lEvent);
         }
 
         // 20-byte GuiEvent<25> "set option" command { 8, 25, 12, reserved, 1.0f } on the
@@ -88,17 +85,16 @@ namespace BrnGui
             s32 miReserved;   // +0x0C
             f32 mfValue;      // +0x10 (1.0f)
             explicit GuiOptionEvent20(s32 liReserved)
-                : CgsGui::GuiEvent<25>(8, 12), miReserved(liReserved), mfValue(1.0f) {}
+                : miReserved(liReserved), mfValue(1.0f) {}
+            GuiOptionEvent20() {}
         };
 
         // 20-byte GuiEvent<18> "apt name + flag" record { 8, 18, 12, name, 1 } on the view
         // channel -- the OnLeave unload post (empty-name sentinel; same as BrnBootLegal's).
         struct GuiAptNameFlagEvent20 : public CgsGui::GuiEvent<18>
         {
-            const char* mpacAptName;   // +0x0C ("" sentinel)
-            s32         miFlag;        // +0x10 (1)
-            GuiAptNameFlagEvent20(const char* lpacAptName, s32 liFlag)
-                : CgsGui::GuiEvent<18>(8, 12), mpacAptName(lpacAptName), miFlag(liFlag) {}
+            const char* mpacAptName;   // payload +0x00 ("" sentinel)
+            s32         miFlag;        // payload +0x04 (1)
         };
 
         // The cache watcher is the ARTIST component-initialisation handshake:
@@ -367,8 +363,7 @@ namespace BrnGui
         if (mpProfileManager != 0)   // X360 unconditional; PC null-guard, see the flow's fallback
             mpProfileManager->AttachMessageDisplay(&mProfileMessage);
         GuiOptionEvent20 lOption(1);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE, 20);
+        mpStateInterface->OutputViewState(lOption);
     }
 
     // @ 0x824784F8 -- detach the message display, unregister, unload the save/load apt
@@ -383,10 +378,8 @@ namespace BrnGui
         // ARTIST 0x82478558: the empty-name sentinel targets the same display level
         // used by SaveLoadComponent (level 3), so that prompt is gone before the
         // post-title intro state can begin.
-        GuiAptNameFlagEvent20 lUnload("", 3);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lUnload), KI_CHANNEL_VIEW_STATE,
-            static_cast<s32>(sizeof(GuiAptNameFlagEvent20)));
+        GuiAptNameFlagEvent20 lUnload; lUnload.mpacAptName = ""; lUnload.miFlag = 3;
+        mpStateInterface->OutputViewState(lUnload);
         if (!mbCheckDiskSpace)
         {
             if (mpGuiCache != 0)
@@ -396,7 +389,7 @@ namespace BrnGui
             // +0x13B90 -- see the GuiCache.h note at +0x4B4F, issue #29 wave). Same byte
             // as before, read under its real name.
             if (mpGuiCache == 0 || !mpGuiCache->IsPerformingInvite())
-                PostCommand16<507>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+                PostCommand16<507>(mpStateInterface);
         }
         else
         {
@@ -510,7 +503,7 @@ namespace BrnGui
             }
             // Post the render-mode command 138 (the game bridges it to the dispatch
             // buffer's render state) and play the save/load prompt at display level 3.
-            PostCommand16<138>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            PostCommand16<138>(mpStateInterface);
             mpStateInterface->PlayAptMovie("SaveLoadComponent", 3);
             meInternalState = E_INTERNALSTATE_WAIT_INITIALISE;
             mpInGuiEventQueue->Clear();
@@ -557,7 +550,7 @@ namespace BrnGui
         case E_INTERNALSTATE_LEAVING:
             if (!mbCheckDiskSpace)
                 mpStateInterface->PlayLoadingScreen();
-            PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            PostCommand16<70>(mpStateInterface);
             mpInGuiEventQueue->Clear();
             break;
 

@@ -91,11 +91,6 @@ namespace BrnGui
             bool mbFlag;       // +0x08  X360 stores 0 here (ShowLoadScreen stores 1)
             u8   maPad[3];     // +0x09  never written by the X360; modelled zeroed
 
-            GuiEventShowHideSatNavPayload(s32 liSubMode, f32 lfValue, bool lbFlag)
-                : miSubMode(liSubMode), mfValue(lfValue), mbFlag(lbFlag)
-            {
-                maPad[0] = maPad[1] = maPad[2] = 0;
-            }
 
             s32 GetEventType() const { return 213; }
         };
@@ -212,19 +207,14 @@ namespace BrnGui
         CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue =
             mpStateInterface->GetOutputEventQueue();
 
-        GuiEventShowHideSatNavPayload lShowHideSatNav(0, 0.0f, false);
+        GuiEventShowHideSatNavPayload lShowHideSatNav;
+        lShowHideSatNav.miSubMode = 0;
+        lShowHideSatNav.mfValue   = 0.0f;
+        lShowHideSatNav.mbFlag    = false;
 
-        CgsGui::GuiEventWrapper<GuiEventShowHideSatNavPayload, KI_CHANNEL_VIEW_STATE>
-            lViewStateRecord(lShowHideSatNav);
-        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lViewStateRecord),
-                             lViewStateRecord.GetChannel(),
-                             static_cast<s32>(sizeof(lViewStateRecord)));
+        mpStateInterface->OutputViewState(lShowHideSatNav);
 
-        CgsGui::GuiEventWrapper<GuiEventShowHideSatNavPayload, KI_CHANNEL_GUI_INTERNAL>
-            lInternalStateRecord(lShowHideSatNav);
-        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lInternalStateRecord),
-                             lInternalStateRecord.GetChannel(),
-                             static_cast<s32>(sizeof(lInternalStateRecord)));
+        mpStateInterface->OutputInternalState(lShowHideSatNav);
 
         // The load page's furniture goes away with the page (this+0x7BA8 / this+0x7C34).
         mLoadHeaderAnimator.AddOutputAptViewState(KPC_APT_TRANSITION,

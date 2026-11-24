@@ -1704,7 +1704,10 @@ void GuiModule::Destruct()
             const CgsGui::ModelIO::InputBuffer::GuiEventInputQueue* lpModelEvents =
                 lpModelInputBuffer->GetEventQueue();
             lpModelInputBuffer->UnlockForRead();
-            CgsGui::GuiEventPlayMusicOnMenuStream lMusic(0, false, false);
+            CgsGui::GuiEventPlayMusicOnMenuStream lMusic;
+            lMusic.muStreamNameHash = 0;
+            lMusic.mbFlagA = false;
+            lMusic.mbFlagB = false;
             lpOutput->AddGuiOutEvent(lMusic);
             const_cast<CgsGui::ModelIO::InputBuffer::GuiEventInputQueue*>(lpModelEvents)->AddEvent(
                 reinterpret_cast<const CgsModule::Event*>(&lFinished), 510, sizeof(lFinished));
@@ -1713,8 +1716,10 @@ void GuiModule::Destruct()
         {
             lVideo.Copy(&mMovieManager.GetPlayingMovieDefinition());
             mMovieManager.SetState(MovieManager::E_MOVIEMANAGERSTATE_WAITING_FOR_AUDIO);
-            CgsGui::GuiEventPlayMusicOnMenuStream lMusic(lVideo.mSoundStreamName, false,
-                lVideo.mbDisableCustomSoundtracks);
+            CgsGui::GuiEventPlayMusicOnMenuStream lMusic;
+            lMusic.muStreamNameHash = lVideo.mSoundStreamName;
+            lMusic.mbFlagA = false;
+            lMusic.mbFlagB = lVideo.mbDisableCustomSoundtracks;
             lpOutput->AddGuiOutEvent(lMusic);
         }
         if (mAlwaysAvailableComponentsManager.Prepare(&mGuiAccessPointers))

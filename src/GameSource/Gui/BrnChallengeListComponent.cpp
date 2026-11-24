@@ -205,8 +205,7 @@ void ChallengeListComponent::Setup( GuiCache* lpGuiCache, s32 liNumPlayers, bool
 namespace {
     template<class T> void Output(CgsGui::StateInterface* state, T& event)
     {
-        CgsGui::GuiEventWrapper<T, 40> wrapper(event);
-        state->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&wrapper), 40, sizeof(wrapper));
+        state->OutputGuiEvent(event);
     }
     void NavigationAudio(CgsGui::StateInterface* state)
     {

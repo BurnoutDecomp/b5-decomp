@@ -172,11 +172,6 @@ namespace BrnGui
             bool mbFlag;      // +0x08  X360 stores 0     (`stb r29`)
             u8   maPad[3];    // +0x09  stack residue on the console; modelled zeroed
 
-            GuiEventShowHideSatNavPayload(s32 liSubMode, f32 lfValue, bool lbFlag)
-                : miSubMode(liSubMode), mfValue(lfValue), mbFlag(lbFlag)
-            {
-                maPad[0] = maPad[1] = maPad[2] = 0;
-            }
 
             s32 GetEventType() const { return 213; }
         };
@@ -188,7 +183,7 @@ namespace BrnGui
         // and the id 201 while the X360 wire words are 100 and 457.
         const u32 KU_WIRE_ID_AUDIO_TRIGGER = 457;
 
-        typedef CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40> GuiAudioTriggerWire;
+        typedef CgsGui::GuiEventOut<GuiAudioTriggerEvent> GuiAudioTriggerWire;
 
         CGS_STATIC_ASSERT((sizeof(GuiAudioTriggerWire) == 112), "audio trigger record is 112 bytes");
 
@@ -302,19 +297,14 @@ namespace BrnGui
         // The hide pair. Same record shape as CheckForLoadComplete's show pair -- payload
         // { sub-mode 0, 0.0f, false } -- posted at 24 bytes on channel 41 and then again on
         // channel 42. Sizes are host sizeof expressions, never the console's 12 / 24.
-        GuiEventShowHideSatNavPayload lShowHideSatNav(0, 0.0f, false);
+        GuiEventShowHideSatNavPayload lShowHideSatNav;
+        lShowHideSatNav.miSubMode = 0;
+        lShowHideSatNav.mfValue   = 0.0f;
+        lShowHideSatNav.mbFlag    = false;
 
-        CgsGui::GuiEventWrapper<GuiEventShowHideSatNavPayload, KI_CHANNEL_VIEW_STATE>
-            lViewStateRecord(lShowHideSatNav);
-        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lViewStateRecord),
-                             lViewStateRecord.GetChannel(),
-                             static_cast<s32>(sizeof(lViewStateRecord)));
+        mpStateInterface->OutputViewState(lShowHideSatNav);
 
-        CgsGui::GuiEventWrapper<GuiEventShowHideSatNavPayload, KI_CHANNEL_GUI_INTERNAL>
-            lInternalStateRecord(lShowHideSatNav);
-        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lInternalStateRecord),
-                             lInternalStateRecord.GetChannel(),
-                             static_cast<s32>(sizeof(lInternalStateRecord)));
+        mpStateInterface->OutputInternalState(lShowHideSatNav);
 
         // Falling edge of the map-scroll cue: if UpdateSoundEvents left the debouncer
         // latched, close the sound out on the way through the door (`lbz r11, 0x6140`).
@@ -322,10 +312,7 @@ namespace BrnGui
         {
             GuiAudioTriggerEvent lScrollEndPayload;
             lScrollEndPayload.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_SCROLL_END, "");
-            GuiAudioTriggerWire lScrollEnd(lScrollEndPayload);
-            lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lScrollEnd),
-                                 KI_CHANNEL_GUI_OUT,
-                                 static_cast<s32>(sizeof(lScrollEnd)));
+            mpStateInterface->OutputGuiEvent(lScrollEndPayload);   // {100, 457, 12} + 100, channel 40
         }
 
         // Park the cursor. The X360 assembles a zero quad on the stack and passes it in v1
@@ -1360,19 +1347,14 @@ namespace BrnGui
         CgsGui::GuiStackEventQueue::GuiEventQueueLarge* lpOutQueue =
             mpStateInterface->GetOutputEventQueue();
 
-        GuiEventShowHideSatNavPayload lShowHideSatNav(0, KF_MAP_FADE_IN_TIME, true);
+        GuiEventShowHideSatNavPayload lShowHideSatNav;
+        lShowHideSatNav.miSubMode = 0;
+        lShowHideSatNav.mfValue   = KF_MAP_FADE_IN_TIME;
+        lShowHideSatNav.mbFlag    = true;
 
-        CgsGui::GuiEventWrapper<GuiEventShowHideSatNavPayload, KI_CHANNEL_VIEW_STATE>
-            lViewStateRecord(lShowHideSatNav);
-        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lViewStateRecord),
-                             lViewStateRecord.GetChannel(),
-                             static_cast<s32>(sizeof(lViewStateRecord)));
+        mpStateInterface->OutputViewState(lShowHideSatNav);
 
-        CgsGui::GuiEventWrapper<GuiEventShowHideSatNavPayload, KI_CHANNEL_GUI_INTERNAL>
-            lInternalStateRecord(lShowHideSatNav);
-        lpOutQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lInternalStateRecord),
-                             lInternalStateRecord.GetChannel(),
-                             static_cast<s32>(sizeof(lInternalStateRecord)));
+        mpStateInterface->OutputInternalState(lShowHideSatNav);
     }
 }
 
@@ -1505,27 +1487,18 @@ namespace BrnGui
             {
                 GuiAudioTriggerEvent lMoveStartPayload;
                 lMoveStartPayload.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_MOVE_START, "");
-                GuiAudioTriggerWire lMoveStart(lMoveStartPayload);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lMoveStart), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lMoveStart)));
+                mpStateInterface->OutputGuiEvent(lMoveStartPayload);
 
                 GuiAudioTriggerEvent lScrollStartPayload;
                 lScrollStartPayload.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_SCROLL_START, "");
-                GuiAudioTriggerWire lScrollStart(lScrollStartPayload);
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lScrollStart), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lScrollStart)));
+                mpStateInterface->OutputGuiEvent(lScrollStartPayload);
             }
         }
         else if (mSoundData.mbPrevIsScrolling)
         {
             GuiAudioTriggerEvent lScrollEndPayload;
             lScrollEndPayload.Construct(KI_AUDIO_ACTION_MAP_CUE, "", KPC_SOUND_MAP_SCROLL_END, "");
-            GuiAudioTriggerWire lScrollEnd(lScrollEndPayload);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lScrollEnd), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lScrollEnd)));
+            mpStateInterface->OutputGuiEvent(lScrollEndPayload);
         }
 
         mSoundData.Update(lv3CursorWorldPos, lbIsMapScrolling);
@@ -1726,12 +1699,7 @@ namespace BrnGui
         // The X360 stack-builds the wrapper record inline: { payload size 1, type 555,
         // payload offset 12 } posted at 16 bytes on channel 40.
         GuiEventUnnamed555Payload lEnteredEvent;
-        CgsGui::GuiEventWrapper<GuiEventUnnamed555Payload, KI_CHANNEL_GUI_EVENT_OUT>
-            lEnteredRecord(lEnteredEvent);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEnteredRecord),
-            lEnteredRecord.GetChannel(),
-            static_cast<s32>(sizeof(lEnteredRecord)));
+        mpStateInterface->OutputGuiEvent(lEnteredEvent);
 
         meCursorMode = E_CURSORMODE_NONE;
         mCursor.Construct(mCursorName, mpStateInterface,
@@ -2545,10 +2513,7 @@ namespace BrnGui
                     GuiAudioTriggerEvent lAudioPayload;
                     lAudioPayload.Construct(KI_AUDIO_ACTION_VIEW_EVENT_STOP, "",
                                      KPC_SOUND_MAP_VIEW_EVENT, "");
-                    GuiAudioTriggerWire lAudio(lAudioPayload);
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lAudio),
-                        KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lAudio)));
+                    mpStateInterface->OutputGuiEvent(lAudioPayload);
                 }
                 break;
 
@@ -2576,10 +2541,7 @@ namespace BrnGui
                         GuiAudioTriggerEvent lAudioPayload;
                         lAudioPayload.Construct(KI_AUDIO_ACTION_VIEW_EVENT_START, "",
                                          KPC_SOUND_MAP_VIEW_EVENT, "");
-                        GuiAudioTriggerWire lAudio(lAudioPayload);
-                        mpStateInterface->GetOutputEventQueue()->AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>(&lAudio),
-                            KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lAudio)));
+                        mpStateInterface->OutputGuiEvent(lAudioPayload);
                     }
 
                     // The two fsel instructions, transcribed operand for operand -- see
@@ -3239,12 +3201,7 @@ namespace BrnGui
             lPayload.muHoveredEventId    = luHoveredEventId;
             lPayload.mpcLockedIconName   = lpcLockedIconName;
 
-            CgsGui::GuiEventWrapper<GuiEventSetHoveredEventIconPayload, KI_CHANNEL_VIEW_STATE>
-                lRecord(lPayload);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                lRecord.GetChannel(),
-                static_cast<s32>(sizeof(lRecord)));
+            lpStateInterface->OutputViewState(lPayload);
         }
 
 // (fold: an identical definition of FindOnlinePlayerByActiveRaceCarIndex was dropped here -- this TU defines it once, above)
@@ -3332,12 +3289,7 @@ namespace BrnGui
                         // { payload size 1, type 328, payload offset 12 } posted at 16
                         // bytes on channel 40. It never writes the payload byte itself.
                         GuiEventCrashNavCacheAcceptedPayload lCacheAccepted;
-                        CgsGui::GuiEventWrapper<GuiEventCrashNavCacheAcceptedPayload,
-                                                KI_CHANNEL_GUI_EVENT> lRecord(lCacheAccepted);
-                        mpStateInterface->GetOutputEventQueue()->AddEvent(
-                            reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                            lRecord.GetChannel(),
-                            static_cast<s32>(sizeof(lRecord)));
+                        mpStateInterface->OutputGuiEvent(lCacheAccepted);
                     }
                 }
                 break;
@@ -3639,12 +3591,7 @@ namespace BrnGui
                                 static_cast<s64>(std::atoi(lpcRoadSignName));
                             std::memcpy(lRequest.maData, &li64RoadId, sizeof(li64RoadId));
 
-                            CgsGui::GuiEventWrapper<GuiEventRoadRuleDataRequest,
-                                                    KI_CHANNEL_GUI_EVENT> lRecord(lRequest);
-                            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                                reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                                lRecord.GetChannel(),
-                                static_cast<s32>(sizeof(lRecord)));
+                            mpStateInterface->OutputGuiEvent(lRequest);
 
                             // A road sign has no world record of its own, so the "locked"
                             // position is wherever the cursor is sitting.
@@ -3714,12 +3661,7 @@ namespace BrnGui
 
                             CGS_ASSERT(mpStateInterface != 0, "mpStateInterface");  // cpp:1321
 
-                            CgsGui::GuiEventWrapper<GuiEventChallengedEventDataRequest,
-                                                    KI_CHANNEL_GUI_EVENT> lRecord(lRequest);
-                            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                                reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                                lRecord.GetChannel(),
-                                static_cast<s32>(sizeof(lRecord)));
+                            mpStateInterface->OutputGuiEvent(lRequest);
                         }
 
                         muHoveredEventID      = luEventId;

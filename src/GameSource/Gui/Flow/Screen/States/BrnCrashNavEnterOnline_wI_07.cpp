@@ -22,14 +22,11 @@ namespace BrnGui
         const s32 KI_CHANNEL_GUI_OUT = 40;   // GuiEventOut -- the AddEvent channel every site here uses
 
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-        struct GuiOverlayWaitFinishWire : public CgsGui::GuiEvent<188>
+        struct GuiOverlayWaitFinishWire
         {
-            u32                         muPad0C;    // +0x0C (the payload is 8-aligned)
-            GuiOverlayWaitFinishRequest mRequest;   // +0x10
+            GuiOverlayWaitFinishRequest mRequest;   // the OutputGuiEvent payload
 
             GuiOverlayWaitFinishWire()
-                : CgsGui::GuiEvent<188>(static_cast<u32>(sizeof(GuiOverlayWaitFinishRequest)), 16)
-                , muPad0C(0)
             {
             }
         };
@@ -38,23 +35,20 @@ namespace BrnGui
         // shape the out-of-line OutputGuiEvent<GuiOverlayRequest> instantiation
         // @0x82436BE0 builds (memcpy 0x120 into record+0x10, then the three header
         // words, then AddEvent(queue, record, 0x28, 0x130)).
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+        struct GuiOverlayRequestWire
         {
-            u32               muPad0C;    // +0x0C (the payload is 16-aligned past the header)
-            GuiOverlayRequest mRequest;   // +0x10
+            GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
             {
             }
         };
 
         // Record-size pins: every payload here is pointer-free, so the X360's AddEvent
         // size immediates must survive unchanged on the x64 host.
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayWaitFinishWire) == 24), "wait-finish record is 24 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventNetworkSuspension) == 16), "suspension record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayWaitFinishRequest>) == 24), "wait-finish record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<CgsGui::GuiEventNetworkSuspension>) == 16), "suspension record is 16 bytes");
 
         const char KAC_STATE_EVENT_GO_BACK[]      = "GO_BACK";
         const char KAC_STATE_EVENT_GO_BACK_EASY[] = "GO_BACK_EASY";
@@ -98,9 +92,7 @@ namespace BrnGui
             GuiOverlayWaitFinishWire lWaitConnecting;
             lWaitConnecting.mRequest.Construct(KAC_CONNECTING_STRING_ID);
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWaitConnecting), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWaitConnecting)));
+            mpStateInterface->OutputGuiEvent(lWaitConnecting.mRequest);
         }
 
         // cpp:892 -- the second, streamed assert on the same pointer (the X360 fires
@@ -122,11 +114,10 @@ namespace BrnGui
                 // (stw r27, with r27 == 0, at 0x824D8964) into the record it hands the
                 // out-of-line OutputGuiEvent<GuiEventNetworkSuspension> instantiation,
                 // which posts { 4, 45, 12, 0 } on channel 40.
-                CgsGui::GuiEventNetworkSuspension lSuspension(false);
+                CgsGui::GuiEventNetworkSuspension lSuspension;
+                lSuspension.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
 
-                mpStateInterface->GetOutputEventQueue()->AddEvent(
-                    reinterpret_cast<const CgsModule::Event*>(&lSuspension), KI_CHANNEL_GUI_OUT,
-                    static_cast<s32>(sizeof(lSuspension)));
+                mpStateInterface->OutputGuiEvent(lSuspension);
 
                 mpGuiCache->SetOnlineStartPending(false);
                 SendStateEvent(KAC_STATE_EVENT_GO_BACK_EASY);
@@ -164,9 +155,7 @@ namespace BrnGui
             lWire.mRequest.Construct(KAC_DISCONNECTED_STRING_ID);
         }
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lWire)));
+        mpStateInterface->OutputGuiEvent(lWire.mRequest);
 
         // Everything the sign-in flow had on screen goes away behind the overlay, in the
         // X360's own call order (0x824D8A40 onwards). off_82F26E68 is
@@ -191,8 +180,8 @@ namespace BrnGui
     {
 
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes.
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayWaitFinishWire) == 24), "wait-finish record is 24 bytes");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventNetworkSuspension) == 16), "suspension record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayWaitFinishRequest>) == 24), "wait-finish record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<CgsGui::GuiEventNetworkSuspension>) == 16), "suspension record is 16 bytes");
 
         // Event 189 ("overlay complete") payload view: the compressed overlay id then how
         // the overlay was left. The X360 compares the id with a FULL 64-bit `cmpld` after
@@ -228,9 +217,7 @@ namespace BrnGui
             GuiOverlayWaitFinishWire lWaitConnecting;
             lWaitConnecting.mRequest.Construct(KAC_CONNECTING_STRING_ID);
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWaitConnecting), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWaitConnecting)));
+            mpStateInterface->OutputGuiEvent(lWaitConnecting.mRequest);
         }
 
         // The same leave tail HandleDisconnectedEvent's ignore-popup path runs -- but
@@ -244,11 +231,10 @@ namespace BrnGui
             // One CLEAR payload word (stw r30, with r30 == 0, at 0x824D8BFC) handed to
             // the out-of-line OutputGuiEvent<GuiEventNetworkSuspension> instantiation,
             // which posts { 4, 45, 12, 0 } on channel 40.
-            CgsGui::GuiEventNetworkSuspension lSuspension(false);
+            CgsGui::GuiEventNetworkSuspension lSuspension;
+            lSuspension.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lSuspension), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lSuspension)));
+            mpStateInterface->OutputGuiEvent(lSuspension);
 
             mpGuiCache->SetOnlineStartPending(false);
             SendStateEvent(KAC_STATE_EVENT_GO_BACK_EASY);
@@ -307,7 +293,7 @@ namespace BrnGui
         // { 8, 188, 16, <pad>, the compressed overlay id }, channel 40, 24 bytes. All
         // three handlers post it for the "OnConnecting" overlay to tear the connecting
         // spinner down before they act.
-        typedef CgsGui::GuiEventWrapper<GuiEventShowHideHud, KI_CHANNEL_GUI_OUT> GuiShowHideHudWire;
+        typedef CgsGui::GuiEventOut<GuiEventShowHideHud> GuiShowHideHudWire;
 
         // The OutputGuiEvent<BrnGui::GuiOverlayRequest> record: { 288, 184, 16, <pad>,
         // the 288-byte request }, channel 40, 304 bytes -- the shape the out-of-line
@@ -315,11 +301,11 @@ namespace BrnGui
         // three header words, then AddEvent(queue, record, 0x28, 0x130)).
         // Record-size pins: every payload here is pointer-free, so the X360's AddEvent
         // size immediates must survive unchanged on the x64 host.
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayWaitFinishWire) == 24), "wait-finish record is 24 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventNetworkSuspension) == 16), "suspension record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayWaitFinishRequest>) == 24), "wait-finish record is 24 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<CgsGui::GuiEventNetworkSuspension>) == 16), "suspension record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(GuiShowHideHudWire) == 16), "show/hide-hud record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
 
         // ---- in-queue payload views (the queue hands out the HEADER-STRIPPED payload,
         //      so each view starts at the first field) ---------------------------------
@@ -369,9 +355,7 @@ namespace BrnGui
             GuiOverlayWaitFinishWire lWaitConnecting;
             lWaitConnecting.mRequest.Construct(KAC_CONNECTING_STRING_ID);
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWaitConnecting), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWaitConnecting)));
+            mpStateInterface->OutputGuiEvent(lWaitConnecting.mRequest);
         }
 
         meCurrentLoginQuestion = lpPayload->meLoginQuestion;
@@ -386,19 +370,16 @@ namespace BrnGui
         {
             // Put the CrashNav map flow to sleep: this screen owns the front end until
             // the sign-in resolves.
-            GuiEventActivateCrashNav lDeactivateCrashNav(false);
+            GuiEventActivateCrashNav lDeactivateCrashNav;
+            lDeactivateCrashNav.muActivate = 0u;
+            lDeactivateCrashNav.muParam = 0;
             lDeactivateCrashNav.muParam = KU_ACTIVATE_CRASHNAV_PARAM_SIGN_IN;
 
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lDeactivateCrashNav), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lDeactivateCrashNav)));
+            mpStateInterface->OutputGuiEvent(lDeactivateCrashNav);
 
             GuiEventShowHideHud lHideHud;
             lHideHud.maData[0] = 0;
-            GuiShowHideHudWire lHideHudWire(lHideHud);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lHideHudWire), lHideHudWire.GetChannel(),
-                static_cast<s32>(sizeof(lHideHudWire)));
+            mpStateInterface->OutputGuiEvent(lHideHud);
         }
     }
 }

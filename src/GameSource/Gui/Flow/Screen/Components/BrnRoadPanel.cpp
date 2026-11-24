@@ -104,13 +104,13 @@ namespace BrnGui
     struct GuiEventSetRoadRuleScoreModeRecord : public CgsGui::GuiEvent<330>
     {
         explicit GuiEventSetRoadRuleScoreModeRecord(s32 liScoreMode)
-            : CgsGui::GuiEvent<330>(4, 12)   // muHeader0 == payload size, muHeader2 == its offset
-            , miScoreMode(liScoreMode)
+            : miScoreMode(liScoreMode)
         {
         }
         s32 miScoreMode;   // record +0x0C
+        GuiEventSetRoadRuleScoreModeRecord() {}
     };
-    CGS_STATIC_ASSERT((sizeof(GuiEventSetRoadRuleScoreModeRecord) == 16),
+    CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventSetRoadRuleScoreModeRecord>) == 16),
                   "the road-rule score-mode record is the 16 bytes AddEvent is given (li r6, 0x10)");
 
     static const s32 KI_OUT_CHANNEL_GUI_EVENT = 40;
@@ -333,9 +333,7 @@ namespace BrnGui
 
         // Tell the rest of the GUI which scoreboard the road panel is now showing.
         GuiEventSetRoadRuleScoreModeRecord lScoreModeEvent(meCurrentScoreMode);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lScoreModeEvent),
-            KI_OUT_CHANNEL_GUI_EVENT, KI_SCORE_MODE_RECORD_SIZE);
+        mpStateInterface->OutputGuiEvent(lScoreModeEvent);
     }
 
     // @ 0x8243A490 -------------------------------------------------------------------
@@ -356,9 +354,7 @@ namespace BrnGui
 
         // Showing the panel re-announces the scoring mode (same record as SwitchScoreMode).
         GuiEventSetRoadRuleScoreModeRecord lScoreModeEvent(meCurrentScoreMode);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lScoreModeEvent),
-            KI_OUT_CHANNEL_GUI_EVENT, KI_SCORE_MODE_RECORD_SIZE);
+        mpStateInterface->OutputGuiEvent(lScoreModeEvent);
     }
 
     // @ 0x824184D0 -------------------------------------------------------------------

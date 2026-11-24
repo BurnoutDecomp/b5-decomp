@@ -28,14 +28,11 @@ namespace BrnGui
 static const s32 KI_BUTTON_L2 = 56;
 static const s32 KI_BUTTON_R2 = 57;
 
-// The "start freeburn challenge" GUI event HandleButtonPress posts. The X360 fills a
-// GuiEvent<575> header { muHeader0 = 1, muEventType = 575, muHeader2 = 12 } and pushes a
-// 16-byte record (channel id 40); the trailing payload word is left uninitialised.
+// The "start freeburn challenge" GUI event HandleButtonPress posts through OutputGuiEvent:
+// the X360 record is { 1, 575, 12 } on channel 40, 16 bytes, so the payload is the empty
+// event's one unwritten byte.
 struct GuiEventStartFreeburnChallenge : public CgsGui::GuiEvent<575>
 {
-    u32 muReserved;   // +0x0C (X360 leaves this gap word uninitialised; record size is 16)
-
-    GuiEventStartFreeburnChallenge() : CgsGui::GuiEvent<575>(1, 12) {}
 };
 
 // @ 0x824157D8
@@ -91,8 +88,7 @@ void FreeburnChallengeStartComponent::HandleButtonPress(s32 liButton)
     if (mbActive && lbBothHeld)
     {
         GuiEventStartFreeburnChallenge lEvent;
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), 40, 16);
+        mpStateInterface->OutputGuiEvent(lEvent);
     }
 }
 

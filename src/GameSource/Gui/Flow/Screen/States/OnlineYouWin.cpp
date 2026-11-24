@@ -263,10 +263,7 @@ bool OnlineYouWin::UpdateWFInit()
     }
 
     GuiRequestOnlinePhotoFinishEvent lRequest;
-    CgsGui::GuiEventWrapper<GuiRequestOnlinePhotoFinishEvent, KI_CHANNEL_GUI_OUT> lWrapper(lRequest);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(
-        reinterpret_cast<const CgsModule::Event*>(&lWrapper), KI_CHANNEL_GUI_OUT,
-        static_cast<s32>(sizeof(lWrapper)));
+    mpStateInterface->OutputGuiEvent(lRequest);
     return true;
 }
 

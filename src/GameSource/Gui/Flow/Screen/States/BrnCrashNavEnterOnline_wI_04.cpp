@@ -79,16 +79,13 @@ namespace BrnGui
             GuiEventAnswerLoginQuestionWire(CgsGui::ELoginQuestion leLoginQuestion,
                                             bool lbAccept,
                                             bool lbAccept2)
-                : AnswerLoginQuestionHeader(
-                      static_cast<u32>(sizeof(GuiEventAnswerLoginQuestionWire)
-                                       - sizeof(AnswerLoginQuestionHeader)),
-                      static_cast<u32>(sizeof(AnswerLoginQuestionHeader)))
-                , meLoginQuestion(leLoginQuestion)
+                : meLoginQuestion(leLoginQuestion)
                 , mbAccept(lbAccept)
                 , mbAccept2(lbAccept2)
                 , muPad12(0)
             {
             }
+            GuiEventAnswerLoginQuestionWire() {}
         };
 
         // The "cancel the sign-in attempt" request. X360 stack-builds { 1, 49, 12 } and
@@ -103,10 +100,7 @@ namespace BrnGui
             u8 muPayload;   // +0x0C -- X360 leaves this byte uninitialised
 
             GuiEventCancelLoginWire()
-                : CgsGui::GuiEventCancelLogin(
-                      static_cast<u32>(sizeof(u8)),
-                      static_cast<u32>(sizeof(CgsGui::GuiEventCancelLogin)))
-                , muPayload(0)
+                : muPayload(0)
             {
             }
         };
@@ -125,10 +119,7 @@ namespace BrnGui
         // The question is captured into the record BEFORE it is reset below (the X360
         // reads this+0xC8 @0x824CAE28, well ahead of the `li r10, 7` store @0x824CAEA4).
         GuiEventAnswerLoginQuestionWire lAnswer(meCurrentLoginQuestion, lbAccept, lbAccept2);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAnswer),
-            KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lAnswer)));      // X360 record size 20
+        mpStateInterface->OutputGuiEvent(lAnswer);      // X360 record size 20
 
         mfTimeInState = 0.0f;                        // flt_82001CC0 == 0.0f
 
@@ -188,10 +179,7 @@ namespace BrnGui
                 if (meCurrentLoginQuestion != CgsGui::E_LOGIN_QUESTION_CHAT_RESTRICTION)
                 {
                     GuiEventCancelLoginWire lCancelLogin;
-                    mpStateInterface->GetOutputEventQueue()->AddEvent(
-                        reinterpret_cast<const CgsModule::Event*>(&lCancelLogin),
-                        KI_CHANNEL_GUI_OUT,
-                        static_cast<s32>(sizeof(lCancelLogin)));   // X360 record size 16
+                    mpStateInterface->OutputGuiEvent(lCancelLogin);   // X360 record size 16
 
                     // Backing out of the no-agreement question is the expected way to end
                     // the session, so the disconnect it causes must not raise the popup.

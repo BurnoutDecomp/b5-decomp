@@ -114,21 +114,21 @@ namespace BrnGui
         template <s32 N>
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
-            u8 mu8Flag;
-            u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            u8 mu8Flag;   // payload +0x00 (sizeof 1: the {1, N, 12} channel-40 record)
+
+            GuiCommandEvent16(u8 lu8Flag = 0) : mu8Flag(lu8Flag)
+            {}
         };
 
+        // OutputGuiEvent boxes the one-byte payload in its channel-40 wrapper.
         template <s32 N>
-        void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel)
+        void PostCommand16(CgsGui::StateInterface* lpInterface)
         {
             GuiCommandEvent16<N> lEvent(0);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+            lpInterface->OutputGuiEvent(lEvent);
+
         }
 
-        const s32 KI_CHANNEL_GUI_OUT = 40;   // GuiEventOut
 
         // ARTIST 0x8247E474..490 calls OutputGuiEvent<GuiEventPlayMusicOnMenuStream>.
         typedef CgsGui::GuiEventPlayMusicOnMenuStream MusicOnMenuStreamEvent;
@@ -167,11 +167,11 @@ namespace BrnGui
                     CgsSound::Playback::Name::MakeHash("intro"));
                 lPlayEvent.mVideo.mbDisableCustomSoundtracks = true;
 
-                PostCommand16<20>(mpStateInterface, KI_CHANNEL_GUI_OUT);   // loading screen down
+                PostCommand16<20>(mpStateInterface);   // loading screen down
                 // X360 @0x8247E474..490 posts dword_830082A8. Its sole dynamic
                 // initializer hashes the empty string, which MakeHash returns as 0:
                 // stop the title/menu stream while the movie-owned stream is active.
-                MusicOnMenuStreamEvent lMusic(0);
+                MusicOnMenuStreamEvent lMusic; lMusic.muStreamNameHash = 0; lMusic.mbFlagA = false; lMusic.mbFlagB = false;
                 mpStateInterface->OutputGuiEvent<MusicOnMenuStreamEvent>(lMusic);
                 mbVideoFinished = false;
                 mpStateInterface->OutputGuiEvent<BrnGui::GuiEventPlayVideo>(lPlayEvent);
@@ -181,7 +181,7 @@ namespace BrnGui
                 return;
             }
             // No intro video: the phase completes immediately.
-            PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);
+            PostCommand16<70>(mpStateInterface);
             meState = E_FINISHED_VIDEO;
             break;
         }
@@ -190,12 +190,12 @@ namespace BrnGui
             if (!mbVideoFinished)
                 break;
             {
-                MusicOnMenuStreamEvent lMusic(static_cast<s32>(
-                    CgsSound::Playback::Name::MakeHash("Guns_And_Roses")));
+                MusicOnMenuStreamEvent lMusic; lMusic.muStreamNameHash = CgsSound::Playback::Name::MakeHash("Guns_And_Roses");
+                lMusic.mbFlagA = false; lMusic.mbFlagB = false;
                 mpStateInterface->OutputGuiEvent<MusicOnMenuStreamEvent>(lMusic);
             }
-            PostCommand16<19>(mpStateInterface, KI_CHANNEL_GUI_OUT);   // loading screen up
-            PostCommand16<70>(mpStateInterface, KI_CHANNEL_GUI_OUT);   // phase complete
+            PostCommand16<19>(mpStateInterface);   // loading screen up
+            PostCommand16<70>(mpStateInterface);   // phase complete
             meState = E_FINISHED_VIDEO;
             break;
 

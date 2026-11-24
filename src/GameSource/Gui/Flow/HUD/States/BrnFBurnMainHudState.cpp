@@ -71,17 +71,21 @@ namespace BrnGui
         struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
         {
             u8 mu8Flag;
-            u8 maPad[3];
-            GuiCommandEvent16(u8 lu8Flag = 0) : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            GuiCommandEvent16(u8 lu8Flag = 0) : mu8Flag(lu8Flag) {}
         };
 
         template <s32 N>
-        void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
+        void PostCommand16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
         {
             GuiCommandEvent16<N> lEvent(lu8Flag);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+            lpInterface->OutputGuiEvent(lEvent);
+        }
+
+        template <s32 N>
+        void PostViewState16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
+        {
+            GuiCommandEvent16<N> lEvent(lu8Flag);
+            lpInterface->OutputViewState(lEvent);
         }
 
         // 20-byte GuiEvent<25> "set option" record { 8, 25, 12, reserved, 1.0f } (the
@@ -92,7 +96,8 @@ namespace BrnGui
             s32 miReserved;   // +0x0C
             f32 mfValue;      // +0x10 (1.0f)
             explicit GuiOptionEvent20(s32 liReserved)
-                : CgsGui::GuiEvent<25>(8, 12), miReserved(liReserved), mfValue(1.0f) {}
+                : miReserved(liReserved), mfValue(1.0f) {}
+            GuiOptionEvent20() {}
         };
 
         // (The apt movie mount/unmount goes through StateInterface::PlayAptMovie, not a
@@ -105,21 +110,31 @@ namespace BrnGui
         // typed OutputViewState<T> instantiations reduce to these records).
         struct GuiShowHideEvent24 : public CgsGui::GuiEvent<213>
         {
-            s32 miShow;      // +0x0C
-            f32 mfValue;     // +0x10
-            u8  mu8Flag;     // +0x14
-            u8  maPad[3];
-            GuiShowHideEvent24(s32 liShow, f32 lfValue, u8 lu8Flag)
-                : CgsGui::GuiEvent<213>(12, 12), miShow(liShow), mfValue(lfValue), mu8Flag(lu8Flag)
-            { maPad[0] = maPad[1] = maPad[2] = 0; }
+            s32 miShow;      // payload +0x00
+            f32 mfValue;     // payload +0x04
+            u8  mu8Flag;     // payload +0x08 (sizeof 12: the {12, 213, 12} record)
         };
 
-        void PostShowHide24(CgsGui::StateInterface* lpInterface, s32 liChannel,
+        // The view-state post (OutputViewState, channel 41) and its internal-state mirror
+        // (OutputInternalState, channel 42).
+        void PostShowHide24(CgsGui::StateInterface* lpInterface,
                             s32 liShow, f32 lfValue, u8 lu8Flag)
         {
-            GuiShowHideEvent24 lEvent(liShow, lfValue, lu8Flag);
-            lpInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 24);
+            GuiShowHideEvent24 lEvent;
+            lEvent.miShow  = liShow;
+            lEvent.mfValue = lfValue;
+            lEvent.mu8Flag = lu8Flag;
+            lpInterface->OutputViewState(lEvent);
+        }
+
+        void PostShowHideInternal24(CgsGui::StateInterface* lpInterface,
+                                    s32 liShow, f32 lfValue, u8 lu8Flag)
+        {
+            GuiShowHideEvent24 lEvent;
+            lEvent.miShow  = liShow;
+            lEvent.mfValue = lfValue;
+            lEvent.mu8Flag = lu8Flag;
+            lpInterface->OutputInternalState(lEvent);
         }
 
         // [hud reveal gate 2026-08-25] THE FIX. This leaf used to `return 1;` -- hardcoding
@@ -275,8 +290,7 @@ namespace BrnGui
         mpStateInterface->RegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
         GuiOptionEvent20 lOption(1);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_VIEW_STATE, 20);
+        mpStateInterface->OutputViewState(lOption);
 
         // The FLAPT persistent HUD file: access pointers -> FlaptManager -> file 0 ->
         // root movie clip -> the RaceMainHUD_mc child, shown + timeline-reset.
@@ -368,7 +382,7 @@ namespace BrnGui
         mFriendsListChangeIcon.Construct("FriendListChange_mc", mpStateInterface, 0);
         mFriendsListChangeIcon.Prepare("FriendListChange_mc", lFile);
 
-        PostCommand16<94>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+        PostCommand16<94>(mpStateInterface, 0);
 
         // [H1] X360 OnEnter @0x8247B0E8 (asm h1_dump.txt): JunctionInfo then Odometer,
         // between the {1,94} post and the Ident animator. The X360 Odometer call carries
@@ -387,9 +401,9 @@ namespace BrnGui
         mfPpToggleNextTime  = 0.0f;    // +0x53CC := 0.0
         mfBoostAmountPrev   = 0.0f;    // +0x53D4 := 0.0
 
-        PostCommand16<215>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1);
-        PostCommand16<96>(mpStateInterface, KI_CHANNEL_GUI_OUT, 1);
-        PostCommand16<308>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+        PostViewState16<215>(mpStateInterface, 1);
+        PostCommand16<96>(mpStateInterface, 1);
+        PostCommand16<308>(mpStateInterface, 0);
 
         mbTrophyUnlockScanned = false;   // +0x53D8 := 0
     }
@@ -432,7 +446,7 @@ namespace BrnGui
         mEventHudAnimator.Run("transout");
         mOdometer.TransOutActiveText();
 
-        PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, 0);   // {12,213,flag0}
+        PostShowHide24(mpStateInterface, 1, 0.0f, 0);   // {12,213,flag0}
 
         if (mbSatNavEnabled)
         {
@@ -450,21 +464,21 @@ namespace BrnGui
             mRoadRuleComponent.EndTimers();   // [H2] X360 OnLeave @0x82480B88
         }
 
-        PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
-        PostCommand16<215>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
-        PostCommand16<94>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+        PostViewState16<214>(mpStateInterface, 0);
+        PostViewState16<215>(mpStateInterface, 0);
+        PostCommand16<94>(mpStateInterface, 0);
 
-        // { 2, 536, 12, hi256 } -- the X360 posts the 16-byte type-2 record id 536
-        // with the 0x0100 half-word flag.
+        // { 2, 536, 12 } + the GuiEventTickerClearMessages byte pair (DWARF
+        // BrnGuiEventTypeDefs.h:301/302) { 0, 1 }: ARTIST OnLeave @0x82480E20..0x82480E3C
+        // `stb 0` / `stb 1` into a scratch half-word, then one `sth` at wrapper +0xC.
         {
             struct GuiEvent536 : public CgsGui::GuiEvent<536>
             {
-                u16 mu16Pad;
-                u16 mu16Flag;
-                GuiEvent536() : CgsGui::GuiEvent<536>(2, 12), mu16Pad(0), mu16Flag(256) {}
+                bool mbForceFadeOut;
+                bool mbDeleteChallengeMessages;
+                GuiEvent536() : mbForceFadeOut(false), mbDeleteChallengeMessages(true) {}
             } lEvent;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT, 16);
+            mpStateInterface->OutputGuiEvent(lEvent);
         }
 
         // { 12, 204, 12, 5, 6, ... } -- the 24-byte id-204 record with the 5/6 pair.
@@ -474,10 +488,9 @@ namespace BrnGui
                 s32 miValueA;   // 5
                 s32 miValueB;   // 6
                 s32 miPad;
-                GuiEvent204() : CgsGui::GuiEvent<204>(12, 12), miValueA(5), miValueB(6), miPad(0) {}
+                GuiEvent204() : miValueA(5), miValueB(6), miPad(0) {}
             } lEvent;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_VIEW_STATE, 24);
+            mpStateInterface->OutputViewState(lEvent);
         }
     }
 
@@ -599,7 +612,7 @@ namespace BrnGui
         else
             DisableSatNavEventsFilter();
 
-        PostCommand16<555>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+        PostCommand16<555>(mpStateInterface, 0);
 
         if (mbInGameMessagesEnabled)
         {
@@ -681,16 +694,15 @@ namespace BrnGui
 
         if (mbRoadRulesEnabled)
         {
-            // { 8, 327, 16 } on the gui-out channel, then the road-rule begin sweep.
+            // { 8, 327, 16 } on the gui-out channel, then the road-rule begin sweep. The payload
+            // is GuiEventRoadRuleDataRequest's one CgsID (DWARF BrnGuiEventTypeDefs.h:1291
+            // mRoadId), 8-aligned: ARTIST 0x8247C758 `std r27(=0), 0x70` at wrapper +0x10.
             struct GuiEvent327 : public CgsGui::GuiEvent<327>
             {
-                s32 miPadA;
-                s32 miPadB;
-                s32 miPadC;
-                GuiEvent327() : CgsGui::GuiEvent<327>(8, 16), miPadA(0), miPadB(0), miPadC(0) {}
+                CgsID mRoadId;
+                GuiEvent327() : mRoadId(0) {}
             } lEvent;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lEvent), KI_CHANNEL_GUI_OUT, 24);
+            mpStateInterface->OutputGuiEvent(lEvent);
 
             // [H2] X360 UpdateWFInit @0x8247C710: replay any rule already live in the
             // cache (the by-type flags @cache+0xAC44) into the fresh panel.
@@ -714,23 +726,23 @@ namespace BrnGui
 
         if (liEngineState == 1)
         {
-            PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, 1);      // {12,213,flag1}
-            PostShowHide24(mpStateInterface, KI_CHANNEL_INTERNAL_STATE, 1, 0.0f, 1);  // ch42 mirror
+            PostShowHide24(mpStateInterface, 1, 0.0f, 1);      // {12,213,flag1}
+            PostShowHideInternal24(mpStateInterface, 1, 0.0f, 1);  // ch42 mirror
             // X360 @0x8247C710: BOTH halves of the "EventHud_Animator" pair -- the
             // apt-view-state write the movie's AS polls (field_A40) AND the FLAPT
             // goto-and-play (field_ACC). The apt write is what makes the HUD's master
             // transition play (the movie starts on its invisible frame).
             mEventHudAnimatorIcon.AddOutputAptViewState("apt_Transition", "visible", false);
             mEventHudAnimator.Run("visible");
-            PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1);
+            PostViewState16<214>(mpStateInterface, 1);
         }
         else
         {
             mEventHudAnimatorIcon.AddOutputAptViewState("apt_Transition", "invisible", false);
             mEventHudAnimator.Run("invisible");
-            PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
-            PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, 0);      // {12,213,flag0}
-            PostShowHide24(mpStateInterface, KI_CHANNEL_INTERNAL_STATE, 1, 0.0f, 0);
+            PostViewState16<214>(mpStateInterface, 0);
+            PostShowHide24(mpStateInterface, 1, 0.0f, 0);      // {12,213,flag0}
+            PostShowHideInternal24(mpStateInterface, 1, 0.0f, 0);
         }
 
         // [H3b] X360 UpdateWFInit: mirror the show record into the component.
@@ -872,7 +884,7 @@ namespace BrnGui
                 // Show/hide satnav passthrough: view record + the satnav mirror. The record
                 // is the one-byte GuiEventMiniMapSwitch; its byte is copied as-is.
                 const u8 lu8Show = *reinterpret_cast<const u8*>(lpEvent);
-                PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, lu8Show);
+                PostShowHide24(mpStateInterface, 1, 0.0f, lu8Show);
                 if (mbSatNavEnabled)   // [H3b] the X360 mirror of the same payload
                 {
                     SatNavShowHidePayload lMirror;
@@ -896,9 +908,9 @@ namespace BrnGui
                     {
                         mEventHudAnimatorIcon.AddOutputAptViewState("apt_Transition", "invisible", false);
                         mEventHudAnimator.Run("invisible");
-                        PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
-                        PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, 0);
-                        PostShowHide24(mpStateInterface, KI_CHANNEL_INTERNAL_STATE, 1, 0.0f, 0);
+                        PostViewState16<214>(mpStateInterface, 0);
+                        PostShowHide24(mpStateInterface, 1, 0.0f, 0);
+                        PostShowHideInternal24(mpStateInterface, 1, 0.0f, 0);
                         if (mbSatNavEnabled)   // [H3b] the X360 LABEL_46 mirror
                         {
                             SatNavShowHidePayload lMirror;
@@ -913,9 +925,9 @@ namespace BrnGui
                     {
                         mEventHudAnimatorIcon.AddOutputAptViewState("apt_Transition", "visible", false);
                         mEventHudAnimator.Run("visible");
-                        PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1);
-                        PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f, 1);
-                        PostShowHide24(mpStateInterface, KI_CHANNEL_INTERNAL_STATE, 1, 0.0f, 1);
+                        PostViewState16<214>(mpStateInterface, 1);
+                        PostShowHide24(mpStateInterface, 1, 0.0f, 1);
+                        PostShowHideInternal24(mpStateInterface, 1, 0.0f, 1);
                         if (mbSatNavEnabled)   // [H3b] the X360 LABEL_46 mirror
                         {
                             SatNavShowHidePayload lMirror;
@@ -951,10 +963,10 @@ namespace BrnGui
                 }
                 break;
             case 226:
-                PostCommand16<60>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
+                PostViewState16<60>(mpStateInterface, 0);
                 break;
             case 227:
-                PostCommand16<61>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
+                PostViewState16<61>(mpStateInterface, 0);
                 break;
             case 311:
                 if (mbJunctionInfoEnabled)
@@ -1082,11 +1094,7 @@ namespace BrnGui
                             GuiEventTrophyCarUnlock lTrophyCarUnlock;
                             lTrophyCarUnlock.meUnlockType = leUnlockType;
                             lTrophyCarUnlock.mTrophyCarID = lCarUnlockId;
-                            CgsGui::GuiEventWrapper<GuiEventTrophyCarUnlock, KI_CHANNEL_GUI_OUT>
-                                lTrophyCarUnlockRecord(lTrophyCarUnlock);
-                            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                                reinterpret_cast<const CgsModule::Event*>(&lTrophyCarUnlockRecord),
-                                KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lTrophyCarUnlockRecord)));
+                            mpStateInterface->OutputGuiEvent(lTrophyCarUnlock);
 
 
                             break;
@@ -1116,17 +1124,17 @@ namespace BrnGui
                 {
                     mEventHudAnimatorIcon.AddOutputAptViewState("apt_Transition", "transin", false);
                     mEventHudAnimator.Run("transin");
-                    PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1);
+                    PostViewState16<214>(mpStateInterface, 1);
                 }
                 else
                 {
                     mEventHudAnimatorIcon.AddOutputAptViewState("apt_Transition", "transout", false);
                     mEventHudAnimator.Run("transout");
-                    PostCommand16<214>(mpStateInterface, KI_CHANNEL_VIEW_STATE, 0);
+                    PostViewState16<214>(mpStateInterface, 0);
                 }
-                PostShowHide24(mpStateInterface, KI_CHANNEL_VIEW_STATE, 1, 0.0f,
+                PostShowHide24(mpStateInterface, 1, 0.0f,
                                static_cast<u8>(lpiPayload[0] == 1));
-                PostShowHide24(mpStateInterface, KI_CHANNEL_INTERNAL_STATE, 1, 0.0f,
+                PostShowHideInternal24(mpStateInterface, 1, 0.0f,
                                static_cast<u8>(lpiPayload[0] == 1));
                 if (mbSatNavEnabled)   // [H3b] the X360 mirror
                 {
@@ -1431,23 +1439,15 @@ namespace BrnGui
         {
             s32 miDisplayType;
             s32 miModeFilter;
-            u8  mu8Show;
-            u8  mau8Pad[3];
-            GuiEvent204(s32 liDisplayType, s32 liModeFilter, u8 lu8Show)
-                : CgsGui::GuiEvent<204>(12, 12)
-                , miDisplayType(liDisplayType)
-                , miModeFilter(liModeFilter)
-                , mu8Show(lu8Show)
-            {
-                mau8Pad[0] = mau8Pad[1] = mau8Pad[2] = 0;
-            }
+            u8  mu8Show;   // sizeof 12: the {12, 204, 12} record
         };
 
-        GuiEvent204 lRecord(0, meSatNavEventFilter, 1);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_VIEW_STATE, 24);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_INTERNAL_STATE, 24);
+        GuiEvent204 lRecord;
+        lRecord.miDisplayType = 0;
+        lRecord.miModeFilter  = meSatNavEventFilter;
+        lRecord.mu8Show       = 1;
+        mpStateInterface->OutputViewState(lRecord);
+        mpStateInterface->OutputInternalState(lRecord);
     }
 
     void FBurnMainHudState::DisableSatNavEventsFilter()
@@ -1456,20 +1456,13 @@ namespace BrnGui
         {
             s32 miDisplayType;
             s32 miModeFilter;
-            u8  mu8Show;
-            u8  mau8Pad[3];
-            GuiEvent204(s32 liDisplayType, s32 liModeFilter, u8 lu8Show)
-                : CgsGui::GuiEvent<204>(12, 12)
-                , miDisplayType(liDisplayType)
-                , miModeFilter(liModeFilter)
-                , mu8Show(lu8Show)
-            {
-                mau8Pad[0] = mau8Pad[1] = mau8Pad[2] = 0;
-            }
+            u8  mu8Show;   // sizeof 12: the {12, 204, 12} record
         };
 
-        GuiEvent204 lRecord(5, 6, 0);
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_VIEW_STATE, 24);
+        GuiEvent204 lRecord;
+        lRecord.miDisplayType = 5;
+        lRecord.miModeFilter  = 6;
+        lRecord.mu8Show       = 0;
+        mpStateInterface->OutputViewState(lRecord);
     }
 }

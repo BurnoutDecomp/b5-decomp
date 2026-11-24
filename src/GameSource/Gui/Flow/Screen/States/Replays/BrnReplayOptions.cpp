@@ -55,42 +55,46 @@ namespace
         u8  mbPspQuality;    // +0x12 (the export-quality toggle is on "$PSP_QUALITY")
         u8  muReserved;      // +0x13 (never written by the console)
         GuiReplayPlayReelWire()
-            : CgsGui::GuiEvent<526>(8, 12), miReel(0), mbExport(0), mbFlag11(0),
+            : miReel(0), mbExport(0), mbFlag11(0),
               mbPspQuality(0), muReserved(0) {}
     };
 
     // The director's camera-type request (console id 591): { 4, 591, 12 } + the camera, 16 bytes.
     struct GuiEventSetCameraTypeWire : public CgsGui::GuiEvent<591>
     {
-        s32 miCameraType;   // +0x0C (0 chase, 1 bumper)
-        explicit GuiEventSetCameraTypeWire(s32 liCameraType)
-            : CgsGui::GuiEvent<591>(4, 12), miCameraType(liCameraType) {}
+        s32 miCameraType;   // payload +0x00 (0 chase, 1 bumper)
     };
 
     // OutputGuiEvent<GuiOverlayRequest>: { 288, 184, 16, <pad>, request }, 304 bytes.
-    struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+    struct GuiOverlayRequestWire
     {
-        u32               muPad0C;    // +0x0C
-        GuiOverlayRequest mRequest;   // +0x10
-        GuiOverlayRequestWire()
-            : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16), muPad0C(0) {}
+        GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
+        GuiOverlayRequestWire() {}
     };
 
-    void PostClearScreen(CgsGui::StateInterface* lpStateInterface, s32 liChannel,
+    // The clear-screen record {8, 25, 12} on channel 40 (OutputGuiEvent) or 41 (OutputViewState).
+    void PostClearScreen(CgsGui::StateInterface* lpStateInterface,
                          CgsGui::GuiEventClearScreenSet::EClearScreen leClearScreen)
     {
         CgsGui::GuiEventClearScreenSet lEvent;
         lEvent.meClearScreen = leClearScreen;
         lEvent.mfAlpha       = 1.0f;
-        lpStateInterface->GetOutputEventQueue()->AddEvent(
-            &lEvent, liChannel, static_cast<s32>(sizeof(lEvent)));
+        lpStateInterface->OutputGuiEvent(lEvent);
+    }
+
+    void PostClearScreenViewState(CgsGui::StateInterface* lpStateInterface,
+                                  CgsGui::GuiEventClearScreenSet::EClearScreen leClearScreen)
+    {
+        CgsGui::GuiEventClearScreenSet lEvent;
+        lEvent.meClearScreen = leClearScreen;
+        lEvent.mfAlpha       = 1.0f;
+        lpStateInterface->OutputViewState(lEvent);
     }
 
     template <typename TWire>
     void PostOut(CgsGui::StateInterface* lpStateInterface, TWire& lrWire)
     {
-        lpStateInterface->GetOutputEventQueue()->AddEvent(
-            &lrWire, KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lrWire)));
+        lpStateInterface->OutputGuiEvent(lrWire);
     }
 }
 
@@ -127,10 +131,12 @@ void ReplayOptions::OnEnter()
     mOptionToggles.SetupGroup(E_OPTION_TOGGLE_COUNT, true);
 
     // This screen posts the clear-screen record on the plain out channel.
-    PostClearScreen(mpStateInterface, KI_CHANNEL_GUI_OUT,
+    PostClearScreen(mpStateInterface,
                     CgsGui::GuiEventClearScreenSet::E_CLEAR_SCREEN_INACTIVE);
 
-    GuiEventActivateCrashNav lDeactivate(false);
+    GuiEventActivateCrashNav lDeactivate;
+    lDeactivate.muActivate = 0u;
+    lDeactivate.muParam = 0;
     PostOut(mpStateInterface, lDeactivate);
 
     // Back from an export: confirm it.
@@ -138,7 +144,7 @@ void ReplayOptions::OnEnter()
     {
         GuiOverlayRequestWire lOverlay;
         lOverlay.mRequest.Construct("ReplayExOK");
-        PostOut(mpStateInterface, lOverlay);
+        PostOut(mpStateInterface, lOverlay.mRequest);
         mpGuiCache->mbReplayExporting = false;
     }
 }
@@ -308,7 +314,9 @@ void ReplayOptions::PlayReel(s32 liSlotIndex)
     lPlayReel.mbPspQuality = lpQualityToggle->mItemText.GetHighlightedIndex() == KI_OPTION_PSP_QUALITY;
     PostOut(mpStateInterface, lPlayReel);
 
-    GuiEventActivateCrashNav lActivate(true);
+    GuiEventActivateCrashNav lActivate;
+    lActivate.muActivate = 1u;
+    lActivate.muParam = 0;
     PostOut(mpStateInterface, lActivate);
 
     CGS_ASSERT(mpGuiCache->IsReplayInfoVisible(), "mpGuiCache->IsReplayInfoVisible()");
@@ -327,10 +335,10 @@ void ReplayOptions::PlayReel(s32 liSlotIndex)
     mpGuiCache->mbReplayShowCredits =
         mOptionToggles.GetSelectable(E_OPTION_TOGGLE_SHOW_CREDITS)->mItemText.GetHighlightedIndex() == KI_OPTION_ON;
 
-    GuiEventSetCameraTypeWire lCamera(mpGuiCache->miReplayCamera);
+    GuiEventSetCameraTypeWire lCamera; lCamera.miCameraType = mpGuiCache->miReplayCamera;
     PostOut(mpStateInterface, lCamera);
 
-    PostClearScreen(mpStateInterface, KI_CHANNEL_VIEW_STATE,
+    PostClearScreenViewState(mpStateInterface,
                     CgsGui::GuiEventClearScreenSet::E_CLEAR_SCREEN_ACTIVE);
 
     SendStateEvent("ADVANCE");

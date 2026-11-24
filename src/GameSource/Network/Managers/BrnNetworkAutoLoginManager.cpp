@@ -197,7 +197,7 @@ namespace BrnNetwork
             {
                 // (dev log) "NetworkRoadRulesManager::ProcessBeforeSimulation() - NOT logged in -
                 //            triggering signing in"
-                const BrnGui::GuiEventNetworkConnect lConnectEvent(LoginManagerBase::E_SIGN_IN_TYPE_SILENT);
+                BrnGui::GuiEventNetworkConnect lConnectEvent; lConnectEvent.miConnectType = LoginManagerBase::E_SIGN_IN_TYPE_SILENT;
                 lpNetworkManager->GetStateManager()->HandleConnectEvent(&lConnectEvent);
             }
         }

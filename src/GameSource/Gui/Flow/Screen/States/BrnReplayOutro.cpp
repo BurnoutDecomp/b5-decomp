@@ -40,19 +40,17 @@ namespace
     template <s32 N>
     struct GuiCommandEvent16 : public CgsGui::GuiEvent<N>
     {
-        u8  mu8Flag;        // +0x0C
-        u8  maPad[3];
+        u8  mu8Flag;        // payload +0x00 (sizeof 1: the {1, N, 12} record)
         GuiCommandEvent16(u8 lu8Flag = 0)
-            : CgsGui::GuiEvent<N>(1, 12), mu8Flag(lu8Flag) { maPad[0] = maPad[1] = maPad[2] = 0; }
+            : mu8Flag(lu8Flag) {}
     };
 
     // Post a 16-byte GuiEvent<N> { 1, N, 12 } command on the given channel.
     template <s32 N>
-    void PostCommand16(CgsGui::StateInterface* lpInterface, s32 liChannel, u8 lu8Flag = 0)
+    void PostCommand16(CgsGui::StateInterface* lpInterface, u8 lu8Flag = 0)
     {
         GuiCommandEvent16<N> lEvent(lu8Flag);
-        lpInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lEvent), liChannel, 16);
+        lpInterface->OutputGuiEvent(lEvent);
     }
 
     // 20-byte GuiEvent<25> "set option" command: header { 8, 25, 12 } then a reserved word
@@ -63,7 +61,7 @@ namespace
     {
         s32 miReserved;     // +0x0C (0)
         f32 mfValue;        // +0x10 (1.0f)
-        GuiOptionEvent20() : CgsGui::GuiEvent<25>(8, 12), miReserved(0), mfValue(1.0f) {}
+        GuiOptionEvent20() : miReserved(0), mfValue(1.0f) {}
     };
 
 
@@ -124,8 +122,8 @@ void ReplayOutro::OnLeave()
     // Post the two teardown command records onto the out-queue (channel 40):
     //   GuiEvent<528> { 1, 528, 12 }                (16 bytes)
     //   GuiEvent<215> { 1, 215, 12 } + flag byte 0  (16 bytes)
-    PostCommand16<528>(mpStateInterface, KI_CHANNEL_GUI_OUT);
-    PostCommand16<215>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+    PostCommand16<528>(mpStateInterface);
+    PostCommand16<215>(mpStateInterface, 0);
 }
 
 // ------------------------------------------------ UpdateLoadResources @ 0x824D5038
@@ -164,8 +162,7 @@ void ReplayOutro::UpdateRunning()
             SendStateEvent(lpacEvent);
 
             GuiOptionEvent20 lOption;   // GuiEvent<25> { 8, 25, 12, 0, 1.0f }
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lOption), KI_CHANNEL_GUI_OUT, 20);
+            mpStateInterface->OutputGuiEvent(lOption);
         }
 
         const CgsModule::Event* lpNextEvent = 0;

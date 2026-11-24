@@ -198,10 +198,10 @@ namespace
     // id 237 size 16 -- AddGuiEvent<BrnGui::GuiGameModeStarted> @0x823D4A50 (`li r5,0xED` /
     // `li r6,0x10` into VariableEventQueue<32768,16>::AddEvent). Posted by the case-34 arm
     // (E_ACTION_START_PLAYING_MODE) of TranslateGameActionsToGuiEvents @0x823E9CE0, which
-    // copies the action's first two words onto the stack record. The ONE consumer is
-    // GuiCache::RecEvent case 237 @0x8250DDF0 (`*(a1 + 40980) = 0`): it clears
-    // mbEventPreparedForModeStart and reads nothing else, so the record's payload word is the
-    // action's mode type and the header carries the 4-byte payload at +12.
+    // copies the action's landmark id to +0 and its mode type to +8 of the 16-byte record. The
+    // ONE consumer is GuiCache::RecEvent case 237 @0x8250DDF0 (`*(a1 + 40980) = 0`): it clears
+    // mbEventPreparedForModeStart and reads nothing else. The record is the payload alone
+    // (GuiEvent<237> is empty).
     // ⭐ WHY IT MATTERS (2026-09-10): RaceMainHudState::UpdateWFInit defers its reveal while
     // IsEventPreparedForModeStart() && mbPreRaceCountdown ("waiting for the countdown GO").
     // Without this arm the flag stayed up for the whole event, so pausing a RACE / BURNING
@@ -209,10 +209,10 @@ namespace
     // never came back (stunt runs / road rage arm no countdown, which is why they were fine).
     struct GameModeStartedWire237 : public CgsGui::GuiEvent<237>
     {
-        s32 miGameMode;                        // +0x0C  StartPlayingModeAction::meGameMode
-        explicit GameModeStartedWire237(s32 liGameMode)
-            : CgsGui::GuiEvent<237>(4, 12), miGameMode(liGameMode) {}
-    };
+        CgsID mDestinationLandmarkID;          // +0x00  `ld 8(action)` / `std 0x4D0` (0x823EBD5C)
+        s32   meGameMode;                      // +0x08  `lwz 0(action)` / `stw 0x4D8` (0x823EBD48)
+    };                                         // DWARF GuiGameModeStarted (h:4815/4816) names,
+                                               // ARTIST's X360 member order
     CGS_STATIC_ASSERT((sizeof(GameModeStartedWire237) == 16), "id 237 size 16");
 
     struct PreRaceFlyByEndWire164    {
@@ -931,7 +931,7 @@ namespace
             const BrnGameState::GameStateModuleIO::StartPlayingModeAction* lpStart =
                 reinterpret_cast<
                     const BrnGameState::GameStateModuleIO::StartPlayingModeAction*>(lpAction);
-            GameModeStartedWire237 lStarted(static_cast<s32>(lpStart->meGameMode));
+            GameModeStartedWire237 lStarted; lStarted.meGameMode = static_cast<s32>(lpStart->meGameMode); lStarted.mDestinationLandmarkID = lpStart->mDestinationLandmarkID;
             PushGuiEvent(lStarted, lpGuiInput);
             return true;
         }

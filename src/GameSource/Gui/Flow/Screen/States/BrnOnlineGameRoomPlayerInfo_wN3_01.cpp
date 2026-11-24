@@ -49,10 +49,7 @@ namespace BrnGui
         template <class TEvent>
         void OutputGuiEventRecord(CgsGui::StateInterface* lpStateInterface, TEvent& lrEvent)
         {
-            CgsGui::GuiEventWrapper<TEvent, KI_CHANNEL_GUI_OUT> lRecord(lrEvent);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord), lRecord.GetChannel(),
-                static_cast<s32>(sizeof(lRecord)));
+            lpStateInterface->OutputGuiEvent(lrEvent);
         }
 
         // Id 533, payload size 1 -- the screen-flow command the "back to driving" pages
@@ -82,15 +79,15 @@ namespace BrnGui
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<GuiEventRequestChallengeStatusPayload, 40>) == 16), "580 record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<GuiEventNetworkOutputPlayerTexture, 40>) == 20), "264 record is 20 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventWrapper<GuiEventRequestTraining, 40>) == 16), "572 record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "191 record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "191 record is 20 bytes");
 
         // ---- the shared command sequences ---------------------------------------------
         void PostActivateCrashNav(CgsGui::StateInterface* lpStateInterface, bool lbActivate)
         {
-            GuiEventActivateCrashNav lActivateCrashNav(lbActivate);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lActivateCrashNav), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lActivateCrashNav)));
+            GuiEventActivateCrashNav lActivateCrashNav;
+            lActivateCrashNav.muActivate = (lbActivate) ? 1u : 0u;
+            lActivateCrashNav.muParam = 0;
+            lpStateInterface->OutputGuiEvent(lActivateCrashNav);
         }
 
         void PostShowHideHud(CgsGui::StateInterface* lpStateInterface, bool lbShowHud)

@@ -36,10 +36,8 @@ namespace {
         GuiEventTickerClearMessages lClear;
         lClear.maData[0] = 0;
         lClear.maData[1] = 1;
-        CgsGui::GuiEventWrapper<GuiEventTickerClearMessages, KI_CHANNEL_GUI_OUT> lRecord(lClear);
-        CGS_STATIC_ASSERT((sizeof(lRecord) == 16), "the ticker-clear record is 16 bytes");
-        lpInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_GUI_OUT, sizeof(lRecord));
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventTickerClearMessages>) == 16), "the ticker-clear record is 16 bytes");
+        lpInterface->OutputGuiEvent(lClear);
     }
 
     // StartFreeburnChallengeTicker's four positional-parameter slots (64 characters each).
@@ -284,16 +282,11 @@ bool CrashedHudState::UpdateSetupState()
     mbImpactTimer = mpCache->miGameFlowState != 2;
     struct BoostVisibility : CgsGui::GuiEvent<214>
     {
-        u8 mbVisible;
-        u8 maPad[3];
-        BoostVisibility(bool lbVisible) : CgsGui::GuiEvent<214>(1, 12), mbVisible(lbVisible)
-        {
-            maPad[0] = 0;
-            maPad[1] = 0;
-            maPad[2] = 0;
-        }
+        u8 mbVisible;   // the one payload byte: {1, 214, 12} on channel 41
+        BoostVisibility(bool lbVisible) : mbVisible(lbVisible) {}
+        BoostVisibility() {}
     } lBoost(mbBoostBar);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lBoost), 41, sizeof(lBoost));
+    mpStateInterface->OutputViewState(lBoost);
     if (mbImpactTimer)
     {
         if (mbInImpactTime) EnterSteerWreckScreen();
@@ -557,11 +550,8 @@ void CrashedHudState::UpdateRunning()
 
         for (s32 liPost = 0; liPost < KI_TICKER_MESSAGE_POST_COUNT; ++liPost)
         {
-            CgsGui::GuiEventWrapper<GuiEventTickerCustomMessage, KI_CHANNEL_GUI_OUT> lRecord(lMessage);
-            CGS_STATIC_ASSERT((sizeof(lRecord) == 0x824), "the ticker message record is 0x824 bytes");
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lRecord)));
+            CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventTickerCustomMessage>) == 0x824), "the ticker message record is 0x824 bytes");
+            mpStateInterface->OutputGuiEvent(lMessage);
         }
     }
 }

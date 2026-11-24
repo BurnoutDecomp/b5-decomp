@@ -13,8 +13,7 @@ namespace {
     const char* KAPC_PLAYER_COUNTS[] = {"2", "3", "4", "5", "6", "7", "8"};
     template<class T> void Output(CgsGui::StateInterface* state, T& event)
     {
-        CgsGui::GuiEventWrapper<T, 40> wrapper(event);
-        state->GetOutputEventQueue()->AddEvent(reinterpret_cast<const CgsModule::Event*>(&wrapper), 40, sizeof(wrapper));
+        state->OutputGuiEvent(event);
     }
 }
 const s32 OnlineViewChallenges::maiEventToObserve[5] = {14, 21, 6, 64, 581};
@@ -37,16 +36,18 @@ void OnlineViewChallenges::OnEnter()
     mDownArrowAnimation.Construct("DownArrowAnimation", mpStateInterface, 0);
     meSubState = E_SUBSTATE_LOADING_SCREEN;
     mpGuiCache = 0;
-    GuiEventActivateCrashNav activate(false);
-    mpStateInterface->GetOutputEventQueue()->AddEvent(&activate, 40, sizeof(activate));
+    GuiEventActivateCrashNav activate;
+    activate.muActivate = 0u;
+    activate.muParam = 0;
+    mpStateInterface->OutputGuiEvent(activate);
     GuiEventShowHideHud hide = {};
     Output(mpStateInterface, hide);
     struct Request : CgsGui::GuiEvent<580>
     {
         u8 unused;
-        Request() : CgsGui::GuiEvent<580>(1, 12), unused(0) {}
+        Request() : unused(0) {}
     } request;
-    mpStateInterface->GetOutputEventQueue()->AddEvent(&request, 40, sizeof(request));
+    mpStateInterface->OutputGuiEvent(request);
 }
 
 // ARTIST 0x824A1EC8.
@@ -135,8 +136,9 @@ void OnlineViewChallenges::HandleControllerInputSelectParams(const s32* event)
     case 50:
         if (mpGuiCache->IsOnlineStartPending())
         {
-            CgsGui::GuiEventNetworkSuspension suspension(false);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(&suspension, 40, sizeof(suspension));
+            CgsGui::GuiEventNetworkSuspension suspension;
+            suspension.meSuspensionType = CgsGui::GuiEventNetworkSuspension::E_SUSPENSION_TYPE_SUSPEND;
+            mpStateInterface->OutputGuiEvent(suspension);
             mpGuiCache->SetOnlineStartPending(false);
             SendStateEvent("GO_BACK_EASY");
         }

@@ -112,57 +112,56 @@ namespace BrnGui
         struct GuiByteEventWire : public CgsGui::GuiEvent<N>
         {
             u8 mu8Value;    // +0x0C
-            u8 maPad[3];
 
             explicit GuiByteEventWire(u8 lu8Value)
-                : CgsGui::GuiEvent<N>(static_cast<u32>(sizeof(u8)), 12)
-                , mu8Value(lu8Value)
+                : mu8Value(lu8Value)
             {
-                maPad[0] = maPad[1] = maPad[2] = 0;
             }
+            GuiByteEventWire() {}
         };
 
         // { 288, 184, 16, <pad>, the 288-byte request }: 304 bytes.
-        struct GuiOverlayRequestWire : public CgsGui::GuiEvent<184>
+        struct GuiOverlayRequestWire
         {
-            u32               muPad0C;    // +0x0C
-            GuiOverlayRequest mRequest;   // +0x10
+            GuiOverlayRequest mRequest;   // the OutputGuiEvent payload
 
             GuiOverlayRequestWire()
-                : CgsGui::GuiEvent<184>(static_cast<u32>(sizeof(GuiOverlayRequest)), 16)
-                , muPad0C(0)
             {
             }
         };
 
-        CGS_STATIC_ASSERT((sizeof(GuiByteEventWire<1>) == 16), "byte record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiOverlayRequestWire) == 304), "overlay request record is 304 bytes");
-        CGS_STATIC_ASSERT((sizeof(GuiEventActivateCrashNav) == 20), "activate-crashnav record is 20 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiByteEventWire<1> >) == 16), "byte record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventActivateCrashNav>) == 20), "activate-crashnav record is 20 bytes");
 
+        // The one-byte records: OutputGuiEvent (channel 40) / OutputInternalState (channel 42).
         template <s32 N>
-        void PostByteEvent(CgsGui::StateInterface* lpStateInterface, s32 liChannel, u8 lu8Value)
+        void PostByteEvent(CgsGui::StateInterface* lpStateInterface, u8 lu8Value)
         {
             GuiByteEventWire<N> lRecord(lu8Value);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord), liChannel,
-                static_cast<s32>(sizeof(lRecord)));
+            lpStateInterface->OutputGuiEvent(lRecord);
+        }
+
+        template <s32 N>
+        void PostByteInternalState(CgsGui::StateInterface* lpStateInterface, u8 lu8Value)
+        {
+            GuiByteEventWire<N> lRecord(lu8Value);
+            lpStateInterface->OutputInternalState(lRecord);
         }
 
         void PostActivateCrashNav(CgsGui::StateInterface* lpStateInterface, bool lbActivate)
         {
-            GuiEventActivateCrashNav lRecord(lbActivate);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lRecord)));
+            GuiEventActivateCrashNav lRecord;
+            lRecord.muActivate = (lbActivate) ? 1u : 0u;
+            lRecord.muParam = 0;
+            lpStateInterface->OutputGuiEvent(lRecord);
         }
 
         void PostOverlayRequest(CgsGui::StateInterface* lpStateInterface, const char* lpcOverlayId)
         {
             GuiOverlayRequestWire lWire;
             lWire.mRequest.Construct(lpcOverlayId);
-            lpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lWire), KI_CHANNEL_GUI_OUT,
-                static_cast<s32>(sizeof(lWire)));
+            lpStateInterface->OutputGuiEvent(lWire.mRequest);
         }
     }
 
@@ -174,9 +173,9 @@ namespace BrnGui
 
         meSubState = E_SUBSTATE_LOADING_SCREEN;
 
-        PostByteEvent<KI_GUI_EVENT_SHOW_HIDE_HUD>(mpStateInterface, KI_CHANNEL_GUI_INTERNAL, 0);
+        PostByteInternalState<KI_GUI_EVENT_SHOW_HIDE_HUD>(mpStateInterface, 0);
         PostActivateCrashNav(mpStateInterface, false);
-        PostByteEvent<KI_GUI_EVENT_CAR_CONTROL_CHANGE>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+        PostByteEvent<KI_GUI_EVENT_CAR_CONTROL_CHANGE>(mpStateInterface, 0);
 
         mpGuiCache = 0;
     }
@@ -189,8 +188,8 @@ namespace BrnGui
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
         PostActivateCrashNav(mpStateInterface, true);
-        PostByteEvent<KI_GUI_EVENT_SCREEN_CLOSED>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
-        PostByteEvent<KI_GUI_EVENT_CAR_CONTROL_CHANGE>(mpStateInterface, KI_CHANNEL_GUI_OUT, 1);
+        PostByteEvent<KI_GUI_EVENT_SCREEN_CLOSED>(mpStateInterface, 0);
+        PostByteEvent<KI_GUI_EVENT_CAR_CONTROL_CHANGE>(mpStateInterface, 1);
     }
 
     // Drain the in-queue, then update the menu and step the load sequencer.
@@ -337,7 +336,7 @@ namespace BrnGui
                         break;
 
                     case KI_OPTION_FINISH_ROUND:
-                        PostByteEvent<KI_GUI_EVENT_DEBUG_FINISH_ROUND>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+                        PostByteEvent<KI_GUI_EVENT_DEBUG_FINISH_ROUND>(mpStateInterface, 0);
                         SendStateEvent("GO_BACK");
                         break;
 
@@ -363,7 +362,7 @@ namespace BrnGui
         if (lpPayload->mOverlayId == CgsIDCompress(KAC_LEAVE_GAME_QUESTION_OVERLAY) &&
             lpPayload->meLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK)
         {
-            PostByteEvent<KI_GUI_EVENT_LEAVE_GAME>(mpStateInterface, KI_CHANNEL_GUI_OUT, 0);
+            PostByteEvent<KI_GUI_EVENT_LEAVE_GAME>(mpStateInterface, 0);
         }
     }
 }

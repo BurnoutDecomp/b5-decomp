@@ -79,7 +79,7 @@ namespace BrnGui
         // type (BrnOnlineGameRoomPlayerInfo_wH_08.cpp carries the identical view).
         const u32 KU_WIRE_ID_AUDIO_TRIGGER = 457;   // X360 `li r11, 0x1C9`
 
-        typedef CgsGui::GuiEventWrapper<GuiAudioTriggerEvent, 40> GuiAudioTriggerWire;
+        typedef CgsGui::GuiEventOut<GuiAudioTriggerEvent> GuiAudioTriggerWire;
 
         // Record-size pin. The payload is pointer-free, so the X360's AddEvent size
         // immediate must survive unchanged on the x64 host; if a host layout ever drifts,
@@ -211,10 +211,7 @@ namespace BrnGui
 
         GuiAudioTriggerEvent lAudioPayload;
         lAudioPayload.Construct(KI_AUDIO_ACTION_MENU_CUE, "", lpcLabel, "");
-        GuiAudioTriggerWire lAudio(lAudioPayload);
 
-        mpStateInterface->GetOutputEventQueue()->AddEvent(
-            reinterpret_cast<const CgsModule::Event*>(&lAudio), KI_CHANNEL_GUI_OUT,
-            static_cast<s32>(sizeof(lAudio)));
+        mpStateInterface->OutputGuiEvent(lAudioPayload);
     }
 }

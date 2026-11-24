@@ -368,10 +368,7 @@ namespace
             lRoadSignStatus.mpRoadSignIcons = &mIcons[0];
             lRoadSignStatus.mfScaleFactor   = lfScaleFactor * 0.01f;
 
-            CgsGui::GuiEventWrapper<GuiEventRoadSignIconStatus, KI_CHANNEL_GUI_EVENT_OUT> lRecord(lRoadSignStatus);
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lRecord),
-                lRecord.GetChannel(), static_cast<s32>(sizeof(lRecord)));
+            mpStateInterface->OutputGuiEvent(lRoadSignStatus);
 
         }
     }

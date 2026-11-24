@@ -91,9 +91,6 @@ namespace BrnGui
             GuiEventNetworkGameOptionsRequest mRequest;   // +0x0C (never written)
 
             GuiEventNetworkGameOptionsRequestWire()
-                : NetworkGameOptionsRequestHeader(
-                      static_cast<u32>(sizeof(GuiEventNetworkGameOptionsRequest)),
-                      static_cast<u32>(sizeof(NetworkGameOptionsRequestHeader)))
             {
             }
         };
@@ -102,10 +99,8 @@ namespace BrnGui
         // word is 1 and whose payload offset word is 12. All three survive on the host.
         typedef char KAC_ASSERT_REQUEST_PAYLOAD_SIZE[
             sizeof(GuiEventNetworkGameOptionsRequest) == 1 ? 1 : -1];
-        typedef char KAC_ASSERT_REQUEST_HEADER_SIZE[
-            sizeof(NetworkGameOptionsRequestHeader) == 12 ? 1 : -1];
         typedef char KAC_ASSERT_REQUEST_WIRE_SIZE[
-            sizeof(GuiEventNetworkGameOptionsRequestWire) == 16 ? 1 : -1];
+            sizeof(CgsGui::GuiEventOut<GuiEventNetworkGameOptionsRequestWire>) == 16 ? 1 : -1];
     }
 
     // ------------------------------------------------------ HandleGuiCacheEvent @0x824A3DD8
@@ -136,9 +131,7 @@ namespace BrnGui
             }
 
             GuiEventNetworkGameOptionsRequestWire lGameOptionsRequest;
-            mpStateInterface->GetOutputEventQueue()->AddEvent(
-                reinterpret_cast<const CgsModule::Event*>(&lGameOptionsRequest),
-                KI_CHANNEL_GUI_OUT, static_cast<s32>(sizeof(lGameOptionsRequest)));
+            mpStateInterface->OutputGuiEvent(lGameOptionsRequest);
         }
 
         // ---- challenges page: refresh the select-button state -------------------------
