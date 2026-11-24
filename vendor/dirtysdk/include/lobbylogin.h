@@ -45,6 +45,7 @@ enum LobbyLoginAlertE
     LOBBYLOGIN_ALERT_DEACTIVATED_EMAIL = 26,
     LOBBYLOGIN_NUMALERTS               = 27
 };
+typedef enum LobbyLoginAlertE LobbyLoginAlertE;   // DirtySDK is C
 
 // The current login "context" (which step of the login flow is active). The
 // ServerInterfaceConnection maps these onto its own ELoginStatus 1:1.
@@ -67,6 +68,7 @@ enum LobbyLoginContextE
     LOBBYLOGIN_NUMCONTEXTS             = 13,
     LOBBYLOGIN_CONTEXT_PREVIOUS        = 4096
 };
+typedef enum LobbyLoginContextE LobbyLoginContextE;   // DirtySDK is C
 
 // The transient status within the current context.
 enum LobbyLoginStatusE
@@ -78,8 +80,10 @@ enum LobbyLoginStatusE
     LOBBYLOGIN_STATUS_OFFLINE = 4,
     LOBBYLOGIN_NUMSTATUS      = 5
 };
+typedef enum LobbyLoginStatusE LobbyLoginStatusE;   // DirtySDK is C
 
 // One entry of the alert table handed to LobbyLoginCreate (LOBBYLOGIN_NUMALERTS entries).
+typedef struct LobbyLoginAlertT LobbyLoginAlertT;   // DirtySDK is C
 struct LobbyLoginAlertT
 {
     s32         uFlags;
@@ -88,6 +92,7 @@ struct LobbyLoginAlertT
     const char* pFooter;
 };
 
+typedef struct LobbyLoginRefT LobbyLoginRefT;   // DirtySDK is C
 struct LobbyLoginRefT;   // opaque
 
 // Completion callback TYPE: (login ref, the submitted context, its status, user data).

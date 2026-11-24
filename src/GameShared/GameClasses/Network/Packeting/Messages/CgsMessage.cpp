@@ -34,8 +34,7 @@
 // All offsets/stores are store-for-store faithful to the X360 pseudocode + asm.
 // Members are referenced by name; asserts use the house CGS_ASSERT machinery.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h".
 
 namespace CgsNetwork
 {
@@ -659,7 +658,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
             CgsDev::Assert::MessageAt(
-                "lu16Frame != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 594 /* ARTIST 0x8257D624 */));
+                "lu16Frame != KU16_INVALID_FRAME", __FILE__, 594 /* ARTIST 0x8257D624 */));
         SetType(leType);
         mu16Frame = lu16Frame;
         mx8Flags |= KX8_FLAGS_VALID;
@@ -669,7 +668,7 @@ namespace CgsNetwork
     void Message::PrepareAck(s32 leType, u16 lu16Frame, u8 lu8GameID)
     {
         CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
-            CgsDev::Assert::MessageAt("!IsMessageValid()", KAC_ARTIST_ASSERT_FILE, 888 /* ARTIST 0x8286F4BC */));
+            CgsDev::Assert::MessageAt("!IsMessageValid()", __FILE__, 888 /* ARTIST 0x8286F4BC */));
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_ACK;
         SetType(leType);
@@ -681,7 +680,7 @@ namespace CgsNetwork
     void Message::PrepareNack(s32 leType, u16 lu16Frame, u8 lu8GameID)
     {
         CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
-            CgsDev::Assert::MessageAt("!IsMessageValid()", KAC_ARTIST_ASSERT_FILE, 915 /* ARTIST 0x8286F53C */));
+            CgsDev::Assert::MessageAt("!IsMessageValid()", __FILE__, 915 /* ARTIST 0x8286F53C */));
         mu16Frame = lu16Frame;
         mx8Flags  = KX8_FLAGS_NACK;
         SetType(leType);
@@ -789,8 +788,9 @@ namespace CgsNetwork
 
         const bool lbPacked = Pack(lacTmpBuffer, 0, KI_MAX_PACKED_MESSAGE_SIZE * 8,
                                    &liMessageSizeInBits);
-        CGS_ASSERT(lbPacked,
-                   "Pack(lacTmpBuffer, 0, KI_MAX_PACKED_MESSAGE_SIZE*8, &liMessageSizeInBits)");
+        CGS_ASSERT(lbPacked, CgsDev::Assert::MessageAt(
+            "Pack(lacTmpBuffer, 0, KI_MAX_PACKED_MESSAGE_SIZE*8, &liMessageSizeInBits)",
+            __FILE__, 416 /* ARTIST 0x82880EB4 */));
 
         return (liMessageSizeInBits + 7) / 8;
     }
@@ -807,7 +807,9 @@ namespace CgsNetwork
     {
         const XMVECTOR lvMinusOne = { -1.0f, -1.0f, -1.0f, 0.0f };
         const XMVECTOR lvPlusOne = { 1.0f, 1.0f, 1.0f, 0.0f };
-        CGS_ASSERT(lpfRollOut && lpfPitchOut && lpfYawOut, "lpfRollOut && lpfPitchOut && lpfYawOut");
+        CGS_ASSERT(lpfRollOut && lpfPitchOut && lpfYawOut, CgsDev::Assert::MessageAt(
+            "lpfRollOut && lpfPitchOut && lpfYawOut",
+            __FILE__, 828 /* ARTIST 0x82881680 */));
         const XMVECTOR lvZAxis = __vminfp(__vmaxfp(__lvx(&lMatrix.zAxis, 0), lvMinusOne), lvPlusOne);
         const XMVECTOR lvXAxis = __vminfp(__vmaxfp(__lvx(&lMatrix.xAxis, 0), lvMinusOne), lvPlusOne);
         const XMVECTOR lvYAxis = __vminfp(__vmaxfp(__lvx(&lMatrix.yAxis, 0), lvMinusOne), lvPlusOne);

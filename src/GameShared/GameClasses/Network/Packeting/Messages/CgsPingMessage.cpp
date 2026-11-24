@@ -28,8 +28,7 @@
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsPingMessage.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsPingMessage.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\Messages\\CgsPingMessage.cpp".
 
 namespace CgsNetwork
 {
@@ -64,7 +63,7 @@ namespace CgsNetwork
             mfPingTime = lfPingTime;                                 // stfs @ +0x20
             Message::PrepareForSend(KI_E_MESSAGE_TYPE_PING, lu16Frame);
             CGS_ASSERT(!IsReliable(),
-                CgsDev::Assert::MessageAt("!IsReliable()", KAC_ARTIST_ASSERT_FILE, 88 /* ARTIST 0x82882684 */));              // vtable slot0
+                CgsDev::Assert::MessageAt("!IsReliable()", __FILE__, 88 /* ARTIST 0x82882684 */));              // vtable slot0
         }
     }
 
@@ -122,7 +121,7 @@ namespace CgsNetwork
             mfPingTime = lfPingTime;                                 // stfs @ +0x20
             Message::PrepareForSend(KI_E_MESSAGE_TYPE_PING_REPLY, lu16Frame);
             CGS_ASSERT(!IsReliable(),
-                CgsDev::Assert::MessageAt("!IsReliable()", KAC_ARTIST_ASSERT_FILE, 253 /* ARTIST 0x8288271C */));              // vtable slot0
+                CgsDev::Assert::MessageAt("!IsReliable()", __FILE__, 253 /* ARTIST 0x8288271C */));              // vtable slot0
         }
     }
 

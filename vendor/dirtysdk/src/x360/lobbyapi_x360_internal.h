@@ -6,12 +6,18 @@
 
 #include <stddef.h>
 
+typedef struct ProtoAriesRefT ProtoAriesRefT;   // DirtySDK is C
 struct ProtoAriesRefT;
+typedef struct PingManagerRefT PingManagerRefT;   // DirtySDK is C
 struct PingManagerRefT;
+typedef struct ProtoFilterRefT ProtoFilterRefT;   // DirtySDK is C
 struct ProtoFilterRefT;
+typedef struct LobbyApiXenonRefT LobbyApiXenonRefT;   // DirtySDK is C
 struct LobbyApiXenonRefT;
+typedef struct LobbyListRefT LobbyListRefT;   // DirtySDK is C
 struct LobbyListRefT;
 
+typedef struct HasherT HasherT;   // DirtySDK is C
 struct HasherT
 {
     HasherT* next;
@@ -23,6 +29,7 @@ struct HasherT
     } key;
 };
 
+typedef struct HashEnumT HashEnumT;   // DirtySDK is C
 struct HashEnumT
 {
     s32 idx;
@@ -31,6 +38,7 @@ struct HashEnumT
 
 typedef s32 (HasherCompareF)(const char*, const char*);
 
+typedef struct HasherRef HasherRef;   // DirtySDK is C
 struct HasherRef
 {
     s32 memgroup;
@@ -44,6 +52,7 @@ struct HasherRef
     HasherCompareF* compare;
 };
 
+typedef struct LobbyApiRoomCriteriaT LobbyApiRoomCriteriaT;   // DirtySDK is C
 struct LobbyApiRoomCriteriaT
 {
     u32 uFlags;
@@ -52,6 +61,7 @@ struct LobbyApiRoomCriteriaT
     u32 uVals[8];
 };
 
+typedef struct LobbyGlobalCBRefT LobbyGlobalCBRefT;   // DirtySDK is C
 struct LobbyGlobalCBRefT
 {
     s32                 eType;
@@ -59,6 +69,7 @@ struct LobbyGlobalCBRefT
     void*               pUserData;
 };
 
+typedef struct LobbyCBQueueRefT LobbyCBQueueRefT;   // DirtySDK is C
 struct LobbyCBQueueRefT
 {
     s32                 iId;
@@ -69,6 +80,7 @@ struct LobbyCBQueueRefT
     void*               pUserData;
 };
 
+typedef struct LobbyApiServerStatT LobbyApiServerStatT;   // DirtySDK is C
 struct LobbyApiServerStatT
 {
     s32 iEnabled;
@@ -81,6 +93,7 @@ struct LobbyApiServerStatT
     u32 uGamesCompleted;
 };
 
+typedef struct LobbyDispListT LobbyDispListT;   // DirtySDK is C
 struct LobbyDispListT
 {
     HasherRef*          pHash;
@@ -99,6 +112,7 @@ struct LobbyListRefT
 // The lobby room record begins with the DecFIGS fields below. ARTIST reads
 // popul at +0x10 in LobbyApiStatus (0x82B1ABAC) and name at +0x24 in
 // LobbyApiListFindByName (0x82B22E7C).
+typedef struct LobbyApiRoomRecordPrefixT LobbyApiRoomRecordPrefixT;   // DirtySDK is C
 struct LobbyApiRoomRecordPrefixT
 {
     s32 iIdent;
@@ -118,6 +132,7 @@ struct LobbyApiRoomRecordPrefixT
     u8  aStructure[44];
 };
 
+typedef struct LobbyApiRankRecordT LobbyApiRankRecordT;   // DirtySDK is C
 struct LobbyApiRankRecordT
 {
     s32  iPoints;
@@ -127,6 +142,7 @@ struct LobbyApiRankRecordT
     char strStats[260];
 };
 
+typedef struct LobbyApiUserSetMemberT LobbyApiUserSetMemberT;   // DirtySDK is C
 struct LobbyApiUserSetMemberT
 {
     s32  iIdent;
@@ -139,6 +155,7 @@ struct LobbyApiUserSetMemberT
     char strMachineAddr[64];
 };
 
+typedef struct LobbyApiXenonFilterRequestT LobbyApiXenonFilterRequestT;   // DirtySDK is C
 struct LobbyApiXenonFilterRequestT
 {
     s32  iCallbackID;
@@ -151,12 +168,14 @@ struct LobbyApiXenonFilterRequestT
     char strRequest[1024];
 };
 
+typedef struct LobbyApiXenonContextT LobbyApiXenonContextT;   // DirtySDK is C
 struct LobbyApiXenonContextT
 {
     u32 uContextID;
     u32 uValue;
 };
 
+typedef struct LobbyApiXenonSearchStateT LobbyApiXenonSearchStateT;   // DirtySDK is C
 struct LobbyApiXenonSearchStateT
 {
     LobbyApiXenonContextT aContexts[10];
@@ -182,6 +201,7 @@ struct LobbyApiXenonRefT
 // Private X360 SDK layout. The ARTIST constructor allocates 8,388 bytes and
 // stores LobbyApiXenonCreate at +0x10; the status/callback/list code pins the
 // remaining offsets below. DecFIGS supplies member order and names.
+typedef struct LobbyApiRefT LobbyApiRefT;   // DirtySDK is C
 struct LobbyApiRefT
 {
     ProtoAriesRefT*      net;                // +0x000
@@ -334,10 +354,14 @@ CGS_STATIC_ASSERT(offsetof(LobbyApiRefT, snapopen) == 0x1adc,
 CGS_STATIC_ASSERT(offsetof(LobbyApiRefT, strServerName) == 0x2084,
                   "LobbyApiRefT::strServerName");
 
+#ifdef __cplusplus
 extern "C"
 {
+#endif
     LobbyApiUserT* LobbyApiGetUserInfo(LobbyApiRefT* pLobbyApi, const char* pUserName);
     void LobbyApiExtractUserRecord(LobbyApiUserT* pUser, const char* pData);
+#ifdef __cplusplus
 }
+#endif
 
 #endif // DIRTYSDK_X360_LOBBYAPI_INTERNAL_H

@@ -13,6 +13,7 @@
 // in this build, so IDA mis-labels it; the menu name and the matching Unregister pin its identity).
 
 #include "GameSource/Network/Debug Components/BrnNetworkImageManagerDebugComponent.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
 
 namespace BrnNetwork
@@ -26,10 +27,14 @@ namespace BrnNetwork
         miNumEncodes   = 0;
         mbRenderImage  = false;
 
-        CGS_ASSERT( lpImageManager != 0, "lpImageManager" );
+        CGS_ASSERT(lpImageManager != 0, CgsDev::Assert::MessageAt(
+            "lpImageManager",
+            __FILE__, 59 /* ARTIST 0x82586488 */));
         mpImageManager = lpImageManager;
 
-        CGS_ASSERT( lpTextureCompressor != 0, "lpTextureCompressor" );
+        CGS_ASSERT(lpTextureCompressor != 0, CgsDev::Assert::MessageAt(
+            "lpTextureCompressor",
+            __FILE__, 62 /* ARTIST 0x825864B0 */));
         mpTextureCompressor = lpTextureCompressor;
 
         Register();

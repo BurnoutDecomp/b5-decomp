@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"   // GetConnectionData
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "netgamelink.h"                                                // NetGameLinkStatus
@@ -18,7 +19,9 @@ u32 PlayerManager::GetTotalBytesSent()
     while (GetNextRemotePlayerID(&lPlayerID))
     {
         const NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
-        CGS_ASSERT(lpNetworkPlayer, "lpNetworkPlayer");
+        CGS_ASSERT(lpNetworkPlayer, CgsDev::Assert::MessageAt(
+            "lpNetworkPlayer",
+            __FILE__, 2134 /* ARTIST 0x828741B8 */));
 
         u32 luRate = 0;
         if (lpNetworkPlayer->GetConnectionData().IsValid())
@@ -43,7 +46,9 @@ u32 PlayerManager::GetTotalBytesSentToDirtySock()
     while (GetNextRemotePlayerID(&lPlayerID))
     {
         const NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
-        CGS_ASSERT(lpNetworkPlayer, "lpNetworkPlayer");
+        CGS_ASSERT(lpNetworkPlayer, CgsDev::Assert::MessageAt(
+            "lpNetworkPlayer",
+            __FILE__, 2162 /* ARTIST 0x828742E0 */));
 
         u32 luRate = 0;
         if (lpNetworkPlayer->GetConnectionData().IsValid())
@@ -68,7 +73,9 @@ u32 PlayerManager::GetTotalBytesSentWithOverhead()
     while (GetNextRemotePlayerID(&lPlayerID))
     {
         const NetworkPlayer* lpNetworkPlayer = GetPlayerByID(lPlayerID);
-        CGS_ASSERT(lpNetworkPlayer, "lpNetworkPlayer");
+        CGS_ASSERT(lpNetworkPlayer, CgsDev::Assert::MessageAt(
+            "lpNetworkPlayer",
+            __FILE__, 2191 /* ARTIST 0x82874408 */));
 
         u32 luRate = 0;
         if (lpNetworkPlayer->GetConnectionData().IsValid())

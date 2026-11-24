@@ -10,10 +10,12 @@
 // player-info component is the only caller. PC body: ../src/pc/lobbymiscpc.cpp.
 
 // Opaque "find user" module handle.
+typedef struct LobbyFindUserT LobbyFindUserT;   // DirtySDK is C
 struct LobbyFindUserT;
 
 // The lobby user record handed to a find-user completion callback (defined with the lobby
 // API; this module only passes it on).
+typedef struct LobbyApiUserT LobbyApiUserT;   // DirtySDK is C
 struct LobbyApiUserT;
 
 // Find-user completion callback TYPE: (user data, persona name, resolved user record). The

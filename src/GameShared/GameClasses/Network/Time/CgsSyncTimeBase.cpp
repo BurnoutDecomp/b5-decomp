@@ -17,8 +17,7 @@
 // offsets in the asm (e.g. the 0x38-byte SyncTimeMessage stride, meMessageMode @ +0x32C)
 // are the platform layout the natively-laid-out C++ struct stands in for.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeBase.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network\\Time\\CgsSyncTimeBase.cpp".
 
 namespace CgsNetwork
 {
@@ -82,7 +81,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT(lPlayerID != KI_INVALID_PLAYER_ID,
             CgsDev::Assert::MessageAt(
-                "lPlayerID != K_INVALID_PLAYER_ID", KAC_ARTIST_ASSERT_FILE, 246 /* ARTIST 0x8287D164 */));
+                "lPlayerID != K_INVALID_PLAYER_ID", __FILE__, 246 /* ARTIST 0x8287D164 */));
 
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_SYNC_PLAYERS; ++liPlayerIndex)
         {
@@ -205,10 +204,10 @@ namespace CgsNetwork
     void SyncTimeMessageManager::SwitchMode(EMessageMode leMessageMode)
     {
         CGS_ASSERT(leMessageMode >= 0,
-            CgsDev::Assert::MessageAt("leMessageMode >= 0", KAC_ARTIST_ASSERT_FILE, 305 /* ARTIST 0x8288AC44 */));
+            CgsDev::Assert::MessageAt("leMessageMode >= 0", __FILE__, 305 /* ARTIST 0x8288AC44 */));
         CGS_ASSERT(leMessageMode <= E_MESSAGE_MODE_NONE,
             CgsDev::Assert::MessageAt(
-                "leMessageMode <= E_MESSAGE_MODE_NONE", KAC_ARTIST_ASSERT_FILE, 306 /* ARTIST 0x8288AC68 */));
+                "leMessageMode <= E_MESSAGE_MODE_NONE", __FILE__, 306 /* ARTIST 0x8288AC68 */));
 
         meMessageMode = leMessageMode;
 

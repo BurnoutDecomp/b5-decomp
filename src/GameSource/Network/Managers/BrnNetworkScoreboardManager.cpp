@@ -36,8 +36,7 @@
 #include <cstdlib>   // atoi, qsort
 #include "types.hpp"   // uintptr_t (this <-> s32 user-data round-trip)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboardManager.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboardManager.cpp".
 
 namespace BrnNetwork
 {
@@ -156,17 +155,17 @@ namespace BrnNetwork
                                     BrnNetwork::BrnNetworkModule* lpModule)
     {
         CGS_ASSERT(lpModule != 0,
-            CgsDev::Assert::MessageAt("lpModule", KAC_ARTIST_ASSERT_FILE, 128 /* ARTIST 0x825471E0 */));
+            CgsDev::Assert::MessageAt("lpModule", __FILE__, 128 /* ARTIST 0x825471E0 */));
         mpNetworkModule   = lpModule;
         mpServerInterface = lpServerInterface;
         CGS_ASSERT(lpServerInterface != 0,
-            CgsDev::Assert::MessageAt("mpServerInterface", KAC_ARTIST_ASSERT_FILE, 132 /* ARTIST 0x8254720C */));
+            CgsDev::Assert::MessageAt("mpServerInterface", __FILE__, 132 /* ARTIST 0x8254720C */));
 
         // X360: mpRankings = mpServerInterface->maComponents[E_COMPONENTS_RANKINGS].mpComponent.
         mpRankings = reinterpret_cast<CgsNetwork::ServerInterfaceRankings*>(
             lpServerInterface->GetRankingsComponent());
         CGS_ASSERT(mpRankings != 0,
-            CgsDev::Assert::MessageAt("mpRankings", KAC_ARTIST_ASSERT_FILE, 135 /* ARTIST 0x82547238 */));
+            CgsDev::Assert::MessageAt("mpRankings", __FILE__, 135 /* ARTIST 0x82547238 */));
 
         miCurrentView      = KI_INVALID_HEADING;
         miCurrentVariation = KI_INVALID_HEADING;
@@ -316,13 +315,13 @@ namespace BrnNetwork
             static_cast<const ScoreboardRowSortData*>(lpData2);
 
         CGS_ASSERT(lpSortData1 != 0,
-            CgsDev::Assert::MessageAt("lpSortData1", KAC_ARTIST_ASSERT_FILE, 1236 /* ARTIST 0x8254766C */));
+            CgsDev::Assert::MessageAt("lpSortData1", __FILE__, 1236 /* ARTIST 0x8254766C */));
         CGS_ASSERT(lpSortData2 != 0,
-            CgsDev::Assert::MessageAt("lpSortData2", KAC_ARTIST_ASSERT_FILE, 1237 /* ARTIST 0x82547690 */));
+            CgsDev::Assert::MessageAt("lpSortData2", __FILE__, 1237 /* ARTIST 0x82547690 */));
         CGS_ASSERT(lpSortData1->mbAscending == lpSortData2->mbAscending,
             CgsDev::Assert::MessageAt(
                 "lpSortData1->mbAscending == lpSortData2->mbAscending",
-                KAC_ARTIST_ASSERT_FILE, 1238 /* ARTIST 0x825476BC */));
+                __FILE__, 1238 /* ARTIST 0x825476BC */));
 
         int liRetVal;
         if (lpSortData1->miScore > lpSortData2->miScore)

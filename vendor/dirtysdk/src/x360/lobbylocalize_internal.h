@@ -2,6 +2,8 @@
 #include "types.hpp"
 
 enum DateFormat_E { _DF_YMD = 0, _DF_DMY = 1, _DF_MDY = 2 };
+typedef enum DateFormat_E DateFormat_E;   // DirtySDK is C
+typedef struct LangMapT LangMapT;   // DirtySDK is C
 struct LangMapT
 {
     s32 iLang;
@@ -20,6 +22,7 @@ struct LangMapT
     s32 bCurrEnd;
 };
 typedef s32 LobbyLocalizeFuncT(s32, char*, s32, const char*, void*);
+typedef struct LobbyLocalizeT LobbyLocalizeT;   // DirtySDK is C
 struct LobbyLocalizeT
 {
     s32 iMemGroup;
@@ -30,6 +33,12 @@ struct LobbyLocalizeT
     LobbyLocalizeFuncT* pCallback;
     void* pUserData;
 };
-extern "C" LobbyLocalizeT* LobbyLocalizeCreate(u32 uLocality, s32 iCurrency);
-extern "C" LobbyLocalizeT* LobbyLocalizeDestroy(LobbyLocalizeT* pLocalize);
-extern "C" s32 LobbyLocalizeData(LobbyLocalizeT* pLocalize, s32 iType, char* pBuffer, s32 iBufLen, const char* pSource);
+#ifdef __cplusplus
+extern "C" {
+#endif
+LobbyLocalizeT* LobbyLocalizeCreate(u32 uLocality, s32 iCurrency);
+LobbyLocalizeT* LobbyLocalizeDestroy(LobbyLocalizeT* pLocalize);
+s32 LobbyLocalizeData(LobbyLocalizeT* pLocalize, s32 iType, char* pBuffer, s32 iBufLen, const char* pSource);
+#ifdef __cplusplus
+}
+#endif

@@ -3,6 +3,7 @@
 #include "cryptarc4.h"
 
 // ARTIST82B3AC10: two independent 258-byte ARC4 states at +8/+0x10A.
+typedef struct CryptStp1T CryptStp1T;   // DirtySDK is C
 struct CryptStp1T
 {
     s32 enabled;
@@ -10,7 +11,9 @@ struct CryptStp1T
     CryptArc4T recvArc4;
     CryptArc4T sendArc4;
 };
+#ifdef __cplusplus
 extern "C" {
+#endif
 s32 CryptStp1OpenWallet(const u8* wallet, u8* secret, u8* ticket);
 s32 CryptStp1UseSecret(CryptStp1T* state, const u8* secret);
 void CryptStp1DecryptData(CryptStp1T* state, u8* data, s32 size);
@@ -19,4 +22,6 @@ s32 CryptStp1DecryptSize(CryptStp1T* state, s32 size);
 s32 CryptStp1EncryptSize(CryptStp1T* state, s32 size);
 s32 CryptStp1EncryptHash(CryptStp1T* state, u8* data, s32 size);
 void CryptStp1EncryptData(CryptStp1T* state, u8* data, s32 size);
+#ifdef __cplusplus
 }
+#endif

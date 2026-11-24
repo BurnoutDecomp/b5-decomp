@@ -18,7 +18,7 @@
 #include "GameSource/Network/SharedIO/BrnNetworkOutPlayerEvents.h"
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Network/BrnNetworkOutEventTypeDefs.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/BrnNetworkOutEventTypeDefs.h".
 
 namespace BrnNetwork
 {
@@ -36,7 +36,7 @@ namespace BrnNetworkModuleIO
         CGS_ASSERT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
             CgsDev::Assert::MessageAt(
                 "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                KAC_ARTIST_ASSERT_FILE, 1447 /* ARTIST 0x8258110C */));
+                __FILE__, 1447 /* ARTIST 0x8258110C */));
         mNetworkPlayerID = lNetworkPlayerID;
     }
 
@@ -46,7 +46,7 @@ namespace BrnNetworkModuleIO
         CGS_ASSERT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
             CgsDev::Assert::MessageAt(
                 "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                KAC_ARTIST_ASSERT_FILE, 1554 /* ARTIST 0x8258116C */));
+                __FILE__, 1554 /* ARTIST 0x8258116C */));
         mNetworkPlayerID = lNetworkPlayerID;
     }
 
@@ -56,7 +56,7 @@ namespace BrnNetworkModuleIO
         CGS_ASSERT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
             CgsDev::Assert::MessageAt(
                 "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                KAC_ARTIST_ASSERT_FILE, 1568 /* ARTIST 0x825811CC */));
+                __FILE__, 1568 /* ARTIST 0x825811CC */));
         mNetworkPlayerID = lNetworkPlayerID;
     }
 
@@ -72,7 +72,7 @@ namespace BrnNetworkModuleIO
         CGS_ASSERT(lNetworkPlayerID != KI_INVALID_PLAYER_ID,
             CgsDev::Assert::MessageAt(
                 "lNetworkPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
-                KAC_ARTIST_ASSERT_FILE, 1416 /* ARTIST 0x825810B4 */));
+                __FILE__, 1416 /* ARTIST 0x825810B4 */));
         mNetworkPlayerID     = lNetworkPlayerID;
         meDisconnectStatus   = leDisconnectStatus;
         meActiveRaceCarIndex = leActiveRaceCarIndex;

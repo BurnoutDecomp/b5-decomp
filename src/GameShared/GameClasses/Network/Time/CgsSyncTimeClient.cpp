@@ -122,10 +122,12 @@ namespace CgsNetwork
     bool
     SyncTimeClient::TimeIsSynchronised(CgsSystem::Time lTimeDiffTolerance, s32 liMinNumPacketsRecvd) const
     {
-        CGS_ASSERT(lTimeDiffTolerance.GetFloatVal() > 0.0f,
-                   "lTimeDiffTolerance.GetFloatVal() > 0.0f");
-        CGS_ASSERT(liMinNumPacketsRecvd >= 0,
-                   "liMinNumPacketsRecvd >= 0");
+        CGS_ASSERT(lTimeDiffTolerance.GetFloatVal() > 0.0f, CgsDev::Assert::MessageAt(
+            "lTimeDiffTolerance.GetFloatVal() > 0.0f",
+            __FILE__, 329 /* ARTIST 0x8287D2A8 */));
+        CGS_ASSERT(liMinNumPacketsRecvd >= 0, CgsDev::Assert::MessageAt(
+            "liMinNumPacketsRecvd >= 0",
+            __FILE__, 330 /* ARTIST 0x8287D2CC */));
 
         if (miNumTimePackets < liMinNumPacketsRecvd)
         {

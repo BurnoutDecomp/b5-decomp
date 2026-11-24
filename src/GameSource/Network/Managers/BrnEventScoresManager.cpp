@@ -37,8 +37,7 @@
 #include "GameShared/GameClasses/Module/CgsVariableEventQueue.h"    // VariableEventQueue<14000,16> (GetFirstEvent/GetNextEvent/AddEvent)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                  // CGS_ASSERT
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkEventScoresManager.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkEventScoresManager.cpp".
 
 namespace BrnNetwork
 {
@@ -122,9 +121,9 @@ namespace BrnNetwork
         mpServerInterface  = lpServerInterface;
 
         CGS_ASSERT( mpNetworkModule != 0,
-            CgsDev::Assert::MessageAt("mpNetworkModule", KAC_ARTIST_ASSERT_FILE, 67 /* ARTIST 0x82556AF4 */));
+            CgsDev::Assert::MessageAt("mpNetworkModule", __FILE__, 67 /* ARTIST 0x82556AF4 */));
         CGS_ASSERT( mpServerInterface != 0,
-            CgsDev::Assert::MessageAt("mpServerInterface", KAC_ARTIST_ASSERT_FILE, 68 /* ARTIST 0x82556B1C */));
+            CgsDev::Assert::MessageAt("mpServerInterface", __FILE__, 68 /* ARTIST 0x82556B1C */));
 
         maPendingUploads.Clear();          // stw 0 -> +0x310 (live count word)
         miUploadCount = 0;                 // stw 0 -> +0x320
@@ -230,7 +229,7 @@ namespace BrnNetwork
     void EventScoresManager::ProcessAfterSimulation( const BrnNetworkModuleIO::PostSimulationInputBuffer* lpInput )
     {
         CGS_ASSERT( lpInput != 0,
-            CgsDev::Assert::MessageAt("lpInput", KAC_ARTIST_ASSERT_FILE, 287 /* ARTIST 0x8256545C */));
+            CgsDev::Assert::MessageAt("lpInput", __FILE__, 287 /* ARTIST 0x8256545C */));
         ProcessNetworkEvents( lpInput->GetNetworkEventQueue() );
     }
 

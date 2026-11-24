@@ -19,8 +19,7 @@
 // use the house CGS_ASSERT machinery (declared via CgsAssert.h, pulled by
 // CgsMessage.h).
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h".
 
 namespace BrnNetwork
 {
@@ -67,11 +66,11 @@ namespace CgsNetwork
     void ReliableMessage::PrepareForSend(s32 leType, u16 lu16Frame)
     {
         CGS_ASSERT((mx8Flags & KX8_FLAGS_VALID) == 0,
-            CgsDev::Assert::MessageAt("!IsMessageValid()", KAC_ARTIST_ASSERT_FILE, 940 /* ARTIST 0x82882138 */));
+            CgsDev::Assert::MessageAt("!IsMessageValid()", __FILE__, 940 /* ARTIST 0x82882138 */));
         mx8Flags |= KX8_FLAGS_RELIABLE;
         CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME,
             CgsDev::Assert::MessageAt(
-                "lu16Frame != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 594 /* ARTIST 0x8288216C */));
+                "lu16Frame != KU16_INVALID_FRAME", __FILE__, 594 /* ARTIST 0x8288216C */));
         SetType(leType);
         mu16Frame = lu16Frame;
         mx8Flags |= KX8_FLAGS_VALID;

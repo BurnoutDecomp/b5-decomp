@@ -1,6 +1,12 @@
 // MassiveAdClient3::CRequestEnterZone (vendor middleware): the enter-zone request block and
 // the response parser that builds the zone's placements, assets and orders.
 
+// XDK size optimization matches ARTIST at 0x82BDABF8, 0x82BDAD08, 0x82BDBE58 (3 functions).
+// MassiveAd was built for size: /Os turns 63 more of its functions exact across 31 files, none worse.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3RequestEnterZone.h"
 
 #include <new>

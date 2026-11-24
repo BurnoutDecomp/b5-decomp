@@ -14,7 +14,7 @@
 // bool flags (lbz/stb). Reproduced here as plain named-member assignments; the aggregate
 // vector/matrix members copy as 16-byte units exactly as the SIMD load/store pairs do.
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Network/Messages/BrnUpdateMessage.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Messages/BrnUpdateMessage.h".
 
 namespace BrnNetwork
 {
@@ -34,6 +34,30 @@ namespace BrnNetwork
         // The packed translation row's bounds (x, y, z; the w lane clamps to 0).
         const f32 KF_UPDATE_POSITION_MAX_XZ = 20000.0f;
         const f32 KF_UPDATE_POSITION_MAX_Y  = 2000.0f;
+
+        // Rotation as roll / pitch / yaw, then 20 bits per translation axis.
+        const s32 KI_UPDATE_ROLL_BITS     = 10;
+        const s32 KI_UPDATE_PITCH_BITS    = 11;
+        const s32 KI_UPDATE_YAW_BITS      = 10;
+        const s32 KI_UPDATE_POSITION_BITS = 20;
+
+        // Velocities: 8 bits per angle and for the magnitude, bounded by the two maximum speeds.
+        const s32 KI_UPDATE_VELOCITY_BITS = 8;
+
+        // Driver controls: steering in [-1, 1] over 5 bits, acceleration over 4 and
+        // braking over 3, both in [0, 1].
+        const f32 KF_UPDATE_STEERING_MIN     = -1.0f;
+        const f32 KF_UPDATE_CONTROL_MIN      = 0.0f;
+        const f32 KF_UPDATE_CONTROL_MAX      = 1.0f;
+        const s32 KI_UPDATE_STEERING_BITS    = 5;
+        const s32 KI_UPDATE_ACCELERATION_BITS = 4;
+        const s32 KI_UPDATE_BRAKING_BITS     = 3;
+
+        // Frame counters travel in [0, 65534]; the camera status in [0, 4] and the headset
+        // status in [0, 3].
+        const s32 KI_UPDATE_MAX_FRAME          = 0xFFFE;
+        const s32 KI_UPDATE_MAX_CAMERA_STATUS  = 4;
+        const s32 KI_UPDATE_MAX_HEADSET_STATUS = 3;
     }
 
     // BrnNetwork::UpdateMessage::Construct (identical code to AggressiveDrivingMessage's):
@@ -83,7 +107,9 @@ namespace BrnNetwork
                                                        lPositionMin);
 
         CgsNetwork::Message::PrepareForSend(KI_UPDATE_MESSAGE_TYPE, mUpdateData.mu16SentFrame);
-        CGS_ASSERT(!IsReliable(), "!IsReliable()");
+        CGS_ASSERT(!IsReliable(), CgsDev::Assert::MessageAt(
+            "!IsReliable()",
+            __FILE__, 151 /* ARTIST 0x8257D96C */));
     }
 
     UpdateData& UpdateData::operator=(const UpdateData& lOther)
@@ -114,6 +140,68 @@ namespace BrnNetwork
         return *this;
     }
 
+    // The base status first, then the matrix, both velocities, the three controls, the two
+    // frame counters, the two statuses (through int copies written back at the end) and
+    // the eight flags, in the console's order; every field status is OR-accumulated.
+    CgsNetwork::PackOrUnpackResult UpdateMessage::PackOrUnpack()
+    {
+        CgsNetwork::PackOrUnpackResult lxResult = CgsNetwork::Message::PackOrUnpack();
+
+        s32 liCameraStatus  = static_cast<s32>(mUpdateData.meCameraStatus);
+        s32 liHeadsetStatus = mUpdateData.meHeadsetStatus;
+
+        const rw::math::vpu::Vector3 lPositionMin(-KF_UPDATE_POSITION_MAX_XZ,
+                                                   -KF_UPDATE_POSITION_MAX_Y,
+                                                   -KF_UPDATE_POSITION_MAX_XZ);
+        const rw::math::vpu::Vector3 lPositionMax(KF_UPDATE_POSITION_MAX_XZ,
+                                                   KF_UPDATE_POSITION_MAX_Y,
+                                                   KF_UPDATE_POSITION_MAX_XZ);
+
+        lxResult = CgsNetwork::PackOrUnpackMatrix(this, &mUpdateData.mMatrix,
+                                                  KI_UPDATE_ROLL_BITS, KI_UPDATE_PITCH_BITS, KI_UPDATE_YAW_BITS,
+                                                  lPositionMin, lPositionMax,
+                                                  KI_UPDATE_POSITION_BITS, KI_UPDATE_POSITION_BITS,
+                                                  KI_UPDATE_POSITION_BITS) | lxResult;
+
+        lxResult = CgsNetwork::PackOrUnpackVector(this, &mUpdateData.mLinearVelocity,
+                                                  KI_UPDATE_VELOCITY_BITS, KI_UPDATE_VELOCITY_BITS,
+                                                  KF_UPDATE_MAX_LINEAR_VELOCITY,
+                                                  KI_UPDATE_VELOCITY_BITS) | lxResult;
+        lxResult = CgsNetwork::PackOrUnpackVector(this, &mUpdateData.mAngularVelocity,
+                                                  KI_UPDATE_VELOCITY_BITS, KI_UPDATE_VELOCITY_BITS,
+                                                  KF_UPDATE_MAX_ANGULAR_VELOCITY,
+                                                  KI_UPDATE_VELOCITY_BITS) | lxResult;
+
+        lxResult = CgsNetwork::PackOrUnpackFloat(this, &mUpdateData.mfSteering,
+                                                 KF_UPDATE_STEERING_MIN, KF_UPDATE_CONTROL_MAX,
+                                                 KI_UPDATE_STEERING_BITS) | lxResult;
+        lxResult = CgsNetwork::PackOrUnpackFloat(this, &mUpdateData.mfAcceleration,
+                                                 KF_UPDATE_CONTROL_MIN, KF_UPDATE_CONTROL_MAX,
+                                                 KI_UPDATE_ACCELERATION_BITS) | lxResult;
+        lxResult = CgsNetwork::PackOrUnpackFloat(this, &mUpdateData.mfBraking,
+                                                 KF_UPDATE_CONTROL_MIN, KF_UPDATE_CONTROL_MAX,
+                                                 KI_UPDATE_BRAKING_BITS) | lxResult;
+
+        lxResult = CgsNetwork::PackOrUnpackU16(this, &mUpdateData.mu16SentFrame, 0, KI_UPDATE_MAX_FRAME) | lxResult;
+        lxResult = CgsNetwork::PackOrUnpackU16(this, &mUpdateData.mu16FramesSinceStart, 0, KI_UPDATE_MAX_FRAME) | lxResult;
+
+        lxResult = CgsNetwork::Message::PackOrUnpack(&liCameraStatus, 0, KI_UPDATE_MAX_CAMERA_STATUS) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&liHeadsetStatus, 0, KI_UPDATE_MAX_HEADSET_STATUS) | lxResult;
+
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbIsBoosting) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbIsCrashing) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbSnap) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbIsRoundNumberOdd) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbIsFreeBurnLobby) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbIsEliminated) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbIsInCarSelect) | lxResult;
+        lxResult = CgsNetwork::Message::PackOrUnpack(&mUpdateData.mbReceivingPlayerCrashedUs) | lxResult;
+
+        mUpdateData.meCameraStatus  = static_cast<ECameraStatus>(liCameraStatus);
+        mUpdateData.meHeadsetStatus = liHeadsetStatus;
+        return lxResult;
+    }
+
     // BrnNetwork::UpdateMessage::GetUpdateData  @ 0x82580BA0
     //   (BrnNetwork::BrnNetworkPlayer::CheckForNewMessages, ::Update)
     // Asserts the message is valid (mx8Flags VALID bit @ +0x19), then returns &mUpdateData
@@ -121,7 +209,7 @@ namespace BrnNetwork
     const UpdateData* UpdateMessage::GetUpdateData()
     {
         CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0,
-            CgsDev::Assert::MessageAt("IsMessageValid()", KAC_ARTIST_ASSERT_FILE, 131 /* ARTIST 0x82580BCC */));
+            CgsDev::Assert::MessageAt("IsMessageValid()", __FILE__, 131 /* ARTIST 0x82580BCC */));
         return &mUpdateData;
     }
 
@@ -131,7 +219,7 @@ namespace BrnNetwork
     u16 UpdateMessage::GetU16FramesSinceStart()
     {
         CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0,
-            CgsDev::Assert::MessageAt("IsMessageValid()", KAC_ARTIST_ASSERT_FILE, 138 /* ARTIST 0x82580C2C */));
+            CgsDev::Assert::MessageAt("IsMessageValid()", __FILE__, 138 /* ARTIST 0x82580C2C */));
         return mUpdateData.mu16FramesSinceStart;
     }
 

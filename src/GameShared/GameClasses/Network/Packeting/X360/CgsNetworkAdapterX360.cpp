@@ -163,7 +163,9 @@ void NetworkAdapterX360::StartupNetworking()
             break;
 
         case E_SERVER_TYPE_COUNT:
-            CGS_ASSERT(false, "Unknown server type");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "Unknown server type",
+                __FILE__, 315 /* ARTIST 0x8287F6A8 */));
             lpcEnvironment = KPC_ENVIRONMENT_SECURE;
             lpcFlags       = "";
             break;

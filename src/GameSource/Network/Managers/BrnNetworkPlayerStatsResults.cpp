@@ -25,8 +25,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // ::LobbyNameCmp (the vendor name compare)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsResults.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStatsResults.cpp".
 
 namespace BrnNetwork
 {
@@ -88,18 +87,18 @@ namespace BrnNetwork
         miCacheSize = 0;
 
         CGS_ASSERT(mpNetworkManager,
-            CgsDev::Assert::MessageAt("mpNetworkManager", KAC_ARTIST_ASSERT_FILE, 77 /* ARTIST 0x82552C5C */));
+            CgsDev::Assert::MessageAt("mpNetworkManager", __FILE__, 77 /* ARTIST 0x82552C5C */));
         CGS_ASSERT(mpNetworkManager->GetServerInterface(),
             CgsDev::Assert::MessageAt(
                 "mpNetworkManager->GetServerInterface()",
-                KAC_ARTIST_ASSERT_FILE, 78 /* ARTIST 0x82552C84 */));
+                __FILE__, 78 /* ARTIST 0x82552C84 */));
 
         CGS_ASSERT(
             mStatsDebugComponent.Prepare(mpNetworkManager->GetServerInterface(),
                                          mpNetworkManager->GetStatsManager()),
             CgsDev::Assert::MessageAt(
                 "mStatsDebugComponent.Prepare( mpNetworkManager->GetServerInterface(), mpNetworkManager->GetStatsManager() )",
-                KAC_ARTIST_ASSERT_FILE, 80 /* ARTIST 0x82552CC4 */));
+                __FILE__, 80 /* ARTIST 0x82552CC4 */));
 
         return true;
     }
@@ -166,7 +165,7 @@ namespace BrnNetwork
         CGS_ASSERT(lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED,
             CgsDev::Assert::MessageAt(
                 "lNewStats.GetStatus() != NetworkPlayerStats::E_STATS_AGE_UNPREPARED",
-                KAC_ARTIST_ASSERT_FILE, 295 /* ARTIST 0x82552E40 */));
+                __FILE__, 295 /* ARTIST 0x82552E40 */));
 
         NetworkPlayerStats* lpPlaceToInsert = 0;
         if (lNewStats.GetPlayerID() != CgsNetwork::K_INVALID_PLAYER_ID)
@@ -190,7 +189,7 @@ namespace BrnNetwork
         CGS_ASSERT(lpPlaceToInsert != 0,
             CgsDev::Assert::MessageAt(
                 "lpPlaceToInsert != NULL",
-                KAC_ARTIST_ASSERT_FILE, 324 /* ARTIST 0x82552EB8 */));
+                __FILE__, 324 /* ARTIST 0x82552EB8 */));
         *lpPlaceToInsert = lNewStats;
         mStatsDebugComponent.AddStats(lpPlaceToInsert);
         return lpPlaceToInsert;

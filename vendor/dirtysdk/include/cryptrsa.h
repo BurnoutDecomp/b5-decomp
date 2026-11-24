@@ -1,7 +1,9 @@
 #ifndef DIRTYSDK_CRYPT_RSA_H
 #define DIRTYSDK_CRYPT_RSA_H
 #include "types.hpp"
+typedef struct CryptRSARandomT CryptRSARandomT;   // DirtySDK is C
 struct CryptRSARandomT { u32 u0, u1; };
+typedef struct CryptRSAT CryptRSAT;   // DirtySDK is C
 struct CryptRSAT
 {
     u8 EncryptBlock[1024];

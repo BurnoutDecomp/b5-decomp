@@ -62,8 +62,7 @@
 
 // Platform sign-in state query (provided by the platform layer).
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStateManager.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStateManager.cpp".
 
 namespace BrnNetwork
 {
@@ -134,7 +133,7 @@ namespace BrnNetwork
     void StateManager::ResumeFinishedCallback(bool lbSuccess, void* lpUserData)
     {
         CGS_ASSERT(lbSuccess,
-            CgsDev::Assert::MessageAt("lbSuccess", KAC_ARTIST_ASSERT_FILE, 3612 /* ARTIST 0x825632D8 */));
+            CgsDev::Assert::MessageAt("lbSuccess", __FILE__, 3612 /* ARTIST 0x825632D8 */));
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
         lpStateManager->meState = E_STATE_COUNT;
@@ -254,7 +253,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT(mbRefreshingFreeburnLobbyThisFrame,
             CgsDev::Assert::MessageAt(
-                "mbRefreshingFreeburnLobbyThisFrame", KAC_ARTIST_ASSERT_FILE, 4647 /* ARTIST 0x8256A6E4 */));
+                "mbRefreshingFreeburnLobbyThisFrame", __FILE__, 4647 /* ARTIST 0x8256A6E4 */));
 
         CgsNetwork::ServerInterfaceGames* lpGames = mpNetworkManager->GetServerInterface()->GetGameComponent();
         const bool lbInLobby = lpGames->IsLocalPlayerInGame() && !lpGames->IsGameStarted();

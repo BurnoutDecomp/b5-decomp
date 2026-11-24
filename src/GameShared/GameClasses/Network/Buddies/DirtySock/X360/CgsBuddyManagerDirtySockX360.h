@@ -67,7 +67,7 @@ namespace CgsNetwork
         u32   ShowProfile(const PlayerName* lpBuddyName);
 
         // ---- async gamer-picture download pipeline ---------------------------
-        void StartDownloadingPictures(NetworkTexture* lpaTextures, s32 liNumberOfPictures,
+        void StartDownloadingPictures(NetworkTexture* lpaTextures, u32 luNumberOfPictures,
                                       u64* lpaXuids, void* lpaGamerPicKeys);
         void RequestNextProfilePictures();
         void DownloadNextPicture(bool lbContinueCurrent);

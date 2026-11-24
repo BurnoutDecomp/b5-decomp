@@ -26,8 +26,7 @@
 
 #include <cstring>  // std::strlen / std::strncpy (the name copy) / std::strncat (Construct)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Parameters/BrnNetworkRoadRulesData.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Parameters/BrnNetworkRoadRulesData.h".
 
 static const char KAC_ARTIST_ASSERT_SOURCE[] =
     "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkRoadRulesData.cpp";
@@ -124,13 +123,13 @@ void RoadRulesLocalPlayerDownloadedScores::GetRoadRulesDataForDownloadIndex(s32 
                                                                             s32* lpScoreType, s32* lpScore)
 {
     CGS_ASSERT(liDownloadIndex >= 0,
-        CgsDev::Assert::MessageAt("liDownloadIndex >= 0", KAC_ARTIST_ASSERT_FILE, 481 /* ARTIST 0x825418E4 */));
+        CgsDev::Assert::MessageAt("liDownloadIndex >= 0", __FILE__, 481 /* ARTIST 0x825418E4 */));
     CGS_ASSERT(liDownloadIndex < KI_MAX_DOWNLOAD_DATA,
         CgsDev::Assert::MessageAt(
-            "liDownloadIndex < KI_MAX_DOWNLOAD_DATA", KAC_ARTIST_ASSERT_FILE, 482 /* ARTIST 0x82541908 */));
+            "liDownloadIndex < KI_MAX_DOWNLOAD_DATA", __FILE__, 482 /* ARTIST 0x82541908 */));
     CGS_ASSERT(liDownloadIndex < miNumScores,
         CgsDev::Assert::MessageAt(
-            "liDownloadIndex < miNumScores", KAC_ARTIST_ASSERT_FILE, 483 /* ARTIST 0x82541930 */));
+            "liDownloadIndex < miNumScores", __FILE__, 483 /* ARTIST 0x82541930 */));
 
     // *lpScoreType = maiScoreTypes[index] (the +0xA0 array == v5[index+40]);
     // *lpScore     = maiScores[index]     (the +0x00 array == v5[index]).
@@ -143,7 +142,7 @@ void RoadRulesLocalPlayerDownloadedScores::SetDownloadedRoadRulesData(s32 liScor
 {
     CGS_ASSERT(miNumScores < KI_MAX_DOWNLOAD_DATA,
         CgsDev::Assert::MessageAt(
-            "miNumScores < KI_MAX_DOWNLOAD_DATA", KAC_ARTIST_ASSERT_FILE, 503 /* ARTIST 0x825809A4 */));
+            "miNumScores < KI_MAX_DOWNLOAD_DATA", __FILE__, 503 /* ARTIST 0x825809A4 */));
 
     // v3[v3[82]+40] = a2 -> maiScoreTypes[miNumScores] = liScoreType;
     // v3[v3[82]++]  = a3 -> maiScores[miNumScores]     = liScore; then bump the count.

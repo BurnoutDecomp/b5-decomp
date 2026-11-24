@@ -9,6 +9,8 @@
 // digits of the 64-bit host address (the player's XUID).
 // Bodies: ../src/dirtyaddr.cpp.
 
+typedef struct DirtyAddrT DirtyAddrT;   // DirtySDK is C
+
 struct DirtyAddrT
 {
     char strMachineAddr[64];

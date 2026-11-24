@@ -21,8 +21,7 @@
 // Log lines stream through CgsDev::Log::gpDebugPrint; assert messages the console built in
 // the assert buffer keep their literal text.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsCompressionAndEncryptionUtils.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsCompressionAndEncryptionUtils.cpp".
 
 namespace CgsNetwork
 {
@@ -91,9 +90,12 @@ void CompressionAndEncryptionUtils::ResetBandwidthUsed(const CgsSystem::TimerSta
 // Copy the current period into the history ring and advance the ring cursor.
 void CompressionAndEncryptionUtils::UpdateBandwidthHistory()
 {
-    CGS_ASSERT(miHistoricalIndex >= 0, "miHistoricalIndex >= 0");
-    CGS_ASSERT(miHistoricalIndex < KI_MAX_BANDWIDTH_HISTORY,
-               "miHistoricalIndex < KI_MAX_BANDWIDTH_HISTORY");
+    CGS_ASSERT(miHistoricalIndex >= 0, CgsDev::Assert::MessageAt(
+        "miHistoricalIndex >= 0",
+        __FILE__, 668 /* ARTIST 0x8286FEC8 */));
+    CGS_ASSERT(miHistoricalIndex < KI_MAX_BANDWIDTH_HISTORY, CgsDev::Assert::MessageAt(
+        "miHistoricalIndex < KI_MAX_BANDWIDTH_HISTORY",
+        __FILE__, 669 /* ARTIST 0x8286FEF0 */));
 
     memcpy(maaaaiHistoricalBitsTransmitted[miHistoricalIndex], maaaiBitsTransmitted,
            sizeof(maaaiBitsTransmitted));
@@ -207,10 +209,10 @@ void CompressionAndEncryptionUtils::RecordBitsTransmitted(ESendRecv leSendRecv,
 {
     const s32 liEntryIndex = GetEntryIndex(liPlayerID);
     CGS_ASSERT(liEntryIndex >= 0,
-        CgsDev::Assert::MessageAt("liEntryIndex >= 0", KAC_ARTIST_ASSERT_FILE, 647 /* ARTIST 0x828805F4 */));
+        CgsDev::Assert::MessageAt("liEntryIndex >= 0", __FILE__, 647 /* ARTIST 0x828805F4 */));
     CGS_ASSERT(liEntryIndex < KI_MAX_PLAYERS,
         CgsDev::Assert::MessageAt(
-            "liEntryIndex < KI_MAX_PLAYERS", KAC_ARTIST_ASSERT_FILE, 648 /* ARTIST 0x82880618 */));
+            "liEntryIndex < KI_MAX_PLAYERS", __FILE__, 648 /* ARTIST 0x82880618 */));
 
     maaaiBitsTransmitted[leSendRecv][liEntryIndex][leMessageType]          += liBits;
     maaaiBitsTransmitted[leSendRecv][liEntryIndex][KE_ALL_MESSAGE_TYPES]   += liBits;
@@ -537,9 +539,9 @@ NetworkPlayerID CompressionAndEncryptionUtils::ExtractSendingPlayerID(u8* lpacBu
     CGS_ASSERT(static_cast<u32>(liBufferSize) >= sizeof(PackedPacketHeader),
         CgsDev::Assert::MessageAt(
             "(uint32_t)liBufferSize >= sizeof(PackedPacketHeader)",
-            KAC_ARTIST_ASSERT_FILE, 581 /* ARTIST 0x8286FD64 */));
+            __FILE__, 581 /* ARTIST 0x8286FD64 */));
     CGS_ASSERT(lpacBufferToUnPackFrom,
-        CgsDev::Assert::MessageAt("lpacBufferToUnPackFrom", KAC_ARTIST_ASSERT_FILE, 582 /* ARTIST 0x8286FD88 */));
+        CgsDev::Assert::MessageAt("lpacBufferToUnPackFrom", __FILE__, 582 /* ARTIST 0x8286FD88 */));
 
     const PackedPacketHeader* lpHeader =
         reinterpret_cast<const PackedPacketHeader*>(lpacBufferToUnPackFrom);
@@ -548,7 +550,7 @@ NetworkPlayerID CompressionAndEncryptionUtils::ExtractSendingPlayerID(u8* lpacBu
         CGS_ASSERT(static_cast<u32>(liBufferSize) > sizeof(ReliablePackedPacketHeader),
             CgsDev::Assert::MessageAt(
                 "(uint32_t)liBufferSize > sizeof(ReliablePackedPacketHeader)",
-                KAC_ARTIST_ASSERT_FILE, 590 /* ARTIST 0x8286FDBC */));
+                __FILE__, 590 /* ARTIST 0x8286FDBC */));
         const ReliablePackedPacketHeader* lpReliableHeader =
             reinterpret_cast<const ReliablePackedPacketHeader*>(lpacBufferToUnPackFrom);
         return lpReliableHeader->mSendingPlayerID;

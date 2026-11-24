@@ -49,7 +49,7 @@ private:
     CMassiveList   mMAOList;     // +0x50 parsed placements
     unsigned short mnIECount;    // +0x60 placement count the response announces
     CMassiveList   mAssetList;   // +0x64 parsed assets (every order's)
-    int            mnField74;    // +0x74 (0 at construction)
+    unsigned short mnField74;    // +0x74 (0 at construction; 16-bit: ARTIST 0x82BDAE7C sth)
     CMassiveList   mOrderList;   // +0x78 parsed orders
     unsigned short mnOrderCount; // +0x88 order count the response announces (set by Parse)
 };

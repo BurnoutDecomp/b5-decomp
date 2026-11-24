@@ -2,6 +2,7 @@
 #define DIRTYSDK_DIRTYLSP_H
 #include "protoname.h"
 
+typedef struct DirtyLSPRefT DirtyLSPRefT;   // DirtySDK is C
 struct DirtyLSPRefT;
 #ifdef __cplusplus
 extern "C" {

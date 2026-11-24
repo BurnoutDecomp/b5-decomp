@@ -18,6 +18,7 @@
 // ============================================================================
 
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/ParticleBehaviour.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionSerialiser.h"
 #include "SDKs/Packages/Lion/Final/eauk_lion/Dev/LionRuntime/include/LionTokeniser.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -436,8 +437,9 @@ inline u8 PackUnitChannel(f32 afUnit)
 
 void cParticleBehaviour::Build()
 {
-    CGS_ASSERT((mFlags & E_DO_WAVEALPHA) == 0,
-               "( mFlags & cParticleBehaviour::eDO_WAVEALPHA ) == 0");
+    CGS_ASSERT((mFlags & E_DO_WAVEALPHA) == 0, CgsDev::Assert::MessageAt(
+        "( mFlags & cParticleBehaviour::eDO_WAVEALPHA ) == 0",
+        __FILE__, 343 /* ARTIST 0x8290B024 */));
 
     const cColour8 lC0 = mRGBA0;
     const cColour8 lC1 = mRGBA1;

@@ -121,9 +121,9 @@ namespace CgsNetwork
             lPrepareParams.mpConnectionFinalisedUserData    = lpPrepareParams->mPlayerManager.mpConnectionFinalisedUserData;
             lPrepareParams.mpNetworkHeapAllocator           = lpPrepareParams->mPlayerManager.mpNetworkHeapAllocator;
 
-            CGS_ASSERT(lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ ||
-                       lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ,
-                       "lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ");
+            CGS_ASSERT(lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ, CgsDev::Assert::MessageAt(
+                "lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_50HZ || lPrepareParams.meLocalConsoleFrameRate == CgsSystem::E_FRAMERATE_60HZ",
+                __FILE__, 184 /* ARTIST 0x8289C9B8 */));
 
             if (!mPlayerManager.Prepare(&lPrepareParams))
             {
@@ -155,7 +155,9 @@ namespace CgsNetwork
             return E_MANAGER_STATUS_READY;
 
         default:
-            CGS_ASSERT(false, "unknown prepare stage");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "unknown prepare stage",
+                __FILE__, 228 /* ARTIST 0x8289CA6C */));
             return E_MANAGER_STATUS_BUSY;
         }
     }

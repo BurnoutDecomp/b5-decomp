@@ -182,10 +182,15 @@ namespace BrnNetwork
         GetEventQueue(mpNetworkModule)->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lInviteRequest),
                                                  lInviteRequest.GetEventType(), sizeof(lInviteRequest));
 
-        CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetNetworkInviteManager(),
-                   "mpNetworkModule->GetNetworkManager()->GetNetworkInviteManager()");
+        CGS_ASSERT(mpNetworkModule, CgsDev::Assert::MessageAt(
+            "mpNetworkModule",
+            __FILE__, 343 /* ARTIST 0x8256374C */));
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager(), CgsDev::Assert::MessageAt(
+            "mpNetworkModule->GetNetworkManager()",
+            __FILE__, 344 /* ARTIST 0x82563778 */));
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetNetworkInviteManager(), CgsDev::Assert::MessageAt(
+            "mpNetworkModule->GetNetworkManager()->GetNetworkInviteManager()",
+            __FILE__, 345 /* ARTIST 0x825637A8 */));
         mpNetworkModule->GetNetworkManager()->GetNetworkInviteManager()->SetPreparingForInvite();
     }
 
@@ -318,8 +323,12 @@ namespace BrnNetwork
     {
         BrnServerInterface* lpServerInterface = AsBrnServerInterface(mpServerInterface);
 
-        CGS_ASSERT(lpServerInterface, "mpServerInterface");
-        CGS_ASSERT(lpServerInterface->GetConnectionComponent(), "mpServerInterface->GetConnectionComponent()");
+        CGS_ASSERT(lpServerInterface, CgsDev::Assert::MessageAt(
+            "mpServerInterface",
+            __FILE__, 410 /* ARTIST 0x82554278 */));
+        CGS_ASSERT(lpServerInterface->GetConnectionComponent(), CgsDev::Assert::MessageAt(
+            "mpServerInterface->GetConnectionComponent()",
+            __FILE__, 411 /* ARTIST 0x825542A4 */));
 
         if (!lpServerInterface->GetConnectionComponent()->IsLoggedIn())
         {
@@ -332,9 +341,13 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT(lpServerInterface->GetCustomCommandsComponent(), "mpServerInterface->GetCustomCommandsComponent()");
+        CGS_ASSERT(lpServerInterface->GetCustomCommandsComponent(), CgsDev::Assert::MessageAt(
+            "mpServerInterface->GetCustomCommandsComponent()",
+            __FILE__, 419 /* ARTIST 0x825542FC */));
         ServerInterfaceCustomCommands* lpCustomCommandsComponent = lpServerInterface->GetCustomCommandsComponent();
-        CGS_ASSERT(lpCustomCommandsComponent, "lpCustomCommandsComponent");
+        CGS_ASSERT(lpCustomCommandsComponent, CgsDev::Assert::MessageAt(
+            "lpCustomCommandsComponent",
+            __FILE__, 421 /* ARTIST 0x82554328 */));
 
         mbOverwriteFriendsList = false;
         lpCustomCommandsComponent->GetFriendsListFromServer(_GetFriendsListFromServerComplete, this);
@@ -566,15 +579,23 @@ namespace BrnNetwork
         {
             case E_BUDDY_MANAGER_STATE_FAILED:
             {
-                CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
-                CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
+                CGS_ASSERT(mpNetworkModule, CgsDev::Assert::MessageAt(
+                    "mpNetworkModule",
+                    __FILE__, 162 /* ARTIST 0x8256B474 */));
+                CGS_ASSERT(mpNetworkModule->GetNetworkManager(), CgsDev::Assert::MessageAt(
+                    "mpNetworkModule->GetNetworkManager()",
+                    __FILE__, 163 /* ARTIST 0x8256B49C */));
 
                 CgsSystem::Time lElapsed = mTimeUntilRetryAfterFailedBuddyUpload
                     - mpNetworkModule->GetNetworkManager()->GetTime();
 
                 BrnServerInterface* lpServerInterface = AsBrnServerInterface(mpServerInterface);
-                CGS_ASSERT(lpServerInterface, "mpServerInterface");
-                CGS_ASSERT(lpServerInterface->GetGameComponent(), "mpServerInterface->GetGameComponent()");
+                CGS_ASSERT(lpServerInterface, CgsDev::Assert::MessageAt(
+                    "mpServerInterface",
+                    __FILE__, 168 /* ARTIST 0x8256B4F8 */));
+                CGS_ASSERT(lpServerInterface->GetGameComponent(), CgsDev::Assert::MessageAt(
+                    "mpServerInterface->GetGameComponent()",
+                    __FILE__, 169 /* ARTIST 0x8256B524 */));
 
                 if (!lpServerInterface->GetGameComponent()->IsLocalPlayerInGame())
                 {
@@ -618,10 +639,15 @@ namespace BrnNetwork
             mfTimeUntilRetryGetServerBuddies -= lfTimeStep;
             if (mfTimeUntilRetryGetServerBuddies < 0.0f)
             {
-                CGS_ASSERT(mpNetworkModule, "mpNetworkModule");
-                CGS_ASSERT(mpNetworkModule->GetNetworkManager(), "mpNetworkModule->GetNetworkManager()");
-                CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetStateManager(),
-                           "mpNetworkModule->GetNetworkManager()->GetStateManager()");
+                CGS_ASSERT(mpNetworkModule, CgsDev::Assert::MessageAt(
+                    "mpNetworkModule",
+                    __FILE__, 211 /* ARTIST 0x8256B61C */));
+                CGS_ASSERT(mpNetworkModule->GetNetworkManager(), CgsDev::Assert::MessageAt(
+                    "mpNetworkModule->GetNetworkManager()",
+                    __FILE__, 212 /* ARTIST 0x8256B644 */));
+                CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetStateManager(), CgsDev::Assert::MessageAt(
+                    "mpNetworkModule->GetNetworkManager()->GetStateManager()",
+                    __FILE__, 213 /* ARTIST 0x8256B678 */));
 
                 StateManager* lpStateManager = mpNetworkModule->GetNetworkManager()->GetStateManager();
                 if (lpStateManager->IsInLimbo())
@@ -670,10 +696,12 @@ namespace BrnNetwork
 
             BuddyInformationRecord& lRecord = lEvent.maBuddyInformation[liBuddySlotIndex];
 
-            CGS_ASSERT(GetBuddyName(miNextBuddyToSend, &lRecord.mPlayerName),
-                       "GetBuddyName( miNextBuddyToSend, &lEvent.mBuddyInformation[liBuddySlotIndex].mPlayerName )");
-            CGS_ASSERT(lRecord.mPlayerName.macName[0] != 0,
-                       "!lEvent.mBuddyInformation[liBuddySlotIndex].mPlayerName.IsEmpty()");
+            CGS_ASSERT(GetBuddyName(miNextBuddyToSend, &lRecord.mPlayerName), CgsDev::Assert::MessageAt(
+                "GetBuddyName( miNextBuddyToSend, &lEvent.mBuddyInformation[liBuddySlotIndex].mPlayerName )",
+                __FILE__, 818 /* ARTIST 0x82563978 */));
+            CGS_ASSERT(lRecord.mPlayerName.macName[0] != 0, CgsDev::Assert::MessageAt(
+                "!lEvent.mBuddyInformation[liBuddySlotIndex].mPlayerName.IsEmpty()",
+                __FILE__, 820 /* ARTIST 0x8256399C */));
 
             lRecord.miInviteType    = GetTotalNumberOfMessages(&lRecord.mPlayerName);
             lRecord.miInviteSubType = GetNumberOfUnreadMessages(&lRecord.mPlayerName);
@@ -924,7 +952,9 @@ namespace BrnNetwork
     void BuddyManagerBase::_UploadFriendsToServerComplete(void* lpData, void* lpResult, bool lbSuccess)
     {
         BuddyManagerBase* lpBuddyManager = reinterpret_cast<BuddyManagerBase*>(lpData);
-        CGS_ASSERT(lpBuddyManager, "lpBuddyManager");
+        CGS_ASSERT(lpBuddyManager, CgsDev::Assert::MessageAt(
+            "lpBuddyManager",
+            __FILE__, 1246 /* ARTIST 0x82549E08 */));
 
         if (lbSuccess)
         {
@@ -935,9 +965,12 @@ namespace BrnNetwork
         else
         {
             BrnServerInterface* lpServerInterface = AsBrnServerInterface(lpBuddyManager->mpServerInterface);
-            CGS_ASSERT(lpServerInterface, "lpServerInterface");
-            CGS_ASSERT(lpServerInterface->GetCustomCommandsComponent(),
-                       "lpServerInterface->GetCustomCommandsComponent()");
+            CGS_ASSERT(lpServerInterface, CgsDev::Assert::MessageAt(
+                "lpServerInterface",
+                __FILE__, 1259 /* ARTIST 0x82549E70 */));
+            CGS_ASSERT(lpServerInterface->GetCustomCommandsComponent(), CgsDev::Assert::MessageAt(
+                "lpServerInterface->GetCustomCommandsComponent()",
+                __FILE__, 1262 /* ARTIST 0x82549E98 */));
 
             ServerInterfaceCustomCommands* lpCustomCommands = lpServerInterface->GetCustomCommandsComponent();
             if (lpCustomCommands->GetLastError() == CgsNetwork::E_BUDDY_ERROR_CODES_PENDING)

@@ -9,6 +9,7 @@
 // PC body: ../src/pc/voippc.cpp.
 
 // Opaque voice module handle.
+typedef struct VoipRefT VoipRefT;   // DirtySDK is C
 struct VoipRefT;
 
 // VoipLocal flag bits.

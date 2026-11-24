@@ -1,3 +1,9 @@
+// XDK size optimization matches ARTIST at 0x82BCF280, 0x82BCF4B0, 0x82BCF908 ... (12 functions).
+// MassiveAd was built for size: /Os turns 63 more of its functions exact across 31 files, none worse.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Request.h"
 
 #include <cstring>  // memcpy, memset, memcmp, strlen, strncpy

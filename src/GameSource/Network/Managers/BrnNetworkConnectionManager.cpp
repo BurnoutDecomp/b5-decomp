@@ -1,4 +1,5 @@
 #include "GameSource/Network/Managers/BrnNetworkConnectionManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                  // CGS_ASSERT
 #include "GameSource/Network/BrnNetworkManager.h"                                   // BrnNetworkManager, GetTime/GetServerInterface/GetPlayerManager
@@ -78,16 +79,21 @@ namespace BrnNetwork
         CgsNetwork::ServerInterfaceUsersets* lpUsersets =
             reinterpret_cast<CgsNetwork::ServerInterfaceUsersets*>(lpServerInterface->GetUsersetsComponent());
 
-        CGS_ASSERT(lpGames, "lpGames");
-        CGS_ASSERT(lpUsersets, "lpUsersets");
+        CGS_ASSERT(lpGames, CgsDev::Assert::MessageAt(
+            "lpGames",
+            __FILE__, 226 /* ARTIST 0x825668C8 */));
+        CGS_ASSERT(lpUsersets, CgsDev::Assert::MessageAt(
+            "lpUsersets",
+            __FILE__, 227 /* ARTIST 0x825668EC */));
 
         // Fetch the target player's lobby parameters (fills the name we kick by).
         PlayerParams lPlayerParams;
         lPlayerParams.Prepare();
         lpGames->GetPlayerParametersByPlayerID(liPlayerID, &lPlayerParams);
 
-        CGS_ASSERT(lpGames->IsLocalPlayerInGame(),
-                   "Natting when not in a game or a userset!");
+        CGS_ASSERT(lpGames->IsLocalPlayerInGame(), CgsDev::Assert::MessageAt(
+            "Natting when not in a game or a userset!",
+            __FILE__, 232 /* ARTIST 0x82566934 */));
 
         if (lpGames->IsLocalPlayerInGame())
         {

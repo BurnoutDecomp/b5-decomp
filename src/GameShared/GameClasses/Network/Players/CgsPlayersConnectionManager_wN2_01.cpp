@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayersConnectionManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"                  // GetNextLocalPlayerID
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"        // GetConnAPIRef
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -43,11 +44,17 @@ EConnectionStatus PlayersConnectionManager::GetConnectionStatus(NetworkPlayerID 
     NetworkPlayerID lLocalPlayerID;
     mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
 
-    CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID, "lPlayerID != K_INVALID_PLAYER_ID");
-    CGS_ASSERT(lPlayerID != lLocalPlayerID, "lPlayerID != lLocalPlayerID");
+    CGS_ASSERT(lPlayerID != K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+        "lPlayerID != K_INVALID_PLAYER_ID",
+        __FILE__, 1574 /* ARTIST 0x82874DE0 */));
+    CGS_ASSERT(lPlayerID != lLocalPlayerID, CgsDev::Assert::MessageAt(
+        "lPlayerID != lLocalPlayerID",
+        __FILE__, 1575 /* ARTIST 0x82874E04 */));
 
     const ConnectionDataEntry* lpEntry = GetEntry(lPlayerID);
-    CGS_ASSERT(lpEntry, "lpEntry");
+    CGS_ASSERT(lpEntry, CgsDev::Assert::MessageAt(
+        "lpEntry",
+        __FILE__, 1580 /* ARTIST 0x82874E38 */));
     return lpEntry->mPlayerConnectionData.meConnectionStatus;
 }
 
@@ -58,8 +65,12 @@ EConnectionStatus PlayersConnectionManager::GetConnectionStatus(NetworkPlayerID 
 bool PlayersConnectionManager::HavePlayersFailedToConnect(NetworkPlayerID lPlayerID1,
                                                           NetworkPlayerID lPlayerID2) const
 {
-    CGS_ASSERT(lPlayerID1 != K_INVALID_PLAYER_ID, "lPlayerID1 != K_INVALID_PLAYER_ID");
-    CGS_ASSERT(lPlayerID2 != K_INVALID_PLAYER_ID, "lPlayerID2 != K_INVALID_PLAYER_ID");
+    CGS_ASSERT(lPlayerID1 != K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+        "lPlayerID1 != K_INVALID_PLAYER_ID",
+        __FILE__, 732 /* ARTIST 0x82884B4C */));
+    CGS_ASSERT(lPlayerID2 != K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+        "lPlayerID2 != K_INVALID_PLAYER_ID",
+        __FILE__, 733 /* ARTIST 0x82884B70 */));
 
     NetworkPlayerID lLocalPlayerID;
     mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
@@ -83,7 +94,9 @@ bool PlayersConnectionManager::HavePlayersFailedToConnect(NetworkPlayerID lPlaye
     else
     {
         const ConnectionDataEntry* lpPlayer1Entry = GetEntry(lPlayerID1);
-        CGS_ASSERT(lpPlayer1Entry, "lpPlayer1Entry");
+        CGS_ASSERT(lpPlayer1Entry, CgsDev::Assert::MessageAt(
+            "lpPlayer1Entry",
+            __FILE__, 758 /* ARTIST 0x82884C0C */));
         for (s32 liIndex = 0; liIndex < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liIndex)
         {
             const PlayerConnectionData& lData = lpPlayer1Entry->maLastFinaliseStateRecvd[liIndex];
@@ -113,7 +126,9 @@ bool PlayersConnectionManager::HavePlayersFailedToConnect(NetworkPlayerID lPlaye
     }
 
     const ConnectionDataEntry* lpPlayer2Entry = GetEntry(lPlayerID2);
-    CGS_ASSERT(lpPlayer2Entry, "lpPlayer2Entry");
+    CGS_ASSERT(lpPlayer2Entry, CgsDev::Assert::MessageAt(
+        "lpPlayer2Entry",
+        __FILE__, 795 /* ARTIST 0x82884CD4 */));
     for (s32 liIndex = 0; liIndex < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liIndex)
     {
         const PlayerConnectionData& lData = lpPlayer2Entry->maLastFinaliseStateRecvd[liIndex];

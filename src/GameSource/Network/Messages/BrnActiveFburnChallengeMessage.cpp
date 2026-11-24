@@ -27,8 +27,7 @@
 //    TestConnectionMessage::GetPackedMessageSize -- identical body). The semantic base
 //    call is ReliableMessage::GetPackedMessageSize(), matching the class hierarchy.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Messages/BrnActiveFburnChallengeMessage.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Messages/BrnActiveFburnChallengeMessage.cpp".
 
 namespace BrnNetwork
 {
@@ -83,20 +82,20 @@ namespace BrnNetwork
     {
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
             CgsDev::Assert::MessageAt(
-                "lu16FrameCount != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 145 /* ARTIST 0x8257CD6C */));
+                "lu16FrameCount != KU16_INVALID_FRAME", __FILE__, 145 /* ARTIST 0x8257CD6C */));
         CGS_ASSERT(!IsMessageValid(),
             CgsDev::Assert::MessageAt(
-                "!CgsNetwork::ReliableMessage::IsMessageValid()", KAC_ARTIST_ASSERT_FILE, 146 /* ARTIST 0x8257CD98 */));
+                "!CgsNetwork::ReliableMessage::IsMessageValid()", __FILE__, 146 /* ARTIST 0x8257CD98 */));
 
         mChallengeID            = lChallengeID;
         miNumPlayersInChallenge = liNumPlayersInChallenge;
 
         CGS_ASSERT(liNumPlayersInChallenge > 0,
             CgsDev::Assert::MessageAt(
-                "liNumPlayersInChallenge > 0", KAC_ARTIST_ASSERT_FILE, 151 /* ARTIST 0x8257CDC4 */));
+                "liNumPlayersInChallenge > 0", __FILE__, 151 /* ARTIST 0x8257CDC4 */));
         CGS_ASSERT(liNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS,
             CgsDev::Assert::MessageAt(
-                "liNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS", KAC_ARTIST_ASSERT_FILE, 152 /* ARTIST 0x8257CDE8 */));
+                "liNumPlayersInChallenge <= KI_MAX_NETWORK_PLAYERS", __FILE__, 152 /* ARTIST 0x8257CDE8 */));
 
         for (s32 liPlayer = 0; liPlayer < miNumPlayersInChallenge; ++liPlayer)
             maPlayersInChallengeIDs[liPlayer] = lpaPlayersInChallengeIDs[liPlayer];

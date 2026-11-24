@@ -8,6 +8,7 @@
 
 // NetConnStartup allocates 0x13430 bytes. Unnamed ranges are retained until
 // the remaining singleton owner is recovered; the friends fields are ARTIST-attested.
+typedef struct NetConnX360User NetConnX360User;   // DirtySDK is C
 struct NetConnX360User
 {
     char strName[16];
@@ -19,6 +20,7 @@ typedef char NetConnX360LanguageOffset[(offsetof(GET_USER_INFO_RESPONSE,wLanguag
 typedef char NetConnX360CountryOffset[(offsetof(GET_USER_INFO_RESPONSE,bCountryId)==0x38)?1:-1];
 typedef char NetConnX360UserSize[(sizeof(NetConnX360User)==0x20)?1:-1];
 
+typedef struct NetConnX360AddrMap NetConnX360AddrMap;   // DirtySDK is C
 struct NetConnX360AddrMap
 {
     u32 uStart;
@@ -27,6 +29,7 @@ struct NetConnX360AddrMap
     u8 aOpaque[20];
 };
 
+typedef struct NetConnX360State NetConnX360State;   // DirtySDK is C
 struct NetConnX360State
 {
     s32 iMemGroup;                        // +0x0000

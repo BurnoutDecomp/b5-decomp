@@ -51,8 +51,7 @@ BrnNetwork::NetworkPlayerStats::operator=(const NetworkPlayerStats& lOther)
     return *this;
 }
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStats.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStats.cpp".
 
 namespace BrnNetwork
 {
@@ -115,12 +114,12 @@ namespace BrnNetwork
     {
         CGS_ASSERT(leValue >= E_STATS_VALUE_START,
             CgsDev::Assert::MessageAt(
-                "leValue >= E_STATS_VALUE_START", KAC_ARTIST_ASSERT_FILE, 195 /* ARTIST 0x825469DC */));
+                "leValue >= E_STATS_VALUE_START", __FILE__, 195 /* ARTIST 0x825469DC */));
         CGS_ASSERT(leValue < E_STATS_VALUE_COUNT,
             CgsDev::Assert::MessageAt(
-                "leValue < E_STATS_VALUE_COUNT", KAC_ARTIST_ASSERT_FILE, 196 /* ARTIST 0x82546A00 */));
+                "leValue < E_STATS_VALUE_COUNT", __FILE__, 196 /* ARTIST 0x82546A00 */));
         CGS_ASSERT(lpcStat != 0,
-            CgsDev::Assert::MessageAt("lpcStat", KAC_ARTIST_ASSERT_FILE, 197 /* ARTIST 0x82546A24 */));
+            CgsDev::Assert::MessageAt("lpcStat", __FILE__, 197 /* ARTIST 0x82546A24 */));
 
         maiValues[leValue]   = std::atoi(lpcStat);
         maeStatType[leValue] = leType;

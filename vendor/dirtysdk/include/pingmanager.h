@@ -8,6 +8,7 @@
 // callback. The CGS ping-regions component is the only caller. PC body: ../src/pc/pingmanagerpc.cpp.
 
 // Opaque ping manager handle.
+typedef struct PingManagerRefT PingManagerRefT;   // DirtySDK is C
 struct PingManagerRefT;
 
 // Server ping result callback TYPE: (pinged address record, round-trip ms, user data).

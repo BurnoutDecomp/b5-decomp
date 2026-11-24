@@ -38,8 +38,7 @@
 #include "GameSource/GameState/BrnCgsPlayerName.h"                     // CgsNetwork::PlayerName::GetPlayerName
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                     // CGS_ASSERT
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkLiveRevengeDebugComponent.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkLiveRevengeDebugComponent.cpp".
 
 namespace BrnNetwork
 {
@@ -131,7 +130,9 @@ namespace BrnNetwork
     void LiveRevengeDebugComponent::AddPlayer(LiveRevengeRelationship* lpRelationship)
     {
         const CgsNetwork::PlayerName* lpRivalName = lpRelationship->GetRivalName();
-        CGS_ASSERT(lpRivalName != 0, "lpRelationship->GetRivalName()");
+        CGS_ASSERT(lpRivalName != 0, CgsDev::Assert::MessageAt(
+            "lpRelationship->GetRivalName()",
+            __FILE__, 180 /* ARTIST 0x8258500C */));
 
         const char* lpcRivalName = lpRivalName->GetPlayerName();
         if (lpcRivalName[0] != '\0')
@@ -229,10 +230,10 @@ namespace BrnNetwork
         LiveRevengeDebugComponent* lpDebugComponent = static_cast<LiveRevengeDebugComponent*>(lpUserData);
 
         CGS_ASSERT(lpDebugComponent != 0,
-            CgsDev::Assert::MessageAt("lpDebugComponent", KAC_ARTIST_ASSERT_FILE, 302 /* ARTIST 0x82585188 */));
+            CgsDev::Assert::MessageAt("lpDebugComponent", __FILE__, 302 /* ARTIST 0x82585188 */));
         CGS_ASSERT(lpDebugComponent->mpLiveRevengeManager != 0,
             CgsDev::Assert::MessageAt(
-                "lpDebugComponent->mpLiveRevengeManager", KAC_ARTIST_ASSERT_FILE, 303 /* ARTIST 0x825851B0 */));
+                "lpDebugComponent->mpLiveRevengeManager", __FILE__, 303 /* ARTIST 0x825851B0 */));
 
         lpDebugComponent->mpLiveRevengeManager->SendLiveRevengeRivalsToServer();
     }

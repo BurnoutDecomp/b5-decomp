@@ -9,6 +9,7 @@
 // service download) is the only caller. PC body: ../src/pc/protopc.cpp.
 
 // Opaque HTTP module handle.
+typedef struct ProtoHttpRefT ProtoHttpRefT;   // DirtySDK is C
 struct ProtoHttpRefT;
 
 // ProtoHttpStatus selectors (four-character codes).

@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "types.hpp"                                                                         // intptr_t
 #include <cstring>                                                                         // strlen / strncpy
@@ -73,7 +74,9 @@ namespace BrnNetwork
         case E_LOGIN_EVENT_PROCEED:
             return;
         default:
-            CGS_ASSERT(false, "Invalid login event");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "Invalid login event",
+                __FILE__, 1556 /* ARTIST 0x825959D8 */));
             return;
         }
 

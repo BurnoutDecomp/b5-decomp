@@ -13,8 +13,7 @@
 // attested for this TU is defined here.
 // =============================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network/Buddies/DirtySock/CgsBuddyManagerDirtySock.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network/Buddies/DirtySock/CgsBuddyManagerDirtySock.cpp".
 
 namespace CgsNetwork
 {
@@ -27,9 +26,9 @@ namespace CgsNetwork
                                      ServerInterface* lpServerInterface)
     {
         CGS_ASSERT(lpNetworkManager,
-            CgsDev::Assert::MessageAt("lpNetworkManager", KAC_ARTIST_ASSERT_FILE, 86 /* ARTIST 0x8287D4A8 */));
+            CgsDev::Assert::MessageAt("lpNetworkManager", __FILE__, 86 /* ARTIST 0x8287D4A8 */));
         CGS_ASSERT(lpServerInterface,
-            CgsDev::Assert::MessageAt("lpServerInterface", KAC_ARTIST_ASSERT_FILE, 87 /* ARTIST 0x8287D4CC */));
+            CgsDev::Assert::MessageAt("lpServerInterface", __FILE__, 87 /* ARTIST 0x8287D4CC */));
 
         mpNetworkManager  = lpNetworkManager;
         mpServerInterface = lpServerInterface;
@@ -56,7 +55,9 @@ namespace CgsNetwork
                 // as null placeholders here (the asm address is not a real owned
                 // object we can name). Flagged: config-blob contents unrecovered.
                 mpBuddies = HLBApiCreate(0, 0, 0);
-                CGS_ASSERT(mpBuddies, "mpBuddies");
+                CGS_ASSERT(mpBuddies, CgsDev::Assert::MessageAt(
+                    "mpBuddies",
+                    __FILE__, 145 /* ARTIST 0x8288B604 */));
 
                 HLBApiRegisterBuddyChangeCallback(mpBuddies, reinterpret_cast<void*>(&_BuddiesChangedCallback), this);
                 HLBListSendChatMsg(mpBuddies, reinterpret_cast<void*>(&_MessageArrivedCallback), reinterpret_cast<s32>(this), 0, 0);
@@ -145,7 +146,7 @@ namespace CgsNetwork
     bool BuddyManagerBase::GetBuddyName(s32 liIndex, PlayerName* lpOutName)
     {
         CGS_ASSERT(mpBuddies,
-            CgsDev::Assert::MessageAt("mpBuddies", KAC_ARTIST_ASSERT_FILE, 399 /* ARTIST 0x8287D62C */));
+            CgsDev::Assert::MessageAt("mpBuddies", __FILE__, 399 /* ARTIST 0x8287D62C */));
 
         HLBBudT* lpBuddy = HLBListGetBuddyByIndex(mpBuddies, liIndex);
         if (lpBuddy == 0)
@@ -214,9 +215,9 @@ namespace CgsNetwork
     bool BuddyManagerBase::IsBuddyJoinable(const PlayerName* lpBuddyName)
     {
         CGS_ASSERT(mpBuddies,
-            CgsDev::Assert::MessageAt("mpBuddies", KAC_ARTIST_ASSERT_FILE, 627 /* ARTIST 0x8287D7D0 */));
+            CgsDev::Assert::MessageAt("mpBuddies", __FILE__, 627 /* ARTIST 0x8287D7D0 */));
         CGS_ASSERT(lpBuddyName,
-            CgsDev::Assert::MessageAt("lpBuddyName", KAC_ARTIST_ASSERT_FILE, 628 /* ARTIST 0x8287D7F4 */));
+            CgsDev::Assert::MessageAt("lpBuddyName", __FILE__, 628 /* ARTIST 0x8287D7F4 */));
 
         HLBBudT* lpBuddy = HLBListGetBuddyByName(mpBuddies, lpBuddyName->GetPlayerName());
         return HLBBudIsJoinable(lpBuddy) == 1;
@@ -228,11 +229,11 @@ namespace CgsNetwork
     bool BuddyManagerBase::IsBuddyOnline(const PlayerName* lpBuddyName)
     {
         CGS_ASSERT(lpBuddyName,
-            CgsDev::Assert::MessageAt("lpBuddyName", KAC_ARTIST_ASSERT_FILE, 1196 /* ARTIST 0x8287DB9C */));
+            CgsDev::Assert::MessageAt("lpBuddyName", __FILE__, 1196 /* ARTIST 0x8287DB9C */));
 
         HLBBudT* lpBuddy = HLBListGetBuddyByName(mpBuddies, lpBuddyName->GetPlayerName());
         CGS_ASSERT(lpBuddy,
-            CgsDev::Assert::MessageAt("lpBuddy", KAC_ARTIST_ASSERT_FILE, 1199 /* ARTIST 0x8287DBD0 */));
+            CgsDev::Assert::MessageAt("lpBuddy", __FILE__, 1199 /* ARTIST 0x8287DBD0 */));
 
         return HLBBudGetState(lpBuddy) != 0;
     }
@@ -247,10 +248,14 @@ namespace CgsNetwork
     // =========================================================================
     void BuddyManagerBase::GetBuddyPresence(const PlayerName* lpBuddyName, char* lpcOut)
     {
-        CGS_ASSERT(lpBuddyName, "lpBuddyName");
+        CGS_ASSERT(lpBuddyName, CgsDev::Assert::MessageAt(
+            "lpBuddyName",
+            __FILE__, 1006 /* ARTIST 0x8287DB1C */));
 
         HLBBudT* lpBuddy = HLBListGetBuddyByName(mpBuddies, lpBuddyName->GetPlayerName());
-        CGS_ASSERT(lpBuddy, "lpBuddy");
+        CGS_ASSERT(lpBuddy, CgsDev::Assert::MessageAt(
+            "lpBuddy",
+            __FILE__, 1009 /* ARTIST 0x8287DB50 */));
 
         (void)lpBuddy;
         (void)lpcOut;
@@ -317,14 +322,14 @@ namespace CgsNetwork
     void BuddyManagerBase::SendMessage(const PlayerName* lpBuddyName, const char* lpcMessage)
     {
         CGS_ASSERT(lpBuddyName,
-            CgsDev::Assert::MessageAt("lpBuddyName", KAC_ARTIST_ASSERT_FILE, 742 /* ARTIST 0x8288B6F8 */));
+            CgsDev::Assert::MessageAt("lpBuddyName", __FILE__, 742 /* ARTIST 0x8288B6F8 */));
 
         s32 liResult = HLBListSendChatMsg(mpBuddies, lpBuddyName->GetPlayerName(), reinterpret_cast<s32>(lpcMessage),
                                           reinterpret_cast<void*>(&_MessageSendingCallback), this);
         CGS_ASSERT(liResult == HLB_ERROR_NONE,
             CgsDev::Assert::MessageAt(
                 "DirtySock::HLBListSendChatMsg( mpBuddies, lpBuddyName->GetPlayerName(), lpcMessage, &_MessageSendingCallback, this ) == HLB_ERROR_NONE",
-                KAC_ARTIST_ASSERT_FILE, 744 /* ARTIST 0x8288B738 */));
+                __FILE__, 744 /* ARTIST 0x8288B738 */));
     }
 
     // =========================================================================
@@ -354,8 +359,12 @@ namespace CgsNetwork
     // =========================================================================
     void BuddyManagerBase::InviteArrived(const PlayerName* lpPlayerName, s32 liInvitePayload)
     {
-        CGS_ASSERT(lpPlayerName, "lpPlayerName");
-        CGS_ASSERT(lpPlayerName && lpPlayerName->GetPlayerName()[0] != '\0', "!lpPlayerName->IsEmpty()");
+        CGS_ASSERT(lpPlayerName, CgsDev::Assert::MessageAt(
+            "lpPlayerName",
+            __FILE__, 916 /* ARTIST 0x8287DA98 */));
+        CGS_ASSERT(lpPlayerName && lpPlayerName->GetPlayerName()[0] != '\0', CgsDev::Assert::MessageAt(
+            "!lpPlayerName->IsEmpty()",
+            __FILE__, 917 /* ARTIST 0x8287DAC0 */));
 
         // The asm forwards the caller's payload (incoming r5) straight through to
         // HLBListSendChatMsg -- it never loads a constant here (unlike the sibling
@@ -370,9 +379,9 @@ namespace CgsNetwork
     void BuddyManagerBase::InviteAccepted(const PlayerName* lpBuddyName)
     {
         CGS_ASSERT(lpBuddyName,
-            CgsDev::Assert::MessageAt("lpBuddyName", KAC_ARTIST_ASSERT_FILE, 1417 /* ARTIST 0x8287DE74 */));
+            CgsDev::Assert::MessageAt("lpBuddyName", __FILE__, 1417 /* ARTIST 0x8287DE74 */));
         CGS_ASSERT(mpBuddies,
-            CgsDev::Assert::MessageAt("mpBuddies", KAC_ARTIST_ASSERT_FILE, 1418 /* ARTIST 0x8287DE9C */));
+            CgsDev::Assert::MessageAt("mpBuddies", __FILE__, 1418 /* ARTIST 0x8287DE9C */));
 
         HLBListSendChatMsg(mpBuddies, lpBuddyName->GetPlayerName(), HLB_MSG_INVITE_REPLY, 0, 0);
     }
@@ -383,9 +392,9 @@ namespace CgsNetwork
     void BuddyManagerBase::InviteRevoked(const PlayerName* lpBuddyName)
     {
         CGS_ASSERT(lpBuddyName,
-            CgsDev::Assert::MessageAt("lpBuddyName", KAC_ARTIST_ASSERT_FILE, 1437 /* ARTIST 0x8287DEFC */));
+            CgsDev::Assert::MessageAt("lpBuddyName", __FILE__, 1437 /* ARTIST 0x8287DEFC */));
         CGS_ASSERT(mpBuddies,
-            CgsDev::Assert::MessageAt("mpBuddies", KAC_ARTIST_ASSERT_FILE, 1438 /* ARTIST 0x8287DF24 */));
+            CgsDev::Assert::MessageAt("mpBuddies", __FILE__, 1438 /* ARTIST 0x8287DF24 */));
 
         HLBListSendChatMsg(mpBuddies, lpBuddyName->GetPlayerName(), HLB_MSG_INVITE_REVOKE, 0, 0);
     }
@@ -396,9 +405,9 @@ namespace CgsNetwork
     void BuddyManagerBase::InviteDeclined(const PlayerName* lpBuddyName)
     {
         CGS_ASSERT(lpBuddyName,
-            CgsDev::Assert::MessageAt("lpBuddyName", KAC_ARTIST_ASSERT_FILE, 1455 /* ARTIST 0x8287DF84 */));
+            CgsDev::Assert::MessageAt("lpBuddyName", __FILE__, 1455 /* ARTIST 0x8287DF84 */));
         CGS_ASSERT(mpBuddies,
-            CgsDev::Assert::MessageAt("mpBuddies", KAC_ARTIST_ASSERT_FILE, 1456 /* ARTIST 0x8287DFAC */));
+            CgsDev::Assert::MessageAt("mpBuddies", __FILE__, 1456 /* ARTIST 0x8287DFAC */));
 
         HLBListSendChatMsg(mpBuddies, lpBuddyName->GetPlayerName(), HLB_MSG_INVITE_REPLY, 0, 0);
     }
@@ -453,7 +462,7 @@ namespace CgsNetwork
                                                    s32 /*liArg3*/, void* lpBuddyManager)
     {
         CGS_ASSERT(lpBuddyManager,
-            CgsDev::Assert::MessageAt("lpBuddyManager", KAC_ARTIST_ASSERT_FILE, 672 /* ARTIST 0x8287D854 */));
+            CgsDev::Assert::MessageAt("lpBuddyManager", __FILE__, 672 /* ARTIST 0x8287D854 */));
         static_cast<BuddyManagerBase*>(lpBuddyManager)->BuddyListHasChanged();
     }
 
@@ -467,7 +476,7 @@ namespace CgsNetwork
                                                     HLBStatE /*leState*/, void* lpBuddyManager)
     {
         CGS_ASSERT(lpBuddyManager,
-            CgsDev::Assert::MessageAt("lpBuddyManager", KAC_ARTIST_ASSERT_FILE, 695 /* ARTIST 0x8287D8BC */));
+            CgsDev::Assert::MessageAt("lpBuddyManager", __FILE__, 695 /* ARTIST 0x8287D8BC */));
         static_cast<BuddyManagerBase*>(lpBuddyManager)->BuddyListHasChanged();
     }
 
@@ -499,7 +508,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT(lnOperation == HLB_OP_SEND_MSG,
             CgsDev::Assert::MessageAt(
-                "lnOperation == DirtySock::HLB_OP_SEND_MSG", KAC_ARTIST_ASSERT_FILE, 786 /* ARTIST 0x8287D92C */));
+                "lnOperation == DirtySock::HLB_OP_SEND_MSG", __FILE__, 786 /* ARTIST 0x8287D92C */));
         static_cast<BuddyManagerBase*>(lpBuddyManager)->MessageSent(liError == 0, liError);
     }
 }

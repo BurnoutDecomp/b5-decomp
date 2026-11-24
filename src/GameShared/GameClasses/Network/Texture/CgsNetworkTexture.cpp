@@ -23,8 +23,7 @@
 #include <cstring>  // std::memset
 #include <xtl.h>    // XMemCpy
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network/CgsNetworkTexture.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network/CgsNetworkTexture.cpp".
 
 namespace CgsNetwork
 {
@@ -169,7 +168,7 @@ namespace CgsNetwork
         if (mbTextureAllocatedFromHeap)
         {
             CGS_ASSERT(mpcTexture,
-                CgsDev::Assert::MessageAt("mpcTexture", KAC_ARTIST_ASSERT_FILE, 144 /* ARTIST 0x8287E60C */));
+                CgsDev::Assert::MessageAt("mpcTexture", __FILE__, 144 /* ARTIST 0x8287E60C */));
             mpHeapMalloc->Free(mpcTexture);
             mpcTexture                 = 0;
             mbTextureAllocatedFromHeap = false;
@@ -189,8 +188,9 @@ namespace CgsNetwork
     // format really is DXT1. A width <= one block is a single block.
     s32 NetworkTexture::GetWidthInBlocks() const
     {
-        CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == mFormat,
-                   "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == mFormat");
+        CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == mFormat, CgsDev::Assert::MessageAt(
+            "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == mFormat",
+            __FILE__, 308 /* ARTIST 0x8287E7E0 */));
 
         if (miWidth > KI_DXT1_BLOCK_WIDTH)
             return (miWidth + (KI_DXT1_BLOCK_WIDTH - 1)) / KI_DXT1_BLOCK_WIDTH;
@@ -201,8 +201,9 @@ namespace CgsNetwork
     // DXT1-only: the texture height measured in 4x4 compression blocks (rounded up).
     s32 NetworkTexture::GetHeightInBlocks() const
     {
-        CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == mFormat,
-                   "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == mFormat");
+        CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == mFormat, CgsDev::Assert::MessageAt(
+            "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == mFormat",
+            __FILE__, 339 /* ARTIST 0x8287E858 */));
 
         if (miHeight > KI_DXT1_BLOCK_HEIGHT)
             return (miHeight + (KI_DXT1_BLOCK_HEIGHT - 1)) / KI_DXT1_BLOCK_HEIGHT;
@@ -262,10 +263,10 @@ namespace CgsNetwork
     {
         CGS_ASSERT(liDataSizeInBytes == GetTextureSize(),
             CgsDev::Assert::MessageAt(
-                "liDataSizeInBytes == GetTextureSize()", KAC_ARTIST_ASSERT_FILE, 369 /* ARTIST 0x8287E8E4 */));
+                "liDataSizeInBytes == GetTextureSize()", __FILE__, 369 /* ARTIST 0x8287E8E4 */));
         CGS_ASSERT(lePixelFormat == GetFormat(),
             CgsDev::Assert::MessageAt(
-                "lePixelFormat == GetFormat()", KAC_ARTIST_ASSERT_FILE, 370 /* ARTIST 0x8287E90C */));
+                "lePixelFormat == GetFormat()", __FILE__, 370 /* ARTIST 0x8287E90C */));
 
         XMemCpy(mpcTexture, lpcPixelData, static_cast<SIZE_T>(liDataSizeInBytes));
     }

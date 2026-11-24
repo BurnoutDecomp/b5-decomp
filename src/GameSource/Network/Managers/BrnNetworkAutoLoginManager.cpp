@@ -110,15 +110,19 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT(mpServerInterface->GetDownloadableConfigComponent() != 0,
-                   "mpServerInterface->GetDownloadableConfigComponent()");
+        CGS_ASSERT(mpServerInterface->GetDownloadableConfigComponent() != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface->GetDownloadableConfigComponent()",
+            __FILE__, 345 /* ARTIST 0x82556D08 */));
 
         mTimer.SetFloatVal(mpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesDownloads());
         mProcessesComplete.UnSetAll();
 
-        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0,
-                   "mpNetworkModule->GetNetworkManager()");
+        CGS_ASSERT(mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkModule",
+            __FILE__, 353 /* ARTIST 0x82556D4C */));
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkModule->GetNetworkManager()",
+            __FILE__, 354 /* ARTIST 0x82556D78 */));
 
         mpNetworkModule->GetNetworkManager()->OnAutoLogin();
 
@@ -160,19 +164,24 @@ namespace BrnNetwork
         // Count the frame time down off the wait timer.
         mTimer -= CgsSystem::Time(lfFrameDelta);
 
-        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0,
-                   "mpNetworkModule->GetNetworkManager()");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetStateManager() != 0,
-                   "mpNetworkModule->GetNetworkManager()->GetStateManager()");
+        CGS_ASSERT(mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkModule",
+            __FILE__, 209 /* ARTIST 0x8257627C */));
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkModule->GetNetworkManager()",
+            __FILE__, 210 /* ARTIST 0x825762A8 */));
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetStateManager() != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkModule->GetNetworkManager()->GetStateManager()",
+            __FILE__, 211 /* ARTIST 0x825762DC */));
 
         BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
 
         if (!(mTimer.GetFloatVal() > 0.0f)
             && lpNetworkManager->GetStateManager()->IsIdle())
         {
-            CGS_ASSERT(mpServerInterface->GetDownloadableConfigComponent() != 0,
-                       "mpServerInterface->GetDownloadableConfigComponent()");
+            CGS_ASSERT(mpServerInterface->GetDownloadableConfigComponent() != 0, CgsDev::Assert::MessageAt(
+                "mpServerInterface->GetDownloadableConfigComponent()",
+                __FILE__, 221 /* ARTIST 0x82576354 */));
 
             mTimer.SetFloatVal(mpServerInterface->GetDownloadableConfigComponent()->TimeBetweenRoadRulesDownloads());
             meState = E_AUTO_LOGIN_STATE_CONNECTING;
@@ -197,14 +206,21 @@ namespace BrnNetwork
     void
     AutoLoginManager::UpdateConnecting()
     {
-        CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0,
-                   "mpNetworkModule->GetNetworkManager()");
-        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetLoginManager() != 0,
-                   "mpNetworkModule->GetNetworkManager()->GetLoginManager()");
-        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
-        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0,
-                   "mpServerInterface->GetConnectionComponent()");
+        CGS_ASSERT(mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkModule",
+            __FILE__, 258 /* ARTIST 0x8254B6C8 */));
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkModule->GetNetworkManager()",
+            __FILE__, 259 /* ARTIST 0x8254B6F4 */));
+        CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetLoginManager() != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkModule->GetNetworkManager()->GetLoginManager()",
+            __FILE__, 260 /* ARTIST 0x8254B720 */));
+        CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface",
+            __FILE__, 261 /* ARTIST 0x8254B748 */));
+        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface->GetConnectionComponent()",
+            __FILE__, 262 /* ARTIST 0x8254B774 */));
 
         BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
 

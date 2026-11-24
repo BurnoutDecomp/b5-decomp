@@ -21,7 +21,7 @@
 
 #include <cstring>   // std::strlen / std::strncpy (the cell and title copies)
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboard.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboard.h".
 static const char KAC_ARTIST_ASSERT_SOURCE[] =
     "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkScoreboard.cpp";
 
@@ -157,10 +157,10 @@ namespace BrnNetwork
     const ScoreboardRow* Scoreboard::GetRow(s32 liRowNumber) const
     {
         CGS_ASSERT(liRowNumber >= 0,
-            CgsDev::Assert::MessageAt("liRowNumber >= 0", KAC_ARTIST_ASSERT_FILE, 309 /* ARTIST 0x8240E9D4 */));
+            CgsDev::Assert::MessageAt("liRowNumber >= 0", __FILE__, 309 /* ARTIST 0x8240E9D4 */));
         CGS_ASSERT(liRowNumber < miNumberOfRows,
             CgsDev::Assert::MessageAt(
-                "liRowNumber < miNumberOfRows", KAC_ARTIST_ASSERT_FILE, 310 /* ARTIST 0x8240EA00 */));
+                "liRowNumber < miNumberOfRows", __FILE__, 310 /* ARTIST 0x8240EA00 */));
         return &maRows[liRowNumber];
     }
 }

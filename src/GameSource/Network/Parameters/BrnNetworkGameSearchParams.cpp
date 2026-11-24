@@ -1,4 +1,5 @@
 #include <xtl.h>
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "BrnNetworkGameSearchParams.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                          // CgsCore::SPrintf
@@ -97,7 +98,9 @@ namespace BrnNetwork
                                        u32 luRequiredSlots, CgsNetwork::EFirewallSettings leFirewallSettings,
                                        BrnNetworkManager* lpNetworkManager, u32 luField29C)
     {
-        CGS_ASSERT(lpNetworkManager, "lpNetworkManager");
+        CGS_ASSERT(lpNetworkManager, CgsDev::Assert::MessageAt(
+            "lpNetworkManager",
+            __FILE__, 58 /* ARTIST 0x82593778 */));
 
         if (!CgsNetwork::ServerInterfaceGameSearchParams::Prepare())
         {

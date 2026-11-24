@@ -25,8 +25,7 @@
 #include "GameSource/Resource/BrnResourceAllocator.h"                                              // PrintConsoleMemory, GetAvailableMemory, BRN_RESOURCE_MEMORY_CHECK
 #include <cstddef>       // offsetof
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkModule.cpp".
 
 namespace BrnNetwork
 {
@@ -111,16 +110,36 @@ namespace BrnNetwork
         miNetworkAfterSim7PM = CgsDev::PerfMonCpu::AddMonitor("Module - Process after 7",       CgsDev::E_PMP_9, false, 1.0f, true);
         miNetworkAfterSim8PM = CgsDev::PerfMonCpu::AddMonitor("Module - Process after 8",       CgsDev::E_PMP_9, false, 1.0f, true);
 
-        CGS_ASSERT(miNetworkBeforeSimPM >= 0, "miNetworkBeforeSimPM >= 0");
-        CGS_ASSERT(miNetworkAfterSimPM  >= 0, "miNetworkAfterSimPM >= 0");
-        CGS_ASSERT(miNetworkAfterSim1PM >= 0, "miNetworkAfterSim1PM >= 0");
-        CGS_ASSERT(miNetworkAfterSim2PM >= 0, "miNetworkAfterSim2PM >= 0");
-        CGS_ASSERT(miNetworkAfterSim3PM >= 0, "miNetworkAfterSim3PM >= 0");
-        CGS_ASSERT(miNetworkAfterSim4PM >= 0, "miNetworkAfterSim4PM >= 0");
-        CGS_ASSERT(miNetworkAfterSim5PM >= 0, "miNetworkAfterSim5PM >= 0");
-        CGS_ASSERT(miNetworkAfterSim6PM >= 0, "miNetworkAfterSim6PM >= 0");
-        CGS_ASSERT(miNetworkAfterSim7PM >= 0, "miNetworkAfterSim7PM >= 0");
-        CGS_ASSERT(miNetworkAfterSim8PM >= 0, "miNetworkAfterSim8PM >= 0");
+        CGS_ASSERT(miNetworkBeforeSimPM >= 0, CgsDev::Assert::MessageAt(
+            "miNetworkBeforeSimPM >= 0",
+            __FILE__, 119 /* ARTIST 0x82592C54 */));
+        CGS_ASSERT(miNetworkAfterSimPM  >= 0, CgsDev::Assert::MessageAt(
+            "miNetworkAfterSimPM >= 0",
+            __FILE__, 120 /* ARTIST 0x82592C7C */));
+        CGS_ASSERT(miNetworkAfterSim1PM >= 0, CgsDev::Assert::MessageAt(
+            "miNetworkAfterSim1PM >= 0",
+            __FILE__, 121 /* ARTIST 0x82592CA4 */));
+        CGS_ASSERT(miNetworkAfterSim2PM >= 0, CgsDev::Assert::MessageAt(
+            "miNetworkAfterSim2PM >= 0",
+            __FILE__, 122 /* ARTIST 0x82592CCC */));
+        CGS_ASSERT(miNetworkAfterSim3PM >= 0, CgsDev::Assert::MessageAt(
+            "miNetworkAfterSim3PM >= 0",
+            __FILE__, 123 /* ARTIST 0x82592CF4 */));
+        CGS_ASSERT(miNetworkAfterSim4PM >= 0, CgsDev::Assert::MessageAt(
+            "miNetworkAfterSim4PM >= 0",
+            __FILE__, 124 /* ARTIST 0x82592D1C */));
+        CGS_ASSERT(miNetworkAfterSim5PM >= 0, CgsDev::Assert::MessageAt(
+            "miNetworkAfterSim5PM >= 0",
+            __FILE__, 125 /* ARTIST 0x82592D44 */));
+        CGS_ASSERT(miNetworkAfterSim6PM >= 0, CgsDev::Assert::MessageAt(
+            "miNetworkAfterSim6PM >= 0",
+            __FILE__, 126 /* ARTIST 0x82592D6C */));
+        CGS_ASSERT(miNetworkAfterSim7PM >= 0, CgsDev::Assert::MessageAt(
+            "miNetworkAfterSim7PM >= 0",
+            __FILE__, 127 /* ARTIST 0x82592D94 */));
+        CGS_ASSERT(miNetworkAfterSim8PM >= 0, CgsDev::Assert::MessageAt(
+            "miNetworkAfterSim8PM >= 0",
+            __FILE__, 128 /* ARTIST 0x82592DBC */));
 
         CgsNetwork::NetworkImageConverter::SetupPerfmons();
     }
@@ -264,7 +283,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT(mNetworkManager.GetServerInterface(),
             CgsDev::Assert::MessageAt(
-                "mNetworkManager.GetServerInterface()", KAC_ARTIST_ASSERT_FILE, 515 /* ARTIST 0x82581A70 */));
+                "mNetworkManager.GetServerInterface()", __FILE__, 515 /* ARTIST 0x82581A70 */));
 
         CgsNetwork::ServerInterfaceGames* lpServerInterfaceGames = mNetworkManager.GetServerInterface()->GetGameComponent();
         CgsNetwork::PlayerManager*        lpPlayerManager        = mNetworkManager.GetPlayerManager();
@@ -272,9 +291,9 @@ namespace BrnNetwork
 
         CGS_ASSERT(lpServerInterfaceGames,
             CgsDev::Assert::MessageAt(
-                "lpServerInterfaceGames", KAC_ARTIST_ASSERT_FILE, 521 /* ARTIST 0x82581AA4 */));
+                "lpServerInterfaceGames", __FILE__, 521 /* ARTIST 0x82581AA4 */));
         CGS_ASSERT(lpPlayerManager,
-            CgsDev::Assert::MessageAt("lpPlayerManager", KAC_ARTIST_ASSERT_FILE, 522 /* ARTIST 0x82581AC8 */));
+            CgsDev::Assert::MessageAt("lpPlayerManager", __FILE__, 522 /* ARTIST 0x82581AC8 */));
 
         miCachedPlayersInGame = 0;
         while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))

@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsSmartBitStream.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsFloatQuantiser.h"
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsIntQuantiser.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"
@@ -62,8 +63,12 @@ namespace
 
     bool SmartBitStream::AddRawData(const char* lpcData, s32 liNumBytes)
     {
-        CGS_ASSERT(lpcData != 0, "lpcData != NULL");
-        CGS_ASSERT(liNumBytes >= 0, "liNumBytes >= 0");
+        CGS_ASSERT(lpcData != 0, CgsDev::Assert::MessageAt(
+            "lpcData != NULL",
+            __FILE__, 47 /* ARTIST 0x82882F14 */));
+        CGS_ASSERT(liNumBytes >= 0, CgsDev::Assert::MessageAt(
+            "liNumBytes >= 0",
+            __FILE__, 48 /* ARTIST 0x82882F38 */));
 
         const char* lpcRemaining = lpcData;
 
@@ -103,14 +108,20 @@ namespace
             ++lpcRemaining;
         }
 
-        CGS_ASSERT(liNumBytes == 0, "liNumBytes == 0");
+        CGS_ASSERT(liNumBytes == 0, CgsDev::Assert::MessageAt(
+            "liNumBytes == 0",
+            __FILE__, 85 /* ARTIST 0x82883004 */));
         return true;
     }
 
     void SmartBitStream::GetRawData(char* lpcBuffer, s32 liNumBytes)
     {
-        CGS_ASSERT(lpcBuffer != 0, "lpcBuffer != NULL");
-        CGS_ASSERT(liNumBytes >= 0, "liNumBytes >= 0");
+        CGS_ASSERT(lpcBuffer != 0, CgsDev::Assert::MessageAt(
+            "lpcBuffer != NULL",
+            __FILE__, 100 /* ARTIST 0x82883064 */));
+        CGS_ASSERT(liNumBytes >= 0, CgsDev::Assert::MessageAt(
+            "liNumBytes >= 0",
+            __FILE__, 101 /* ARTIST 0x82883088 */));
 
         char* lpcDst = lpcBuffer;
 

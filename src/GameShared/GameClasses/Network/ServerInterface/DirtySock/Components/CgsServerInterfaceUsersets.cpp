@@ -26,8 +26,7 @@ extern "C"
     s32               DispListOrder(DispListRef* ref);
 }
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceUsersets.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceUsersets.cpp".
 
 namespace CgsNetwork
 {
@@ -235,7 +234,7 @@ namespace CgsNetwork
                                                      KI_LOBBY_LIST_USERSET_USERS, 0, 0);
             CGS_ASSERT(mpUsersInUsersetList != 0,
                 CgsDev::Assert::MessageAt(
-                    "Failed to create users in userset list", KAC_ARTIST_ASSERT_FILE, 451 /* ARTIST 0x8287C42C */));
+                    "Failed to create users in userset list", __FILE__, 451 /* ARTIST 0x8287C42C */));
         }
     }
 
@@ -255,7 +254,7 @@ namespace CgsNetwork
     bool ServerInterfaceUsersets::GetUserSetParams(ServerInterfaceUsersetParamsBase* lpParams) const
     {
         CGS_ASSERT(lpParams != 0,
-            CgsDev::Assert::MessageAt("lpUsersetParams", KAC_ARTIST_ASSERT_FILE, 602 /* ARTIST 0x8287C4FC */));
+            CgsDev::Assert::MessageAt("lpUsersetParams", __FILE__, 602 /* ARTIST 0x8287C4FC */));
 
         lpParams->Prepare();
 

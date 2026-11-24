@@ -4,6 +4,7 @@
 #include "dirtylib_x360_internal.h"
 #include <stddef.h>
 
+typedef struct SocketT SocketT;   // DirtySDK is C
 struct SocketT
 {
     SocketT* next; SocketT* killedNext;
@@ -20,11 +21,15 @@ struct SocketT
     sockaddr recvFrom; u8 padAE[2];
     s32 recvSize; u8 recvData[1264];
 };
+typedef struct SocketAddrMapX360 SocketAddrMapX360;   // DirtySDK is C
 struct SocketAddrMapX360 { u32 address, mask, remap; u16 port, remapPort; };
+typedef struct SocketNameMapX360 SocketNameMapX360;   // DirtySDK is C
 struct SocketNameMapX360 { char match[64], remapName[32]; u32 remapAddress; u16 port, remapPort; };
 CGS_STATIC_ASSERT((sizeof(SocketAddrMapX360) == 16), "ARTIST address map");
 CGS_STATIC_ASSERT((sizeof(SocketNameMapX360) == 104), "ARTIST name map");
+typedef struct DirtyLSPRefT DirtyLSPRefT;   // DirtySDK is C
 struct DirtyLSPRefT;
+typedef struct SocketStateX360 SocketStateX360;   // DirtySDK is C
 struct SocketStateX360
 {
     SocketT* sockets; SocketT* killed;

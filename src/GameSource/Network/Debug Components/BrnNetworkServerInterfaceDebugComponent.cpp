@@ -33,8 +33,7 @@
 
 // The shared debug-HUD text helper (its own TU).
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkServerInterfaceDebugComponent.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkServerInterfaceDebugComponent.cpp".
 
 namespace BrnNetwork
 {
@@ -112,7 +111,9 @@ namespace BrnNetwork
     // bodies); it is a no-op and carries no observable effect, so it is dropped.
     void ServerInterfaceDebugComponent::Construct(BrnServerInterfaceBase* lpServerInterfaceBase)
     {
-        CGS_ASSERT(lpServerInterfaceBase != 0, "lpServerInterfaceBase");
+        CGS_ASSERT(lpServerInterfaceBase != 0, CgsDev::Assert::MessageAt(
+            "lpServerInterfaceBase",
+            __FILE__, 86 /* ARTIST 0x8258573C */));
 
         mpServerInterfaceBase       = lpServerInterfaceBase;
         miConnectionType            = CgsNetwork::ServerInterfaceGames::E_GAME_SERVER_CONNECTION_TYPE_FALLBACK_GAME_ONLY; // 3
@@ -170,7 +171,7 @@ namespace BrnNetwork
         CGS_ASSERT(lpData != 0,
             CgsDev::Assert::MessageAt(
                 "lpServerInterfaceDebugComponent",
-                KAC_ARTIST_ASSERT_FILE, 235 /* ARTIST 0x825857CC */));
+                __FILE__, 235 /* ARTIST 0x825857CC */));
         static_cast<ServerInterfaceDebugComponent*>(lpData)->mbDisconnectNextUpdate = true;
     }
 
@@ -222,7 +223,7 @@ namespace BrnNetwork
         {
             mbApplyServerTypeNextUpdate = false;
             CGS_ASSERT(mpNetworkManager != 0,
-                CgsDev::Assert::MessageAt("mpNetworkManager", KAC_ARTIST_ASSERT_FILE, 190 /* ARTIST 0x8258ACCC */));
+                CgsDev::Assert::MessageAt("mpNetworkManager", __FILE__, 190 /* ARTIST 0x8258ACCC */));
             mpNetworkManager->GetNetworkServers()->SetServerType(static_cast<CgsNetwork::EServerType>(miServerType));
         }
     }
@@ -369,7 +370,7 @@ namespace BrnNetwork
         CGS_ASSERT(lpUserData != 0,
             CgsDev::Assert::MessageAt(
                 "lpServerInterfaceDebugComponent",
-                KAC_ARTIST_ASSERT_FILE, 541 /* ARTIST 0x82585824 */));
+                __FILE__, 541 /* ARTIST 0x82585824 */));
         static_cast<ServerInterfaceDebugComponent*>(lpUserData)->mbApplyServerTypeNextUpdate = true;
     }
 }

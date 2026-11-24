@@ -252,9 +252,9 @@ namespace CgsNetwork
             // diagnostic only and is reduced to this note (mirrors the sibling
             // CgsPlayersConnectionManagerLookup reconstruction).
 
-            CGS_ASSERT(static_cast<s32>(leType) >= 0 &&
-                       static_cast<s32>(leType) < E_BROADCAST_MESSAGE_TYPES_COUNT,
-                       "Broadcast message has invalid type");
+            CGS_ASSERT(static_cast<s32>(leType) >= 0 && static_cast<s32>(leType) < E_BROADCAST_MESSAGE_TYPES_COUNT, CgsDev::Assert::MessageAt(
+                "Broadcast message has invalid type",
+                __FILE__, 191 /* ARTIST 0x828861FC */));
 
             BroadcastMessageCallback lpfCallback = mapRegisteredCallbacks[leType];
             if (lpfCallback)

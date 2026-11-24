@@ -18,6 +18,7 @@ enum TagFieldPatternE
     TAGFIELD_PATTERN_INT32 = 'l',
     TAGFIELD_PATTERN_STR   = 's',
 };
+typedef enum TagFieldPatternE TagFieldPatternE;   // DirtySDK is C
 
 #ifdef __cplusplus
 extern "C" {

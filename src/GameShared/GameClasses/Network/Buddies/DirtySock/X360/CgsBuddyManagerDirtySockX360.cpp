@@ -69,8 +69,7 @@ static const s32 KI_CONNAPI_SESSION_TEXT_SIZE = 128;
 // buddy (dwNumSettingIds = 1; the value is read from the image's rodata).
 static const u32 KU_PROFILE_GAMERCARD_PICTURE_KEY = 0x4064000Fu;
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network\\Buddies\\DirtySock\\X360\\CgsBuddyManagerDirtySockX360.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network\\Buddies\\DirtySock\\X360\\CgsBuddyManagerDirtySockX360.cpp".
 
 namespace CgsSystem
 {
@@ -220,14 +219,14 @@ namespace CgsNetwork
     u64 BuddyManagerX360::GetBuddyXUID(const PlayerName* lpBuddyName)
     {
         CGS_ASSERT(mpBuddies,
-            CgsDev::Assert::MessageAt("mpBuddies", KAC_ARTIST_ASSERT_FILE, 222 /* ARTIST 0x8287F9E0 */));
+            CgsDev::Assert::MessageAt("mpBuddies", __FILE__, 222 /* ARTIST 0x8287F9E0 */));
         CGS_ASSERT(lpBuddyName,
-            CgsDev::Assert::MessageAt("lpBuddyName", KAC_ARTIST_ASSERT_FILE, 223 /* ARTIST 0x8287FA04 */));
+            CgsDev::Assert::MessageAt("lpBuddyName", __FILE__, 223 /* ARTIST 0x8287FA04 */));
 
         DirtySock::HLBBudT* lpBuddy =
             DirtySock::HLBListGetBuddyByName(mpBuddies, lpBuddyName->GetPlayerName());
         CGS_ASSERT(lpBuddy,
-            CgsDev::Assert::MessageAt("lpBuddy", KAC_ARTIST_ASSERT_FILE, 226 /* ARTIST 0x8287FA38 */));
+            CgsDev::Assert::MessageAt("lpBuddy", __FILE__, 226 /* ARTIST 0x8287FA38 */));
 
         return DirtySock::HLBBudGetXenonXUID(lpBuddy);
     }
@@ -257,12 +256,12 @@ namespace CgsNetwork
     bool BuddyManagerX360::HaveIInvitedMyBuddy(const PlayerName* lpPlayerName)
     {
         CGS_ASSERT(lpPlayerName,
-            CgsDev::Assert::MessageAt("lpPlayerName", KAC_ARTIST_ASSERT_FILE, 616 /* ARTIST 0x8287FD8C */));
+            CgsDev::Assert::MessageAt("lpPlayerName", __FILE__, 616 /* ARTIST 0x8287FD8C */));
 
         DirtySock::HLBBudT* lpBuddy =
             DirtySock::HLBListGetBuddyByName(mpBuddies, lpPlayerName->GetPlayerName());
         CGS_ASSERT(lpBuddy,
-            CgsDev::Assert::MessageAt("lpBuddy", KAC_ARTIST_ASSERT_FILE, 619 /* ARTIST 0x8287FDC0 */));
+            CgsDev::Assert::MessageAt("lpBuddy", __FILE__, 619 /* ARTIST 0x8287FDC0 */));
 
         // The "I have invited this buddy" flag is bit 26 of the buddy record's flag
         // word (+0x18).
@@ -286,7 +285,9 @@ namespace CgsNetwork
             }
 
             DirtySock::HLBBudT* lpBuddy = DirtySock::HLBListGetBuddyByIndex(mpBuddies, liIndex);
-            CGS_ASSERT(lpBuddy, "lpBuddy");
+            CGS_ASSERT(lpBuddy, CgsDev::Assert::MessageAt(
+                "lpBuddy",
+                __FILE__, 649 /* ARTIST 0x8287FFDC */));
 
             if ((lpBuddy->uFlags & HLB_BUDFLAG_INVITE_SENT) != 0)
             {
@@ -432,12 +433,13 @@ namespace CgsNetwork
     // picture-key blob and the source XUID array, reset the progress counters,
     // and kick off the first profile-settings request.
     // =========================================================================
+    // The count is unsigned: ARTIST 0x828940E8 tests it with cmplwi.
     void BuddyManagerX360::StartDownloadingPictures(NetworkTexture* lpaTextures,
-                                                     s32 liNumberOfPictures,
+                                                     u32 luNumberOfPictures,
                                                      u64* lpaXuids,
                                                      void* lpaGamerPicKeys)
     {
-        if (liNumberOfPictures == 0)
+        if (luNumberOfPictures == 0)
         {
             return;
         }
@@ -445,7 +447,7 @@ namespace CgsNetwork
         mpDownloadTextures           = lpaTextures;
         mpGamerPicKeys               = lpaGamerPicKeys;
         mpDownloadXuids              = lpaXuids;
-        miNumberOfPicturesToDownload = liNumberOfPictures;
+        miNumberOfPicturesToDownload = luNumberOfPictures;
         miCurrentProfile             = 0;
         miNextProfileToRequest       = 0;
         miFirstProfileInThisRequest  = 0;
@@ -483,7 +485,9 @@ namespace CgsNetwork
             &luResultsSize,
             &muProfileResultsSettingsLen,    // pResults (+0x28)
             mGamerPicOverlapped);
-        CGS_ASSERT(luResult == ERROR_IO_PENDING, "dwRet == ERROR_IO_PENDING");
+        CGS_ASSERT(luResult == ERROR_IO_PENDING, CgsDev::Assert::MessageAt(
+            "dwRet == ERROR_IO_PENDING",
+            __FILE__, 426 /* ARTIST 0x8288CCD8 */));
 
         meCurrentStatus             = E_BUDDY_ACTION_DOWNLOADING_PROFILE;
         miFirstProfileInThisRequest = miNextProfileToRequest;
@@ -602,7 +606,7 @@ namespace CgsNetwork
             const u32 luResult = XCancelOverlapped(mGamerPicOverlapped);
             CGS_ASSERT(luResult == 0,
                 CgsDev::Assert::MessageAt(
-                    "mGamerPicOverlapped.CancelXOverlapped()", KAC_ARTIST_ASSERT_FILE, 316 /* ARTIST 0x8287FAA0 */));
+                    "mGamerPicOverlapped.CancelXOverlapped()", __FILE__, 316 /* ARTIST 0x8287FAA0 */));
         }
     }
 

@@ -20,8 +20,7 @@
 // sent); Connect authenticates both with the lobby's telemetry auth string; CaptureEvent
 // records {module, group, "description.data"} into the current buffer.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceTelemetry.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network\\ServerInterface\\DirtySock\\Components\\CgsServerInterfaceTelemetry.cpp".
 
 namespace CgsNetwork
 {
@@ -158,7 +157,7 @@ namespace CgsNetwork
 
         CGS_ASSERT(mpTelemetryNormalUsage != 0,
             CgsDev::Assert::MessageAt(
-                "NULL != mpTelemetryNormalUsage", KAC_ARTIST_ASSERT_FILE, 228 /* ARTIST 0x8287B1E0 */));
+                "NULL != mpTelemetryNormalUsage", __FILE__, 228 /* ARTIST 0x8287B1E0 */));
         TelemetryApiUpdate(mpTelemetryNormalUsage);
     }
 
@@ -196,7 +195,7 @@ namespace CgsNetwork
     {
         CGS_ASSERT(mpTelemetryNormalUsage != 0,
             CgsDev::Assert::MessageAt(
-                "NULL != mpTelemetryNormalUsage", KAC_ARTIST_ASSERT_FILE, 336 /* ARTIST 0x82888F58 */));
+                "NULL != mpTelemetryNormalUsage", __FILE__, 336 /* ARTIST 0x82888F58 */));
 
         if (lbAbandonFirstUsage)
         {
@@ -356,7 +355,7 @@ namespace CgsNetwork
         ServerInterfaceTelemetry* lpServerInterfaceTelemetry = static_cast<ServerInterfaceTelemetry*>(lpUserData);
         CGS_ASSERT(lpServerInterfaceTelemetry != 0,
             CgsDev::Assert::MessageAt(
-                "NULL != lpServerInterfaceTelemetry", KAC_ARTIST_ASSERT_FILE, 960 /* ARTIST 0x8287B8AC */));
+                "NULL != lpServerInterfaceTelemetry", __FILE__, 960 /* ARTIST 0x8287B8AC */));
 
         // The first-usage buffer is full: record into the normal buffer and hold the full one.
         lpServerInterfaceTelemetry->mpTelemetryCurrent = lpServerInterfaceTelemetry->mpTelemetryNormalUsage;
@@ -369,7 +368,7 @@ namespace CgsNetwork
         ServerInterfaceTelemetry* lpServerInterfaceTelemetry = static_cast<ServerInterfaceTelemetry*>(lpUserData);
         CGS_ASSERT(lpServerInterfaceTelemetry != 0,
             CgsDev::Assert::MessageAt(
-                "NULL != lpServerInterfaceTelemetry", KAC_ARTIST_ASSERT_FILE, 989 /* ARTIST 0x8287B924 */));
+                "NULL != lpServerInterfaceTelemetry", __FILE__, 989 /* ARTIST 0x8287B924 */));
 
         lpServerInterfaceTelemetry->mpServerInterface->OnEvent(E_SERVER_INTERFACE_TELEMETRY_FIRST_USAGE_DATA_UPLOADED, 0);
         lpServerInterfaceTelemetry->AbandonFirstUsageBuffer();

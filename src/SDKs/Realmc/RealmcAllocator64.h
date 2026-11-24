@@ -68,6 +68,7 @@
 // ===========================================================================
 
 #include <cstddef>
+#include "SDKs/Realmc/RealmcCore.h"   // RealmcCore::allocator (the deque's allocator member)
 
 namespace RealmcCore
 {
@@ -194,6 +195,11 @@ private:
     char*  mpBackBegin;   // +0x1C  page begin   (deque iterator `first`)
     char*  mpBackEnd;     // +0x20  page end     (deque iterator `last`)
     char** mppBackSlot;   // +0x24  owning slot  (deque iterator `node`)
+    // +0x28: the empty allocator subobject an eastl::deque keeps after its iterators (the
+    // constructor's third, by-reference allocator argument is copied here). It makes the deque
+    // 0x2C bytes, which puts MemcardState::mpMessageFilter at +0x50 as ARTIST reads it
+    // (IRunnableTask::operator() 0x82C475EC, lwz r3,0x50(r11)).
+    allocator mAllocator;
 
     // Grow or re-centre the page-pointer array so nAdditionalSlots more slots are
     // free on one side (nSide == 0: front, else back), then reseat the front/back

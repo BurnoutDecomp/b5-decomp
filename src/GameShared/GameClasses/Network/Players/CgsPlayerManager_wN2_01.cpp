@@ -30,13 +30,16 @@ static void MessageSentCallbackFunction(void* lpUserData)
 // and the bandwidth counters.
 void PlayerManager::Construct(PlayerManagerConstructParams* lpConstructParams)
 {
-    CGS_ASSERT(lpConstructParams->mapPlayerList, "lpConstructParams->mapPlayerList");
+    CGS_ASSERT(lpConstructParams->mapPlayerList, CgsDev::Assert::MessageAt(
+        "lpConstructParams->mapPlayerList",
+        __FILE__, 77 /* ARTIST 0x82895444 */));
 
     // Every slot but the last carries a network player.
     for (s32 liIndex = 0; liIndex < KI_MAX_PLAYERS - 1; ++liIndex)
     {
-        CGS_ASSERT(lpConstructParams->mapConstructParams[liIndex],
-                   "lpConstructParams->mapConstructParams[liIndex]");
+        CGS_ASSERT(lpConstructParams->mapConstructParams[liIndex], CgsDev::Assert::MessageAt(
+            "lpConstructParams->mapConstructParams[liIndex]",
+            __FILE__, 82 /* ARTIST 0x82895478 */));
         lpConstructParams->mapConstructParams[liIndex]->mpPlayerManager = this;
         lpConstructParams->mapPlayerList[liIndex]->Construct(lpConstructParams->mapConstructParams[liIndex]);
     }

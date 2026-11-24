@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/BrnNetworkManager.h"
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"
@@ -37,8 +38,12 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------------
     void BrnNetworkManager::CaptureTelemetryEvent(ETelemetryHook leHook, s32 liData)
     {
-        CGS_ASSERT(GetServerInterface(), "GetServerInterface()");
-        CGS_ASSERT(GetServerInterface()->GetTelemetryComponent(), "GetServerInterface()->GetTelemetryComponent()");
+        CGS_ASSERT(GetServerInterface(), CgsDev::Assert::MessageAt(
+            "GetServerInterface()",
+            __FILE__, 3121 /* ARTIST 0x825821B4 */));
+        CGS_ASSERT(GetServerInterface()->GetTelemetryComponent(), CgsDev::Assert::MessageAt(
+            "GetServerInterface()->GetTelemetryComponent()",
+            __FILE__, 3122 /* ARTIST 0x825821DC */));
 
         char lacData[CgsNetwork::KI_MAX_TELEMETRY_DATA_SIZE];
         CgsCore::SPrintf(lacData, sizeof(lacData), "%i", liData);

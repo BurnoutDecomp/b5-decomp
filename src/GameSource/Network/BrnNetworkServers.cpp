@@ -5,8 +5,7 @@
 #include "GameSource/Network/BrnServerInterface.h"   // BrnServerInterface::GetConnectionComponent
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceConnection.h" // DisconnectFromServer
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkServers.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkServers.cpp".
 
 namespace BrnNetwork
 {
@@ -25,14 +24,14 @@ namespace BrnNetwork
     const char* NetworkServers::GetServerIP() const
     {
         CGS_ASSERT(mpcServerIP,
-            CgsDev::Assert::MessageAt("mpcServerIP", KAC_ARTIST_ASSERT_FILE, 171 /* ARTIST 0x82582BC0 */));
+            CgsDev::Assert::MessageAt("mpcServerIP", __FILE__, 171 /* ARTIST 0x82582BC0 */));
         return mpcServerIP;
     }
 
     s32 NetworkServers::GetServerPort() const
     {
         CGS_ASSERT(miServerPort > 0,
-            CgsDev::Assert::MessageAt("miServerPort > 0", KAC_ARTIST_ASSERT_FILE, 189 /* ARTIST 0x82582C18 */));
+            CgsDev::Assert::MessageAt("miServerPort > 0", __FILE__, 189 /* ARTIST 0x82582C18 */));
         return miServerPort;
     }
 
@@ -72,7 +71,9 @@ namespace BrnNetwork
             break;
 
         default:
-            CGS_ASSERT(false, "Unknown server type");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "Unknown server type",
+                __FILE__, 319 /* ARTIST 0x82582D08 */));
             mpcServerIP = KAC_TEST_SERVER_IP;
             break;
         }

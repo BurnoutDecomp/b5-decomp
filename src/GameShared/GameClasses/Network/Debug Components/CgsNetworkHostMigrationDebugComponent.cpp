@@ -55,13 +55,17 @@ namespace CgsNetwork
     {
         HostMigrationDebugComponent* lpDebugComponent =
             static_cast<HostMigrationDebugComponent*>(lpData);
-        CGS_ASSERT(lpDebugComponent != 0, "lpDebugComponent");
+        CGS_ASSERT(lpDebugComponent != 0, CgsDev::Assert::MessageAt(
+            "lpDebugComponent",
+            __FILE__, 129 /* ARTIST 0x8287F43C */));
 
         lpDebugComponent->mLocalPlayerID = -1;
-        CGS_ASSERT(lpDebugComponent->mpHostMigrationManager != 0,
-                   "lpDebugComponent->mpHostMigrationManager");
-        CGS_ASSERT(lpDebugComponent->mpHostMigrationManager->mpPlayerManager != 0,
-                   "lpDebugComponent->mpHostMigrationManager->mpPlayerManager");
+        CGS_ASSERT(lpDebugComponent->mpHostMigrationManager != 0, CgsDev::Assert::MessageAt(
+            "lpDebugComponent->mpHostMigrationManager",
+            __FILE__, 134 /* ARTIST 0x8287F46C */));
+        CGS_ASSERT(lpDebugComponent->mpHostMigrationManager->mpPlayerManager != 0, CgsDev::Assert::MessageAt(
+            "lpDebugComponent->mpHostMigrationManager->mpPlayerManager",
+            __FILE__, 135 /* ARTIST 0x8287F498 */));
 
         const NetworkPlayerID liLocalPlayerID =
             lpDebugComponent->mpHostMigrationManager->mpPlayerManager->GetLocalPlayerID();

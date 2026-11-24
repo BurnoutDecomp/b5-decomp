@@ -112,12 +112,16 @@ void NetMessageData::Prepare(s32 leType, s32 liLength, Message* lpMsg)
 // fields with their invalid sentinels.
 void NetworkPlayer::Construct(CgsNetworkPlayerConstructParams* lpConstructParams)
 {
-    CGS_ASSERT(lpConstructParams, "lpConstructParams");
+    CGS_ASSERT(lpConstructParams, CgsDev::Assert::MessageAt(
+        "lpConstructParams",
+        __FILE__, 159 /* ARTIST 0x82872328 */));
 
     mPlayerID        = KI_INVALID_PLAYER_ID;          // +0x08 = -1
     mpNetworkAdapter = 0;                        // +0x04 = 0
 
-    CGS_ASSERT(lpConstructParams->mpPlayerManager, "mpPlayerManager");
+    CGS_ASSERT(lpConstructParams->mpPlayerManager, CgsDev::Assert::MessageAt(
+        "mpPlayerManager",
+        __FILE__, 164 /* ARTIST 0x82872364 */));
     mpPlayerManager  = lpConstructParams->mpPlayerManager;   // +0x0C
 
     // mConnectionData: no link, the address sentinels and a zeroed tail.
@@ -211,19 +215,28 @@ void NetworkPlayer::RegisterMessageType(s32 leType, s32 liLength, Message* lpSen
                                         ReliableMessageDeliveredCallback lpfDelivered,
                                         void* lpUserData)
 {
-    CGS_ASSERT(liLength > 0, "liLength > 0");
-    CGS_ASSERT(leType >= 0,  "leType >= 0");
-    CGS_ASSERT(miNumberMessagesRegistered < KI_MAX_MESSAGE_TYPES,
-               "miNumberMessagesRegistered < KI_MAX_MESSAGE_TYPES");
+    CGS_ASSERT(liLength > 0, CgsDev::Assert::MessageAt(
+        "liLength > 0",
+        __FILE__, 742 /* ARTIST 0x82872610 */));
+    CGS_ASSERT(leType >= 0, CgsDev::Assert::MessageAt(
+        "leType >= 0",
+        __FILE__, 743 /* ARTIST 0x82872634 */));
+    CGS_ASSERT(miNumberMessagesRegistered < KI_MAX_MESSAGE_TYPES, CgsDev::Assert::MessageAt(
+        "miNumberMessagesRegistered < KI_MAX_MESSAGE_TYPES",
+        __FILE__, 746 /* ARTIST 0x8287265C */));
 
-    CGS_ASSERT(!lpSendMsg->IsReliable() || lpfArrived,
-               "!lpSendMsg->IsReliable() || lpfMsgArrivedCallback");
-    CGS_ASSERT(lpRecvMsg, "lpRecvMsg");
+    CGS_ASSERT(!lpSendMsg->IsReliable() || lpfArrived, CgsDev::Assert::MessageAt(
+        "!lpSendMsg->IsReliable() || lpfMsgArrivedCallback",
+        __FILE__, 749 /* ARTIST 0x828726A0 */));
+    CGS_ASSERT(lpRecvMsg, CgsDev::Assert::MessageAt(
+        "lpRecvMsg",
+        __FILE__, 752 /* ARTIST 0x828726C4 */));
 
     for (s32 liIndex = 0; liIndex < miNumberMessagesRegistered; ++liIndex)
     {
-        CGS_ASSERT(maSendMessageData[liIndex].meType != leType,
-                   "maSendMessageData[i].meType != leType");
+        CGS_ASSERT(maSendMessageData[liIndex].meType != leType, CgsDev::Assert::MessageAt(
+            "maSendMessageData[i].meType != leType",
+            __FILE__, 760 /* ARTIST 0x82872708 */));
     }
 
     const s32 liSlot = miNumberMessagesRegistered;
@@ -321,7 +334,9 @@ void NetworkPlayer::ResetAllMessages()
     for (s32 liIndex = 0; liIndex < miNumberMessagesRegistered; ++liIndex)
     {
         Message* lpSendMsg = maSendMessageData[liIndex].mpMsg;
-        CGS_ASSERT(lpSendMsg, "maSendMessageData[i].mpMsg");
+        CGS_ASSERT(lpSendMsg, CgsDev::Assert::MessageAt(
+            "maSendMessageData[i].mpMsg",
+            __FILE__, 1052 /* ARTIST 0x82872F24 */));
         lpSendMsg->Construct();
 
         if (Message* lpRecvMsg = maRecvMessageData[liIndex].mpMsg)

@@ -1,6 +1,12 @@
 // MassiveAdClient3::CMassiveClientCore -- the MassiveAd client root (vendor middleware), plus the
 // SDK's heap-hook pointers, its compiled-out log sink and its bounded string formatter.
 
+// XDK size optimization matches ARTIST at 0x82BCC7C0, 0x82BCC858 (2 functions).
+// MassiveAd was built for size: /Os turns 63 more of its functions exact across 31 files, none worse.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3ClientCore.h"
 
 #include <new>      // placement new over the heap-hook allocation

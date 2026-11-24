@@ -9,10 +9,12 @@
 // The CGS buddy manager is the only caller. PC body: ../src/pc/hlbudapipc.cpp.
 
 // Opaque buddy API handle.
+typedef struct HLBApiRefT HLBApiRefT;   // DirtySDK is C
 struct HLBApiRefT;
 
 // One buddy record. The accessors below and the game's invite checks read these fields;
 // the record continues past uFlags with data nothing outside the module reads.
+typedef struct HLBBudT HLBBudT;   // DirtySDK is C
 struct HLBBudT
 {
     u64  uXuid;       // +0x00  platform user id

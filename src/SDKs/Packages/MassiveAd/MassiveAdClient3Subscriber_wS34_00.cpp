@@ -1,6 +1,12 @@
 // MassiveAdClient3::XMassiveAdClientSubscriber -- the closure-free members (base callbacks, impression
 // record, inventory-element id); the constructor/destructor/GetCrexID/MediaDownloadComplete stay in the parent.
 
+// XDK size optimization matches ARTIST at 0x82BCEB88, 0x82BCEBE8 (2 functions).
+// MassiveAd was built for size: /Os turns 63 more of its functions exact across 31 files, none worse.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Subscriber.h"
 
 #include <cstring>  // memset, memcpy

@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfaceDownloadableConfig.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySock.h"
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/CgsServerInterfaceDirtySockErrorHelpers.h"
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
@@ -302,8 +303,12 @@ namespace CgsNetwork
     {
         char lacBool[6] = { 0, 0, 0, 0, 0, 0 };
 
-        CGS_ASSERT(lpacConfigData != 0, "NULL != lpacConfigData");
-        CGS_ASSERT(mpaDataIDToMemAddrs != 0, "mpaDataIDToMemAddrs != NULL");
+        CGS_ASSERT(lpacConfigData != 0, CgsDev::Assert::MessageAt(
+            "NULL != lpacConfigData",
+            __FILE__, 416 /* ARTIST 0x8287AED4 */));
+        CGS_ASSERT(mpaDataIDToMemAddrs != 0, CgsDev::Assert::MessageAt(
+            "mpaDataIDToMemAddrs != NULL",
+            __FILE__, 417 /* ARTIST 0x8287AEFC */));
 
         char* lpacBase = reinterpret_cast<char*>(this);
 
@@ -367,7 +372,9 @@ namespace CgsNetwork
 
                 default:
                 {
-                    CGS_ASSERT(false, "Invalid Data Type");
+                    CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                        "Invalid Data Type",
+                        __FILE__, 478 /* ARTIST 0x8287B0A4 */));
                     break;
                 }
             }

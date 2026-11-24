@@ -60,15 +60,18 @@ namespace BrnNetwork
                                                const u16* lpau16ActiveTrafficHulls,
                                                const NetworkPlayerID* lpaPlayerIDsForActiveHulls)
     {
-        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
-                   "!CgsNetwork::ReliableMessage::IsMessageValid()");
+        CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0, CgsDev::Assert::MessageAt(
+            "!CgsNetwork::ReliableMessage::IsMessageValid()",
+            __FILE__, 85 /* ARTIST 0x8257BC1C */));
 
         mu16FrameSinceStartToResetTraffic = lu16FrameSinceStartToResetTraffic;   // +0x58
         memcpy(mau16ActiveTrafficHulls,   lpau16ActiveTrafficHulls,   16);        // +0x48, 8 x u16
         memcpy(maPlayerIDsForActiveHulls, lpaPlayerIDsForActiveHulls, 32);        // +0x28, 8 x s32
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_RESTART_TRAFFIC_MESSAGE_TYPE, lu16CurrentFrame);
-        CGS_ASSERT(IsReliable(), "IsReliable()");
+        CGS_ASSERT(IsReliable(), CgsDev::Assert::MessageAt(
+            "IsReliable()",
+            __FILE__, 94 /* ARTIST 0x8257BC8C */));
     }
 
     s32 RestartTrafficMessage::GetPackedMessageSize()

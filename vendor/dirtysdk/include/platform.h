@@ -3,8 +3,8 @@
 
 #include "types.hpp"
 
-#include <cstdarg>
-#include <ctime>
+#include <stdarg.h>   // the C headers: DirtySDK is C
+#include <time.h>
 
 // DirtySDK 5.5.3 - platform/platform.h (string + time helpers subset).
 // Bodies: ../src/plat-str.cpp, ../src/plat-time.cpp.

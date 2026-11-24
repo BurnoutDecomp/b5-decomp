@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Players/CgsConnectionStatusMessage.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 #include "GameShared/GameClasses/Development/Log/CgsLog.h"   // CgsDev::Log::gpDebugPrint
 
@@ -18,7 +19,9 @@ namespace CgsNetwork
                                                  u16 lu16Frame)
     {
         *CgsDev::Log::gpDebugPrint << "Preparing ConnectionStatusMessage\n";
-        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME, "lu16Frame != KU16_INVALID_FRAME");
+        CGS_ASSERT(lu16Frame != KU16_INVALID_FRAME, CgsDev::Assert::MessageAt(
+            "lu16Frame != KU16_INVALID_FRAME",
+            __FILE__, 80 /* ARTIST 0x82883194 */));
 
         for (s32 liIndex = 0; liIndex < KI_CONNECTION_STATUS_PLAYER_COUNT; ++liIndex)
         {
@@ -44,7 +47,9 @@ namespace CgsNetwork
         }
 
         SetMessageInvalid();
-        CGS_ASSERT(!IsMessageValid(), "!IsMessageValid()");
+        CGS_ASSERT(!IsMessageValid(), CgsDev::Assert::MessageAt(
+            "!IsMessageValid()",
+            __FILE__, 121 /* ARTIST 0x82883294 */));
         return true;
     }
 }

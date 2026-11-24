@@ -70,7 +70,9 @@ void PlayersConnectionManager::ConnApiStatusChangeCallback(DirtySock::ConnApiRef
     PlayersConnectionManager* lpSelf = static_cast<PlayersConnectionManager*>(lpUserData);
 
     const DirtySock::ConnApiClientListT* lpClientList = ConnApiGetClientList(lpConnApi);
-    CGS_ASSERT(lpClientList, "lpClientList");
+    CGS_ASSERT(lpClientList, CgsDev::Assert::MessageAt(
+        "lpClientList",
+        __FILE__, 1509 /* ARTIST 0x82874CAC */));
 
     const bool lbDisconnected = (lpCbInfo->eNewStatus == DirtySock::CONNAPI_STATUS_DISC) ||
                                 (lpCbInfo->eNewStatus == DirtySock::CONNAPI_STATUS_DEST);

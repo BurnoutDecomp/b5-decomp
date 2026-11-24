@@ -33,7 +33,6 @@ target_sources(${PROJECT_NAME}
         BrnTeamSelectMessage.cpp
         BrnTrafficHashMessage.cpp
         BrnUpdateMessage.cpp
-        BrnUpdateMessage_wN1_01.cpp
 
     PUBLIC
         BrnActiveFburnChallengeMessage.h

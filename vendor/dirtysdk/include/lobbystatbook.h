@@ -11,9 +11,11 @@
 // PC body: ../src/pc/lobbymiscpc.cpp.
 
 // Opaque statbook module handle.
+typedef struct LobbyStatbookT LobbyStatbookT;   // DirtySDK is C
 struct LobbyStatbookT;
 
 // Per-row info record returned by LobbyStatbookRowInfo (0x114 bytes).
+typedef struct LobbyStatbookRowInfoT LobbyStatbookRowInfoT;   // DirtySDK is C
 struct LobbyStatbookRowInfoT
 {
     char strName[48];       // +0x000

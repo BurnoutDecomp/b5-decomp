@@ -19,6 +19,7 @@ namespace CgsNetwork
 }
 typedef CgsNetwork::DirtySock::ConnApiRefT ConnApiRefT;
 
+typedef struct GameManagerRefT GameManagerRefT;   // DirtySDK is C
 struct GameManagerRefT;   // opaque
 
 enum GameManagerCBTypeE
@@ -29,7 +30,9 @@ enum GameManagerCBTypeE
     GAMEMANAGER_CBTYPE_POST_DEL = 3,   // the current game is gone
     GAMEMANAGER_CBTYPE_PLAYINFO = 4    // the current game record changed ('gnfo' has it)
 };
+typedef enum GameManagerCBTypeE GameManagerCBTypeE;   // DirtySDK is C
 
+typedef struct GameManagerCBDataT GameManagerCBDataT;   // DirtySDK is C
 struct GameManagerCBDataT
 {
     GameManagerCBTypeE eType;

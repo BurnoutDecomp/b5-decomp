@@ -12,8 +12,7 @@
 // A reliable per-event message carrying one triggered checkpoint index (@+0x28, directly
 // after the 0x28-byte CgsNetwork::ReliableMessage base). Message type 39 (0x27).
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Messages/BrnCheckpointTriggeredMessage.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Messages/BrnCheckpointTriggeredMessage.cpp".
 
 namespace BrnNetwork
 {
@@ -44,15 +43,15 @@ namespace BrnNetwork
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
             CgsDev::Assert::MessageAt(
                 "lu16FrameCount != KU16_INVALID_FRAME",
-                KAC_ARTIST_ASSERT_FILE, 141 /* ARTIST 0x8257CF0C */));
+                __FILE__, 141 /* ARTIST 0x8257CF0C */));
         CGS_ASSERT(liCheckpointIndex != -1,
             CgsDev::Assert::MessageAt(
                 "liCheckpointIndex != -1",
-                KAC_ARTIST_ASSERT_FILE, 142 /* ARTIST 0x8257CF30 */));
+                __FILE__, 142 /* ARTIST 0x8257CF30 */));
         CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
             CgsDev::Assert::MessageAt(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                KAC_ARTIST_ASSERT_FILE, 145 /* ARTIST 0x8257CF5C */));
+                __FILE__, 145 /* ARTIST 0x8257CF5C */));
 
         miCheckpointIndex = liCheckpointIndex;   // stw r28,0x28(this)
         CgsNetwork::ReliableMessage::PrepareForSend(KI_CHECKPOINT_TRIGGERED_MESSAGE_TYPE, lu16FrameCount);

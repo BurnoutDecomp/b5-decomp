@@ -1,9 +1,11 @@
 #ifndef DIRTYSDK_COMMALL_X360_INTERNAL_H
 #define DIRTYSDK_COMMALL_X360_INTERNAL_H
 #include "types.hpp"
+typedef struct SocketT SocketT;   // DirtySDK is C
 struct SocketT;
 // DirtySDK commall.h, DecFIGS declaration shape; ARTIST NetGameLinkStatus
 // reads Status and packsent/packrcvd/packlost at 0x24 and 0x60..0x68.
+typedef struct CommRef CommRef;   // DirtySDK is C
 struct CommRef
 {
     CommRef* (*Construct)(s32, s32, s32);

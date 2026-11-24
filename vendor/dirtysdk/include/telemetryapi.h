@@ -9,9 +9,11 @@
 // keeps two refs (first-usage and normal-usage). PC body: ../src/pc/telemetryapipc.cpp.
 
 // Opaque telemetry module handle.
+typedef struct TelemetryApiRefT TelemetryApiRefT;   // DirtySDK is C
 struct TelemetryApiRefT;
 
 // One buffered event (28 bytes).
+typedef struct TelemetryApiEventT TelemetryApiEventT;   // DirtySDK is C
 struct TelemetryApiEventT
 {
     u32  uModuleID;
@@ -26,6 +28,7 @@ enum TelemetryApiBufferTypeE
     TELEMETRY_BUFFERTYPE_FILLANDSTOP       = 0,
     TELEMETRY_BUFFERTYPE_CIRCULAROVERWRITE = 1
 };
+typedef enum TelemetryApiBufferTypeE TelemetryApiBufferTypeE;   // DirtySDK is C
 
 enum TelemetryApiCBTypeE
 {
@@ -34,6 +37,7 @@ enum TelemetryApiCBTypeE
     TELEMETRY_CBTYPE_FULLSENDCOMPLETE = 2,
     TELEMETRY_CBTYPE_TOTAL            = 3
 };
+typedef enum TelemetryApiCBTypeE TelemetryApiCBTypeE;   // DirtySDK is C
 
 // Callback TYPE: (telemetry ref, user data).
 typedef void (TelemetryApiCallbackT)(TelemetryApiRefT* pTelemetryRef, void* pUserData);
@@ -88,6 +92,11 @@ void                TelemetryApiEvent(TelemetryApiRefT* pTelemetryRef, u32 uModu
 // insert an event at the oldest end (0 when accepted).
 TelemetryApiEventT* TelemetryApiPopBack(TelemetryApiRefT* pTelemetryRef, TelemetryApiEventT* pEvent);
 s32                 TelemetryApiPushFront(TelemetryApiRefT* pTelemetryRef, const TelemetryApiEventT* pEvent);
+
+// The other two ends (DWARF telemetryapi.c:1871 / :2081, both extern): remove the oldest event,
+// append an event at the newest end.
+TelemetryApiEventT* TelemetryApiPopFront(TelemetryApiRefT* pTelemetryRef, TelemetryApiEventT* pEvent);
+s32                 TelemetryApiPushBack(TelemetryApiRefT* pTelemetryRef, const TelemetryApiEventT* pEvent);
 
 #ifdef __cplusplus
 }

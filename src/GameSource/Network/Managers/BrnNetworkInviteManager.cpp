@@ -24,8 +24,7 @@
 
 #include <cstring>   // std::memcpy (X360 StartInviteOrJoin / DownloadPlayersGameIDFromServer)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkInviteManager.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkInviteManager.cpp".
 
 namespace BrnNetwork
 {
@@ -192,13 +191,13 @@ namespace BrnNetwork
     {
         CGS_ASSERT(meGetGameIDState == E_GET_ID_STATE_IDLE,
             CgsDev::Assert::MessageAt(
-                "meGetGameIDState == E_GET_ID_STATE_IDLE", KAC_ARTIST_ASSERT_FILE, 423 /* ARTIST 0x82548AD8 */));
+                "meGetGameIDState == E_GET_ID_STATE_IDLE", __FILE__, 423 /* ARTIST 0x82548AD8 */));
         CGS_ASSERT(lpPlayerName != 0,
-            CgsDev::Assert::MessageAt("lpPlayerName", KAC_ARTIST_ASSERT_FILE, 425 /* ARTIST 0x82548AFC */));
+            CgsDev::Assert::MessageAt("lpPlayerName", __FILE__, 425 /* ARTIST 0x82548AFC */));
         // X360 checks the first name byte is non-zero (the inlined PlayerName::IsEmpty()).
         CGS_ASSERT(lpPlayerName->macName[0] != '\0',
             CgsDev::Assert::MessageAt(
-                "!lpPlayerName->IsEmpty()", KAC_ARTIST_ASSERT_FILE, 426 /* ARTIST 0x82548B24 */));
+                "!lpPlayerName->IsEmpty()", __FILE__, 426 /* ARTIST 0x82548B24 */));
 
         std::memcpy(&mPlayerNameToGetGameID, lpPlayerName, sizeof(PlayerName)); // memcpy(a1 + 416, a2, 16)
         meGetGameIDState = E_GET_ID_STATE_START;       // *(a1 + 432) = 0

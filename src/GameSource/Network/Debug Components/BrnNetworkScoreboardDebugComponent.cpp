@@ -57,8 +57,7 @@ namespace
     }
 }
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkScoreboardDebugComponent.cpp".
 
 namespace BrnNetwork
 {
@@ -74,7 +73,7 @@ namespace BrnNetwork
     void ScoreboardDebugComponent::Construct(ScoreboardManager* lpScoreboardManager)
     {
         CGS_ASSERT(lpScoreboardManager != 0,
-            CgsDev::Assert::MessageAt("lpScoreboardManager", KAC_ARTIST_ASSERT_FILE, 45 /* ARTIST 0x82585884 */));
+            CgsDev::Assert::MessageAt("lpScoreboardManager", __FILE__, 45 /* ARTIST 0x82585884 */));
         mpScoreboardManager = lpScoreboardManager;
 
         mScoreboard.Construct();
@@ -286,7 +285,7 @@ namespace BrnNetwork
     void ScoreboardDebugComponent::HandleScoreboardEvent(const Scoreboard* lpScoreboard)
     {
         CGS_ASSERT(lpScoreboard != 0,
-            CgsDev::Assert::MessageAt("lpScoreboardEvent", KAC_ARTIST_ASSERT_FILE, 378 /* ARTIST 0x8258AE64 */));
+            CgsDev::Assert::MessageAt("lpScoreboardEvent", __FILE__, 378 /* ARTIST 0x8258AE64 */));
         mScoreboard = *lpScoreboard;   // X360: memcpy(this+0xC, src, 0xB6C) -- whole Scoreboard payload
         PrintScoreboard();             // tail call: render the freshly copied scoreboard
     }

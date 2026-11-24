@@ -8,7 +8,7 @@
 // keep whatever the caller left there (Prepare()'s KI_INVALID_HEADING in the GUI bridge, stack
 // contents in the scoreboard debug component).
 
-static const char KAC_ARTIST_ASSERT_FILE[] = "..\\..\\..\\GameSource\\Network/BrnNetworkInEventTypeDefs.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/BrnNetworkInEventTypeDefs.h".
 
 namespace BrnNetwork
 {
@@ -26,7 +26,7 @@ namespace BrnNetworkModuleIO
     void NetworkInSelectScoreboardEvent::GetIndexes(s32 liCategory)
     {
         CGS_ASSERT(liCategory >= 0,
-            CgsDev::Assert::MessageAt("liCategory >= 0", KAC_ARTIST_ASSERT_FILE, 1031 /* ARTIST 0x823A637C */));
+            CgsDev::Assert::MessageAt("liCategory >= 0", __FILE__, 1031 /* ARTIST 0x823A637C */));
         miCategory = liCategory;
         meType     = E_TYPE_GET_INDEX;
     }
@@ -34,7 +34,7 @@ namespace BrnNetworkModuleIO
     void NetworkInSelectScoreboardEvent::GetVariations(s32 liIndex)
     {
         CGS_ASSERT(liIndex >= 0,
-            CgsDev::Assert::MessageAt("liIndex >= 0", KAC_ARTIST_ASSERT_FILE, 1048 /* ARTIST 0x823A63E4 */));
+            CgsDev::Assert::MessageAt("liIndex >= 0", __FILE__, 1048 /* ARTIST 0x823A63E4 */));
         miIndex = liIndex;
         meType  = E_TYPE_GET_VARIATION;
     }
@@ -42,7 +42,7 @@ namespace BrnNetworkModuleIO
     void NetworkInSelectScoreboardEvent::GetScoreboard(s32 liVariation)
     {
         CGS_ASSERT(liVariation >= 0,
-            CgsDev::Assert::MessageAt("liVariation >= 0", KAC_ARTIST_ASSERT_FILE, 1065 /* ARTIST 0x823A644C */));
+            CgsDev::Assert::MessageAt("liVariation >= 0", __FILE__, 1065 /* ARTIST 0x823A644C */));
         miVariation = liVariation;
         meType      = E_TYPE_GET_SCOREBOARD;
     }

@@ -2,6 +2,7 @@
 #define DIRTYSDK_PROTOADVT_H
 #include "types.hpp"
 
+typedef struct ProtoAdvtRefT ProtoAdvtRefT;   // DirtySDK is C
 struct ProtoAdvtRefT;
 #ifdef __cplusplus
 extern "C" {

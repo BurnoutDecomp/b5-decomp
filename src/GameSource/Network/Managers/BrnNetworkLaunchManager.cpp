@@ -42,8 +42,7 @@
 // StateManager.
 // ===========================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLaunchManager.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLaunchManager.cpp".
 
 namespace BrnNetwork
 {
@@ -172,7 +171,7 @@ namespace BrnNetwork
         CGS_ASSERT(maUpdateFunctions[meSubState] != 0,
             CgsDev::Assert::MessageAt(
                 "No update function supplied for the current substate",
-                KAC_ARTIST_ASSERT_FILE, 144 /* ARTIST 0x82543ED8 */));
+                __FILE__, 144 /* ARTIST 0x82543ED8 */));
 
         return (this->*maUpdateFunctions[meSubState])();
     }
@@ -490,11 +489,11 @@ namespace BrnNetwork
     LaunchManager::EStatus LaunchManager::UpdateWaiting()
     {
         CGS_ASSERT(mpNetworkManager != 0,
-            CgsDev::Assert::MessageAt("mpNetworkManager", KAC_ARTIST_ASSERT_FILE, 484 /* ARTIST 0x825440C4 */));
+            CgsDev::Assert::MessageAt("mpNetworkManager", __FILE__, 484 /* ARTIST 0x825440C4 */));
         CGS_ASSERT(mpNetworkManager->GetTimerStatus() != 0,
             CgsDev::Assert::MessageAt(
                 "mpNetworkManager->GetTimerStatus()",
-                KAC_ARTIST_ASSERT_FILE, 485 /* ARTIST 0x825440F8 */));
+                __FILE__, 485 /* ARTIST 0x825440F8 */));
 
         const CgsSystem::Time lNow =
             mpNetworkManager->GetTimerStatus()->GetTime();

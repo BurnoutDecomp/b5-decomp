@@ -158,8 +158,9 @@ void ServerInterfaceServerInfo::GetNewsUrl(char* lpcOut, s32 liOutLen)
 
 void ServerInterfaceServerInfo::GetTelemetryAuthString(char* lpcOut, s32 liOutLen)
 {
-    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0,
-               "NULL != mpServerInterface->GetLobbyAPIRef()");
+    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0, CgsDev::Assert::MessageAt(
+        "NULL != mpServerInterface->GetLobbyAPIRef()",
+        __FILE__, 524 /* ARTIST 0x8287A710 */));
 
     const char* lpcPred = static_cast<const char*>(
         LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_PRED));
@@ -171,8 +172,9 @@ void ServerInterfaceServerInfo::GetTelemetryAuthString(char* lpcOut, s32 liOutLe
 void ServerInterfaceServerInfo::GetStringFromClientConfig(const char* lpcKey,
                                                           char* lpcOut, s32 liOutLen)
 {
-    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0,
-               "NULL != mpServerInterface->GetLobbyAPIRef()");
+    CGS_ASSERT(mpServerInterface->GetLobbyAPIRef() != 0, CgsDev::Assert::MessageAt(
+        "NULL != mpServerInterface->GetLobbyAPIRef()",
+        __FILE__, 572 /* ARTIST 0x8287A83C */));
 
     const char* lpcConf = static_cast<const char*>(
         LobbyApiInfo(mpServerInterface->GetLobbyAPIRef(), KI_SELECT_CONF));

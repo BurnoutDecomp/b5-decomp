@@ -11,8 +11,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"        // CGS_ASSERT
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"   // CgsCore::SPrintf
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStats.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkPlayerStats.cpp".
 
 namespace BrnNetwork
 {
@@ -21,10 +20,10 @@ namespace BrnNetwork
     {
         CGS_ASSERT(leValue >= E_STATS_VALUE_START,
             CgsDev::Assert::MessageAt(
-                "leValue >= E_STATS_VALUE_START", KAC_ARTIST_ASSERT_FILE, 154 /* ARTIST 0x825468EC */));
+                "leValue >= E_STATS_VALUE_START", __FILE__, 154 /* ARTIST 0x825468EC */));
         CGS_ASSERT(leValue < E_STATS_VALUE_COUNT,
             CgsDev::Assert::MessageAt(
-                "leValue < E_STATS_VALUE_COUNT", KAC_ARTIST_ASSERT_FILE, 155 /* ARTIST 0x82546910 */));
+                "leValue < E_STATS_VALUE_COUNT", __FILE__, 155 /* ARTIST 0x82546910 */));
 
         return maiValues[leValue];
     }
@@ -34,7 +33,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT(liSize >= KI_MININUM_CHAR_BUFFER_SIZE,
             CgsDev::Assert::MessageAt(
-                "liSize >= KI_MININUM_CHAR_BUFFER_SIZE", KAC_ARTIST_ASSERT_FILE, 174 /* ARTIST 0x82546964 */));
+                "liSize >= KI_MININUM_CHAR_BUFFER_SIZE", __FILE__, 174 /* ARTIST 0x82546964 */));
 
         CgsCore::SPrintf(lpcBuffer, liSize, "%i", GetStatAsInt(leValue));
     }
@@ -44,10 +43,10 @@ namespace BrnNetwork
     {
         CGS_ASSERT(leValue >= E_STATS_VALUE_START,
             CgsDev::Assert::MessageAt(
-                "leValue >= E_STATS_VALUE_START", KAC_ARTIST_ASSERT_FILE, 218 /* ARTIST 0x82546A8C */));
+                "leValue >= E_STATS_VALUE_START", __FILE__, 218 /* ARTIST 0x82546A8C */));
         CGS_ASSERT(leValue < E_STATS_VALUE_COUNT,
             CgsDev::Assert::MessageAt(
-                "leValue < E_STATS_VALUE_COUNT", KAC_ARTIST_ASSERT_FILE, 219 /* ARTIST 0x82546AB0 */));
+                "leValue < E_STATS_VALUE_COUNT", __FILE__, 219 /* ARTIST 0x82546AB0 */));
 
         return maeStatType[leValue];
     }

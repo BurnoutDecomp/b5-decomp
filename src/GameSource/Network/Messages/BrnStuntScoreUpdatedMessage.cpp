@@ -18,8 +18,7 @@
 // +0x19 must be clear -- !IsMessageValid()), then stores the score and stamps the reliable
 // message with type 41 (0x29) for the given frame.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Messages/BrnStuntScoreUpdatedMessage.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Messages/BrnStuntScoreUpdatedMessage.cpp".
 
 namespace BrnNetwork
 {
@@ -42,13 +41,13 @@ namespace BrnNetwork
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
             CgsDev::Assert::MessageAt(
                 "lu16FrameCount != KU16_INVALID_FRAME",
-                KAC_ARTIST_ASSERT_FILE, 141 /* ARTIST 0x8257D18C */));
+                __FILE__, 141 /* ARTIST 0x8257D18C */));
         CGS_ASSERT(liStuntScore != -1,
-            CgsDev::Assert::MessageAt("liStuntScore != -1", KAC_ARTIST_ASSERT_FILE, 142 /* ARTIST 0x8257D1B0 */));
+            CgsDev::Assert::MessageAt("liStuntScore != -1", __FILE__, 142 /* ARTIST 0x8257D1B0 */));
         CGS_ASSERT((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0,
             CgsDev::Assert::MessageAt(
                 "!CgsNetwork::ReliableMessage::IsMessageValid()",
-                KAC_ARTIST_ASSERT_FILE, 145 /* ARTIST 0x8257D1DC */));
+                __FILE__, 145 /* ARTIST 0x8257D1DC */));
 
         miStuntScore = liStuntScore;   // stw r28, 0x28(this)
         CgsNetwork::ReliableMessage::PrepareForSend(KI_STUNT_SCORE_UPDATED_MESSAGE_TYPE, lu16FrameCount);

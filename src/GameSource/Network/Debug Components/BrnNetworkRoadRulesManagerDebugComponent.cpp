@@ -20,8 +20,7 @@
 #include "GameSource/Network/BrnNetworkInEventTypeDefs.h"             // BrnNetworkModuleIO::NetworkInRoadRulesPBEvent (TriggerPersonalBest)
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                    // CGS_ASSERT
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkRoadRulesManagerDebugComponent.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Debug Components/BrnNetworkRoadRulesManagerDebugComponent.cpp".
 
 namespace BrnNetwork
 {
@@ -66,9 +65,13 @@ namespace BrnNetwork
     // reconstruction retains the same event and stores for that original constant.
     void RoadRulesManagerDebugComponent::TriggerPersonalBest( void* lpData )
     {
-        CGS_ASSERT( lpData != 0, "lpData" );
+        CGS_ASSERT(lpData != 0, CgsDev::Assert::MessageAt(
+            "lpData",
+            __FILE__, 104 /* ARTIST 0x8258AEEC */));
         RoadRulesManagerDebugComponent* lpThis = static_cast<RoadRulesManagerDebugComponent*>( lpData );
-        CGS_ASSERT( lpThis != 0, "lpRoadRulesManagerDebugCmpt" );
+        CGS_ASSERT(lpThis != 0, CgsDev::Assert::MessageAt(
+            "lpRoadRulesManagerDebugCmpt",
+            __FILE__, 106 /* ARTIST 0x8258AF08 */));
 
         // The record is a whole personal-best event: the score entry, then challenge 0 and the
         // not-a-lobby-score flag (the two stores just before the call).
@@ -90,11 +93,11 @@ namespace BrnNetwork
     void RoadRulesManagerDebugComponent::RequestRoadRulesHighScores( void* lpData )
     {
         CGS_ASSERT( lpData != 0,
-            CgsDev::Assert::MessageAt("lpData", KAC_ARTIST_ASSERT_FILE, 141 /* ARTIST 0x825863D0 */));
+            CgsDev::Assert::MessageAt("lpData", __FILE__, 141 /* ARTIST 0x825863D0 */));
         RoadRulesManagerDebugComponent* lpThis = static_cast<RoadRulesManagerDebugComponent*>( lpData );
         CGS_ASSERT( lpThis != 0,
             CgsDev::Assert::MessageAt(
-                "lpRoadRulesManagerDebugCmpt", KAC_ARTIST_ASSERT_FILE, 143 /* ARTIST 0x825863F4 */));
+                "lpRoadRulesManagerDebugCmpt", __FILE__, 143 /* ARTIST 0x825863F4 */));
 
         lpThis->mpRoadRulesManager->StartDownloadingRoadRulesScoresFromServer();
     }

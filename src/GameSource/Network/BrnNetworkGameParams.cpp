@@ -15,8 +15,7 @@
 //   operator=    @ 0x82566A00
 // =============================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkGameParams.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/Parameters/BrnNetworkGameParams.cpp".
 
 namespace BrnNetwork
 {
@@ -165,7 +164,7 @@ void GameParams::SetGameMode(s32 liGameMode)
                           reinterpret_cast<MatchmakingContext*>(maRankedContexts));
 
     CGS_ASSERT(GameMode() == liGameMode,
-        CgsDev::Assert::MessageAt("GameMode() == leGameMode", KAC_ARTIST_ASSERT_FILE, 309 /* ARTIST 0x8258A7E8 */));
+        CgsDev::Assert::MessageAt("GameMode() == leGameMode", __FILE__, 309 /* ARTIST 0x8258A7E8 */));
 }
 
 // X360 @ 0x82583EA8. Pack the 1-bit infinite-boost flag (base bit 7) into the leaf
@@ -188,10 +187,10 @@ void GameParams::SetNumRunnerCrashes(s32 liNumRunnerCrashes)
 void GameParams::SetNumberRounds(s32 liNumRounds)
 {
     CGS_ASSERT(liNumRounds > 0,
-        CgsDev::Assert::MessageAt("liNumRounds > 0", KAC_ARTIST_ASSERT_FILE, 272 /* ARTIST 0x82583F74 */));
+        CgsDev::Assert::MessageAt("liNumRounds > 0", __FILE__, 272 /* ARTIST 0x82583F74 */));
     CGS_ASSERT(liNumRounds < 16,
         CgsDev::Assert::MessageAt(
-            "liNumRounds < (1<<KI_GAME_PARAMS_ROUNDS_NUM_BITS)", KAC_ARTIST_ASSERT_FILE, 273 /* ARTIST 0x82583F98 */));
+            "liNumRounds < (1<<KI_GAME_PARAMS_ROUNDS_NUM_BITS)", __FILE__, 273 /* ARTIST 0x82583F98 */));
 
     mGameData.muUser1 = ((static_cast<u32>(liNumRounds) << 11) & 0x7800u)
                       | (mGameData.muUser1 & 0xFFFF87FFu);
@@ -210,10 +209,10 @@ void GameParams::SetPreviousGameMode(s32 liGameMode)
 void GameParams::SetRagerVehicleLevelLimit(s32 liLevelLimit)
 {
     CGS_ASSERT(liLevelLimit >= 0,
-        CgsDev::Assert::MessageAt("liLevelLimit >= 0", KAC_ARTIST_ASSERT_FILE, 194 /* ARTIST 0x82583E5C */));
+        CgsDev::Assert::MessageAt("liLevelLimit >= 0", __FILE__, 194 /* ARTIST 0x82583E5C */));
     CGS_ASSERT(liLevelLimit < 16,
         CgsDev::Assert::MessageAt(
-            "liLevelLimit < (1<<KI_GAME_PARAMS_VEHICLE_LEVEL_NUM_BITS)", KAC_ARTIST_ASSERT_FILE, 195 /* ARTIST 0x82583E80 */));
+            "liLevelLimit < (1<<KI_GAME_PARAMS_VEHICLE_LEVEL_NUM_BITS)", __FILE__, 195 /* ARTIST 0x82583E80 */));
 
     mGameData.muUser1 = ((static_cast<u32>(liLevelLimit) << 3) & 0x78u)
                       | (mGameData.muUser1 & 0xFFFFFF87u);
@@ -233,11 +232,11 @@ void GameParams::SetVehicleChoice(s32 liVehicleChoice)
 void GameParams::SetVehicleLevelLimit(s32 liLevelLimit)
 {
     CGS_ASSERT(liLevelLimit >= 0,
-        CgsDev::Assert::MessageAt("liLevelLimit >= 0", KAC_ARTIST_ASSERT_FILE, 180 /* ARTIST 0x82583DE4 */));
+        CgsDev::Assert::MessageAt("liLevelLimit >= 0", __FILE__, 180 /* ARTIST 0x82583DE4 */));
     CGS_ASSERT(liLevelLimit < (1 << KU_BRN_GAMESEARCHDATA_VEC_LEVEL_NUM_BITS),
         CgsDev::Assert::MessageAt(
             "liLevelLimit < (1<<KU_BRN_GAMESEARCHDATA_VEC_LEVEL_NUM_BITS)",
-            KAC_ARTIST_ASSERT_FILE, 181 /* ARTIST 0x82583E08 */));
+            __FILE__, 181 /* ARTIST 0x82583E08 */));
 
     const u32 luMask = ((1u << KU_BRN_GAMESEARCHDATA_VEC_LEVEL_NUM_BITS) - 1)
                        << KU_BRN_GAMESEARCHDATA_VEC_LEVEL_BASE_BIT;
@@ -279,11 +278,11 @@ void GameParams::SetTrafficCheckingOn(bool lbTrafficCheckingOn)
 void GameParams::SetTimeLimit(s32 liTimeLimit)
 {
     CGS_ASSERT(liTimeLimit >= 0,
-        CgsDev::Assert::MessageAt("liTimeLimit >= 0", KAC_ARTIST_ASSERT_FILE, 233 /* ARTIST 0x82583EEC */));
+        CgsDev::Assert::MessageAt("liTimeLimit >= 0", __FILE__, 233 /* ARTIST 0x82583EEC */));
     CGS_ASSERT(liTimeLimit < (1 << KI_GAME_PARAMS_TIME_LIMIT_NUM_BITS),
         CgsDev::Assert::MessageAt(
             "liTimeLimit < (1<<KI_GAME_PARAMS_TIME_LIMIT_NUM_BITS)",
-            KAC_ARTIST_ASSERT_FILE, 234 /* ARTIST 0x82583F10 */));
+            __FILE__, 234 /* ARTIST 0x82583F10 */));
     mGameData.muUser1 = ((static_cast<u32>(liTimeLimit) << KI_GAME_PARAMS_TIME_LIMIT_BASE_BIT) & 0xF8000u)
                       | (mGameData.muUser1 & 0xFFF07FFFu);
 }

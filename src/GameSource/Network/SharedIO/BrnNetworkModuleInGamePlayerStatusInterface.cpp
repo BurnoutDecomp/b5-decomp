@@ -11,8 +11,7 @@
 // (BrnNetworkLiveRevengeRelationship.h, grown to 120B) types -- NOT local trap stubs. Member
 // layout recovered from the DecFIGS DWARF (BrnNetworkModuleInGamePlayerStatusInterface.h:63).
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/SharedIO/BrnNetworkModuleInGamePlayerStatusInterface.h".
 
 namespace BrnNetwork
 {
@@ -85,12 +84,12 @@ namespace BrnNetwork
                        (leAggressorActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT),
                 CgsDev::Assert::MessageAt(
                     "( leAggressorActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leAggressorActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )",
-                    KAC_ARTIST_ASSERT_FILE, 511 /* ARTIST 0x82355790 */));
+                    __FILE__, 511 /* ARTIST 0x82355790 */));
             CGS_ASSERT((leVictimActiveRaceCarIndex > ::E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                        (leVictimActiveRaceCarIndex < ::E_ACTIVE_RACE_CAR_INDEX_COUNT),
                 CgsDev::Assert::MessageAt(
                     "( leVictimActiveRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID ) && ( leVictimActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )",
-                    KAC_ARTIST_ASSERT_FILE, 512 /* ARTIST 0x823557BC */));
+                    __FILE__, 512 /* ARTIST 0x823557BC */));
 
             return maMarkedManActiveRaceCarIndex[leAggressorActiveRaceCarIndex] == leVictimActiveRaceCarIndex;
         }

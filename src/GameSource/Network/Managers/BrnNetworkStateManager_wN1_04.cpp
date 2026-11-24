@@ -75,8 +75,7 @@
 // Declared as extern "C" free functions, as the other network TUs that open the Guide do.
 
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStateManager.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkStateManager.cpp".
 
 namespace BrnNetwork
 {
@@ -327,7 +326,7 @@ namespace BrnNetwork
     void StateManager::PostRoundFinishedCallback(bool lbSuccess, void* lpUserData)
     {
         CGS_ASSERT(lbSuccess,
-            CgsDev::Assert::MessageAt("lbSuccess", KAC_ARTIST_ASSERT_FILE, 3636 /* ARTIST 0x82553DB0 */));
+            CgsDev::Assert::MessageAt("lbSuccess", __FILE__, 3636 /* ARTIST 0x82553DB0 */));
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
         lpStateManager->PostRoundProcessingFinished();
@@ -339,7 +338,7 @@ namespace BrnNetwork
     void StateManager::PostGameFinishedCallback(bool lbSuccess, void* lpUserData)
     {
         CGS_ASSERT(lbSuccess,
-            CgsDev::Assert::MessageAt("lbSuccess", KAC_ARTIST_ASSERT_FILE, 3694 /* ARTIST 0x825730C8 */));
+            CgsDev::Assert::MessageAt("lbSuccess", __FILE__, 3694 /* ARTIST 0x825730C8 */));
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
         lpStateManager->PostGameProcessingFinished();
@@ -390,15 +389,15 @@ namespace BrnNetwork
     void StateManager::MarkedManLoaded(const BrnGameState::GameStateModuleIO::MarkedManLoadedAction* lpMarkedManLoadedAction)
     {
         CGS_ASSERT(mpNetworkManager,
-            CgsDev::Assert::MessageAt("mpNetworkManager", KAC_ARTIST_ASSERT_FILE, 3925 /* ARTIST 0x825494C0 */));
+            CgsDev::Assert::MessageAt("mpNetworkManager", __FILE__, 3925 /* ARTIST 0x825494C0 */));
         CGS_ASSERT(mpNetworkManager->GetServerInterface(),
             CgsDev::Assert::MessageAt(
                 "mpNetworkManager->GetServerInterface()",
-                KAC_ARTIST_ASSERT_FILE, 3926 /* ARTIST 0x825494E8 */));
+                __FILE__, 3926 /* ARTIST 0x825494E8 */));
         CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetConnectionComponent(),
             CgsDev::Assert::MessageAt(
                 "mpNetworkManager->GetServerInterface()->GetConnectionComponent()",
-                KAC_ARTIST_ASSERT_FILE, 3927 /* ARTIST 0x82549514 */));
+                __FILE__, 3927 /* ARTIST 0x82549514 */));
 
         if (mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn())
         {
@@ -407,7 +406,7 @@ namespace BrnNetwork
                 CGS_ASSERT(!GsmIO::IsShowtimeGameMode(lpMarkedManLoadedAction->meGameMode),
                     CgsDev::Assert::MessageAt(
                         "!GsmIO::IsShowtimeGameMode(lpMarkedManLoadedAction->meGameMode)",
-                        KAC_ARTIST_ASSERT_FILE, 3935 /* ARTIST 0x8254957C */));
+                        __FILE__, 3935 /* ARTIST 0x8254957C */));
 
                 mpNetworkManager->GetStartTimeManager()->StartSyncingTime(
                     lpMarkedManLoadedAction->meGameMode == GsmIO::E_MODE_ONLINE_FREE_BURN_LOBBY);
@@ -438,7 +437,7 @@ namespace BrnNetwork
             PlayerMenuData* lpMenuData =
                 static_cast<PlayerMenuData*>(mpNetworkManager->GetPlayerManager()->GetMenuDataByID(lPlayerID));
             CGS_ASSERT(lpMenuData,
-                CgsDev::Assert::MessageAt("lpMenuData", KAC_ARTIST_ASSERT_FILE, 3663 /* ARTIST 0x82549208 */));
+                CgsDev::Assert::MessageAt("lpMenuData", __FILE__, 3663 /* ARTIST 0x82549208 */));
 
             lpMenuData->mMarkedManID = CgsNetwork::KI_INVALID_PLAYER_ID;
         }

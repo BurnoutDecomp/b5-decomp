@@ -17,8 +17,7 @@
 
 #include "netconn.h"   // NetConnStatus ('onln': 1 while connected to the network service)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerPictureManagerX360.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/X360/BrnNetworkGamerPictureManagerX360.cpp".
 
 namespace BrnNetwork
 {
@@ -65,7 +64,7 @@ namespace BrnNetwork
                                             CgsNetwork::NetworkTextureDXTCompress* lpTextureCompressor)
     {
         CGS_ASSERT(lpNetworkManager,
-            CgsDev::Assert::MessageAt("lpNetworkManager", KAC_ARTIST_ASSERT_FILE, 59 /* ARTIST 0x825574E8 */));
+            CgsDev::Assert::MessageAt("lpNetworkManager", __FILE__, 59 /* ARTIST 0x825574E8 */));
 
         for (s32 liPlayerIndex = 0; liPlayerIndex < KI_MAX_GAMER_PICTURES; ++liPlayerIndex)
         {
@@ -80,7 +79,7 @@ namespace BrnNetwork
         mDownloadingXuid        = 0;
 
         CGS_ASSERT(lpTextureCompressor,
-            CgsDev::Assert::MessageAt("lpTextureCompressor", KAC_ARTIST_ASSERT_FILE, 76 /* ARTIST 0x82557550 */));
+            CgsDev::Assert::MessageAt("lpTextureCompressor", __FILE__, 76 /* ARTIST 0x82557550 */));
         mpTextureCompressor = lpTextureCompressor;
 
         ResetGamerPictureData();

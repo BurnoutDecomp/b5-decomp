@@ -1,5 +1,11 @@
 // MassiveAd client hashing: MD5 hex digest, the SHA-1 core and HMAC-SHA1 (vendor middleware).
 
+// XDK size optimization matches ARTIST at 0x82BD7DD0, 0x82BD7EF0, 0x82BD7FC8 (3 functions).
+// MassiveAd was built for size: /Os turns 63 more of its functions exact across 31 files, none worse.
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "SDKs/Packages/MassiveAd/MassiveAdClient3Crypto.h"
 
 #include <cstring>

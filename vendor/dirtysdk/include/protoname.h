@@ -9,6 +9,7 @@
 
 // Host-name lookup record returned by ProtoNameAsync. The caller polls Done until it is
 // non-zero (-1 on failure), reads addr, then releases the record through Free.
+typedef struct HostentT HostentT;   // DirtySDK is C
 struct HostentT
 {
     s32  done;

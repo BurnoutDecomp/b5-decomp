@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Players/CgsReliableMessageManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"                  // GetPlayerByID / GetNextLocalPlayerID
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"                  // NetworkPlayer::ReceiveAckOrNack
 #include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"            // GetFrameDiffWrapped16
@@ -242,7 +243,9 @@ void ReliableMessageManager::UpdateReliableMessagesReceived()
             continue;
         }
 
-        CGS_ASSERT(lData.miValidCountdown == 0, "maReliableMessagesRcvdData[i].miValidCountdown == 0");
+        CGS_ASSERT(lData.miValidCountdown == 0, CgsDev::Assert::MessageAt(
+            "maReliableMessagesRcvdData[i].miValidCountdown == 0",
+            __FILE__, 721 /* ARTIST 0x82875250 */));
         *CgsDev::Log::gpDebugPrint << "Removing reliable message received data for message type "
                                    << lData.miType << " from player " << lData.mPlayerID
                                    << " with frame " << static_cast<s32>(lData.mu16FrameSent)
@@ -261,8 +264,12 @@ void ReliableMessageManager::FakeNackMessage(Message* lpMessage, NetworkPlayerID
                                              NetworkPlayerID lRecvingPlayerID, bool lbAck)
 {
     SignalMessage lNackMessage;
-    CGS_ASSERT(lSendingPlayerID != K_INVALID_PLAYER_ID, "lSendingPlayerID != K_INVALID_PLAYER_ID");
-    CGS_ASSERT(lRecvingPlayerID != K_INVALID_PLAYER_ID, "lRecvingPlayerID != K_INVALID_PLAYER_ID");
+    CGS_ASSERT(lSendingPlayerID != K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+        "lSendingPlayerID != K_INVALID_PLAYER_ID",
+        __FILE__, 568 /* ARTIST 0x82890AF8 */));
+    CGS_ASSERT(lRecvingPlayerID != K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+        "lRecvingPlayerID != K_INVALID_PLAYER_ID",
+        __FILE__, 569 /* ARTIST 0x82890B1C */));
 
     lNackMessage.Construct();
     lNackMessage.PrepareNack(lpMessage, lSendingPlayerID, lRecvingPlayerID);

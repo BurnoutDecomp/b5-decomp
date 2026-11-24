@@ -48,8 +48,7 @@
 // bytes there, so the embedded component slots land at different byte offsets while
 // the by-name member walk -- and the codegen the compiler emits -- is identical).
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnServerInterfaceBase.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnServerInterfaceBase.cpp".
 
 namespace BrnNetwork
 {
@@ -97,37 +96,37 @@ namespace BrnNetwork
 
         CGS_ASSERT( miNetworkServerInterfaceBasePM1 >= 0,
             CgsDev::Assert::MessageAt(
-                "miNetworkServerInterfaceBasePM1 >= 0", KAC_ARTIST_ASSERT_FILE, 89 /* ARTIST 0x825894BC */));
+                "miNetworkServerInterfaceBasePM1 >= 0", __FILE__, 89 /* ARTIST 0x825894BC */));
         CGS_ASSERT( miNetworkServerInterfaceBasePM2 >= 0,
             CgsDev::Assert::MessageAt(
-                "miNetworkServerInterfaceBasePM2 >= 0", KAC_ARTIST_ASSERT_FILE, 90 /* ARTIST 0x825894E4 */));
+                "miNetworkServerInterfaceBasePM2 >= 0", __FILE__, 90 /* ARTIST 0x825894E4 */));
         CGS_ASSERT( miNetworkServerInterfaceBasePM3 >= 0,
             CgsDev::Assert::MessageAt(
-                "miNetworkServerInterfaceBasePM3 >= 0", KAC_ARTIST_ASSERT_FILE, 91 /* ARTIST 0x8258950C */));
+                "miNetworkServerInterfaceBasePM3 >= 0", __FILE__, 91 /* ARTIST 0x8258950C */));
         CGS_ASSERT( miNetworkServerInterfaceBasePM4 >= 0,
             CgsDev::Assert::MessageAt(
-                "miNetworkServerInterfaceBasePM4 >= 0", KAC_ARTIST_ASSERT_FILE, 92 /* ARTIST 0x82589534 */));
+                "miNetworkServerInterfaceBasePM4 >= 0", __FILE__, 92 /* ARTIST 0x82589534 */));
         CGS_ASSERT( miNetworkServerInterfaceBasePM5 >= 0,
             CgsDev::Assert::MessageAt(
-                "miNetworkServerInterfaceBasePM5 >= 0", KAC_ARTIST_ASSERT_FILE, 93 /* ARTIST 0x8258955C */));
+                "miNetworkServerInterfaceBasePM5 >= 0", __FILE__, 93 /* ARTIST 0x8258955C */));
         CGS_ASSERT( miNetworkServerInterfaceBasePM6 >= 0,
             CgsDev::Assert::MessageAt(
-                "miNetworkServerInterfaceBasePM6 >= 0", KAC_ARTIST_ASSERT_FILE, 94 /* ARTIST 0x82589584 */));
+                "miNetworkServerInterfaceBasePM6 >= 0", __FILE__, 94 /* ARTIST 0x82589584 */));
         CGS_ASSERT( miNetworkServerInterfaceBasePM7 >= 0,
             CgsDev::Assert::MessageAt(
-                "miNetworkServerInterfaceBasePM7 >= 0", KAC_ARTIST_ASSERT_FILE, 95 /* ARTIST 0x825895AC */));
+                "miNetworkServerInterfaceBasePM7 >= 0", __FILE__, 95 /* ARTIST 0x825895AC */));
         CGS_ASSERT( miNetworkServerInterfaceBasePM8 >= 0,
             CgsDev::Assert::MessageAt(
-                "miNetworkServerInterfaceBasePM8 >= 0", KAC_ARTIST_ASSERT_FILE, 96 /* ARTIST 0x825895D4 */));
+                "miNetworkServerInterfaceBasePM8 >= 0", __FILE__, 96 /* ARTIST 0x825895D4 */));
         CGS_ASSERT( miNetworkServerInterfaceBasePM9 >= 0,
             CgsDev::Assert::MessageAt(
-                "miNetworkServerInterfaceBasePM9 >= 0", KAC_ARTIST_ASSERT_FILE, 97 /* ARTIST 0x825895FC */));
+                "miNetworkServerInterfaceBasePM9 >= 0", __FILE__, 97 /* ARTIST 0x825895FC */));
         CGS_ASSERT( miNetworkServerInterfaceBasePM10 >= 0,
             CgsDev::Assert::MessageAt(
-                "miNetworkServerInterfaceBasePM10 >= 0", KAC_ARTIST_ASSERT_FILE, 98 /* ARTIST 0x82589624 */));
+                "miNetworkServerInterfaceBasePM10 >= 0", __FILE__, 98 /* ARTIST 0x82589624 */));
         CGS_ASSERT( miNetworkServerInterfaceBasePM11 >= 0,
             CgsDev::Assert::MessageAt(
-                "miNetworkServerInterfaceBasePM11 >= 0", KAC_ARTIST_ASSERT_FILE, 99 /* ARTIST 0x8258964C */));
+                "miNetworkServerInterfaceBasePM11 >= 0", __FILE__, 99 /* ARTIST 0x8258964C */));
     }
 
     // Forward every server-interface event to the network manager first, then let the
@@ -251,7 +250,9 @@ namespace BrnNetwork
             return true;
 
         default:
-            CGS_ASSERT( false, "0" );
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "0",
+                __FILE__, 290 /* ARTIST 0x82589940 */));
             return false;
         }
     }
@@ -356,7 +357,9 @@ namespace BrnNetwork
             return true;
 
         default:
-            CGS_ASSERT( false, "0" );
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "0",
+                __FILE__, 468 /* ARTIST 0x82589B74 */));
             return false;
         }
     }

@@ -337,7 +337,9 @@ void ServerInterfaceConnection::AgreeShareInfo(bool lbAgreeShare1, bool lbAgreeS
 void ServerInterfaceConnection::EndAction(s32 liError)
 {
     const DSErrorToServerInterfaceErrorTable& lrEntry = KA_CONNECTION_DS_ERROR_TABLE_LOOKUP[meCurrentAction];
-    CGS_ASSERT(lrEntry.mpMappingTable, "lpMappingTable");
+    CGS_ASSERT(lrEntry.mpMappingTable, CgsDev::Assert::MessageAt(
+        "lpMappingTable",
+        __FILE__, 421 /* ARTIST 0x82876B90 */));
     ServerInterfaceComponent::EndActionCore(
         ServerInterfaceComponent::ConvertError(liError, lrEntry.mpMappingTable, lrEntry.miNumMappings));
     meCurrentAction = E_ACTION_COUNT;

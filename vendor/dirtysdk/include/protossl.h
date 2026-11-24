@@ -1,6 +1,7 @@
 #ifndef DIRTYSDK_PROTOSSL_H
 #define DIRTYSDK_PROTOSSL_H
 #include "types.hpp"
+typedef struct ProtoSSLRefT ProtoSSLRefT;   // DirtySDK is C
 struct ProtoSSLRefT;
 struct sockaddr;
 #ifdef __cplusplus

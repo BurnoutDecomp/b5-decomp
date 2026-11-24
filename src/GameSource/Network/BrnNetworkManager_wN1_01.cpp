@@ -1,4 +1,5 @@
 #include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameSource/Network/BrnNetworkManager.h"
 #include "GameSource/Network/BrnNetworkPlayer.h"                             // BrnNetworkPlayerConstructParams
@@ -242,8 +243,9 @@ namespace BrnNetwork
             {
                 return false;
             }
-            CGS_ASSERT(lReturnCode == CgsNetwork::E_MANAGER_STATUS_READY,
-                       "lReturnCode == CgsNetwork::E_MANAGER_STATUS_READY");
+            CGS_ASSERT(lReturnCode == CgsNetwork::E_MANAGER_STATUS_READY, CgsDev::Assert::MessageAt(
+                "lReturnCode == CgsNetwork::E_MANAGER_STATUS_READY",
+                __FILE__, 430 /* ARTIST 0x8259ADE8 */));
 
             GetPlayerManager()->RegisterEventCallback(PlayerManagerEventCallback, this);
         }
@@ -409,7 +411,9 @@ namespace BrnNetwork
             return true;
 
         default:
-            CGS_ASSERT(false, "unknown prepare stage");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "unknown prepare stage",
+                __FILE__, 811 /* ARTIST 0x8259B318 */));
             return false;
         }
     }
@@ -577,7 +581,9 @@ namespace BrnNetwork
             return true;
 
         default:
-            CGS_ASSERT(false, "unknown release stage");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "unknown release stage",
+                __FILE__, 1210 /* ARTIST 0x8258E230 */));
             return false;
         }
     }

@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Players/CgsPlayersConnectionManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Network/Players/CgsPlayerManager.h"                  // registry lookups / AddPlayer / RemovePlayer
 #include "GameShared/GameClasses/Network/Players/CgsNetworkPlayer.h"                  // SetConnectionData / GetName
 #include "GameShared/GameClasses/Network/ServerInterface/CgsServerInterface.h"
@@ -34,7 +35,9 @@ const char* PlayersConnectionManager::GetPlayerName(NetworkPlayerID lPlayerID) c
     // in static storage so the name outlives the call.
     static DefaultPlayerInfoData sLocalPlayerInfo;
 
-    CGS_ASSERT(mpServerInterface, "mpServerInterface");
+    CGS_ASSERT(mpServerInterface, CgsDev::Assert::MessageAt(
+        "mpServerInterface",
+        __FILE__, 836 /* ARTIST 0x8289057C */));
     static_cast<ServerInterfacePlayerInfo*>(mpServerInterface->GetComponent(E_COMPONENTS_PLAYER_INFO))
         ->GetLocalPlayerInfo(&sLocalPlayerInfo);
     if (sLocalPlayerInfo.GetID() == lPlayerID)
@@ -42,7 +45,9 @@ const char* PlayersConnectionManager::GetPlayerName(NetworkPlayerID lPlayerID) c
         return sLocalPlayerInfo.GetName();
     }
 
-    CGS_ASSERT(false, "Could not find name of player");
+    CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+        "Could not find name of player",
+        __FILE__, 844 /* ARTIST 0x828905E8 */));
     return 0;
 }
 

@@ -25,8 +25,7 @@
 #include "GameSource/Network/Parameters/BrnNetworkUsersetParams.h"                      // UsersetParams
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerInfo.h" // GetLocalPlayerInfo
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMatchMakingManager.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkMatchMakingManager.cpp".
 
 namespace BrnNetwork
 {
@@ -94,7 +93,7 @@ namespace BrnNetwork
     {
         CGS_ASSERT(maUpdateFunctions[meSubState] != 0,
             CgsDev::Assert::MessageAt(
-                "No update function supplied for the current substate", KAC_ARTIST_ASSERT_FILE, 322 /* ARTIST 0x8254461C */));
+                "No update function supplied for the current substate", __FILE__, 322 /* ARTIST 0x8254461C */));
         (this->*maUpdateFunctions[meSubState])();
     }
 
@@ -118,7 +117,7 @@ namespace BrnNetwork
         {
             CGS_ASSERT(maUpdateFunctions[liIndex] != 0,
                 CgsDev::Assert::MessageAt(
-                    "No update function supplied for this substate", KAC_ARTIST_ASSERT_FILE, 99 /* ARTIST 0x82558D84 */));
+                    "No update function supplied for this substate", __FILE__, 99 /* ARTIST 0x82558D84 */));
         }
     }
 
@@ -275,7 +274,7 @@ namespace BrnNetwork
     void MatchMakingManager::ProcessComplete(bool lbSuccess)
     {
         CGS_ASSERT(mCallback != 0,
-            CgsDev::Assert::MessageAt("mCallback", KAC_ARTIST_ASSERT_FILE, 442 /* ARTIST 0x825447B8 */));
+            CgsDev::Assert::MessageAt("mCallback", __FILE__, 442 /* ARTIST 0x825447B8 */));
 
         Callback lCallback          = mCallback;
         void*    lpCallbackUserData = mpCallbackUserData;

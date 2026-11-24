@@ -46,8 +46,7 @@
 
 #include "netconn.h"   // NetConnStatus (the selector is a FourCC)
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLoginManagerBase.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Managers/BrnNetworkLoginManagerBase.cpp".
 
 namespace BrnNetwork
 {
@@ -180,7 +179,7 @@ namespace BrnNetwork
             CGS_ASSERT(false,
                 CgsDev::Assert::MessageAt(
                     "Invalid login sub state",
-                    KAC_ARTIST_ASSERT_FILE, 237 /* ARTIST 0x8256CE04 */));
+                    __FILE__, 237 /* ARTIST 0x8256CE04 */));
             return false;
         }
     }
@@ -332,7 +331,7 @@ namespace BrnNetwork
         CGS_ASSERT(meSignInState == E_SIGN_IN_STATE_SIGNING_IN,
             CgsDev::Assert::MessageAt(
                 "meSignInState == E_SIGN_IN_STATE_SIGNING_IN",
-                KAC_ARTIST_ASSERT_FILE, 958 /* ARTIST 0x82543BE8 */));
+                __FILE__, 958 /* ARTIST 0x82543BE8 */));
         // X360: meSignInState = !lbSuccess + 1 -- success -> SUCCESS(1), failure -> FAILED(2).
         meSignInState = lbSuccess ? E_SIGN_IN_STATE_SUCCESS : E_SIGN_IN_STATE_FAILED;
     }

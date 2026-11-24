@@ -82,7 +82,9 @@ bool StartTimeManager::Prepare()
 
     PrepareStartTime();
 
-    CGS_ASSERT(mpTimeManager->Prepare(), "mpTimeManager->Prepare()");
+    CGS_ASSERT(mpTimeManager->Prepare(), CgsDev::Assert::MessageAt(
+        "mpTimeManager->Prepare()",
+        __FILE__, 136 /* ARTIST 0x8289C86C */));
     return true;
 }
 
@@ -247,7 +249,9 @@ void StartTimeManager::OnHostMigration(const CgsSystem::TimerStatus* lpTimerStat
 {
     NetworkPlayerID lLocalPlayerID;
     mpPlayerManager->GetNextLocalPlayerID(&lLocalPlayerID);
-    CGS_ASSERT(lLocalPlayerID != K_INVALID_PLAYER_ID, "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID");
+    CGS_ASSERT(lLocalPlayerID != K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+        "lLocalPlayerID != CgsNetwork::K_INVALID_PLAYER_ID",
+        __FILE__, 498 /* ARTIST 0x82898A7C */));
 
     mpTimeManager->OnHostMigration(lOldHostID, lNewHostID, lLocalPlayerID == lNewHostID);
 
@@ -255,7 +259,9 @@ void StartTimeManager::OnHostMigration(const CgsSystem::TimerStatus* lpTimerStat
     {
     case E_HOST_WAIT_FOR_CLIENTS_READY:
     case E_HOST_SEND_START_TIME:
-        CGS_ASSERT(!mpPlayerManager->AmIHost(), "!mpPlayerManager->AmIHost()");
+        CGS_ASSERT(!mpPlayerManager->AmIHost(), CgsDev::Assert::MessageAt(
+            "!mpPlayerManager->AmIHost()",
+            __FILE__, 512 /* ARTIST 0x82898B04 */));
         PrepareClientSyncTime();
         SetStatus(lpTimerStatus->GetTime(), E_CLIENT_SYNC_TIME);
         break;
@@ -284,7 +290,9 @@ void StartTimeManager::OnHostMigration(const CgsSystem::TimerStatus* lpTimerStat
 // player other than ourselves.
 void StartTimeManager::AddPlayer(NetworkPlayerID lPlayerID)
 {
-    CGS_ASSERT(mpTimeManager, "mpTimeManager");
+    CGS_ASSERT(mpTimeManager, CgsDev::Assert::MessageAt(
+        "mpTimeManager",
+        __FILE__, 839 /* ARTIST 0x82898DF8 */));
 
     NetworkPlayerID lLocalPlayerID;
     bool lbIAmHost = false;
@@ -353,14 +361,20 @@ void StartTimeManager::ForceStartTime(const CgsSystem::TimerStatus* lpTimerStatu
 // Claim a free slot for the player and register its start-time and ready messages.
 void StartTimeManager::RegisterMessages(NetworkPlayerID lPlayerID)
 {
-    CGS_ASSERT(mpPlayerManager, "mpPlayerManager");
+    CGS_ASSERT(mpPlayerManager, CgsDev::Assert::MessageAt(
+        "mpPlayerManager",
+        __FILE__, 700 /* ARTIST 0x82898C34 */));
 
     NetworkPlayer* lpNetPlayer = mpPlayerManager->GetPlayerByID(lPlayerID);
-    CGS_ASSERT(lpNetPlayer, "lpNetPlayer");
+    CGS_ASSERT(lpNetPlayer, CgsDev::Assert::MessageAt(
+        "lpNetPlayer",
+        __FILE__, 705 /* ARTIST 0x82898CAC */));
 
     for (s32 liIndex = 0; liIndex < KI_MAX_MESSAGE_DATA; ++liIndex)
     {
-        CGS_ASSERT(maMsgData[liIndex].mPlayerID != lPlayerID, "maMsgData[liIndex].mPlayerID != lPlayerID");
+        CGS_ASSERT(maMsgData[liIndex].mPlayerID != lPlayerID, CgsDev::Assert::MessageAt(
+            "maMsgData[liIndex].mPlayerID != lPlayerID",
+            __FILE__, 713 /* ARTIST 0x82898CE4 */));
     }
 
     s32 liFreeSlot;
@@ -371,7 +385,9 @@ void StartTimeManager::RegisterMessages(NetworkPlayerID lPlayerID)
             break;
         }
     }
-    CGS_ASSERT(liFreeSlot < KI_MAX_MESSAGE_DATA, "liFreeSlot<KI_MAX_NETWORK_PLAYERS");
+    CGS_ASSERT(liFreeSlot < KI_MAX_MESSAGE_DATA, CgsDev::Assert::MessageAt(
+        "liFreeSlot<KI_MAX_NETWORK_PLAYERS",
+        __FILE__, 726 /* ARTIST 0x82898D40 */));
 
     MessageData& lMessageData = maMsgData[liFreeSlot];
     lMessageData.mPlayerID       = lPlayerID;
@@ -569,7 +585,9 @@ bool StartTimeManager::UpdateClientSyncTime(const CgsSystem::TimerStatus* lpTime
     else if (IsStartTimeValid()
              && (lpTimerStatus->GetTime() - mStatusEnterTime) > mMinTimeToSyncTime)
     {
-        CGS_ASSERT(!mpPlayerManager->AmIHost(), "!mpPlayerManager->AmIHost()");
+        CGS_ASSERT(!mpPlayerManager->AmIHost(), CgsDev::Assert::MessageAt(
+            "!mpPlayerManager->AmIHost()",
+            __FILE__, 1335 /* ARTIST 0x8288A2EC */));
         lbDone = true;
     }
     else if ((lpTimerStatus->GetTime() - mStatusEnterTime) > mMaxTimeToSyncTime)
@@ -664,7 +682,9 @@ void StartTimeManager::StartTimeMessageArrivedCallback(ReliableMessage* lpMessag
     }
 
     const bool lbSuccess = lpStartTimeMessage->Retrieve(&lStartTime, laReceivedClientsIDs);
-    CGS_ASSERT(lbSuccess, "lbSuccess");
+    CGS_ASSERT(lbSuccess, CgsDev::Assert::MessageAt(
+        "lbSuccess",
+        __FILE__, 968 /* ARTIST 0x82891DD0 */));
 
     if (lpStartTimeManager->IsStartTimeValid()
         && !lpHostMigrationManager->ABecomesHostBeforeB(lpStartTimeManager->mStartTime.mHostID, lStartTime.mHostID))
@@ -690,7 +710,9 @@ void StartTimeManager::StartTimeMessageArrivedCallback(ReliableMessage* lpMessag
             break;
         }
     }
-    CGS_ASSERT(liPlayerIndex < KI_START_TIME_CLIENT_COUNT, "liPlayerIndex<KI_MAX_PLAYERS");
+    CGS_ASSERT(liPlayerIndex < KI_START_TIME_CLIENT_COUNT, CgsDev::Assert::MessageAt(
+        "liPlayerIndex<KI_MAX_PLAYERS",
+        __FILE__, 996 /* ARTIST 0x82891EB0 */));
 
     lpStartTimeManager->SetStartTime(&lStartTime);
 }
@@ -706,7 +728,9 @@ void StartTimeManager::ReadyMessageArrivedCallback(ReliableMessage*,
                                                    void* lpUserData)
 {
     StartTimeManager* lpStartTimeMgr = static_cast<StartTimeManager*>(lpUserData);
-    CGS_ASSERT(lpStartTimeMgr, "lpStartTimeMgr");
+    CGS_ASSERT(lpStartTimeMgr, CgsDev::Assert::MessageAt(
+        "lpStartTimeMgr",
+        __FILE__, 1075 /* ARTIST 0x8287CF58 */));
 
     s32 liPlayerIndex;
     for (liPlayerIndex = 0; liPlayerIndex < KI_MAX_MESSAGE_DATA; ++liPlayerIndex)
@@ -723,7 +747,9 @@ void StartTimeManager::ReadyMessageArrivedCallback(ReliableMessage*,
         }
     }
 
-    CGS_ASSERT(liPlayerIndex < KI_MAX_MESSAGE_DATA, "liPlayerIndex < KI_MAX_NETWORK_PLAYERS");
+    CGS_ASSERT(liPlayerIndex < KI_MAX_MESSAGE_DATA, CgsDev::Assert::MessageAt(
+        "liPlayerIndex < KI_MAX_NETWORK_PLAYERS",
+        __FILE__, 1099 /* ARTIST 0x8287CFD8 */));
 }
 
 // Delivery notifications are not used.

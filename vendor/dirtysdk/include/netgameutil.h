@@ -2,10 +2,13 @@
 
 #include "types.hpp"
 
+typedef struct NetGameUtilRefT NetGameUtilRefT;   // DirtySDK is C
 struct NetGameUtilRefT;
 
+#ifdef __cplusplus
 extern "C"
 {
+#endif
     NetGameUtilRefT* NetGameUtilCreate();
     void NetGameUtilReset(NetGameUtilRefT* ref);
     void NetGameUtilDestroy(NetGameUtilRefT* ref);
@@ -13,4 +16,6 @@ extern "C"
     s32 NetGameUtilStatus(NetGameUtilRefT* ref, s32 selector, void* pBuffer, s32 size);
     s32 NetGameUtilConnect(NetGameUtilRefT* ref, s32 connection, const char* address);
     void* NetGameUtilComplete(NetGameUtilRefT* ref);
+#ifdef __cplusplus
 }
+#endif

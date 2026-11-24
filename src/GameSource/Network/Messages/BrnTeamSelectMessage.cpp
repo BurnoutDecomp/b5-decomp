@@ -78,9 +78,12 @@ namespace BrnNetwork
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
             mx8Flags &= ~CgsNetwork::KX8_FLAGS_VALID;
 
-        CGS_ASSERT(lpaPlayerTeamInfo != 0, "lpaPlayerTeamInfo");
-        CGS_ASSERT(static_cast<s32>(8 * liNumPlayers) <= static_cast<s32>(sizeof(maPlayerTeamInfo)),
-                   "sizeof( maPlayerTeamInfo) >= liNumPlayers * sizeof( PlayerTeamInfo )");
+        CGS_ASSERT(lpaPlayerTeamInfo != 0, CgsDev::Assert::MessageAt(
+            "lpaPlayerTeamInfo",
+            __FILE__, 96 /* ARTIST 0x825800D4 */));
+        CGS_ASSERT(static_cast<s32>(8 * liNumPlayers) <= static_cast<s32>(sizeof(maPlayerTeamInfo)), CgsDev::Assert::MessageAt(
+            "sizeof( maPlayerTeamInfo) >= liNumPlayers * sizeof( PlayerTeamInfo )",
+            __FILE__, 97 /* ARTIST 0x825800FC */));
 
         XMemCpy(maPlayerTeamInfo, lpaPlayerTeamInfo, sizeof(maPlayerTeamInfo));   // +0x28, src, 0x40
         miNumPlayers     = liNumPlayers;        // stw, +0x68
@@ -89,7 +92,9 @@ namespace BrnNetwork
         mbFinalSelection = lbFinalSelection;    // stb, +0x71
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_TEAM_SELECT_MESSAGE_TYPE, lu16Frame);
-        CGS_ASSERT(IsReliable(), "IsReliable()");
+        CGS_ASSERT(IsReliable(), CgsDev::Assert::MessageAt(
+            "IsReliable()",
+            __FILE__, 106 /* ARTIST 0x82580168 */));
     }
 
     // ---------------------------------------------------------------------------------

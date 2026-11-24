@@ -91,7 +91,9 @@ namespace CgsNetwork
         }
 
         SetMessageInvalid();
-        CGS_ASSERT(!IsMessageValid(), "!IsMessageValid()");
+        CGS_ASSERT(!IsMessageValid(), CgsDev::Assert::MessageAt(
+            "!IsMessageValid()",
+            __FILE__, 159 /* ARTIST 0x8288A600 */));
         return true;
     }
 }

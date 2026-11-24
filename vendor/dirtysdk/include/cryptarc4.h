@@ -2,6 +2,7 @@
 
 #include "types.hpp"
 
+typedef struct CryptArc4T CryptArc4T;   // DirtySDK is C
 struct CryptArc4T
 {
     u8 state[256];
@@ -9,9 +10,13 @@ struct CryptArc4T
     u8 swap;
 };
 
+#ifdef __cplusplus
 extern "C"
 {
+#endif
     void CryptArc4Init(CryptArc4T* pState, const u8* pKeyBuf, s32 iKeyLen, s32 iIter);
     void CryptArc4Apply(CryptArc4T* pState, u8* pBuffer, s32 iLength);
     void CryptArc4Advance(CryptArc4T* pState, s32 iLength);
+#ifdef __cplusplus
 }
+#endif

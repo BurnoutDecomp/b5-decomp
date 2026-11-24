@@ -70,10 +70,18 @@ namespace CgsNetwork
                                    MessageWithPlayerIDs::NetworkPlayerID* lpHostID,
                                    CgsSystem::Time* lpHostTime)
     {
-        CGS_ASSERT(lpClientID, "lpClientID");
-        CGS_ASSERT(lpClientTime, "lpClientTime");
-        CGS_ASSERT(lpHostID, "lpHostID");
-        CGS_ASSERT(lpHostTime, "lpHostTime");
+        CGS_ASSERT(lpClientID, CgsDev::Assert::MessageAt(
+            "lpClientID",
+            __FILE__, 105 /* ARTIST 0x8288B18C */));
+        CGS_ASSERT(lpClientTime, CgsDev::Assert::MessageAt(
+            "lpClientTime",
+            __FILE__, 106 /* ARTIST 0x8288B1B0 */));
+        CGS_ASSERT(lpHostID, CgsDev::Assert::MessageAt(
+            "lpHostID",
+            __FILE__, 107 /* ARTIST 0x8288B1D4 */));
+        CGS_ASSERT(lpHostTime, CgsDev::Assert::MessageAt(
+            "lpHostTime",
+            __FILE__, 108 /* ARTIST 0x8288B1F8 */));
 
         if (!IsMessageValid())
         {

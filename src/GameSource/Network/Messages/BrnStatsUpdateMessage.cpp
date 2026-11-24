@@ -26,8 +26,7 @@
 // Reproduced store-for-store against the named base fields. The frame-validity assert keeps
 // the X360 message-base wording.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Messages/BrnStatsUpdateMessage.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Messages/BrnStatsUpdateMessage.cpp".
 
 namespace BrnNetwork
 {
@@ -108,14 +107,14 @@ namespace BrnNetwork
                                       s32* lpiNumberOfTakedowns)
     {
         CGS_ASSERT(lpiNumberOfChallenges,
-            CgsDev::Assert::MessageAt("lpiNumberOfChallenges", KAC_ARTIST_ASSERT_FILE, 101 /* ARTIST 0x8257FF38 */));
+            CgsDev::Assert::MessageAt("lpiNumberOfChallenges", __FILE__, 101 /* ARTIST 0x8257FF38 */));
         CGS_ASSERT(lpiNumberOfRivals,
-            CgsDev::Assert::MessageAt("lpiNumberOfRivals", KAC_ARTIST_ASSERT_FILE, 102 /* ARTIST 0x8257FF5C */));
+            CgsDev::Assert::MessageAt("lpiNumberOfRivals", __FILE__, 102 /* ARTIST 0x8257FF5C */));
         CGS_ASSERT(lpiNumberOfAchievements,
             CgsDev::Assert::MessageAt(
-                "lpiNumberOfAchievements", KAC_ARTIST_ASSERT_FILE, 103 /* ARTIST 0x8257FF80 */));
+                "lpiNumberOfAchievements", __FILE__, 103 /* ARTIST 0x8257FF80 */));
         CGS_ASSERT(lpiNumberOfTakedowns,
-            CgsDev::Assert::MessageAt("lpiNumberOfTakedowns", KAC_ARTIST_ASSERT_FILE, 104 /* ARTIST 0x8257FFA4 */));
+            CgsDev::Assert::MessageAt("lpiNumberOfTakedowns", __FILE__, 104 /* ARTIST 0x8257FFA4 */));
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {

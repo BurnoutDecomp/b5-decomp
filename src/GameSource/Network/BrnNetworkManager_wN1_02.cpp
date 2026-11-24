@@ -40,8 +40,7 @@
 // DxtDecodeCallback, ProcessNetworkTextureDecodeEvent.
 // ============================================================================================
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/BrnNetworkManager.cpp".
 
 namespace GsmIO = BrnGameState::GameStateModuleIO;
 
@@ -233,13 +232,19 @@ namespace BrnNetwork
     // ----------------------------------------------------------------------------------------
     void BrnNetworkManager::ProcessHLUpdateFlags(BrnUpdateSet luUpdateSet)
     {
-        CGS_ASSERT(GetPlayerManager(), "GetPlayerManager()");
+        CGS_ASSERT(GetPlayerManager(), CgsDev::Assert::MessageAt(
+            "GetPlayerManager()",
+            __FILE__, 3260 /* ARTIST 0x82596900 */));
 
         mbDiskReadErrorThisFrame = (luUpdateSet & 0x200) != 0;
         if (mbDiskReadErrorThisFrame)
         {
-            CGS_ASSERT(GetServerInterface(), "GetServerInterface()");
-            CGS_ASSERT(GetServerInterface()->GetConnectionComponent(), "GetServerInterface()->GetConnectionComponent()");
+            CGS_ASSERT(GetServerInterface(), CgsDev::Assert::MessageAt(
+                "GetServerInterface()",
+                __FILE__, 3267 /* ARTIST 0x82596940 */));
+            CGS_ASSERT(GetServerInterface()->GetConnectionComponent(), CgsDev::Assert::MessageAt(
+                "GetServerInterface()->GetConnectionComponent()",
+                __FILE__, 3268 /* ARTIST 0x82596968 */));
 
             mbNotifyGameOfDisconnectAfterDiskError = true;
             GetBuddyManager()->RevokeAllInvites();
@@ -281,15 +286,15 @@ namespace BrnNetwork
     {
         BrnNetworkManager* lpNetworkManager = static_cast<BrnNetworkManager*>(lpUserData);
         CGS_ASSERT(lpNetworkManager,
-            CgsDev::Assert::MessageAt("lpNetworkManager", KAC_ARTIST_ASSERT_FILE, 2276 /* ARTIST 0x82581BD4 */));
+            CgsDev::Assert::MessageAt("lpNetworkManager", __FILE__, 2276 /* ARTIST 0x82581BD4 */));
         CGS_ASSERT(lpNetworkManager->GetServerInterface(),
             CgsDev::Assert::MessageAt(
                 "lpNetworkManager->GetServerInterface()",
-                KAC_ARTIST_ASSERT_FILE, 2281 /* ARTIST 0x82581BF8 */));
+                __FILE__, 2281 /* ARTIST 0x82581BF8 */));
         CGS_ASSERT(lpNetworkManager->GetServerInterface()->GetGameComponent(),
             CgsDev::Assert::MessageAt(
                 "lpNetworkManager->GetServerInterface()->GetGameComponent()",
-                KAC_ARTIST_ASSERT_FILE, 2282 /* ARTIST 0x82581C20 */));
+                __FILE__, 2282 /* ARTIST 0x82581C20 */));
 
         if (lpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame() &&
             !lpNetworkManager->GetServerInterface()->GetGameComponent()->IsGameStarted())
@@ -297,7 +302,7 @@ namespace BrnNetwork
             CGS_ASSERT(lpNetworkManager->mpNetworkModule,
                 CgsDev::Assert::MessageAt(
                     "lpNetworkManager->mpNetworkModule",
-                    KAC_ARTIST_ASSERT_FILE, 2286 /* ARTIST 0x82581C78 */));
+                    __FILE__, 2286 /* ARTIST 0x82581C78 */));
             lpNetworkManager->GetTrafficManager()->RestartNetworkTraffic(lClientReadyID);
         }
     }
@@ -415,10 +420,10 @@ namespace BrnNetwork
     void BrnNetworkManager::CaptureTelemetryEvent(ETelemetryHook leHook, const char* lpcData)
     {
         CGS_ASSERT(GetServerInterface(),
-            CgsDev::Assert::MessageAt("GetServerInterface()", KAC_ARTIST_ASSERT_FILE, 3121 /* ARTIST 0x825821A8 */));
+            CgsDev::Assert::MessageAt("GetServerInterface()", __FILE__, 3121 /* ARTIST 0x825821A8 */));
         CGS_ASSERT(GetServerInterface()->GetTelemetryComponent(),
             CgsDev::Assert::MessageAt(
-                "GetServerInterface()->GetTelemetryComponent()", KAC_ARTIST_ASSERT_FILE, 3122 /* ARTIST 0x825821D0 */));
+                "GetServerInterface()->GetTelemetryComponent()", __FILE__, 3122 /* ARTIST 0x825821D0 */));
         GetServerInterface()->GetTelemetryComponent()->CaptureEvent(leHook, lpcData);
     }
 
@@ -528,9 +533,12 @@ namespace BrnNetwork
     void BrnNetworkManager::ProcessNetworkTextureDecodeEvent(
             const BrnNetworkModuleIO::NetworkInDxtDecodeImageEvent* lpDxtDecodeRequestEvent)
     {
-        CGS_ASSERT(lpDxtDecodeRequestEvent, "lpDxtDecodeRequestEvent");
-        CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == lpDxtDecodeRequestEvent->mpTextureToDecode->GetFormat(),
-                   "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == lpDxtDecodeRequestEvent->mpTextureToDecode->GetFormat()");
+        CGS_ASSERT(lpDxtDecodeRequestEvent, CgsDev::Assert::MessageAt(
+            "lpDxtDecodeRequestEvent",
+            __FILE__, 3208 /* ARTIST 0x82596828 */));
+        CGS_ASSERT(renderengine::PIXELFORMAT_DXT1 == lpDxtDecodeRequestEvent->mpTextureToDecode->GetFormat(), CgsDev::Assert::MessageAt(
+            "rw::graphics::core::PIXELFORMAT_LIN_DXT1 == lpDxtDecodeRequestEvent->mpTextureToDecode->GetFormat()",
+            __FILE__, 3209 /* ARTIST 0x8259685C */));
 
         mExportPlayerName = lpDxtDecodeRequestEvent->mPlayerName;
 

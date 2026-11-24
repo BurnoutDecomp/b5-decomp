@@ -18,8 +18,7 @@
 // The server-type guard is the combined "(leServerType >= E_SERVER_TYPE_LOCAL) &&
 // (leServerType < E_SERVER_TYPE_COUNT)" range test (the asm splits it into blt 0 / blt 7).
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network\\Packeting\\CgsNetworkAdapterBase.cpp".
 
 namespace CgsNetwork
 {
@@ -123,11 +122,14 @@ bool NetworkAdapterBase::Release()
 // message-sent hook sees the data; on failure the peer's address is logged.
 bool NetworkAdapterBase::SendTo(void* lpData, s32 liLength, ConnectionData lConnectionData)
 {
-    CGS_ASSERT(lConnectionData.IsValid(), "lConnectionData.IsValid()");
+    CGS_ASSERT(lConnectionData.IsValid(), CgsDev::Assert::MessageAt(
+        "lConnectionData.IsValid()",
+        __FILE__, 206 /* ARTIST 0x828710EC */));
 
     NetGamePacketT lPacket;
-    CGS_ASSERT((liLength) <= static_cast<int32_t>( sizeof(lPacket.body.data) ),
-               "(liLength) <= static_cast<int32_t>( sizeof(lPacket.body.data) )");
+    CGS_ASSERT((liLength) <= static_cast<int32_t>( sizeof(lPacket.body.data) ), CgsDev::Assert::MessageAt(
+        "(liLength) <= static_cast<int32_t>( sizeof(lPacket.body.data) )",
+        __FILE__, 208 /* ARTIST 0x82871110 */));
 
     std::memset(&lPacket, 0, sizeof(lPacket));
     lPacket.head.len  = static_cast<u16>(liLength);
@@ -162,9 +164,9 @@ s32 NetworkAdapterBase::ReceiveFrom(void** lppData, ConnectionData lConnectionDa
     NetGamePacketT* lpPacket = reinterpret_cast<NetGamePacketT*>(mpRecvBuffer);
 
     CGS_ASSERT(lppData,
-        CgsDev::Assert::MessageAt("lppData", KAC_ARTIST_ASSERT_FILE, 262 /* ARTIST 0x8287122C */));
+        CgsDev::Assert::MessageAt("lppData", __FILE__, 262 /* ARTIST 0x8287122C */));
     CGS_ASSERT(mpRecvBuffer,
-        CgsDev::Assert::MessageAt("mpRecvBuffer", KAC_ARTIST_ASSERT_FILE, 263 /* ARTIST 0x82871254 */));
+        CgsDev::Assert::MessageAt("mpRecvBuffer", __FILE__, 263 /* ARTIST 0x82871254 */));
 
     if (lConnectionData.mpNetGameLink == 0)
     {

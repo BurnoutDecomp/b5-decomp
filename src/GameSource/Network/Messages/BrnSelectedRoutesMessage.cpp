@@ -37,8 +37,7 @@
 // is the `lis r9, 0x3900` / `oris r11, r11, 0x3900` immediate in the instruction stream,
 // not an undecoded rodata constant).
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Messages/BrnSelectedRoutesMessage.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Messages/BrnSelectedRoutesMessage.cpp".
 
 namespace BrnNetwork
 {
@@ -109,20 +108,20 @@ namespace BrnNetwork
             return;
 
         CGS_ASSERT(lpEvent != 0,
-            CgsDev::Assert::MessageAt("lpEvent", KAC_ARTIST_ASSERT_FILE, 95 /* ARTIST 0x8257AFC4 */));
+            CgsDev::Assert::MessageAt("lpEvent", __FILE__, 95 /* ARTIST 0x8257AFC4 */));
         CGS_ASSERT(liRoundNumber >= KI_MIN_ROUND_NUM,
             CgsDev::Assert::MessageAt(
-                "liRoundNumber>=KI_MIN_ROUND_NUM", KAC_ARTIST_ASSERT_FILE, 96 /* ARTIST 0x8257AFE8 */));
+                "liRoundNumber>=KI_MIN_ROUND_NUM", __FILE__, 96 /* ARTIST 0x8257AFE8 */));
         CGS_ASSERT(liRoundNumber <= KI_MAX_ROUND_NUM,
             CgsDev::Assert::MessageAt(
-                "liRoundNumber<=KI_MAX_ROUND_NUM", KAC_ARTIST_ASSERT_FILE, 97 /* ARTIST 0x8257B00C */));
+                "liRoundNumber<=KI_MAX_ROUND_NUM", __FILE__, 97 /* ARTIST 0x8257B00C */));
 
         miRoundNumber = liRoundNumber;          // stw, +0x54
         mEvent        = *lpEvent;               // 44-byte payload copy in (memcpy +0x28, 0x2C)
 
         CgsNetwork::ReliableMessage::PrepareForSend(KI_SELECTED_ROUTES_MESSAGE_TYPE, lu16Frame);
         CGS_ASSERT(IsReliable(),
-            CgsDev::Assert::MessageAt("IsReliable()", KAC_ARTIST_ASSERT_FILE, 103 /* ARTIST 0x8257B06C */));
+            CgsDev::Assert::MessageAt("IsReliable()", __FILE__, 103 /* ARTIST 0x8257B06C */));
     }
 
     // ---------------------------------------------------------------------------------

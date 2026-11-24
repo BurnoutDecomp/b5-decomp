@@ -15,8 +15,7 @@
 // plus an initial-data marker (@+0x60). Its immediate base is ReliableMessage; see the
 // header note for the evidence.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/Messages/BrnBurnoutSkillzMessage.cpp";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/Messages/BrnBurnoutSkillzMessage.cpp".
 
 namespace BrnNetwork
 {
@@ -80,11 +79,11 @@ namespace BrnNetwork
                                               bool lbInitialData)
     {
         CGS_ASSERT(lpSkillzData,
-            CgsDev::Assert::MessageAt("lpSkillzData", KAC_ARTIST_ASSERT_FILE, 146 /* ARTIST 0x8257F6FC */));
+            CgsDev::Assert::MessageAt("lpSkillzData", __FILE__, 146 /* ARTIST 0x8257F6FC */));
         CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
             CgsDev::Assert::MessageAt(
                 "lu16FrameCount != KU16_INVALID_FRAME",
-                KAC_ARTIST_ASSERT_FILE, 147 /* ARTIST 0x8257F724 */));
+                __FILE__, 147 /* ARTIST 0x8257F724 */));
 
         // A slot already flagged VALID is being re-armed: clear the flag instead of
         // stamping the initial-data marker (asm: lbz 0x19 ; if bit0 set -> clear bit0 ;
@@ -102,9 +101,9 @@ namespace BrnNetwork
                                         bool* lpbInitialData)
     {
         CGS_ASSERT(lpSkillzData,
-            CgsDev::Assert::MessageAt("lpSkillzData", KAC_ARTIST_ASSERT_FILE, 183 /* ARTIST 0x8257F7B0 */));
+            CgsDev::Assert::MessageAt("lpSkillzData", __FILE__, 183 /* ARTIST 0x8257F7B0 */));
         CGS_ASSERT(lpbInitialData,
-            CgsDev::Assert::MessageAt("lpbInitialData", KAC_ARTIST_ASSERT_FILE, 184 /* ARTIST 0x8257F7D4 */));
+            CgsDev::Assert::MessageAt("lpbInitialData", __FILE__, 184 /* ARTIST 0x8257F7D4 */));
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) != 0)
         {

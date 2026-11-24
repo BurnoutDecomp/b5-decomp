@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/ServerInterface/DirtySock/Components/CgsServerInterfacePlayerParams.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Core/CgsAssert.h"            // CgsDev::Assert Begin/Fire/End
 #include "GameShared/GameClasses/Development/CgsStrStream.h"  // CgsDev::StrStream (over-length assert)
 #include "lobbytagfield.h"                                    // DirtySDK TagFieldGet/Set*
@@ -74,8 +75,9 @@ void ServerInterfacePlayerParamsBase::SerialiseFromPlayer(const void* lpPlayer)
 
 void ServerInterfacePlayerParamsBase::SerialiseToString(char* lpcRecord, s32 liRecLen) const
 {
-    CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()),
-               "strlen( GetPattern() ) < (size_t) GetPatternLength()");
+    CGS_ASSERT(std::strlen(GetPattern()) < static_cast<u32>(GetPatternLength()), CgsDev::Assert::MessageAt(
+        "strlen( GetPattern() ) < (size_t) GetPatternLength()",
+        __FILE__, 108 /* ARTIST 0x8287A19C */));
 
     const char* lpcPattern = GetPattern();
     const u32   luDataSize = GetDataSize();

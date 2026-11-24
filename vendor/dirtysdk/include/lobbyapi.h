@@ -19,6 +19,17 @@
 
 struct LobbyApiRefT;   // opaque
 
+// DirtySDK is C: each record type is also its own typedef name (`typedef struct X X`).
+typedef struct LobbyApiRefT       LobbyApiRefT;
+typedef struct LobbyApiMsgT       LobbyApiMsgT;
+typedef struct LobbyApiColorT     LobbyApiColorT;
+typedef struct LobbyApiUserT      LobbyApiUserT;
+typedef struct LobbyApiRankT      LobbyApiRankT;
+typedef struct LobbyApiPlayerT    LobbyApiPlayerT;
+typedef struct LobbyApiPartitionT LobbyApiPartitionT;
+typedef struct LobbyApiPlayT      LobbyApiPlayT;
+typedef struct LobbyApiUserSetT   LobbyApiUserSetT;
+
 // Callback types (the second argument of LobbyApiSetCallback).
 enum LobbyApiCBTypeE
 {
@@ -31,6 +42,7 @@ enum LobbyApiCBTypeE
     LOBBYAPI_CBTYPE_IDLE    = 5,   // called once per LobbyApiUpdate
     LOBBYAPI_CBTYPE_TOTAL   = 6
 };
+typedef enum LobbyApiCBTypeE LobbyApiCBTypeE;   // DirtySDK is C
 
 // A lobby message handed to a callback: the request/event kind fourcc, the result code
 // (0 or an error fourcc for responses) and the tagfield payload text.

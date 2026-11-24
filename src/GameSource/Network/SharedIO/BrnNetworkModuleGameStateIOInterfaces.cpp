@@ -14,8 +14,7 @@
 //
 // The class layout (member byte offsets, queue stride) is in the owning header.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameSource\\Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameSource\\Network/SharedIO/BrnNetworkModuleGameStateIOInterfaces.h".
 
 namespace BrnNetwork
 {
@@ -90,7 +89,7 @@ namespace BrnNetwork
         void NetworkToGameStateInterface::Append(const NetworkToGameStateInterface* lpCopyFrom)
         {
             CGS_ASSERT(lpCopyFrom != 0,
-                CgsDev::Assert::MessageAt("lpCopyFrom", KAC_ARTIST_ASSERT_FILE, 621 /* ARTIST 0x823C94DC */));
+                CgsDev::Assert::MessageAt("lpCopyFrom", __FILE__, 621 /* ARTIST 0x823C94DC */));
 
             mDirtyTrickEventQueue.Append(lpCopyFrom->mDirtyTrickEventQueue);
             mRoadRulesReceivedQueue.Append(lpCopyFrom->mRoadRulesReceivedQueue);
@@ -191,14 +190,14 @@ namespace BrnNetwork
                 CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
                     CgsDev::Assert::MessageAt(
                         "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-                        KAC_ARTIST_ASSERT_FILE, 520 /* ARTIST 0x82542254 */));
+                        __FILE__, 520 /* ARTIST 0x82542254 */));
             }
             if (leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
             {
                 CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                     CgsDev::Assert::MessageAt(
                         "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                        KAC_ARTIST_ASSERT_FILE, 521 /* ARTIST 0x82542278 */));
+                        __FILE__, 521 /* ARTIST 0x82542278 */));
             }
 
             for (s32 li = 0; li < KI_MAX_ACTIVE_RACE_CARS; ++li)
@@ -222,14 +221,14 @@ namespace BrnNetwork
                 CGS_ASSERT(leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0,
                     CgsDev::Assert::MessageAt(
                         "leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_0",
-                        KAC_ARTIST_ASSERT_FILE, 588 /* ARTIST 0x825422FC */));
+                        __FILE__, 588 /* ARTIST 0x825422FC */));
             }
             if (leActiveRaceCarIndex >= E_ACTIVE_RACE_CAR_INDEX_COUNT)
             {
                 CGS_ASSERT(leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT,
                     CgsDev::Assert::MessageAt(
                         "leActiveRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT",
-                        KAC_ARTIST_ASSERT_FILE, 589 /* ARTIST 0x82542320 */));
+                        __FILE__, 589 /* ARTIST 0x82542320 */));
             }
 
             return mabPlayersInFreeburnChallenge[leActiveRaceCarIndex];

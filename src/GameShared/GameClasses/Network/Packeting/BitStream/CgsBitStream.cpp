@@ -1,4 +1,5 @@
 #include "GameShared/GameClasses/Network/Packeting/BitStream/CgsBitStream.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 #include "GameShared/GameClasses/Core/CgsAssert.h"
 
 #include "types.hpp"   // uintptr_t
@@ -91,8 +92,9 @@ namespace
 
     bool BitStream::AddBits(u64 luValue, s32 liNumBits)
     {
-        CGS_ASSERT(liNumBits > 0 && liNumBits <= KI_MAX_BITS,
-                   "liNumBits > 0 && liNumBits <= KI_MAX_BITS");
+        CGS_ASSERT(liNumBits > 0 && liNumBits <= KI_MAX_BITS, CgsDev::Assert::MessageAt(
+            "liNumBits > 0 && liNumBits <= KI_MAX_BITS",
+            __FILE__, 107 /* ARTIST 0x82871320 */));
 
         // Safe mask (avoid 1<<64 UB when liNumBits == 64).
         u64 luMask        = (liNumBits >= 64) ? ~0ull : ((1ull << liNumBits) - 1ull);
@@ -140,12 +142,15 @@ namespace
 
     u64 BitStream::GetBits(s32 liNumBits)
     {
-        CGS_ASSERT(liNumBits > 0 && liNumBits <= KI_MAX_BITS,
-                   "liNumBits > 0 && liNumBits <= KI_MAX_BITS");
-        CGS_ASSERT(miBitReadPosition + liNumBits <= miBufferSizeInBits,
-                   "miBitReadPosition + liNumBits <= miBufferSizeInBits");
-        CGS_ASSERT(miBitReadPosition + liNumBits <= miBitWritePosition,
-                   "miBitReadPosition + liNumBits <= miBitWritePosition");
+        CGS_ASSERT(liNumBits > 0 && liNumBits <= KI_MAX_BITS, CgsDev::Assert::MessageAt(
+            "liNumBits > 0 && liNumBits <= KI_MAX_BITS",
+            __FILE__, 160 /* ARTIST 0x82871460 */));
+        CGS_ASSERT(miBitReadPosition + liNumBits <= miBufferSizeInBits, CgsDev::Assert::MessageAt(
+            "miBitReadPosition + liNumBits <= miBufferSizeInBits",
+            __FILE__, 163 /* ARTIST 0x82871490 */));
+        CGS_ASSERT(miBitReadPosition + liNumBits <= miBitWritePosition, CgsDev::Assert::MessageAt(
+            "miBitReadPosition + liNumBits <= miBitWritePosition",
+            __FILE__, 164 /* ARTIST 0x828714C0 */));
 
         s32 liReadPos = miBitReadPosition;
         miBitReadPosition += liNumBits;

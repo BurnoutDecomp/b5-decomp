@@ -12,6 +12,7 @@
 // PC body: ../src/pc/lobbymiscpc.cpp.
 
 // Opaque rank module handle.
+typedef struct LobbyRankT LobbyRankT;   // DirtySDK is C
 struct LobbyRankT;
 
 // Fetch completion callback TYPE: (rank ref, completion message, user data). The message

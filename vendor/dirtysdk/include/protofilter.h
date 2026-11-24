@@ -8,6 +8,7 @@
 // asynchronous: ProtoFilterRequest returns -1 and writes a slot index, Result
 // returns -1 while that slot is pending, then 0/1 for the XDK result. Two
 // requests can be in flight at once.
+typedef struct ProtoFilterRefT ProtoFilterRefT;   // DirtySDK is C
 struct ProtoFilterRefT;
 
 #ifdef __cplusplus

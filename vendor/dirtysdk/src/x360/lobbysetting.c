@@ -1,5 +1,10 @@
 // DirtySDK 5.5.3 lobby settings provider, recovered from ARTIST 82B1F968..82B1FC64.
 // XDK size optimization matches ARTIST at 0x82B1FAF0 and 0x82B1FB80.
+// DirtySDK is C (DWARF home: SDKs/Packages/DirtySDK/5.5.3/core/source/lobby/lobbysetting.c), and
+// the C compiler is what places its literals as ARTIST has them: without string pooling a C
+// module keeps its literals in .data and an all-zero "" in .bss, beside the module's statics
+// (LobbySettingLoad passes "" from 0x8324EA8B, between GameManagerLeaveCb's .bss byte 0x8324EA88
+// and the next lobby module's; its NetPrintf text is .data at 0x82F7DF64).
 #if defined(_XBOX) && defined(_MSC_VER)
 #pragma optimize("s", on)
 #endif
@@ -11,7 +16,6 @@
 #include <stddef.h>
 #include <string.h>
 
-namespace CgsNetwork { namespace DirtySock {
 struct LobbySettingRefT
 {
     LobbyApiRefT* pApiRef;
@@ -22,8 +26,6 @@ struct LobbySettingRefT
     s32 eState;
     char strSettings[1001];
 };
-} }
-using CgsNetwork::DirtySock::LobbySettingRefT;
 typedef char SettingSizeCheck[sizeof(LobbySettingRefT) == 1028 ? 1 : -1];
 typedef char SettingBufferOffsetCheck[offsetof(LobbySettingRefT, strSettings) == 24 ? 1 : -1];
 
@@ -37,17 +39,17 @@ static void _LobbySettingCmdDone(LobbySettingRefT* pSettings, s32 iCode)
     pSettings->iCallbackID = -1;
 }
 
-static void _LobbySettingSaveCallback(LobbyApiRefT*, LobbyApiMsgT* pMsg, void* pUserData)
+static void _LobbySettingSaveCallback(LobbyApiRefT* pApiRef, LobbyApiMsgT* pMsg, void* pUserData)
 {
-    LobbySettingRefT* pSettings = static_cast<LobbySettingRefT*>(pUserData);
+    LobbySettingRefT* pSettings = (LobbySettingRefT*)pUserData;
     if (pMsg->code)
         NetPrintfCode("_LobbySettingSaveCallback: Error response to mesg\n");
     _LobbySettingCmdDone(pSettings, pMsg->code);
 }
 
-static void _LobbySettingLoadCallback(LobbyApiRefT*, LobbyApiMsgT* pMsg, void* pUserData)
+static void _LobbySettingLoadCallback(LobbyApiRefT* pApiRef, LobbyApiMsgT* pMsg, void* pUserData)
 {
-    LobbySettingRefT* pSettings = static_cast<LobbySettingRefT*>(pUserData);
+    LobbySettingRefT* pSettings = (LobbySettingRefT*)pUserData;
     if (pMsg->code)
     {
         NetPrintfCode("_LobbySettingLoadCallback: Error response to mesg\n");
@@ -58,10 +60,11 @@ static void _LobbySettingLoadCallback(LobbyApiRefT*, LobbyApiMsgT* pMsg, void* p
     _LobbySettingCmdDone(pSettings, pMsg->code);
 }
 
-extern "C" LobbySettingRefT* LobbySettingCreate(LobbyApiRefT* pApiRef)
+LobbySettingRefT* LobbySettingCreate(LobbyApiRefT* pApiRef)
 {
+    LobbySettingRefT* pSettings;
     const s32 iMemGroup = DirtyMemGroupQuery();
-    LobbySettingRefT* pSettings = static_cast<LobbySettingRefT*>(DirtyMemAlloc(sizeof(LobbySettingRefT), 0x6c736574, iMemGroup));
+    pSettings = (LobbySettingRefT*)DirtyMemAlloc(sizeof(LobbySettingRefT), 0x6c736574, iMemGroup);
     if (!pSettings)
         return 0;
     memset(pSettings, 0, sizeof(*pSettings));
@@ -73,7 +76,7 @@ extern "C" LobbySettingRefT* LobbySettingCreate(LobbyApiRefT* pApiRef)
     return pSettings;
 }
 
-extern "C" s32 LobbySettingLoad(LobbySettingRefT* pSettings, LobbySettingCallbackT* pCallback, void* pUserData)
+s32 LobbySettingLoad(LobbySettingRefT* pSettings, LobbySettingCallbackT* pCallback, void* pUserData)
 {
     if (pSettings->eState)
     {
@@ -87,7 +90,7 @@ extern "C" s32 LobbySettingLoad(LobbySettingRefT* pSettings, LobbySettingCallbac
     return 1;
 }
 
-extern "C" s32 LobbySettingSave(LobbySettingRefT* pSettings, LobbySettingCallbackT* pCallback, void* pUserData)
+s32 LobbySettingSave(LobbySettingRefT* pSettings, LobbySettingCallbackT* pCallback, void* pUserData)
 {
     if (pSettings->eState)
     {
@@ -101,17 +104,17 @@ extern "C" s32 LobbySettingSave(LobbySettingRefT* pSettings, LobbySettingCallbac
     return 1;
 }
 
-extern "C" s32 LobbySettingGetNumber(LobbySettingRefT* pSettings, const char* pName, s32 iDefault)
+s32 LobbySettingGetNumber(LobbySettingRefT* pSettings, const char* pName, s32 iDefault)
 {
     return TagFieldGetNumber(TagFieldFind(pSettings->strSettings, pName), iDefault);
 }
 
-extern "C" void LobbySettingSetNumber(LobbySettingRefT* pSettings, const char* pName, s32 iValue)
+void LobbySettingSetNumber(LobbySettingRefT* pSettings, const char* pName, s32 iValue)
 {
     TagFieldSetNumber(pSettings->strSettings, sizeof(pSettings->strSettings), pName, iValue);
 }
 
-extern "C" void LobbySettingDestroy(LobbySettingRefT* pSettings)
+void LobbySettingDestroy(LobbySettingRefT* pSettings)
 {
     DirtyMemFree(pSettings, 0x6c736574, pSettings->iMemGroup);
 }

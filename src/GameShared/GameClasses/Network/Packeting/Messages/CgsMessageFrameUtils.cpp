@@ -11,8 +11,7 @@
 // 16-bit frame numbers wrap modulo 2^16; KU16_INVALID_FRAME (0xFFFF) is reserved
 // and asserted against on entry. Store-for-store faithful to the X360 asm.
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h";
+// Asserts pass __FILE__; ARTIST's reads "..\\..\\..\\GameShared\\GameClasses\\Network/Packeting/Messages/CgsMessage.h".
 
 namespace CgsNetwork
 {
@@ -55,10 +54,10 @@ namespace CgsNetwork
     {
         CGS_ASSERT(lu16A != KU16_INVALID_FRAME,
             CgsDev::Assert::MessageAt(
-                "lu16A != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 522 /* ARTIST 0x82540F54 */));
+                "lu16A != KU16_INVALID_FRAME", __FILE__, 522 /* ARTIST 0x82540F54 */));
         CGS_ASSERT(lu16B != KU16_INVALID_FRAME,
             CgsDev::Assert::MessageAt(
-                "lu16B != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 523 /* ARTIST 0x82540F7C */));
+                "lu16B != KU16_INVALID_FRAME", __FILE__, 523 /* ARTIST 0x82540F7C */));
         return static_cast<u16>(lu16A - lu16B) < KU16_HALF_OF_FRAMES;
     }
 
@@ -68,10 +67,10 @@ namespace CgsNetwork
     {
         CGS_ASSERT(lu16A != KU16_INVALID_FRAME,
             CgsDev::Assert::MessageAt(
-                "lu16A != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 544 /* ARTIST 0x82540FE8 */));
+                "lu16A != KU16_INVALID_FRAME", __FILE__, 544 /* ARTIST 0x82540FE8 */));
         CGS_ASSERT(lu16B != KU16_INVALID_FRAME,
             CgsDev::Assert::MessageAt(
-                "lu16B != KU16_INVALID_FRAME", KAC_ARTIST_ASSERT_FILE, 545 /* ARTIST 0x82541010 */));
+                "lu16B != KU16_INVALID_FRAME", __FILE__, 545 /* ARTIST 0x82541010 */));
         if (lu16A == lu16B)
         {
             return false;

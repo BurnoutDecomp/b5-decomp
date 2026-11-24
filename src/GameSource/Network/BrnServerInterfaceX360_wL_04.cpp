@@ -3,8 +3,7 @@
 #include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                           // CGS_ASSERT
 #include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h"    // CgsDev::PerfMonCpu
 
-static const char KAC_ARTIST_ASSERT_FILE[] =
-    "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/X360/BrnServerInterfaceX360.cpp";
+// Asserts pass __FILE__; ARTIST's reads "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../Network/X360/BrnServerInterfaceX360.cpp".
 
 namespace BrnNetwork
 {
@@ -127,10 +126,10 @@ void BrnServerInterfaceX360::Construct()
     // Update() would then be dead. (X360 BrnServerInterfaceX360.cpp lines 56/57.)
     CGS_ASSERT( miNetworkServerInterfaceX360PM1 >= 0,
         CgsDev::Assert::MessageAt(
-            "miNetworkServerInterfaceX360PM1 >= 0", KAC_ARTIST_ASSERT_FILE, 56 /* ARTIST 0x8258B1A4 */));
+            "miNetworkServerInterfaceX360PM1 >= 0", __FILE__, 56 /* ARTIST 0x8258B1A4 */));
     CGS_ASSERT( miNetworkServerInterfaceX360PM2 >= 0,
         CgsDev::Assert::MessageAt(
-            "miNetworkServerInterfaceX360PM2 >= 0", KAC_ARTIST_ASSERT_FILE, 57 /* ARTIST 0x8258B1CC */));
+            "miNetworkServerInterfaceX360PM2 >= 0", __FILE__, 57 /* ARTIST 0x8258B1CC */));
 }
 
 }
