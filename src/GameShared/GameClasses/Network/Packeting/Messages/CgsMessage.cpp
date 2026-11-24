@@ -965,3 +965,342 @@ namespace CgsNetwork
         return lfTimeDiff;
     }
 }
+
+// FOLDED FROM CgsMessage_wN1_01.cpp
+#include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+
+// CgsNetwork::TranslateFrame50HzTo60Hz / TranslateFrame60HzTo50Hz.
+//
+// A 16-bit frame counter from a console running the other simulation rate is placed on
+// the local 16-bit ring and rescaled to the local rate. The frame and the local current
+// frame are both extended by lu16NumWraps whole rings of KU16_WRAP_FRAMES; the frame is
+// then moved one ring up or down when it lies more than half a ring from the current
+// frame (a frame below one ring that must move down is mirrored instead and the result
+// mirrored back). The rescale is integer and rounds to nearest: 50 -> 60 is
+// (12 f + 5) / 10, 60 -> 50 is (5 f + 3) / 6, both modulo one ring.
+//
+// When the two frames are close, the result is cross-checked against the float
+// reference (OLDTranslateFrame*) within a tolerance that grows with the wrap count.
+// Kept apart from the mounted CgsMessage.cpp: mount it together with
+// CgsOldFrameConversionFunctions.cpp.
+
+namespace CgsNetwork
+{
+    namespace
+    {
+        const u64 KU16_WRAP_FRAMES      = 65535;
+        const u64 KU16_HALF_WRAP_FRAMES = 32768;
+        const s32 KI_DEFAULT_TOLERANCE  = 21845;   // KU16_DEFAULT_TOLERANCE
+    }
+
+    // The frame and the current frame, lu16NumWraps rings up, are summed in 32 bits and
+    // sign-extended into the 64-bit working values.
+
+    u16 TranslateFrame50HzTo60Hz(u16 lu16Frame50Hz, u16 lu16CurrentFrame50Hz, u16 lu16NumWraps)
+    {
+        u64 luEstimatedTime50Hz =
+            static_cast<s32>(static_cast<u32>(lu16Frame50Hz) + static_cast<u32>(lu16NumWraps) * static_cast<u32>(KU16_WRAP_FRAMES));
+        const u64 luCurrentTime50Hz =
+            static_cast<s32>(static_cast<u32>(lu16CurrentFrame50Hz) + static_cast<u32>(lu16NumWraps) * static_cast<u32>(KU16_WRAP_FRAMES));
+
+        bool lbMirrored = false;
+        if (luEstimatedTime50Hz < luCurrentTime50Hz + KU16_HALF_WRAP_FRAMES)
+        {
+            if (!(luEstimatedTime50Hz + KU16_HALF_WRAP_FRAMES > luCurrentTime50Hz))
+            {
+                luEstimatedTime50Hz += KU16_WRAP_FRAMES;
+            }
+        }
+        else if (luEstimatedTime50Hz < KU16_WRAP_FRAMES)
+        {
+            lbMirrored          = true;
+            luEstimatedTime50Hz = KU16_WRAP_FRAMES - luEstimatedTime50Hz;
+        }
+        else
+        {
+            luEstimatedTime50Hz -= KU16_WRAP_FRAMES;
+        }
+
+        CGS_ASSERT((static_cast<u16>(luEstimatedTime50Hz - luCurrentTime50Hz) < KU16_HALF_WRAP_FRAMES)
+                       || (static_cast<u16>(luCurrentTime50Hz - luEstimatedTime50Hz) < KU16_HALF_WRAP_FRAMES),
+                   "((uint16_t) (luEstimatedTime50Hz - luCurrentTime50Hz) < KU16_HALF_WRAP_FRAMES) || "
+                   "((uint16_t) (luCurrentTime50Hz - luEstimatedTime50Hz) < KU16_HALF_WRAP_FRAMES)");
+
+        u16 lu16Frame60Hz = static_cast<u16>(((luEstimatedTime50Hz * 12 + 5) / 10) % KU16_WRAP_FRAMES);
+        if (lbMirrored)
+        {
+            lu16Frame60Hz = static_cast<u16>(KU16_WRAP_FRAMES - lu16Frame60Hz);
+        }
+
+        s32 liFrameDistance = static_cast<s32>(lu16Frame50Hz) - static_cast<s32>(lu16CurrentFrame50Hz);
+        if (liFrameDistance < 0)
+        {
+            liFrameDistance = -liFrameDistance;
+        }
+
+        if (liFrameDistance < KI_DEFAULT_TOLERANCE)
+        {
+            const u16 lu16OldFrame60Hz = OLDTranslateFrame50HzTo60Hz(lu16Frame50Hz, lu16CurrentFrame50Hz,
+                                                                    lu16NumWraps);
+            if (lu16NumWraps <= 1000)
+            {
+                if (lu16NumWraps > 100)
+                {
+                    CGS_ASSERT(lu16Frame60Hz == lu16OldFrame60Hz
+                                   || lu16Frame60Hz == static_cast<u16>(lu16OldFrame60Hz - 1)
+                                   || lu16Frame60Hz == static_cast<u16>(lu16OldFrame60Hz - 2)
+                                   || lu16Frame60Hz == static_cast<u16>(lu16OldFrame60Hz + 1)
+                                   || lu16Frame60Hz == static_cast<u16>(lu16OldFrame60Hz + 2),
+                               "Translate50HzTo60Hz(,,,) failed. lu16Frame60Hz= lu16OldFrame60Hz=");
+                }
+                else if (lu16NumWraps > 7)
+                {
+                    CGS_ASSERT(lu16Frame60Hz == lu16OldFrame60Hz
+                                   || lu16Frame60Hz == static_cast<u16>(lu16OldFrame60Hz - 1)
+                                   || lu16Frame60Hz == static_cast<u16>(lu16OldFrame60Hz + 1),
+                               "Translate50HzTo60Hz(,,,) failed lu16Frame60Hz= lu16OldFrame60Hz=");
+                }
+                else
+                {
+                    CGS_ASSERT(lu16Frame60Hz == lu16OldFrame60Hz,
+                               "Translate50HzTo60Hz(,,,) failed lu16Frame60Hz= lu16OldFrame60Hz=");
+                }
+            }
+        }
+
+        return lu16Frame60Hz;
+    }
+
+    u16 TranslateFrame60HzTo50Hz(u16 lu16Frame60Hz, u16 lu16CurrentFrame60Hz, u16 lu16NumWraps)
+    {
+        u64 luEstimatedTime60Hz =
+            static_cast<s32>(static_cast<u32>(lu16Frame60Hz) + static_cast<u32>(lu16NumWraps) * static_cast<u32>(KU16_WRAP_FRAMES));
+        const u64 luCurrentTime60Hz =
+            static_cast<s32>(static_cast<u32>(lu16CurrentFrame60Hz) + static_cast<u32>(lu16NumWraps) * static_cast<u32>(KU16_WRAP_FRAMES));
+
+        bool lbMirrored = false;
+        if (luEstimatedTime60Hz < luCurrentTime60Hz + KU16_HALF_WRAP_FRAMES)
+        {
+            if (!(luEstimatedTime60Hz + KU16_HALF_WRAP_FRAMES > luCurrentTime60Hz))
+            {
+                luEstimatedTime60Hz += KU16_WRAP_FRAMES;
+            }
+        }
+        else if (luEstimatedTime60Hz < KU16_WRAP_FRAMES)
+        {
+            lbMirrored          = true;
+            luEstimatedTime60Hz = KU16_WRAP_FRAMES - luEstimatedTime60Hz;
+        }
+        else
+        {
+            luEstimatedTime60Hz -= KU16_WRAP_FRAMES;
+        }
+
+        CGS_ASSERT((static_cast<u16>(luEstimatedTime60Hz - luCurrentTime60Hz) < KU16_HALF_WRAP_FRAMES)
+                       || (static_cast<u16>(luCurrentTime60Hz - luEstimatedTime60Hz) < KU16_HALF_WRAP_FRAMES),
+                   "((uint16_t) (luEstimatedTime60Hz - luCurrentTime60Hz) < KU16_HALF_WRAP_FRAMES) || "
+                   "((uint16_t) (luCurrentTime60Hz - luEstimatedTime60Hz) < KU16_HALF_WRAP_FRAMES)");
+
+        u16 lu16Frame50Hz = static_cast<u16>(((luEstimatedTime60Hz * 5 + 3) / 6) % KU16_WRAP_FRAMES);
+        if (lbMirrored)
+        {
+            lu16Frame50Hz = static_cast<u16>(KU16_WRAP_FRAMES - lu16Frame50Hz);
+        }
+
+        s32 liFrameDistance = static_cast<s32>(lu16Frame60Hz) - static_cast<s32>(lu16CurrentFrame60Hz);
+        if (liFrameDistance < 0)
+        {
+            liFrameDistance = -liFrameDistance;
+        }
+
+        if (liFrameDistance < KI_DEFAULT_TOLERANCE)
+        {
+            const u16 lu16OldFrame50Hz = OLDTranslateFrame60HzTo50Hz(lu16Frame60Hz, lu16CurrentFrame60Hz,
+                                                                    lu16NumWraps);
+            if (lu16NumWraps < 0x8000)
+            {
+                if (lu16NumWraps > 100)
+                {
+                    CGS_ASSERT(lu16Frame50Hz == lu16OldFrame50Hz
+                                   || lu16Frame50Hz == static_cast<u16>(lu16OldFrame50Hz - 1)
+                                   || lu16Frame50Hz == static_cast<u16>(lu16OldFrame50Hz - 2)
+                                   || lu16Frame50Hz == static_cast<u16>(lu16OldFrame50Hz - 3)
+                                   || lu16Frame50Hz == static_cast<u16>(lu16OldFrame50Hz + 1)
+                                   || lu16Frame50Hz == static_cast<u16>(lu16OldFrame50Hz + 2)
+                                   || lu16Frame50Hz == static_cast<u16>(lu16OldFrame50Hz + 3),
+                               "Translate60HzTo50Hz(,,) tol= new= old= failed");
+                }
+                else
+                {
+                    CGS_ASSERT(lu16Frame50Hz == lu16OldFrame50Hz
+                                   || lu16Frame50Hz == static_cast<u16>(lu16OldFrame50Hz - 1)
+                                   || lu16Frame50Hz == static_cast<u16>(lu16OldFrame50Hz - 2)
+                                   || lu16Frame50Hz == static_cast<u16>(lu16OldFrame50Hz + 1)
+                                   || lu16Frame50Hz == static_cast<u16>(lu16OldFrame50Hz + 2),
+                               "Translate60HzTo50Hz(,,) tol= new= old= failed");
+                }
+            }
+        }
+
+        return lu16Frame50Hz;
+    }
+}
+
+// FOLDED FROM CgsMessage_wN1_02.cpp
+#include "GameShared/GameClasses/Network/Packeting/Messages/CgsMessage.h"
+#include "GameShared/GameClasses/Network/Packeting/BitStream/CgsFloatQuantiser.h"
+#include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "rw/math/vpu/vector3_operation.h"   // Magnitude / operator- (the round-trip checks)
+
+// CgsNetwork::PackOrUnpackMatrix and PackOrUnpackVector: the affine and bounded-vector field
+// primitives. They read the rotation / direction through Message::GetEulerAnglesFromMatrix
+// and Message::GetAnglesFromVector (bodied in CgsMessage.cpp).
+
+namespace CgsNetwork
+{
+    namespace
+    {
+        const f32 KF_PI      = 3.14159265f;
+        const f32 KF_HALF_PI = 1.57079637f;
+
+        // How far a vector may drift through its angle encoding before it is reported.
+        const f32 KF_MAX_VECTOR_MAGNITUDE_ERROR = 0.1f;
+        const f32 KF_MAX_VECTOR_ERROR           = 0.05f;
+    }
+
+    // The rotation travels as roll, pitch and yaw, each in [-pi, pi] over its own bit
+    // count (a pack stops at the first angle that does not fit); then the translation
+    // row, one axis at a time, in [lPosMin, lPosMax] over the per-axis bit counts, each
+    // through a copy written back into the row. An unknown lifecycle state asserts and
+    // still runs the translation part.
+    PackOrUnpackResult PackOrUnpackMatrix(Message* lpMessage, rw::math::vpu::Matrix44Affine* lpMatrix,
+                                          s32 liRollBits, s32 liPitchBits, s32 liYawBits,
+                                          rw::math::vpu::Vector3 lPosMin, rw::math::vpu::Vector3 lPosMax,
+                                          s32 liPosXBits, s32 liPosYBits, s32 liPosZBits)
+    {
+        f32 lfRoll  = 0.0f;
+        f32 lfPitch = 0.0f;
+        f32 lfYaw   = 0.0f;
+
+        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        {
+            Message::GetEulerAnglesFromMatrix(*lpMatrix, &lfRoll, &lfPitch, &lfYaw);
+
+            u32 luPacked = 0;
+            FloatQuantiser::Pack(lfRoll, -KF_PI, KF_PI, liRollBits, &luPacked);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liRollBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+
+            FloatQuantiser::Pack(lfPitch, -KF_PI, KF_PI, liPitchBits, &luPacked);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liPitchBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+
+            FloatQuantiser::Pack(lfYaw, -KF_PI, KF_PI, liYawBits, &luPacked);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liYawBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+        }
+        else if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        {
+            lpMessage->mBitstream.GetQuantisedFloat(&lfRoll, -KF_PI, KF_PI, liRollBits);
+            lpMessage->mBitstream.GetQuantisedFloat(&lfPitch, -KF_PI, KF_PI, liPitchBits);
+            lpMessage->mBitstream.GetQuantisedFloat(&lfYaw, -KF_PI, KF_PI, liYawBits);
+            Message::SetMatrixFromEulerAngles(lpMatrix, lfRoll, lfPitch, lfYaw);
+        }
+        else
+        {
+            CGS_ASSERT(false,
+                       "CgsNetwork::Message::PackOrUnpack called without telling "
+                       "it which it is doing\n");
+        }
+
+        f32 lfPosition = lpMatrix->wAxis.mV.x;
+        PackOrUnpackResult lxResult = PackOrUnpackFloat(lpMessage, &lfPosition, lPosMin.mV.x, lPosMax.mV.x, liPosXBits);
+        lpMatrix->wAxis.mV.x = lfPosition;
+
+        lfPosition = lpMatrix->wAxis.mV.y;
+        lxResult   = PackOrUnpackFloat(lpMessage, &lfPosition, lPosMin.mV.y, lPosMax.mV.y, liPosYBits) | lxResult;
+        lpMatrix->wAxis.mV.y = lfPosition;
+
+        lfPosition = lpMatrix->wAxis.mV.z;
+        lxResult   = PackOrUnpackFloat(lpMessage, &lfPosition, lPosMin.mV.z, lPosMax.mV.z, liPosZBits) | lxResult;
+        lpMatrix->wAxis.mV.z = lfPosition;
+
+        return lxResult;
+    }
+
+    // A vector travels as its two direction angles (angle A in [-pi, pi], angle B in
+    // [-pi/2, pi/2]) and its magnitude in [0, lfMagnitudeBound], over the three bit counts
+    // (a pack stops at the first value that does not fit). Both directions check the
+    // encoding: after packing, the vector rebuilt from the packed angles must be close to
+    // the original; after unpacking, the rebuilt vector must survive a second trip.
+    PackOrUnpackResult PackOrUnpackVector(Message* lpMessage, rw::math::vpu::Vector3* lpvField,
+                                          s32 liXBits, s32 liYBits, f32 lfMagnitudeBound, s32 liZBits)
+    {
+        f32 lfAngleA    = 0.0f;
+        f32 lfAngleB    = 0.0f;
+        f32 lfMagnitude = 0.0f;
+
+        if (lpMessage->mePackOrUnpack == Message::E_PACK_INTO_BITSTREAM)
+        {
+            Message::GetAnglesFromVector(__lvx(lpvField, 0), &lfAngleA, &lfAngleB, &lfMagnitude);
+
+            u32 luPacked = 0;
+            FloatQuantiser::Pack(lfAngleA, -KF_PI, KF_PI, liXBits, &luPacked);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liXBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+
+            FloatQuantiser::Pack(lfAngleB, -KF_HALF_PI, KF_HALF_PI, liYBits, &luPacked);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liYBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+
+            FloatQuantiser::Pack(lfMagnitude, 0.0f, lfMagnitudeBound, liZBits, &luPacked);
+            if (!lpMessage->mBitstream.AddBits(luPacked, liZBits))
+            {
+                return KX_PACK_FAILED_NO_SPACE;
+            }
+
+            rw::math::vpu::Vector3 lRebuiltVector;
+            Message::GetVectorFromAngles(&lRebuiltVector, lfAngleA, lfAngleB, lfMagnitude);
+            const rw::math::vpu::Vector3 lDifferenceVector = lRebuiltVector - *lpvField;
+            CGS_ASSERT(rw::math::vpu::Magnitude(lDifferenceVector) < KF_MAX_VECTOR_ERROR,
+                       "RwMath::Magnitude( lDifferenceVector ) < 0.05f");
+        }
+        else if (lpMessage->mePackOrUnpack == Message::E_UNPACK_FROM_BITSTREAM)
+        {
+            lpMessage->mBitstream.GetQuantisedFloat(&lfAngleA, -KF_PI, KF_PI, liXBits);
+            lpMessage->mBitstream.GetQuantisedFloat(&lfAngleB, -KF_HALF_PI, KF_HALF_PI, liYBits);
+            lpMessage->mBitstream.GetQuantisedFloat(&lfMagnitude, 0.0f, lfMagnitudeBound, liZBits);
+            Message::GetVectorFromAngles(lpvField, lfAngleA, lfAngleB, lfMagnitude);
+
+            f32 lfTestMagnitude = 0.0f;
+            Message::GetAnglesFromVector(__lvx(lpvField, 0), &lfAngleA, &lfAngleB, &lfTestMagnitude);
+            CGS_ASSERT(fabsf(lfTestMagnitude - lfMagnitude) < KF_MAX_VECTOR_MAGNITUDE_ERROR,
+                       "RwMath::Abs( lfTestMagnitude - lfMagnitude ) < 0.1f");
+
+            rw::math::vpu::Vector3 lRebuiltVector;
+            Message::GetVectorFromAngles(&lRebuiltVector, lfAngleA, lfAngleB, lfTestMagnitude);
+            const rw::math::vpu::Vector3 lDifferenceVector = lRebuiltVector - *lpvField;
+            CGS_ASSERT(rw::math::vpu::Magnitude(lDifferenceVector) < KF_MAX_VECTOR_ERROR,
+                       "RwMath::Magnitude( lDifferenceVector ) < 0.05f");
+        }
+        else
+        {
+            CGS_ASSERT(false,
+                       "CgsNetwork::Message::PackOrUnpack called without telling "
+                       "it which it is doing\n");
+        }
+
+        return KX_PACK_OR_UNPACK_SUCCESS;
+    }
+}

@@ -23,6 +23,8 @@
 #include "types.hpp"
 #include "SDKs/XCam/XCamVideoOutput.h"
 
+struct _D3DLOCKED_RECT;
+
 namespace XCAM
 {
 
@@ -66,18 +68,8 @@ public:
     // reconstructed by its own TU.
     void Reset();
 
-    // @ 0x82984BD0 -- consume the ready frame under the base helper and software-
-    // convert its packed YUY2 plane to 32-bit ARGB into the caller's buffer
-    // (pDst = {pitch,data}, one u32 per pixel). Returns 0, or 997 if no frame is
-    // ready. The VMX128 body is a per-macropixel BT.601 matrix multiply; every
-    // rodata constant it consumes was dumped from the image on 2026-08-04
-    // (scratchpad/waveM/YUY2Output.spec.md holds the full table): the XDK-rounded
-    // coefficients 1.164/1.596/-0.813/-0.391/2.018 (flt_8210C330/320/324/328/32C),
-    // the normalisation constants 1/255, 0.0625, 0.5 (flt_82010C1C / flt_82046E00
-    // / flt_82001DA0), the output scale 255.0 (flt_82010C20), and the 32-byte
-    // [0,1] clamp pair unk_8210C300. The same rodata is shared verbatim by
-    // XCAM::CI420VideoOutput::GetNextBufferRGB @ 0x82985360 (xref-attested).
-    int GetNextBufferRGB(SVideoBuffer* pDst);
+    // ARTIST 0x82984BD0 is supplied by xcam.lib (videooutput.obj).
+    unsigned long GetNextBufferRGB(_D3DLOCKED_RECT* pDst);
 
     // No additional data members -- the packed YUY2 plane reuses the base ring.
 };

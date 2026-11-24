@@ -1501,3 +1501,760 @@ namespace Vehicle
     }
 }   // namespace Vehicle
 }   // namespace BrnPhysics
+
+// FOLDED FROM BrnPhysicalTrafficManager_Create.cpp
+// =================================================================================================
+// GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_Create.cpp
+//
+// The PHYSICS-SIDE CREATE DRAIN: everything between
+// PhysicalTrafficManager::ProcessTrafficMaintenanceEvents' create arm and a seated physics body.
+//
+//   ProcessCreateEvents                 @0x826495E8 ( 95)  .ida-exports HOLE, dumped headless
+//   ProcessCreateNonArticulatedTraffic  @0x82647E20 (617)
+//   CreateTrafficVehicle                @0x82646E70 (656)
+//   GetFreeTrafficVehicleWithPhysics    @0x82637608 (266)
+//   GetLeastInterestingFullyPhysicalVehicle @0x825F1990 (446)
+//   GetTrafficInterest                  @0x825F1658 (206)
+//   PreparePhysicsForNewTrafficVehicle  @0x826440D0 (210)
+//   ProcessCreateArticulatedTrafficEvents @0x826487C8 (614)
+//
+// Slice TU: the console home BrnPhysicalTrafficManager.cpp is a different, already-mounted file,
+// so these bodies land in their own translation unit.
+//
+// -------------------------------------------------------------------------------------------------
+// ONE INDEX, TWO NAMES (GetFreeTrafficVehicleWithPhysics). The console computes
+// mUsedTrafficVehicles.GetFirstZeroBit() ONCE (r31 @0x82637790) and then fires BOTH of the source's
+// bound asserts against it -- ":3002 liFreeFullTrafficPhysics < ku8MaxNumFullyPhysicalTraffic"
+// (0x826377F0 `li r5,0xBBA`) and ":3003 liFreeTrafficVehicle < ku8TotalMaxNumPhysicalTraffic"
+// (0x8263781C `li r5,0xBBB`) -- and sets the matching bit in BOTH bitsets. Both console constants
+// are 20 here (`cmpwi r31,0x14` twice; maFullTrafficPhysics[20] and BitArray<20u> for both
+// bitsets), so the one host constant KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC serves both bounds. The
+// traffic-vehicle slot index and the FULL-physics pool index are the same number by construction.
+// Reproduced as one value with both assert texts, not as two independently derived indices.
+//
+// No LegacySrc source exists for any of this (the reference holds no PhysicalTrafficManager).
+// Everything below is ARTIST pseudocode + asm, with the DecFIGS DWARF for declaration shape.
+//
+// HEX-RAYS MERGES THE SWITCH/BIT-WALK ARMS in ProcessCreateNonArticulatedTraffic and
+// GetLeastInterestingFullyPhysicalVehicle. Both are written from the ASM; the pseudocode's
+// interleaved `GetFirstNonZeroBit`/`GetNextNonZeroBit` cursor expansions are re-rolled into the
+// container's own accessors, which is what the source had.
+// =================================================================================================
+
+#include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleInputInterface.h"   // the two create queues
+#include "GameSource/Physics/VehicleManager/SharedIO/BrnVehicleEvents.h"           // CreatePhysicalTrafficEvent
+#include "GameSource/Physics/VehicleManager/VehiclePhysics/RaceCarPhysics.h"       // the interest walk's stride
+#include "GameShared/GameClasses/Physics/CgsRigidBody.h"                            // CgsPhysics::RigidBodyId
+#include "GameSource/Physics/DeformationManager/DeformationPhysics/BrnStreamedDeformationSpec.h"
+#include "GameSource/AttribSys/Generated/classes/burnoutcarasset.h"                // the +0x158 handling RefSpec
+#include "GameSource/AttribSys/Generated/classes/physicsvehiclehandling.h"
+#include "rw/math/vpu/matrix44affine_operation.h"                                  // IsValid(Matrix44Affine)
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
+
+namespace
+{
+    // The articulated create arm uses the same half-separation correction on both bodies.
+    const f32 KF_ARTICULATION_SEPARATION_SHARE = 0.5f; // flt_82001DA0
+}
+
+namespace BrnPhysics
+{
+namespace Vehicle
+{
+    // =============================================================================================
+    // ProcessCreateEvents @0x826495E8 (95)
+    //   asserts BrnPhysicalTrafficManager.cpp:791..:796 (a2..a6 and a8 -- lpaRaceCarDrivers, a7,
+    //   is deliberately NOT asserted; reproduced as shipped).
+    //   DWARF BrnPhysicalTrafficManager.h:318.
+    //
+    // The two queue arguments are the console's `lpInputInterface + 132976` and `+ 136592`, reached
+    // BY NAME through the DWARF-attested readers in BrnVehicleInputInterface.h.
+    // =============================================================================================
+    void PhysicalTrafficManager::ProcessCreateEvents(
+            const VehicleInputInterface* lpInputInterface,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            VehicleOutputRequestInterface* lpOutputRequestInterface,
+            Deformation::DeformationInputInterface* lpDeformationInterface,
+            RaceCarPhysics* lpaRaceCarVehicles,
+            VehicleDriver* lpaRaceCarDrivers,
+            CgsContainers::BitArray<8u>* lpUsedRaceCars)
+    {
+        CGS_ASSERT(lpInputInterface          != 0, "lpInputInterface != NULL");          // :791
+        CGS_ASSERT(lpManagerOutputInterface  != 0, "lpManagerOutputInterface != NULL");  // :792
+        CGS_ASSERT(lpOutputRequestInterface  != 0, "lpOutputRequestInterface != NULL");  // :793
+        CGS_ASSERT(lpDeformationInterface    != 0, "lpDeformationInterface != NULL");    // :794
+        CGS_ASSERT(lpaRaceCarVehicles        != 0, "lpaRaceCarVehicles != NULL");        // :795
+        CGS_ASSERT(lpUsedRaceCars            != 0, "lpUsedRaceCars != NULL");            // :796
+
+        // The original create drain removes any broken joint slots before processing new pairs.
+        mArticulatedJointPool.RemoveBrokenJointsFromSimulation(mpArticulatedJointCreateBuffer);
+
+        ProcessCreateNonArticulatedTraffic(lpInputInterface->GetCreateTrafficBodyEvents(),
+                                           lpManagerOutputInterface, lpOutputRequestInterface,
+                                           lpDeformationInterface, lpaRaceCarVehicles,
+                                           lpaRaceCarDrivers, lpUsedRaceCars);
+
+        ProcessCreateArticulatedTrafficEvents(lpInputInterface->GetCreateArticulatedTrafficQueue(),
+                                              lpManagerOutputInterface, lpOutputRequestInterface,
+                                              lpDeformationInterface, lpaRaceCarVehicles,
+                                              lpaRaceCarDrivers, lpUsedRaceCars);
+    }
+
+    // =============================================================================================
+    // ProcessCreateArticulatedTrafficEvents @0x826487C8 (614)
+    // =============================================================================================
+    void PhysicalTrafficManager::ProcessCreateArticulatedTrafficEvents(
+            const CgsModule::EventQueue<CreateArticulatedTrafficEvent, 10>* lpCreateArticulatedTrafficEvents,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            VehicleOutputRequestInterface* lpOutputRequestInterface,
+            Deformation::DeformationInputInterface* lpDeformationInterface,
+            RaceCarPhysics* lpaRaceCarVehicles,
+            VehicleDriver* lpaRaceCarDrivers,
+            CgsContainers::BitArray<8u>* lpUsedRaceCars)
+    {
+        CGS_ASSERT(lpCreateArticulatedTrafficEvents != 0,
+                   "lpCreateArticulatedTrafficQueue != NULL"); // :935
+        CGS_ASSERT(lpManagerOutputInterface != 0,
+                   "lpManagerOutputInterface != NULL"); // :936
+        CGS_ASSERT(lpDeformationInterface != 0,
+                   "lpDeformationInterface != NULL"); // :937
+        CGS_ASSERT(lpaRaceCarVehicles != 0,
+                   "lpaRaceCarVehicles != NULL"); // :938
+        CGS_ASSERT(lpUsedRaceCars != 0,
+                   "lpUsedRaceCars != NULL"); // :939
+
+        TotalPhysicalTrafficBitArray lDoNotRecycle;
+
+        for (s32 liEvent = 0; liEvent < lpCreateArticulatedTrafficEvents->GetLength(); ++liEvent)
+        {
+            const CreateArticulatedTrafficEvent* const lpArticulatedEvent =
+                &lpCreateArticulatedTrafficEvents->GetEvent(liEvent);
+
+            CreatePhysicalTrafficEvent lCabEvent;
+            lpArticulatedEvent->GetCreateCabEvent(&lCabEvent);
+            CreatePhysicalTrafficEvent lTrailerEvent;
+            lpArticulatedEvent->GetCreateTrailerEvent(&lTrailerEvent);
+
+            // ARTIST 0x82648A80 clears the mask for EACH request; the cab is
+            // protected only while creating its own trailer below.
+            lDoNotRecycle.UnSetAll();
+            const s32 liCab = CreateTrafficVehicle(lCabEvent, lpManagerOutputInterface,
+                lpOutputRequestInterface, lpDeformationInterface, lpaRaceCarVehicles,
+                lpaRaceCarDrivers, lpUsedRaceCars, &lDoNotRecycle);
+            CGS_ASSERT(liCab < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                       "liVehicle < ku8TotalMaxNumPhysicalTraffic");
+            lDoNotRecycle.SetBit(static_cast<u32>(liCab));
+
+            const s32 liTrailer = CreateTrafficVehicle(lTrailerEvent, lpManagerOutputInterface,
+                lpOutputRequestInterface, lpDeformationInterface, lpaRaceCarVehicles,
+                lpaRaceCarDrivers, lpUsedRaceCars, &lDoNotRecycle);
+            CGS_ASSERT(liCab < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                       "liVehicle < ku8TotalMaxNumPhysicalTraffic");
+
+            CGS_ASSERT(mUsedTrafficVehicles.IsBitSet(static_cast<u32>(liCab)),
+                       "mUsedTrafficVehicles.IsBitSet( liCab )"); // :1002
+            CGS_ASSERT(mUsedTrafficVehicles.IsBitSet(static_cast<u32>(liTrailer)),
+                       "mUsedTrafficVehicles.IsBitSet( liTrailer )"); // :1003
+            CGS_ASSERT(liCab >= 0, "liVehicle >= 0"); // :740
+            CGS_ASSERT(liCab < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                       "liVehicle < ku8TotalMaxNumPhysicalTraffic"); // :741
+            CGS_ASSERT(liTrailer >= 0, "liVehicle >= 0"); // :740
+            CGS_ASSERT(liTrailer < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                       "liVehicle < ku8TotalMaxNumPhysicalTraffic"); // :741
+
+            PhysicalTrafficVehicle* const lpCab = GetTrafficVehicle(liCab);
+            PhysicalTrafficVehicle* const lpTrailer = GetTrafficVehicle(liTrailer);
+            lpCab->SetArticulated(lCabEvent, PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_CAB);
+            lpTrailer->SetArticulated(lTrailerEvent,
+                PhysicalTrafficVehicle::E_ARTICULATE_VEHICLE_TRAILER);
+
+            const Vector3 lCabHitch = lpCab->GetArticulationPointWorldSpace();
+            const Vector3 lTrailerHitch = lpTrailer->GetArticulationPointWorldSpace();
+            const __vector4 lvSeparation = __vsubfp(lCabHitch.mV, lTrailerHitch.mV);
+            const __vector4 lvHalf = {
+                KF_ARTICULATION_SEPARATION_SHARE, KF_ARTICULATION_SEPARATION_SHARE,
+                KF_ARTICULATION_SEPARATION_SHARE, KF_ARTICULATION_SEPARATION_SHARE
+            };
+            const __vector4 lvSign = __vslw(__vspltisw(-1), __vspltisw(-1));
+
+            // ARTIST 0x82648F90..0x82648FD8 updates only the two translation rows.
+            Vector3& lrCabPosition = lpCab->mpVehicleBody->mTransform.wAxis;
+            const __vector4 lvCabAdjustment = __vxor(__vmulfp(lvHalf, lvSeparation), lvSign);
+            lrCabPosition.mV = __vaddfp(lrCabPosition.mV, lvCabAdjustment);
+
+            Vector3& lrTrailerPosition = lpTrailer->mpVehicleBody->mTransform.wAxis;
+            lrTrailerPosition.mV = __vmaddfp(lvHalf, lvSeparation, lrTrailerPosition.mV);
+
+            CGS_ASSERT(mpArticulatedJointCreateBuffer != 0,
+                       "mpArticulatedJointCreateBuffer != NULL"); // :1045
+            const EntityId lCabEntityId = GetPhysicsEntityId(liCab);
+            const EntityId lTrailerEntityId = GetPhysicsEntityId(liTrailer);
+            const CgsPhysics::RigidBodyId lCabRigidBodyId(
+                static_cast<u64>(lCabEntityId.muValue) << 32);
+            const CgsPhysics::RigidBodyId lTrailerRigidBodyId(
+                static_cast<u64>(lTrailerEntityId.muValue) << 32);
+            const s32 liJoint = mArticulatedJointPool.CreateJoint(
+                mpArticulatedJointCreateBuffer,
+                lCabRigidBodyId, lTrailerRigidBodyId,
+                lpCab->mpVehicleBody->GetTransform(), lpTrailer->mpVehicleBody->GetTransform(),
+                lpCab->GetArticulationPointWorldSpace());
+            CGS_ASSERT(liJoint >= -1 && liJoint < ArticulatedJointPool::KI_NUM_JOINTS,
+                       "liJointIndex >= -1 && liJointIndex < kiMaxArticulatedTrafficVehicles"); // :565
+            lpCab->miJointIndex = liJoint;
+            CGS_ASSERT(liJoint >= -1 && liJoint < ArticulatedJointPool::KI_NUM_JOINTS,
+                       "liJointIndex >= -1 && liJointIndex < kiMaxArticulatedTrafficVehicles"); // :565
+            lpTrailer->miJointIndex = liJoint;
+        }
+    }
+
+    // =============================================================================================
+    // ProcessCreateNonArticulatedTraffic @0x82647E20 (617)
+    //   asserts BrnPhysicalTrafficManager.cpp:845..:849 (again no lpaRaceCarDrivers check),
+    //   :870 :878 :890 :891 :892 :893 :894 :898.  DWARF :324.
+    //
+    // TWO passes over the SAME queue, in this order (both are real: each copies the event by value,
+    // 0x82647FBC.. and 0x82648394..):
+    //   1. a validation sweep -- no duplicate mVolumeInstanceID left in the queue, and no live
+    //      traffic slot already carrying this global entity id;
+    //   2. the work sweep -- five more asserts, then CreateTrafficVehicle.
+    //
+    // lDoNotRecycleBitArray is declared and zeroed BEFORE pass 1 (`std r21,0(r11)` twice at
+    // 0x82647F44/48 -- the console writes the one 8-byte BitArray<20> word twice; idempotent, done
+    // once here) and is asserted EMPTY at the top of every pass-2 iteration (:898). Nothing in this
+    // build ever sets a bit in it: it exists so a create batch cannot recycle a slot it just
+    // created, and CreateTrafficVehicle only ever READS it.
+    // =============================================================================================
+    void PhysicalTrafficManager::ProcessCreateNonArticulatedTraffic(
+            const CgsModule::EventQueue<CreatePhysicalTrafficEvent, 25>* lpCreateTrafficEvents,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            VehicleOutputRequestInterface* lpOutputRequestInterface,
+            Deformation::DeformationInputInterface* lpDeformationInterface,
+            RaceCarPhysics* lpaRaceCarVehicles,
+            VehicleDriver* lpaRaceCarDrivers,
+            CgsContainers::BitArray<8u>* lpUsedRaceCars)
+    {
+        CGS_ASSERT(lpCreateTrafficEvents     != 0, "lpCreateTrafficEvents != NULL");     // :845
+        CGS_ASSERT(lpManagerOutputInterface  != 0, "lpManagerOutputInterface != NULL");  // :846
+        CGS_ASSERT(lpDeformationInterface    != 0, "lpDeformationInterface != NULL");    // :847
+        CGS_ASSERT(lpaRaceCarVehicles        != 0, "lpaRaceCarVehicles != NULL");        // :848
+        CGS_ASSERT(lpUsedRaceCars            != 0, "lpUsedRaceCars != NULL");            // :849
+
+        TotalPhysicalTrafficBitArray lDoNotRecycleBitArray;
+        lDoNotRecycleBitArray.UnSetAll();
+
+        // ---- pass 1: the validation sweep --------------------------------------------------------
+        for (s32 liEvent = 0; liEvent < lpCreateTrafficEvents->GetLength(); ++liEvent)
+        {
+            const CreatePhysicalTrafficEvent lCreateTrafficEvent = lpCreateTrafficEvents->GetEvent(liEvent);
+
+            for (s32 liOther = liEvent + 1; liOther < lpCreateTrafficEvents->GetLength(); ++liOther)
+            {
+                // `ld r11,0(r3) ; cmpld r30,r11` -- the WHOLE 64-bit VolumeInstanceId, not its
+                // entity word. (The console's own typo is preserved in the message.)
+                CGS_ASSERT(lpCreateTrafficEvents->GetEvent(liOther).mVolumeInstanceID.muId
+                               != lCreateTrafficEvent.mVolumeInstanceID.muId,
+                           "Duplicate crash body messgae in input buffer");              // :870
+            }
+
+            // `srdi r11,r30,32` -- the embedded entity word is the HIGH dword (DWARF
+            // CgsVolumeInstanceId.h:85 `EntityId GetEntityId() const`, folded in place here).
+            const u32 luGlobalEntityId =
+                static_cast<u32>(lCreateTrafficEvent.mVolumeInstanceID.muId
+                                 >> CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX);
+
+            for (s32 liVehicle = mUsedTrafficVehicles.GetFirstNonZeroBit();
+                 liVehicle != TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX;
+                 liVehicle = mUsedTrafficVehicles.GetNextNonZeroBit(liVehicle))
+            {
+                CGS_ASSERT(maTrafficEntityIDs[liVehicle].muValue != luGlobalEntityId,
+                           "Traffic already has body");                                  // :878
+            }
+        }
+
+        // ---- pass 2: the work sweep --------------------------------------------------------------
+        for (s32 liEvent = 0; liEvent < lpCreateTrafficEvents->GetLength(); ++liEvent)
+        {
+            const CreatePhysicalTrafficEvent lCreateTrafficEvent = lpCreateTrafficEvents->GetEvent(liEvent);
+
+            CGS_ASSERT(lCreateTrafficEvent.mVolumeInstanceID.GetEntityIDOwner()
+                           == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
+                       "lCreateTrafficEvent.mVolumeInstanceID.GetEntityId().GetOwner() == "
+                       "BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");                        // :890
+            CGS_ASSERT(lCreateTrafficEvent.meTrafficType < E_TRAFFIC_TYPE_COUNT,
+                       "lCreateTrafficEvent.meTrafficType < BrnPhysics::Vehicle::E_TRAFFIC_TYPE_COUNT"); // :891
+            CGS_ASSERT(rw::math::vpu::IsValid(lCreateTrafficEvent.mInitialTransform),
+                       "RwMath::IsValid( lCreateTrafficEvent.mInitialTransform )");      // :892
+            CGS_ASSERT(rw::math::vpu::IsValid(lCreateTrafficEvent.mInitialVelocity),
+                       "RwMath::IsValid( lCreateTrafficEvent.mInitialVelocity )");       // :893
+            CGS_ASSERT(rw::math::vpu::IsValid(lCreateTrafficEvent.mAngularVelocity),
+                       "RwMath::IsValid( lCreateTrafficEvent.mAngularVelocity )");       // :894
+            CGS_ASSERT(lDoNotRecycleBitArray.GetFirstNonZeroBit()
+                           == TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX,
+                       "lDoNotRecycleBitArray.GetFirstNonZeroBit() == -1");              // :898
+
+            CreateTrafficVehicle(lCreateTrafficEvent, lpManagerOutputInterface,
+                                 lpOutputRequestInterface, lpDeformationInterface,
+                                 lpaRaceCarVehicles, lpaRaceCarDrivers, lpUsedRaceCars,
+                                 &lDoNotRecycleBitArray);
+        }
+    }
+
+    // =============================================================================================
+    // CreateTrafficVehicle @0x82646E70 (656)
+    //   asserts BrnPhysicalTrafficManager.cpp:1095..:1100, :1110 (streamed), :1139, :1140.
+    //   DWARF :330. Returns the physical slot index.
+    // =============================================================================================
+    s32 PhysicalTrafficManager::CreateTrafficVehicle(
+            const CreatePhysicalTrafficEvent& lrCreateTrafficEvent,
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            VehicleOutputRequestInterface* lpOutputRequestInterface,
+            Deformation::DeformationInputInterface* lpDeformationInterface,
+            RaceCarPhysics* lpaRaceCarVehicles,
+            VehicleDriver* lpaRaceCarDrivers,
+            CgsContainers::BitArray<8u>* lpUsedRaceCars,
+            const TotalPhysicalTrafficBitArray* lpDoNotRecycleBitArray)
+    {
+        CGS_ASSERT(lrCreateTrafficEvent.mVolumeInstanceID.GetEntityIDOwner()
+                       == KU_ENTITYTYPE_TRAFFIC_VEHICLE,
+                   "lCreateTrafficEvent.mVolumeInstanceID.GetEntityId().GetOwner() == "
+                   "BrnWorld::E_ENTITYTYPE_TRAFFIC_VEHICLE");                            // :1095
+        CGS_ASSERT(lrCreateTrafficEvent.meTrafficType < E_TRAFFIC_TYPE_COUNT,
+                   "lCreateTrafficEvent.meTrafficType < BrnPhysics::Vehicle::E_TRAFFIC_TYPE_COUNT"); // :1096
+        CGS_ASSERT(rw::math::vpu::IsValid(lrCreateTrafficEvent.mInitialTransform),
+                   "RwMath::IsValid( lCreateTrafficEvent.mInitialTransform )");          // :1097
+        CGS_ASSERT(rw::math::vpu::IsValid(lrCreateTrafficEvent.mInitialVelocity),
+                   "RwMath::IsValid( lCreateTrafficEvent.mInitialVelocity )");           // :1098
+        CGS_ASSERT(rw::math::vpu::IsValid(lrCreateTrafficEvent.mAngularVelocity),
+                   "RwMath::IsValid( lCreateTrafficEvent.mAngularVelocity )");           // :1099
+        CGS_ASSERT(lpDoNotRecycleBitArray != 0, "lpDoNotRecycleBitArray != NULL");       // :1100
+
+        // `srdi r10,r10,32 ; clrlwi r10,r10,0` -- the global entity word.
+        const u32 luGlobalEntityId =
+            static_cast<u32>(lrCreateTrafficEvent.mVolumeInstanceID.muId
+                             >> CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX);
+
+        for (s32 liVehicle = mUsedTrafficVehicles.GetFirstNonZeroBit();
+             liVehicle != TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX;
+             liVehicle = mUsedTrafficVehicles.GetNextNonZeroBit(liVehicle))
+        {
+            // The console streams the message ("Tried to add traffic <index> to physics module
+            // twice\n"); collapsed to the static text, which is the committed precedent for
+            // streamed asserts whose only variable part is the index the caller already has.
+            CGS_ASSERT(maTrafficEntityIDs[liVehicle].muValue != luGlobalEntityId,
+                       "Tried to add traffic vehicle to physics module twice");          // :1110
+        }
+
+        const s32 liFreeVehicleIndex = GetFreeTrafficVehicleWithPhysics(
+                lpManagerOutputInterface, lpOutputRequestInterface, lpDeformationInterface,
+                lpaRaceCarVehicles, lpaRaceCarDrivers, lpUsedRaceCars, lpDoNotRecycleBitArray);
+
+        // `lwz r11,0x80(event) ; cmpwi 0 ; bne` -- only a POTENTIAL spawn joins that set.
+        if (lrCreateTrafficEvent.meTrafficType == E_TRAFFIC_TYPE_POTENTIAL)
+        {
+            mPotentialTrafficVehicles.SetBit(static_cast<u32>(liFreeVehicleIndex));
+        }
+
+        PreparePhysicsForNewTrafficVehicle(lrCreateTrafficEvent, liFreeVehicleIndex);
+
+        // `extrwi r11,r11,14,8` -- the 14-bit entity index inside the entity word.
+        const u32 luEntityIndex =
+            lrCreateTrafficEvent.mVolumeInstanceID.GetEntityIDEntityIndex();
+
+        CGS_ASSERT(mu8GlobalToPhysicalEntityIndexMap[luEntityIndex] == KU8_INVALID_MAP,
+                   "mu8GlobalToPhysicalEntityIndexMap[lCreateTrafficEvent.mVolumeInstanceID."
+                   "GetEntityId().GetEntityIndex()] == KU8_INVALID_MAP");                // :1139
+        CGS_ASSERT(liFreeVehicleIndex >= 0 && liFreeVehicleIndex < KU8_INVALID_MAP,
+                   "liFreeVehicleIndex >= 0 && liFreeVehicleIndex < KU8_INVALID_MAP");   // :1140
+
+        mu8GlobalToPhysicalEntityIndexMap[luEntityIndex] = static_cast<u8>(liFreeVehicleIndex);
+        mAddedTrafficVehicles.SetBit(static_cast<u32>(liFreeVehicleIndex));
+
+        return liFreeVehicleIndex;
+    }
+
+    // =============================================================================================
+    // GetFreeTrafficVehicleWithPhysics @0x82637608 (266)
+    //   asserts BrnPhysicalTrafficManager.cpp:2920..:2926, :3002, :3003. DWARF :306.
+    // =============================================================================================
+    s32 PhysicalTrafficManager::GetFreeTrafficVehicleWithPhysics(
+            VehicleManagerOutputInterface* lpManagerOutputInterface,
+            VehicleOutputRequestInterface* lpOutputRequestInterface,
+            Deformation::DeformationInputInterface* lpDeformationInterface,
+            RaceCarPhysics* lpaRaceCarVehicles,
+            VehicleDriver* lpaRaceCarDrivers,
+            CgsContainers::BitArray<8u>* lpUsedRaceCars,
+            const TotalPhysicalTrafficBitArray* lpDoNotRecycleBitArray)
+    {
+        CGS_ASSERT(lpManagerOutputInterface  != 0, "lpManagerOutputInterface != NULL");  // :2920
+        CGS_ASSERT(lpOutputRequestInterface  != 0, "lpOutputRequestInterface != NULL");  // :2921
+        CGS_ASSERT(lpDeformationInterface    != 0, "lpDeformationInterface != NULL");    // :2922
+        CGS_ASSERT(lpaRaceCarVehicles        != 0, "lpaRaceCarVehicles != NULL");        // :2923
+        CGS_ASSERT(lpaRaceCarDrivers         != 0, "lpaRaceCarDrivers != NULL");         // :2924
+        CGS_ASSERT(lpUsedRaceCars            != 0, "lpUsedRaceCars != NULL");            // :2925
+        CGS_ASSERT(lpDoNotRecycleBitArray    != 0, "lpDoNotRecycleBitArray != NULL");    // :2926
+
+        s32 liFreeTrafficVehicle = mUsedTrafficVehicles.GetFirstClearBit();
+        if (liFreeTrafficVehicle == TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX)
+        {
+            liFreeTrafficVehicle = GetLeastInterestingFullyPhysicalVehicle(
+                    lpaRaceCarVehicles, lpaRaceCarDrivers, lpUsedRaceCars, lpDoNotRecycleBitArray);
+            RecycleTrafficVehicle(liFreeTrafficVehicle, lpManagerOutputInterface,
+                                  lpOutputRequestInterface, lpDeformationInterface);
+        }
+
+        // ONE INDEX, TWO NAMES -- see the banner. r31 feeds both asserts and both SetBits.
+        const s32 liFreeFullTrafficPhysics = liFreeTrafficVehicle;
+
+        // Verbatim console texts: the FIRST names ku8MaxNumFullyPhysicalTraffic, the second
+        // ku8TotalMaxNumPhysicalTraffic. Both are 20 (`cmpwi r31,0x14` at 0x826377E0/0x8263780C).
+        CGS_ASSERT(liFreeFullTrafficPhysics >= 0
+                       && liFreeFullTrafficPhysics < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                   "liFreeFullTrafficPhysics >= 0 && liFreeFullTrafficPhysics < "
+                   "static_cast<int32_t>( ku8MaxNumFullyPhysicalTraffic )");             // :3002
+        CGS_ASSERT(liFreeTrafficVehicle >= 0
+                       && liFreeTrafficVehicle < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                   "liFreeTrafficVehicle >= 0 && liFreeTrafficVehicle < "
+                   "static_cast<int32_t>( ku8TotalMaxNumPhysicalTraffic )");             // :3003
+
+        mUsedTrafficVehicles.SetBit(static_cast<u32>(liFreeTrafficVehicle));
+        mUsedFullTrafficPhysics.SetBit(static_cast<u32>(liFreeFullTrafficPhysics));
+
+        PhysicalTrafficVehicle* lpTrafficVehicle = GetTrafficVehicle(liFreeTrafficVehicle);
+        TrafficPhysics* lpFullTrafficPhysics = &maFullTrafficPhysics[liFreeFullTrafficPhysics];
+        CGS_ASSERT(lpFullTrafficPhysics != 0, "lpFullTrafficPhysics != NULL");
+
+        // `stw r30,0x1C ; stb r18(0),0x32 ; stb r31,0x31` -- ROUND 1 IS THE FULL BODY. There are
+        // twenty FULL slots and exactly one SIMPLE one, and UpdateTrafficPhysics asserts
+        // IsFullyPhysical(); every slot this function hands out is E_PHYSICAL_TRAFFIC_TYPE_FULL.
+        lpTrafficVehicle->mpVehicleBody       = lpFullTrafficPhysics;
+        lpTrafficVehicle->mu8PhysicalType     =
+            static_cast<u8>(PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_FULL);
+        lpTrafficVehicle->mu8PhysicsPoolIndex = static_cast<u8>(liFreeFullTrafficPhysics);
+
+        return liFreeTrafficVehicle;
+    }
+
+    // =============================================================================================
+    // GetLeastInterestingFullyPhysicalVehicle @0x825F1990 (446)
+    //   asserts BrnPhysicalTrafficManager.cpp:3345..:3348, :3356, :3400. DWARF :309.
+    //
+    // ONLY FULLY-PHYSICAL SLOTS ARE CANDIDATES (`lbz +0x32 ; cmpwi 0 ; bne skip`) and only ones
+    // whose bit is clear in lpDoNotRecycleBitArray. liNumRecyclable is bumped for every candidate,
+    // and the FIRST candidate always wins the compare (`cntlzw`/`extrwi` == "is the count zero").
+    // =============================================================================================
+    s32 PhysicalTrafficManager::GetLeastInterestingFullyPhysicalVehicle(
+            RaceCarPhysics* lpaRaceCarVehicles,
+            VehicleDriver* lpaRaceCarDrivers,
+            CgsContainers::BitArray<8u>* lpUsedRaceCars,
+            const TotalPhysicalTrafficBitArray* lpDoNotRecycleBitArray)
+    {
+        CGS_ASSERT(lpaRaceCarVehicles     != 0, "lpaRaceCarVehicles != NULL");           // :3345
+        CGS_ASSERT(lpaRaceCarDrivers      != 0, "lpaRaceCarDrivers != NULL");            // :3346
+        CGS_ASSERT(lpUsedRaceCars         != 0, "lpUsedRaceCars != NULL");               // :3347
+        CGS_ASSERT(lpDoNotRecycleBitArray != 0, "lpDoNotRecycleBitArray != NULL");       // :3348
+
+        f32 lfLeastInterest              = 0.0f;                              // flt_82001CC0
+        s32 liLeastInterestingVehicle    = -1;
+        s32 liNumRecyclable              = 0;
+
+        CGS_ASSERT(mUsedFullTrafficPhysics.GetFirstClearBit()
+                       == FullyPhysicalTrafficBitArray::KI_INVALID_BITINDEX,
+                   "mUsedFullTrafficPhysics.GetFirstZeroBit() == -1");                   // :3356
+
+        for (s32 liVehicle = mUsedTrafficVehicles.GetFirstNonZeroBit();
+             liVehicle != TotalPhysicalTrafficBitArray::KI_INVALID_BITINDEX;
+             liVehicle = mUsedTrafficVehicles.GetNextNonZeroBit(liVehicle))
+        {
+            const PhysicalTrafficVehicle* lpVehicle = GetTrafficVehicle(liVehicle);
+            const u8 lu8Type = lpVehicle->mu8PhysicalType;
+            CGS_ASSERT(lu8Type < PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_COUNT,
+                       "leType < E_PHYSICAL_TRAFFIC_TYPE_COUNT");
+            if (lu8Type != PhysicalTrafficVehicle::E_PHYSICAL_TRAFFIC_TYPE_FULL)
+            {
+                continue;
+            }
+
+            const f32 lfInterest = GetTrafficInterest(lpVehicle, lpaRaceCarVehicles,
+                                                      lpaRaceCarDrivers, lpUsedRaceCars);
+            if (lpDoNotRecycleBitArray->IsBitSet(static_cast<u32>(liVehicle)))
+            {
+                continue;
+            }
+
+            if (liNumRecyclable == 0 || lfInterest < lfLeastInterest)
+            {
+                lfLeastInterest           = lfInterest;
+                liLeastInterestingVehicle = liVehicle;
+            }
+            ++liNumRecyclable;
+        }
+
+        // Streamed on the console ("Failed to recycle fully-physical traffic ... <n> recyclable
+        // vehicles"); collapsed to the static text.
+        CGS_ASSERT(liLeastInterestingVehicle >= 0,
+                   "Failed to recycle fully-physical traffic vehicle");                  // :3400
+
+        return liLeastInterestingVehicle;
+    }
+
+    // =============================================================================================
+    // GetTrafficInterest @0x825F1658 (206)
+    //   assert BrnPhysicalTrafficManager.cpp:2886. DWARF :303.
+    //
+    // "Interest" == 1 / (1 + squared distance to the nearest PLAYER-driven race car). Only
+    // E_DRIVER_TYPE_PLAYER cars count (`mulli r11,r10,0xE0 ; lwz 0xD0(r11) ; cmpwi 0 ; bne skip`),
+    // so a lobby of AI rivals leaves every traffic car equally (un)interesting -- which is what
+    // makes the car nearest the PLAYER the last one recycled.
+    // =============================================================================================
+    f32 PhysicalTrafficManager::GetTrafficInterest(const PhysicalTrafficVehicle* lpTrafficVehicle,
+                                                   RaceCarPhysics* lpaRaceCarVehicles,
+                                                   VehicleDriver* lpaRaceCarDrivers,
+                                                   CgsContainers::BitArray<8u>* lpUsedRaceCars)
+    {
+        // flt_8208F5EC == 0x7F7FFFFF == FLT_MAX.
+        f32 lfMinSquareDistToRaceCar = 3.402823466e+38F;
+
+        // `lwz r9,0x1C(r4) ; lvx128 v127,r9,0x40` -- the body's transform translation row.
+        const Vector3 lvTrafficPosition = lpTrafficVehicle->mpVehicleBody->GetPosition();
+
+        for (s32 liCar = lpUsedRaceCars->GetFirstNonZeroBit();
+             liCar != CgsContainers::BitArray<8u>::KI_INVALID_BITINDEX;
+             liCar = lpUsedRaceCars->GetNextNonZeroBit(liCar))
+        {
+            if (lpaRaceCarDrivers[liCar].GetDriverType() != E_DRIVER_TYPE_PLAYER)
+            {
+                continue;
+            }
+
+            const Vector3 lvDelta =
+                rw::math::vpu::Subtract(lpaRaceCarVehicles[liCar].GetPosition(), lvTrafficPosition);
+            const f32 lfSquareDist = rw::math::vpu::Dot(lvDelta, lvDelta);
+
+            // `fsubs f13,f31,f0 ; fsel f31,f13,f0,f31` == min(min, sq).
+            if (lfSquareDist < lfMinSquareDistToRaceCar)
+            {
+                lfMinSquareDistToRaceCar = lfSquareDist;
+            }
+        }
+
+        CGS_ASSERT(lfMinSquareDistToRaceCar >= 0.0f, "lfMinSquareDistToRaceCar >= 0.0f"); // :2886
+
+        return 1.0f / (lfMinSquareDistToRaceCar + 1.0f);
+    }
+
+    // =============================================================================================
+    // PreparePhysicsForNewTrafficVehicle @0x826440D0 (210)
+    //   asserts BrnPhysicalTrafficManager.cpp:1174, :1192, :1195; BrnPhysicalTrafficManager.h:740/:741.
+    //   DWARF :300 `void (const CreatePhysicalTrafficEvent&, int32_t)`.
+    //
+    // The AttribSys chase is the SAME inlined sequence VehicleManager::ProcessCreateEvents already
+    // carries for a race car (BrnVehicleManager_ProcessCreateEvents.cpp:205-218), one for one:
+    //   sub_82204998                    == Attrib::Gen::burnoutcarasset(key, NULL)
+    //   +0x158 RefSpec -> GetCollection == GetPhysicsVehicleHandlingRefSpec()->GetCollection()
+    //   Attrib::Gen::physicsvehiclehandling(collection, NULL)
+    //   VehicleAttribs::Construct
+    //   sub_825BDB88                    == the checked physicsvehiclehandling COPY (by-value arg)
+    //   VehicleAttribs::SetupAttribs(copy)
+    // THE TRAFFIC ARM DOES NOT RE-CENTRE THE COM ON THE WHEEL MEAN. The race-car drain adds the
+    // four-wheel mean into mBaseAttribs.mCOMOffset before building the box; this one does not (no
+    // vaddfp/vmulfp on v125 anywhere in 0x82644290..0x826442F4). Do not copy the sibling here.
+    // =============================================================================================
+    void PhysicalTrafficManager::PreparePhysicsForNewTrafficVehicle(
+            const CreatePhysicalTrafficEvent& lrCreateTrafficEvent, s32 liTrafficVehicleIndex)
+    {
+        CGS_ASSERT(liTrafficVehicleIndex < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                   "liTrafficVehicleIndex < ku8TotalMaxNumPhysicalTraffic");             // :1174
+
+        maTrafficEntityIDs[liTrafficVehicleIndex].muValue =
+            static_cast<u32>(lrCreateTrafficEvent.mVolumeInstanceID.muId
+                             >> CgsSceneManager::VolumeInstanceId::KU_ENTITY_ID_START_INDEX);
+        maTrafficCarModelHandles[liTrafficVehicleIndex] = lrCreateTrafficEvent.mModelHandle;
+
+        VehicleAttribs lVehicleAttribs;
+        {
+            Attrib::Gen::burnoutcarasset lCarAsset(lrCreateTrafficEvent.mCarAssetAttribKey, NULL);
+            Attrib::Gen::physicsvehiclehandling lHandling(
+                const_cast<Attrib::Collection*>(
+                    lCarAsset.GetPhysicsVehicleHandlingRefSpec()->GetCollection()), NULL);
+
+            lVehicleAttribs.Construct();
+            Attrib::Gen::physicsvehiclehandling lHandlingCopy(lHandling);
+            lVehicleAttribs.SetupAttribs(lHandlingCopy);
+        }
+        // `ld r11,0x70(r27) ; std r11,var_78` -- VehicleAttribs + 0x358.
+        lVehicleAttribs.mAttribsKey = lrCreateTrafficEvent.mCarAssetAttribKey;
+
+        CGS_ASSERT(lrCreateTrafficEvent.mModelHandle.mpResourceMemory != 0,
+                   "lpModelResource != NULL");                                           // :1192
+        Deformation::StreamedDeformationSpec* lpModelData =
+            *reinterpret_cast<Deformation::StreamedDeformationSpec* const*>(
+                 lrCreateTrafficEvent.mModelHandle.mpResourceMemory);
+        CGS_ASSERT(lpModelData != 0, "lpModelData != NULL");                             // :1195
+
+        lpModelData->TransformToNewCOMSpace(lVehicleAttribs.mBaseAttribs.mCOMOffset);
+
+        Vector3 lavWheelPositions[4];
+        f32     lafWheelRadii[4];
+        for (s32 liWheel = 0; liWheel < 4; ++liWheel)
+        {
+            // GetWheelSpec's own bound tripwire, emitted once per member read.
+            CGS_ASSERT(liWheel < 4, "liWheel < eNumWheels");
+            lavWheelPositions[liWheel] = lpModelData->maWheelSpecs[liWheel].mPosition;
+            CGS_ASSERT(liWheel < 4, "liWheel < eNumWheels");
+            lafWheelRadii[liWheel] = 0.5f * lpModelData->maWheelSpecs[liWheel].mScale.mV.y;
+        }
+
+        CGS_ASSERT(liTrafficVehicleIndex >= 0, "liVehicle >= 0");                        // h:740
+        CGS_ASSERT(liTrafficVehicleIndex < KU8_TOTAL_MAX_NUM_PHYSICAL_TRAFFIC,
+                   "liVehicle < ku8TotalMaxNumPhysicalTraffic");                         // h:741
+
+        // The delegation C3 wires: PhysicalTrafficVehicle::PreparePhysical @0x82641058 ->
+        // TrafficPhysics::PreparePhysical @0x82639380.
+        mpaTrafficVehicles[liTrafficVehicleIndex].PreparePhysical(
+                &lrCreateTrafficEvent, &lVehicleAttribs, lpModelData,
+                lavWheelPositions, lafWheelRadii);
+
+        // The inlined VehicleDriver::ClearControls over mpaTrafficDrivers[index] -- the same
+        // out-of-line body the race-car create/remove drains already call by name.
+        mpaTrafficDrivers[liTrafficVehicleIndex].ClearControls();
+    }
+}
+}
+
+// FOLDED FROM BrnPhysicalTrafficManager_UpdateTrafficDriver.cpp
+// =================================================================================================
+// GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager_UpdateTrafficDriver.cpp
+//
+// PhysicalTrafficManager::UpdateTrafficDriver @0x825CA8A0 (169 insns) -- the TRAFFIC arm of
+// VehicleManager::UpdateDrivers' four-way driver-control dispatch (case 3 of the jumptable,
+// reached with `add r3, r31, r28` where r28 == 0xAEE0 == the embedded mPhysicalTrafficManager, so
+// the `this` really is this class). DWARF BrnPhysicalTrafficManager.h:158.
+//
+// Slice TU: the home BrnPhysicalTrafficManager.cpp is mounted and owns twelve other bodies; this is
+// kept separate so the driver-arms wave lands as one reviewable unit alongside
+// BrnVehicleManager_DriverArms.cpp (the other four arms). Fold back at will.
+//
+// The conductor gate that stood for this function was deleted by the same wave.
+//
+// WHAT IT DOES:
+//   1. assert the record names a STANDARD traffic vehicle (species 0). Static street furniture and
+//      the trailer slot have no driver;
+//   2. build the vehicle's GLOBAL entity id -- owner E_ENTITYTYPE_TRAFFIC_VEHICLE(2), entity index
+//      == the record's miVehicleID;
+//   3. map global -> LOCAL PHYSICS index through mu8GlobalToPhysicalEntityIndexMap. Traffic is
+//      streamed, so most global vehicles have NO physics body: the KU8_INVALID_MAP(127) slot is the
+//      normal "this car is not physical right now" answer and the record is dropped SILENTLY;
+//   4. install the record into mpaTrafficDrivers[physicsIndex].
+//
+// IT NEVER TOUCHES THE BitArray<8>. The parameter is declared (DWARF) and passed by the caller,
+// and the console's r5 is dead from the prologue to the epilogue -- confirmed by reading the asm,
+// not by trusting Hex-Rays (which drops the parameter from its 2-arg prototype entirely). That is
+// correct and not an omission: the bitset tracks RACE CARS, and a traffic index is not one.
+//
+// COST NOTE: only ONE absent callee across the whole body -- BrnTraffic::GetVehicleSpecies
+// @0x821F4648 (32 insns, a pure range ladder, xrefs_from == the assert triple). It is LANDED this
+// wave as a header-inline in its own console home
+// (GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h), not parked. The other
+// two non-assert callees, memcpy and VolumeInstanceId::SetEntityIDEntityIndex @0x822B0E70, are
+// already real in this tree.
+//
+// CONSOLE OFFSETS NOT REPRODUCED (this class's standing rule): the map at `this+104688`, the
+// driver array behind `this+103600` and the 224-byte driver stride are ALL reached by name. The
+// host pointer width alone moves two of the three.
+// =================================================================================================
+
+#include "GameSource/Physics/VehicleManager/BrnPhysicalTrafficManager.h"
+
+#include "GameShared/GameClasses/Core/CgsAssert.h"                                    // CGS_ASSERT
+#include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h"                  // VolumeInstanceId + its two setters
+#include "GameSource/World/EntityModules/TrafficEntityModule/BrnTrafficVehicle.h"     // BrnTraffic::GetVehicleSpecies
+
+namespace BrnPhysics
+{
+namespace Vehicle
+{
+    // ==============================================================================================
+    // @0x825CA8A0  PhysicalTrafficManager::UpdateTrafficDriver  (169 insns)
+    // ==============================================================================================
+    void PhysicalTrafficManager::UpdateTrafficDriver(const BrnTrafficDriverControls* lpControls,
+                                                     CgsContainers::BitArray<8u>& lrUpdatedCars)
+    {
+        // The console never reads r5. Named in the signature (DWARF) and deliberately unused, so
+        // the divergence is explicit rather than a warning.
+        (void)lrUpdatedCars;
+
+        const s32 liVehicleID = lpControls->miVehicleID;
+
+        // ---- 0x825CA8B4..0x825CA944: BrnPhysicalTrafficManager.cpp:1782 (0x6F6). Streamed with the
+        //      index ("Driver controls specified for non-standard traffic vehicle " << id).
+        CGS_ASSERT(BrnTraffic::GetVehicleSpecies(static_cast<u32>(liVehicleID)) ==
+                       BrnTraffic::Vehicle::E_SPECIES_STANDARD,
+                   "Driver controls specified for non-standard traffic vehicle ");
+
+        // ---- 0x825CA948..0x825CA95C: the global id. The console materialises the whole 64-bit
+        //      word as one `std` of (2 << 56) -- i.e. a zero-initialised VolumeInstanceId whose
+        //      owner splice the compiler constant-folded -- then splices the index in through the
+        //      out-of-line setter. Reproduced as the two field writes it folded, so no raw packing
+        //      constant appears here.
+        CgsSceneManager::VolumeInstanceId lGlobalEntityId;
+        lGlobalEntityId.muId = 0;
+        lGlobalEntityId.SetEntityIDOwner(static_cast<u8>(KU_ENTITYTYPE_TRAFFIC_VEHICLE));
+        lGlobalEntityId.SetEntityIDEntityIndex(static_cast<u32>(liVehicleID));
+
+        const u32 luGlobalEntityIndex = lGlobalEntityId.GetEntityIDEntityIndex();
+
+        // ---- 0x825CA96C..0x825CAA08: the "is this vehicle physical at all?" probe. The console
+        //      inlines the SAME map lookup TWICE -- once as the bool gate here, once below to
+        //      produce the id -- with the BrnPhysicalTrafficManager.h:944 (0x3B0) bound assert
+        //      baked into each. Both copies are kept, in order.
+        CGS_ASSERT(luGlobalEntityIndex < sizeof(mu8GlobalToPhysicalEntityIndexMap),
+                   "lGlobalEntityId.GetEntityIndex() < sizeof(mu8GlobalToPhysicalEntityIndexMap)");
+
+        if (mu8GlobalToPhysicalEntityIndexMap[luGlobalEntityIndex] == KU8_INVALID_MAP)
+        {
+            // The ordinary streamed-out case -- no assert, no log, nothing. A traffic car that is
+            // not currently a physics body simply has no driver record to update.
+            return;
+        }
+
+        // ---- 0x825CAA0C..0x825CAAF8: the same probe again, this time building the physics id.
+        //      The `!lbFound` arm cannot be taken (the gate above already proved the slot occupied),
+        //      but the console emits it, so the tripwire it carries is emitted too.
+        CGS_ASSERT(luGlobalEntityIndex < sizeof(mu8GlobalToPhysicalEntityIndexMap),
+                   "lGlobalEntityId.GetEntityIndex() < sizeof(mu8GlobalToPhysicalEntityIndexMap)");
+
+        const u8 lu8PhysicalIndex = mu8GlobalToPhysicalEntityIndexMap[luGlobalEntityIndex];
+        const bool lbFound = (lu8PhysicalIndex != KU8_INVALID_MAP);
+
+        if (lbFound)
+        {
+            // CgsEntityId.h:116 (0x74) -- the EntityId ctor bound check; dead for a u8, emitted.
+            CGS_ASSERT(static_cast<u32>(lu8PhysicalIndex) < (1u << KU_NUM_BITS_FOR_ENTITY_NUM),
+                       "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
+        }
+
+        // BrnPhysicalTrafficManager.h:1030 (0x406) -- streamed with the global id.
+        CGS_ASSERT(lbFound,
+                   "Failed to find local physics ID of traffic vehicle with global entity ID: ");
+
+        EntityId lPhysicsEntityId;
+        lPhysicsEntityId.muValue = (static_cast<u32>(lu8PhysicalIndex) << 10)
+                                 | (KU_ENTITYTYPE_TRAFFIC_VEHICLE << 24);
+
+        // ---- 0x825CAAFC..0x825CAB38: install. `extrwi r11, r26, 14, 8` is GetEntityIndex(); the
+        //      `mulli 0xE0` + the deref of the array pointer is GetTrafficDriver's own arithmetic.
+        //      Same four stores as the network arm in BrnVehicleManager_DriverArms.cpp: the driver
+        //      type, the 0x48-byte control BASE copy, then the two AI-tail fields the console clears
+        //      because a traffic record never carries them (BrnTrafficDriverControls adds NO members
+        //      -- sizeof == sizeof(BrnPlayerDriverControls) == 0x48, which is why the copy is 0x48).
+        const u32 luPhysicalIndex = (lPhysicsEntityId.muValue >> 10) & 0x3FFFu;
+        VehicleDriver& lrDriver = mpaTrafficDrivers[luPhysicalIndex];
+
+        lrDriver.meDriverType = E_DRIVER_TYPE_TRAFFIC;                             // stw 3, +0xD0
+        static_cast<BrnPlayerDriverControls&>(lrDriver.mControls) = *lpControls;    // memcpy 0x48
+        lrDriver.mControls.mbForceComeOutOfDrift = false;                          // stb 0, +0x4D
+        lrDriver.mControls.mfSpeedMatchSpeed     = 0.0f;                           // stfs 0.0f, +0x48
+    }
+}
+}

@@ -9,7 +9,6 @@
 #include "Primitives/CgsFrustum.cpp"
 #include "Primitives/PolygonSoup/CgsPolygonSoupList.cpp"
 #include "Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap.cpp"
-#include "Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap_wBT_01.cpp"  // part of CgsPolygonSoupListSpatialMap.cpp (x360 tree partfile)
 #include "Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap_Build.cpp"  // holds functions of CgsPolygonSoupListSpatialMap.cpp (x360 tree split)
 #include "Primitives/PolygonSoup/CgsPolygonSoupListSpatialMap_Query.cpp"  // holds functions of CgsPolygonSoupListSpatialMap.cpp (x360 tree split)
 #include "Intersection/CgsPolygonSoupTests.cpp"

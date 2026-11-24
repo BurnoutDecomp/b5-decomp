@@ -1497,3 +1497,1730 @@ void RacingLineGenerator::DropHardNoGoLinesIntoMap(RacingLine* lpRacingLine)
 }
 
 }
+
+// FOLDED FROM BrnRacingLineGenerator_Curve.cpp
+// =================================================================================================
+// RacingLine/BrnRacingLineGenerator_Curve.cpp  (aiwave2 lane R3, 2026-09-05)
+//
+// Partfile of RacingLine/BrnRacingLineGenerator.cpp. The two REAL out-of-line console bodies that
+// carry no IDA export at all -- lanes R1 and R2 both parked them, and the already-landed
+// BrnRacingLineGenerator_Query.cpp calls BOTH, so the game cannot link without this file.
+//
+//   BODIED (no IDA export -- disassembled straight out of the image with tools/re/ppcdis.py)
+//     GetPointAndNormalOnCurve  @0x82780B18 .. 0x827815F4  (DWARF BrnRacingLineGenerator.h:331)
+//                               -- called by GetPointFarAhead @0x82790204
+//     SetUpIncomingPortalTarget @0x8278F878 .. 0x8278FB1C  (DWARF :359)
+//                               -- called TWICE by InitialiseRacingLine (@0x8278FF50/@0x8278FF78)
+//   BODIED (no export -- the console inlines them; recovered from the blocks inside the two above
+//           and inside InitialiseRacingLine @0x8278FB20, written ONCE, here)
+//     IsTargetUpToDate          (DWARF :323) -- @0x8278F8A0..0x8278F8D0 and @0x8278FE44..0x8278FE74
+//     IsAJunction               (DWARF :292) -- @0x8278FE88..0x8278FEA4
+//
+// PARAMETER ORDER PROVED (the open question lane R2 raised). GetPointAndNormalOnCurve's prologue
+// @0x82780B48..0x82780B64 keeps r3=this, r4=lpRacingLine, r5=liSectionIndex, f1=lfInterp and then
+// `mr r14, r7` / `mr r27, r8` -- r6 is SKIPPED because the f32 consumes its GPR slot (COMMON_BRIEF
+// rule 4). r14 is handed to GetIterativeHermite as its `&lrResult` (@0x827810A4 `mr r5, r14`;
+// GetIterativeHermite's own prologue @0x82776D8C is `mr r26, r5` -> the result pointer), and r27 is
+// what the closing normalise stores into (@0x827815C4). So the FOURTH parameter (r7) IS lrPoint and
+// the FIFTH (r8) IS lrNormal -- lane R2's inference from `vmaddfp v12, v0, v12, v10`
+// (normal * mfRoadPlacement + point) is CONFIRMED, and the DWARF prototype needs no change.
+//
+// SOURCE FILE / LINE NUMBERS: every assert cites the same unity-build path the sibling partfiles
+// use; the console line is quoted at each site. The X360 retail build DOES emit these (each is a
+// full BeginAssert / StrStream / FireAssert / EndAssert sequence in the listing).
+//
+// CONSTANTS RECOVERED FROM THE IMAGE (big-endian, file offset = VA - 0x82000000):
+//   flt_82001C98 = 1.0f     flt_82001CC0 = 0.0f     flt_820C4168 = 0.5f
+//   flt_820C424C = 0.1f     (the curve-normal sampling step)
+//   unk_820C3B40 = 0x37800000 = 2^-16       (rw::math::vpu::IsSimilar epsilon)
+//   flt_820C3B70 = 0x34000000 = FLT_EPSILON (RwMath::IsZero epsilon)
+// =================================================================================================
+
+#include "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"
+
+#include <cmath>
+
+#include "GameSource/World/AI/Route/BrnRacingLine.h"      // RacingLine + SectionData
+#include "GameSource/World/AI/BrnAIPortal.h"              // Portal (SectionData::mpTargetPortal)
+#include "SharedClasses/AI/AISectionsResourceType.h"      // AISection::mx8Flags
+#include "GameShared/GameClasses/Core/CgsAssert.h"        // CgsDev::Assert::Begin/Fire/End
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // CgsDev::StrStream
+
+namespace BrnAI
+{
+namespace
+{
+    // ARTIST section flag test uses bit 0x10.
+
+
+// ---- baked constants ---------------------------------------------------------------------
+// The cache is 16 slots addressed by `sectionIndex & 15` (`clrlwi r11, r5, 28` everywhere; here
+// @0x8278F8A0 and @0x8278FE44).
+
+
+// flt_820C3B70 lane 0 == FLT_EPSILON: the RwMath::IsZero epsilon (`vandc` sign-clear + `vcmpgtfp`
+// + the 0x0004080C AND-reduce permute @0x82781388 and @0x82781474).
+
+
+// unk_820C3B40 lane 0 == 2^-16: the rw::math::vpu::IsSimilar epsilon the entrance/exit degeneracy
+// tests @0x82780C78 / @0x82780CF8 / @0x82781030 run on.
+
+
+// flt_820C424C == 0.1f -- how much further along the hermite GetPointAndNormalOnCurve samples its
+// second point to get the tangent (`lfs f0, 0(r15)` @0x827811BC, with r15 == 0x820C424C).
+const f32 KF_CURVE_NORMAL_STEP = 0.1f;
+
+// The unity-build file string every streamed assert in this TU cites.
+
+
+
+// ---- small shared helpers ----------------------------------------------------------------
+// These mirror the file-local helpers of BrnRacingLineGenerator.cpp; both copies live in an
+// anonymous namespace, so there is no LNK2005 and no second external symbol.
+
+// RwMath::IsZero on a 2D vector: |x| <= FLT_EPSILON && |y| <= FLT_EPSILON.
+inline bool IsZeroCurveVector(f32 lfX, f32 lfY)
+{
+    return !(std::fabs(lfX) > KF_ZERO_EPSILON) && !(std::fabs(lfY) > KF_ZERO_EPSILON);
+}
+
+// rw::math::vpu::IsSimilar on the x/y lanes: no lane differs by more than 2^-16. The console
+// duplicates x/y into z/w with `vrlimi128 v, v, 3, 2` so all four compared lanes are the pair.
+inline bool IsSimilar2D(const Vector2& lrA, const Vector2& lrB)
+{
+    return !(std::fabs(lrA.mV.x - lrB.mV.x) > KF_PORTAL_MATCH_EPSILON)
+        && !(std::fabs(lrA.mV.y - lrB.mV.y) > KF_PORTAL_MATCH_EPSILON);
+}
+
+// The lane-wise `vcmpeqfp.` self-compare the console uses as "is this finite / not-NaN".
+
+
+
+
+
+// ---- the streamed asserts (BeginAssert ; StrStream ; FireAssert ; EndAssert) ---------------
+
+
+
+
+
+
+
+
+
+
+// "<prefix>" << index << ", interp " << interp << "\n"   (str_820C7304 == ", interp ").
+void FireBadCentreAssert(const char* lpcPrefix, s32 liSectionIndex, f32 lfInterp, s32 liLine)
+{
+    char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+    CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+    lStream << lpcPrefix << liSectionIndex << ", interp " << lfInterp << "\n";
+    CgsDev::Assert::BeginAssert();
+    CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE_CPP, liLine);
+    CgsDev::Assert::EndAssert();
+}
+
+// "Zero vector being normalize, Interp = " << interp << "\n"   (str_820C72A8, .cpp:2267).
+void FireZeroNormalAssert(f32 lfInterp, s32 liLine)
+{
+    char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+    CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+    lStream << "Zero vector being normalize, Interp = " << lfInterp << "\n";
+    CgsDev::Assert::BeginAssert();
+    CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE_CPP, liLine);
+    CgsDev::Assert::EndAssert();
+}
+}   // anonymous namespace
+
+// =================================================================================================
+// IsAJunction -- DWARF BrnRacingLineGenerator.h:292. NO IDA export; the console inlines it.
+// Recovered from InitialiseRacingLine @0x8278FE88..0x8278FEA4, the one site that calls it through
+// the wrapper shape (GetSectionPointer, then the flag test):
+//
+//   0x8278FE84  bl  GetSectionPointer(lpRacingLine, liSection)
+//   0x8278FE88  lwz    r11, 0xA0(r3)          -- SectionData::mpLineSection
+//   0x8278FE98  lbz    r11, 0x17(r11)         -- AISection::mx8Flags (host offsetof == 0x23)
+//   0x8278FE9C  rlwinm r11, r11, 0, 27, 27    -- & 0x10
+//   0x8278FEA4  beq -> the "not a junction" arm
+//
+// LookForStraightSectionAhead / Behind open-code the identical `& 0x10` test on the same member;
+// this is the wrapper the DWARF names.
+// =================================================================================================
+bool RacingLineGenerator::IsAJunction(RacingLine* lpRacingLine, s32 liSectionIndex)
+{
+    const SectionData* lpSectionData = GetSectionPointer(lpRacingLine, liSectionIndex);
+    return (lpSectionData->mpLineSection->mx8Flags & KX8_SECTION_FLAG_JUNCTION) != 0;
+}
+
+// =================================================================================================
+// IsTargetUpToDate -- DWARF BrnRacingLineGenerator.h:323. NO IDA export; the console inlines it at
+// both of its call sites, and the two copies agree:
+//
+//   InitialiseRacingLine @0x8278FE44..0x8278FE74 (the fully open-coded form)
+//     r11 = lpRacingLine + (liSection & 15) * 0xB0
+//     lhz / extsh 0xB8(r11) == maSectionCache[i].mCachedSectionIndex  (0x10 + 0xA8)
+//     != liSection -> the value is 0 (false)
+//     otherwise    -> lbz 0xBA(r11) == maSectionCache[i].mbTargetUpToDate (0x10 + 0xAA)
+//
+//   SetUpIncomingPortalTarget @0x8278F8A0..0x8278F8D0 (the same test, but the second half goes
+//     through a real `bl GetSectionPointer` and reads +0xAA off its result -- which is the same
+//     &maSectionCache[i & 15], so the two shapes mean the same thing).
+//
+// i.e. the READ twin of SetTargetUpToDate @0x82768710, whose write is this same byte. The console
+// emits NO assert on the stale-cache arm here (SetTargetUpToDate's does) -- it simply answers
+// false, which is why InitialiseRacingLine may call it on an index it has not cached yet.
+// =================================================================================================
+bool RacingLineGenerator::IsTargetUpToDate(RacingLine* lpRacingLine, s32 liSectionIndex)
+{
+    if (!CacheUpToDate(lpRacingLine, liSectionIndex))
+    {
+        return false;
+    }
+    return lpRacingLine->maSectionCache[liSectionIndex & KI_SECTION_CACHE_MASK].mbTargetUpToDate;
+}
+
+// =================================================================================================
+// SetUpIncomingPortalTarget @0x8278F878 .. 0x8278FB1C (170 instructions; no IDA export)
+//   (r3/r29 = this, r4/r30 = lpRacingLine, r5 = liSectionIndex)
+//
+// Give the section its ENTRANCE point -- the incoming half of the target pair whose outgoing half
+// SetupSectionExit @0x8278F548 writes. InitialiseRacingLine calls it right after SetTargetUpToDate
+// on every section it processes, in both the junction and the ordinary arm.
+//
+//   0x8278F894  lpSectionData = GetSectionPointer(lpRacingLine, liSectionIndex)   (kept in r31)
+//   0x8278F898  addi r5, r31, -1 -- everything below is about the PREVIOUS section
+//   0x8278F8A0  the inlined IsTargetUpToDate(lpRacingLine, liSectionIndex - 1)
+//   0x8278F8E4  arm A: lvx 0x40(prev) + `vpermwi128 .., 0xBF` == prev->GetSectionExit(), then the
+//               `vrlimi128` mask-8 / mask-4 pair == SectionData::SetSectionEntrance
+//   0x8278F9E0  arm B: FindMaximalEdges(left, right, 0.0f) on THIS section's own map -- height 0.0
+//               is the ENTRANCE end of the map (SetupSectionExit uses 1.0, the exit end)
+//   0x8278FA44  arm B: entrance = (left + right) * 0.5   (flt_820C4168)
+//   0x8278F938 / 0x8278FA74  each arm then asserts its OWN copy of "Zero EXit created.\n"
+//               (str_820C7D6C) when both lanes of the new entrance are exactly 0.0 -- .cpp:1159 in
+//               arm A, .cpp:1178 in arm B. (The console's own spelling: this member writes the
+//               ENTRANCE, but the literal says "EXit".) Two distinct line numbers is what proves
+//               the source really carries the assert twice, once per arm.
+// Each assert is a `vcmpeqfp.` against a 0.0 splat, lane 0 then lane 1, and it fires only when both
+// are equal -- the console then RETURNS anyway; there is no recovery arm.
+// =================================================================================================
+void RacingLineGenerator::SetUpIncomingPortalTarget(RacingLine* lpRacingLine, s32 liSectionIndex)
+{
+    SectionData* lpSectionData = GetSectionPointer(lpRacingLine, liSectionIndex);
+
+    if (IsTargetUpToDate(lpRacingLine, liSectionIndex - 1))
+    {
+        // The previous section already has a target, so this section's entrance IS that exit.
+        SectionData* lpPreviousSectionData = GetSectionPointer(lpRacingLine, liSectionIndex - 1);
+        lpSectionData->SetSectionEntrance(lpPreviousSectionData->GetSectionExit());
+
+        const Vector2 lEntrance = lpSectionData->GetSectionEntrance();
+        if (lEntrance.mV.x == 0.0f && lEntrance.mV.y == 0.0f)
+        {
+            FireStreamedTextAssert("Zero EXit created.\n", 1159);
+        }
+    }
+    else
+    {
+        // Nothing to inherit: take the midpoint of this section's own maximal hard-no-go edges at
+        // the entrance end of the map.
+        Vector2 lLeftEdge;
+        Vector2 lRightEdge;
+        lLeftEdge.SetZero();
+        lRightEdge.SetZero();
+
+        lpSectionData->mHardNoGoMap.FindMaximalEdges(lLeftEdge, lRightEdge, 0.0f);
+
+        // The vaddfp / vmulfp pair combines all four SIMD lanes; SetSectionEntrance consumes only
+        // x and y.
+        Vector2 lMidPoint;
+        const VecFloat lHalf(0.5f);
+        lMidPoint.mV = __vmulfp(__vaddfp(lLeftEdge.mV, lRightEdge.mV), lHalf.mV);
+
+        lpSectionData->SetSectionEntrance(lMidPoint);
+
+        const Vector2 lEntrance = lpSectionData->GetSectionEntrance();
+        if (lEntrance.mV.x == 0.0f && lEntrance.mV.y == 0.0f)
+        {
+            FireStreamedTextAssert("Zero EXit created.\n", 1178);
+        }
+    }
+}
+
+// =================================================================================================
+// GetPointAndNormalOnCurve @0x82780B18 .. 0x827815F4 (438 instructions; no IDA export)
+//   (r3/r20 = this, r4/r29 = lpRacingLine, r5/r22 = liSectionIndex, f1/f31 = lfInterp,
+//    r7/r14 = &lrPoint, r8/r27 = &lrNormal -- r6 skipped, the f32 takes its GPR slot)
+//
+// Evaluate the section's hermite centre line at lfInterp and hand back the point plus the UNIT
+// NORMAL there. GetPointFarAhead @0x82790204 is the only caller: it offsets the point along the
+// normal by mfRoadPlacement, and turns the normal 90 degrees back into the travel direction.
+//
+//   0x82780B68  lpFirstTrySectionData = GetSectionPointer(lpRacingLine, liSectionIndex)
+//   0x82780B84  `vcmpeqfp.` self-compare on lfInterp -> "Bad interp\n"  (.cpp:2148)
+//   0x82780C24  GenerateInOutVectors(lpRacingLine, liSectionIndex, lInVector (r6 = sp+0xA0),
+//                                    lOutVector (r7 = sp+0x120))
+//   0x82780C44  A = lpFirstTrySectionData->GetSectionEntrance()   -> [sp+0x100]
+//   0x82780C60  B = lpFirstTrySectionData->GetSectionExit()       -> [sp+0xF0]
+//               (`vpermwi128 .., 0xBF` == word-select {2,3,3,3}, the z/w pair pulled down)
+//   0x82780C78  IsSimilar(A, B) -- the DEGENERATE-section arm below
+//   0x8278109C  the main arm: GetIterativeHermite(A, B, in, out, lfInterp, lrPoint)
+//   0x827810D4  validity of lrPoint -> "Bad centre at index " << i << ", interp " << t << "\n"
+//               (.cpp:2220)
+//   0x827811BC  lfAheadParam = t + 0.1 (flt_820C424C); when that passes 1.0 (flt_82001C98) it
+//               steps BACKWARDS instead (t - 0.1) and remembers that in r28
+//   0x82781218  GetSimpleHermite(A, B, in, out, splat(lfAheadParam), lPointAhead (sp+0x110))
+//   0x8278122C  validity of lPointAhead -> "Bad centre ahead at index " ...  (.cpp:2244)
+//   0x82781314  THE NORMAL. The two `vrlimi128` write masks decode as mask 4 == the Y lane
+//               (@0x82781338 / @0x82781354, vA field 68) and mask 8 == the X lane (@0x82781370,
+//               vA field 72) -- the same encodings, in the same order, that
+//               SectionData::SetSectionExit (masks 2/1) and SetSectionEntrance (masks 8/4) use.
+//               So the Y lane takes the tangent's X difference and the X lane the NEGATED Y
+//               difference:
+//                   normal = (-tangent.y, tangent.x)      -- a clean +90 degree rotation
+//               and the r28 (stepped-backwards) arm negates BOTH differences, keeping the same
+//               orientation. GetPointFarAhead then reads back (normal.y, -normal.x) == the
+//               tangent, which is exactly self-consistent -- the two bodies corroborate each other.
+//   0x82781388  IsZero(normal) -> fall back to the raw chord (see the [FLAG] on that arm)
+//   0x82781458  IsZero again -> "Zero vector being normalize, Interp = " << lfAheadParam (:2267)
+//   0x82781574  `vrsqrtefp` + two Newton-Raphson steps + `vmulfp128` == normalise. There is NO
+//               `vsel` zero guard here (unlike the shared Normalise2D idiom elsewhere in this
+//               class): the console divides by zero and publishes the NaN. Reproduced as-is -- the
+//               assert above is the console's only warning, and an assert is not a guard.
+// =================================================================================================
+void RacingLineGenerator::GetPointAndNormalOnCurve(RacingLine* lpRacingLine, s32 liSectionIndex,
+                                                   f32 lfInterp, Vector2& lrPoint,
+                                                   Vector2& lrNormal)
+{
+    SectionData* lpFirstTrySectionData = GetSectionPointer(lpRacingLine, liSectionIndex);
+
+    if (!(lfInterp == lfInterp))
+    {
+        FireStreamedTextAssert("Bad interp\n", 2148);
+    }
+
+    Vector2 lInVector;
+    Vector2 lOutVector;
+    GenerateInOutVectors(lpRacingLine, liSectionIndex, lInVector, lOutVector);
+
+    Vector2 lLineStart = lpFirstTrySectionData->GetSectionEntrance();
+    Vector2 lLineEnd   = lpFirstTrySectionData->GetSectionExit();
+
+    if (IsSimilar2D(lLineStart, lLineEnd))
+    {
+        // A degenerate section -- its portal entrance and exit are the same point, so there is no
+        // chord to run a hermite along. Answer the entrance, and try to borrow a chord from the
+        // exit of the NEXT cached section.
+        lrPoint = lLineStart;
+
+        if (liSectionIndex >= lpRacingLine->mLastSectionInCache)
+        {
+            // 0x82781070: the default normal is the literal pair (flt_82001C98, flt_82001CC0) with
+            // z/w zeroed, and the console branches STRAIGHT to the store at 0x827815C4 -- it is
+            // published UNNORMALISED (it is already unit length).
+            lrNormal.mV.x = 1.0f;
+            lrNormal.mV.y = 0.0f;
+            lrNormal.mV.z = 0.0f;
+            lrNormal.mV.w = 0.0f;
+            return;
+        }
+
+        SectionData* lpSecondTrySectionData = GetSectionPointer(lpRacingLine, liSectionIndex + 1);
+        lLineEnd = lpSecondTrySectionData->GetSectionExit();
+
+        if (IsSimilar2D(lLineStart, lLineEnd))
+        {
+            lrNormal.mV.y = 0.0f;
+            lrNormal.mV.z = 0.0f;
+            lrNormal.mV.w = 0.0f;
+            return;
+        }
+    }
+
+    // GetIterativeHermite returns the CURVE PARAMETER it settled on, which is not lfInterp (see its
+    // banner in BrnRacingLineGenerator.cpp) -- both asserts below print that parameter, not the
+    // argument.
+    const f32 lfCurveParam =
+        GetIterativeHermite(lLineStart, lLineEnd, lInVector, lOutVector, lfInterp, lrPoint);
+
+    if (!IsValid2D(lrPoint))
+    {
+        FireBadCentreAssert("Bad centre at index ", liSectionIndex, lfCurveParam, 2220);
+    }
+
+    // Sample a second point a little further along the curve; when that would run off the end,
+    // sample BEHIND instead and flip the difference so the tangent still points forwards.
+    bool lbSteppedBackwards = false;
+    f32  lfAheadParam       = lfCurveParam + KF_CURVE_NORMAL_STEP;
+    if (lfAheadParam > 1.0f)
+    {
+        lfAheadParam       = lfCurveParam - KF_CURVE_NORMAL_STEP;
+        lbSteppedBackwards = true;
+    }
+
+    const VecFloat lAheadVector(lfAheadParam);
+    Vector2 lPointAhead;
+    GetSimpleHermite(lLineStart, lLineEnd, lInVector, lOutVector, lAheadVector, lPointAhead);
+
+    if (!IsValid2D(lPointAhead))
+    {
+        FireBadCentreAssert("Bad centre ahead at index ", liSectionIndex, lfAheadParam, 2244);
+    }
+
+    // The Y lane is written first (mask 4) and the X lane second (mask 8); the two arms are exact
+    // negations of one another, i.e. the same forward tangent turned 90 degrees.
+    if (lbSteppedBackwards)
+    {
+        lrNormal.mV.y = lrPoint.mV.x     - lPointAhead.mV.x;
+        lrNormal.mV.x = lPointAhead.mV.y - lrPoint.mV.y;
+    }
+    else
+    {
+        lrNormal.mV.y = lPointAhead.mV.x - lrPoint.mV.x;
+        lrNormal.mV.x = lrPoint.mV.y     - lPointAhead.mV.y;
+    }
+
+    // The console retains the existing z/w lanes until the full-register normalization.
+
+    if (IsZeroCurveVector(lrNormal.mV.x, lrNormal.mV.y))
+    {
+        lrNormal.mV.y = lLineStart.mV.x - lLineEnd.mV.x;
+        lrNormal.mV.x = lLineEnd.mV.y   - lLineStart.mV.y;
+    }
+
+    if (IsZeroCurveVector(lrNormal.mV.x, lrNormal.mV.y))
+    {
+        FireZeroNormalAssert(lfAheadParam, 2267);
+    }
+
+    // vrsqrtefp + two Newton-Raphson refinements + vmulfp128, with no zero guard.
+    const f32 lfLengthSq  = (lrNormal.mV.x * lrNormal.mV.x) + (lrNormal.mV.y * lrNormal.mV.y);
+    const f32 lfInvLength = 1.0f / std::sqrt(lfLengthSq);
+    const VecFloat lInvLength(lfInvLength);
+    lrNormal.mV = __vmulfp(lrNormal.mV, lInvLength.mV);
+}
+}
+
+// FOLDED FROM BrnRacingLineGenerator_Extrapolate.cpp
+// =================================================================================================
+// RacingLine/BrnRacingLineGenerator_Extrapolate.cpp  (aiwave A6, 2026-09-03)
+//
+//   BrnAI::RacingLineGenerator::ExtrapolateRouteBackwards @0x82782580  (398 insns, VMX128)
+//   BrnAI::RacingLineGenerator::ExtrapolateRouteForwards  @0x82781AE8  (330 insns, VMX128)
+//   BrnAI::RacingLineGenerator::ExtrapolateTwistyRoute    @0x82782018  (344 insns, VMX128)
+//   DWARF BrnRacingLineGenerator.h:139 / :148 / :158; bodies at .cpp :3085 / :2699 / :2877.
+//
+// PROTOTYPE (DWARF, parameter names verbatim -- dumpfile BrnRacingLineGenerator.cpp:528/825/689):
+//   (int32_t liNumSectionsToGenerate, uint16_t|int32_t lStartSectionIndex,
+//    const Vector2 lCarDirection, const Vector2 lCarPosition,
+//    const AISectionsData* lpAISectionsData, const ExtrapolatedIndexArray& lpauGeneratedIndices)
+// The DIRECTION is the third parameter, not the position -- the DWARF names it, ProcessExtrapolatedRoute
+// feeds v1 from request+0x20 (mCarDirection) and v2 from +0x10 (mCarPosition) @0x8278C534/0x8278C53C,
+// and Backwards negates v1. The DWARF's `const` on the array reference is drift: the console writes
+// every generated pair through it (`stw` into the Array<>::operator[] result), so it is taken
+// non-const here. All three are STATIC: the console passes the generate-count in r3 and never a
+// `this` (ProcessExtrapolatedRoute @0x8278C528 `li r3, 6` / @0x8278C66C `li r3, 8`).
+//
+// Partfile of RacingLine/BrnRacingLineGenerator.cpp. The three are the producers behind
+// RouteMapModule::ProcessExtrapolatedRoute @0x8278C4C8 (6 behind + 8 ahead) and the
+// ResetOnTrackManager's Scan{Backwards,Forwards}AlongExtrapolatedRoute; an "extrapolated route"
+// is the road portal-to-portal through the AI sections, and every non-A* AI driver (Road Rage,
+// pursuit, marked man, avoid-player, free roam) drives on one.
+//
+// Shared register map (see the header banner): r3 = liNumSectionsToGenerate (spilled to
+// arg_14), r4 = start section, v1 = lCarDirection (`vmr128 v12x, v1` is the ONLY vector argument
+// read; v2 = lCarPosition is never touched), r5 = lpAISectionsData, r6 = &lpauGeneratedIndices.
+//
+// Shared inner geometry (identical instruction sequence in all three; Backwards
+// 0x82782844..0x82782A1C, Forwards 0x82781DAC..0x82781F84, Twisty 0x827822D4..0x827824A8):
+//   lPossiblePortalCentre3D = portal->(x, y, z, 0)      (three lfs/stfs + stw 0)
+//   lPossiblePortalCentre2D = (x, z)                    (vrlimi128 lane packs 8,0 / 4,1)
+//   lCentreOfNextSection3D  = next->GetMiddle()         (bl 0x826771D0)
+//   lCentreOfNextSection2D  = (x, z)
+//   lPortalLeadsToDirection = centre2D - portal2D       (vsubfp128)
+//   IsZero(lPortalLeadsToDirection): |x| <= eps && |y| <= eps, eps = flt_820C3B70 lane 0
+//     (`lvlx ; vspltw ..,0` ; `vandc` abs ; `vcmpgtfp` per lane) -> the "Strangely shaped
+//     section index <n>\n" streamed assert, then the portal is skipped
+//   Normalize: vrsqrtefp + two Newton-Raphson steps (an exact 1/sqrt here)
+//   lfAheadness = Dot(normalised, v12x)                 (vmulfp128 ; vspltw 0/1 ; vaddfp)
+//
+// Baked constants (image.bin, big-endian, 2026-09-03):
+//   flt_820C3B70 = 0x34000000 = FLT_EPSILON        (IsZero epsilon)
+//   unk_820C3B40 = 0x37800000 = 1.52587890625e-05  (= 2^-16; the IsSimilar epsilon of the
+//                                                  Backwards exit-portal match)
+//   flt_82035570 = 0xFF7FFFFF = -FLT_MAX           (best-aheadness seed, Backwards/Forwards)
+//   flt_8204F664 = 0x7F7FFFFF = +FLT_MAX           (best-aheadness seed, Twisty, liGen >= 0)
+//   flt_82001CC0 = 0x00000000 = 0.0f               (Twisty's "still points forward" floor)
+//
+// Section flag bits read through mx8Flags (+0x17): 0x01 IsShortcut, 0x40 IsAIShortcut (DWARF
+// :377/:380, now inline in AISectionsResourceType.h) and 0x10 (`rlwinm r11,r11,0,27,27`) -- the
+// track-back stop; see KX8_SECTION_FLAG_TRACKBACK_STOP below.
+// =================================================================================================
+
+#include <cmath>
+#include <cfloat>
+
+#include "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"
+#include "GameSource/World/AI/Route/BrnRouteMapModule.h"          // BrnAI::SectionAndPortalIndices
+#include "SharedClasses/AI/AISectionsResourceType.h"              // AISection / AISectionsData
+#include "GameSource/World/AI/BrnAIPortal.h"                      // BrnAI::Portal
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                // CGS_ASSERT + Begin/Fire/End
+#include "GameShared/GameClasses/Development/CgsStrStream.h"      // CgsDev::StrStream
+
+namespace BrnAI
+{
+namespace
+{
+    // ARTIST section flag test uses bit 0x10.
+    const u8 KX8_SECTION_FLAG_TRACKBACK_STOP = 0x10;
+
+    // flt_820C3B70 lane 0 == FLT_EPSILON: the RwMath::IsZero epsilon.
+
+
+    // unk_820C3B40 lane 0 == 0x37800000 == 2^-16: the rw::math::vpu::IsSimilar epsilon used by
+    // ExtrapolateRouteBackwards to match the exit section's portal against the chosen one
+    // (`lvlx v0, r0, r18 ; vspltw v13, v0, 0` at 0x82782B00/0x82782B08, r18 = 0x820C3B40).
+
+
+    // flt_82035570 == -FLT_MAX / flt_8204F664 == +FLT_MAX: the lfBestAheadnesss seeds.
+    const f32 KF_AHEADNESS_SEED_MIN = -FLT_MAX;
+    const f32 KF_AHEADNESS_SEED_MAX =  FLT_MAX;
+
+    // flt_82001CC0 == 0.0f: Twisty's "aheadness must not point backwards" floor.
+    const f32 KF_AHEADNESS_FLOOR = 0.0f;
+
+    // The "no portal chosen" marker written to SectionAndPortalIndices::muPortal (li r11,0xFF).
+    const u32 KU_NO_PORTAL = 0xFF;
+
+    // BrnWorld::KI_INVALID_SECTION_INDEX (the assert text at :3087); the asm literal is
+    // `cmplwi cr6, r31, 0x7FFF` @0x827825BC. AICar.h carries the same value as
+    // AICar::KI_INVALID_SECTION_INDEX; repeated here so this leaf does not pull BrnAICar.h.
+    const u16 KU_INVALID_SECTION_INDEX = 0x7FFF;
+
+    // Stuck budget: the third single-portal dead end ends the walk (`cmpwi cr6, r11, 2 ; bgt`).
+    const s32 KI_MAX_STUCK_ITERATIONS = 2;
+
+    // The unity build's file string every "Strangely shaped section index" assert cites.
+    const char* const KPC_SOURCE_FILE =
+        "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\unity\\../World/AI/RacingLine/BrnRacingLineGenerator.cpp";
+
+
+
+
+
+
+    // The streamed assert at BrnRacingLineGenerator.cpp:<liLine>: BeginAssert ; StrStream over
+    // gpcMessageBuffer << "Strangely shaped section index " << <index> << "\n" ; FireAssert ;
+    // EndAssert (0x82782930..0x827829A4 / 0x82781E9C..0x82781F0C / 0x827823C4..0x82782434).
+    void FireStrangelyShapedSectionAssert(u32 luSectionIndex, s32 liLine)
+    {
+        char lacMessageBuffer[CgsDev::Assert::KI_MESSAGEBUFFERSIZE];
+        CgsDev::StrStream lStream(lacMessageBuffer, CgsDev::Assert::KI_MESSAGEBUFFERSIZE);
+        lStream << "Strangely shaped section index " << static_cast<s32>(luSectionIndex) << "\n";
+        CgsDev::Assert::BeginAssert();
+        CgsDev::Assert::FireAssert(lacMessageBuffer, KPC_SOURCE_FILE, liLine);
+        CgsDev::Assert::EndAssert();
+    }
+
+    // The shared inner geometry (banner): how far "ahead" of lReferenceDirection the road
+    // through lpPossibleNextPortal into lpNextSection leads. Returns false (and fires the
+    // streamed assert) when the portal sits on the next section's middle.
+    bool ComputeAheadness(const Portal* lpPossibleNextPortal, const AISection* lpNextSection,
+                          u32 luLinkedSectionIndex, Vector2 lReferenceDirection, s32 liAssertLine,
+                          f32& lrfAheadness)
+    {
+        // lPossiblePortalCentre2D = (x, z) of the portal; lCentreOfNextSection2D = (x, z) of
+        // the section middle; lPortalLeadsToDirection = centre - portal.
+        const Vector3 lCentreOfNextSection3D = lpNextSection->GetMiddle();
+        const f32 lfLeadsToX = lCentreOfNextSection3D.mV.x - lpPossibleNextPortal->GetPositionX();
+        const f32 lfLeadsToY = lCentreOfNextSection3D.mV.z - lpPossibleNextPortal->GetPositionZ();
+
+        if (IsZero2D(lfLeadsToX, lfLeadsToY))
+        {
+            FireStrangelyShapedSectionAssert(luLinkedSectionIndex, liAssertLine);
+            return false;
+        }
+
+        // Normalize (vrsqrtefp + 2 x Newton-Raphson == exact) then Dot with the reference.
+        const f32 lfInvLength =
+            1.0f / sqrtf((lfLeadsToX * lfLeadsToX) + (lfLeadsToY * lfLeadsToY));
+        lrfAheadness = (lfLeadsToX * lfInvLength * lReferenceDirection.mV.x)
+                     + (lfLeadsToY * lfInvLength * lReferenceDirection.mV.y);
+        return true;
+    }
+
+    // The stuck walk-back shared by the three bodies (Backwards 0x82782718..0x82782794,
+    // Forwards 0x82781C80..0x82781CFC, Twisty 0x827821C4..0x82782240): from the entry below
+    // the current one down to 0, find the last generated section carrying the track-back
+    // stop bit. On success the walk resumes AT that entry (liGeneratedNodeIndex = liTrackBack),
+    // with the section it had continued into blocked; liPreviousSection is NOT touched.
+    bool WalkBackToTrackBackStop(const AISectionsData* lpAISectionsData,
+                                 const ExtrapolatedIndexArray& lpauGeneratedIndices,
+                                 s32& lriGeneratedNodeIndex, s32& lriCurrentSectionIndex,
+                                 const AISection*& lrpCurrentSection, s32& lriBlockedSection)
+    {
+        for (s32 liTrackBack = lriGeneratedNodeIndex - 1; liTrackBack >= 0; --liTrackBack)
+        {
+            lriCurrentSectionIndex = static_cast<s32>(lpauGeneratedIndices[liTrackBack].muSection);
+            lrpCurrentSection      = lpAISectionsData->GetAISection(lriCurrentSectionIndex);
+            if ((lrpCurrentSection->mx8Flags & KX8_SECTION_FLAG_TRACKBACK_STOP) != 0)
+            {
+                lriBlockedSection      = static_cast<s32>(lpauGeneratedIndices[liTrackBack + 1].muSection);
+                lriGeneratedNodeIndex  = liTrackBack;
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
+// =================================================================================================
+// ExtrapolateRouteBackwards @0x82782580 (DWARF BrnRacingLineGenerator.cpp:3085)
+//
+//   r30 = liNumSectionsToGenerate (-> arg_14), r31 = luStartSectionIndex (clrlwi 16),
+//   r24 = lpAISectionsData, r17 = &lpauGeneratedIndices, v126 = lCarDirection
+//   0x827825BC  assert(luStartSectionIndex != 0x7FFF)                             (:3087)
+//   0x827825F0  lpCurrentSection = GetAISection(start) ; lbUseShortcuts (var_1E0) = flags & 1 ;
+//               lbUseAIShortcuts (var_1DF) = flags & 0x40
+//   0x82782628  v123 = lCarBackwardsDirection = -lCarDirection   (vxor with the sign splat)
+//   r16 = liPreviousSection = -1, var_1D8 = liBlockedSection = -1, var_1D4 = liStuckIterations = 0,
+//   r20 = liGeneratedNodeIndex = 0 ; r22 = liCurrentSectionIndex
+//   0x82782618  if (liNum <= 0) return 0
+//   loop (0x827826A8):
+//     r19 = liExitToSectionIndex = -1 ; f31 = lfBestAheadnesss = -FLT_MAX ; r28 = GetAISection(r22)
+//     0x827826E8  if (r28->mu8NumPortals == 1) {           -- a dead end
+//       0x82782704    indices[liGen].muPortal = 0             (muSection is NOT written here)
+//       0x82782714    if (++liStuckIterations > 2) return liGen
+//       0x82782718    walk back (helper above); not found -> return liGen
+//     }
+//     0x82782798  r26 = lpBestNextPortal = NULL ; for (lPortalIndex < mu8NumPortals):
+//       0x827827C0    liLinkedSectionIndex = portal->mu16LinkSection (+0x10)
+//       0x827827C4    if (linked == liBlockedSection || linked == liPreviousSection) continue
+//       0x82782814    if (!lbUseShortcuts && next->IsShortcut()) continue
+//       0x82782828    if (!lbUseAIShortcuts && next->IsAIShortcut()) continue
+//       0x82782844    lfAheadness = Dot(Normalize(middle2D - portal2D), lCarBackwardsDirection)
+//       0x82782A18    if (lfAheadness > best) { best = it ; liExitTo = linked ; lpBestNextPortal = portal }
+//     0x82782A40  if (liExitTo == -1) return liGen
+//     0x82782A54  indices[liGen].muSection = liExitTo ; r30 = lpExitSection = GetAISection(liExitTo)
+//     0x82782AA4  indices[liGen].muPortal = 0xFF
+//     0x82782AB8  for (each lpExitPortal of the exit section):
+//                   IsSimilar(lpExitPortal->GetPosition(), lpBestNextPortal->GetPosition(), 2^-16)
+//                   -- 3-D: |dx|,|dy|,|dz| all <= eps (vsubfp ; vandc128 abs ; vrlimi128 W<-X ;
+//                   vcmpgtfp. ; CR6[all-false]) -> indices[liGen].muPortal = that index ; break
+//     0x82782B78  if (indices[liGen].muPortal == 0xFF) return liGen - 1      (0x82782BB4)
+//     0x82782B84  ++liGen ; liPreviousSection = liCurrent ; liCurrent = liExitTo
+//     0x82782B90  if (liGen < liNum) loop ; else return liGen
+//
+// The pseudocode's argument list is empty and it labels r4 `v1`; the asm above is the map.
+// =================================================================================================
+s32 RacingLineGenerator::ExtrapolateRouteBackwards(s32 liNumSectionsToGenerate,
+                                                   u16 luStartSectionIndex,
+                                                   Vector2 lCarDirection, Vector2 lCarPosition,
+                                                   const AISectionsData* lpAISectionsData,
+                                                   ExtrapolatedIndexArray& lpauGeneratedIndices)
+{
+    (void)lCarPosition;   // v2: never read (0x82782580..0x82782BB8 copy only v1)
+
+    CGS_ASSERT(luStartSectionIndex != KU_INVALID_SECTION_INDEX,
+               CgsDev::Assert::MessageAt("luStartSectionIndex != BrnWorld::KI_INVALID_SECTION_INDEX", __FILE__, 3087));   // :3087
+
+    s32 liCurrentSectionIndex = luStartSectionIndex;
+
+    const AISection* lpCurrentSection = lpAISectionsData->GetAISection(luStartSectionIndex);
+    const bool lbUseShortcuts   = lpCurrentSection->IsShortcut();     // :3092
+    const bool lbUseAIShortcuts = lpCurrentSection->IsAIShortcut();   // :3093
+
+    Vector2 lCarBackwardsDirection;
+    __vector4 lSignMask;
+    lSignMask.u[0] = lSignMask.u[1] = lSignMask.u[2] = lSignMask.u[3] = 0x80000000u;
+    lCarBackwardsDirection.mV = __vxor(lCarDirection.mV, lSignMask);   // :3097
+
+    s32 liBlockedSection     = -1;
+    s32 liPreviousSection    = -1;
+    s32 liStuckIterations    = 0;
+    s32 liGeneratedNodeIndex = 0;
+
+    if (liNumSectionsToGenerate <= 0)
+    {
+        return liGeneratedNodeIndex;
+    }
+
+    for (;;)
+    {
+        s16           liExitToSectionIndex = -1;
+        f32           lfBestAheadnesss     = KF_AHEADNESS_SEED_MIN;
+        const Portal* lpBestNextPortal     = 0;
+
+        lpCurrentSection = lpAISectionsData->GetAISection(static_cast<u32>(liCurrentSectionIndex));
+
+        if (lpCurrentSection->mu8NumPortals == 1)
+        {
+            lpauGeneratedIndices[liGeneratedNodeIndex].muPortal = 0;
+
+            if (++liStuckIterations > KI_MAX_STUCK_ITERATIONS)
+            {
+                return liGeneratedNodeIndex;
+            }
+            if (!WalkBackToTrackBackStop(lpAISectionsData, lpauGeneratedIndices,
+                                         liGeneratedNodeIndex, liCurrentSectionIndex,
+                                         lpCurrentSection, liBlockedSection))
+            {
+                return liGeneratedNodeIndex;
+            }
+        }
+
+        const u8 luNumPortals = lpCurrentSection->mu8NumPortals;
+        for (u8 lPortalIndex = 0; lPortalIndex < luNumPortals; ++lPortalIndex)
+        {
+            const Portal* lpPossibleNextPortal = lpCurrentSection->GetPortal(lPortalIndex);
+            const u32     luLinkedSectionIndex = lpPossibleNextPortal->GetLinkSectionIndex();
+
+            if (static_cast<s32>(luLinkedSectionIndex) == liBlockedSection ||
+                static_cast<s32>(luLinkedSectionIndex) == liPreviousSection)
+            {
+                continue;
+            }
+
+            const AISection* lpNextSection = lpAISectionsData->GetAISection(luLinkedSectionIndex);
+            if (!lbUseShortcuts && lpNextSection->IsShortcut())
+            {
+                continue;
+            }
+            if (!lbUseAIShortcuts && lpNextSection->IsAIShortcut())
+            {
+                continue;
+            }
+
+            f32 lfAheadness;
+            if (!ComputeAheadness(lpPossibleNextPortal, lpNextSection, luLinkedSectionIndex,
+                                  lCarBackwardsDirection, 3211, lfAheadness))
+            {
+                continue;
+            }
+
+            if (lfAheadness > lfBestAheadnesss)
+            {
+                liExitToSectionIndex = static_cast<s16>(luLinkedSectionIndex);
+                lfBestAheadnesss     = lfAheadness;
+                lpBestNextPortal     = lpPossibleNextPortal;
+            }
+        }
+
+        if (liExitToSectionIndex == -1)
+        {
+            return liGeneratedNodeIndex;
+        }
+
+        lpauGeneratedIndices[liGeneratedNodeIndex].muSection = static_cast<u32>(liExitToSectionIndex);
+        const AISection* lpExitSection =
+            lpAISectionsData->GetAISection(static_cast<u32>(liExitToSectionIndex));   // :3248
+        lpauGeneratedIndices[liGeneratedNodeIndex].muPortal = KU_NO_PORTAL;
+
+        // The portal of the exit section that IS the chosen portal (same 3-D position).
+        const u8 luNumExitPortals = lpExitSection->mu8NumPortals;
+        for (u8 luExitPortalIndex = 0; luExitPortalIndex < luNumExitPortals; ++luExitPortalIndex)
+        {
+            const Portal* lpExitPortal = lpExitSection->GetPortal(luExitPortalIndex);   // :3249
+            const f32 lfDX = lpExitPortal->GetPositionX() - lpBestNextPortal->GetPositionX();
+            const f32 lfDY = lpExitPortal->GetPositionY() - lpBestNextPortal->GetPositionY();
+            const f32 lfDZ = lpExitPortal->GetPositionZ() - lpBestNextPortal->GetPositionZ();
+            const bool lbSimilar = !(fabsf(lfDX) > KF_PORTAL_MATCH_EPSILON) &&
+                                   !(fabsf(lfDY) > KF_PORTAL_MATCH_EPSILON) &&
+                                   !(fabsf(lfDZ) > KF_PORTAL_MATCH_EPSILON);
+            if (lbSimilar)
+            {
+                lpauGeneratedIndices[liGeneratedNodeIndex].muPortal = luExitPortalIndex;
+                break;
+            }
+        }
+
+        if (lpauGeneratedIndices[liGeneratedNodeIndex].muPortal == KU_NO_PORTAL)
+        {
+            return liGeneratedNodeIndex - 1;   // 0x82782BB4
+        }
+
+        ++liGeneratedNodeIndex;
+        liPreviousSection     = liCurrentSectionIndex;
+        liCurrentSectionIndex = liExitToSectionIndex;
+
+        if (liGeneratedNodeIndex >= liNumSectionsToGenerate)
+        {
+            return liGeneratedNodeIndex;
+        }
+    }
+}
+
+// =================================================================================================
+// ExtrapolateRouteForwards @0x82781AE8 (DWARF BrnRacingLineGenerator.cpp:2699)
+//
+//   r31 = liNumSectionsToGenerate (-> arg_14), r28 = liCurrentSectionIndex (= r4),
+//   r24 = lpAISectionsData, r20 = &lpauGeneratedIndices, v125 = lCarDirection
+//   var_174 = liBlockedSection = -1, var_170 = liPreviousSection = -1, var_17C = liStuck = 0,
+//   r22 = liGeneratedNodeIndex = 0
+//   0x82781B44  lbUseShortcuts (var_17F) / lbUseAIShortcuts (var_180) from the START section
+//   0x82781B50  if (liNum <= 0) return 0
+//   loop (0x82781BE8):
+//     f31 = -FLT_MAX ; var_17E = liExitToSectionIndex = -1
+//     0x82781C0C  indices[liGen].muPortal = 0xFF ; 0x82781C14 indices[liGen].muSection = liCurrent
+//     0x82781C50  if (cur->mu8NumPortals == 1) { indices[liGen].muPortal = 0 ;
+//                   if (++stuck > 2) return liGen + 1 (0x8278200C) ; walk back, not found ->
+//                   return liGen + 1 }
+//     0x82781D10  for (lPortalIndex < mu8NumPortals): blocked/previous skip (0x82781D28/D34),
+//                 shortcut gates (0x82781D7C/D90), aheadness vs lCarDirection (0x82781F68),
+//       0x82781F80  if (aheadness > best) { best ; liExitTo = linked ; indices[liGen].muPortal = i }
+//     0x82781FC0  if (liExitTo == -1) return liGen
+//     0x82781FC8  liPreviousSection = liCurrent ; liCurrent = liExitTo
+//     0x82781FD8  if (++liGen < liNum) loop ; else return liGen
+//
+// Hex-Rays' 12-argument prototype is register noise; the asm map above is the shape.
+// =================================================================================================
+s32 RacingLineGenerator::ExtrapolateRouteForwards(s32 liNumSectionsToGenerate,
+                                                  s32 liStartSectionIndex,
+                                                  Vector2 lCarDirection, Vector2 lCarPosition,
+                                                  const AISectionsData* lpAISectionsData,
+                                                  ExtrapolatedIndexArray& lpauGeneratedIndices)
+{
+    (void)lCarPosition;   // v2: never read
+
+    s32 liCurrentSectionIndex = liStartSectionIndex;
+    s32 liBlockedSection      = -1;
+    s32 liPreviousSection     = -1;
+    s32 liStuckIterations     = 0;
+    s32 liGeneratedNodeIndex  = 0;
+
+    const AISection* lpCurrentSection =
+        lpAISectionsData->GetAISection(static_cast<u32>(liStartSectionIndex));
+    const bool lbUseShortcuts   = lpCurrentSection->IsShortcut();     // :2709
+    const bool lbUseAIShortcuts = lpCurrentSection->IsAIShortcut();   // :2710
+
+    if (liNumSectionsToGenerate <= 0)
+    {
+        return liGeneratedNodeIndex;
+    }
+
+    for (;;)
+    {
+        f32 lfBestAheadnesss     = KF_AHEADNESS_SEED_MIN;
+        s16 liExitToSectionIndex = -1;
+
+        lpauGeneratedIndices[liGeneratedNodeIndex].muPortal  = KU_NO_PORTAL;
+        lpauGeneratedIndices[liGeneratedNodeIndex].muSection = static_cast<u32>(liCurrentSectionIndex);
+
+        lpCurrentSection = lpAISectionsData->GetAISection(static_cast<u32>(liCurrentSectionIndex));
+
+        if (lpCurrentSection->mu8NumPortals == 1)
+        {
+            lpauGeneratedIndices[liGeneratedNodeIndex].muPortal = 0;
+
+            if (++liStuckIterations > KI_MAX_STUCK_ITERATIONS)
+            {
+                return liGeneratedNodeIndex + 1;
+            }
+            if (!WalkBackToTrackBackStop(lpAISectionsData, lpauGeneratedIndices,
+                                         liGeneratedNodeIndex, liCurrentSectionIndex,
+                                         lpCurrentSection, liBlockedSection))
+            {
+                return liGeneratedNodeIndex + 1;
+            }
+        }
+
+        const u8 luNumPortals = lpCurrentSection->mu8NumPortals;
+        for (u8 lPortalIndex = 0; lPortalIndex < luNumPortals; ++lPortalIndex)
+        {
+            const Portal* lpPossibleNextPortal = lpCurrentSection->GetPortal(lPortalIndex);
+            const u32     luLinkedSectionIndex = lpPossibleNextPortal->GetLinkSectionIndex();
+
+            if (static_cast<s32>(luLinkedSectionIndex) == liBlockedSection ||
+                static_cast<s32>(luLinkedSectionIndex) == liPreviousSection)
+            {
+                continue;
+            }
+
+            const AISection* lpNextSection = lpAISectionsData->GetAISection(luLinkedSectionIndex);
+            if (!lbUseShortcuts && lpNextSection->IsShortcut())
+            {
+                continue;
+            }
+            if (!lbUseAIShortcuts && lpNextSection->IsAIShortcut())
+            {
+                continue;
+            }
+
+            f32 lfAheadness;
+            if (!ComputeAheadness(lpPossibleNextPortal, lpNextSection, luLinkedSectionIndex,
+                                  lCarDirection, 2819, lfAheadness))
+            {
+                continue;
+            }
+
+            if (lfAheadness > lfBestAheadnesss)
+            {
+                lfBestAheadnesss     = lfAheadness;
+                liExitToSectionIndex = static_cast<s16>(luLinkedSectionIndex);
+                lpauGeneratedIndices[liGeneratedNodeIndex].muPortal = lPortalIndex;
+            }
+        }
+
+        if (liExitToSectionIndex == -1)
+        {
+            return liGeneratedNodeIndex;
+        }
+
+        liPreviousSection     = liCurrentSectionIndex;
+        liCurrentSectionIndex = liExitToSectionIndex;
+
+        if (++liGeneratedNodeIndex >= liNumSectionsToGenerate)
+        {
+            return liGeneratedNodeIndex;
+        }
+    }
+}
+
+// =================================================================================================
+// ExtrapolateTwistyRoute @0x82782018 (DWARF BrnRacingLineGenerator.cpp:2877)
+//
+// Same skeleton as Forwards (r25 = liCurrent, r21 = liGen, var_184/var_180/var_18C the blocked /
+// previous / stuck slots, var_18E = liExitToSectionIndex, v125 = lCarDirection) with THREE
+// differences:
+//   0x82782074  only lbUseShortcuts (var_190 = flags & 1) is computed -- there is no AI-shortcut
+//               gate in the portal loop (0x827822A4..0x827822D0 tests bit 0x01 only)
+//   0x82782120  lfBestAheadnesss = (liGen >= 0) ? +FLT_MAX (f28 = flt_8204F664)
+//                                               : -FLT_MAX (f29 = flt_82035570)
+//   0x827824AC  lbKeepThisSection (:3014):
+//                 liGen >= 0 : (aheadness >= 0.0f (f30 = flt_82001CC0)) && (aheadness < best)
+//                 liGen <  0 : (aheadness > best)
+//               i.e. the twisty walk takes the portal that turns the MOST while still pointing
+//               forward. liGeneratedNodeIndex starts at 0 and only grows, so the `< 0` arm is
+//               dead on the console too; it is kept because it is in the binary.
+//   0x82782574  the stuck / walk-back-failed exits return liGen + 1, as Forwards.
+// =================================================================================================
+s32 RacingLineGenerator::ExtrapolateTwistyRoute(s32 liNumSectionsToGenerate,
+                                                s32 liStartSectionIndex,
+                                                Vector2 lCarDirection, Vector2 lCarPosition,
+                                                const AISectionsData* lpAISectionsData,
+                                                ExtrapolatedIndexArray& lpauGeneratedIndices)
+{
+    (void)lCarPosition;   // v2: never read
+
+    s32 liCurrentSectionIndex = liStartSectionIndex;
+    s32 liBlockedSection      = -1;
+    s32 liPreviousSection     = -1;
+    s32 liStuckIterations     = 0;
+    s32 liGeneratedNodeIndex  = 0;
+
+    const AISection* lpCurrentSection =
+        lpAISectionsData->GetAISection(static_cast<u32>(liStartSectionIndex));
+    const bool lbUseShortcuts = lpCurrentSection->IsShortcut();   // :2887
+
+    if (liNumSectionsToGenerate <= 0)
+    {
+        return liGeneratedNodeIndex;
+    }
+
+    for (;;)
+    {
+        s16 liExitToSectionIndex = -1;
+        f32 lfBestAheadnesss     = (liGeneratedNodeIndex >= 0) ? KF_AHEADNESS_SEED_MAX
+                                                               : KF_AHEADNESS_SEED_MIN;
+
+        lpauGeneratedIndices[liGeneratedNodeIndex].muPortal  = KU_NO_PORTAL;
+        lpauGeneratedIndices[liGeneratedNodeIndex].muSection = static_cast<u32>(liCurrentSectionIndex);
+
+        lpCurrentSection = lpAISectionsData->GetAISection(static_cast<u32>(liCurrentSectionIndex));
+
+        if (lpCurrentSection->mu8NumPortals == 1)
+        {
+            lpauGeneratedIndices[liGeneratedNodeIndex].muPortal = 0;
+
+            if (++liStuckIterations > KI_MAX_STUCK_ITERATIONS)
+            {
+                return liGeneratedNodeIndex + 1;
+            }
+            if (!WalkBackToTrackBackStop(lpAISectionsData, lpauGeneratedIndices,
+                                         liGeneratedNodeIndex, liCurrentSectionIndex,
+                                         lpCurrentSection, liBlockedSection))
+            {
+                return liGeneratedNodeIndex + 1;
+            }
+        }
+
+        const u8 luNumPortals = lpCurrentSection->mu8NumPortals;
+        for (u8 lPortalIndex = 0; lPortalIndex < luNumPortals; ++lPortalIndex)
+        {
+            const Portal* lpPossibleNextPortal = lpCurrentSection->GetPortal(lPortalIndex);
+            const u32     luLinkedSectionIndex = lpPossibleNextPortal->GetLinkSectionIndex();
+
+            if (static_cast<s32>(luLinkedSectionIndex) == liBlockedSection ||
+                static_cast<s32>(luLinkedSectionIndex) == liPreviousSection)
+            {
+                continue;
+            }
+
+            const AISection* lpNextSection = lpAISectionsData->GetAISection(luLinkedSectionIndex);
+            if (!lbUseShortcuts && lpNextSection->IsShortcut())
+            {
+                continue;
+            }
+
+            f32 lfAheadness;
+            if (!ComputeAheadness(lpPossibleNextPortal, lpNextSection, luLinkedSectionIndex,
+                                  lCarDirection, 3002, lfAheadness))
+            {
+                continue;
+            }
+
+            bool lbKeepThisSection;   // :3014
+            if (liGeneratedNodeIndex >= 0)
+            {
+                lbKeepThisSection = (lfAheadness >= KF_AHEADNESS_FLOOR) &&
+                                    (lfAheadness < lfBestAheadnesss);
+            }
+            else
+            {
+                lbKeepThisSection = (lfAheadness > lfBestAheadnesss);
+            }
+
+            if (lbKeepThisSection)
+            {
+                lfBestAheadnesss     = lfAheadness;
+                liExitToSectionIndex = static_cast<s16>(luLinkedSectionIndex);
+                lpauGeneratedIndices[liGeneratedNodeIndex].muPortal = lPortalIndex;
+            }
+        }
+
+        if (liExitToSectionIndex == -1)
+        {
+            return liGeneratedNodeIndex;
+        }
+
+        liPreviousSection     = liCurrentSectionIndex;
+        liCurrentSectionIndex = liExitToSectionIndex;
+
+        if (++liGeneratedNodeIndex >= liNumSectionsToGenerate)
+        {
+            return liGeneratedNodeIndex;
+        }
+    }
+}
+}
+
+// FOLDED FROM BrnRacingLineGenerator_GetForwardPortalIndex.cpp
+// =================================================================================================
+// RacingLine/BrnRacingLineGenerator_GetForwardPortalIndex.cpp  (aiwave A5, 2026-09-03)
+//
+//   BrnAI::RacingLineGenerator::GetForwardPortalIndex @0x827817F8  (186 insns, VMX128)
+//   DWARF BrnRacingLineGenerator.h:79:
+//     static uint8_t GetForwardPortalIndex(const AISectionsData*, const AISection*, Vector2, Vector2)
+//
+// Partfile of RacingLine/BrnRacingLineGenerator.cpp (which bodies SetupSectionExit and
+// DropHardNoGoLinesIntoMap only). Split out because the committed BrnRacingLineGenerator.h
+// declares neither this member nor the three Extrapolate* siblings, and that header is not this
+// lane's file -- see the header_request below.
+//
+// ⚠️ [FLAG header_request] The class is declared TU-LOCALLY here with ONLY this static member,
+// exactly the idiom BrnRouteRequestManager.cpp already uses for the same function (its sole
+// caller: ComputeSectionBehind @0x827892C0). The real declaration belongs in
+// RacingLine/BrnRacingLineGenerator.h:
+//     static u8 GetForwardPortalIndex(const AISectionsData* lpAISectionData,
+//                                     const AISection* lpAISection,
+//                                     Vector2 lCarPosition, Vector2 lCarDirection);
+// DELETE-WHEN that lands: replace the local declaration with `#include
+// "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"` here and in the manager TU.
+//
+// Register map (X360): r3 = lpAISectionData (never read), r28 = r4 = lpAISection,
+// v122 = v1 = lCarPosition, v126 = v2 = lCarDirection (the DWARF order; ComputeSectionBehind
+// @0x82789318..0x82789334 builds v1 = Flatten(GetPosition()), v2 = Flatten(-GetDirection())).
+//
+//   0x8278182C..0x827818F8  assert(!RwMath::IsZero(lCarDirection))  BrnRacingLineGenerator.cpp:2640
+//                           -- the `vandc` (abs) / `vcmpgtfp` vs flt_820C3B70 lane 0 (FLT_EPSILON,
+//                           read from the image) pair per lane: zero <=> |x| <= eps && |y| <= eps
+//   0x827818FC..0x82781958  v123 = lCarDirection * rsqrt(x*x + y*y)   (vrsqrtefp + two
+//                           Newton-Raphson refinements == an exact normalise here)
+//   0x82781854              f31 = flt_820C4358 == -2.0f   (best-dot seed)
+//   0x82781904/0x82781ABC   for (i = 0; i < lpAISection->mu8NumPortals (+0x14); ++i)
+//   0x82781984                portal = lpAISection->GetPortal(i)
+//   0x827819B8..0x827819C4    v126 = (portal.x, portal.z)   (vrlimi lane packs of the Vector3)
+//   0x827819D0                d = v126 - lCarPosition
+//   0x827819D4..0x82781A44    if (IsZero(d)) continue      (same eps idiom, both lanes)
+//   0x82781A48..0x82781A94    dN = d * rsqrt(d.x*d.x + d.y*d.y) ; dot = dN . v123
+//   0x82781AA8..0x82781AB8    if (dot > best) { best = dot ; result = i }
+//   0x82781ACC              return result   (0 when no portal beat the seed)
+// =================================================================================================
+
+#include <cmath>
+
+#include "types.hpp"
+#include "BrnCommonTypes.h"                                  // Vector2 (rw vpu; .x/.y)
+#include "SharedClasses/AI/AISectionsResourceType.h"        // BrnAI::AISection / AISectionsData
+#include "GameSource/World/AI/BrnAIPortal.h"                // BrnAI::Portal (GetPositionX/Z)
+#include "GameShared/GameClasses/Core/CgsAssert.h"          // CGS_ASSERT
+
+namespace BrnAI
+{
+namespace
+{
+    // flt_820C3B70 lane 0 == 0x34000000 == FLT_EPSILON (image bytes, 2026-09-03). The
+    // RwMath::IsZero epsilon every VMX user of that address splats (`lvlx ; vspltw ..,0`).
+
+
+    // flt_820C4358 == -2.0f: the best-dot seed (below any unit dot product).
+    const f32 KF_BEST_DOT_SEED = -2.0f;
+
+
+
+
+
+}
+
+u8 RacingLineGenerator::GetForwardPortalIndex(const AISectionsData* lpAISectionData,
+                                              const AISection* lpAISection,
+                                              Vector2 lCarPosition, Vector2 lCarDirection)
+{
+    (void)lpAISectionData;   // r3: passed by every caller, read by nothing in the body
+
+    CGS_ASSERT(!IsZero2D(lCarDirection.mV.x, lCarDirection.mV.y),
+               "!RwMath::IsZero(lCarDirection)");   // BrnRacingLineGenerator.cpp:2640
+
+    // The console normalises unconditionally after the (non-gating) assert; a zero direction
+    // yields NaN lanes, every dot compare then fails and portal 0 is returned. Same here.
+    const f32 lfDirectionInvLength =
+        1.0f / sqrtf((lCarDirection.mV.x * lCarDirection.mV.x) + (lCarDirection.mV.y * lCarDirection.mV.y));
+    const f32 lfDirectionX = lCarDirection.mV.x * lfDirectionInvLength;
+    const f32 lfDirectionY = lCarDirection.mV.y * lfDirectionInvLength;
+
+    u8  luBestPortalIndex = 0;
+    f32 lfBestDot         = KF_BEST_DOT_SEED;
+
+    const u8 luNumPortals = lpAISection->mu8NumPortals;
+    for (u8 luPortalIndex = 0; luPortalIndex < luNumPortals; ++luPortalIndex)
+    {
+        const Portal* lpPortal = lpAISection->GetPortal(luPortalIndex);
+
+        // Flattened portal position (x, z) minus the car's flattened position.
+        const f32 lfDeltaX = lpPortal->GetPositionX() - lCarPosition.mV.x;
+        const f32 lfDeltaY = lpPortal->GetPositionZ() - lCarPosition.mV.y;
+
+        if (IsZero2D(lfDeltaX, lfDeltaY))
+        {
+            continue;
+        }
+
+        const f32 lfDeltaInvLength = 1.0f / sqrtf((lfDeltaX * lfDeltaX) + (lfDeltaY * lfDeltaY));
+        const f32 lfDot = (lfDeltaX * lfDeltaInvLength * lfDirectionX)
+                        + (lfDeltaY * lfDeltaInvLength * lfDirectionY);
+
+        if (lfDot > lfBestDot)
+        {
+            lfBestDot         = lfDot;
+            luBestPortalIndex = luPortalIndex;
+        }
+    }
+
+    return luBestPortalIndex;
+}
+}
+
+// FOLDED FROM BrnRacingLineGenerator_Query.cpp
+// =================================================================================================
+// RacingLine/BrnRacingLineGenerator_Query.cpp  (aiwave2 lane R2, 2026-09-05)
+//
+// Partfile of RacingLine/BrnRacingLineGenerator.cpp: the QUERY half of BrnAI::RacingLineGenerator
+// -- the five members the AIDriver / SteeringFan call once the section cache exists, plus the four
+// DWARF-declared helpers the console inlined into them.
+//
+//   BODIED (exported)
+//     InitialiseRacingLine         @0x8278FB20   (AIDriver::InitialiseRacingLine @0x82792DF0)
+//     GetPointFarAhead             @0x827900A0   (SteeringFan::CachePointAhead, AIDriver::
+//                                                 FindPositionInFuture / FindFinalDriftDirection)
+//     GetRoadPositionAsPercentage  @0x8278FFB0   (AIDriver::HardShoulderSpeed @0x827930B8)
+//     SpreadHNGBackOneStep         @0x8278F680   (AIDriver::DoRoundRobinWork  @0x82796340)
+//     RaceLineDefaultsToSlamPlayer @0x82777730   (AIDriver::GenerateRacingLine @0x8277C4E8)
+//   BODIED (no export -- recovered from the inlined blocks inside the five above, written ONCE)
+//     GetPerpendicularDistanceToCentreLine     (DWARF BrnRacingLineGenerator.h:102) -- inlined
+//                                  twice, at 0x8278FFDC..0x8279004C and 0x827777D8..0x82777814
+//     FinishedSpreadingBack                    (:363) -- inlined THREE times inside
+//                                  SpreadHNGBackOneStep (0x8278F768, 0x8278F7A8, 0x8278F82C)
+//     HasSpreadHardNoGoLinesFinished           (:368) -- the 32-entry scan @0x8278F7F4..0x8278F824
+//     SpreadHardNoGoLinesThroughCurrentSection (:372) -- the miBackwardsStep == 0 arm
+//                                  @0x8278F70C..0x8278F740
+//   PARKED (see the park banner at the foot of this file)
+//     RenderHardNoGoMap @0x82790278, DrawCentreLine (:203), RenderSectionDetails (:208),
+//     FindTargetFixedDistanceAhead (:96), FindAnyTargetOnLineAhead (:248),
+//     RaceDefaultsLineToAutoCentre (:107), RaceLineDefaultsToHoldingRoadPosition (:117),
+//     MoveRaceLineToSlamPlayer (:122).
+//
+// (RESOLVED 2026-09-05: the class is now taken from BrnRacingLineGenerator.h; the note below is historical) THE CLASS WAS DECLARED TU-LOCALLY, exactly the idiom the sibling
+// partfile RacingLine/BrnRacingLineGenerator_GetForwardPortalIndex.cpp already uses. The host
+// RacingLine/BrnRacingLineGenerator.h (lane R1's file this wave) declares this lane's five entry
+// points but NOT the section-cache helpers they call, and this lane owns no header -- so including
+// it would not compile. Every declaration below is the DecFIGS DWARF prototype verbatim
+// (references/DecFIGS/dwarfdump/.../BrnRacingLineGenerator.h) at the DWARF's OWN access, because
+// MSVC mangles member access into the symbol name. DELETE-WHEN lane R1's header grow lands:
+// replace this block with `#include "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"`.
+//
+// SOURCE FILE / LINE NUMBERS: every assert this TU reproduces cites
+// "d:\p4\b5_main\burnout\main\code\gamesource\unity\../World/AI/RacingLine/BrnRacingLineGenerator.cpp"
+// -- the console line number is quoted at each site. The X360 retail build DOES emit these
+// (BeginAssert / FireAssert / EndAssert are in the listing), so they are reproduced; the
+// StrStream-formatted asserts elsewhere in this class are compiled out and are not.
+// =================================================================================================
+
+#include <cmath>
+
+#include "types.hpp"
+#include "BrnCommonTypes.h"                                               // Vector2 / Vector3 (vpu)
+#include "rw/math/vpu/vector3_operation.h"                            // rw::math::vpu::IsValid
+#include "GameSource/World/AI/Route/BrnRacingLine.h"                      // RacingLine + SectionData
+#include "GameSource/World/AI/RacingLine/BrnRacingLineGenerator.h"     // RacingLineGenerator (lane R1 header)
+#include "GameSource/World/AI/BrnAIUtils.h"                                // BrnAI::DistancePointToLine
+#include "GameSource/World/AI/Route/BrnRoute.h"                           // Route::GetNodeCount/GetStatus
+#include "GameSource/World/AI/BrnAICar.h"                                 // AICar::GetPosition / GetRoute
+#include "SharedClasses/AI/AISectionsResourceType.h"                      // AISectionsData / AISection
+#include "GameSource/Math/BrnMathUtils.h"                                 // BrnMath::Flatten
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"                        // CGS_ASSERT
+#include "GameShared/GameClasses/Development/PerfMon/Cpu/CgsPerfMonCpu.h" // AddMonitor/Start/Stop
+
+namespace BrnAI
+{
+// (The TU-local RacingLineGenerator declaration that stood here was replaced by the real header
+//  once lane R1 landed it -- conductor, 2026-09-05.)
+
+// (RESOLVED 2026-09-05: declared in BrnAIUtils.h, bodied in BrnAIUtils.cpp) BrnAI::DistancePointToLine -- DWARF GameSource/World/AI/BrnAIUtils.h:7,
+// X360 @0x8276DDB8 (its own assert cites "..\..\..\GameSource\World/AI/BrnAIUtils.cpp":117,
+// "Bad maths! Point = ..., Start = ..., End = ..."). The host BrnAIUtils.h deliberately declares
+// only the helpers already homed, and this lane owns no header, so it is declared here.
+// It has NO BODY anywhere in the tree yet -- see this lane's report (`## risks`), which carries
+// the fully decoded body for BrnAIUtils.cpp. DELETE-WHEN it is declared in BrnAIUtils.h.
+
+namespace
+{
+    // AddMonitor page argument: `li r4, 7` at every one of the six call sites in
+    // InitialiseRacingLine. CgsDev::PerfMonCpuPage only spells out the pages earlier waves
+    // needed; 7 is inside the enum's range (E_PMP_MAX == 24), so the cast is well defined.
+    // [FLAG header_request] add `E_PMP_7 = 7` to CgsPerfMonCpu.h and use it here instead.
+    const CgsDev::PerfMonCpuPage KE_RACING_LINE_PERFMON_PAGE =
+        static_cast<CgsDev::PerfMonCpuPage>(7);
+
+    // AddMonitor CPU budgets, read from the image: flt_820C4150 == 10.0f for the top-level
+    // "Generate Racing Line" monitor, flt_820C41F4 == 2.0f for the other five.
+    const f32 KF_PERFMON_BUDGET_GENERATE = 10.0f;
+    const f32 KF_PERFMON_BUDGET_STEP     = 2.0f;
+
+    // `cmpwi r11, 0x10` in InitialiseRacingLine @0x8278FDC8: at most sixteen route nodes are ever
+    // cached, i.e. KI_RACING_LINE_MAX_AVAILABLE_SECTIONS.
+    const s32 KI_MAX_SECTIONS_TO_CACHE = KI_RACING_LINE_MAX_AVAILABLE_SECTIONS;
+
+    // `cmpwi r11, 7` / `bgt` @0x8278FF84: InitialiseRacingLine stops setting up targets once it
+    // has done eight non-junction sections in one call (later frames finish the rest).
+    const s32 KI_MAX_NON_JUNCTION_SETUPS = 7;
+
+    // `cmpwi r11, 0x20` @0x8278F814 -- one stretch-distance slot per hard-no-go map COLUMN
+    // (DWARF BrnHardNoGoMap.h:30, KI_HNG_MAP_WIDTH == 32), matching
+    // RacingLine::maStretchDistanceForHNG[32].
+    const s32 KI_HNG_STRETCH_COUNT = 32;
+
+    // `lfs f1, flt_820C4168` == 0.5f -- GetPointFarAhead measures every section's length across
+    // the middle of the map (height interpolant 0.5).
+    const f32 KF_SECTION_LENGTH_HEIGHT = 0.5f;
+}
+
+// The six PerfMon handles: ONE definition, here (see the header_request above).
+
+// =================================================================================================
+// GetPerpendicularDistanceToCentreLine -- DWARF BrnRacingLineGenerator.h:102. NO IDA export; the
+// console inlines it whole into the two bodies below, and the two copies are identical:
+//
+//   0x8278FFDC / 0x827777DC  lbz 0xBD1(lpRacingLine)      -- mbCentreLineHereKnown
+//   0x82790034 / 0x82777800  lvx 0xBE0 -> v2, 0xBF0 -> v3 -- mCentreHere, mCentreAhead
+//   0x82790048 / 0x82777810  bl  sub_8276DDB8              -- DistancePointToLine(v1, v2, v3)
+//   0x8279002C / 0x827777F8  the "not known" arm supplies the CALLER's own default: 0.0f in
+//                            GetRoadPositionAsPercentage, mfRoadPlacement (lfs 0xB24) in
+//                            RaceLineDefaultsToSlamPlayer -- which is exactly what the DWARF's
+//                            third (float32_t) parameter is for.
+// =================================================================================================
+f32 RacingLineGenerator::GetPerpendicularDistanceToCentreLine(RacingLine* lpRacingLine,
+                                                              Vector2 lPos2D,
+                                                              f32 lfDefault)
+{
+    if (!lpRacingLine->mbCentreLineHereKnown)
+        return lfDefault;
+
+    return DistancePointToLine(lPos2D, lpRacingLine->mCentreHere, lpRacingLine->mCentreAhead);
+}
+
+// =================================================================================================
+// InitialiseRacingLine @0x8278FB20 (168 instructions)
+//
+// Register map: r3/r25 = this, r4/r30 = lpRacingLine, r5/r23 = lpCar, r6/r22 = liSectionIndex,
+// r7/r21 = lpSectionsData -- i.e. the DWARF (:75) order (RacingLine*, AICar*, int32_t,
+// AISectionsData*). The asserts NAME the second argument `lpRoute` because AICar embeds its Route
+// at offset 0 (BrnAICar.h: GetRoute() == reinterpret_cast<Route*>(this)), so `lwz 0x1408(r23)`
+// (Route::meStatus) and `bl AICar::GetPosition(r4 = r23)` really are the same pointer. That is the
+// one place the pseudocode misleads -- it renders a3 as a bare int serving both roles.
+//
+//   0x8278FB48..0x8278FBDC  the four asserts (:1196 / :1197 / :1201 / :1202)
+//   0x8278FBE0              lCarPosition = lpCar->GetPosition() -- only .y is used, hoisted into
+//                           f31 @0x8278FE40 BEFORE the second loop (the compiler then reuses that
+//                           stack slot for a GetRouteCentre out-parameter)
+//   0x8278FBEC..0x8278FDB4  the one-shot PerfMon registration and its five `>= 0` asserts
+//   0x8278FDB8              stb 0, 0xBD0 -- SetInitialised(false)
+//   0x8278FDC0..0x8278FDF4  first / last section in cache, from the route's node count
+//   0x8278FDF8              CacheLocalSections(lpRacingLine, lpCar->GetRoute(), lpSectionsData,
+//                                              lpCar)   (r5 and r7 are the SAME register, r23)
+//   0x8278FE10..0x8278FE2C  SetUpHardNoGoMap over the whole cache
+//   0x8278FE44..0x8278FF98  the target-setup pass
+//   0x8278FF9C              stb 1, 0xBD0 -- SetInitialised(true)
+// =================================================================================================
+void RacingLineGenerator::InitialiseRacingLine(RacingLine* lpRacingLine, AICar* lpCar,
+                                               s32 liSectionIndex, AISectionsData* lpSectionsData)
+{
+    CGS_ASSERT(lpRacingLine != 0, CgsDev::Assert::MessageAt("lpRacingLine", __FILE__, 1196));      // :1196
+    CGS_ASSERT(lpSectionsData != 0, CgsDev::Assert::MessageAt("lpSectionsData", __FILE__, 1197));  // :1197
+
+    const Route* lpRoute = lpCar->GetRoute();
+    CGS_ASSERT(lpRoute != 0, CgsDev::Assert::MessageAt("lpRoute", __FILE__, 1201));                                                // :1201
+    CGS_ASSERT(lpRoute->GetStatus() != Route::E_STATUS_UNINITIALISED,
+               CgsDev::Assert::MessageAt("lpRoute->IsInitialised()", __FILE__, 1202));                                             // :1202
+
+    const Vector3 lCarPosition = lpCar->GetPosition();
+
+    if (miGenerateRacingLinePM == -1)
+    {
+        miGenerateRacingLinePM = CgsDev::PerfMonCpu::AddMonitor("Generate Racing Line",
+                                                                KE_RACING_LINE_PERFMON_PAGE, false,
+                                                                KF_PERFMON_BUDGET_GENERATE, true);
+        miGenerateInSectionPM  = CgsDev::PerfMonCpu::AddMonitor("In Section",
+                                                                KE_RACING_LINE_PERFMON_PAGE, false,
+                                                                KF_PERFMON_BUDGET_STEP, true);
+        miHNGMapGenerationPM1  = CgsDev::PerfMonCpu::AddMonitor("HNG Map dropping",
+                                                                KE_RACING_LINE_PERFMON_PAGE, false,
+                                                                KF_PERFMON_BUDGET_STEP, true);
+        miHNGMapGenerationPM2  = CgsDev::PerfMonCpu::AddMonitor("HNG Map spread current",
+                                                                KE_RACING_LINE_PERFMON_PAGE, false,
+                                                                KF_PERFMON_BUDGET_STEP, true);
+        miHNGMapGenerationPM3  = CgsDev::PerfMonCpu::AddMonitor("HNG Map spread previous",
+                                                                KE_RACING_LINE_PERFMON_PAGE, false,
+                                                                KF_PERFMON_BUDGET_STEP, true);
+        miFarAheadPM           = CgsDev::PerfMonCpu::AddMonitor("Far ahead scan",
+                                                                KE_RACING_LINE_PERFMON_PAGE, false,
+                                                                KF_PERFMON_BUDGET_STEP, true);
+
+        CGS_ASSERT(miGenerateRacingLinePM >= 0, CgsDev::Assert::MessageAt("miGenerateRacingLinePM >= 0", __FILE__, 1216));   // :1216
+        CGS_ASSERT(miGenerateInSectionPM  >= 0, CgsDev::Assert::MessageAt("miGenerateInSectionPM >= 0", __FILE__, 1217));    // :1217
+        CGS_ASSERT(miHNGMapGenerationPM1  >= 0, CgsDev::Assert::MessageAt("miHNGMapGenerationPM1 >= 0", __FILE__, 1218));    // :1218
+        CGS_ASSERT(miHNGMapGenerationPM2  >= 0, CgsDev::Assert::MessageAt("miHNGMapGenerationPM2 >= 0", __FILE__, 1219));    // :1219
+        CGS_ASSERT(miHNGMapGenerationPM3  >= 0, CgsDev::Assert::MessageAt("miHNGMapGenerationPM3 >= 0", __FILE__, 1220));    // :1220
+        // (the console emits FIVE of these, not six -- miFarAheadPM is not asserted.)
+    }
+
+    lpRacingLine->SetInitialised(false);                                          // stb 0, 0xBD0
+
+    // lwz 0x1400(route) - liSectionIndex, clamped to sixteen: the cache holds at most
+    // KI_RACING_LINE_MAX_AVAILABLE_SECTIONS nodes and never runs past the end of the route.
+    s32 liSectionsToCache = lpRoute->GetNodeCount() - liSectionIndex;
+    if (liSectionsToCache >= KI_MAX_SECTIONS_TO_CACHE)
+        liSectionsToCache = KI_MAX_SECTIONS_TO_CACHE;
+
+    lpRacingLine->mFirstSectionInCache = liSectionIndex;
+    lpRacingLine->mLastSectionInCache  = liSectionIndex + liSectionsToCache - 1;
+
+    // CacheLocalSections returns the section the cache actually starts at.
+    lpRacingLine->mFirstSectionInCache =
+        CacheLocalSections(lpRacingLine, lpRoute, lpSectionsData, lpCar);
+
+    for (s32 liSection = lpRacingLine->mFirstSectionInCache;
+         liSection <= lpRacingLine->mLastSectionInCache;
+         ++liSection)
+    {
+        SetUpHardNoGoMap(lpRacingLine, liSection);
+    }
+
+    // f31 is loaded ONCE, before the loop, from the car position's height lane.
+    const f32 lfCarHeight = lCarPosition.mV.y;
+
+    Vector2 lRouteCentreAhead;
+    Vector2 lRouteCentreBehind;
+
+    for (s32 liSection = lpRacingLine->mFirstSectionInCache;
+         liSection <= lpRacingLine->mLastSectionInCache;
+         ++liSection)
+    {
+        if (IsTargetUpToDate(lpRacingLine, liSection))
+            continue;
+
+        if (IsAJunction(lpRacingLine, liSection))
+        {
+            // A junction's exit is where the straight stretches either side of it cross.
+            const s32 liStraightAhead  = LookForStraightSectionAhead(lpRacingLine, liSection);
+            const s32 liStraightBehind = LookForStraightSectionBehind(lpRacingLine, liSection);
+
+            GetRouteCentre(lpRacingLine, liStraightAhead,  lRouteCentreAhead);
+            GetRouteCentre(lpRacingLine, liStraightBehind, lRouteCentreBehind);
+
+            if (liSection == liStraightAhead || liSection == liStraightBehind)
+            {
+                // No straight to project from on one side -- fall back to the map's own exit.
+                SetupSectionExit(lpRacingLine, liSection);
+            }
+            else
+            {
+                // v1 = the BEHIND centre (var_80), v2 = the AHEAD centre (var_90), f1 = the car's
+                // height (0x8278FEFC..0x8278FF1C).
+                CalculateIntersectionWithProjectedRoute(lpRacingLine, liSection,
+                                                        lRouteCentreBehind, lRouteCentreAhead,
+                                                        lfCarHeight);
+            }
+
+            SetTargetUpToDate(lpRacingLine, liSection);
+            SetUpIncomingPortalTarget(lpRacingLine, liSection);
+        }
+        else
+        {
+            SetupSectionExit(lpRacingLine, liSection);
+            SetTargetUpToDate(lpRacingLine, liSection);
+            SetUpIncomingPortalTarget(lpRacingLine, liSection);
+
+            // Budget: at most eight ordinary sections get their target set up in one call.
+            if (liSection - lpRacingLine->mFirstSectionInCache > KI_MAX_NON_JUNCTION_SETUPS)
+                break;
+        }
+    }
+
+    lpRacingLine->SetInitialised(true);                                           // stb 1, 0xBD0
+}
+
+// =================================================================================================
+// GetRoadPositionAsPercentage @0x8278FFB0 (59 instructions)
+//
+// r3/r30 = this, r4/r31 = lpRacingLine, r5 = lpCar. How far off the centre line the car is, as a
+// fraction of the half road width -- AIDriver::HardShoulderSpeed ramps its 75 % speed limiter on
+// it above 0.85.
+//
+//   0x8278FFDC  lbz 0xBD0 -- not initialised -> 0.0f (flt_82001CC0)
+//   0x8278FFFC  AICar::GetPosition, then the two vrlimi128 lane packs (mask 8 shift 0 = .x,
+//               mask 4 shift 1 = .z into .y) == BrnMath::Flatten: world (x, Z) -> 2D (x, y)
+//   0x8279000C  the inlined GetPerpendicularDistanceToCentreLine, default 0.0f
+//   0x8279005C  GetHalfRoadWidthHere(lpRacingLine, lCarPos2D)
+//   0x82790060  fcmpu vs 0.0 -- an exactly-zero half width returns 0.0f, no divide
+//   0x82790068  fdivs then fabs
+// =================================================================================================
+f32 RacingLineGenerator::GetRoadPositionAsPercentage(RacingLine* lpRacingLine, AICar* lpCar)
+{
+    if (!lpRacingLine->mbIsInitialised)
+        return 0.0f;
+
+    const Vector2 lCarPos2D = BrnMath::Flatten(lpCar->GetPosition());
+
+    const f32 lfPerpendicularDistance =
+        GetPerpendicularDistanceToCentreLine(lpRacingLine, lCarPos2D, 0.0f);
+
+    const f32 lfHalfRoadWidth = GetHalfRoadWidthHere(lpRacingLine, lCarPos2D);
+    if (lfHalfRoadWidth == 0.0f)
+        return 0.0f;
+
+    return std::fabs(lfPerpendicularDistance / lfHalfRoadWidth);
+}
+
+// =================================================================================================
+// RaceLineDefaultsToSlamPlayer @0x82777730 (44 instructions)
+//
+// r3 = this, r4/r31 = lpRacingLine, v1/v127 = lSlamTarget3D. Point the racing line's default
+// perpendicular offset at the slam target: AIDriver::GenerateRacingLine calls it while the
+// aggression machine holds a valid target, then (in ATTACK_SLAM) copies the offset into
+// mfRoadPlacement.
+//
+//   0x82777754..0x827777A8  the three-lane vspltw128 + vcmpeqfp. self-equality cascade ==
+//                           rw::math::vpu::IsValid(Vector3); assert :3297 IS emitted in retail
+//   0x827777E4..0x827777F0  the same two vrlimi128 lane packs as above == BrnMath::Flatten
+//   0x827777DC..0x82777810  the inlined GetPerpendicularDistanceToCentreLine, whose "not known"
+//                           default is mfRoadPlacement (lfs 0xB24)
+//   0x82777818 / 0x8277781C stfs 0xB10 / stb 1, 0xB14
+// =================================================================================================
+void RacingLineGenerator::RaceLineDefaultsToSlamPlayer(RacingLine* lpRacingLine,
+                                                       Vector3 lSlamTarget3D)
+{
+    CGS_ASSERT(rw::math::vpu::IsValid(lSlamTarget3D), CgsDev::Assert::MessageAt("RwMath::IsValid( lSlamTarget3D )", __FILE__, 3297));  // :3297
+
+    const Vector2 lSlamTarget2D = BrnMath::Flatten(lSlamTarget3D);
+
+    lpRacingLine->mfDefaultPerpendicularOffset =
+        GetPerpendicularDistanceToCentreLine(lpRacingLine, lSlamTarget2D,
+                                             lpRacingLine->mfRoadPlacement);
+    lpRacingLine->mbDefiniteDestination = true;
+}
+
+// =================================================================================================
+// FinishedSpreadingBack -- DWARF BrnRacingLineGenerator.h:363. No export; inlined three times in
+// SpreadHNGBackOneStep (0x8278F768..0x8278F780, 0x8278F7A8..0x8278F7C4, 0x8278F82C..0x8278F848),
+// each copy the identical store triple: miSectionToSpread + 1, miBackwardsStep = -1,
+// miHNGLineStart = 0 -- move the spread cursor on to the next section, from scratch.
+// =================================================================================================
+void RacingLineGenerator::FinishedSpreadingBack(RacingLine* lpRacingLine)
+{
+    ++lpRacingLine->miSectionToSpread;
+    lpRacingLine->miBackwardsStep = -1;
+    lpRacingLine->miHNGLineStart  = 0;
+}
+
+// =================================================================================================
+// HasSpreadHardNoGoLinesFinished -- DWARF :368. No export; the scan at 0x8278F7F4..0x8278F824:
+// walk maStretchDistanceForHNG[0..31] and stop at the FIRST slot that is >= 0.0f (fcmpu / bge).
+// The spread is finished only once every one of the 32 columns has gone negative, i.e. the
+// hard-no-go lines have been carried back past the spread distance everywhere.
+// =================================================================================================
+bool RacingLineGenerator::HasSpreadHardNoGoLinesFinished(RacingLine* lpRacingLine)
+{
+    for (s32 liColumn = 0; liColumn < KI_HNG_STRETCH_COUNT; ++liColumn)
+    {
+        // NaN polarity (FX-AINAN2): `fcmpu stretch, 0.0 ; bge -> not finished` @0x8278F804/
+        // 0x8278F808 is taken on an unordered compare -- a NaN column still counts as budget.
+        if (!(lpRacingLine->maStretchDistanceForHNG[liColumn] < 0.0f))
+            return false;
+    }
+    return true;
+}
+
+// =================================================================================================
+// SpreadHardNoGoLinesThroughCurrentSection -- DWARF :372. No export; the miBackwardsStep == 0 arm
+// at 0x8278F70C..0x8278F740: seed the stretch distances by spreading this section's OWN map along
+// the track, then step the backwards cursor.
+//   0x8278F724  GetSectionPointer(lpRacingLine, miSectionToSpread)
+//   0x8278F72C  r3 = section + 0x50 == &SectionData::mHardNoGoMap
+//   0x8278F728  r4 = lpRacingLine + 0xB40 == maStretchDistanceForHNG
+//   0x8278F730  f1 = lfs 0xBCC == mfSpreadDistance
+// =================================================================================================
+void RacingLineGenerator::SpreadHardNoGoLinesThroughCurrentSection(RacingLine* lpRacingLine)
+{
+    SectionData* lpCurrentSectionData =
+        GetSectionPointer(lpRacingLine, lpRacingLine->miSectionToSpread);
+
+    lpCurrentSectionData->mHardNoGoMap.SpreadHNGAlongTrack(lpRacingLine->maStretchDistanceForHNG,
+                                                           lpRacingLine->mfSpreadDistance);
+    ++lpRacingLine->miBackwardsStep;
+}
+
+// =================================================================================================
+// SpreadHNGBackOneStep @0x8278F680 (125 instructions)
+//
+// r3/r29 = this, r4/r31 = lpRacingLine. One slice of the round-robin hard-no-go work
+// (AIDriver::DoRoundRobinWork runs up to four per frame). Returns TRUE when there is nothing left
+// to do -- that is the caller's loop-exit answer, not an error.
+//
+// The cursor triple is (miSectionToSpread 0xBC0, miBackwardsStep 0xBC4, miHNGLineStart 0xBC8), all
+// three reset by RacingLine::ClearSectionCache. miBackwardsStep sequences the work for one
+// section: -1 = still building that section's own map, 0 = spread it along the track, n > 0 =
+// carry it back into the n'th section behind.
+//
+//   0x8278F694  lbz 0xBD0 -- not initialised -> true
+//   0x8278F6AC  miSectionToSpread > mLastSectionInCache -> true
+//   0x8278F6BC  miSectionToSpread < mFirstSectionInCache -> snap it forward
+//   0x8278F6CC  == -1 -> DropHardNoGoLinesIntoMap, bracketed by miHNGMapGenerationPM1
+//   0x8278F704  ==  0 -> SpreadHardNoGoLinesThroughCurrentSection, bracketed by ...PM2
+//   0x8278F758  (miSectionToSpread - miBackwardsStep) has walked off the front of the cache ->
+//               FinishedSpreadingBack
+//   0x8278F79C  lbz 0x98(section) == mHardNoGoMap.mbReady -- that section's map is not built yet
+//               -> FinishedSpreadingBack
+//   0x8278F7D0  SpreadHNGIntoPreviousSection, bracketed by ...PM3, then either
+//               FinishedSpreadingBack (all 32 stretch columns exhausted) or one more step back
+// =================================================================================================
+bool RacingLineGenerator::SpreadHNGBackOneStep(RacingLine* lpRacingLine)
+{
+    if (!lpRacingLine->mbIsInitialised)
+        return true;
+
+    if (lpRacingLine->miSectionToSpread > lpRacingLine->mLastSectionInCache)
+        return true;
+
+    if (lpRacingLine->miSectionToSpread < lpRacingLine->mFirstSectionInCache)
+        lpRacingLine->miSectionToSpread = lpRacingLine->mFirstSectionInCache;
+
+    if (lpRacingLine->miBackwardsStep == -1)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miHNGMapGenerationPM1);
+        DropHardNoGoLinesIntoMap(lpRacingLine);
+        CgsDev::PerfMonCpu::StopMonitor(miHNGMapGenerationPM1);
+        return false;
+    }
+
+    if (lpRacingLine->miBackwardsStep == 0)
+    {
+        CgsDev::PerfMonCpu::StartMonitor(miHNGMapGenerationPM2);
+        SpreadHardNoGoLinesThroughCurrentSection(lpRacingLine);
+        CgsDev::PerfMonCpu::StopMonitor(miHNGMapGenerationPM2);
+        return false;
+    }
+
+    const s32 liPreviousSection = lpRacingLine->miSectionToSpread - lpRacingLine->miBackwardsStep;
+    if (liPreviousSection < lpRacingLine->mFirstSectionInCache)
+    {
+        FinishedSpreadingBack(lpRacingLine);
+        return false;
+    }
+
+    SectionData* lpPreviousSectionData = GetSectionPointer(lpRacingLine, liPreviousSection);
+    if (!lpPreviousSectionData->mHardNoGoMap.IsReady())
+    {
+        FinishedSpreadingBack(lpRacingLine);
+        return false;
+    }
+
+    CgsDev::PerfMonCpu::StartMonitor(miHNGMapGenerationPM3);
+    lpPreviousSectionData->mHardNoGoMap.SpreadHNGIntoPreviousSection(
+        lpRacingLine->maStretchDistanceForHNG);
+    CgsDev::PerfMonCpu::StopMonitor(miHNGMapGenerationPM3);
+
+    if (HasSpreadHardNoGoLinesFinished(lpRacingLine))
+        FinishedSpreadingBack(lpRacingLine);
+    else
+        ++lpRacingLine->miBackwardsStep;
+
+    return false;
+}
+
+// =================================================================================================
+// GetPointFarAhead @0x827900A0 (118 instructions)
+//
+// r3/r29 = this, r4/r31 = lpRacingLine, f1/f29 = lfDistanceAhead, v1/v127 = lFrom2D,
+// r6/r25 = &lrOutPosition, r7/r26 = &lrOutDirection. NOTE r5 IS SKIPPED: the float argument
+// consumes its GPR slot, which is why the two reference outs land in r6/r7 (COMMON_BRIEF rule 4).
+//
+// Walk forward along the cached racing line until lfDistanceAhead metres have been covered, then
+// return the point on that section's curve (pushed sideways by mfRoadPlacement) and the curve's
+// tangent there. Returns false whenever the walk runs out of cache -- which is exactly what every
+// caller (SteeringFan::CachePointAhead, AIDriver::FindPositionInFuture /
+// FindFinalDriftDirection) reads as "no point ahead is known".
+//
+//   0x827900DC  StartMonitor(miFarAheadPM) -- the WHOLE body is bracketed, both exits included
+//   0x827900F0  GetLocalSectionID(lpRacingLine, lFrom2D, miLastKnownSectionID (lwz 0xC00))
+//   0x827900FC  == 0x7FFF (KI_INVALID_SECTION_INDEX) -> fail
+//   0x82790118  lbz 0x98(section) == mHardNoGoMap.mbReady (SectionData +0x50 plus 0x48) -> fail
+//   0x82790134  GetSectionInterpPosition(lpRacingLine, liSectionID, lFrom2D)
+//   0x8279014C  SectionLength(0.5f)
+//   0x82790154  fmadds: remaining = sectionLength * interp + lfDistanceAhead -- measured from the
+//               START of the current section, not from the car
+//   0x82790160..0x827901A0  step forward one section at a time, subtracting each section's length,
+//               until one is longer than what is left (fcmpu / bgt -> found)
+//   0x827901CC  fdivs then the fsel pair == saturate(remaining / sectionLength) into [0, 1]
+//   0x82790204  GetPointAndNormalOnCurve(lpRacingLine, liSectionID, interp, lPoint (r7),
+//                                        lNormal (r8))
+//   0x82790250  vmaddfp, read in RAW FIELD ORDER vD = vA*vC + vB (tools/re/vmx128.py banner):
+//               outPosition = lNormal * splat(mfRoadPlacement) + lPoint
+//   0x8279025C  the two vrlimi128 writes touch ONLY lanes x and y of *lpOutDirection:
+//               x = lNormal.y, y = -lNormal.x (v13 is lNormal.x XORed with the 0x80000000 sign
+//               mask built by vspltisw -1 / vslw) -- the normal turned 90 degrees, i.e. the
+//               tangent along the line.
+// =================================================================================================
+bool RacingLineGenerator::GetPointFarAhead(RacingLine* lpRacingLine, f32 lfDistanceAhead,
+                                           Vector2 lFrom2D, Vector2& lrOutPosition,
+                                           Vector2& lrOutDirection)
+{
+    CgsDev::PerfMonCpu::StartMonitor(miFarAheadPM);
+
+    s32 liSectionID = GetLocalSectionID(lpRacingLine, lFrom2D, lpRacingLine->miLastKnownSectionID);
+    if (liSectionID == AICar::KI_INVALID_SECTION_INDEX)
+    {
+        CgsDev::PerfMonCpu::StopMonitor(miFarAheadPM);
+        return false;
+    }
+
+    SectionData* lpSectionData = GetSectionPointer(lpRacingLine, liSectionID);
+    if (!lpSectionData->mHardNoGoMap.IsReady())
+    {
+        CgsDev::PerfMonCpu::StopMonitor(miFarAheadPM);
+        return false;
+    }
+
+    const f32 lfInterpInSection = GetSectionInterpPosition(lpRacingLine, liSectionID, lFrom2D);
+    f32 lfDistanceRemaining =
+        lpSectionData->mHardNoGoMap.SectionLength(KF_SECTION_LENGTH_HEIGHT) * lfInterpInSection
+        + lfDistanceAhead;
+
+    f32  lfSectionLength = 0.0f;
+    bool lbFoundSection  = false;
+
+    while (liSectionID <= lpRacingLine->mLastSectionInCache)
+    {
+        SectionData* lpWalkSectionData = GetSectionPointer(lpRacingLine, liSectionID);
+        if (!lpWalkSectionData->mHardNoGoMap.IsReady())
+            break;
+
+        lfSectionLength = lpWalkSectionData->mHardNoGoMap.SectionLength(KF_SECTION_LENGTH_HEIGHT);
+        if (lfSectionLength > lfDistanceRemaining)
+        {
+            lbFoundSection = true;
+            break;
+        }
+
+        lfDistanceRemaining -= lfSectionLength;
+        ++liSectionID;
+    }
+
+    if (!lbFoundSection)
+    {
+        CgsDev::PerfMonCpu::StopMonitor(miFarAheadPM);
+        return false;
+    }
+
+    // ⭐⭐⭐ THE CLAMP IS AN `fsel` PAIR AND ITS NaN ARM IS LOAD-BEARING (fixed 2026-09-15,
+    // issue #24). ARTIST 0x827901CC..0x82790200, verbatim:
+    //     fdivs f0, f31, f1              ; interp = remaining / sectionLength
+    //     lfs   f13, flt_82001CC0        ; 0.0
+    //     fneg  f12, f0                  ; -interp
+    //     fsel  f0, f12, f13, f0         ; FRT,FRA,FRC,FRB -> (-interp >= 0) ? 0.0 : interp
+    //     lfs   f13, flt_82001C98        ; 1.0
+    //     fsubs f12, f13, f0             ; 1.0 - interp
+    //     fsel  f1, f12, f0, f13         ; (1.0 - interp >= 0) ? interp : 1.0
+    // PowerPC `fsel FRT,FRA,FRC,FRB` is "if (FRA) >= 0.0 then FRC else FRB", and the >= is FALSE
+    // for a NaN FRA -- so a NaN interp survives the FIRST fsel (FRB is interp) and is turned into
+    // **1.0** by the SECOND (FRB is 1.0). That second arm is the console's NaN CONTAINMENT for the
+    // whole hermite stack.
+    // ⛔ The previous `if (x <= 0) x = 0; if (x > 1) x = 1;` form is NOT that program: in C++ both
+    // comparisons are false for a NaN, so a NaN interp was passed straight into
+    // GetPointAndNormalOnCurve.
+    // ⚠️ REPRODUCIBLE IS NOT ATTRIBUTABLE -- MEASURED, AND SAID OUT LOUD. Fixing THIS site alone
+    // (issue #24 run 4) changed nothing: 53,522 asserts and a per-site histogram identical to the
+    // runs before it, and GetPointAndNormalOnCurve's own "Bad interp" (.cpp:2148) never fires at
+    // all. The storm comes through the OTHER caller of the same hermite pair,
+    // GetCentreCentreLineHere @0x8278E930, which carried the identical mistranslation; see the
+    // banner there. This site is corrected because the console's program says so, not because it
+    // was the cause of anything observed.
+    // Written as the two explicit `>= 0.0f` tests so the NaN behaviour is the ternary's own
+    // (a NaN comparison is false in C++ too, so each line IS its fsel).
+    const f32 lfRawInterp = lfDistanceRemaining / lfSectionLength;
+    f32 lfInterp = (-lfRawInterp >= 0.0f) ? 0.0f : lfRawInterp;   // fsel f0, f12, f13, f0
+    lfInterp    = ((1.0f - lfInterp) >= 0.0f) ? lfInterp : 1.0f;  // fsel f1, f12, f0, f13
+
+    Vector2 lPoint;
+    Vector2 lNormal;
+    GetPointAndNormalOnCurve(lpRacingLine, liSectionID, lfInterp, lPoint, lNormal);
+
+    const f32 lfRoadPlacement = lpRacingLine->mfRoadPlacement;
+    lrOutPosition.mV.x = lNormal.mV.x * lfRoadPlacement + lPoint.mV.x;
+    lrOutPosition.mV.y = lNormal.mV.y * lfRoadPlacement + lPoint.mV.y;
+    lrOutPosition.mV.z = lNormal.mV.z * lfRoadPlacement + lPoint.mV.z;
+    lrOutPosition.mV.w = lNormal.mV.w * lfRoadPlacement + lPoint.mV.w;
+
+    // Only lanes x and y are written (vrlimi128 masks 8 and 4); z / w keep whatever the caller
+    // had there, exactly as the console leaves them.
+    lrOutDirection.mV.x =  lNormal.mV.y;
+    lrOutDirection.mV.y = -lNormal.mV.x;
+
+    CgsDev::PerfMonCpu::StopMonitor(miFarAheadPM);
+    return true;
+}
+
+//
+//   RenderHardNoGoMap @0x82790278 (DWARF :190), DrawCentreLine (:203), RenderSectionDetails (:208)
+//     -- debug render. Presentation-only on this host (COMMON_BRIEF rule 11): they draw the map
+//     grid / centre line through the AI debug component, which is not part of this bring-up.
+//     DELETE-WHEN the AI debug-render component is brought up on the host.
+//
+//   FindTargetFixedDistanceAhead (:96), FindAnyTargetOnLineAhead (:248),
+//   RaceDefaultsLineToAutoCentre (:107), RaceLineDefaultsToHoldingRoadPosition (:117),
+//   MoveRaceLineToSlamPlayer (:122)
+//     -- DWARF-declared, NO IDA export, and NO inlined copy of any of them appears anywhere in
+//     this lane's five exported bodies (they are folded into GenerateRacingLine @0x8277C4E8 and
+//     the AIDriver target chain, neither of which is in this wave). There is nothing to recover
+//     them from, so no body is written -- a guessed one would be invention.
+//     DELETE-WHEN the wave that reconstructs their inlining call sites lands.
+// =================================================================================================
+}

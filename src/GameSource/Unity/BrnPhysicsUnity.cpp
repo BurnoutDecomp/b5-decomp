@@ -14,7 +14,6 @@
 #include "../Physics/BrnPhysicsModuleUpdateFunctions.cpp"
 #include "../Physics/BrnPhysicsModuleGameActions.cpp"  // holds functions of BrnPhysicsModuleUpdateFunctions.cpp (x360 tree split)
 #include "../Physics/PhysicsUtilities/ExternalPhysicsBody.cpp"
-#include "../Physics/PhysicsUtilities/ExternalPhysicsBody_ReadPropertiesFromRenderware.cpp"  // holds functions of ExternalPhysicsBody.cpp (x360 tree split)
 #include "../Physics/PhysicsUtilities/InterpedParam3.cpp"
 #include "../Physics/PhysicsUtilities/Spring1D.cpp"
 #include "../Physics/PhysicsUtilities/SuspensionSpring.cpp"  // holds functions of Spring1D.cpp (x360 tree split)
