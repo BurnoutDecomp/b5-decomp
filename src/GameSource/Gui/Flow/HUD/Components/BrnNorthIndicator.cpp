@@ -18,10 +18,6 @@
 namespace BrnGui
 {
 
-// X360 rodata: radians -> degrees scale (flt_82011268 == 57.295776) and the +180 offset
-// (flt_820025FC == 180.0) the X360 fmadds applies to the heading.
-static const f32 KF_RAD_TO_DEG     = 57.295776f;
-static const f32 KF_ROTATION_OFFSET = 180.0f;
 
 // The "_style" apt view-state strings, indexed by the style id SetEventType resolves
 // (off_82F24890[v3]). off_82F24890[0] == "Race" is asm-attested; the remaining ids carry
@@ -42,17 +38,18 @@ static const char* const mpacStyleAptStrings[NorthIndicatorComponent::E_STYLE_CO
 //   v8 = (double)(a2 * 57.295776 + 180.0)        ; fmadds f1,f1,scale,offset ; stfd -> ld as the %f arg
 //   SPrintf(buf16, 7, "%f", v8); buf[7] = 0;     ; format the rotation into a 16-byte temp
 //   AddOutputAptViewState(this, "_rotation", buf, true)
-void NorthIndicatorComponent::Update(f32 lfHeadingRadians)
+void NorthIndicatorComponent::Update(f32 lrAngle)
 {
-    // The X360 stores the fmadds result as a double and passes it to SPrintf via the "%f"
-    // varargs slot (a default-promoted double).
-    const double ldRotation = static_cast<double>(lfHeadingRadians * KF_RAD_TO_DEG + KF_ROTATION_OFFSET);
+    // DWARF locals (BrnNorthIndicator.cpp:60/62/63). The scale and offset are pooled literals
+    // in ARTIST (0x82011268 == 57.295776f, 0x820025FC == 180.0f), not file statics.
+    f32 lrDegreeAngle = lrAngle * 57.295776f + 180.0f;
+    const s32 KI_MAX_ROTATION = 7;
+    char lacAngle[8];
 
-    char lacRotation[16];
-    CgsCore::SPrintf(lacRotation, 7, "%f", ldRotation);
-    lacRotation[7] = 0;   // X360 stb 0, buf+7
+    CgsCore::SPrintf(lacAngle, KI_MAX_ROTATION, "%f", lrDegreeAngle);
+    lacAngle[KI_MAX_ROTATION] = 0;
 
-    AddOutputAptViewState("_rotation", lacRotation, true);
+    AddOutputAptViewState("_rotation", lacAngle, true);
 }
 
 // @ 0x82411430

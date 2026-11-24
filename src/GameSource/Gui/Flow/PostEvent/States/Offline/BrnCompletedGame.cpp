@@ -132,11 +132,10 @@ namespace
     // again and runs SelectSubstates/SetupComponents on it -- so the record must still be the
     // finished event's, with only the already-shown pages suppressed. (This used to post 292,
     // the teardown, which emptied the record and crashed the re-entry on finish position -1.)
+    // No data: the 1-byte record is the empty GuiEvent<304> tag itself, which ARTIST copies
+    // without a load or store (TriggerExitState 0x824D2FE0).
     struct GuiEventSuppressPostEventPresentation : public CgsGui::GuiEvent<304>
     {
-        u8 mucPad;   // +0x0C (the 1-byte empty payload; the console leaves it unwritten)
-
-        GuiEventSuppressPostEventPresentation() : mucPad(0) {}
     };
     const s32 KI_CHANNEL_GUI_OUT = 40;
 
@@ -1054,7 +1053,14 @@ void CompletedGame::TriggerExitState()
     mpStateInterface->OutputGuiEvent(lSuppressEvent);   // {1, 304, 12} + 1 on channel 40
 
 
-    SendStateEvent(meCompletionType == E_COMPLETION_JUST_HIT_100_PERCENT ? "TO_CREDITS"
-                                                                        : "ADVANCE");
+    // One SendStateEvent per arm (ARTIST hoists `mr r3, r31` and cross-jumps the call).
+    if (meCompletionType == E_COMPLETION_JUST_HIT_100_PERCENT)
+    {
+        SendStateEvent("TO_CREDITS");
+    }
+    else
+    {
+        SendStateEvent("ADVANCE");
+    }
 }
 }

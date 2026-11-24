@@ -298,7 +298,7 @@ const s32 OnlineMarkMan::miNumEventsObserved = 5;
     // If the local player dropped out of the session, post the advance record and advance.
     bool OnlineMarkMan::UpdateSyncing()
     {
-        CGS_ASSERT(mpGuiCache, "mpGuiCache");
+        CGS_ASSERT(mpGuiCache, CgsDev::Assert::MessageAt("mpGuiCache", __FILE__, 332 /* ARTIST 0x824A0C88 */));
 
         if (mpGuiCache->GetOnlinePlayerDisconnected(
                 static_cast<EActiveRaceCarIndex>(mpGuiCache->GetPlayerActiveRaceCarIndex())))

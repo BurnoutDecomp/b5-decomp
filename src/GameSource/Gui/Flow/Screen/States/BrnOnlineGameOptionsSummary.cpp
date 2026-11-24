@@ -148,14 +148,10 @@ namespace BrnGui
         // { 1, N, 12, <one byte> }, channel 40, 16 bytes: the one-byte command records. The
         // console never writes the payload byte.
         template <s32 TI_EVENT_ID>
+        // No data: the 1-byte record payload is the empty GuiEvent<TI_EVENT_ID> tag itself;
+        // ARTIST copies it without writing it.
         struct GuiCommandWire16 : public CgsGui::GuiEvent<TI_EVENT_ID>
         {
-            u8 mu8Payload;   // +0x0C
-
-            GuiCommandWire16()
-                : mu8Payload(0)
-            {
-            }
         };
 
         // { 1, 148, 12, <show byte> }, channel 40, 16 bytes: show / hide the HUD.
@@ -170,13 +166,6 @@ namespace BrnGui
             GuiEventShowHideHudWire() {}
         };
 
-        // { 1, 356, 12, <the byte> }, channel 40, 16 bytes: the autosave request.
-        struct GuiAutosaveRequestWire : public CgsGui::GuiEvent<356>
-        {
-            u8 mu8Payload;   // +0x0C
-
-            GuiAutosaveRequestWire() : mu8Payload(0) {}
-        };
 
         // { 288, 184, 16, <pad>, the 288-byte request }, channel 40, 304 bytes.
         struct GuiOverlayRequestWire
@@ -202,7 +191,7 @@ namespace BrnGui
         // The channel-40 records OutputGuiEvent's GuiEventOut<T> builds around these payloads.
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiCommandWire16<175> >) == 16), "command record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventShowHideHudWire>) == 16), "show/hide-hud record is 16 bytes");
-        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiAutosaveRequestWire>) == 16), "autosave record is 16 bytes");
+        CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiAutosaveRequestEvent>) == 16), "autosave record is 16 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiAudioTriggerEvent>) == 112), "audio trigger record is 112 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayWaitFinishRequest>) == 24), "wait-finish record is 24 bytes");
@@ -688,7 +677,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptionsSummary::HandleOverlayComplete(const CgsModule::Event* lpOverlayCompleteEvent)
     {
-        CGS_ASSERT(lpOverlayCompleteEvent != 0, "lpOverlayCompleteEvent");
+        CGS_ASSERT(lpOverlayCompleteEvent != 0, CgsDev::Assert::MessageAt("lpOverlayCompleteEvent", __FILE__, 1104 /* ARTIST 0x8249DBA4 */));
 
         const OverlayCompletePayload* lpOverlayComplete =
             static_cast<const OverlayCompletePayload*>(lpOverlayCompleteEvent);
@@ -699,7 +688,9 @@ namespace BrnGui
             mpGuiCache->GetMenuOptionsData()->SetCreatedOnlineGameOptions(
                 mMenuOptions.GetHighlightedIndex(), mpGuiCache,
                 reinterpret_cast<const GuiEventNetworkGameParams*>(mpGuiCache->maOnlineGameModeOptionsStorage));
-            PostWire(mpStateInterface, GuiAutosaveRequestWire());
+            GuiAutosaveRequestEvent lAutosaveRequest;   // OutputGuiEvent<GuiAutosaveRequestEvent> 0x824937E0
+            lAutosaveRequest.maData[0] = 0;
+            mpStateInterface->OutputGuiEvent(lAutosaveRequest);
             ShowGameOptionsScreen();
         }
     }
@@ -827,7 +818,9 @@ namespace BrnGui
                 lpProfile->SetCreatedOnlineGameOptions(
                     liHighlightedSlot, mpGuiCache,
                     reinterpret_cast<const GuiEventNetworkGameParams*>(mpGuiCache->maOnlineGameModeOptionsStorage));
-                PostWire(mpStateInterface, GuiAutosaveRequestWire());
+                GuiAutosaveRequestEvent lAutosaveRequest;   // OutputGuiEvent<GuiAutosaveRequestEvent> 0x824937E0
+                lAutosaveRequest.maData[0] = 0;
+                mpStateInterface->OutputGuiEvent(lAutosaveRequest);
                 ShowGameOptionsScreen();
             }
             PostMenuAudio(mpStateInterface, "Accept");

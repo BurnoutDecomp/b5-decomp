@@ -96,9 +96,9 @@ void TextField::OutputAptData()
 
     if (miScroll != 0)
     {
-        char lacScroll[48];   // X360 sp+0x50 local; format capped at 10
-        CgsCore::SPrintf(lacScroll, 10, "%d", miScroll);
-        AddOutputAptViewState("apt_scroll", lacScroll, false);
+        char lacScrollText[10];   // DWARF local (BrnTextField.cpp:536)
+        CgsCore::SPrintf(lacScrollText, 10, "%d", miScroll);
+        AddOutputAptViewState("apt_scroll", lacScrollText, false);
         miScroll = 0;
     }
     else

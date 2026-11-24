@@ -680,7 +680,7 @@ namespace BrnGui
     // Publish the model's CURRENT (uncommitted) volumes so scrubbing is audible.
     void CrashNavOptions::UpdateSoundSettings()
     {
-        CGS_ASSERT(mpStateInterface != 0, "mpStateInterface");   // cpp:927
+        CGS_ASSERT(mpStateInterface != 0, CgsDev::Assert::MessageAt("mpStateInterface", __FILE__, 927 /* ARTIST 0x824CDF38 */));
 
         GuiEventCrashNavAudioVolumes lEvent;
         lEvent.miMusicVolume = static_cast<s32>(mOptionsData.GetMusicVolume());

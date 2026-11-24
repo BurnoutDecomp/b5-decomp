@@ -79,10 +79,10 @@ namespace BrnGui
         // ⚠️ The X360 writes the three header words and NEVER writes the one payload byte
         // (asm @0x824D6C88..0x824D6C98: three `stw`, no `stb`) -- it posts whatever was on the
         // stack. Reconstructed as an explicit zero; there is no defined value to copy.
+        // No data: the 1-byte record payload is the empty GuiEvent<80> tag itself;
+        // ARTIST copies it without writing it.
         struct GuiScreenLeaveWire80 : public CgsGui::GuiEvent<80>
         {
-            u8 muPayload;   // +0x0C
-            GuiScreenLeaveWire80() : muPayload(0) {}
         };
 
         // The play-apt-movie record PlayMovie posts: { 8, 18, 12, <name>, 3 }, channel 41,

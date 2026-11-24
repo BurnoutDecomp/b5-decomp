@@ -36,7 +36,7 @@ namespace BrnGui
 
         // @ 0x824113B8 -- publish the compass needle rotation. lfHeadingRadians is converted to
         // degrees (* 57.295776) and offset by 180, formatted "%f" into the "_rotation" view state.
-        void Update(f32 lfHeadingRadians);
+        void Update(f32 lrAngle);
 
         // @ 0x82411430 -- map the active game mode to a compass style and publish it as the
         // "_style" view state. An unknown mode asserts and falls back to E_STYLE_RACE.

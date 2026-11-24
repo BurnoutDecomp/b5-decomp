@@ -51,7 +51,14 @@ namespace BrnGui
         }
 
         // hidden flag (+0xAC) -> "1" / "0".
-        AddOutputAptViewState("apt_hideColour", mbHidden ? "1" : "0", false);
+        if (mbHidden)
+        {
+            AddOutputAptViewState("apt_hideColour", "1", false);
+        }
+        else
+        {
+            AddOutputAptViewState("apt_hideColour", "0", false);
+        }
     }
 
     // @ 0x824E8440

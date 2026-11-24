@@ -98,14 +98,9 @@ namespace BrnGui
         // ---- out-queue wire records ------------------------------------------------------
         // { 1, 241, 12, <one byte> }, channel 40, 16 bytes: the stats request. The console
         // never writes the payload byte.
+        // No data: the empty GuiEvent<241> tag is the whole 1-byte payload (ARTIST copies nothing).
         struct OnlineStatsRequestWire : public CgsGui::GuiEvent<241>
         {
-            u8 muUnwrittenPayload;   // +0x0C
-
-            OnlineStatsRequestWire()
-                : muUnwrittenPayload(0)
-            {
-            }
         };
 
         // { 24, 242, 12, the six totals }, channel 40, 36 bytes.

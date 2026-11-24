@@ -582,7 +582,7 @@ namespace BrnGui
 
         for (s32 liPlayer = 0; liPlayer < KI_MAX_PLAYERS; ++liPlayer)
         {
-            if (maPlayer[liPlayer].HandleLoadNotification(lpTrigger->mpacComponentName))
+            if (maPlayer[liPlayer].HandleLoadNotification(lpTrigger->mpacComponentName) == true)
             {
                 break;
             }
@@ -638,7 +638,7 @@ namespace BrnGui
     // ================================================================================
     void OnlineLoading::HandleInviteFailed(const CgsModule::Event* lpInviteFailedEvent)
     {
-        CGS_ASSERT(lpInviteFailedEvent != 0, "lpInviteFailedEvent");
+        CGS_ASSERT(lpInviteFailedEvent != 0, CgsDev::Assert::MessageAt("lpInviteFailedEvent", __FILE__, 604 /* ARTIST 0x8249B644 */));
 
         const InviteFailedPayload* lpInviteFailed =
             static_cast<const InviteFailedPayload*>(lpInviteFailedEvent);

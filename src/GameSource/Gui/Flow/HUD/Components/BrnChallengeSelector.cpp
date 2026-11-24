@@ -230,14 +230,20 @@ void ChallengeSelector::Show()
 // No-op when already hidden (asm only proceeds when mbVisible == 1).
 void ChallengeSelector::Hide()
 {
-    if (!mbVisible)
+    if (mbVisible != true)
     {
-        return;   // asm: only proceeds when mbVisible == 1
+        return;   // asm: only proceeds when mbVisible == 1 (cmplwi 1)
     }
 
-    AddOutputAptViewState("apt_state",
-                          mbIsHost ? "transoutHost" : "transoutClient",
-                          false);
+    // One call per arm (ARTIST 0x82436F78 hoists r6 and cross-jumps the call).
+    if (mbIsHost)
+    {
+        AddOutputAptViewState("apt_state", "transoutHost", false);
+    }
+    else
+    {
+        AddOutputAptViewState("apt_state", "transoutClient", false);
+    }
 
     // X360 clears mbVisible after capturing the current-index arg but before GetChallengeIndex.
     const s32 liCurrentIndex   = miCurrentAvailableChallengeIndex;   // lwz 0x1158

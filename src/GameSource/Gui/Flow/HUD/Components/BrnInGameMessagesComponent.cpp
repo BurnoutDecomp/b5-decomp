@@ -130,11 +130,10 @@ namespace
     // BrnFBurnMainHudState.cpp (GuiCommandEvent16<N> / GuiShowHideEvent24).
 
     // Construct's own post: {1, 157, 12} + one trailing word, 16 bytes, channel 40.
+    // No data: the 1-byte record payload is the empty GuiEvent<157> tag itself;
+    // ARTIST copies it without writing it.
     struct GuiCommandEvent16_157 : public CgsGui::GuiEvent<157>
     {
-        u8 mu8Flag;   // the one payload byte (sizeof 1: {1, 157, 12})
-        GuiCommandEvent16_157() : mu8Flag(0)
-        {}
     };
 
     // StartMessage / EndMessage's post: the 40-byte OutputGuiEvent<BrnGui::GuiAudioEvent>
@@ -245,14 +244,14 @@ namespace
         const MessageState leState = lInGameInMessagesQueue->maeMessageState[luIndex];
         if (leState != E_MESSAGESTATE_NOMESSAGE)
         {
-            if (leState == E_MESSAGESTATE_TRANSIN)
-            {
-                lInGameInMessagesQueue->maeMessageState[luIndex] = E_MESSAGESTATE_WAITING;
-            }
-            else
+            if (leState != E_MESSAGESTATE_TRANSIN)
             {
                 lInGameInMessagesQueue->maeMessageState[luIndex] = E_MESSAGESTATE_NOMESSAGE;
                 SwitchCurrentIndex();
+            }
+            else
+            {
+                lInGameInMessagesQueue->maeMessageState[luIndex] = E_MESSAGESTATE_WAITING;
             }
         }
     }

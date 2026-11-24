@@ -116,11 +116,10 @@ namespace
     // consumer reads it. The GUI->game-state bridge turns GUI 295 into game event 149, which is
     // E_EVENT_RIVAL_SHUTDOWN_DISPLAY_FINSHED (DWARF BrnGameEvents.h, PS3 id 147). The record NAME
     // is ours (the X360 inlines the OutputGuiEvent and keeps no type name); the id is the image's.
+    // No data: the 1-byte record payload is the empty GuiEvent<295> tag itself;
+    // ARTIST copies it without writing it.
     struct GuiEventRivalShutdownDisplayFinished : public CgsGui::GuiEvent<295>
     {
-        u8 mucPad;   // +0x0C (the 1-byte empty payload)
-
-        GuiEventRivalShutdownDisplayFinished() : mucPad(0) {}
     };
     CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiEventRivalShutdownDisplayFinished>) == 16),
                   "the console posts a 16-byte record for GUI 295 (`li r6, 0x10`)");
