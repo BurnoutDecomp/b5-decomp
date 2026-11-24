@@ -67,12 +67,13 @@ extern "C" void ProtoAriesDestroy(ProtoAriesRefT* ref)
 extern "C" s32 ProtoAriesUnconnect(ProtoAriesRefT* ref)
 {
     if (ref->ssl) { ProtoSSLDestroy(ref->ssl); ref->ssl = 0; }
-    ref->outputLen = ref->outputOffset = 0; ref->state = 4; return 0;
+    ref->outputLen = 0; ref->outputOffset = 0; ref->state = 4; return 0;   // ARTIST stores +0x6c, +0x70, +0x60
 }
 extern "C" void ProtoAriesSecure(ProtoAriesRefT* ref, s32 secure) { ref->secure = secure == 1; }
 extern "C" void ProtoAriesSetKey(ProtoAriesRefT* ref, const void* key, u32 size)
 {
-    if (key && size == 84) { ref->haveWallet = 1; memcpy(ref->wallet, key, 84); }
+    // ARTIST 0x82B2A064..0x82B2A074 tests the size for zero before comparing it with the wallet size.
+    if (key && size > 0 && size == 84) { ref->haveWallet = 1; memcpy(ref->wallet, key, 84); }
     else { ref->haveWallet = 0; CryptStp1UseSecret(&ref->crypt, 0); }
 }
 extern "C" s32 ProtoAriesStatus(ProtoAriesRefT* ref, s32 select, void* buffer, s32 length)
@@ -251,14 +252,14 @@ extern "C" s32 ProtoAriesRecv(ProtoAriesRefT* ref, s32* kind, s32* code, char* d
     {
         if (length > received) length = received;
         if (data) memcpy(data, ref->input + 12, length);
-        ref->inputLen = ref->inputOffset = 0;
+        ref->inputLen = 0; ref->inputOffset = 0;
     }
     return received;
 }
 extern "C" s32 ProtoAriesConnect(ProtoAriesRefT* ref, const char* host, u32 address, s32 port)
 {
     if (ref->ssl) return -1;
-    ref->inputLen = ref->inputOffset = 0;
+    ref->inputLen = 0; ref->inputOffset = 0;
     memset(&ref->peer, 0, 16);
     ref->peer.sin_family = AF_INET;
     ref->peer.sin_addr.s_addr = SocketHtonl(address);

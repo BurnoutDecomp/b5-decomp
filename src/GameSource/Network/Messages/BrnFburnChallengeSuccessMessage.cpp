@@ -108,8 +108,9 @@ namespace BrnNetwork
                                                       const bool* lpaAccumulationsThisFrame,
                                                       const f32* lpaActionScores)
     {
-        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME,
-                   "lu16FrameCount != KU16_INVALID_FRAME");
+        CGS_ASSERT(lu16FrameCount != CgsNetwork::KU16_INVALID_FRAME, CgsDev::Assert::MessageAt(
+            "lu16FrameCount != KU16_INVALID_FRAME",
+            __FILE__, 158 /* ARTIST 0x8257CB70 */));
 
         if ((mx8Flags & CgsNetwork::KX8_FLAGS_VALID) == 0)
         {

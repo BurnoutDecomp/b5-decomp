@@ -136,11 +136,12 @@ void ConnApiDestroy(ConnApiRefT* pConnApi);
 void ConnApiOnline(ConnApiRefT* pConnApi, const char* pGameName, const char* pSelfName, const DirtyAddrT* pSelfAddr);
 
 // Start a session as host / as a member with the given members (pClientList is iNumClients
-// ConnApiUserInfoT entries, the local player among them). iSessFlags bit 0 = ranked. The fourth
-// argument is not used. ARTIST X360 callers ignore r3 for these void lifecycle entries.
+// ConnApiUserInfoT entries, the local player among them). uGameFlags bit 0 = ranked (DWARF
+// connapi.c:455/:460 names the last two iSessId, uGameFlags); iSessId is not used on X360.
+// ARTIST X360 callers ignore r3 for these void lifecycle entries.
 #if defined(_XBOX)
-void ConnApiHost(ConnApiRefT* pConnApi, ConnApiUserInfoT* pClientList, s32 iNumClients, s32 iUnused, s32 iSessFlags);
-void ConnApiConnect(ConnApiRefT* pConnApi, ConnApiUserInfoT* pClientList, s32 iNumClients, s32 iUnused, s32 iSessFlags);
+void ConnApiHost(ConnApiRefT* pConnApi, ConnApiUserInfoT* pClientList, s32 iNumClients, s32 iSessId, u32 uGameFlags);
+void ConnApiConnect(ConnApiRefT* pConnApi, ConnApiUserInfoT* pClientList, s32 iNumClients, s32 iSessId, u32 uGameFlags);
 #else
 s32 ConnApiHost(ConnApiRefT* pConnApi, ConnApiUserInfoT* pClientList, s32 iNumClients, s32 iUnused, s32 iSessFlags);
 s32 ConnApiConnect(ConnApiRefT* pConnApi, ConnApiUserInfoT* pClientList, s32 iNumClients, s32 iUnused, s32 iSessFlags);

@@ -30,8 +30,8 @@ struct DirtyLSPQueryT
     XOVERLAPPED Overlapped;
     XTITLE_SERVER_INFO aServers[1];
 };
-CGS_STATIC_ASSERT((offsetof(HostentT, pDns) == 0x50), "ARTIST Hostent DNS");
-CGS_STATIC_ASSERT((offsetof(HostentT, pPlatformData) == 0x54), "ARTIST Hostent platform data");
+CGS_STATIC_ASSERT((offsetof(HostentT, sema) == 0x50), "ARTIST Hostent DNS");
+CGS_STATIC_ASSERT((offsetof(HostentT, thread) == 0x54), "ARTIST Hostent platform data");
 CGS_STATIC_ASSERT((sizeof(HostentT) == 0x5c), "ARTIST Hostent size");
 CGS_STATIC_ASSERT((offsetof(DirtyLSPQueryT, Overlapped) == 4), "ARTIST LSP overlapped");
 CGS_STATIC_ASSERT((offsetof(DirtyLSPQueryT, aServers) == 0x20), "ARTIST LSP server list");
@@ -59,13 +59,14 @@ extern "C" void DirtyLSPDestroy(DirtyLSPRefT* ref)
 
 extern "C" void DirtyLSPQueryFree(DirtyLSPRefT* ref, HostentT* host)
 {
-    DirtyLSPQueryT* const query = static_cast<DirtyLSPQueryT*>(host->pPlatformData);
-    if (query)
+    // The query lives in HostentT::thread, an int32_t: ARTIST tests that word (0x82B3AF20 cmpwi).
+    if (host->thread != 0)
     {
+        DirtyLSPQueryT* const query = reinterpret_cast<DirtyLSPQueryT*>(host->thread);
         if (query->hEnumerator)
             CloseHandle(query->hEnumerator);
         DirtyMemFree(query, kDirtyLSPMemId, ref->iMemGroup);
-        host->pPlatformData = 0;
+        host->thread = 0;
     }
 }
 
@@ -73,7 +74,7 @@ extern "C" s32 DirtyLSPQueryDone(DirtyLSPRefT*, HostentT* host)
 {
     if (host->done != 0)
         return host->done;
-    DirtyLSPQueryT* const query = static_cast<DirtyLSPQueryT*>(host->pPlatformData);
+    DirtyLSPQueryT* const query = reinterpret_cast<DirtyLSPQueryT*>(host->thread);
     if (query->Overlapped.InternalLow == ERROR_IO_PENDING)
         return host->done;
     host->done = -1;
@@ -134,10 +135,10 @@ extern "C" s32 DirtyLSPQueryStart(DirtyLSPRefT* ref, HostentT* host)
     if (result != ERROR_IO_PENDING)
     {
         NetPrintfCode("dirtylspxenon: could not enumerate LSP servers (err=%s)\n", DirtyErrGetName(result));
-        // ARTIST calls QueryFree before assigning this query to host->pPlatformData.
+        // ARTIST calls QueryFree before assigning this query to host->thread.
         DirtyLSPQueryFree(ref, host);
         return -2;
     }
-    host->pPlatformData = query;
+    host->thread = reinterpret_cast<s32>(query);
     return 0;
 }

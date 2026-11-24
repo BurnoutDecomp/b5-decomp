@@ -24,7 +24,7 @@ struct ProtoPingRequestT
 struct ProtoPingRefT
 {
     ProtoPingRequestT* requests; s32 sequence; s32 userIndex;
-    XNKID listenKey; s32 listening, probes, memGroup;
+    XNKID listenKey; u32 listening; s32 probes, memGroup;   // listening is tested unsigned (ARTIST 0x82B38984 cmplwi)
 };
 struct ProtoPingResponseT
 {

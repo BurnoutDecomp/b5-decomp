@@ -297,11 +297,15 @@ namespace BrnNetwork
 
         if (meGetGameIDState == E_GET_ID_STATE_START)
         {
-            CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0,
-                       "mpNetworkModule->GetNetworkManager()");
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != 0,
-                       "mpNetworkModule->GetNetworkManager()->GetServerInterface()");
+            CGS_ASSERT(mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+                "mpNetworkModule",
+                __FILE__, 250 /* ARTIST 0x8254895C */));
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CgsDev::Assert::MessageAt(
+                "mpNetworkModule->GetNetworkManager()",
+                __FILE__, 251 /* ARTIST 0x82548984 */));
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != 0, CgsDev::Assert::MessageAt(
+                "mpNetworkModule->GetNetworkManager()->GetServerInterface()",
+                __FILE__, 252 /* ARTIST 0x825489AC */));
 
             BrnNetworkManager* lpNetworkManager = mpNetworkModule->GetNetworkManager();
             if (lpNetworkManager->GetServerInterface()->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO)
@@ -326,11 +330,15 @@ namespace BrnNetwork
             // reports idle.
             meGetGameIDState = E_GET_ID_STATE_WAITING_FOR_PLAYER_INFO; // *(v1 + 432) = 1
 
-            CGS_ASSERT(mpNetworkModule != 0, "mpNetworkModule");
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0,
-                       "mpNetworkModule->GetNetworkManager()");
-            CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != 0,
-                       "mpNetworkModule->GetNetworkManager()->GetServerInterface()");
+            CGS_ASSERT(mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+                "mpNetworkModule",
+                __FILE__, 268 /* ARTIST 0x82548A0C */));
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CgsDev::Assert::MessageAt(
+                "mpNetworkModule->GetNetworkManager()",
+                __FILE__, 269 /* ARTIST 0x82548A34 */));
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager()->GetServerInterface() != 0, CgsDev::Assert::MessageAt(
+                "mpNetworkModule->GetNetworkManager()->GetServerInterface()",
+                __FILE__, 270 /* ARTIST 0x82548A5C */));
 
             BrnNetworkManager* lpWaitManager = mpNetworkModule->GetNetworkManager();
             if (lpWaitManager->GetServerInterface()->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO)

@@ -1,4 +1,5 @@
 #include "GameSource/Network/Managers/BrnNetworkStateManager.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include <cstring>                                                                         // strstr
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                         // CGS_ASSERT
@@ -65,10 +66,14 @@ namespace BrnNetwork
     // ------------------------------------------------------------------------------------
     void StateManager::Construct(BrnNetworkModule* lpNetworkModule)
     {
-        CGS_ASSERT(lpNetworkModule != 0, "lpNetworkModule");
+        CGS_ASSERT(lpNetworkModule != 0, CgsDev::Assert::MessageAt(
+            "lpNetworkModule",
+            __FILE__, 75 /* ARTIST 0x82548F80 */));
         mpNetworkModule  = lpNetworkModule;
         mpNetworkManager = lpNetworkModule->GetNetworkManager();
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            __FILE__, 78 /* ARTIST 0x82548FB4 */));
 
         meState                  = E_STATE_COUNT;
         meOutputPlayerTexture    = 0;
@@ -148,9 +153,12 @@ namespace BrnNetwork
         mbReadyToJoinGameSession = false;
         mbLoadingScreenVisible   = false;
 
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetHostMigrationManager() != 0,
-                   "mpNetworkManager->GetHostMigrationManager()");
+        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            __FILE__, 180 /* ARTIST 0x8256907C */));
+        CGS_ASSERT(mpNetworkManager->GetHostMigrationManager() != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager->GetHostMigrationManager()",
+            __FILE__, 181 /* ARTIST 0x825690A4 */));
         mpNetworkManager->GetHostMigrationManager()->RegisterHostMigrationCallback(&HostChangedCallback, this);
 
         mbForceStartFreeburnLobby = false;
@@ -174,9 +182,12 @@ namespace BrnNetwork
     // ------------------------------------------------------------------------------------
     bool StateManager::Release()
     {
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetHostMigrationManager() != 0,
-                   "mpNetworkManager->GetHostMigrationManager()");
+        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            __FILE__, 212 /* ARTIST 0x82569150 */));
+        CGS_ASSERT(mpNetworkManager->GetHostMigrationManager() != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager->GetHostMigrationManager()",
+            __FILE__, 213 /* ARTIST 0x82569178 */));
         mpNetworkManager->GetHostMigrationManager()->UnregisterHostMigrationCallback(&HostChangedCallback);
 
         mNewCarData.mCarModelId        = 0;

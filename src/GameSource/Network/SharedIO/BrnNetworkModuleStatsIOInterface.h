@@ -56,8 +56,10 @@ namespace BrnNetwork
         private:
             // EventQueue<StatsRequestEvent,16>: console 332 bytes (12-byte header + 16 x 20).
             // Storage of the host queue's size (see the fork note); the .cpp reaches it as the
-            // real queue type.
-            CGS_ALIGN(8) u8 maStatsEventQueueStorage[sizeof(CgsModule::BaseEventQueue<StatsRequestEvent>)
+            // real queue type. Aligned as the console queue (32-bit header words): at 8 the
+            // interface rounds to 336 and PostSimulationInputBuffer::mNetworkEventQueue lands at
+            // +73288, where ARTIST's GetNetworkEventQueue reads +73284 (0x8254EE0C, 0x11E44).
+            CGS_ALIGN(4) u8 maStatsEventQueueStorage[sizeof(CgsModule::BaseEventQueue<StatsRequestEvent>)
                                                    + KI_STATS_EVENT_QUEUE_SIZE * KI_STATS_REQUEST_EVENT_SIZE];
         };
 

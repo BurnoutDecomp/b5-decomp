@@ -227,10 +227,14 @@ namespace BrnNetwork
     // empty the request queue, reset the scalar state and every per-player update entry.
     void NetworkPlayerStatsManager::Construct(BrnNetworkModule* lpNetworkModule)
     {
-        CGS_ASSERT(lpNetworkModule != 0, "lpNetworkModule");
+        CGS_ASSERT(lpNetworkModule != 0, CgsDev::Assert::MessageAt(
+            "lpNetworkModule",
+            __FILE__, 60 /* ARTIST 0x82559D58 */));
         mpNetworkModule  = lpNetworkModule;
         mpNetworkManager = lpNetworkModule->GetNetworkManager();
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            __FILE__, 63 /* ARTIST 0x82559D8C */));
 
         mPlayerStatsCache.Construct(mpNetworkManager);
 
@@ -416,8 +420,9 @@ namespace BrnNetwork
     // message pair with their network player.
     void NetworkPlayerStatsManager::AddPlayer(NetworkPlayerID lNetworkPlayerId)
     {
-        CGS_ASSERT(lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID,
-                   "lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID");
+        CGS_ASSERT(lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+            "lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID",
+            __FILE__, 638 /* ARTIST 0x825682A0 */));
 
         AddEventFromNetworkPlayerID(lNetworkPlayerId);
 
@@ -448,8 +453,9 @@ namespace BrnNetwork
     // A player left: free their update entry and unregister its message pair.
     void NetworkPlayerStatsManager::RemovePlayer(NetworkPlayerID lNetworkPlayerId)
     {
-        CGS_ASSERT(lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID,
-                   "lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID");
+        CGS_ASSERT(lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+            "lNetworkPlayerId != CgsNetwork::K_INVALID_PLAYER_ID",
+            __FILE__, 695 /* ARTIST 0x825527E0 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer =
             mpNetworkManager->GetPlayerManager()->GetPlayerByID(lNetworkPlayerId);
@@ -905,7 +911,9 @@ namespace BrnNetwork
     // A server-interface component failed: log its error, clear it and drop back to idle.
     bool NetworkPlayerStatsManager::CheckForAndHandleServerErrors(CgsNetwork::EComponents leComponent)
     {
-        CGS_ASSERT(mpServerInterface != 0, "mpServerInterface");
+        CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface",
+            __FILE__, 450 /* ARTIST 0x82546B10 */));
 
         if (mpServerInterface->GetStatus(leComponent) != CgsNetwork::ServerInterfaceDirtySock::E_STATUS_ERROR)
         {
@@ -974,8 +982,12 @@ namespace BrnNetwork
     bool NetworkPlayerStatsManager::IsThisLocalPlayer(const char* lpcName)
     {
         PlayerInfoData lPlayerInfo;
-        CGS_ASSERT(lPlayerInfo.Prepare(), "lPlayerInfo.Prepare()");
-        CGS_ASSERT(mpServerInterfacePlayerInfo != 0, "mpServerInterfacePlayerInfo");
+        CGS_ASSERT(lPlayerInfo.Prepare(), CgsDev::Assert::MessageAt(
+            "lPlayerInfo.Prepare()",
+            __FILE__, 969 /* ARTIST 0x8255F740 */));
+        CGS_ASSERT(mpServerInterfacePlayerInfo != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterfacePlayerInfo",
+            __FILE__, 971 /* ARTIST 0x8255F768 */));
         mpServerInterfacePlayerInfo->GetLocalPlayerInfo(&lPlayerInfo);
         return ::LobbyNameCmp(lpcName, lPlayerInfo.GetName()) == 0;
     }
@@ -1023,7 +1035,9 @@ namespace BrnNetwork
             if (lAggressorID != CgsNetwork::K_INVALID_PLAYER_ID && lAggressorID == lLocalPlayerID)
             {
                 NetworkPlayerStats* lpLocalPlayersStats = mPlayerStatsCache.GetPlayerStats(lLocalPlayerID);
-                CGS_ASSERT(lpLocalPlayersStats != 0, "lpLocalPlayersStats");
+                CGS_ASSERT(lpLocalPlayersStats != 0, CgsDev::Assert::MessageAt(
+                    "lpLocalPlayersStats",
+                    __FILE__, 1313 /* ARTIST 0x82552BC0 */));
                 if (lpLocalPlayersStats != 0)
                 {
                     lpLocalPlayersStats->SetStatAsInt(
@@ -1052,7 +1066,9 @@ namespace BrnNetwork
                 && mpNetworkManager->GetPlayerManager()->IsPlayerTurnToSendRoundRobinMessage(lEntry.mPlayerID, true, 0))
             {
                 const NetworkPlayerStats* lpLocalPlayerStats = GetLocalPlayerStats();
-                CGS_ASSERT(lpLocalPlayerStats != 0, "lpLocalPlayerStats");
+                CGS_ASSERT(lpLocalPlayerStats != 0, CgsDev::Assert::MessageAt(
+                    "lpLocalPlayerStats",
+                    __FILE__, 1156 /* ARTIST 0x8255A280 */));
 
                 lEntry.mSendMessage.PrepareForSend(
                     mpNetworkManager->GetTimeManager()->GetU16FrameCount(),

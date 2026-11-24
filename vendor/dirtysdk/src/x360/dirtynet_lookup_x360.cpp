@@ -104,8 +104,8 @@ const sockaddr* SocketMapAddress(sockaddr* output, const sockaddr* input)
 
 static s32 SocketLookupDnsDone(HostentT* host)
 {
-    XNDNS* dns = static_cast<XNDNS*>(host->pDns);
-    HANDLE event = static_cast<HANDLE>(host->pPlatformData);
+    XNDNS* dns = reinterpret_cast<XNDNS*>(host->sema);
+    HANDLE event = reinterpret_cast<HANDLE>(host->thread);
     if (event && WaitForSingleObject(event, 0) == WAIT_OBJECT_0)
     {
         if (dns->iStatus)
@@ -131,8 +131,8 @@ static s32 SocketLookupDnsDone(HostentT* host)
 static void SocketLookupDnsFree(HostentT* host)
 {
     SocketStateX360* state = gSocketStateX360;
-    if (host->pDns) XNetDnsRelease(static_cast<XNDNS*>(host->pDns));
-    if (host->pPlatformData) WSACloseEvent(static_cast<HANDLE>(host->pPlatformData));
+    if (host->sema) XNetDnsRelease(reinterpret_cast<XNDNS*>(host->sema));
+    if (host->thread) WSACloseEvent(reinterpret_cast<HANDLE>(host->thread));
     DirtyMemFree(host, SOCKET_MEM_ID, state->memGroup);
 }
 
@@ -204,17 +204,17 @@ extern "C" HostentT* SocketLookup(const char* name, s32 timeout)
     }
     const u32 address = SocketInTextGetAddr(name);
     if (address) { host->addr = address; host->done = 1; return host; }
-    host->pPlatformData = WSACreateEvent();
-    host->pDns = 0;
+    host->thread = reinterpret_cast<s32>(WSACreateEvent());
+    host->sema = 0;
     ds_strnzcpy(host->name, name, sizeof(host->name));
     XNDNS* dns = 0;
-    s32 error = XNetDnsLookup(host->name, static_cast<HANDLE>(host->pPlatformData), &dns);
-    host->pDns = dns;
+    s32 error = XNetDnsLookup(host->name, reinterpret_cast<HANDLE>(host->thread), &dns);
+    host->sema = reinterpret_cast<s32>(dns);
     if (error)
     {
         NetPrintfCode("dirtynetwin: error %d initiating DNS lookup\n", error);
-        WSACloseEvent(static_cast<HANDLE>(host->pPlatformData));
-        host->pPlatformData = 0; host->addr = 0; host->done = -1;
+        WSACloseEvent(reinterpret_cast<HANDLE>(host->thread));
+        host->thread = 0; host->addr = 0; host->done = -1;
     }
     return host;
 }

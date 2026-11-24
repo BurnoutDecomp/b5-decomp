@@ -63,7 +63,7 @@ namespace BrnNetworkModuleIO
     // (the inlined TimerStatusInterface assignment).
     void PreSimulationInputBuffer::SetTimerStatusInterface(const CgsSystem::TimerStatusInterface* lpTimerStatusInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 515));
         mTimerInterface = *lpTimerStatusInterface;
     }
 
@@ -151,7 +151,7 @@ namespace BrnNetworkModuleIO
 
     const PostSimulationInputBuffer::TakedownEventQueue* PostSimulationInputBuffer::GetTakedownEventInputQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 550));
         return &mTakedownEventInputQueue;
     }
 
@@ -181,7 +181,7 @@ namespace BrnNetworkModuleIO
 
     const BrnPhysics::Vehicle::VehicleOutputInterface* PostSimulationInputBuffer::GetVehicleOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 589));
         return &mVehicleOutputInterface;
     }
 
@@ -237,7 +237,7 @@ namespace BrnNetworkModuleIO
 
     const NetworkEventQueue* PostSimulationInputBuffer::GetNetworkEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 708));
         return &mNetworkEventQueue;
     }
 
@@ -261,7 +261,7 @@ namespace BrnNetworkModuleIO
     void PostSimulationInputBuffer::AppendVehicleOutputInterface(
             const BrnPhysics::Vehicle::VehicleOutputInterface* lpVehicleOutputInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 639));
         mVehicleOutputInterface.Append(lpVehicleOutputInterface);
     }
 
@@ -271,7 +271,7 @@ namespace BrnNetworkModuleIO
             const BrnTraffic::BrnTrafficIO::TrafficNetworkOutputInterface* lpInterface)
     {
         mTrafficNetworkOutputInterface = *lpInterface;
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 657));
     }
 
     // Write lock, then the interface's replace-merge: the queue length reset and the
@@ -279,14 +279,14 @@ namespace BrnNetworkModuleIO
     // (NetworkOutputInterface::Append is exactly that pair).
     void PostSimulationInputBuffer::SetCrashOutputInterface(const BrnWorld::CrashIO::NetworkOutputInterface* lpInterface)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 664));
         mCrashNetworkOutputInterface.Append(lpInterface);
     }
 
     // Write lock, then BaseEventQueue<TakedownEvent>::Append (no length reset).
     void PostSimulationInputBuffer::AppendTakedownQueue(const TakedownEventQueue* lpQueue)
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 672));
         mTakedownEventInputQueue.Append(*lpQueue);
     }
 
@@ -386,7 +386,7 @@ namespace BrnNetworkModuleIO
 
     const CgsGui::GuiEventQueueSmall* OutputBuffer::GetGuiEventQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 775));
         return &mGuiEventQueue;
     }
 
@@ -440,13 +440,13 @@ namespace BrnNetworkModuleIO
 
     const BrnPhysics::Vehicle::VehicleInputInterface* OutputBuffer::GetVehicleInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 827));
         return &mVehicleInputInterface;
     }
 
     const BrnPhysics::Vehicle::VehicleDriverInputInterface* OutputBuffer::GetVehicleDriverInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 834));
         return &mVehicleDriverInputInterface;
     }
 
@@ -464,7 +464,7 @@ namespace BrnNetworkModuleIO
 
     const BrnWorld::CrashIO::NetworkInputInterface* OutputBuffer::GetCrashNetworkInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 855));
         return &mCrashNetworkInputInterface;
     }
 
@@ -476,7 +476,7 @@ namespace BrnNetworkModuleIO
 
     const BrnTraffic::BrnTrafficIO::TrafficNetworkInputInterface* OutputBuffer::GetTrafficNetworkInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\network\\BrnNetworkModuleIO.h", 869));
         return &mTrafficNetworkInputInterface;
     }
 

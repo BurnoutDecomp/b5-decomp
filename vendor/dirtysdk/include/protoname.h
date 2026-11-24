@@ -17,15 +17,12 @@ struct HostentT
     s32  (*Done)(HostentT* pHost);
     void (*Free)(HostentT* pHost);
     char name[64];
-#if defined(_XBOX)
-    void* pDns;           // ARTIST HostentT +0x50: XNDNS*
-    void* pPlatformData;  // ARTIST HostentT +0x54: event or DirtyLSP query
-    u32   timeout;        // +0x58
-#else
-    s32  sema;
-    s32  thread;
-    u32  timeout;
-#endif
+    // DWARF dirtynet.h:188-190. The console keeps its lookup state in the two int32_t words,
+    // tested signed as such (ARTIST SocketLookup's free 0x82B2CCDC / 0x82B2CCEC cmpwi): sema
+    // holds the XNDNS* of a DNS lookup, thread its event or the DirtyLSP query.
+    s32  sema;     // +0x50
+    s32  thread;   // +0x54
+    u32  timeout;  // +0x58
 };
 
 #ifdef __cplusplus

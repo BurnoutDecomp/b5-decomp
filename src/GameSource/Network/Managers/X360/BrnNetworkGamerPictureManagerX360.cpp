@@ -347,7 +347,9 @@ namespace BrnNetwork
         }
 
         CgsNetwork::NetworkTexture* lpSource = &lpData->mTexture;
-        CGS_ASSERT(mpTextureCompressor, "mpTextureCompressor");
+        CGS_ASSERT(mpTextureCompressor, CgsDev::Assert::MessageAt(
+            "mpTextureCompressor",
+            __FILE__, 510 /* ARTIST 0x8254C41C */));
 
         const s32 liWidth  = lpSource->GetWidth();
         const s32 liHeight = lpSource->GetHeight();
@@ -445,8 +447,9 @@ namespace BrnNetwork
                     }
                 }
 
-                CGS_ASSERT(maGamerPictureData[liPlayerIndex].miPlayerID == KI_INVALID_PLAYER_ID,
-                           "maGamerPictureData[liPlayerIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID");
+                CGS_ASSERT(maGamerPictureData[liPlayerIndex].miPlayerID == KI_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+                    "maGamerPictureData[liPlayerIndex].mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
+                    __FILE__, 364 /* ARTIST 0x8255790C */));
             }
         }
 
@@ -475,8 +478,9 @@ namespace BrnNetwork
             }
         }
 
-        CGS_ASSERT(mLocalPlayerGamerPictureData.miPlayerID == KI_INVALID_PLAYER_ID,
-                   "mLocalPlayerGamerPictureData.mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID");
+        CGS_ASSERT(mLocalPlayerGamerPictureData.miPlayerID == KI_INVALID_PLAYER_ID, CgsDev::Assert::MessageAt(
+            "mLocalPlayerGamerPictureData.mPlayerID == CgsNetwork::K_INVALID_PLAYER_ID",
+            __FILE__, 369 /* ARTIST 0x825579DC */));
     }
 
     // =======================================================================
@@ -569,9 +573,12 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0,
-                   "mpNetworkManager->GetPlayerManager()");
+        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            __FILE__, 255 /* ARTIST 0x82561708 */));
+        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager->GetPlayerManager()",
+            __FILE__, 256 /* ARTIST 0x82561730 */));
 
         // A player the session registry does not know is the LOCAL player.
         const bool lbLocalPlayer =
@@ -596,7 +603,9 @@ namespace BrnNetwork
                 }
             }
 
-            CGS_ASSERT(lpDataEntry, "lpDataEntry");
+            CGS_ASSERT(lpDataEntry, CgsDev::Assert::MessageAt(
+                "lpDataEntry",
+                __FILE__, 267 /* ARTIST 0x825617C0 */));
         }
 
         u64 lXuid = 0;
@@ -621,8 +630,9 @@ namespace BrnNetwork
             mpNetworkManager->GetServerInterface()->GetPlayerInfoComponent()
                 ->GetLocalPlayerInfo(&lPlayerInfo);
 
-            CGS_ASSERT(lPlayerInfo.GetID() == liPlayerID,
-                       "Can only get local player XUID when not in a game");
+            CGS_ASSERT(lPlayerInfo.GetID() == liPlayerID, CgsDev::Assert::MessageAt(
+                "Can only get local player XUID when not in a game",
+                __FILE__, 280 /* ARTIST 0x82561840 */));
 
             lXuid = lPlayerInfo.GetXUID();
         }

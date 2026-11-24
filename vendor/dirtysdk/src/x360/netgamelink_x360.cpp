@@ -1,4 +1,9 @@
 // DirtySDK 5.5.3 NetGameLink native X360 implementation.
+// XDK size optimization matches ARTIST at 0x82B1DC90 (1 function).
+#if defined(_XBOX) && defined(_MSC_VER)
+#pragma optimize("s", on)
+#endif
+
 #include "netgamelink.h"
 #include "dirtylib_x360_internal.h"
 #include "commall_x360_internal.h"

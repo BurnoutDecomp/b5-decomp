@@ -83,6 +83,7 @@ extern "C" ProtoFilterRefT* ProtoFilterCreate(void)
 
     memset(pFilter, 0, sizeof(*pFilter));
     pFilter->iMemGroup = iMemGroup;
+    pFilter->strProfane[0] = 0;   // ARTIST 0x82B40560 stb, after the memset
     return pFilter;
 }
 

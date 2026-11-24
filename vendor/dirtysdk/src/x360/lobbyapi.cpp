@@ -239,21 +239,22 @@ extern "C" void LobbyApiListDestroy(LobbyApiRefT* pLobbyApi)
 extern "C" DispListRef* LobbyApiListAlloc(LobbyApiRefT* pLobbyApi, s32 iListType,
                                            LobbyApiCallbackT* pCallback, void* pUserData)
 {
+    // One exit: ARTIST 0x82B22CEC loads the NULL result before either test.
     LobbyListRefT* pListRef = pLobbyApi->pListRef;
-    if ((pListRef == NULL) || ((u32)iListType > 10))
+    DispListRef* pDisp = NULL;
+    if ((pListRef != NULL) && ((u32)iListType <= 10))
     {
-        return NULL;
+        LobbyDispListT* pList = &pListRef->Lists[iListType];
+        pList->pCallback = pCallback;
+        pList->pUserData = pUserData;
+        DirtyMemGroupEnter(pListRef->iMemGroup);
+        pList->pHash = HasherCreate(1000, 2000);
+        pList->pDisp = DispListCreate(100, 100, 0);
+        DirtyMemGroupLeave();
+        DispListDataSet(pList->pDisp, pList->pHash);
+        pDisp = pList->pDisp;
     }
-
-    LobbyDispListT* pList = &pListRef->Lists[iListType];
-    pList->pCallback = pCallback;
-    pList->pUserData = pUserData;
-    DirtyMemGroupEnter(pListRef->iMemGroup);
-    pList->pHash = HasherCreate(1000, 2000);
-    pList->pDisp = DispListCreate(100, 100, 0);
-    DirtyMemGroupLeave();
-    DispListDataSet(pList->pDisp, pList->pHash);
-    return pList->pDisp;
+    return pDisp;
 }
 
 extern "C" void LobbyApiListFree(LobbyApiRefT* pLobbyApi, s32 iListType,

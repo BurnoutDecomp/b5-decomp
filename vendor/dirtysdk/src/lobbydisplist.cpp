@@ -206,7 +206,11 @@ extern "C" void* DispListDelByIndex(DispListRef* ref, s32 idx)
     void* data;
     DispListT* item;
 
-    if ((idx >= ref->count) || (ref->view[idx] == NULL))
+    if (idx >= ref->count)
+    {
+        return NULL;
+    }
+    if (ref->view[idx] == NULL)
     {
         return NULL;
     }

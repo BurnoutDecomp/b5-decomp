@@ -1,4 +1,5 @@
 #include "GameSource/Network/Managers/X360/BrnNetworkCameraX360.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT at ARTIST locations
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"                                 // CGS_ASSERT
 #include "GameShared/GameClasses/Development/CgsStrStream.h"                       // socket assertions
@@ -102,7 +103,9 @@ namespace BrnNetwork
         mRequestTimer.SetFloatVal(0.0f);
         miRequestedPlayerID = KI_INVALID_PLAYER_ID;
 
-        CGS_ASSERT(lpTextureCompressor, "lpTextureCompressor");
+        CGS_ASSERT(lpTextureCompressor, CgsDev::Assert::MessageAt(
+            "lpTextureCompressor",
+            __FILE__, 87 /* ARTIST 0x8258B4EC */));
         mpTextureCompressor = lpTextureCompressor;
 
         miUserSetting   = 1;

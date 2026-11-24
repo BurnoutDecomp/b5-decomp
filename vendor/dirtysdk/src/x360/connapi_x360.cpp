@@ -1086,19 +1086,20 @@ s32 ConnApiUpdateConnections(ConnApiRefT* ref)
 }
 }
 
+// The game flags go to ConnApiRefT::uGameFlags (+0x44): ARTIST 0x82B1510C / 0x82B15120.
 extern "C" void ConnApiHost(ConnApiRefT* ref, ConnApiUserInfoT* clientList,
-                             s32 numClients, s32, s32 sessionFlags)
+                             s32 numClients, s32 iSessId, u32 uGameFlags)
 {
     if (ref->eState)
     {
         NetPrintfCode("connapi: can't host a game when not in idle state\n");
         return;
     }
-    ref->uSessionFlags = static_cast<u32>(sessionFlags);
+    ref->uGameFlags = uGameFlags;
     ConnApiInitializeClientList(ref, clientList, numClients);
     ConnApiUpdateSessionParams(ref, 1);
     if (ProtoMangleControl(ref->pProtoMangle, 0x73657373,
-                           ref->uSessionFlags & 1, 0, 0) == 0)
+                           ref->uGameFlags & 1, 0, 0) == 0)
     {
         ref->bHost = 1;
         ref->eState = 1;
@@ -1106,18 +1107,18 @@ extern "C" void ConnApiHost(ConnApiRefT* ref, ConnApiUserInfoT* clientList,
 }
 
 extern "C" void ConnApiConnect(ConnApiRefT* ref, ConnApiUserInfoT* clientList,
-                                s32 numClients, s32, s32 sessionFlags)
+                                s32 numClients, s32 iSessId, u32 uGameFlags)
 {
     if (ref->eState)
     {
         NetPrintfCode("connapi: can't connect to a game when not in idle state\n");
         return;
     }
-    ref->uSessionFlags = static_cast<u32>(sessionFlags);
+    ref->uGameFlags = uGameFlags;
     ConnApiInitializeClientList(ref, clientList, numClients);
     ConnApiUpdateSessionParams(ref, 0);
     if (ProtoMangleControl(ref->pProtoMangle, 0x73657373,
-                           ref->uSessionFlags & 1, 0, ref->strSession) == 0)
+                           ref->uGameFlags & 1, 0, ref->strSession) == 0)
     {
         ref->bHost = 0;
         ref->eState = 1;

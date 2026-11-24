@@ -105,11 +105,15 @@ namespace BrnNetwork
     // X360 0x82543808
     void LoginManagerBase::Construct(BrnNetworkModule* lpNetworkModule)
     {
-        CGS_ASSERT(lpNetworkModule != 0, "lpNetworkModule");
+        CGS_ASSERT(lpNetworkModule != 0, CgsDev::Assert::MessageAt(
+            "lpNetworkModule",
+            __FILE__, 60 /* ARTIST 0x82543840 */));
         mpNetworkModule = lpNetworkModule;
 
         mpNetworkManager = lpNetworkModule->GetNetworkManager();
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            __FILE__, 65 /* ARTIST 0x82543874 */));
 
         meSignInState        = E_SIGN_IN_STATE_COUNT;
         meSubState           = E_SUBSTATE_COUNT;
@@ -403,7 +407,9 @@ namespace BrnNetwork
     // X360 0x8254FEC8
     void LoginManagerBase::PrepareConnectTelemetry()
     {
-        CGS_ASSERT(mpNetworkManager != 0, "NULL != mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "NULL != mpNetworkManager",
+            __FILE__, 1116 /* ARTIST 0x8254FEFC */));
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         BrnServerInterfaceDownloadableConfig* lpConfig = lpServerInterface->GetDownloadableConfigComponent();
@@ -427,7 +433,9 @@ namespace BrnNetwork
     // X360 0x82543D88
     void LoginManagerBase::PrepareLoadSettings()
     {
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            __FILE__, 1156 /* ARTIST 0x82543DC0 */));
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         if (lpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_PLAYER_INFO) == BrnServerInterface::E_STATUS_IDLE)
@@ -440,7 +448,9 @@ namespace BrnNetwork
     // X360 0x82543E08
     void LoginManagerBase::PreparePingRegions()
     {
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            __FILE__, 1176 /* ARTIST 0x82543E40 */));
 
         BrnServerInterface* lpServerInterface = mpNetworkManager->GetServerInterface();
         if (lpServerInterface->GetStatus(CgsNetwork::E_COMPONENTS_PING_REGIONS) == BrnServerInterface::E_STATUS_IDLE)
@@ -527,7 +537,9 @@ namespace BrnNetwork
         }
         else
         {
-            CGS_ASSERT(false, "Invalid server interface status!");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "Invalid server interface status!",
+                __FILE__, 362 /* ARTIST 0x8254F988 */));
         }
     }
 
@@ -552,7 +564,9 @@ namespace BrnNetwork
         switch (lpConnection->GetLoginStatus())
         {
         case CgsNetwork::ServerInterfaceConnection::E_LOGIN_STATUS_LOGIN:
-            CGS_ASSERT(false, "Probably shouldn't get here but just in case try logging in again");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "Probably shouldn't get here but just in case try logging in again",
+                __FILE__, 389 /* ARTIST 0x8254FAE4 */));
             LogInToServer();
             break;
 
@@ -600,7 +614,9 @@ namespace BrnNetwork
             return;
 
         default:
-            CGS_ASSERT(false, "Unexpected Login status");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "Unexpected Login status",
+                __FILE__, 469 /* ARTIST 0x8254FC34 */));
             break;
         }
     }
@@ -689,7 +705,9 @@ namespace BrnNetwork
     void LoginManagerBase::UpdateWaitingForPlayerID()
     {
         PlayerInfoData lPlayerInfo;
-        CGS_ASSERT(lPlayerInfo.Prepare(), "lPlayerInfo.Prepare()");
+        CGS_ASSERT(lPlayerInfo.Prepare(), CgsDev::Assert::MessageAt(
+            "lPlayerInfo.Prepare()",
+            __FILE__, 644 /* ARTIST 0x82561A64 */));
 
         mpNetworkManager->GetServerInterface()->GetPlayerInfoComponent()->GetLocalPlayerInfo(&lPlayerInfo);
         if (lPlayerInfo.GetID() != -1)

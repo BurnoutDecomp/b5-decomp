@@ -97,13 +97,15 @@ namespace
         return -1;
     }
 
-    void AddChange(XnFriendsChange* pChanges, s32* pCount, s32 iAction,
-                   const XONLINE_FRIEND* pFriend, u32 uFlags)
+    // ARTIST sub_82B38CE8 (unnamed): the friend record arrives BY VALUE (r4..r10 plus the 0x8c-byte
+    // stack copy its callers memcpy, 0x82B390C0), then the flags, the change list and the count;
+    // each store re-reads *pCount (0x82B38D14/38/48).
+    void AddChange(s32 iAction, XONLINE_FRIEND Friend, u32 uFlags, XnFriendsChange* pChanges,
+                   s32* pCount)
     {
-        XnFriendsChange* pChange = &pChanges[*pCount];
-        pChange->iAction = iAction;
-        pChange->uFlags = uFlags;
-        ds_strnzcpy(pChange->strName, pFriend->szGamertag, 16);
+        pChanges[*pCount].iAction = iAction;
+        pChanges[*pCount].uFlags = uFlags;
+        ds_strnzcpy(pChanges[*pCount].strName, Friend.szGamertag, 16);
         ++*pCount;
     }
 
@@ -115,48 +117,50 @@ namespace
                                   pRef->aChanges, pRef->pChangeUserData);
         }
     }
+}
 
-    void CompareFriends(XnFriendsRef* pRef, XnFriendsSnapshot* pOld,
-                        XnFriendsSnapshot* pNew)
+// ARTIST 0x82B39010 `_compareFriendsAndCB`: a file-static C helper that takes the change list as
+// its fourth argument (XnFriendsUpdate passes &pRef->aChanges, 0x82B39324..0x82B3932C).
+static void _compareFriendsAndCB(XnFriendsRef* pRef, XnFriendsSnapshot* pOld,
+                                 XnFriendsSnapshot* pNew, XnFriendsChange* pChanges)
+{
+    s32 iChanges = 0;
+    s32 i;
+    for (i = 0; i < pNew->iCount; ++i)
     {
-        s32 iChanges = 0;
-        s32 i;
-        for (i = 0; i < pNew->iCount; ++i)
+        XONLINE_FRIEND* pFriend = &pNew->aFriends[i];
+        s32 iOld = FindFriendByXuid(pOld, pFriend->xuid);
+        if (iOld == -1)
         {
-            XONLINE_FRIEND* pFriend = &pNew->aFriends[i];
-            s32 iOld = FindFriendByXuid(pOld, pFriend->xuid);
-            if (iOld == -1)
-            {
-                AddChange(pRef->aChanges, &iChanges, 'A', pFriend, pFriend->dwFriendState);
-            }
-            else if (pOld->aFriends[iOld].dwFriendState != pFriend->dwFriendState)
-            {
-                AddChange(pRef->aChanges, &iChanges, 'C', pFriend,
-                          pOld->aFriends[iOld].dwFriendState ^ pFriend->dwFriendState);
-            }
-            if (iChanges >= 25)
-            {
-                FlushChanges(pRef, iChanges);
-                iChanges = 0;
-            }
+            AddChange('A', *pFriend, pFriend->dwFriendState, pChanges, &iChanges);
         }
-        for (i = 0; i < pOld->iCount; ++i)
+        else if (pOld->aFriends[iOld].dwFriendState != pFriend->dwFriendState)
         {
-            XONLINE_FRIEND* pFriend = &pOld->aFriends[i];
-            if (FindFriendByXuid(pNew, pFriend->xuid) == -1)
-            {
-                AddChange(pRef->aChanges, &iChanges, 'D', pFriend, pFriend->dwFriendState);
-            }
-            if (iChanges >= 25)
-            {
-                FlushChanges(pRef, iChanges);
-                iChanges = 0;
-            }
+            AddChange('C', *pFriend, pFriend->dwFriendState ^ pOld->aFriends[iOld].dwFriendState,
+                      pChanges, &iChanges);
         }
-        if (iChanges != 0)
+        if (iChanges >= 25)
         {
             FlushChanges(pRef, iChanges);
+            iChanges = 0;
         }
+    }
+    for (i = 0; i < pOld->iCount; ++i)
+    {
+        XONLINE_FRIEND* pFriend = &pOld->aFriends[i];
+        if (FindFriendByXuid(pNew, pFriend->xuid) == -1)
+        {
+            AddChange('D', *pFriend, pFriend->dwFriendState, pChanges, &iChanges);
+        }
+        if (iChanges >= 25)
+        {
+            FlushChanges(pRef, iChanges);
+            iChanges = 0;
+        }
+    }
+    if (iChanges != 0)
+    {
+        FlushChanges(pRef, iChanges);
     }
 }
 
@@ -182,20 +186,22 @@ extern "C" void XnFriendsDestroy(XnFriendsRef* pRef)
 extern "C" s32 XnFriendsConnect(XnFriendsRef* pRef, s32 /*iArg*/,
                                 XnFriendsChangeCallback pCallback, void* pUserData)
 {
-    if (pRef == 0)
+    // single exit: ARTIST loads -1 before the NULL test and returns through one epilogue (0x82B38E78)
+    s32 iResult = -1;
+    if (pRef != 0)
     {
-        return -1;
+        pRef->pChangeCallback = pCallback;
+        pRef->pChangeUserData = pUserData;
+        pRef->iInitialised = 0;
+        pRef->iConnected = 1;
+        pRef->uConnectTick = NetTick();
+        pRef->iCurrentSnapshot = 0;
+        memset(pRef->aSnapshots, 0, sizeof(pRef->aSnapshots));
+        memset(pRef->aChanges, 0, sizeof(pRef->aChanges));
+        pRef->iConnected = 1;
+        iResult = 0;
     }
-    pRef->pChangeCallback = pCallback;
-    pRef->pChangeUserData = pUserData;
-    pRef->iInitialised = 0;
-    pRef->iConnected = 1;
-    pRef->uConnectTick = NetTick();
-    pRef->iCurrentSnapshot = 0;
-    memset(pRef->aSnapshots, 0, sizeof(pRef->aSnapshots));
-    memset(pRef->aChanges, 0, sizeof(pRef->aChanges));
-    pRef->iConnected = 1;
-    return 0;
+    return iResult;
 }
 
 extern "C" s32 XnFriendsDisconnect(XnFriendsRef* pRef)
@@ -220,12 +226,11 @@ extern "C" XONLINE_FRIEND* XnFriendsGetFriend(XnFriendsRef* pRef, s32 iIndex)
     {
         return 0;
     }
-    XnFriendsSnapshot* pSnapshot = &pRef->aSnapshots[pRef->iCurrentSnapshot];
-    if (iIndex >= pSnapshot->iCount)
+    if (iIndex >= pRef->aSnapshots[pRef->iCurrentSnapshot].iCount)
     {
         return 0;
     }
-    return &pSnapshot->aFriends[iIndex];
+    return &pRef->aSnapshots[pRef->iCurrentSnapshot].aFriends[iIndex];
 }
 
 extern "C" XONLINE_FRIEND* XnFriendsGetFriendByName(XnFriendsRef* pRef, const char* pName)
@@ -240,7 +245,7 @@ extern "C" void XnFriendsUpdate(XnFriendsRef* pRef)
         XnFriendsSnapshot* pNew = &pRef->aSnapshots[pRef->iCurrentSnapshot];
         pNew->iCount = NetConnStatus(0x66726e64, pRef->iUserIndex, pNew->aFriends, 0x4c90);
         s32 iOld = (pRef->iCurrentSnapshot + 1) % 2;
-        CompareFriends(pRef, &pRef->aSnapshots[iOld], pNew);
+        _compareFriendsAndCB(pRef, &pRef->aSnapshots[iOld], pNew, pRef->aChanges);
         pRef->iCurrentSnapshot = iOld;
         pRef->iInitialised = 1;
     }

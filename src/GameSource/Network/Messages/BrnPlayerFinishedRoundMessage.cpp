@@ -127,8 +127,9 @@ namespace BrnNetwork
         lxResult |= CgsNetwork::PackOrUnpackTime(this, &mFinishTime, KF_FINISH_TIME_RESOLUTION);
 
         // A valid distance must never equal the in-range invalid sentinel.
-        CGS_ASSERT(mfDistanceFromFinish != KF_INVALID_NETWORK_DISTANCE,
-                   "mfDistanceFromFinish != KF_INVALID_NETWORK_DISTANCE");
+        CGS_ASSERT(mfDistanceFromFinish != KF_INVALID_NETWORK_DISTANCE, CgsDev::Assert::MessageAt(
+            "mfDistanceFromFinish != KF_INVALID_NETWORK_DISTANCE",
+            __FILE__, 199 /* ARTIST 0x8257A28C */));
 
         // Map the in-RAM unset default onto its serialisable wire equivalent before packing.
         if (mfDistanceFromFinish == KF_UNSET_DISTANCE)

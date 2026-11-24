@@ -112,7 +112,9 @@ namespace BrnNetwork
         }
         else
         {
-            CGS_ASSERT(false, "Unknown platform specific update state");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "Unknown platform specific update state",
+                __FILE__, 144 /* ARTIST 0x8255E7F4 */));
         }
     }
 

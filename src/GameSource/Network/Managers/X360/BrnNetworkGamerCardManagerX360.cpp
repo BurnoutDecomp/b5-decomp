@@ -93,8 +93,9 @@ namespace BrnNetwork
 
         for (s32 li = 0; li < KI_NUMBER_OF_SUBSTATES; ++li)
         {
-            CGS_ASSERT(mapUpdateFunctions[li] != 0,
-                       "No update function supplied for this substate");
+            CGS_ASSERT(mapUpdateFunctions[li] != 0, CgsDev::Assert::MessageAt(
+                "No update function supplied for this substate",
+                __FILE__, 179 /* ARTIST 0x8255E8B0 */));
         }
     }
 
@@ -107,8 +108,9 @@ namespace BrnNetwork
 
         for (s32 li = 0; li < KI_NUMBER_OF_ACTIONS; ++li)
         {
-            CGS_ASSERT(mapActionFunctions[li] != 0,
-                       "No function supplied for this action");
+            CGS_ASSERT(mapActionFunctions[li] != 0, CgsDev::Assert::MessageAt(
+                "No function supplied for this action",
+                __FILE__, 211 /* ARTIST 0x82557B40 */));
         }
     }
 
@@ -401,9 +403,12 @@ namespace BrnNetwork
         s32 liResult = 0;
         if (meProcess == KI_PROCESS_NONE)
         {
-            CGS_ASSERT(luRequestingControllerPort != KU_NUMBER_OF_PADS,
-                       "luRequestingControllerPort != CgsInput::KU_NUMBER_OF_PADS");
-            CGS_ASSERT(lPlayerXuid != 0, "lPlayerXuid != 0");
+            CGS_ASSERT(luRequestingControllerPort != KU_NUMBER_OF_PADS, CgsDev::Assert::MessageAt(
+                "luRequestingControllerPort != CgsInput::KU_NUMBER_OF_PADS",
+                __FILE__, 694 /* ARTIST 0x8254D1E8 */));
+            CGS_ASSERT(lPlayerXuid != 0, CgsDev::Assert::MessageAt(
+                "lPlayerXuid != 0",
+                __FILE__, 695 /* ARTIST 0x8254D20C */));
 
             mRequestedGamerCardXUID    = lPlayerXuid;             // std r28, 0x78
             muRequestingControllerPort = luRequestingControllerPort; // stw r29, 0x80

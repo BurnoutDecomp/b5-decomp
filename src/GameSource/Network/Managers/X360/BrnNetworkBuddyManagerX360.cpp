@@ -164,14 +164,24 @@ namespace BrnNetwork
     // =======================================================================
     bool BuddyManagerX360::IsUserInGameSession(const char* lpcSessionID)
     {
-        CGS_ASSERT(lpcSessionID, "lpcSessionID");
+        CGS_ASSERT(lpcSessionID, CgsDev::Assert::MessageAt(
+            "lpcSessionID",
+            __FILE__, 342 /* ARTIST 0x8256C780 */));
 
-        CGS_ASSERT(GetNetworkModule(), "GetNetworkModule()");
-        CGS_ASSERT(GetNetworkModule()->GetNetworkManager(), "GetNetworkModule()->GetNetworkManager()");
+        CGS_ASSERT(GetNetworkModule(), CgsDev::Assert::MessageAt(
+            "GetNetworkModule()",
+            __FILE__, 345 /* ARTIST 0x8256C7B0 */));
+        CGS_ASSERT(GetNetworkModule()->GetNetworkManager(), CgsDev::Assert::MessageAt(
+            "GetNetworkModule()->GetNetworkManager()",
+            __FILE__, 346 /* ARTIST 0x8256C7DC */));
 
         BrnServerInterface* lpServerInterface = GetNetworkModule()->GetNetworkManager()->GetServerInterface();
-        CGS_ASSERT(lpServerInterface, "lpServerInterface");
-        CGS_ASSERT(lpServerInterface->GetGameComponent(), "lpServerInterface->GetGameComponent()");
+        CGS_ASSERT(lpServerInterface, CgsDev::Assert::MessageAt(
+            "lpServerInterface",
+            __FILE__, 348 /* ARTIST 0x8256C80C */));
+        CGS_ASSERT(lpServerInterface->GetGameComponent(), CgsDev::Assert::MessageAt(
+            "lpServerInterface->GetGameComponent()",
+            __FILE__, 349 /* ARTIST 0x8256C834 */));
 
         if (!lpServerInterface->GetGameComponent()->IsLocalPlayerInGame())
         {
@@ -287,7 +297,9 @@ namespace BrnNetwork
             }
             else if (liEventType == KI_NETWORK_EVENT_SHOW_PROFILE)
             {
-                CGS_ASSERT(lpEvent, "lpShowProfileEvent");
+                CGS_ASSERT(lpEvent, CgsDev::Assert::MessageAt(
+                    "lpShowProfileEvent",
+                    __FILE__, 402 /* ARTIST 0x8256C980 */));
                 // this IS-A CgsNetwork::BuddyManagerX360 (the platform leaf in the base chain);
                 // route the show-profile event name through its Xbox Guide ShowProfile.
                 CgsNetwork::BuddyManagerX360::ShowProfile(

@@ -212,9 +212,12 @@ namespace BrnNetwork
              || liPreviousState == E_ROAD_RULES_STATE_DOWNLOADING
              || liPreviousState == E_ROAD_RULES_STATE_DOWNLOADING_LOCAL )
         {
-            CGS_ASSERT( mpNetworkModule != 0, "mpNetworkModule" );
-            CGS_ASSERT( mpNetworkModule->GetNetworkManager() != 0,
-                        "mpNetworkModule->GetNetworkManager()" );
+            CGS_ASSERT(mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+                "mpNetworkModule",
+                __FILE__, 1568 /* ARTIST 0x8254A574 */));
+            CGS_ASSERT(mpNetworkModule->GetNetworkManager() != 0, CgsDev::Assert::MessageAt(
+                "mpNetworkModule->GetNetworkManager()",
+                __FILE__, 1569 /* ARTIST 0x8254A5A0 */));
 
             mpNetworkModule->GetNetworkManager()->OnAutoLoginProcessComplete( 0 );
         }
@@ -291,9 +294,12 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     u32 NetworkRoadRulesManager::AttemptToDownloadLocalRoadRulesHighScores()
     {
-        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
-        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
-                    "mpServerInterface->GetConnectionComponent()" );
+        CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface",
+            __FILE__, 1686 /* ARTIST 0x8254A6F8 */));
+        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface->GetConnectionComponent()",
+            __FILE__, 1687 /* ARTIST 0x8254A724 */));
 
         const bool lbLoggedIn = mpServerInterface->GetConnectionComponent()->IsLoggedIn();
         if ( lbLoggedIn )
@@ -319,9 +325,12 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------
     u32 NetworkRoadRulesManager::AttemptToDownloadRoadRulesHighScores()
     {
-        CGS_ASSERT( mpServerInterface != 0, "mpServerInterface" );
-        CGS_ASSERT( mpServerInterface->GetConnectionComponent() != 0,
-                    "mpServerInterface->GetConnectionComponent()" );
+        CGS_ASSERT(mpServerInterface != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface",
+            __FILE__, 1663 /* ARTIST 0x8254A618 */));
+        CGS_ASSERT(mpServerInterface->GetConnectionComponent() != 0, CgsDev::Assert::MessageAt(
+            "mpServerInterface->GetConnectionComponent()",
+            __FILE__, 1664 /* ARTIST 0x8254A644 */));
 
         const bool lbLoggedIn = mpServerInterface->GetConnectionComponent()->IsLoggedIn();
         if ( lbLoggedIn )

@@ -147,7 +147,9 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------------
     void StateManager::SuspensionFinishedCallback(bool lbSuccess, void* lpUserData)
     {
-        CGS_ASSERT(lbSuccess, "lbSuccess");
+        CGS_ASSERT(lbSuccess, CgsDev::Assert::MessageAt(
+            "lbSuccess",
+            __FILE__, 3579 /* ARTIST 0x82569520 */));
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
 
@@ -179,10 +181,15 @@ namespace BrnNetwork
         (void)lpTimerStatus;
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
-        CGS_ASSERT(lpStateManager != 0, "lpStateManager");
-        CGS_ASSERT(lpStateManager->mpNetworkManager != 0, "lpStateManager->mpNetworkManager");
-        CGS_ASSERT(lpStateManager->mpNetworkManager->GetPlayerManager() != 0,
-                   "lpStateManager->mpNetworkManager->GetPlayerManager()");
+        CGS_ASSERT(lpStateManager != 0, CgsDev::Assert::MessageAt(
+            "lpStateManager",
+            __FILE__, 5589 /* ARTIST 0x82563354 */));
+        CGS_ASSERT(lpStateManager->mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "lpStateManager->mpNetworkManager",
+            __FILE__, 5590 /* ARTIST 0x8256337C */));
+        CGS_ASSERT(lpStateManager->mpNetworkManager->GetPlayerManager() != 0, CgsDev::Assert::MessageAt(
+            "lpStateManager->mpNetworkManager->GetPlayerManager()",
+            __FILE__, 5591 /* ARTIST 0x825633A4 */));
 
         const NetworkPlayerID lLocalPlayerID =
             lpStateManager->mpNetworkManager->GetPlayerManager()->GetLocalPlayerID();
@@ -192,9 +199,12 @@ namespace BrnNetwork
         lHostChangedEvent.mbIsLocalPlayerNowHost = lbHaveLocalPlayer && (lNewHostID == lLocalPlayerID);
         lHostChangedEvent.mbIsFirstHost          = (lOldHostID == CgsNetwork::K_INVALID_PLAYER_ID);
 
-        CGS_ASSERT(lpStateManager->mpNetworkModule != 0, "lpStateManager->mpNetworkModule");
-        CGS_ASSERT(lpStateManager->mpNetworkModule->GetNetworkEventQueue() != 0,
-                   "lpStateManager->mpNetworkModule->GetNetworkEventQueue()");
+        CGS_ASSERT(lpStateManager->mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+            "lpStateManager->mpNetworkModule",
+            __FILE__, 5611 /* ARTIST 0x82563420 */));
+        CGS_ASSERT(lpStateManager->mpNetworkModule->GetNetworkEventQueue() != 0, CgsDev::Assert::MessageAt(
+            "lpStateManager->mpNetworkModule->GetNetworkEventQueue()",
+            __FILE__, 5612 /* ARTIST 0x8256344C */));
         lpStateManager->mpNetworkModule->GetNetworkEventQueue()->AddEvent(
             AsEvent(&lHostChangedEvent), lHostChangedEvent.GetEventType(), sizeof(lHostChangedEvent));
     }
@@ -205,11 +215,17 @@ namespace BrnNetwork
     // -----------------------------------------------------------------------------------
     void StateManager::GetCompressedCameraPicCallback(void* lpPixels, void* lpUserData)
     {
-        CGS_ASSERT(lpPixels != 0, "lpPixels");
-        CGS_ASSERT(lpUserData != 0, "lpUserData");
+        CGS_ASSERT(lpPixels != 0, CgsDev::Assert::MessageAt(
+            "lpPixels",
+            __FILE__, 5632 /* ARTIST 0x825634B0 */));
+        CGS_ASSERT(lpUserData != 0, CgsDev::Assert::MessageAt(
+            "lpUserData",
+            __FILE__, 5633 /* ARTIST 0x825634D4 */));
 
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
-        CGS_ASSERT(lpStateManager != 0, "lpStateManager");
+        CGS_ASSERT(lpStateManager != 0, CgsDev::Assert::MessageAt(
+            "lpStateManager",
+            __FILE__, 5635 /* ARTIST 0x825634F0 */));
 
         BrnNetworkModuleIO::NetworkOutCamPicCompressedEvent lCompressedEvent;
         lCompressedEvent.miCompressedPixelSize = KI_COMPRESSED_CAMERA_PIC_SIZE;
@@ -338,7 +354,9 @@ namespace BrnNetwork
         while (lpPlayerManager->GetNextPlayerID(&lPlayerID, CgsNetwork::PlayerManager::E_CONSIDER_PLAYERS_WHO_HAVE_FINALISED))
         {
             PlayerMenuData* lpMenuData = static_cast<PlayerMenuData*>(lpPlayerManager->GetMenuDataByID(lPlayerID));
-            CGS_ASSERT(lpMenuData != 0, "lpMenuData");
+            CGS_ASSERT(lpMenuData != 0, CgsDev::Assert::MessageAt(
+                "lpMenuData",
+                __FILE__, 4242 /* ARTIST 0x82569E04 */));
 
             CgsNetwork::NetworkPlayer* lpPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
             if (!lpMenuData->mbFinalCarSelection
@@ -422,7 +440,9 @@ namespace BrnNetwork
             return;
         }
 
-        CGS_ASSERT(lpConnectEvent != 0, "lpConnectEvent");
+        CGS_ASSERT(lpConnectEvent != 0, CgsDev::Assert::MessageAt(
+            "lpConnectEvent",
+            __FILE__, 5785 /* ARTIST 0x82576034 */));
 
         // FLAG: the console logs "HandleConnectEvent() - NOT connected. SignInType=" <type>
         // " Still Signing In=" "true"/"false" "\n" to the same unhomed debug stream here.
@@ -541,13 +561,18 @@ namespace BrnNetwork
     void StateManager::JoinGameFinishedCallback(bool lbSuccess, void* lpUserData)
     {
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
-        CGS_ASSERT(lpStateManager != 0, "lpStateManager");
+        CGS_ASSERT(lpStateManager != 0, CgsDev::Assert::MessageAt(
+            "lpStateManager",
+            __FILE__, 3305 /* ARTIST 0x8256E5A0 */));
 
         lpStateManager->meState = E_STATE_COUNT;
 
-        CGS_ASSERT(lpStateManager->mpNetworkManager != 0, "lpStateManager->mpNetworkManager");
-        CGS_ASSERT(lpStateManager->mpNetworkManager->GetServerInterface() != 0,
-                   "lpStateManager->mpNetworkManager->GetServerInterface()");
+        CGS_ASSERT(lpStateManager->mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "lpStateManager->mpNetworkManager",
+            __FILE__, 3310 /* ARTIST 0x8256E5D0 */));
+        CGS_ASSERT(lpStateManager->mpNetworkManager->GetServerInterface() != 0, CgsDev::Assert::MessageAt(
+            "lpStateManager->mpNetworkManager->GetServerInterface()",
+            __FILE__, 3311 /* ARTIST 0x8256E5F8 */));
 
         const bool lbInGame =
             lbSuccess && lpStateManager->mpNetworkManager->GetServerInterface()->GetGameComponent()->IsLocalPlayerInGame();
@@ -605,8 +630,12 @@ namespace BrnNetwork
     void StateManager::LeaveGameForOfflineGameFinishedCallback(bool lbSuccess, void* lpUserData)
     {
         StateManager* lpStateManager = static_cast<StateManager*>(lpUserData);
-        CGS_ASSERT(lpStateManager != 0, "lpStateManager");
-        CGS_ASSERT(lpStateManager->mpNetworkManager != 0, "lpStateManager->mpNetworkManager");
+        CGS_ASSERT(lpStateManager != 0, CgsDev::Assert::MessageAt(
+            "lpStateManager",
+            __FILE__, 3401 /* ARTIST 0x8256E7A0 */));
+        CGS_ASSERT(lpStateManager->mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "lpStateManager->mpNetworkManager",
+            __FILE__, 3402 /* ARTIST 0x8256E7C8 */));
 
         if (!lbSuccess)
         {
@@ -628,9 +657,12 @@ namespace BrnNetwork
 
         lpStateManager->mpNetworkManager->GetCamera()->RequestFeed(CgsNetwork::K_INVALID_PLAYER_ID);
 
-        CGS_ASSERT(lpStateManager->mpNetworkModule != 0, "lpStateManager->mpNetworkModule");
-        CGS_ASSERT(lpStateManager->mpNetworkModule->GetGameStateToNetworkInterface() != 0,
-                   "lpStateManager->mpNetworkModule->GetGameStateToNetworkInterface()");
+        CGS_ASSERT(lpStateManager->mpNetworkModule != 0, CgsDev::Assert::MessageAt(
+            "lpStateManager->mpNetworkModule",
+            __FILE__, 3418 /* ARTIST 0x8256E834 */));
+        CGS_ASSERT(lpStateManager->mpNetworkModule->GetGameStateToNetworkInterface() != 0, CgsDev::Assert::MessageAt(
+            "lpStateManager->mpNetworkModule->GetGameStateToNetworkInterface()",
+            __FILE__, 3419 /* ARTIST 0x8256E860 */));
 
         if (!GsmIO::IsOnlineFreeBurnLobby(lpStateManager->mpNetworkModule->GetGameStateToNetworkInterface()->GetCurrentGameMode()))
         {
@@ -747,7 +779,9 @@ namespace BrnNetwork
             GsmIO::OnlineCarSelectEvent lCarSelectEvent;
             NetworkPlayerID         lPlayerID = CgsNetwork::K_INVALID_PLAYER_ID;
 
-            CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
+            CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+                "mpNetworkManager",
+                __FILE__, 4887 /* ARTIST 0x8256A83C */));
 
             lGameParams.Prepare();
             mpNetworkManager->GetServerInterface()->GetGameComponent()->GetGameParameters(&lGameParams);
@@ -761,8 +795,9 @@ namespace BrnNetwork
                 mpNetworkManager->GetTimerStatus(),
                 mpNetworkManager->GetTimeManager()->GetU16FrameCount());
 
-            CGS_ASSERT(mpNetworkManager->GetTeamSelectionManager() != 0,
-                       "mpNetworkManager->GetTeamSelectionManager()");
+            CGS_ASSERT(mpNetworkManager->GetTeamSelectionManager() != 0, CgsDev::Assert::MessageAt(
+                "mpNetworkManager->GetTeamSelectionManager()",
+                __FILE__, 4903 /* ARTIST 0x8256A8F4 */));
             meState = E_STATE_WAIT_TEAM_SELECTION;
             mpNetworkManager->GetTeamSelectionManager()->StartTeamSelection(
                 lGameParams.GameMode(), TeamSelectionFinishedCallback, this);
@@ -796,7 +831,9 @@ namespace BrnNetwork
             {
                 PlayerMenuData* lpMenuData =
                     static_cast<PlayerMenuData*>(mpNetworkManager->GetPlayerManager()->GetMenuDataByID(lPlayerID));
-                CGS_ASSERT((lpMenuData->mFreeBurnCarId != 0), "(lpMenuData->mFreeBurnCarId != 0)");
+                CGS_ASSERT((lpMenuData->mFreeBurnCarId != 0), CgsDev::Assert::MessageAt(
+                    "(lpMenuData->mFreeBurnCarId != 0)",
+                    __FILE__, 4934 /* ARTIST 0x8256AA40 */));
 
                 if (lpMenuData->mCarId == 0)
                 {
@@ -830,7 +867,9 @@ namespace BrnNetwork
         }
 
         default:
-            CGS_ASSERT(false, "Invalid launch state");
+            CGS_ASSERT(false, CgsDev::Assert::MessageAt(
+                "Invalid launch state",
+                __FILE__, 4981 /* ARTIST 0x8256AB38 */));
             break;
         }
     }
@@ -986,7 +1025,9 @@ namespace BrnNetwork
         PlayerInfoData lPlayerInfo;
         lPlayerInfo.Prepare();
         mpNetworkManager->GetServerInterface()->GetPlayerInfoComponent()->GetLocalPlayerInfo(&lPlayerInfo);
-        CGS_ASSERT(lPlayerInfo.GetID() > 0, "lPlayerInfo.GetID() > 0");
+        CGS_ASSERT(lPlayerInfo.GetID() > 0, CgsDev::Assert::MessageAt(
+            "lPlayerInfo.GetID() > 0",
+            __FILE__, 5045 /* ARTIST 0x82560E1C */));
 
         mpNetworkManager->GetStatsManager()->RequestPlayerStats(lPlayerInfo.GetName());
 

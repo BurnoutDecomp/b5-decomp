@@ -350,10 +350,15 @@ namespace BrnNetwork
     // ------------------------------------------------------------------------------------
     void StateManager::IntroStopped(const BrnGameState::GameStateModuleIO::StopModeIntroAction* lpStopIntroAction)
     {
-        CGS_ASSERT(mpNetworkManager, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetServerInterface(), "mpNetworkManager->GetServerInterface()");
-        CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetConnectionComponent(),
-                   "mpNetworkManager->GetServerInterface()->GetConnectionComponent()");
+        CGS_ASSERT(mpNetworkManager, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            __FILE__, 3873 /* ARTIST 0x825492EC */));
+        CGS_ASSERT(mpNetworkManager->GetServerInterface(), CgsDev::Assert::MessageAt(
+            "mpNetworkManager->GetServerInterface()",
+            __FILE__, 3874 /* ARTIST 0x82549314 */));
+        CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetConnectionComponent(), CgsDev::Assert::MessageAt(
+            "mpNetworkManager->GetServerInterface()->GetConnectionComponent()",
+            __FILE__, 3875 /* ARTIST 0x82549340 */));
 
         if (mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn())
         {
@@ -362,8 +367,9 @@ namespace BrnNetwork
                     || lpStopIntroAction->meGameMode == GsmIO::E_MODE_ONLINE_SHOWTIME)
                 && mpNetworkManager->IsDoingFreeBurnLobby())
             {
-                CGS_ASSERT(!GsmIO::IsShowtimeGameMode(lpStopIntroAction->meGameMode),
-                           "!GsmIO::IsShowtimeGameMode(lpStopIntroAction->meGameMode)");
+                CGS_ASSERT(!GsmIO::IsShowtimeGameMode(lpStopIntroAction->meGameMode), CgsDev::Assert::MessageAt(
+                    "!GsmIO::IsShowtimeGameMode(lpStopIntroAction->meGameMode)",
+                    __FILE__, 3888 /* ARTIST 0x825493E4 */));
 
                 mpNetworkManager->GetStartTimeManager()->StartSyncingTime(
                     lpStopIntroAction->meGameMode == GsmIO::E_MODE_ONLINE_FREE_BURN_LOBBY);
@@ -617,8 +623,9 @@ namespace BrnNetwork
 
         mbForceStartFreeburnLobby = false;
 
-        CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn(),
-                   "mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn()");
+        CGS_ASSERT(mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn(), CgsDev::Assert::MessageAt(
+            "mpNetworkManager->GetServerInterface()->GetConnectionComponent()->IsLoggedIn()",
+            __FILE__, 3109 /* ARTIST 0x82573004 */));
 
         lGameParams.Prepare();
         lGameParams.SetSession(lpcSessionID);

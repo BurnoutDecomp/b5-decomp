@@ -151,7 +151,9 @@ namespace BrnNetwork
     void StandingsManager::AddPlayer(NetworkPlayerID lPlayerID)
     {
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
-        CGS_ASSERT(lpPlayerManager != 0, "mpNetworkManager->GetPlayerManager()");
+        CGS_ASSERT(lpPlayerManager != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager->GetPlayerManager()",
+            __FILE__, 165 /* ARTIST 0x825509C0 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
 
@@ -165,7 +167,9 @@ namespace BrnNetwork
                 break;
             }
         }
-        CGS_ASSERT(liIndex < KI_MAX_PLAYERS, "liIndex < KI_MAX_PLAYERS");
+        CGS_ASSERT(liIndex < KI_MAX_PLAYERS, CgsDev::Assert::MessageAt(
+            "liIndex < KI_MAX_PLAYERS",
+            __FILE__, 178 /* ARTIST 0x82550A30 */));
 
         if (lpNetworkPlayer != 0)
         {
@@ -189,7 +193,9 @@ namespace BrnNetwork
     void StandingsManager::RemovePlayer(NetworkPlayerID lPlayerID)
     {
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
-        CGS_ASSERT(lpPlayerManager != 0, "mpNetworkManager->GetPlayerManager()");
+        CGS_ASSERT(lpPlayerManager != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager->GetPlayerManager()",
+            __FILE__, 211 /* ARTIST 0x82550AC4 */));
 
         CgsNetwork::NetworkPlayer* lpNetworkPlayer = lpPlayerManager->GetPlayerByID(lPlayerID);
         if (lpNetworkPlayer != 0)
@@ -198,7 +204,9 @@ namespace BrnNetwork
         }
 
         StandingsData* lpDataEntry = GetStandingsDataEntry(lPlayerID);
-        CGS_ASSERT(lpDataEntry != 0, "lpDataEntry");
+        CGS_ASSERT(lpDataEntry != 0, CgsDev::Assert::MessageAt(
+            "lpDataEntry",
+            __FILE__, 222 /* ARTIST 0x82550B18 */));
 
         lpDataEntry->mPlayerID = K_INVALID_PLAYER_ID;
         lpDataEntry->mFinishTime.SetFloatVal(0.0f);
@@ -329,17 +337,25 @@ namespace BrnNetwork
                                                                 void* lpUserData)
     {
         StandingsManager* lpStandingsManager = static_cast<StandingsManager*>(lpUserData);
-        CGS_ASSERT(lpStandingsManager != 0, "lpStandingsManager");
+        CGS_ASSERT(lpStandingsManager != 0, CgsDev::Assert::MessageAt(
+            "lpStandingsManager",
+            __FILE__, 463 /* ARTIST 0x8254556C */));
 
         PlayerFinishedRoundMessage* lpPlayerFinishedRoundMessage =
             static_cast<PlayerFinishedRoundMessage*>(lpMessage);
-        CGS_ASSERT(lpPlayerFinishedRoundMessage != 0, "lpPlayerFinishedRoundMessage");
+        CGS_ASSERT(lpPlayerFinishedRoundMessage != 0, CgsDev::Assert::MessageAt(
+            "lpPlayerFinishedRoundMessage",
+            __FILE__, 464 /* ARTIST 0x82545590 */));
 
         CgsNetwork::PlayerManager* lpPlayerManager = lpStandingsManager->mpNetworkManager->GetPlayerManager();
-        CGS_ASSERT(lpPlayerManager != 0, "lpPlayerManager");
+        CGS_ASSERT(lpPlayerManager != 0, CgsDev::Assert::MessageAt(
+            "lpPlayerManager",
+            __FILE__, 467 /* ARTIST 0x825455BC */));
 
         StandingsData* lpStandings = lpStandingsManager->GetStandingsDataEntry(lSendingPlayerID);
-        CGS_ASSERT(lpStandings != 0, "lpStandings");
+        CGS_ASSERT(lpStandings != 0, CgsDev::Assert::MessageAt(
+            "lpStandings",
+            __FILE__, 471 /* ARTIST 0x825455F0 */));
         if (lpStandings == 0)
         {
             return;
@@ -409,10 +425,14 @@ namespace BrnNetwork
     void StandingsManager::FillOutResultsData(BrnNetworkModuleIO::PlayerResultsData* lpResultsData,
                                               NetworkPlayerID lPlayerID)
     {
-        CGS_ASSERT(lpResultsData != 0, "lpResultsData");
+        CGS_ASSERT(lpResultsData != 0, CgsDev::Assert::MessageAt(
+            "lpResultsData",
+            __FILE__, 566 /* ARTIST 0x825457CC */));
 
         StandingsData* lpStandingsData = GetStandingsDataEntry(lPlayerID);
-        CGS_ASSERT(lpStandingsData != 0, "lpStandingsData");
+        CGS_ASSERT(lpStandingsData != 0, CgsDev::Assert::MessageAt(
+            "lpStandingsData",
+            __FILE__, 569 /* ARTIST 0x82545800 */));
 
         // Clear the record to its empty defaults (matches the inlined PlayerResultsData::Clear:
         // distance -1.0, both car indices -1, finish time 0, everything else zeroed/false).
@@ -425,7 +445,9 @@ namespace BrnNetwork
         lpResultsData->mbValid              = false;
         lpResultsData->mbEliminated         = false;
 
-        CGS_ASSERT(ArePlayersResultsValid(lPlayerID), "ArePlayersResultsValid( lPlayerID )");
+        CGS_ASSERT(ArePlayersResultsValid(lPlayerID), CgsDev::Assert::MessageAt(
+            "ArePlayersResultsValid( lPlayerID )",
+            __FILE__, 573 /* ARTIST 0x8254587C */));
 
         lpResultsData->mbValid = true;
         lpResultsData->meActiveRaceCarIndex =

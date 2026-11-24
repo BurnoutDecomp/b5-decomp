@@ -224,7 +224,9 @@ namespace BrnNetwork
     // -------------------------------------------------------------------------------------------
     void ScoreboardManager::SetViewAndDownloadHeaders()
     {
-        CGS_ASSERT(mpRankings->IsBusy() == false, "mpRankings->IsBusy() == false");
+        CGS_ASSERT(mpRankings->IsBusy() == false, CgsDev::Assert::MessageAt(
+            "mpRankings->IsBusy() == false",
+            __FILE__, 751 /* ARTIST 0x825472BC */));
 
         const bool lbLeaderboardContent =
             BrnResource::g_DLCFeatureAvailability.IsFeatureAvailable(BrnResource::E_DLC_FEATURE_LEADERBOARDS_BURNING_ROUTE)
@@ -347,10 +349,18 @@ namespace BrnNetwork
     // -------------------------------------------------------------------------------------------
     void ScoreboardManager::BuildDownloadedScoreboard(Scoreboard* lpScoreboard)
     {
-        CGS_ASSERT(lpScoreboard != 0, "lpScoreboard");
-        CGS_ASSERT(miCurrentCategory >= 0, "miCurrentCategory >= 0");
-        CGS_ASSERT(miCurrentIndex >= 0, "miCurrentIndex >= 0");
-        CGS_ASSERT(miCurrentVariation >= 0, "miCurrentVariation >= 0");
+        CGS_ASSERT(lpScoreboard != 0, CgsDev::Assert::MessageAt(
+            "lpScoreboard",
+            __FILE__, 833 /* ARTIST 0x8255F980 */));
+        CGS_ASSERT(miCurrentCategory >= 0, CgsDev::Assert::MessageAt(
+            "miCurrentCategory >= 0",
+            __FILE__, 836 /* ARTIST 0x8255F9A8 */));
+        CGS_ASSERT(miCurrentIndex >= 0, CgsDev::Assert::MessageAt(
+            "miCurrentIndex >= 0",
+            __FILE__, 837 /* ARTIST 0x8255F9D0 */));
+        CGS_ASSERT(miCurrentVariation >= 0, CgsDev::Assert::MessageAt(
+            "miCurrentVariation >= 0",
+            __FILE__, 838 /* ARTIST 0x8255F9F8 */));
 
         bool lbAreCategoryIndexAndVariationValid =
             (miCurrentCategory  < mpRankings->GetNumberOfCategories()) &&
@@ -827,8 +837,9 @@ namespace BrnNetwork
             }
             else if (mpRankings->ScoreboardHasParam(KI_SCOREBOARD_PARAM_STUNT_RUN))
             {
-                CGS_ASSERT(liVariationCounter < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS,
-                           "liVariationLoopCounter < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS");
+                CGS_ASSERT(liVariationCounter < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS, CgsDev::Assert::MessageAt(
+                    "liVariationLoopCounter < KI_NUM_STUNT_RUN_EVENT_SCOREBOARDS",
+                    __FILE__, 542 /* ARTIST 0x825627E0 */));
                 char lacHeading[32];
                 CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$EV_%06u",
                                  static_cast<u32>(KAU64_STUNT_RUN_SCOREBOARD_EVENT_IDS[liTableIndex]));
@@ -838,8 +849,9 @@ namespace BrnNetwork
             }
             else if (mpRankings->ScoreboardHasParam(KI_SCOREBOARD_PARAM_BURN_ROUTE))
             {
-                CGS_ASSERT(liVariationCounter < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS,
-                           "liVariationLoopCounter < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS");
+                CGS_ASSERT(liVariationCounter < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS, CgsDev::Assert::MessageAt(
+                    "liVariationLoopCounter < KI_NUM_BURN_ROUTE_EVENT_SCOREBOARDS",
+                    __FILE__, 552 /* ARTIST 0x82562848 */));
                 char lacHeading[32];
                 CgsCore::SPrintf(lacHeading, KI_CELL_BUFFER_SIZE, "$EV_%06u",
                                  static_cast<u32>(KAU64_BURN_ROUTE_SCOREBOARD_EVENT_IDS[liTableIndex]));

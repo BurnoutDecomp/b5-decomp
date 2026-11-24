@@ -206,8 +206,9 @@ namespace BrnNetwork
         NetworkPlayerID lLocalNetworkPlayerID = KI_INVALID_PLAYER_ID;
         const bool lbHasLocalPlayer =
             mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID(&lLocalNetworkPlayerID);
-        CGS_ASSERT(lbHasLocalPlayer,
-                   "mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID( &lLocalNetworkPlayerID )");
+        CGS_ASSERT(lbHasLocalPlayer, CgsDev::Assert::MessageAt(
+            "mpNetworkManager->GetPlayerManager()->GetNextLocalPlayerID( &lLocalNetworkPlayerID )",
+            __FILE__, 282 /* ARTIST 0x82548D84 */));
 
         BrnNetwork::PlayerMenuData* lpLocalMenuData = static_cast<BrnNetwork::PlayerMenuData*>(
             mpNetworkManager->GetPlayerManager()->GetMenuDataByID(lLocalNetworkPlayerID));

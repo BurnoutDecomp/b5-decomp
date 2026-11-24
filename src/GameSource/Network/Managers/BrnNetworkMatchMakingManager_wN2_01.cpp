@@ -522,8 +522,9 @@ namespace BrnNetwork
             mpNetworkManager->GetServerInterface()->GetUsersetsComponent());
         if (lpUsersets->IsLocalPlayerInUserset() && lpUsersets->IsLocalPlayerHost())
         {
-            CGS_ASSERT(lpUsersets->IsLocalPlayerHost(),
-                       "mpNetworkManager->GetServerInterface()->GetUsersetsComponent()->IsLocalPlayerHost()");
+            CGS_ASSERT(lpUsersets->IsLocalPlayerHost(), CgsDev::Assert::MessageAt(
+                "mpNetworkManager->GetServerInterface()->GetUsersetsComponent()->IsLocalPlayerHost()",
+                __FILE__, 1042 /* ARTIST 0x8255EBF4 */));
 
             UsersetParams lParams;
             lParams.Prepare();

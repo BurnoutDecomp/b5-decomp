@@ -54,7 +54,9 @@ namespace BrnNetwork
         maUpdateFunctions[1] = &TeamSelectionManager::UpdateWaitIdle;
 
         for (s32 liIndex = 0; liIndex < KI_NUM_UPDATE_FUNCTIONS; ++liIndex)
-            CGS_ASSERT(maUpdateFunctions[liIndex] != 0, "No update function supplied for this sub state");
+            CGS_ASSERT(maUpdateFunctions[liIndex] != 0, CgsDev::Assert::MessageAt(
+                "No update function supplied for this sub state",
+                __FILE__, 113 /* ARTIST 0x8255E7A0 */));
     }
 
     // ---------------------------------------------------------------------------------
@@ -598,8 +600,12 @@ namespace BrnNetwork
     // ---------------------------------------------------------------------------------
     bool TeamSelectionManager::ActionBroadcastFinalTeamSelection()
     {
-        CGS_ASSERT(mpNetworkManager != 0, "mpNetworkManager");
-        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, "mpNetworkManager->GetPlayerManager()");
+        CGS_ASSERT(mpNetworkManager != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager",
+            __FILE__, 864 /* ARTIST 0x825571B0 */));
+        CGS_ASSERT(mpNetworkManager->GetPlayerManager() != 0, CgsDev::Assert::MessageAt(
+            "mpNetworkManager->GetPlayerManager()",
+            __FILE__, 865 /* ARTIST 0x825571D8 */));
 
         CgsNetwork::PlayerManager* lpPlayerManager = mpNetworkManager->GetPlayerManager();
         const NetworkPlayerID lLocalPlayerID = lpPlayerManager->GetLocalPlayerID();
@@ -619,7 +625,9 @@ namespace BrnNetwork
             if (!lbIsLocalPlayer)
             {
                 TeamSelectionData* lpTeamSelectionData = GetTeamSelectionDataEntry(lPlayerID);
-                CGS_ASSERT(lpTeamSelectionData != 0, "lpTeamSelectionData");
+                CGS_ASSERT(lpTeamSelectionData != 0, CgsDev::Assert::MessageAt(
+                    "lpTeamSelectionData",
+                    __FILE__, 877 /* ARTIST 0x82557290 */));
 
                 lpTeamSelectionData->mMessageSend.PrepareForSend(
                     lu16Frame, lpaPlayerTeamInfo, miNumPlayersAssigned,

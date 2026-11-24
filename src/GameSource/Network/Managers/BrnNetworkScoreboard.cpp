@@ -124,7 +124,9 @@ namespace BrnNetwork
     // Copy a prepared column heading into the next free column slot.
     void Scoreboard::AddColumn(ScoreboardColumn* lpColumn)
     {
-        CGS_ASSERT(miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS, "miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS");
+        CGS_ASSERT(miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS, CgsDev::Assert::MessageAt(
+            "miNumberOfColumns < KI_MAX_SCOREBOARD_COLUMNS",
+            __FILE__, 198 /* ARTIST 0x82546E4C */));
         maColumns[miNumberOfColumns] = *lpColumn;
         ++miNumberOfColumns;
     }
