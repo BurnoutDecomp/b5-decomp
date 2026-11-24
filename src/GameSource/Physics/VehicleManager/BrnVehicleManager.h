@@ -24,6 +24,7 @@
 #include "GameSource/BurnoutConstants.h"                          // EActiveRaceCarIndex
 #include "GameSource/Physics/VehicleManager/BrnVehicleConstants.h" // EImpactType, EImpactSituation
 #include "GameSource/GameState/BrnTakedownType.h"                 // BrnGameState::ETakedownType
+#include "GameSource/GameState/BrnGameStateTypes.h"               // BrnGameState::EShowtimeBehaviour (meShowtimeBehaviour)
 #include "GameSource/World/EntityModules/RaceCarEntityModule/SharedIO/BrnRaceCarType.h" // BrnWorld::ERaceCarType (maeRaceCarTypes)
 #include "GameSource/Physics/ContactSpies/BrnContactSpyEvents.h"  // RaceCarContact (mNormal @+48, mPointOnA @+64)
 #include "GameShared/GameClasses/SceneManager/SharedIO/CgsPotentialContact.h" // CgsSceneManager::SceneManagerIO::PotentialContact (maNonPhysicalContacts[128], promoted 2026-08-06)
@@ -1497,7 +1498,7 @@ namespace Vehicle
         void SetPlayerActiveRaceCarIndex(EActiveRaceCarIndex lePlayerActiveRaceCarIndex);
 
         // @0x8259C098: store the current showtime behaviour mode (gated 0..2).
-        void SetShowtimeBehaviour(u32 luShowtimeBehaviour);
+        void SetShowtimeBehaviour(BrnGameState::EShowtimeBehaviour leShowtimeBehaviour);   // DWARF h:965
 
         // @0x8259C108: drive the player car into (or out of) showtime: forwards the cached showtime
         // strength/damage-limit to RaceCarPhysics::SetPlayerVehicleInShowtime on the player car and
@@ -2812,9 +2813,9 @@ namespace Vehicle
         s32 meStationaryPlayerWheelAngle;           // +172448 = 2
         bool mbCrashRaceCarWhenFatal;               // +172452 = true
         unsigned char        mPad2A1A5[172456 - (172452 + 1)];
-        // FLAG: BrnGameState::EShowtimeBehaviour has no committed home; kept as u32. Gated 0..2
-        // against E_SHOWTIME_MODE_COUNT==3 by SetShowtimeBehaviour; Construct seeds 2.
-        u32 meShowtimeBehaviour;                    // +172456 = 2     [was muShowtimeBehaviour]
+        // DWARF BrnVehicleManager.h:715 BrnGameState::EShowtimeBehaviour (BrnGameStateTypes.h).
+        // Gated 0..2 by SetShowtimeBehaviour (signed, 0x8259C0B4); Construct seeds ON_SIXAXIS.
+        BrnGameState::EShowtimeBehaviour meShowtimeBehaviour;   // +172456 = 2
         // The 30th PerfMonCpu monitor handle -- the only one of the thirty that is stored INTO the
         // object rather than into a file-scope global. Named by the console's OWN assert text,
         // `"miRaceCarWorldContactValidationPM >= 0"` (BrnVehicleManager.cpp:778), which matches

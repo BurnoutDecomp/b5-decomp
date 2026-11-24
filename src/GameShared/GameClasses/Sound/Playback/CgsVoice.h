@@ -235,7 +235,10 @@ public:
                               const VoiceSpec& arVoiceSpec);
     static void operator delete(void* apMemory, Factory& arFactory,
                                 const VoiceSpec& arVoiceSpec);
-    static void operator delete(void* apMemory);
+    // DWARF CgsVoice.h:492. No out-of-line ARTIST symbol: every deleting destructor of the
+    // family (PlayerVoice 0x826C7F94, SplicerPlayerVoice 0x826E1898, AemsPlayerVoice) calls the
+    // CRT operator delete at 0x82C08FB0 directly, so the class operator inlines to it.
+    static void operator delete(void* apMemory) { ::operator delete(apMemory); }
 
     Voice(size_t auClientSize, Factory& arFactory, const VoiceSpec& arVoiceSpec,
           u32 au32Ident);
@@ -361,6 +364,11 @@ public:
     PlayerVoice(size_t auClientSize, Factory& arFactory,
                 const VoiceSpec& arVoiceSpec, u32 au32Ident)
         : Voice(auClientSize, arFactory, arVoiceSpec, au32Ident) {}
+
+    // DWARF CgsPlayerVoice.h:66: a user-declared virtual destructor. ARTIST's
+    // PlayerVoice::`vector deleting destructor' (0x826C7F58) and every derived one restore the
+    // PlayerVoice vtable (0x820B3608) before ~Voice, which an implicit destructor does not.
+    virtual ~PlayerVoice() {}
 };
 
 // ---------------------------------------------------------------------------

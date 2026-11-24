@@ -26,8 +26,7 @@ namespace Deformation
         mGlassSmashOrCrackQueue.Construct();
         mDetachedPartCurrentPositionQueue.Construct();
 
-        mpDeformationState  = 0;   // X360 +0x70 cleared
-        miNumLocatorOutputs = 0;   // X360 +0x2A00 cleared
+        Clear();
     }
 
     // BrnPhysics::Deformation::DeformationOutputInterface::operator=  @ 0x823C8900.

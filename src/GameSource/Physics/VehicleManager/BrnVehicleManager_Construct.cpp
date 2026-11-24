@@ -374,7 +374,7 @@ namespace Vehicle
 
         meStationaryPlayerWheelAngle = 2;       // +172448
         mbCrashRaceCarWhenFatal      = true;    // +172452
-        meShowtimeBehaviour          = 2;       // +172456
+        meShowtimeBehaviour          = BrnGameState::E_SHOWTIME_MODE_ON_SIXAXIS;   // +172456 = 2
 
         // THE THIRTIETH MONITOR -- page 6, not 12, and the only one stored INTO the object. The
         // console asserts its handle immediately (BrnVehicleManager.cpp:778, `li r5, 0x30A`), which

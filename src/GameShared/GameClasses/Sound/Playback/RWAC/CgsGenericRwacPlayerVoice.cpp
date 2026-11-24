@@ -18,10 +18,6 @@ GenericRwacPlayerVoice::GenericRwacPlayerVoice(
     AcknowledgePlaybackStateChange();
 }
 
-GenericRwacPlayerVoice::~GenericRwacPlayerVoice()
-{
-}
-
 f32 GenericRwacPlayerVoice::GetCpuTicks()
 {
     return GenericRwacVoice::GetCpuTicks();

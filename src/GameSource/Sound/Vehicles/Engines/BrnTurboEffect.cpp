@@ -232,7 +232,8 @@ bool TurboEffect::Detach()
 
 void TurboEffect::Notify(const CgsSound::Io::MessageHeader* apMessage)
 {
-    if (apMessage && apMessage->GetEventId() == E_SOUNDMESSAGE_FX_VOLUMES)
+    // ARTIST reads the message id directly (no null test of the message).
+    if (apMessage->GetEventId() == E_SOUNDMESSAGE_FX_VOLUMES)
     {
         const CgsSound::Io::Message<FxVolumes>* lpVolumes =
             static_cast<const CgsSound::Io::Message<FxVolumes>*>(apMessage);

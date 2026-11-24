@@ -4,6 +4,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsRegistry.h" // Entity (ContentSpec base)
 #include "GameShared/GameClasses/Sound/Playback/CgsObject.h"   // Object (canonical DWARF home -- fold done, see the note below)
 #include "GameShared/GameClasses/Sound/Playback/CgsDataStructures.h" // EContentLoadMethod (IContentLoadService's selector)
@@ -143,7 +144,17 @@ namespace Playback
         // flag as required. FLAG (DEFER): declared-only -- bodied in its own Content TU
         // (X360 CgsSound::Playback::Content::SetContentState). Reached from
         // ContentLoader<>::UpdateResourceModuleLoading on the FINISHED transition.
-        void SetContentState(EContentState leContentState);   // DWARF CgsContent.h:135
+        // DWARF CgsContent.h:135, body at h:462 (inline: ARTIST inlines it into
+        // ContentLoader<>::Unload and keeps an out-of-line copy for UpdateResourceModuleLoading).
+        // The state is compared signed against GetContentState() (cmpw at 0x82680C98) and
+        // stored with the CHANGED bit inserted (rlwimi at 0x82680CA4).
+        void SetContentState(EContentState leContentState)
+        {
+            CGS_ASSERT(!(leContentState & E_CONTENT_STATE_CHANGED), CgsDev::Assert::MessageAt(
+                       "!(leContentState & E_CONTENT_STATE_CHANGED)", "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsContent.h", 462));
+            if (GetContentState() != leContentState)
+                mu8ContentState = static_cast<u8>(leContentState | E_CONTENT_STATE_CHANGED);
+        }
 
         // @ 0x82680CC8. Enter the remove lifecycle and ask the concrete content
         // implementation to begin unloading.

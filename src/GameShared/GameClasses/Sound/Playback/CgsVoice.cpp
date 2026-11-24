@@ -78,12 +78,6 @@ void Voice::operator delete(void* /*apMemory*/, Factory& /*arFactory*/,
 {
 }
 
-void Voice::operator delete(void* /*apMemory*/)
-{
-    // Voice::DoDispose returns the allocator carve; ordinary scalar delete is
-    // never the owning path in the playback object model.
-}
-
 Voice::Voice(size_t auClientSize, Factory& arFactory, const VoiceSpec& arVoiceSpec,
              u32 au32Ident)
     : Object(),
@@ -560,15 +554,18 @@ void Voice::SetParameter(s32 as32Index, f32 af32Value, Name akParamName)
 
 // @ 0x82680E18. Set the low-7-bit playback state, raising the CHANGED (0x80) bit iff the
 // state actually differs from the currently-latched one.
-void Voice::SetPlaybackState(EPlaybackState aeState)
+// The original body is a header inline (its assert names CgsVoice.h:1471). ARTIST clears the
+// CHANGED bit unconditionally (stb at 0x82680E70), compares the state signed (cmpw at
+// 0x82680E6C) and stores the new state with the CHANGED bit inserted (rlwimi at 0x82680E7C).
+void Voice::SetPlaybackState(EPlaybackState lePlaybackState)
 {
-    CGS_ASSERT((aeState & E_PLAYBACK_STATE_CHANGED) == 0,
-               "!(lePlaybackState & E_PLAYBACK_STATE_CHANGED)");
+    CGS_ASSERT(!(lePlaybackState & E_PLAYBACK_STATE_CHANGED), CgsDev::Assert::MessageAt(
+               "!(lePlaybackState & E_PLAYBACK_STATE_CHANGED)",
+               "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/CgsVoice.h", 1471));
 
-    u8 lu8Cur = static_cast<u8>(mu8PlaybackState & 0x7F);   // clear CHANGED bit
-    mu8PlaybackState = lu8Cur;
-    if (lu8Cur != static_cast<u8>(aeState))
-        mu8PlaybackState = static_cast<u8>((aeState & 0x7F) | E_PLAYBACK_STATE_CHANGED);
+    AcknowledgePlaybackStateChange();
+    if (GetPlaybackState() != lePlaybackState)
+        mu8PlaybackState = static_cast<u8>(lePlaybackState | E_PLAYBACK_STATE_CHANGED);
 }
 
 // @ 0x826A24F0. Per-frame tick. While ALIVE, update each slot then run the type-specific

@@ -330,7 +330,7 @@ namespace Deformation
 
         // Drain every input queue (the X360 zeroes each queue's miLength directly -- the queues
         // are consumed). ClearAllQueues is the by-name equivalent (additive interface accessor).
-        lpInputInterface->ClearAllQueues();
+        lpInputInterface->Clear();
     }
 
     // -----------------------------------------------------------------------------------

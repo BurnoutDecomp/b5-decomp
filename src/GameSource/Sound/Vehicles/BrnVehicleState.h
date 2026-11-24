@@ -84,8 +84,18 @@ struct VehicleState : public BrnSound::Logic::BrnState
 
         // @ 0x82681FC8 -- validate the index and asset, then store all three fields.
         // Signature mirrors the X360 fastcall register order: r4=token, r5=asset,
-        // r6=vehicleIndex. Returns `this`.
-        AttachInfo* Construct( u64 aAttachToken, void* apVehicleAsset, u32 auVehicleIndex );
+        // r6=vehicleIndex. DWARF BrnVehicleState.h:143 returns void (ARTIST leaves r3 alone).
+        void Construct( u64 aAttachToken, void* apVehicleAsset, u32 auVehicleIndex );
+
+        // DWARF BrnVehicleState.h:146 (no out-of-line ARTIST symbol; inlined into
+        // VehicleState::Clear, whose stores run +4, +8, +0 at 0x826982F0..0x826982F8 -- the
+        // same order Construct stores in).
+        void Clear()
+        {
+            muVehicleIndex = 0;
+            mAttachToken   = 0;
+            mpVehicleAsset = 0;
+        }
     };
 
     // @ 0x826C9E70 (was homed in the GameShared CgsState.cpp rival). Clears the

@@ -277,13 +277,16 @@ namespace Vehicle
     //
     // Store the current showtime behaviour mode (gated 0..2 against E_SHOWTIME_MODE_COUNT == 3).
     // -------------------------------------------------------------------------------------------
-    void VehicleManager::SetShowtimeBehaviour(u32 luShowtimeBehaviour)
+    // The original body is a header inline (its assert names BrnVehicleManager.h:1691); the enum
+    // range test is signed (cmpwi 0 / cmpwi 3 at 0x8259C0B4..0x8259C0BC).
+    void VehicleManager::SetShowtimeBehaviour(BrnGameState::EShowtimeBehaviour leShowtimeBehaviour)
     {
-        // asm: cmpwi >= 0 (always true for u32) && cmpwi < 3. The X360 gate is `> 2` -> assert.
-        CGS_ASSERT(luShowtimeBehaviour < 3u,
-                   "leShowtimeBehaviour >= 0 && leShowtimeBehaviour < BrnGameState::E_SHOWTIME_MODE_COUNT");
+        CGS_ASSERT(leShowtimeBehaviour >= 0 && leShowtimeBehaviour < BrnGameState::E_SHOWTIME_MODE_COUNT,
+                   CgsDev::Assert::MessageAt(
+                       "leShowtimeBehaviour >= 0 && leShowtimeBehaviour < BrnGameState::E_SHOWTIME_MODE_COUNT",
+                       "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\VehicleManager/BrnVehicleManager.h", 1691));
 
-        meShowtimeBehaviour = luShowtimeBehaviour;   // asm: stwx @ +172456
+        meShowtimeBehaviour = leShowtimeBehaviour;   // asm: stwx @ +172456
     }
 
     // -------------------------------------------------------------------------------------------

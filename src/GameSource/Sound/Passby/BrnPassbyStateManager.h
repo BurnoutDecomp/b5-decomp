@@ -198,14 +198,13 @@ public:
     // unused), returning false when full and true after a successful post.
     bool PostPassby( const Passby& lrPassby )
     {
-        if( ( muPostedPassbyCount + 1 ) >= KU_MAX_PASSBY_POSTS )
+        if( ( muPostedPassbyCount + 1 ) < KU_MAX_PASSBY_POSTS )
         {
-            return false;
+            maPostedPassbys[muPostedPassbyCount] = lrPassby;
+            ++muPostedPassbyCount;
+            return true;
         }
-
-        maPostedPassbys[muPostedPassbyCount] = lrPassby;
-        ++muPostedPassbyCount;
-        return true;
+        return false;
     }
 
 protected:

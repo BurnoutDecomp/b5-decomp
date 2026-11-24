@@ -90,6 +90,20 @@ namespace BrnPhysics
             typedef CgsModule::EventQueue<DetachedPartCurrentPositionEvent, 50> DetachedPartCurrentPositionQueue;
             typedef CgsModule::EventQueue<GlassSmashOrCrackEvent, 20>           GlassSmashOrCrackQueue;
 
+            // DWARF BrnDeformationOutputInterface.h:160 (no out-of-line ARTIST symbol): reset the
+            // five queues (in Construct's order), the locator count and the state pointer; Construct
+            // ends with it (ARTIST 0x8228F1EC..0x8228F208).
+            void Clear()
+            {
+                mBrokenJointNotificationQueue.Clear();
+                mDetachedPartNotificationQueue.Clear();
+                mJointedPartStateQueue.Clear();
+                mGlassSmashOrCrackQueue.Clear();
+                mDetachedPartCurrentPositionQueue.Clear();
+                miNumLocatorOutputs = 0;
+                mpDeformationState  = 0;
+            }
+
             void Construct();
 
             // DWARF :137: hand-written copy assignment. X360 emits it out-of-line @ 0x823C8900;

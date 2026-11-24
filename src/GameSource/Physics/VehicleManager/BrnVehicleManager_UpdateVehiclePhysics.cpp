@@ -331,7 +331,7 @@ namespace Vehicle
         f32 lfOutZ = 0.0f;   // sp+0x54 -- written by the callee, NOT part of the event
         maRaceCarDrivers[liRaceCarIndex].mControls.GetAftertouchValues(
             lPayload.mfAftertouchX, lPayload.mfAftertouchY, lfOutZ,
-            meShowtimeBehaviour == 2u);                            // r7: cntlzw/extrwi idiom
+            meShowtimeBehaviour == BrnGameState::E_SHOWTIME_MODE_ON_SIXAXIS);   // r7: cntlzw/extrwi idiom
 
         lpOutputQueue->AddEvent(
             reinterpret_cast<const CgsModule::Event*>(&lPayload), 76, 12);
@@ -619,7 +619,7 @@ namespace Vehicle
                 maRaceCarDrivers[liCar].GetControls(),
                 mbImpactTime,
                 lbIsPlayerAftertouchAdditive,
-                meShowtimeBehaviour == 2u,
+                meShowtimeBehaviour == BrnGameState::E_SHOWTIME_MODE_ON_SIXAXIS,
                 mRandom);
             CgsDev::PerfMonCpu::StopMonitor(gs_iUpdateVehiclesPM);
 

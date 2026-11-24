@@ -23,9 +23,10 @@ namespace Playback
 {
     AemsPlayerVoice::~AemsPlayerVoice()
     {
-        // GenericRwacVoice and Voice base destructors run implicitly; the vtable
-        // stores, the mbRemoving clear, and the operator-delete tail are the
-        // compiler's scalar-deleting-destructor synthesis.
+        // ARTIST 0x826DAA80 (inlined into the deleting destructor): the only store of the body
+        // drops the internal submix (+0x8C) before the GenericRwacVoice member and the Voice
+        // base are destroyed.
+        mpInternalSubmix = 0;
     }
 }
 }

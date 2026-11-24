@@ -438,7 +438,7 @@ namespace BrnPhysics
                     // ⚠️ SetShowtimeBehaviour asserts `< 3`. If that ever fires, read the witness
                     // line above FIRST: a leading word outside 0..2 means the payload was read
                     // wrong, not that the producer sent a bad behaviour.
-                    mVehicleManager.SetShowtimeBehaviour(static_cast<u32>(liBehaviour));
+                    mVehicleManager.SetShowtimeBehaviour(static_cast<BrnGameState::EShowtimeBehaviour>(liBehaviour));
                     break;
                 }
 

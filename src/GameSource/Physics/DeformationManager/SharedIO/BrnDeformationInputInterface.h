@@ -149,7 +149,7 @@ namespace BrnPhysics
             // Drop every queued event + clear the reset-scratches flag (the X360 zeroes each
             // queue's miLength directly at the tail of DeformationManager::ProcessEvents once the
             // queues are drained). Pure length resets -- the inline buffers are untouched.
-            void ClearAllQueues()
+            void Clear()   // DWARF BrnDeformationInputInterface.h:52
             {
                 mAddDeformationModelQueue.Clear();
                 mRemoveDeformationModelQueue.Clear();

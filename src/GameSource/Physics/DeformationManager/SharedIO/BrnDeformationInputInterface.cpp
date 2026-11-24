@@ -24,7 +24,8 @@ namespace Deformation
         mSetModelCollisionEventQueue.Construct();
         mSetModelCullingGroupEventQueue.Construct();
 
-        mbResetPlayerScratches = false;
+        // ARTIST 0x825A9620..0x825A963C: every queue length re-zeroed, then the flag -- Clear().
+        Clear();
     }
 
     u32 DeformationInputInterface::AddDeformationModel(ResourceHandle lModelHandle,
