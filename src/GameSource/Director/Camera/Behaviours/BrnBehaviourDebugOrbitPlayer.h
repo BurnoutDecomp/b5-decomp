@@ -19,14 +19,14 @@
 //            mfSecondaryYaw@+0x24, mfSecondaryPitch@+0x28, mfSecondaryRoll@+0x2C
 //            and the base "active" byte @+8.
 //   SetupTweaker binds &mfFOV/&mfDistance/&mfYaw/&mfPitch (this+0x14..+0x20).
-// FLAG: the class is still a PRE-BASE FORK -- it carries its own vtable pointer and the
-// Behaviour base head as reserved bytes (+0x00..+0x13) instead of deriving from
-// Camera::Behaviour. Nothing allocates it (the arbitrator's NewBehaviour<> calls are
-// gated), so the fork is inert; retiring it onto the real base is its own job.
+// Derives Camera::Behaviour (DWARF BrnBehaviourDebugOrbitPlayer.h:48); the base owns
+// +0x00..+0x13 and the orbit fields start at +0x14 (sizeof 0x34: AllocateVoid
+// <BehaviourDebugOrbitPlayer> 0x82214668 passes li r7, 0x34).
 // ============================================================================
 
 #include "types.hpp"
 #include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h"   // Utils::Tweaker + Utils::DebugController::EControl
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"     // the Camera::Behaviour base
 
 namespace BrnDirector
 {
@@ -38,11 +38,15 @@ struct BehaviourSharedPrepareReleaseInfo;   // Prepare parameter (opaque here)
 struct BehaviourSharedInfo;                 // Update parameter (opaque here)
 class  Camera;                              // Update target (opaque here)
 
-class BehaviourDebugOrbitPlayer
+class BehaviourDebugOrbitPlayer : public Behaviour
 {
 public:
-    // The orbit parameter block (a Behaviour::Parameters derivative).
-    class Parameters;
+    // The orbit parameter block (DWARF BrnBehaviourDebugOrbitPlayer.h:122).
+    class Parameters : public Behaviour::Parameters
+    {
+    public:
+        void Construct();                                                        // :126
+    };
 
     // ------------------------------------------------------------------------
     // Virtual interface, in vtable order.
@@ -66,16 +70,8 @@ private:
     static void LookAtRightSide(void* lpData);
 
     // ------------------------------------------------------------------------
-    // Members. Base Behaviour occupies +0x00..+0x13 (vtable + shared flag block;
-    // Construct zeroes +4, bytes +8..+0xC, word +0x10). mbActive is the base
-    // byte @+8 that Prepare sets to 1. Owned orbit fields
-    // start at +0x14.
+    // Members (DWARF BrnBehaviourDebugOrbitPlayer.h:82..:116), after the Behaviour base.
     // ------------------------------------------------------------------------
-    void* mpVTable;                      // +0x00  Behaviour vtable (base head)
-    u8    maReserved04[0x08 - 0x04];     // +0x04 .. +0x07 (base flag word, Construct-zeroed)
-    bool  mbActive;                      // +0x08  base "active/prepared" flag (Prepare sets 1)
-    u8    maReserved09[0x14 - 0x09];     // +0x09 .. +0x13 (base flags/word @+0x10, Construct-zeroed)
-
     f32   mfFOV;                         // +0x14  field of view (Prepare = 90.0)
     f32   mfDistance;                    // +0x18  orbit distance to car (Prepare/LookAt* = 2.5)
     f32   mfYaw;                         // +0x1C  orbit yaw   (LookAt* set +/-pi/2, pi, 0)

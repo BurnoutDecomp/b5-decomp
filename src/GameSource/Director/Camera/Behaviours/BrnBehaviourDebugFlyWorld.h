@@ -12,11 +12,8 @@
 //
 // Every function declared here is bodied in the matching .cpp.
 //
-// FLAG: the class is still a PRE-BASE FORK -- it carries its own vtable pointer and the
-// Behaviour base head as reserved bytes (+0x00..+0x1F) instead of deriving from
-// Camera::Behaviour, which is why the member offsets below are pinned by hand. Nothing
-// allocates it (the arbitrator's NewBehaviour<> calls are gated), so the fork is inert;
-// retiring it onto the real base is its own job.
+// Derives Camera::Behaviour (DWARF BrnBehaviourDebugFlyWorld.h:48); the base owns
+// +0x00..+0x13 (Prepare sets mbIsPrepared, ARTIST 0x821FB76C `stb r9, 8(r11)`).
 //
 // Offsets in comments are original-build (4-byte-pointer) provenance; the reconstruction
 // accesses every member BY NAME (semantic parity, not byte-matching).
@@ -25,6 +22,7 @@
 #include "types.hpp"
 #include "BrnCommonTypes.h"                                       // Vector3
 #include "GameSource/Director/Camera/Utils/BrnCameraTweaker.h"   // Utils::Tweaker + Utils::DebugController::EControl
+#include "GameSource/Director/Camera/Behaviours/Behaviour.h"     // the Camera::Behaviour base
 
 namespace BrnDirector
 {
@@ -37,7 +35,7 @@ struct BehaviourSharedPrepareReleaseInfo;   // Prepare parameter (opaque here)
 struct BehaviourSharedInfo;                 // Update parameter (opaque here)
 class  Camera;                              // Update target (opaque here)
 
-class BehaviourDebugFlyWorld
+class BehaviourDebugFlyWorld : public Behaviour
 {
 public:
     // Which of three speed presets the fly rig is on;
@@ -51,8 +49,12 @@ public:
         E_MOVE_SPEED_TYPE_MAX    = 3,
     };
 
-    // The fly-rig parameter block (a Behaviour::Parameters derivative). Declaration-only here.
-    class Parameters;
+    // The fly-rig parameter block (DWARF BrnBehaviourDebugFlyWorld.h:177).
+    class Parameters : public Behaviour::Parameters
+    {
+    public:
+        void Construct();                                                        // :181
+    };
 
     // ------------------------------------------------------------------------
     // Virtual interface, in vtable order.
@@ -86,19 +88,9 @@ private:
     static void TakeScreenshot(void* lpData);
 
     // ------------------------------------------------------------------------
-    // Members. Base Behaviour occupies +0x00..+0x1F (vtable + shared flag block; Construct
-    // zeroes +4, bytes +8..+0xC, word +0x10). mbActive is the base byte @+8 that Prepare sets
-    // to 1. The two 16-byte-aligned Vector3 rig positions start at the next 16-byte slot
-    // (+0x20); the owned scalar rig fields follow at +0x40.
+    // Members (DWARF BrnBehaviourDebugFlyWorld.h:116..:143), after the Behaviour base; the
+    // 16-byte-aligned Vector3 rig positions start at +0x20.
     // ------------------------------------------------------------------------
-    void* mpVTable;                      // +0x00  Behaviour vtable (base head)
-    u32   mBaseResetWord;                // +0x04  base reset word (Construct-zeroed)
-    bool  mbActive;                      // +0x08  base "active/prepared" flag (Prepare sets 1)
-    u8    maBaseFlags[4];                // +0x09..+0x0C base flag bytes (Construct-zeroed)
-    u8    maBasePad0D[3];                // +0x0D..+0x0F (untouched by the bodies)
-    u32   mBaseWord10;                   // +0x10  base word (Construct-zeroed)
-    u8    maBasePad14[0x20 - 0x14];      // +0x14..+0x1F alignment pad to the Vector3 slot
-
     Vector3 mPosition;                   // +0x20  fly-rig eye position (Prepare/WarpToLookAt)
     Vector3 mCurrentPosition;            // +0x30  the smoothed/current eye position (Prepare zeroes)
 

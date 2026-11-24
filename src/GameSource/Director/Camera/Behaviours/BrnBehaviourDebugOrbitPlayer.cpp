@@ -34,14 +34,12 @@ const f32 BehaviourDebugOrbitPlayer::KF_DEFAULT_FOV      = 90.0f;
 
 // ----------------------------------------------------------------------------
 // BehaviourDebugOrbitPlayer::Construct
-// The named model folds the base flag/word head into reserved bytes; the stores land
-// as the zero-init of that reserved head plus mbActive + mpParameters.
+// ARTIST 0x821FB610 inlines the base Construct (Behaviour.cpp:28, unity TU) before
+// clearing mpParameters (+0x30).
 // ----------------------------------------------------------------------------
 void BehaviourDebugOrbitPlayer::Construct()
 {
-    for (unsigned liI = 0; liI < sizeof(maReserved04); ++liI) maReserved04[liI] = 0; // +0x04..+0x07
-    mbActive = false;
-    for (unsigned liI = 0; liI < sizeof(maReserved09); ++liI) maReserved09[liI] = 0; // +0x09..+0x13
+    Behaviour::Construct();
     mpParameters = 0;
 }
 
@@ -109,7 +107,7 @@ void BehaviourDebugOrbitPlayer::LookAtRightSide(void* lpData)
 bool BehaviourDebugOrbitPlayer::Prepare(const BehaviourSharedPrepareReleaseInfo& /*lrInfo*/)
 {
     mfDistance        = KF_LOOK_AT_DISTANCE;
-    mbActive          = true;
+    SetPrepared();
     mfYaw             = 0.0f;
     mfPitch           = 0.0f;
     mfSecondaryPitch  = 0.0f;

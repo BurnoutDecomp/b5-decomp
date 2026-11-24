@@ -1129,23 +1129,23 @@ namespace Camera
     CGS_STATIC_ASSERT((sizeof(BehaviourManager::SmallBehaviourPool::Bucket)
                       == BehaviourManager::KU_SMALL_BEHAVIOUR_POOL_UNITS * sizeof(rw::math::vpu::Vector4)),
                   "the small bucket is KU_SMALL_BEHAVIOUR_POOL_UNITS Vector4");
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourAftertouchCam>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourAftertouchCrash>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourBystanderCam>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourDebugFlyWorld>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourDebugOrbitPlayer>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourFailsafe>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourFixedCam>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourGameplayBumper>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourGameplayExternal>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourGyroCam>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourHeliCam>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourInterpolate>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourLooseAttachment>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourPassengerCam>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourRoadRunner>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourRotateAboutVehicle>();
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourSpirallingDeathcam>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourAftertouchCam>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourAftertouchCrash>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourBystanderCam>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourDebugFlyWorld>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourDebugOrbitPlayer>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourFailsafe>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourFixedCam>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourGameplayBumper>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourGameplayExternal>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourGyroCam>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourHeliCam>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourInterpolate>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourLooseAttachment>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourPassengerCam>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourRoadRunner>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourRotateAboutVehicle>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourSpirallingDeathcam>();
 
     // ========================================================================
     // NewBehaviour<TBehaviour> explicit instantiation (X360 @0x822580F8 &c.)

@@ -64,7 +64,11 @@ namespace Camera
     class BehaviourHelperIndex
     {
     public:
-        BehaviourHelperIndex() : miIndex(-1) {}
+        // DWARF BrnPlayerInfo.h:58 declares a default constructor; ARTIST's in-place
+        // construction of BehaviourInterpolate stores nothing to its two CameraReference
+        // helper indices (+0x414 / +0x584, AllocateVoid<BehaviourInterpolate> 0x822537D0..),
+        // so it leaves miIndex unset.
+        BehaviourHelperIndex() {}
         BehaviourHelperIndex(s32 liIndex) : miIndex(liIndex) {}     // ObjectPool free-queue store
         operator s32() const { return miIndex; }                   // ObjectPool/Array index use
         bool operator==(const BehaviourHelperIndex& lrOther) const { return miIndex == lrOther.miIndex; }
@@ -318,7 +322,7 @@ namespace Camera
         // Out-of-line template body below (needs the pool members complete). The concrete
         // instantiations are emitted by BrnBehaviourManager.cpp (one per behaviour type).
         template <typename TBehaviour>
-        AbstractPoolVoidHandle AllocateBehaviour();
+        const AbstractPoolVoidHandle AllocateBehaviour();
 
         // Allocate a fresh TBehaviour into lrHandle, owned by lpOwningState. The
         // BrnDirector::Camera::BehaviourManager::NewBehaviour<TBehaviour> family the arbitrator
@@ -441,9 +445,9 @@ namespace Camera
     class BehaviourHandle
     {
     public:
-        BehaviourHandle()
-            : mbAllocated(false), muAllocationKey(0), mpHelperPool(0),
-              mpManager(0), mpBehaviour(0) {}
+        // No constructor: DWARF BrnBehaviourManager.h:389.. declares none (Construct() at :513
+        // initialises), and ARTIST's in-place construction of a moment that owns a handle
+        // stores only the moment's vtable (AllocateVoid<MomentBystanderSeesAction> 0x8222E970).
 
         bool IsAllocated() const { return mbAllocated; }
         BehaviourManager* GetManager() const { return mpManager; }
@@ -553,8 +557,14 @@ namespace Camera
     // ------------------------------------------------------------------------
     // ARTIST instantiations select one native pool by object size. The compiler
     // folds this constant branch; the evidence table checks reconstructed sizes.
+    //
+    // DWARF BrnBehaviourManager.h:1115 `const AbstractPoolVoidHandle AllocateBehaviour<T>()`
+    // with the local lVoidHandle (:1118). ARTIST builds AllocateVoid's result in a stack
+    // temporary and copies its four words into the returned handle
+    // (AllocateBehaviour<BehaviourHeliCam> 0x822307B4..0x822307D8): the handle is assigned,
+    // then returned.
     template <typename TBehaviour>
-    inline AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour()
+    inline const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour()
     {
         CGS_STATIC_ASSERT((sizeof(TBehaviour) <= sizeof(LargeBehaviourPool::Bucket)),
                           "behaviour exceeds the native large bucket");
@@ -562,26 +572,26 @@ namespace Camera
             (sizeof(TBehaviour) <= sizeof(SmallBehaviourPool::Bucket)
                 ? E_BEHAVIOUR_POOL_SMALL : E_BEHAVIOUR_POOL_LARGE)),
             "behaviour size differs from its ARTIST pool");
+        AbstractPoolVoidHandle lVoidHandle;
         if (sizeof(TBehaviour) <= sizeof(SmallBehaviourPool::Bucket))
         {
-            const s32 liNumFree = mSmallBehaviourPool.GetNumFreeObjects();
-            if (liNumFree <= 0)
+            if (mSmallBehaviourPool.IsFull())
             {
                 DebugDumpToTTY();
-                CGS_ASSERT(liNumFree > 0, CgsDev::Assert::MessageAt("Ran out of slots when trying to allocate a small behaviour", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 1137));
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("Ran out of slots when trying to allocate a small behaviour", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 1137));
             }
-            return mSmallBehaviourPool.AllocateVoid<TBehaviour>();
+            lVoidHandle = mSmallBehaviourPool.AllocateVoid<TBehaviour>();
         }
         else
         {
-            const s32 liNumFree = mLargeBehaviourPool.GetNumFreeObjects();
-            if (liNumFree <= 0)
+            if (mLargeBehaviourPool.IsFull())
             {
                 DebugDumpToTTY();
-                CGS_ASSERT(liNumFree > 0, CgsDev::Assert::MessageAt("Ran out of slots when trying to allocate a large behaviour", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 1148));
+                CGS_ASSERT(false, CgsDev::Assert::MessageAt("Ran out of slots when trying to allocate a large behaviour", "..\\..\\..\\GameSource\\Director/Camera/BrnBehaviourManager.h", 1148));
             }
-            return mLargeBehaviourPool.AllocateVoid<TBehaviour>();
+            lVoidHandle = mLargeBehaviourPool.AllocateVoid<TBehaviour>();
         }
+        return lVoidHandle;
     }
 
     // ------------------------------------------------------------------------

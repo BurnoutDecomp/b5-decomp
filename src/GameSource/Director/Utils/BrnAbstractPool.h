@@ -20,6 +20,7 @@
 #include <new>         // placement new (AbstractPool::AllocateVoid constructs in-slot)
 #include "GameShared/GameClasses/Containers/CgsObjectPool.h" // CgsContainers::ObjectPool
 #include "GameShared/GameClasses/Core/CgsAssert.h"           // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h" // ARTIST streamed assert (AllocateVoid)
 
 namespace BrnDirector
 {
@@ -133,6 +134,11 @@ public:
     // to the ObjectPool's named counter so callers never reach it by raw offset.
     s32 GetNumFreeObjects() const { return mObjectPool.GetNumFreeObjects(); }
 
+    // DWARF BrnAbstractPool.h:192 `bool IsFull() const`. BehaviourManager::AllocateBehaviour
+    // tests it as a materialised bool (AllocateBehaviour<BehaviourHeliCam> 0x8223076C..0x8223077C:
+    // li 1 / ble / li 0 / clrlwi / cmplwi on the pool's free count <= 0).
+    bool IsFull() const { return mObjectPool.GetNumFreeObjects() <= 0; }
+
     void*       operator[](IndexType liIndex)       { return mObjectPool[liIndex]; }
     const void* operator[](IndexType liIndex) const { return mObjectPool[liIndex]; }
 
@@ -149,14 +155,18 @@ public:
         CGS_ASSERT(sizeof(Bucket) >= sizeof(T), "AbstractPool : object is too large");
 
         const IndexType liIndex = mObjectPool.AllocateObject();
-        CGS_ASSERT(liIndex >= 0, "AbstractPool : out of space");
+        // ARTIST streams this message (AllocateVoid<BehaviourHeliCam> 0x82214864..0x822148D8:
+        // StrStream over gpcMessageBuffer, FireAssert at BrnAbstractPool.h:170).
+        CGS_ASSERT(liIndex >= 0, CgsDev::Assert::StreamMessageAt("AbstractPool : out of space", "..\\..\\..\\GameSource\\Director/Utils/BrnAbstractPool.h", 170));
 
-        void* lpSlot = static_cast<void*>(mObjectPool[liIndex]);
-        T* lpObject = new (lpSlot) T;     // native default initialization, no slot-wide zero fill
+        // The handle takes the slot itself, not the new-expression's result: ARTIST passes
+        // the operator[] result to Prepare in r5 and tests that same register before the
+        // in-place construction (AllocateVoid<BehaviourHeliCam> 0x822148E8..0x82214900).
+        void* lpObject = static_cast<void*>(mObjectPool[liIndex]);
+        new (lpObject) T;     // native default initialization, no slot-wide zero fill
 
         AbstractPoolVoidHandle lHandle;
-        lHandle.Prepare(this, static_cast<void*>(lpObject), liIndex,
-                        static_cast<s32>(sizeof(T)));
+        lHandle.Prepare(this, lpObject, liIndex, static_cast<s32>(sizeof(T)));
         return lHandle;
     }
 

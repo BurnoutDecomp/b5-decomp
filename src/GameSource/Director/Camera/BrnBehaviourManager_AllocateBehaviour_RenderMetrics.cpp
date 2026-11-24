@@ -17,6 +17,6 @@ namespace BrnDirector
 {
 namespace Camera
 {
-    template AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourRenderMetrics>();
+    template const AbstractPoolVoidHandle BehaviourManager::AllocateBehaviour<BehaviourRenderMetrics>();
 }
 } // namespace BrnDirector

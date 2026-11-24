@@ -56,11 +56,8 @@ namespace Camera
 // ----------------------------------------------------------------------------
 void BehaviourDebugFlyWorld::Construct()
 {
-    // Base head zero-init (Behaviour base modelled as reserved; exact the original build stores).
-    mBaseResetWord = 0;
-    mbActive       = false;
-    for (unsigned liI = 0; liI < sizeof(maBaseFlags); ++liI) maBaseFlags[liI] = 0;
-    mBaseWord10    = 0;
+    // ARTIST 0x82210088 inlines the base Construct here (Behaviour.cpp:28, unity TU).
+    Behaviour::Construct();
 
     mbAttachedToCar  = false;
     mbWarpToCar      = true;
@@ -84,7 +81,7 @@ bool BehaviourDebugFlyWorld::Prepare(const BehaviourSharedPrepareReleaseInfo& /*
     mfPitch          = 0.0f;
     meMoveSpeedState = E_MOVE_SPEED_TYPE_NORMAL;
     mfRoll           = 0.0f;
-    mbActive         = true;
+    SetPrepared();
     mfX              = 0.0f;
     mfY              = 0.0f;
     mfZ              = 0.0f;
