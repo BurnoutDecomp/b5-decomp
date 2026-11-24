@@ -77,10 +77,11 @@ namespace BrnGui
     // @ 0x8243BBD0
     void LeaderboardTableComponent::SetupScoreboard(const BrnNetwork::Scoreboard* lpScoreboard)
     {
-        if (lpScoreboard != 0)
-            std::memcpy(&mScoreboard, lpScoreboard, sizeof(BrnNetwork::Scoreboard));
-        else
+        // The null arm comes first (ARTIST 0x8243BBEC: bne to the copy, Construct falls through).
+        if (lpScoreboard == 0)
             mScoreboard.Construct();
+        else
+            std::memcpy(&mScoreboard, lpScoreboard, sizeof(BrnNetwork::Scoreboard));
 
         miColumnsUsed = mScoreboard.GetNumberOfColumns();
         miRowsUsed    = mScoreboard.GetNumberOfRows();

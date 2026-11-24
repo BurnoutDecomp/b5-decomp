@@ -85,7 +85,9 @@ void GuiOverlaysDirector::Construct(CgsGui::ModelModule* lpModelModule)
 
 void GuiOverlaysDirector::HandleOverlayRequest(const GuiOverlayRequest* lpEvent)
 {
-    CGS_ASSERT(mpController != NULL, "mpController");
+    // DWARF: defined at cpp:250, the assert on cpp:252 (li r5,0xFC @0x825162F0).
+    CGS_ASSERT(mpController != NULL,
+        CgsDev::Assert::MessageAt("mpController", __FILE__, 252 /* ARTIST 0x825162F0 */));
 
     if (mbInOverlay)
     {
@@ -94,7 +96,7 @@ void GuiOverlaysDirector::HandleOverlayRequest(const GuiOverlayRequest* lpEvent)
         // gates the debug print).
         if (mBufferedOverlay.mNameId != 0)
         {
-            char lacOverlayName[16];
+            char lacOverlayName[13];   // DWARF cpp:260 char[13] (ARTIST stack 0x58..0x64)
             CgsIDConvertToString(lpEvent->mOverlayID, lacOverlayName);
             lacOverlayName[12] = 0;
 
@@ -150,8 +152,8 @@ void GuiOverlaysDirector::SetUpOverlayInfo(GuiOverlayFullInfoResponse* lpOverlay
                                            const GuiOverlayRequest* lpEvent)
 {
     lpOverlay->mNameId            = lpEvent->mOverlayID;
-    lpOverlay->mbButon1ParamUsed  = lpEvent->mbButton1Used != 0;
-    lpOverlay->mbButon2ParamUsed  = lpEvent->mbButton2Used != 0;
+    lpOverlay->mbButon1ParamUsed  = lpEvent->IsButton1ParamUsed();
+    lpOverlay->mbButon2ParamUsed  = lpEvent->IsButton2ParamUsed();
     lpOverlay->miMessageParamsUsed = lpEvent->GetMessageParamCount();
 
     for (s32 liIter = 0; liIter < lpOverlay->miMessageParamsUsed; ++liIter)

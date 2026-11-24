@@ -112,7 +112,7 @@ namespace CgsGui
         friend struct BrnGui::GuiDebugComponent;
 
         u32       miUserIndex;       // +0x00
-        u32       miState;           // +0x04 (== EUserSigninState; 1 == signed in)
+        s32       miState;           // +0x04 (== EUserSigninState; 1 == signed in). Signed: every reader compares cmpwi (e.g. ARTIST 0x82523A10)
         char      macUserName[16];   // +0x08
         void*     mhNotifyListener;  // +0x18
         bool      mbSignedIn;        // +0x1C

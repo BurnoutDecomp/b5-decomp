@@ -11,17 +11,29 @@
 #include <cstring>
 
 namespace BrnGui {
+// DecFIGS BrnCreditsTextRenderer.cpp:23..40: namespace-scope, NON-const float32_t / int32_t
+// tunables (ARTIST .data 0x82F2589C..0x82F258E0, each read through its own lis/lfs, e.g.
+// SetRenderEnabled @0x82457BE0/0x82457BE8).
+f32 KF_TEXTBOX_CENTRE_X = 418.0f;
+f32 KF_TEXTBOX_CENTRE_Y = 386.0f;
+f32 KF_TEXTBOX_WIDTH = 500.0f;
+f32 KF_TEXTBOX_HEIGHT = 435.0f;
+f32 KF_TEXTBOX_ANGLE = 7.1f;
+f32 KF_LARGE_TEXT_SIZE = 37.0f;
+f32 KF_SMALL_TEXT_SIZE = 25.0f;
+f32 KF_PARAGRAPH_SPACING0 = -5.0f;
+f32 KF_PARAGRAPH_SPACING1 = 25.0f;
+f32 KF_SCROLL_START = -400.0f;
+f32 KF_SCROLL_SPEED = 62.0f;
+f32 KF_FADE_BORDER = 20.0f;
+f32 KF_FADE_IN_START = -2.0f;
+f32 KF_FADE_IN_SPEED = 1.0f;
+f32 KF_CREDITS_DROPSHADOW_X = 2.0f;
+f32 KF_CREDITS_DROPSHADOW_Y = 3.0f;
+s32 KI_CREDITS_BRIGHTNESS = 255;   // 0x82F258DC
+f32 KF_DROPSHADOW_ALPHA = 255.0f;
 namespace {
-// ARTIST 82F2589C..82F258E4; names from DecFIGS BrnCreditsTextRenderer.cpp:23..40.
-const f32 KF_TEXTBOX_CENTRE_X=418.0f, KF_TEXTBOX_CENTRE_Y=386.0f;
-const f32 KF_TEXTBOX_WIDTH=500.0f, KF_TEXTBOX_HEIGHT=435.0f, KF_TEXTBOX_ANGLE=7.1f;
-const f32 KF_LARGE_TEXT_SIZE=37.0f, KF_SMALL_TEXT_SIZE=25.0f;
-const f32 KF_PARAGRAPH_SPACING0=-5.0f, KF_PARAGRAPH_SPACING1=25.0f;
-const f32 KF_SCROLL_START=-400.0f, KF_SCROLL_SPEED=62.0f;
-const f32 KF_FADE_BORDER=20.0f, KF_FADE_IN_START=-2.0f, KF_FADE_IN_SPEED=1.0f;
-const f32 KF_CREDITS_DROPSHADOW_X=2.0f, KF_CREDITS_DROPSHADOW_Y=3.0f;
-const f32 KF_DROPSHADOW_ALPHA=255.0f;
-const f32 KF_TEXTBOX_RIGHT=KF_TEXTBOX_WIDTH, KF_TEXTBOX_BOTTOM=KF_TEXTBOX_HEIGHT;
+// Literal constants of the bodies (not DWARF variables).
 const f32 KF_ONE=1.0f, KF_SHADOW_FADE_RAMP=-100.0f, KF_FADE_Y_MARGIN=100.0f;
 const f32 KF_FRAME_DT=0.016666668f;
 }
@@ -83,8 +95,8 @@ void CreditsTextRenderer::RecalculateParagraphs()
     mTitleTextObject.mfFontHeight = KF_LARGE_TEXT_SIZE;
     mTitleTextObject.mv2TopLeft.mX  = 0.0f;
     mTitleTextObject.mv2TopLeft.mY  = 0.0f;
-    mTitleTextObject.mv2BottomRight.mX = KF_TEXTBOX_RIGHT;
-    mTitleTextObject.mv2BottomRight.mY = KF_TEXTBOX_BOTTOM;
+    mTitleTextObject.mv2BottomRight.mX = KF_TEXTBOX_WIDTH;
+    mTitleTextObject.mv2BottomRight.mY = KF_TEXTBOX_HEIGHT;
     mTitleTextObject.mbMultiLine    = 1;
     mTitleTextObject.mbWordWrap     = 1;
     mTitleTextObject.mbItalic       = 1;
@@ -95,8 +107,8 @@ void CreditsTextRenderer::RecalculateParagraphs()
     mNormalTextObject.mfFontHeight = KF_SMALL_TEXT_SIZE;
     mNormalTextObject.mv2TopLeft.mX = 0.0f;
     mNormalTextObject.mv2TopLeft.mY = 0.0f;
-    mNormalTextObject.mv2BottomRight.mX = KF_TEXTBOX_RIGHT;
-    mNormalTextObject.mv2BottomRight.mY = KF_TEXTBOX_BOTTOM;
+    mNormalTextObject.mv2BottomRight.mX = KF_TEXTBOX_WIDTH;
+    mNormalTextObject.mv2BottomRight.mY = KF_TEXTBOX_HEIGHT;
     mNormalTextObject.mbMultiLine   = 1;
     mNormalTextObject.mbWordWrap    = 1;
     mNormalTextObject.mbItalic      = 1;
@@ -211,7 +223,7 @@ void CreditsTextRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
     for (s32 liPara = 0; liPara < miNumStrings; ++liPara)
     {
         const ParagraphInfo& lrPara = maParagraphs[liPara];
-        if (lrPara.mfPosition <= (mfScroll + KF_TEXTBOX_BOTTOM) &&
+        if (lrPara.mfPosition <= (mfScroll + KF_TEXTBOX_HEIGHT) &&
             (lrPara.mfPosition + lrPara.mfHeight) >= mfScroll)
         {
             const f32 lfTopY = (lrPara.mfPosition - mfScroll) + KF_CREDITS_DROPSHADOW_Y;
@@ -220,7 +232,7 @@ void CreditsTextRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
             {
                 mTitleTextObject.mv2TopLeft.mX  = KF_CREDITS_DROPSHADOW_X;
                 mTitleTextObject.mv2TopLeft.mY  = lfTopY;
-                mTitleTextObject.mv2BottomRight.mX = KF_TEXTBOX_RIGHT + KF_CREDITS_DROPSHADOW_X;
+                mTitleTextObject.mv2BottomRight.mX = KF_TEXTBOX_WIDTH + KF_CREDITS_DROPSHADOW_X;
                 mTitleTextObject.mv2BottomRight.mY =
                     ((lrPara.mfPosition + lrPara.mfHeight) - mfScroll) + KF_CREDITS_DROPSHADOW_Y;
                 mTitleTextObject.mpUtf8String   = lrPara.mpText;
@@ -235,7 +247,7 @@ void CreditsTextRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
             {
                 mNormalTextObject.mv2TopLeft.mX  = KF_CREDITS_DROPSHADOW_X;
                 mNormalTextObject.mv2TopLeft.mY  = lfTopY;
-                mNormalTextObject.mv2BottomRight.mX = KF_TEXTBOX_RIGHT + KF_CREDITS_DROPSHADOW_X;
+                mNormalTextObject.mv2BottomRight.mX = KF_TEXTBOX_WIDTH + KF_CREDITS_DROPSHADOW_X;
                 mNormalTextObject.mv2BottomRight.mY =
                     ((lrPara.mfPosition + lrPara.mfHeight) - mfScroll) + KF_CREDITS_DROPSHADOW_Y;
                 mNormalTextObject.mpUtf8String   = lrPara.mpText;
@@ -247,15 +259,15 @@ void CreditsTextRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
             }
 
             mpTextRenderer->RenderStringFadingY(lpBuffer, *lpObject, 0.0f, KF_SHADOW_FADE_RAMP,
-                                                KF_TEXTBOX_BOTTOM + KF_FADE_Y_MARGIN,
-                                                KF_TEXTBOX_BOTTOM);
+                                                KF_TEXTBOX_HEIGHT + KF_FADE_Y_MARGIN,
+                                                KF_TEXTBOX_HEIGHT);
         }
     }
 
     for (s32 liPara = 0; liPara < miNumStrings; ++liPara)
     {
         const ParagraphInfo& lrPara = maParagraphs[liPara];
-        if (lrPara.mfPosition <= (mfScroll + KF_TEXTBOX_BOTTOM) &&
+        if (lrPara.mfPosition <= (mfScroll + KF_TEXTBOX_HEIGHT) &&
             (lrPara.mfPosition + lrPara.mfHeight) >= mfScroll)
         {
             CgsGraphics::TextObject* lpObject;
@@ -263,7 +275,7 @@ void CreditsTextRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
             {
                 mTitleTextObject.mv2TopLeft.mY  = lrPara.mfPosition - mfScroll;
                 mTitleTextObject.mv2TopLeft.mX  = 0.0f;
-                mTitleTextObject.mv2BottomRight.mX = KF_TEXTBOX_RIGHT;
+                mTitleTextObject.mv2BottomRight.mX = KF_TEXTBOX_WIDTH;
                 mTitleTextObject.mv2BottomRight.mY =
                     (lrPara.mfPosition + lrPara.mfHeight) - mfScroll;
                 mTitleTextObject.mpUtf8String   = lrPara.mpText;
@@ -280,7 +292,7 @@ void CreditsTextRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
             {
                 mNormalTextObject.mv2TopLeft.mY  = lrPara.mfPosition - mfScroll;
                 mNormalTextObject.mv2TopLeft.mX  = 0.0f;
-                mNormalTextObject.mv2BottomRight.mX = KF_TEXTBOX_RIGHT;
+                mNormalTextObject.mv2BottomRight.mX = KF_TEXTBOX_WIDTH;
                 mNormalTextObject.mv2BottomRight.mY =
                     (lrPara.mfPosition + lrPara.mfHeight) - mfScroll;
                 mNormalTextObject.mpUtf8String   = lrPara.mpText;
@@ -294,8 +306,8 @@ void CreditsTextRenderer::RenderComponent(CgsGui::ImRendererSet* lpRendererSet)
             }
 
             mpTextRenderer->RenderStringFadingY(lpBuffer, *lpObject, 0.0f, KF_FADE_BORDER,
-                                                KF_TEXTBOX_BOTTOM - KF_FADE_BORDER,
-                                                KF_TEXTBOX_BOTTOM);
+                                                KF_TEXTBOX_HEIGHT - KF_FADE_BORDER,
+                                                KF_TEXTBOX_HEIGHT);
         }
     }
 

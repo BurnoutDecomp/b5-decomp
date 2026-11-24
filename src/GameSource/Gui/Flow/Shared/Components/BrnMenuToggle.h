@@ -43,7 +43,7 @@
 //   +0x018 CgsGui::GuiComponent         (second base, see the class comment)
 //   +0x0A8 TextSelection mItemText      ("ItemText",  sizeof == 0xCC0)
 //   +0xD68 TextField     mTitleText     ("TitleText")
-//   +0xE8E bool mbLoaded                (Construct stores 1)
+//   +0xE8E (mTitleText+0x126 mbAutosize: Construct calls SetAutoSize(true))
 //   +0xE90 s32  miLoadedItems           (Unloaded stores 0)   -- sizeof(MenuToggle) == 0xE98
 // ===================================================================================
 
@@ -128,8 +128,7 @@ namespace BrnGui
         // +0x018 CgsGui::GuiComponent (second base)
         TextSelection        mItemText;           // +0x0A8 ("ItemText")
         TextField            mTitleText;          // +0xD68 ("TitleText")
-        bool                 mbLoaded;            // +0xE8E (Construct stores 1)
-        s32                  miLoadedItems;       // +0xE90 (Unloaded stores 0)
+        s32                  miLoadedItems;       // +0xE90 (Unloaded stores 0; DWARF h:156, right after mTitleText)
 
         // off_82F27460 -- the per-state apt view-state names, indexed by MenuToggleStates.
         // Shared vocabulary with BrnGui::MenuItem / BrnGui::ColourMenuToggle; entry [0]

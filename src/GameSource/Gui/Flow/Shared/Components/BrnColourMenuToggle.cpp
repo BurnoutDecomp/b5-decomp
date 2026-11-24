@@ -102,12 +102,13 @@ namespace BrnGui
     {
         // ⚠️ See the FLAG on the declaration: the X360 passes NO index here (r4 is left
         // undefined at both the call site and inside). Forwarded explicitly.
-        if (!GetFocusedSelectionNav()->HighlightIndex(liIndex))   // picker slot 12 (+0x30)
-            return false;
-
-        HighlightNeighbours();
-        muFlags |= KU_FLAG_QUERIED;   // *(this+0xC) |= 0x10
-        return true;
+        if (GetFocusedSelectionNav()->HighlightIndex(liIndex))   // picker slot 12 (+0x30)
+        {
+            HighlightNeighbours();
+            muFlags |= KU_FLAG_QUERIED;   // *(this+0xC) |= 0x10
+            return true;
+        }
+        return false;
     }
 
     // @ 0x824EA1A0
@@ -115,24 +116,26 @@ namespace BrnGui
     {
         // Delegate to the focused picker (element [2]) via its SelectableGroup base
         // (vtable slot +0x28 == HighlightNext(quiet=false)).
-        if (!GetFocusedSelectionNav()->HighlightNext(false))
-            return false;
-
-        HighlightNeighbours();
-        muFlags |= KU_FLAG_DIRTY;                                       // *(this+0xC) |= 0x10
-        return true;
+        if (GetFocusedSelectionNav()->HighlightNext(false))
+        {
+            HighlightNeighbours();
+            muFlags |= KU_FLAG_DIRTY;                                       // *(this+0xC) |= 0x10
+            return true;
+        }
+        return false;
     }
 
     // @ 0x824EA220
     bool ColourMenuToggle::HighlightPrevious()
     {
         // As HighlightNext but vtable slot +0x2C == HighlightPrevious(quiet=false).
-        if (!GetFocusedSelectionNav()->HighlightPrevious(false))
-            return false;
-
-        HighlightNeighbours();
-        muFlags |= KU_FLAG_DIRTY;                                       // *(this+0xC) |= 0x10
-        return true;
+        if (GetFocusedSelectionNav()->HighlightPrevious(false))
+        {
+            HighlightNeighbours();
+            muFlags |= KU_FLAG_DIRTY;                                       // *(this+0xC) |= 0x10
+            return true;
+        }
+        return false;
     }
 
     // @ 0x824E56C8 -- plain tail-call of the focused picker's SelectableGroup::Select
@@ -153,7 +156,14 @@ namespace BrnGui
                                                    u64* lpu64Ids)
     {
         // unk_820046A7 sentinel -> empty string when no title text is supplied.
-        mTitleText.SetText(lpacText ? lpacText : "");
+        if (lpacText != NULL)   // one SetText per arm (ARTIST 0x824EA138..0x824EA150)
+        {
+            mTitleText.SetText(lpacText);
+        }
+        else
+        {
+            mTitleText.SetText("");
+        }
 
         for (s32 li = 0; li < KI_NUM_ITEMS; ++li)
         {

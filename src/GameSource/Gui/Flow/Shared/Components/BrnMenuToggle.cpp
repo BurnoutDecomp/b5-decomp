@@ -72,7 +72,7 @@ namespace BrnGui
                             static_cast<u64>(-1));
         mTitleText.Construct("TitleText", lpStateInterface, lpacChildParent);
 
-        mbLoaded = true;   // stb 1, 0xE8E(this)
+        mTitleText.SetAutoSize(true);   // stb 1, 0xE8E(this) == mTitleText (+0xD68) + 0x126 mbAutosize
     }
 
     // ---- AppendExpectedAptComponent @ 0x824E5610 ------------------------------------
@@ -97,7 +97,16 @@ namespace BrnGui
     void MenuToggle::SetupMenuToggle(s32 liNumOptions, bool lbWrapped, const char* lpacText,
                                      const char** lppacOptions, u64* lpu64Ids)
     {
-        mTitleText.SetText(lpacText ? lpacText : "");   // unk_820046A7 == ""
+        // One SetText per arm (ARTIST hoists the field address and cross-jumps the two calls,
+        // 0x824EA0C4..0x824EA0DC); unk_820046A7 == "".
+        if (lpacText != NULL)
+        {
+            mTitleText.SetText(lpacText);
+        }
+        else
+        {
+            mTitleText.SetText("");
+        }
         mItemText.SetupTextSelection(liNumOptions, lbWrapped, lppacOptions, lpu64Ids);
         SetDirty();                                     // *(this+0xC) |= 0x10
     }
@@ -168,22 +177,22 @@ namespace BrnGui
     // ---- HighlightNext @ 0x82482860 -------------------------------------------------
     bool MenuToggle::HighlightNext()
     {
-        if (!mItemText.HighlightNext(false))
+        if (mItemText.HighlightNext(false))   // success arm first (ARTIST beq to the li r3,0 tail)
         {
-            return false;
+            SetDirty();
+            return true;
         }
-        SetDirty();
-        return true;
+        return false;
     }
 
     // ---- HighlightPrevious @ 0x824828D8 ---------------------------------------------
     bool MenuToggle::HighlightPrevious()
     {
-        if (!mItemText.HighlightPrevious(false))
+        if (mItemText.HighlightPrevious(false))   // success arm first (ARTIST beq to the li r3,0 tail)
         {
-            return false;
+            SetDirty();
+            return true;
         }
-        SetDirty();
-        return true;
+        return false;
     }
 }

@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Core/CgsStringUtils.h"                    // CgsCore::SPrintf
 #include "GameShared/GameClasses/Containers/CgsHash.h"                     // CgsContainers::CgsHash::CalculateHash
 #include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
+#include "GameShared/GameClasses/Development/CgsStrStream.h"               // CGS_ASSERT_STREAM messages
 
 #include <cstring>   // strncpy, strlen
 
@@ -15,53 +16,60 @@
 // component registration is live, so the faithful chain below IS the drive:
 // FillAptViewMessage -> AptAux::UpdateFlashComponent -> AptCommunicator::
 // UpdateComponent, flushed per frame by UpdateAllComponents into the movie AS.)
+//
+// LINE LAYOUT: the definitions sit on their DecFIGS DWARF lines (CgsGuiComponent.h dump:
+// AddOutputAptViewState cpp:48, FillAptViewMessage cpp:70, SetName cpp:88, Construct
+// cpp:117), in that order; ARTIST bakes the asserts' __LINE__ (AddOutputAptViewState's
+// four streamed asserts li r5,0x32..0x35 == 50..53, FillAptViewMessage's li r5,0x48 == 72).
 
 namespace CgsGui
 {
-    // @ 0x8285BB48 GuiComponent::Construct (not exported; the body is the composition of
-    // its two homed callees, and the XB1 x64 arbiter shows the inlined result: the name
-    // lands in macName[+8 after the vptr] and the interface behind it). Name + hash via
-    // SetName @0x828488E8, then store the state interface via SetStateInterface
-    // @0x82847030 (which asserts it non-null -- every X360 construct site passes one).
-    void GuiComponent::Construct(const char* lpacName, StateInterface* lpStateInterface,
-                                 const char* lpacParentName)
-    {
-        SetName(lpacName, lpacParentName);
-        SetStateInterface(lpStateInterface);
-    }
 
-    // @ 0x8285BB48-adjacent (not exported). Post this component's (key, value) apt output:
-    // the XB1 x64 arbiter inlines the whole chain to
-    //   AptCommunicator::UpdateComponent(this->macName, key, value)
-    // (e.g. XB1 sub_1401AF470: UpdateComponent(this, this+8, "SignName", value)), i.e.
-    // AddOutputAptViewState(key, value, immediate) == FillAptViewMessage(GetName(), key,
-    // value, immediate). The lpacAptName/lpacViewState parameter names below are the
-    // DWARF's (they carry the KEY / VALUE of the component protocol).
-    void GuiComponent::AddOutputAptViewState(const char* lpacAptName, const char* lpacViewState,
-                                             bool lbImmediate)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // @ 0x8285BB48 (an export hole: no IDA JSON; ppcdis). Four streamed asserts on cpp:50-53
+    // (texts 0x820E4658/4620/45E8/45A8) then this component's (key, value) apt output
+    // through FillAptViewMessage(GetName(), key, value, immediate). The XB1 x64 arbiter
+    // inlines the chain to AptCommunicator::UpdateComponent(this->macName, key, value).
+    void GuiComponent::AddOutputAptViewState(const char* lpacAptName, const char* lpacViewState, bool lbImmediate)
     {
+        CGS_ASSERT_STREAM(GetName() != NULL, "Name not set in GuiComponent::AddOutputAptViewState");
+        CGS_ASSERT_STREAM(lpacAptName != NULL, "Invalid Variable in GuiComponent::AddOutputAptViewState");
+        CGS_ASSERT_STREAM(lpacViewState != NULL, "Invalid value in GuiComponent::AddOutputAptViewState");
+        CGS_ASSERT_STREAM(mpStateInterface != NULL, "Invalid state interface in GuiComponent::AddOutputAptViewState");
         FillAptViewMessage(GetName(), lpacAptName, lpacViewState, lbImmediate);
     }
-    // @ 0x82847030 - assert the incoming state interface is non-null, then store it
-    // in mpStateInterface (the X360 writes it at +0x88). Path/line from the baked
-    // assert string (GameShared/GameClasses/Gui/Model/State/CgsGuiComponent.h:169).
-    void GuiComponent::SetStateInterface(StateInterface* lpStateInterface)
-    {
-        CGS_ASSERT(lpStateInterface != 0, CgsDev::Assert::StreamMessageAt("Invalid state interface sent to GuiComponent::SetStateInterface", "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiComponent.h", 169));
 
-        mpStateInterface = lpStateInterface;
-    }
 
-    // @ 0x828583A8 - post an apt-view-state transition for this component through the
-    // state interface's access pointers. The X360 body asserts mpStateInterface (+0x88)
-    // is non-null, then reaches the AptAux via mpStateInterface->mpAccessPointers
-    // (StateInterface +4, itself asserted non-null) and calls
-    // AptAux::UpdateFlashComponent(mpAccessPointers->mpAptAux, ...) — the first member of
-    // GuiAccessPointers (**mpAccessPointers).
-    void GuiComponent::FillAptViewMessage(const char* lpacAptName, const char* lpacViewState,
-                                          const char* lpacParam, bool lbImmediate)
+
+
+
+
+
+
+
+
+
+    // @ 0x828583A8 - post an apt-view-state transition through the state interface's access
+    // pointers: AptAux::UpdateFlashComponent(mpAccessPointers->mpAptAux, ...). ARTIST inlines
+    // StateInterface::GetAccessPointers (CgsGuiStateInterface.h:344 assert).
+    void GuiComponent::FillAptViewMessage(const char* lpacAptName, const char* lpacViewState, const char* lpacParam, bool lbImmediate)
     {
-        CGS_ASSERT(mpStateInterface != 0, "mpStateInterface");
+        CGS_ASSERT(mpStateInterface != 0, "mpStateInterface");   // cpp:72 (li r5,0x48)
         // GetAccessPointers() reproduces the "mpAccessPointers != NULL" assert and the
         // +4 load the X360 inlined here.
         GuiAccessPointers* lpAccessPointers = mpStateInterface->GetAccessPointers();
@@ -69,14 +77,14 @@ namespace CgsGui
                                      lpacParam, lbImmediate);
     }
 
-    // @ 0x828488E8 - build the component name and cache its hash.
-    //   * Asserts lpacName non-null ("Invalid name sent to GuiComponent::SetName", :90).
-    //   * If a parent name is supplied, the stored name is "<parent>_<name>"
-    //     (SPrintf "%s_%s", parent first then name); the combined length (strlen(parent)
-    //     + strlen(name) + 2 for the '_' and terminator) must stay under 128 (:94).
-    //   * Otherwise the name is copied verbatim into macName[128] (the inlined StrCpy,
-    //     whose debug bounds-check fires "String too long" at CgsStringUtils.h:55).
-    //   * Finally the name is hashed into muHashedName (+0x84) and that hash returned.
+
+
+
+
+
+
+
+    // @ 0x828488E8 - build the component name ("<parent>_<name>" or the name) and cache its hash.
     u32 GuiComponent::SetName(const char* lpacName, const char* lpacParentName)
     {
         CGS_ASSERT(lpacName != 0, "Invalid name sent to GuiComponent::SetName");
@@ -102,5 +110,23 @@ namespace CgsGui
 
         muHashedName = CgsContainers::CgsHash::CalculateHash(macName, static_cast<s32>(strlen(macName)));
         return muHashedName;
+    }
+
+
+    // GuiComponent::Construct (DWARF cpp:117): SetName, then SetStateInterface.
+    void GuiComponent::Construct(const char* lpacName, StateInterface* lpStateInterface,
+                                 const char* lpacParentName)
+    {
+        SetName(lpacName, lpacParentName);
+        SetStateInterface(lpStateInterface);
+    }
+
+    // @ 0x82847030 - header-inline in the original (CgsGuiComponent.h:169 assert); ARTIST keeps
+    // an out-of-line copy. Assert the incoming state interface, store it at +0x88.
+    void GuiComponent::SetStateInterface(StateInterface* lpStateInterface)
+    {
+        CGS_ASSERT(lpStateInterface != 0, CgsDev::Assert::StreamMessageAt("Invalid state interface sent to GuiComponent::SetStateInterface", "..\\..\\..\\GameShared\\GameClasses\\Gui/Model/State/CgsGuiComponent.h", 169));
+
+        mpStateInterface = lpStateInterface;
     }
 }
