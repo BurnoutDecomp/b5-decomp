@@ -26,9 +26,10 @@ struct AptUserFunctions;   // Apt.h -- the allocator/callback table (held by ptr
 class EAStringC
 {
 public:
+    // The shared empty block is not reference counted on construction: x64 0x1400C1490 and
+    // ARTIST's inlined copies (AptString::sMethod_toLowerCase 0x82AFC9F0) only store it.
     EAStringC() : m_pData(reinterpret_cast<DebugDataC*>(&s_EmptyInternalData))
     {
-        IncreaseInternalRefCount();
     }
 
     explicit EAStringC(const uint32_t uReservedLength);
