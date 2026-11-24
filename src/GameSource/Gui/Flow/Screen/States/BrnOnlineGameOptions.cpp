@@ -45,31 +45,31 @@ namespace BrnGui
         { "invisible", "visible" };
 
     // ---- create-match option lists (s32 ids, each E_OPTION_TERMINATOR-terminated) -----
-    const CreateMatchOption::EOption OnlineGameOptions::KAE_COMMON_OPTIONS[2] =              // @0x8205F14C
-        { CreateMatchOption::E_OPTION_GAME_MODE, CreateMatchOption::E_OPTION_TERMINATOR };
-    const CreateMatchOption::EOption OnlineGameOptions::KAE_RACE_MODE_OPTIONS[5] =           // @0x8205F154
-        { CreateMatchOption::E_OPTION_ROUNDS, CreateMatchOption::E_OPTION_VEHICLE_CHOICE,
-          CreateMatchOption::E_OPTION_VEHICLE_CLASS, CreateMatchOption::E_OPTION_TRAFFIC,
-          CreateMatchOption::E_OPTION_TERMINATOR };
-    const CreateMatchOption::EOption OnlineGameOptions::KAE_ROAD_RAGE_MODE_OPTIONS[6] =      // @0x8205F168
-        { CreateMatchOption::E_OPTION_ROUNDS_EVEN, CreateMatchOption::E_OPTION_VEHICLE_CHOICE,
-          CreateMatchOption::E_OPTION_VEHICLE_CLASS, CreateMatchOption::E_OPTION_TRAFFIC,
-          CreateMatchOption::E_OPTION_TRAFFIC_CHECKING, CreateMatchOption::E_OPTION_TERMINATOR };
-    const CreateMatchOption::EOption OnlineGameOptions::KAE_BURNING_HOME_RUN_MODE_OPTIONS[8] = // @0x8205F180
-        { CreateMatchOption::E_OPTION_ROUNDS, CreateMatchOption::E_OPTION_VEHICLE_CHOICE,
-          CreateMatchOption::E_OPTION_VEHICLE_CLASS, CreateMatchOption::E_OPTION_TRAFFIC,
-          CreateMatchOption::E_OPTION_INFINITE_BOOST, CreateMatchOption::E_OPTION_RUNNER_CRASH_LIMIT,
-          CreateMatchOption::E_OPTION_TIME_LIMIT, CreateMatchOption::E_OPTION_TERMINATOR };
+    const CreateMatchOptions::EOption OnlineGameOptions::KAE_COMMON_OPTIONS[2] =              // @0x8205F14C
+        { CreateMatchOptions::E_OPTION_GAME_MODE, CreateMatchOptions::E_OPTION_TERMINATOR };
+    const CreateMatchOptions::EOption OnlineGameOptions::KAE_RACE_MODE_OPTIONS[5] =           // @0x8205F154
+        { CreateMatchOptions::E_OPTION_ROUNDS, CreateMatchOptions::E_OPTION_VEHICLE_CHOICE,
+          CreateMatchOptions::E_OPTION_VEHICLE_CLASS, CreateMatchOptions::E_OPTION_TRAFFIC,
+          CreateMatchOptions::E_OPTION_TERMINATOR };
+    const CreateMatchOptions::EOption OnlineGameOptions::KAE_ROAD_RAGE_MODE_OPTIONS[6] =      // @0x8205F168
+        { CreateMatchOptions::E_OPTION_ROUNDS_EVEN, CreateMatchOptions::E_OPTION_VEHICLE_CHOICE,
+          CreateMatchOptions::E_OPTION_VEHICLE_CLASS, CreateMatchOptions::E_OPTION_TRAFFIC,
+          CreateMatchOptions::E_OPTION_TRAFFIC_CHECKING, CreateMatchOptions::E_OPTION_TERMINATOR };
+    const CreateMatchOptions::EOption OnlineGameOptions::KAE_BURNING_HOME_RUN_MODE_OPTIONS[8] = // @0x8205F180
+        { CreateMatchOptions::E_OPTION_ROUNDS, CreateMatchOptions::E_OPTION_VEHICLE_CHOICE,
+          CreateMatchOptions::E_OPTION_VEHICLE_CLASS, CreateMatchOptions::E_OPTION_TRAFFIC,
+          CreateMatchOptions::E_OPTION_INFINITE_BOOST, CreateMatchOptions::E_OPTION_RUNNER_CRASH_LIMIT,
+          CreateMatchOptions::E_OPTION_TIME_LIMIT, CreateMatchOptions::E_OPTION_TERMINATOR };
     // FLAG: no DWARF name for the fourth list -- named for the role KAP_GAME_MODE_OPTION_DATA
     // gives it (slots 3/4/5 all point at this one array).
-    const CreateMatchOption::EOption OnlineGameOptions::KAE_DEFAULT_MODE_OPTIONS[5] =        // @0x8205F1A0
-        { CreateMatchOption::E_OPTION_ROUNDS, CreateMatchOption::E_OPTION_VEHICLE_CHOICE,
-          CreateMatchOption::E_OPTION_VEHICLE_CLASS, CreateMatchOption::E_OPTION_TRAFFIC,
-          CreateMatchOption::E_OPTION_TERMINATOR };
+    const CreateMatchOptions::EOption OnlineGameOptions::KAE_DEFAULT_MODE_OPTIONS[5] =        // @0x8205F1A0
+        { CreateMatchOptions::E_OPTION_ROUNDS, CreateMatchOptions::E_OPTION_VEHICLE_CHOICE,
+          CreateMatchOptions::E_OPTION_VEHICLE_CLASS, CreateMatchOptions::E_OPTION_TRAFFIC,
+          CreateMatchOptions::E_OPTION_TERMINATOR };
 
     // @0x82F26824 -- indexed by GetSelectedGameMode(). Slots 3/4/5 are the SAME pointer,
     // which is why three game modes share one option list; that is the dump, not a typo.
-    const CreateMatchOption::EOption* const OnlineGameOptions::KAP_GAME_MODE_OPTION_DATA[6] =
+    const CreateMatchOptions::EOption* const OnlineGameOptions::KAP_GAME_MODE_OPTION_DATA[6] =
         { KAE_RACE_MODE_OPTIONS, KAE_ROAD_RAGE_MODE_OPTIONS, KAE_BURNING_HOME_RUN_MODE_OPTIONS,
           KAE_DEFAULT_MODE_OPTIONS, KAE_DEFAULT_MODE_OPTIONS, KAE_DEFAULT_MODE_OPTIONS };
 

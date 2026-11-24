@@ -41,7 +41,6 @@ namespace BrnGui
         const s32 KI_CHANNEL_GUI_OUT = 40;
 
         // The unmount of the page's apt movie: the empty movie name at level 3.
-        const char KAC_EMPTY_MOVIE[]   = "";
         const s32  KI_APT_MOVIE_LEVEL  = 3;
 
         // The console's OutputGuiEvent<T> body: box the payload in a GuiEventWrapper<T,40>
@@ -158,7 +157,7 @@ namespace BrnGui
 
         meSubState = E_SUBSTATE_FREE_BURNING;
 
-        mpStateInterface->PlayAptMovie(KAC_EMPTY_MOVIE, KI_APT_MOVIE_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
 
         mSelectedPlayerID = -1;
         mPlayerStatsDisplay.Destruct();
@@ -257,7 +256,7 @@ namespace BrnGui
 
         meSubState = E_SUBSTATE_FREE_BURNING;
 
-        mpStateInterface->PlayAptMovie(KAC_EMPTY_MOVIE, KI_APT_MOVIE_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
         PostActivateCrashNav(mpStateInterface, true);
         PostScreenFlowCommand(mpStateInterface);
         PostShowHideHud(mpStateInterface, true);
@@ -272,7 +271,7 @@ namespace BrnGui
 
         meSubState = E_SUBSTATE_FREE_BURNING;
 
-        mpStateInterface->PlayAptMovie(KAC_EMPTY_MOVIE, KI_APT_MOVIE_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
         PostActivateCrashNav(mpStateInterface, true);
         PostScreenFlowCommand(mpStateInterface);
         PostShowHideHud(mpStateInterface, true);
@@ -307,7 +306,7 @@ namespace BrnGui
 
         mRouteInfoDisplay.Destruct();
 
-        mpStateInterface->PlayAptMovie(KAC_EMPTY_MOVIE, KI_APT_MOVIE_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
         PostActivateCrashNav(mpStateInterface, true);
         PostScreenFlowCommand(mpStateInterface);
         PostShowHideHud(mpStateInterface, true);
@@ -324,7 +323,7 @@ namespace BrnGui
 
         mRouteInfoDisplay.Destruct();
 
-        mpStateInterface->PlayAptMovie(KAC_EMPTY_MOVIE, KI_APT_MOVIE_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
 
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 

@@ -41,24 +41,22 @@ namespace BrnGui
     // (@0x824BCC18-0x824BCC30).
     void CrashNavEnterOnlineBase::ShowLoginError(s32 liError)
     {
-        const char* lpacMessage;
-        if (liError == 8)
+        // One SetText per case (ARTIST 0x824BCC08 compares 8 / 14 / 25 and cross-jumps the call).
+        switch (liError)
         {
-            lpacMessage = "$ONLINE_POPUP_LOBBY_DISCONNECT";
+        case 8:
+            mMessageText.SetText("$ONLINE_POPUP_LOBBY_DISCONNECT");
+            break;
+        case 14:
+            mMessageText.SetText("$ONLINE_POPUP_ACCOUNT_LOCKED");
+            break;
+        case 25:
+            mMessageText.SetText("$ONLINE_NOT_SIGNED_IN");
+            break;
+        default:
+            mMessageText.SetText("$ONLINE_CONNECTING_FAILED");
+            break;
         }
-        else if (liError == 14)
-        {
-            lpacMessage = "$ONLINE_POPUP_ACCOUNT_LOCKED";
-        }
-        else if (liError == 25)
-        {
-            lpacMessage = "$ONLINE_NOT_SIGNED_IN";
-        }
-        else
-        {
-            lpacMessage = "$ONLINE_CONNECTING_FAILED";
-        }
-        mMessageText.SetText(lpacMessage);
 
         // One button only: acknowledge and go back.
         mMessageButtons.SetupMenu(1, true);

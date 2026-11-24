@@ -48,11 +48,9 @@ namespace BrnGui
     {
         // The apt clip the player-options popup transitions through (X360
         // aAptTransition_1, the AddOutputAptViewState first argument at 0x824AD654).
-        const char KAC_APT_TRANSITION[] = "apt_Transition";
 
         // The empty movie name PlayAptMovie is handed when a screen's apt movie is
         // unmounted (X360 unk_820046A7, the zero-length rodata string).
-        const char KAC_EMPTY_MOVIE[] = "";
 
         // The apt movie level the screens mount/unmount on (X360 `li r11, 3`).
         const s32 KI_APT_MOVIE_LEVEL = 3;
@@ -120,7 +118,7 @@ namespace BrnGui
                 if (liPlayerIndex == lpPlayerList->miNumPlayers)
                 {
                     ShowPlayerList(mSelectedPlayerID);
-                    mOptionsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION,
+                    mOptionsAnimation.AddOutputAptViewState("apt_Transition",
                                                             KAPC_ANIMATION_STATES[1], false);
                     meSubState        = E_SUBSTATE_MAIN;
                     mSelectedPlayerID = -1;
@@ -143,7 +141,7 @@ namespace BrnGui
         mPlayerStatsDisplay.Destruct();
         mRouteInfoDisplay.Destruct();
 
-        mpStateInterface->PlayAptMovie(KAC_EMPTY_MOVIE, KI_APT_MOVIE_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
 
         // X360 BrnOnlineGameRoomPlayerInfo.cpp:4135.
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
@@ -162,7 +160,7 @@ namespace BrnGui
     // and this screen unloads it because the map page IS the base class.
     void OnlineGameRoomPlayerInfo::UnloadMapResources()
     {
-        mpStateInterface->PlayAptMovie(KAC_EMPTY_MOVIE, KI_APT_MOVIE_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
 
         // X360 BrnOnlineGameRoomPlayerInfo.cpp:4182.
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");

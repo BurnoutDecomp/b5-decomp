@@ -146,7 +146,6 @@ namespace BrnGui
         // maResourceTuplesToLoad[0].muId below.
         const s32 KI_RESOURCE_ID_SETTINGS = 139;
         const s32 KI_APT_DISPLAY_LEVEL    = 3;     // X360 `li r5, 3`
-        const char KAC_EMPTY[]            = "";    // X360 unk_820046A7 (the unload sentinel)
 
         // X360 `li r8, -1 ; clrldi r8, r8, 32` -- the 32-bit -1 zero-extended into the
         // 64-bit apt-id slot, i.e. Selectable::K_INVALID_ID.
@@ -274,7 +273,7 @@ namespace BrnGui
         // The apt UNLOAD sentinel: an inlined bare GuiEventPlayAptMovie (GuiEvent<18>(8,12)
         // { name, level }) pushed onto the view-state channel with the EMPTY name and level
         // 3. StateInterface::PlayAptMovie posts exactly that record.
-        mpStateInterface->PlayAptMovie(KAC_EMPTY, KI_APT_DISPLAY_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_DISPLAY_LEVEL);
 
         // Leaving from anything but the settled main state re-arms the news/TOS request.
         if (meState != E_STATE_MAIN)

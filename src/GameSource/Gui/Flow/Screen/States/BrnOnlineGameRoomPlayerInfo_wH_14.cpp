@@ -131,11 +131,6 @@ namespace BrnGui
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayWaitFinishRequest>) == 24), "overlay wait-finish record is 24 bytes");
 
         // ---- overlay / state-event vocabularies (the asm's rodata literals) --------
-        const char KAC_OVERLAY_LOBBY_DELETED[]   = "CNLobbyDlted";   // lobby went away under us
-        const char KAC_OVERLAY_LEAVE_GAME_QN[]   = "CNOnlLvGmQn";    // "leave the game?" question
-        const char KAC_OVERLAY_LEAVE_CHAL_QN[]   = "CNOnlLvChaQn";   // "leave the challenge?" question
-        const char KAC_OVERLAY_LAUNCH_FAILED[]   = "CNOnlLchFail";
-        const char KAC_STATE_EVENT_GO_BACK[]     = "GO_BACK";
 
         // The reason words this handler acts on. FLAG: the producer-side enum name is not
         // in the recovered DWARF slice; the roles come from the overlay ids they raise.
@@ -170,7 +165,7 @@ namespace BrnGui
         if (lpPayload->miReason == KI_LEFT_GAME_REASON_LOBBY_DELETED && !mbKicked)
         {
             GuiOverlayRequestWire lWire;
-            lWire.mRequest.Construct(KAC_OVERLAY_LOBBY_DELETED);
+            lWire.mRequest.Construct("CNLobbyDlted");
 
             mpStateInterface->OutputGuiEvent(lWire.mRequest);
         }
@@ -181,13 +176,13 @@ namespace BrnGui
             // before the kick overlay goes up.
             {
                 GuiOverlayWaitFinishWire lWaitGame;
-                lWaitGame.mRequest.Construct(KAC_OVERLAY_LEAVE_GAME_QN);
+                lWaitGame.mRequest.Construct("CNOnlLvGmQn");
 
                 mpStateInterface->OutputGuiEvent(lWaitGame.mRequest);
             }
             {
                 GuiOverlayWaitFinishWire lWaitChallenge;
-                lWaitChallenge.mRequest.Construct(KAC_OVERLAY_LEAVE_CHAL_QN);
+                lWaitChallenge.mRequest.Construct("CNOnlLvChaQn");
 
                 mpStateInterface->OutputGuiEvent(lWaitChallenge.mRequest);
             }
@@ -206,7 +201,7 @@ namespace BrnGui
             mbKicked = true;
         }
 
-        SendStateEvent(KAC_STATE_EVENT_GO_BACK);
+        SendStateEvent("GO_BACK");
 
         if (mpGuiCache != 0 &&
             (meSubState == E_SUBSTATE_LOADING_SCREEN ||
@@ -237,7 +232,7 @@ namespace BrnGui
             // bytes into the record (the inlined OutputGuiEvent<GuiOverlayRequest> copy);
             // constructed in place here.
             GuiOverlayRequestWire lWire;
-            lWire.mRequest.Construct(KAC_OVERLAY_LAUNCH_FAILED);
+            lWire.mRequest.Construct("CNOnlLchFail");
             lWire.mRequest.AddMessageParam(KU_LAUNCH_FAILED_MESSAGE_PARAM,
                                            KPC_LAUNCH_FAILED_STRINGIDS[lpPayload->miResult]);
 

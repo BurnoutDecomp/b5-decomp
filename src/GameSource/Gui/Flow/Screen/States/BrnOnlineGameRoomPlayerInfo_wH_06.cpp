@@ -116,11 +116,8 @@ namespace BrnGui
 
         // The apt clip the options popup transitions (the X360 literal at every
         // AddOutputAptViewState site in this file).
-        const char KAC_APT_TRANSITION[] = "apt_Transition";
 
         // The audio labels the two sites trigger.
-        const char KAC_SOUND_MENU_ITEM_TOGGLE_DEFAULT[] = "MenuItemToggleDefault";
-        const char KAC_SOUND_GO_BACK[]                  = "GO_BACK";
     }
 
     // ---- HandleControllerInputMainSubState @ 0x824A4670 ---------------------------
@@ -142,7 +139,7 @@ namespace BrnGui
 
                         GuiAudioTriggerEvent lAudio;
                         lAudio.Construct(KI_AUDIO_TRIGGER_ACTION, "",
-                                         KAC_SOUND_MENU_ITEM_TOGGLE_DEFAULT, "");
+                                         "MenuItemToggleDefault", "");
                         mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
                     }
                 }
@@ -157,7 +154,7 @@ namespace BrnGui
 
                         GuiAudioTriggerEvent lAudio;
                         lAudio.Construct(KI_AUDIO_TRIGGER_ACTION, "",
-                                         KAC_SOUND_MENU_ITEM_TOGGLE_DEFAULT, "");
+                                         "MenuItemToggleDefault", "");
                         mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
                     }
                 }
@@ -222,7 +219,7 @@ namespace BrnGui
             case '2':   // 0x32 -- back out of the player list.
             {
                 GuiAudioTriggerEvent lAudio;
-                lAudio.Construct(KI_AUDIO_TRIGGER_ACTION, "", KAC_SOUND_GO_BACK, "");
+                lAudio.Construct(KI_AUDIO_TRIGGER_ACTION, "", "GO_BACK", "");
                 mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
 
                 mPlayerNameComponent.Clear();   // component slot 6
@@ -299,7 +296,7 @@ namespace BrnGui
         }
 
         mOptionComponent.SetIds(lau64OptionIds);
-        mOptionsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION, KAPC_ANIMATION_STATES[0], false);
+        mOptionsAnimation.AddOutputAptViewState("apt_Transition", KAPC_ANIMATION_STATES[0], false);
 
         return true;
     }
@@ -330,7 +327,7 @@ namespace BrnGui
                 lSelectedOption.miPlayerID = mSelectedPlayerID;
                 mpStateInterface->OutputGuiEvent(lSelectedOption);
 
-                mOptionsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION,
+                mOptionsAnimation.AddOutputAptViewState("apt_Transition",
                                                         KAPC_ANIMATION_STATES[1], false);
                 mSelectedPlayerID = -1;
                 meSubState = E_SUBSTATE_MAIN;
@@ -340,10 +337,10 @@ namespace BrnGui
             case '2':   // 0x32 -- cancel: play the back sound, then hide.
             {
                 GuiAudioTriggerEvent lAudio;
-                lAudio.Construct(KI_AUDIO_TRIGGER_ACTION, "", KAC_SOUND_GO_BACK, "");
+                lAudio.Construct(KI_AUDIO_TRIGGER_ACTION, "", "GO_BACK", "");
                 mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
 
-                mOptionsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION,
+                mOptionsAnimation.AddOutputAptViewState("apt_Transition",
                                                         KAPC_ANIMATION_STATES[1], false);
                 mSelectedPlayerID = -1;
                 meSubState = E_SUBSTATE_MAIN;

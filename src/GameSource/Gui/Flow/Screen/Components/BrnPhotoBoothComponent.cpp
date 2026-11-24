@@ -111,7 +111,6 @@ namespace BrnGui
 
         // The empty-string literal the X360 passes as `&unk_820046A7` (a bare "" in .rodata)
         // wherever a prompt is being blanked rather than indexed out of a table.
-        const char KAC_EMPTY_STRING[] = "";
 
         // ---- BrnGui::GuiEventNetworkOutputPlayerTexture (id 264) ------------------
         // The record OutputGuiEvent<GuiEventNetworkOutputPlayerTexture> @0x82436D40 builds:
@@ -377,7 +376,7 @@ namespace BrnGui
                    "E_GUI_RESOURCEID_NUM != mPhotoResourceToLoad.muId");   // cpp:206
         CGS_ASSERT(mpGuiCache, "mpGuiCache");                              // cpp:207
 
-        mpStateInterface->PlayAptMovie(KAC_EMPTY_STRING, KI_PHOTOBOOTH_APT_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_PHOTOBOOTH_APT_LEVEL);
         PostPlayerTextureEvent(mpStateInterface, E_PLAYERTEXTURE_OFF);
 
         mpGuiCache->EnsureResourceIsUnloaded(mPhotoResourceToLoad);
@@ -441,10 +440,10 @@ namespace BrnGui
         }
         else
         {
-            mHelpItemLeft.SetItem(KAC_EMPTY_STRING,
+            mHelpItemLeft.SetItem("",
                                   ButtonIconComponent::E_PADBUTTON_INVISIBLE,
                                   ButtonIconComponent::E_PADBUTTON_INVISIBLE);
-            mHelpItemCentral.SetItem(KAC_EMPTY_STRING,
+            mHelpItemCentral.SetItem("",
                                      ButtonIconComponent::E_PADBUTTON_INVISIBLE,
                                      ButtonIconComponent::E_PADBUTTON_INVISIBLE);
         }

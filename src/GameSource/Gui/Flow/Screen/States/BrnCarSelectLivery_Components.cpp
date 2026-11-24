@@ -39,7 +39,6 @@ namespace BrnGui
     namespace
     {
         const s32 KI_CHANNEL_GUI_OUT = 40;
-        const char KAC_EMPTY[] = "";
 
         // The three paint FINISHES the second toggle row offers, and their option ids
         // (the X360 builds both arrays on the stack: three string pointers and the qwords
@@ -335,9 +334,9 @@ namespace BrnGui
         // there is more than one car to go back to.
         if (IsLoading())
         {
-            mHelpItemContinue.SetItem(KAC_EMPTY, ButtonIconComponent::E_PADBUTTON_INVISIBLE,
+            mHelpItemContinue.SetItem("", ButtonIconComponent::E_PADBUTTON_INVISIBLE,
                                       ButtonIconComponent::E_PADBUTTON_INVISIBLE);
-            mHelpItemBack.SetItem(KAC_EMPTY, ButtonIconComponent::E_PADBUTTON_INVISIBLE,
+            mHelpItemBack.SetItem("", ButtonIconComponent::E_PADBUTTON_INVISIBLE,
                                   ButtonIconComponent::E_PADBUTTON_INVISIBLE);
         }
         else
@@ -358,7 +357,7 @@ namespace BrnGui
             }
             else
             {
-                mHelpItemBack.SetItem(KAC_EMPTY, ButtonIconComponent::E_PADBUTTON_INVISIBLE,
+                mHelpItemBack.SetItem("", ButtonIconComponent::E_PADBUTTON_INVISIBLE,
                                       ButtonIconComponent::E_PADBUTTON_INVISIBLE);
             }
         }
@@ -389,7 +388,7 @@ namespace BrnGui
 
         if (!lbRestoreAvailable)
         {
-            mHelpItemRestoreDefaultPaint.SetItem(KAC_EMPTY,
+            mHelpItemRestoreDefaultPaint.SetItem("",
                                                  ButtonIconComponent::E_PADBUTTON_INVISIBLE,
                                                  ButtonIconComponent::E_PADBUTTON_INVISIBLE);
 

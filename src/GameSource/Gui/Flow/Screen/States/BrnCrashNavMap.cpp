@@ -121,7 +121,6 @@ namespace BrnGui
         // screen's movie with (`li r11, 3` @0x824CB478), with an EMPTY movie name --
         // r28 == &unk_820046A7, and the image byte at 0x820046A7 is 0x00, i.e. "".
         const s32  KI_APT_MOVIE_LEVEL     = 3;
-        const char KPC_NO_APT_MOVIE[]     = "";
 
         // The map-scroll-end cue OnLeave fires when the debouncer is still latched
         // scrolling. X360 off_82F26E7C; same string wJ_03's UpdateSoundEvents posts.
@@ -141,8 +140,6 @@ namespace BrnGui
         // UpdateButtonPrompts reproduces in full -- the X360 reaches them as off_82F26EE0 /
         // off_82F26EE4, which are &table[6] / &table[7]. Only the two this body needs are
         // repeated here; a partial table indexed by the enum would be a trap.
-        const char KPC_PROMPTS_ONLINE_RIVAL[]       = "FreeburnLobbyRival";        // [6]
-        const char KPC_PROMPTS_ONLINE_PAUSE_RIVAL[] = "FreeburnLobbyPauseRival";   // [7]
 
         // GuiCache::maPlayerInfo[8] -- the online-roster walk bound (`cmpwi r11, 8`
         // @0x824BF998).
@@ -288,7 +285,7 @@ namespace BrnGui
         // StateInterface::PlayAptMovie builds (GuiEventPlayAptMovie is GuiEvent<18>(8,12)).
         // The name pointer is &unk_820046A7 == the empty string, i.e. "play nothing at
         // level 3", the same level CheckForLoadComplete started "BrnCrashNavMapMain" at.
-        mpStateInterface->PlayAptMovie(KPC_NO_APT_MOVIE, KI_APT_MOVIE_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
 
         // The X360 clears the loaded latch in the middle of building the next record
         // (`stb r29, 0x44(r31)` @0x824CB4DC); kept where the asm has it.
@@ -534,11 +531,11 @@ namespace BrnGui
                     // The offline screen type falls through with no transition at all.
                     if (meScreenType == E_SCREEN_TYPE_ONLINE)
                     {
-                        mButtonPromptsAnimation.Run(KPC_PROMPTS_ONLINE_RIVAL);
+                        mButtonPromptsAnimation.Run("FreeburnLobbyRival");
                     }
                     else if (meScreenType == E_SCREEN_TYPE_ONLINE_FROM_PAUSE)
                     {
-                        mButtonPromptsAnimation.Run(KPC_PROMPTS_ONLINE_PAUSE_RIVAL);
+                        mButtonPromptsAnimation.Run("FreeburnLobbyPauseRival");
                     }
                 }
 
@@ -1294,7 +1291,6 @@ namespace BrnGui
         // The apt movie this screen plays once its resources are in, and the level the
         // X360 passes with it (`li r5, 3`; same KI_APT_MOVIE_LEVEL the wave-H
         // OnlineGameRoomPlayerInfo partfile 02 uses).
-        const char KPC_CRASHNAV_APT_MOVIE[] = "BrnCrashNavMapMain";   // X360 off_82F27AF0
 // (fold: an identical definition of KI_APT_MOVIE_LEVEL was dropped here -- this TU defines it once, above)
 
         // The float in the ShowHideSatNav payload. MEASURED: X360 flt_82065668 == 0.5f
@@ -1329,7 +1325,7 @@ namespace BrnGui
             return;
         }
 
-        mpStateInterface->PlayAptMovie(KPC_CRASHNAV_APT_MOVIE, KI_APT_MOVIE_LEVEL);
+        mpStateInterface->PlayAptMovie("BrnCrashNavMapMain", KI_APT_MOVIE_LEVEL);
 
         mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
         mpGuiCache->ClearExpectedControlledAptComponentList();
@@ -1554,7 +1550,6 @@ namespace BrnGui
         // X360 rodata aSD_1, the SPrintf format the loop passes (r5). Hex-Rays mislabels
         // variadic args here; the raw asm is unambiguous: r3=buffer, r4=16, r5="%s%d",
         // r6=macSatNavIconBaseName, r7=the loop index.
-        const char KAC_ICON_NAME_FORMAT[5] = "%s%d";
 
     }
 
@@ -1615,7 +1610,7 @@ namespace BrnGui
         for (s32 liIcon = 0; liIcon < KAC_CRASHNAVMAP_NUMICONS; ++liIcon)
         {
             char lacIconName[16];
-            CgsCore::SPrintf(lacIconName, sizeof(lacIconName), KAC_ICON_NAME_FORMAT,
+            CgsCore::SPrintf(lacIconName, sizeof(lacIconName), "%s%d",
                              macSatNavIconBaseName, liIcon);
             mauComponentHashIds[liIcon] = CgsContainers::CgsHash::CalculateHash(
                 lacIconName, static_cast<int>(std::strlen(lacIconName)));

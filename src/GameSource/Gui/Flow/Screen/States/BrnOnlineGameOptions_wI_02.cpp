@@ -64,10 +64,6 @@ namespace BrnGui
         const s32 KI_AUDIO_ACTION_MENU_CUE = 7;
 
         // The four audio labels the X360 selects between (rodata literals).
-        const char KAC_SOUND_LABEL_MENU_TOGGLE[]      = "MenuToggleDefault";
-        const char KAC_SOUND_LABEL_MENU_ITEM_TOGGLE[] = "MenuItemToggleDefault";
-        const char KAC_SOUND_LABEL_ACCEPT[]           = "Accept";
-        const char KAC_SOUND_LABEL_GO_BACK[]          = "GO_BACK";
 
         // ---- out-queue wire record -----------------------------------------------------
         // The record the inlined OutputGuiEvent<BrnGui::GuiAudioTriggerEvent> builds:
@@ -106,7 +102,7 @@ namespace BrnGui
     // leaves the stored mode untouched.
     void OnlineGameOptions::StoreGameMode()
     {
-        if (mCreateGameToggles.GetIndexFromId(CreateMatchOption::E_OPTION_GAME_MODE) == -1)
+        if (mCreateGameToggles.GetIndexFromId(CreateMatchOptions::E_OPTION_GAME_MODE) == -1)
         {
             return;
         }
@@ -115,8 +111,8 @@ namespace BrnGui
         // EOption. The Hex-Rays `>>32` at the other call sites is decompiler noise from the
         // u64 register view -- the X360 switches on r3's low word (`addi r11, r3, -1` then
         // `cmplwi r11, 5`, i.e. the six option rows 1..6).
-        const CreateMatchOption::EOption leHighlighted =
-            GetHighlightedOption(CreateMatchOption::E_OPTION_GAME_MODE);
+        const CreateMatchOptions::EOption leHighlighted =
+            GetHighlightedOption(CreateMatchOptions::E_OPTION_GAME_MODE);
 
         // The stored values are GsmIO::EGameModeType (the same raw-s32 convention the rest
         // of the Gui slice uses for that field): 10 E_MODE_ONLINE_RACE,
@@ -127,7 +123,7 @@ namespace BrnGui
         // as the X360 jump table has it.
         switch (leHighlighted)
         {
-            case CreateMatchOption::E_OPTION_GAME_MODE_RACE:                // 1
+            case CreateMatchOptions::E_OPTION_GAME_MODE_RACE:                // 1
                 mGameOptions.meGameMode = 10;
                 break;
 
@@ -138,15 +134,15 @@ namespace BrnGui
                 mGameOptions.meGameMode = 11;
                 break;
 
-            case CreateMatchOption::E_OPTION_GAME_MODE_STUNT:               // 3
+            case CreateMatchOptions::E_OPTION_GAME_MODE_STUNT:               // 3
                 mGameOptions.meGameMode = 12;
                 break;
 
-            case CreateMatchOption::E_OPTION_GAME_MODE_STUNT_FREE_FOR_ALL:  // 4
+            case CreateMatchOptions::E_OPTION_GAME_MODE_STUNT_FREE_FOR_ALL:  // 4
                 mGameOptions.meGameMode = 14;
                 break;
 
-            case CreateMatchOption::E_OPTION_GAME_MODE_STUNT_COOP:          // 5
+            case CreateMatchOptions::E_OPTION_GAME_MODE_STUNT_COOP:          // 5
                 mGameOptions.meGameMode = 17;
                 break;
 
@@ -179,7 +175,7 @@ namespace BrnGui
             case KI_ACTION_GUI_DPAD_DOWN:
             case KI_ACTION_GUI_UP:
             case KI_ACTION_GUI_DOWN:
-                lpcLabel = KAC_SOUND_LABEL_MENU_TOGGLE;
+                lpcLabel = "MenuToggleDefault";
                 break;
 
             // The four LEFT/RIGHT ids -- moving the highlighted row's VALUE.
@@ -187,15 +183,15 @@ namespace BrnGui
             case KI_ACTION_GUI_DPAD_RIGHT:
             case KI_ACTION_GUI_LEFT:
             case KI_ACTION_GUI_RIGHT:
-                lpcLabel = KAC_SOUND_LABEL_MENU_ITEM_TOGGLE;
+                lpcLabel = "MenuItemToggleDefault";
                 break;
 
             case KI_ACTION_GUI_SELECT:
-                lpcLabel = KAC_SOUND_LABEL_ACCEPT;
+                lpcLabel = "Accept";
                 break;
 
             case KI_ACTION_GUI_CANCEL:
-                lpcLabel = KAC_SOUND_LABEL_GO_BACK;
+                lpcLabel = "GO_BACK";
                 break;
 
             // The remaining four jump-table arms, 0x2D..0x30 == GUI_START / GUI_BACK /

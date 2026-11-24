@@ -63,9 +63,7 @@ namespace BrnGui
         const char* const KPC_EMPTY_STRING    = "";
 
         // The overlay a lost connection raises.
-        const char KAC_LOST_CONNECTION_OVERLAY_ID[] = "OnLostConn";
 
-        const char KAC_ADVANCE_EVENT[] = "ADVANCE";
 
         // ---- in-queue payload views (the queue hands out the header-stripped payload) ----
         // The gui-cache event (the assert text names its field mpCachePointer).
@@ -258,7 +256,7 @@ namespace BrnGui
                 if (mpGuiCache->IsOnline())
                 {
                     GuiOverlayRequestWire lLostConnectionOverlay;
-                    lLostConnectionOverlay.mRequest.Construct(KAC_LOST_CONNECTION_OVERLAY_ID);
+                    lLostConnectionOverlay.mRequest.Construct("OnLostConn");
                     mpStateInterface->OutputGuiEvent(lLostConnectionOverlay.mRequest);
                 }
                 break;
@@ -272,7 +270,7 @@ namespace BrnGui
             }
 
             case KI_EVENT_PRE_EVENT_ADVANCE:
-                SendStateEvent(KAC_ADVANCE_EVENT);
+                SendStateEvent("ADVANCE");
                 break;
 
             default:

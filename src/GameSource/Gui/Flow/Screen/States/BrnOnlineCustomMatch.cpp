@@ -62,7 +62,6 @@ namespace BrnGui
         // r4 = aAptTransition_1 ("apt_Transition") for all fifteen calls, r6 = 0
         // (lbImmediate false). Shared with the other wave-J partfiles of this TU --
         // keep only one copy on merge.
-        const char KAC_APT_TRANSITION_NAME[] = "apt_Transition";
         // Indices into OnlineCustomMatch::KAPC_ANIMATION_STATES @0x82F266B0
         // == { "Visible", "Invisible", "Refresh" }. The asm reaches them as
         // off_82F266B0[0] / off_82F266B4[0], i.e. slots 0 and 1 of that pointer table.
@@ -171,7 +170,7 @@ namespace BrnGui
             // The button prompts belong to the parameter form, so they go away while the
             // search runs.
             mButtonPromptAnimation.AddOutputAptViewState(
-                KAC_APT_TRANSITION_NAME,
+                "apt_Transition",
                 KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE], false);
         }
         else
@@ -224,19 +223,19 @@ namespace BrnGui
     // ================================================================================
     void OnlineCustomMatch::ShowParamSelection()
     {
-        mMessageAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageAnimation.AddOutputAptViewState("apt_Transition",
                                                 KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
                                                 false);
-        mMessageButtonsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageButtonsAnimation.AddOutputAptViewState("apt_Transition",
                                                        KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
                                                        false);
-        mFoundGamesAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mFoundGamesAnimation.AddOutputAptViewState("apt_Transition",
                                                    KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
                                                    false);
-        mButtonPromptAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mButtonPromptAnimation.AddOutputAptViewState("apt_Transition",
                                                      KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE],
                                                      false);
-        mSearchParamsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mSearchParamsAnimation.AddOutputAptViewState("apt_Transition",
                                                      KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE],
                                                      false);
 
@@ -299,19 +298,19 @@ namespace BrnGui
     // ================================================================================
     void OnlineCustomMatch::ShowNoGamesFound()
     {
-        mMessageAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageAnimation.AddOutputAptViewState("apt_Transition",
                                                 KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE],
                                                 false);
-        mMessageButtonsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageButtonsAnimation.AddOutputAptViewState("apt_Transition",
                                                        KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE],
                                                        false);
-        mButtonPromptAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mButtonPromptAnimation.AddOutputAptViewState("apt_Transition",
                                                      KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE],
                                                      false);
-        mSearchParamsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mSearchParamsAnimation.AddOutputAptViewState("apt_Transition",
                                                      KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
                                                      false);
-        mFoundGamesAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mFoundGamesAnimation.AddOutputAptViewState("apt_Transition",
                                                    KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
                                                    false);
 
@@ -391,7 +390,7 @@ namespace BrnGui
         const s32 KI_ACTION_GUI_SELECT = 0x31;   // 49 GUI_SELECT
         const s32 KI_ACTION_GUI_CANCEL = 0x32;   // 50 GUI_CANCEL
 
-// (fold: an identical definition of KAC_APT_TRANSITION_NAME was dropped here -- this TU defines it once, above)
+// (fold: an identical definition of "apt_Transition" was dropped here -- this TU defines it once, above)
 // (fold: an identical definition of KI_ANIMATION_STATE_INVISIBLE was dropped here -- this TU defines it once, above)
 
         // The two search-parameter rows of mSearchParms, in the order ShowParamSelection
@@ -479,7 +478,7 @@ namespace BrnGui
                 meSubState = E_SUBSTATE_SEARCHING;
                 ShowMessage(KAC_SEARCHING_STRING_ID);
                 mButtonPromptAnimation.AddOutputAptViewState(
-                    KAC_APT_TRANSITION_NAME,
+                    "apt_Transition",
                     KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
                     false);
             }
@@ -763,14 +762,12 @@ namespace
     // (0x8248BBD8 / 0x8248BC04 here, 0x8248E7E8 in ShowFoundGames); FillInTable's two twin
     // buffers provably sit 7 bytes apart on the console frame (var_80 / var_79).
     const u32  KU_NUMBER_BUFFER_SIZE = 7;
-    const char KAC_INTEGER_FORMAT[]  = "%d";   // rodata aD_16
 
     // The apt view the animation components are driven through, and the
     // KAPC_ANIMATION_STATES slots ShowFoundGames drives them to (@0x82F266B0 ==
     // { "Visible", "Invisible", "Refresh" }; the asm reaches the three slots as
     // off_82F266B0 / off_82F266B4 / off_82F266B8). Shared with the other wave-J partfiles
     // of this TU -- keep exactly one copy on merge.
-    const char KAC_APT_TRANSITION_NAME[]    = "apt_Transition";
     const s32  KI_ANIMATION_STATE_VISIBLE   = 0;
     const s32  KI_ANIMATION_STATE_INVISIBLE = 1;
     const s32  KI_ANIMATION_STATE_REFRESH   = 2;
@@ -834,9 +831,9 @@ namespace BrnGui
             // manager as INTEGER parameters of one localised string.
             char lacCurrentPlayers[KU_NUMBER_BUFFER_SIZE];
             char lacMaxPlayers[KU_NUMBER_BUFFER_SIZE];
-            CgsCore::SPrintf(lacCurrentPlayers, KU_NUMBER_BUFFER_SIZE, KAC_INTEGER_FORMAT,
+            CgsCore::SPrintf(lacCurrentPlayers, KU_NUMBER_BUFFER_SIZE, "%d",
                              mSearchResults.maiNumPlayers[liGame]);
-            CgsCore::SPrintf(lacMaxPlayers, KU_NUMBER_BUFFER_SIZE, KAC_INTEGER_FORMAT,
+            CgsCore::SPrintf(lacMaxPlayers, KU_NUMBER_BUFFER_SIZE, "%d",
                              mSearchResults.maiMaxNumPlayers[liGame]);
 
             const char* lapacParams[2];
@@ -961,13 +958,13 @@ namespace BrnGui
         // Hide the message text, its buttons and the search-parameter rows; show the
         // button prompts. lbImmediate is 0 on all five calls (`li r6, 0`).
         mMessageAnimation.AddOutputAptViewState(
-            KAC_APT_TRANSITION_NAME, KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE], false);
         mMessageButtonsAnimation.AddOutputAptViewState(
-            KAC_APT_TRANSITION_NAME, KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE], false);
         mSearchParamsAnimation.AddOutputAptViewState(
-            KAC_APT_TRANSITION_NAME, KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE], false);
         mButtonPromptAnimation.AddOutputAptViewState(
-            KAC_APT_TRANSITION_NAME, KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE], false);
 
         // The list panel's transition depends on whether it is ALREADY up: a re-search from
         // the list is a "Refresh", the first entry is a "Visible". meSubState is sampled
@@ -978,7 +975,7 @@ namespace BrnGui
                 ? KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_REFRESH]
                 : KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE];
         mFoundGamesAnimation.AddOutputAptViewState(
-            KAC_APT_TRANSITION_NAME, lpacFoundGamesState, false);
+            "apt_Transition", lpacFoundGamesState, false);
 
         // "<n> GAMES FOUND", with a separate singular string id (note the shipped
         // "SEACH" typo in it). The count goes through the language manager as an INTEGER
@@ -989,7 +986,7 @@ namespace BrnGui
         // the CALL, so the declared size follows the capacity, as in FillInTable where the
         // two twin buffers provably sit 7 bytes apart.)
         char lacNumGames[KU_NUMBER_BUFFER_SIZE];
-        CgsCore::SPrintf(lacNumGames, KU_NUMBER_BUFFER_SIZE, KAC_INTEGER_FORMAT,
+        CgsCore::SPrintf(lacNumGames, KU_NUMBER_BUFFER_SIZE, "%d",
                          mSearchResults.miNumGames);
 
         const char* lpacCaptionID = KAC_NUM_GAMES_FOUND_STRING_ID;
@@ -1416,7 +1413,6 @@ namespace BrnGui
         };
 
         // The overlay the join path raises while the network match is being entered.
-        const char KAC_ENTER_GAME_OVERLAY[] = "CNOnlEntGame";
     }
 
     // ================================================================================
@@ -1490,7 +1486,7 @@ namespace BrnGui
 
                 // Raise the "entering game" overlay over the top of the list.
                 GuiOverlayRequestWire lRequest;
-                lRequest.mRequest.Construct(KAC_ENTER_GAME_OVERLAY);
+                lRequest.mRequest.Construct("CNOnlEntGame");
                 mpStateInterface->OutputGuiEvent(lRequest.mRequest);                   // X360 record size 304
 
                 // The X360 stores the sub-state BEFORE the ShowMessage call
@@ -1607,7 +1603,6 @@ namespace BrnGui
         // (X360 rodata aCnonlentgame, loaded at 0x82497FE0/0x82497FE8). The '1' arm of
         // HandleControllerInputSelectGame raises the very same overlay id, so that
         // partfile carries its own copy -- keep exactly one on merge.
-        const char KAC_ENTER_GAME_OVERLAY_ID[] = "CNOnlEntGame";
 
         // ---- out-queue wire record -----------------------------------------------------
         // The id-188 "this wait overlay has finished" request. Its payload is the homed
@@ -1640,7 +1635,7 @@ namespace BrnGui
                    "Invalid event sent to OnlineSelectRoute::HandleInGameEvent");   // cpp:1032
 
         // Take down the "entering game" wait overlay.
-        GuiOverlayWaitFinishRequestWire lRequest(KAC_ENTER_GAME_OVERLAY_ID);
+        GuiOverlayWaitFinishRequestWire lRequest("CNOnlEntGame");
 
         mpStateInterface->OutputGuiEvent(lRequest.mRequest);   // X360 record size 24
 
@@ -1705,7 +1700,6 @@ namespace BrnGui
         // The custom-match screen's apt movie. The X360 does not hold this string as a
         // static of this class: PlayAptMovie is handed the pointer parked at 0x82F27B9C,
         // one slot of the screen-flow's per-screen movie-name table (0x82F27B90..).
-        const char KAC_APT_MOVIE_NAME[] = "ON_CUSTM";
 
         // The apt movie's layer/level argument (X360 `li r5, 3` @0x824A3514). FLAG: the
         // parameter is `s32 liLevelNum` (CgsGuiStateInterface.h:136); nothing in the image
@@ -1727,7 +1721,7 @@ namespace BrnGui
             if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad,
                                                      static_cast<u32>(miNumResourcesToLoad)))
             {
-                mpStateInterface->PlayAptMovie(KAC_APT_MOVIE_NAME, KI_APT_MOVIE_LEVEL);
+                mpStateInterface->PlayAptMovie("ON_CUSTM", KI_APT_MOVIE_LEVEL);
                 meSubState = E_SUBSTATE_LOADING_COMPONENTS;
             }
             break;
@@ -1829,13 +1823,8 @@ namespace BrnGui
         const s32 KI_TICKER_STRING_TYPE = 2;
 
         // ---- the three ticker lines (rodata literals @0x82497D44/D5C/D68) ---------------
-        const char KAC_RANKED_TICKER_TEXT[]   = "ONLINE_RANKED_TICKER_TEXT";
-        const char KAC_FREEBURN_TICKER_TEXT[] = "ONLINE_FREEBURN_TICKER_TEXT";
-        const char KAC_UNRANKED_TICKER_TEXT[] = "ONLINE_UNRANKED_TICKER_TEXT";
 
         // ---- the two state-machine events this handler can send -------------------------
-        const char KAC_STATE_EVENT_GO_BACK[]      = "GO_BACK";
-        const char KAC_STATE_EVENT_GO_BACK_EASY[] = "GO_BACK_EASY";
 
         // ---- in-queue payload view -----------------------------------------------------
         // The DWARF types the parameter const GuiEventCache*, whose home header is one of
@@ -1937,15 +1926,15 @@ namespace BrnGui
             const char* lpacTickerText;
             if (mpGuiCache->mbOnlineMatchRanked)             // GuiCache +0x4B51
             {
-                lpacTickerText = KAC_RANKED_TICKER_TEXT;
+                lpacTickerText = "ONLINE_RANKED_TICKER_TEXT";
             }
             else if (mpGuiCache->mbOnlineMatchUnranked)      // GuiCache +0x4B52
             {
-                lpacTickerText = KAC_FREEBURN_TICKER_TEXT;
+                lpacTickerText = "ONLINE_FREEBURN_TICKER_TEXT";
             }
             else
             {
-                lpacTickerText = KAC_UNRANKED_TICKER_TEXT;
+                lpacTickerText = "ONLINE_UNRANKED_TICKER_TEXT";
             }
 
             GuiTickerCustomMessageWire lTicker;
@@ -1996,11 +1985,11 @@ namespace BrnGui
             mpStateInterface->OutputGuiEvent(lNetworkSuspension);   // X360 record size 16
 
             mpGuiCache->SetOnlineStartPending(false);
-            SendStateEvent(KAC_STATE_EVENT_GO_BACK_EASY);
+            SendStateEvent("GO_BACK_EASY");
         }
         else
         {
-            SendStateEvent(KAC_STATE_EVENT_GO_BACK);
+            SendStateEvent("GO_BACK");
         }
     }
 }
@@ -2080,14 +2069,10 @@ namespace BrnGui
         // aSD_2 / aCellcomponent / aCell: ordinary literals in the rodata string pool, unlike
         // the "FoundGames"/"SearchParam"/... names, which live in the class's own static
         // block at 0x8205E9A0 / 0x8205E788 and are declared in the header.
-        const char KAC_NAME_INDEX_FORMAT[]   = "%s_%d";
-        const char KAC_CELL_COMPONENT_NAME[] = "CellComponent";
-        const char KAC_CELL_NAME[]           = "Cell";
 
         // @0x820046A7 -- the empty format string (the byte immediately after "%s%s%s\0").
         // OnEnter runs it through SPrintf into an 8-byte stack buffer purely to obtain a
         // blank string to seed the four text columns with.
-        const char KAC_EMPTY_FORMAT[] = "";
 
         // Component-name scratch capacity: the X360 passes `li r4, 0x40` to both name
         // builders (0x82496E08 / 0x82496E24) over 64-byte stack buffers.
@@ -2250,14 +2235,14 @@ namespace BrnGui
         for (s8 liRow = 0; liRow < miTableNumRows; ++liRow)
         {
             char lacRowName[KU_COMPONENT_NAME_BUFFER_LEN];
-            CgsCore::SPrintf(lacRowName, KU_COMPONENT_NAME_BUFFER_LEN, KAC_NAME_INDEX_FORMAT,
+            CgsCore::SPrintf(lacRowName, KU_COMPONENT_NAME_BUFFER_LEN, "%s_%d",
                              macTableName, liRow);
 
             for (s8 liColumn = 0; liColumn < miTableNumColumns; ++liColumn)
             {
                 char lacCellName[KU_COMPONENT_NAME_BUFFER_LEN];
-                CgsCore::SPrintf(lacCellName, KU_COMPONENT_NAME_BUFFER_LEN, KAC_NAME_INDEX_FORMAT,
-                                 KAC_CELL_COMPONENT_NAME, liColumn);
+                CgsCore::SPrintf(lacCellName, KU_COMPONENT_NAME_BUFFER_LEN, "%s_%d",
+                                 "CellComponent", liColumn);
 
                 CgsGui::GuiComponent* lpCellComponent = 0;
 
@@ -2303,7 +2288,7 @@ namespace BrnGui
         for (s8 liRowData = 0; liRowData < miTableNumRows; ++liRowData)
         {
             char lacBlankText[KU_EMPTY_TEXT_BUFFER_LEN];
-            CgsCore::SPrintf(lacBlankText, KU_EMPTY_TEXT_BUFFER_LEN, KAC_EMPTY_FORMAT);
+            CgsCore::SPrintf(lacBlankText, KU_EMPTY_TEXT_BUFFER_LEN, "");
 
             TableRowDataSet* lpRowData = &maTableRowDataSets[liRowData];
 
@@ -2320,7 +2305,7 @@ namespace BrnGui
 
         // The cell components and the row data are both in place, so the table itself can
         // be built over them. The trailing pair is (no parent name, invalid apt id).
-        mTable.Construct(macTableName, mpStateInterface, KAC_CELL_NAME,
+        mTable.Construct(macTableName, mpStateInterface, "Cell",
                          maapTableCellComponentPtrs, maTableRowComponentTypes,
                          miTableNumRows, miTableNumColumns, 0, KU_INVALID_APT_ID);
 
@@ -2434,9 +2419,7 @@ namespace BrnGui
         const char* const KPC_EMPTY_STRING   = "";
 // (fold: an identical definition of KI_APT_MOVIE_LEVEL was dropped here -- this TU defines it once, above)
 
-// (fold: an identical definition of KAC_ENTER_GAME_OVERLAY_ID was dropped here -- this TU defines it once, above)
-        const char KAC_ADVANCE_EVENT[]         = "ADVANCE";        // 0x824AC88C
-        const char KAC_DISCONNECT_EVENT[]      = "DISCONNECT";     // 0x824AC880
+// (fold: an identical definition of "CNOnlEntGame" was dropped here -- this TU defines it once, above)
 
         // Id 44: the server-interface error the disconnect popup shows (`lwz 0(r21)`).
         // Same shape as BrnOnlineGameRoomPlayerInfo_wH_00.cpp's.
@@ -2525,7 +2508,7 @@ namespace BrnGui
                 {
                     mpGuiCache->meLastDisconnectedError = 0;
                 }
-                SendStateEvent(KAC_DISCONNECT_EVENT);
+                SendStateEvent("DISCONNECT");
                 break;
 
             case KI_EVENT_ENTER_GAME:
@@ -2533,10 +2516,10 @@ namespace BrnGui
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:316
 
                 // Take down the "entering game" wait overlay, then advance the flow.
-                GuiOverlayWaitFinishRequestWire lRequest(KAC_ENTER_GAME_OVERLAY_ID);
+                GuiOverlayWaitFinishRequestWire lRequest("CNOnlEntGame");
                 mpStateInterface->OutputGuiEvent(lRequest.mRequest);   // X360 record size 24
 
-                SendStateEvent(KAC_ADVANCE_EVENT);
+                SendStateEvent("ADVANCE");
                 break;
             }
 
@@ -2640,7 +2623,7 @@ namespace BrnGui
 
     namespace
     {
-// (fold: an identical definition of KAC_APT_TRANSITION_NAME was dropped here -- this TU defines it once, above)
+// (fold: an identical definition of "apt_Transition" was dropped here -- this TU defines it once, above)
 // (fold: an identical definition of KI_ANIMATION_STATE_VISIBLE was dropped here -- this TU defines it once, above)
 // (fold: an identical definition of KI_ANIMATION_STATE_INVISIBLE was dropped here -- this TU defines it once, above)
         const s32  KI_NUM_OK_BUTTONS            = 1;
@@ -2656,19 +2639,19 @@ namespace BrnGui
     // ================================================================================
     void OnlineCustomMatch::ShowMessage(const char* lpacTextID)
     {
-        mMessageButtonsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageButtonsAnimation.AddOutputAptViewState("apt_Transition",
                                                        KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
                                                        false);
-        mSearchParamsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mSearchParamsAnimation.AddOutputAptViewState("apt_Transition",
                                                      KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
                                                      false);
-        mFoundGamesAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mFoundGamesAnimation.AddOutputAptViewState("apt_Transition",
                                                    KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
                                                    false);
-        mButtonPromptAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mButtonPromptAnimation.AddOutputAptViewState("apt_Transition",
                                                      KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE],
                                                      false);
-        mMessageAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageAnimation.AddOutputAptViewState("apt_Transition",
                                                 KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE],
                                                 false);
 
@@ -2683,19 +2666,19 @@ namespace BrnGui
     // ================================================================================
     void OnlineCustomMatch::ShowNoGamesFoundInGame()
     {
-        mMessageAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageAnimation.AddOutputAptViewState("apt_Transition",
                                                 KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE],
                                                 false);
-        mMessageButtonsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageButtonsAnimation.AddOutputAptViewState("apt_Transition",
                                                        KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE],
                                                        false);
-        mButtonPromptAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mButtonPromptAnimation.AddOutputAptViewState("apt_Transition",
                                                      KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE],
                                                      false);
-        mSearchParamsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mSearchParamsAnimation.AddOutputAptViewState("apt_Transition",
                                                      KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
                                                      false);
-        mFoundGamesAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mFoundGamesAnimation.AddOutputAptViewState("apt_Transition",
                                                    KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE],
                                                    false);
 

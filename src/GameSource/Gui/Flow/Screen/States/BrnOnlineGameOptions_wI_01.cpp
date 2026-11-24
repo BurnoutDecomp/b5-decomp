@@ -6,7 +6,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"
-#include "GameSource/Gui/Flow/Screen/States/BrnCreateMatchOption.h"   // CreateMatchOption::EOption
+#include "GameSource/Gui/Flow/Screen/States/BrnCreateMatchOption.h"   // CreateMatchOptions::EOption
 
 namespace BrnGui
 {
@@ -33,17 +33,17 @@ namespace BrnGui
     s32 OnlineGameOptions::GetNumberOptions()
     {
         s32 liNumGameModeOptions = 0;
-        for (const CreateMatchOption::EOption* lpeGameModeOption
+        for (const CreateMatchOptions::EOption* lpeGameModeOption
                  = KAP_GAME_MODE_OPTION_DATA[GetSelectedGameMode()];
-             *lpeGameModeOption != CreateMatchOption::E_OPTION_TERMINATOR;
+             *lpeGameModeOption != CreateMatchOptions::E_OPTION_TERMINATOR;
              ++lpeGameModeOption)
         {
             ++liNumGameModeOptions;
         }
 
         s32 liNumCommonOptions = 0;
-        for (const CreateMatchOption::EOption* lpeCommonOption = mpCommonOptions;
-             *lpeCommonOption != CreateMatchOption::E_OPTION_TERMINATOR;
+        for (const CreateMatchOptions::EOption* lpeCommonOption = mpCommonOptions;
+             *lpeCommonOption != CreateMatchOptions::E_OPTION_TERMINATOR;
              ++lpeCommonOption)
         {
             ++liNumCommonOptions;
@@ -79,7 +79,7 @@ namespace BrnGui
     // groups of "terminator, group title, value rows...". So the row's index inside its
     // group is (its own index) - (the preceding terminator's index) - 2: the -1 steps off
     // the terminator and the second -1 steps off the group's title row.
-    s32 OnlineGameOptions::GetOptionIndex(CreateMatchOption::EOption leOption)
+    s32 OnlineGameOptions::GetOptionIndex(CreateMatchOptions::EOption leOption)
     {
         s32 liIndex = 0;
         while (maOptions.GetItem(static_cast<u32>(liIndex)).meOption != leOption)
@@ -91,7 +91,7 @@ namespace BrnGui
         for (; liIndex >= 0; --liIndex)
         {
             if (maOptions.GetItem(static_cast<u32>(liIndex)).meOption
-                    == CreateMatchOption::E_OPTION_TERMINATOR)
+                    == CreateMatchOptions::E_OPTION_TERMINATOR)
             {
                 break;
             }

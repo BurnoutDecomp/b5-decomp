@@ -99,9 +99,6 @@ namespace BrnGui
 
         // ---- the FSM script events this screen sends --------------------------------
         // X360 rodata aGoBack / aToggleLeft / aToggleRight.
-        const char KAC_STATE_EVENT_GO_BACK[]      = "GO_BACK";
-        const char KAC_STATE_EVENT_TOGGLE_LEFT[]  = "TOGGLE_LEFT";
-        const char KAC_STATE_EVENT_TOGGLE_RIGHT[] = "TOGGLE_RIGHT";
 
         // ---- the two custom map-zoom distances --------------------------------------
         // X360 flt_82066264 / flt_82066268, selected by the GuiCache high-definition
@@ -119,7 +116,6 @@ namespace BrnGui
         // arguments are both the empty rodata string &unk_820046A7.
         const s32 KI_AUDIO_ACTION_MAP_ZOOM_IN  = 8;
         const s32 KI_AUDIO_ACTION_MAP_ZOOM_OUT = 9;
-        const char KAC_EMPTY_STRING[] = "";                      // X360 &unk_820046A7
 
         // ---- GsmIO::EGameModeType values Update tests -------------------------------
         // FLAG: raw values, exactly as the X360 encodes them (`cmpwi r10,2` /
@@ -358,7 +354,7 @@ namespace BrnGui
                 if (lpUiVisibleEvent->muVisible == 1)
                 {
                     PostExitToInGame(mpStateInterface);
-                    SendStateEvent(KAC_STATE_EVENT_GO_BACK);   // CN_MAP_MAIN(5) -> INGAME(4)
+                    SendStateEvent("GO_BACK");   // CN_MAP_MAIN(5) -> INGAME(4)
                 }
             }
         }
@@ -479,7 +475,7 @@ namespace BrnGui
         case KI_ACTION_GUI_START:     // 45
         case KI_ACTION_GUI_CANCEL:    // 50 -- both exit the map and resume the world
             PostExitToInGame(mpStateInterface);
-            SendStateEvent(KAC_STATE_EVENT_GO_BACK);
+            SendStateEvent("GO_BACK");
             break;
 
         case KI_ACTION_GUI_SELECT:    // 49 -- flip the road panel between the score modes
@@ -517,11 +513,11 @@ namespace BrnGui
             break;
 
         case KI_ACTION_GUI_LSHOULDER: // 54 -- tab left across the CrashNav screens
-            SendStateEvent(KAC_STATE_EVENT_TOGGLE_LEFT);
+            SendStateEvent("TOGGLE_LEFT");
             break;
 
         case KI_ACTION_GUI_RSHOULDER: // 55 -- tab right
-            SendStateEvent(KAC_STATE_EVENT_TOGGLE_RIGHT);
+            SendStateEvent("TOGGLE_RIGHT");
             break;
 
         case KI_ACTION_GUI_LTRIGGER:  // 56 -- hold to zoom the map out
@@ -544,8 +540,8 @@ namespace BrnGui
                 mMainMapComponent.SetDesiredWorldCentre(KV2_ZOOMED_OUT_MAP_CENTRE());
 
                 GuiAudioTriggerEvent lAudio;
-                lAudio.Construct(KI_AUDIO_ACTION_MAP_ZOOM_IN, KAC_EMPTY_STRING,
-                                 KPC_SOUND_MAP_ZOOM, KAC_EMPTY_STRING);
+                lAudio.Construct(KI_AUDIO_ACTION_MAP_ZOOM_IN, "",
+                                 KPC_SOUND_MAP_ZOOM, "");
                 mpStateInterface->OutputGuiEvent<GuiAudioTriggerEvent>(lAudio);
 
                 // `li r11, 3 ; stw r11, 0x5F50(r31)` -- +24400 meCursorMode.
@@ -598,8 +594,8 @@ namespace BrnGui
                                       KF_MAP_ZOOM_UNUSED_CUSTOM, false);
 
             GuiAudioTriggerEvent lAudio;
-            lAudio.Construct(KI_AUDIO_ACTION_MAP_ZOOM_OUT, KAC_EMPTY_STRING,
-                             KPC_SOUND_MAP_ZOOM, KAC_EMPTY_STRING);
+            lAudio.Construct(KI_AUDIO_ACTION_MAP_ZOOM_OUT, "",
+                             KPC_SOUND_MAP_ZOOM, "");
 
             // The console memcpy's the 100-byte PAYLOAD out of the freshly-built event
             // and re-boxes it under wire id 457 (see GuiAudioTriggerPayload457's note).

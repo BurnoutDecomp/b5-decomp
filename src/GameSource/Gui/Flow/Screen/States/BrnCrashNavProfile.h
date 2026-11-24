@@ -97,6 +97,11 @@ namespace BrnGui
         static const s32                    miNumEventsObserved;
         static const CgsGui::sResourceTuple maResourceTuplesToLoad[1];
         static const s32                    miNumResourcesToLoad;
+        // DWARF class statics (BrnCrashNavProfile.cpp:44 / :55). As external-linkage objects ARTIST
+        // addresses each from its own lis/addi (OnEnter 0x824B7AF8: 0x82066418, 0x82066428); the X360
+        // name is one character longer than the PS3 DWARF's char[21] ("...X360").
+        static const char                   KAC_PROFILE_MENU_COMPONENT[13];
+        static const char                   KAC_MESSAGE_ANIMATION_COMPONENT[22];
 
         EState                  meState;                    // +0x03C
         MenuComponent           mProfileMenuComponent;      // +0x040

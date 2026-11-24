@@ -95,17 +95,12 @@ namespace BrnGui
         const u32 KU_PLAYER_NAME_LENGTH = 32;
 
         const s32 KI_INVITE_FAIL_REASON_SAME_GAME = 1;   // EInviteFailReason: already in that game
-        const char KAC_INVITE_FAILED_OVERLAY_ID[] = "CNInvSmGame";
 
         // The in-game record values the player rows show as connected camera / talking.
         const s32 KI_CAMERA_STATUS_SHOWN_CONNECTED = 3;
         const s32 KI_HEADSET_STATUS_TALKING        = 2;
 
-        const char KAC_APT_TRANSITION_NAME[] = "apt_Transition";
-        const char KAC_BED_MUSIC_LABEL[]     = "OnlineBedLoop";
 
-        const char KAC_ADVANCE_EVENT[]    = "ADVANCE";
-        const char KAC_DISCONNECT_EVENT[] = "DISCONNECT";
 
         // ---- in-queue payload views (the queue hands out the header-stripped payload) ----
         struct GuiCachePayload : public CgsModule::Event
@@ -229,7 +224,7 @@ namespace BrnGui
 
         // Start the online bed music.
         GuiAudioTriggerEvent lBedMusic;
-        lBedMusic.Construct(0, KPC_EMPTY_STRING, KAC_BED_MUSIC_LABEL, KPC_EMPTY_STRING);
+        lBedMusic.Construct(0, KPC_EMPTY_STRING, "OnlineBedLoop", KPC_EMPTY_STRING);
         mpStateInterface->OutputGuiEvent(lBedMusic);   // {100, 457, 12} + 100 on channel 40
     }
 
@@ -338,11 +333,11 @@ namespace BrnGui
                 {
                     CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
                     mpGuiCache->SetDoDisconnectPopup(lpEvent);
-                    SendStateEvent(KAC_DISCONNECT_EVENT);
+                    SendStateEvent("DISCONNECT");
                 }
                 else
                 {
-                    SendStateEvent(KAC_ADVANCE_EVENT);
+                    SendStateEvent("ADVANCE");
                 }
                 break;
 
@@ -413,7 +408,7 @@ namespace BrnGui
             meSubState = E_SUBSTATE_MAIN;
             SetupPlayerList();
             mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-            mPlayerListHeadingComponent.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+            mPlayerListHeadingComponent.AddOutputAptViewState("apt_Transition",
                                                               KAPC_ANIMATION_STATES[1], false);
             mRouteInfoDisplay.AppendExpectedAptComponent(E_GUIFLOW_SCREEN, mpGuiCache);
             meSubState = E_SUBSTATE_LOADING_ROUTE_INFO;
@@ -476,7 +471,7 @@ namespace BrnGui
             break;
         }
 
-        mChevronsColourComponent.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpacChevronsState,
+        mChevronsColourComponent.AddOutputAptViewState("apt_Transition", lpacChevronsState,
                                                        false);
     }
 
@@ -650,7 +645,7 @@ namespace BrnGui
         if (lpInviteFailed->meInviteFailedReason == KI_INVITE_FAIL_REASON_SAME_GAME)
         {
             GuiOverlayRequestWire lInviteFailedOverlay;
-            lInviteFailedOverlay.mRequest.Construct(KAC_INVITE_FAILED_OVERLAY_ID);
+            lInviteFailedOverlay.mRequest.Construct("CNInvSmGame");
             mpStateInterface->OutputGuiEvent(lInviteFailedOverlay.mRequest);
         }
     }

@@ -2672,8 +2672,8 @@ void CrashNavIconRenderer::RenderRoadSign(Im2dCommandBuffer* lpRenderBuffer, s32
 
     // The icon's 2D world lane unflattened to {x, 0, z}, as Update and
     // GetRoadSignIconPositions do, then WorldToDevice(v, false).
-    const Vector3 lv3World(lrIcon.mv4WorldPosition.GetX().GetFloat(), 0.0f,
-                           lrIcon.mv4WorldPosition.GetY().GetFloat());
+    const Vector3 lv3World(lrIcon.mv2WorldPos.mV.x, 0.0f,
+                           lrIcon.mv2WorldPos.mV.y);
     const Vector2 lv2Device = MapTransform::WorldToDevice(lv3World, false);
 
     // ---- the POLE quad -----------------------------------------------------------------

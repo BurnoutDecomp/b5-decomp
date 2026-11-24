@@ -64,8 +64,6 @@ namespace BrnGui
 
         // The back press's audio cue (action 7, "GO_BACK", empty component and movie).
         const s32  KI_AUDIO_ACTION_MENU_CUE = 7;
-        const char KAC_SOUND_GO_BACK[]      = "GO_BACK";
-        const char KAC_EMPTY_STRING[]       = "";
 
         // The console's OutputGuiEvent<T> body: box the payload in a GuiEventWrapper<T,40>
         // and queue the wrapper on the GUI-out channel.
@@ -92,7 +90,7 @@ namespace BrnGui
                               const char* lpcLabel)
         {
             GuiAudioTriggerEvent lAudioTrigger;
-            lAudioTrigger.Construct(leAction, KAC_EMPTY_STRING, lpcLabel, KAC_EMPTY_STRING);
+            lAudioTrigger.Construct(leAction, "", lpcLabel, "");
 
             GuiAudioTriggerPayload457 lPayload;
             std::memcpy(&lPayload, lAudioTrigger.macComponent, sizeof(lPayload));
@@ -249,7 +247,7 @@ namespace BrnGui
 
             case KI_ACTION_BACK:
             {
-                PostAudioTrigger(mpStateInterface, KI_AUDIO_ACTION_MENU_CUE, KAC_SOUND_GO_BACK);
+                PostAudioTrigger(mpStateInterface, KI_AUDIO_ACTION_MENU_CUE, "GO_BACK");
 
                 if (mChallengeListComponent.GetHighlightedChallengeID() != 0 &&
                     mChallengeListComponent.mbShowButton)

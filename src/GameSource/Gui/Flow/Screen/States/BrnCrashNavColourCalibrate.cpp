@@ -101,8 +101,6 @@ namespace BrnGui
         // The GuiAudioTriggerEvent::meAction value every menu cue in the GUI flow uses
         // (X360 `li r4, 7`); the label is the shared menu-toggle cue.
         const s32  KI_AUDIO_ACTION_MENU_CUE     = 7;
-        const char KAC_SOUND_LABEL_MENU_TOGGLE[] = "MenuToggleDefault";
-        const char KAC_EMPTY[]                   = "";   // X360 unk_820046A7
 
         // The brightness row's bounds. The X360 bakes the pair as `cmpwi r11, 1` on the
         // GUI_RIGHT arm and `cmpwi r11, 0x64` on the GUI_LEFT arm -- which are exactly the
@@ -211,8 +209,8 @@ namespace BrnGui
         void PostMenuToggleSound(CgsGui::StateInterface* lpStateInterface)
         {
             GuiAudioTriggerEvent lAudioPayload;
-            lAudioPayload.Construct(KI_AUDIO_ACTION_MENU_CUE, KAC_EMPTY,
-                             KAC_SOUND_LABEL_MENU_TOGGLE, KAC_EMPTY);
+            lAudioPayload.Construct(KI_AUDIO_ACTION_MENU_CUE, "",
+                             "MenuToggleDefault", "");
 
             lpStateInterface->OutputGuiEvent(lAudioPayload);
         }
@@ -331,7 +329,7 @@ namespace BrnGui
         // X360: an inlined bare GuiEventPlayAptMovie (GuiEvent<18>(8,12) { name, level })
         // pushed onto the view-state channel with the EMPTY name (unk_820046A7) and level
         // 3 -- the unload sentinel. StateInterface::PlayAptMovie posts exactly that record.
-        mpStateInterface->PlayAptMovie(KAC_EMPTY, KI_APT_DISPLAY_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_DISPLAY_LEVEL);
     }
 
     // ---- Update @ 0x824E0228 -------------------------------------------------------

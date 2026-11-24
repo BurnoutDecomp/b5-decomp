@@ -56,10 +56,7 @@ namespace
 
         mbCommunicateWithApt = lbCommunicateWithApt;
         mRoadId              = 0;
-        mv4WorldPosition.mV.x   = 0.0f;
-        mv4WorldPosition.mV.y   = 0.0f;
-        mv4WorldPosition.mV.z   = 0.0f;
-        mv4WorldPosition.mV.w   = 0.0f;
+        mv2WorldPos.SetZero();
         meSignColour         = E_SIGN_COLOUR_GREEN;
         meIconType           = E_ICON_TYPE_COUNT;
         mbSignVisible        = false;
@@ -75,10 +72,10 @@ namespace
         CGS_ASSERT(leIcon >= 0 && leIcon < E_ROADICON_COUNT,
                    "leIcon >= 0 && leIcon < E_ROADICON_COUNT");   // assert line 182
 
-        mv4WorldPosition.mV.x = lpv2WorldPos->mV.x;
-        mv4WorldPosition.mV.y = lpv2WorldPos->mV.y;
-        mv4WorldPosition.mV.z = lpv2WorldPos->mV.z;
-        mv4WorldPosition.mV.w = lpv2WorldPos->mV.w;
+        mv2WorldPos.mV.x = lpv2WorldPos->mV.x;
+        mv2WorldPos.mV.y = lpv2WorldPos->mV.y;
+        mv2WorldPos.mV.z = lpv2WorldPos->mV.z;
+        mv2WorldPos.mV.w = lpv2WorldPos->mV.w;
         meIconType         = leIconType;
         mRoadId            = lRoadId;
     }
@@ -88,9 +85,13 @@ namespace
     {
         if (lbVisible != mbSignVisible)
         {
-            if (mbCommunicateWithApt)
+            if (mbCommunicateWithApt == true)
             {
-                AddOutputAptViewState("_visible", lbVisible ? "true" : "false", true);
+                // One call per arm (ARTIST 0x824F5238 hoists r6 and cross-jumps the call).
+                if (lbVisible == true)
+                    AddOutputAptViewState("_visible", "true", true);
+                else
+                    AddOutputAptViewState("_visible", "false", true);
             }
             mbSignVisible = lbVisible;
         }
@@ -110,14 +111,14 @@ namespace
 
     void RoadSignIcon::DisplayRoad(const char* lpcRoadName, bool lbShowPost)
     {
-        CGS_ASSERT(lpcRoadName != 0, "NULL != lpcRoadName");         // assert line 224
-        CGS_ASSERT('\0' != lpcRoadName[0], "'\\0' != lpcRoadName[0]");  // assert line 225
+        CGS_ASSERT(lpcRoadName != 0, CgsDev::Assert::MessageAt("NULL != lpcRoadName", __FILE__, 224 /* ARTIST 0x824FB120 */));
+        CGS_ASSERT('\0' != lpcRoadName[0], CgsDev::Assert::MessageAt("'\\0' != lpcRoadName[0]", __FILE__, 225 /* ARTIST 0x824FB148 */));
 
-        if (mbCommunicateWithApt)
+        if (mbCommunicateWithApt == true)
         {
             AddOutputAptViewState(mpacRoadFrameName, lpcRoadName, false);
         }
-        if (mbCommunicateWithApt)
+        if (mbCommunicateWithApt == true)
         {
             AddOutputAptViewState(mpShowSign, lbShowPost ? mpTrue : mpFalse, false);
         }
@@ -156,7 +157,7 @@ namespace
     // The two lanes go to apt as "%3.3f" strings.
     void RoadSignIcon::SetScreenPosition(Vector2 lv2ScreenPos)
     {
-        if (mbCommunicateWithApt)
+        if (mbCommunicateWithApt == true)
         {
             char lacValue[32];
             CgsCore::SPrintf(lacValue, sizeof(lacValue), "%3.3f", static_cast<double>(lv2ScreenPos.mV.x));
@@ -173,7 +174,7 @@ namespace
                    "Invalid colour (");   // assert line 313
 
         meSignColour = leColour;
-        if (mbCommunicateWithApt)
+        if (mbCommunicateWithApt == true)
         {
             AddOutputAptViewState(mpacRoadColour, KAPC_SIGN_COLOURS[leColour], false);
         }
@@ -181,7 +182,7 @@ namespace
 
     void RoadSignIcon::SetScale(Vector2 lv2Scale)
     {
-        if (mbCommunicateWithApt)
+        if (mbCommunicateWithApt == true)
         {
             char lacValue[32];
             CgsCore::SPrintf(lacValue, sizeof(lacValue), "%3.3f", static_cast<double>(lv2Scale.mV.x));
@@ -313,9 +314,9 @@ namespace
 
             // The 2D world lane unflattened to {x, 0, z}.
             Vector3 lv3World;
-            lv3World.mV.x = lpIcon->mv4WorldPosition.mV.x;
+            lv3World.mV.x = lpIcon->mv2WorldPos.mV.x;
             lv3World.mV.y = 0.0f;
-            lv3World.mV.z = lpIcon->mv4WorldPosition.mV.y;
+            lv3World.mV.z = lpIcon->mv2WorldPos.mV.y;
             lv3World.mV.w = 0.0f;
             const Vector2 lv2ScreenPos = MapTransform::WorldToDevice(lv3World, false);
             lpIcon->SetScreenPosition(lv2ScreenPos);
@@ -413,15 +414,7 @@ namespace
 
         for (u32 luIcon = 0; luIcon < KU_NUM_SIGN_ICONS; ++luIcon)
         {
-            RoadSignIcon& lrIcon = mIcons[luIcon];
-            if (lbVisible != lrIcon.mbSignVisible)
-            {
-                if (lrIcon.mbCommunicateWithApt)
-                {
-                    lrIcon.AddOutputAptViewState("_visible", lbVisible ? "true" : "false", true);
-                }
-                lrIcon.mbSignVisible = lbVisible;
-            }
+            mIcons[luIcon].SetVisible(lbVisible);   // inlined in ARTIST 0x824F5778
         }
 
         mbComponentVisible = lbVisible;
@@ -447,10 +440,10 @@ namespace
             Vector2 lv2WorldPos;
             if (mbIconsTransformed)
             {
-                lv2WorldPos.mV.x = lrIcon.mv4WorldPosition.mV.x;
-                lv2WorldPos.mV.y = lrIcon.mv4WorldPosition.mV.y;
-                lv2WorldPos.mV.z = lrIcon.mv4WorldPosition.mV.z;
-                lv2WorldPos.mV.w = lrIcon.mv4WorldPosition.mV.w;
+                lv2WorldPos.mV.x = lrIcon.mv2WorldPos.mV.x;
+                lv2WorldPos.mV.y = lrIcon.mv2WorldPos.mV.y;
+                lv2WorldPos.mV.z = lrIcon.mv2WorldPos.mV.z;
+                lv2WorldPos.mV.w = lrIcon.mv2WorldPos.mV.w;
             }
             else
             {
@@ -505,7 +498,7 @@ namespace
 
         for (u32 luIcon = 0; luIcon < KU_NUM_SIGN_ICONS; ++luIcon)
         {
-            const Vector4& lv4Lane = mIcons[luIcon].mv4WorldPosition;
+            const Vector2& lv4Lane = mIcons[luIcon].mv2WorldPos;
 
             Vector3 lv3World;
             lv3World.mV.x = lv4Lane.mV.x;

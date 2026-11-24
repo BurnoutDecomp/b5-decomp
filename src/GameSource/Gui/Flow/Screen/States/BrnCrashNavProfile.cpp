@@ -63,23 +63,13 @@ namespace BrnGui
         // "BrnCrashNavProfile", and 140 is also maResourceTuplesToLoad[0].muId below.
         const s32 KI_RESOURCE_ID_PROFILE = 140;
         const s32 KI_APT_DISPLAY_LEVEL   = 3;
-        const char KAC_EMPTY[]           = "";   // the apt unload sentinel name
 
-        // The two component names the screen builds (recovered string operands; the
-        // menu name is the per-row "<name>_<i>" stem).
-        const char KAC_PROFILE_MENU_COMPONENT[13]      = "ProfMenuItem";
-        const char KAC_MESSAGE_ANIMATION_COMPONENT[22] = "MessageTransitionX360";
 
         // The two localisation keys ShowMenu pushes into the rows, in highlight order.
         const char* const KAPC_PROFILE_MENU_TEXT[CrashNavProfile::KI_NUM_MENU_ITEMS] =
         {
             "$PROFILE_MENU_SAVE", "$PROFILE_MENU_LOAD"
         };
-
-        // The animation clip is driven through the component base's view-state channel.
-        const char KAC_APT_TRANSITION[] = "apt_Transition";
-        const char KAC_VIEW_VISIBLE[]   = "visible";
-        const char KAC_VIEW_INVISIBLE[] = "invisible";
 
         // The 32-bit -1 zero-extended into the 64-bit apt-id slot, i.e. the group's
         // "no id" value -- the same spelling the sibling crash-nav states use.
@@ -114,6 +104,10 @@ namespace BrnGui
         { static_cast<u32>(KI_RESOURCE_ID_PROFILE), CgsGui::E_GUI_RESOURCETYPE_APT }
     };
     const s32 CrashNavProfile::miNumResourcesToLoad = 1;
+
+    // DWARF class statics (cpp:44 / cpp:55): the menu-row name stem and the message animation clip.
+    const char CrashNavProfile::KAC_PROFILE_MENU_COMPONENT[13]      = "ProfMenuItem";
+    const char CrashNavProfile::KAC_MESSAGE_ANIMATION_COMPONENT[22] = "MessageTransitionX360";
 
     // ---- constructor ---------------------------------------------------------------
     // Vtable establishment only (see the header): the embedded menu / prompt / animation
@@ -171,7 +165,7 @@ namespace BrnGui
         // registering on every entry without releasing runs it out.
         mpStateInterface->UnRegisterForEvents(maiEventToObserve, miNumEventsObserved);
 
-        mpStateInterface->PlayAptMovie(KAC_EMPTY, KI_APT_DISPLAY_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_DISPLAY_LEVEL);
     }
 
     // ---- HandleGuiCacheEvent -------------------------------------------------------
@@ -216,6 +210,22 @@ namespace BrnGui
 
         switch (liAction)
         {
+        // Case order as ARTIST lays the arms out (0x824B7C2C TOGGLE_LEFT, 0x824B7C4C TOGGLE_RIGHT, then
+        // UP / DOWN / SELECT / CANCEL).
+        case KI_ACTION_TOGGLE_L:
+            if (meState == E_STATE_MAIN)
+            {
+                SendStateEvent("TOGGLE_LEFT");
+            }
+            break;
+
+        case KI_ACTION_TOGGLE_R:
+            if (meState == E_STATE_MAIN)
+            {
+                SendStateEvent("TOGGLE_RIGHT");
+            }
+            break;
+
         case KI_ACTION_MENU_UP:
             if (meState == E_STATE_MAIN)
             {
@@ -240,15 +250,13 @@ namespace BrnGui
                 if (liHighlightedRow == KI_MENU_ROW_SAVE)
                 {
                     meState = E_STATE_PROFILE_MESSAGE;
-                    mSaveLoadMessageAnimation.AddOutputAptViewState(
-                        KAC_APT_TRANSITION, KAC_VIEW_VISIBLE, false);
+                    mSaveLoadMessageAnimation.Run("visible");
                     mpProfileManager->Save(*this);
                 }
                 else if (liHighlightedRow == KI_MENU_ROW_LOAD)
                 {
                     meState = E_STATE_PROFILE_MESSAGE;
-                    mSaveLoadMessageAnimation.AddOutputAptViewState(
-                        KAC_APT_TRANSITION, KAC_VIEW_VISIBLE, false);
+                    mSaveLoadMessageAnimation.Run("visible");
                     mpProfileManager->Load(*this);
                 }
             }
@@ -279,20 +287,6 @@ namespace BrnGui
             }
             break;
 
-        case KI_ACTION_TOGGLE_L:
-            if (meState == E_STATE_MAIN)
-            {
-                SendStateEvent("TOGGLE_LEFT");
-            }
-            break;
-
-        case KI_ACTION_TOGGLE_R:
-            if (meState == E_STATE_MAIN)
-            {
-                SendStateEvent("TOGGLE_RIGHT");
-            }
-            break;
-
         default:
             break;
         }
@@ -303,8 +297,7 @@ namespace BrnGui
     // arm the "ENTER_GAME" post Update makes on the next tick.
     void CrashNavProfile::HandleProfileTaskResult()
     {
-        mSaveLoadMessageAnimation.AddOutputAptViewState(KAC_APT_TRANSITION,
-                                                        KAC_VIEW_INVISIBLE, false);
+        mSaveLoadMessageAnimation.Run("invisible");
         meState = E_STATE_PROFILE_LOADED;
     }
 

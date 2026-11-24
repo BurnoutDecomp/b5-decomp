@@ -76,15 +76,11 @@ namespace BrnGui
         const s32 KI_AUDIO_ACTION_MENU_CUE = 7;
 
         // The two audio labels the X360 selects between (rodata literals).
-        const char KAC_SOUND_LABEL_MENU_TOGGLE[]      = "MenuToggleDefault";
-        const char KAC_SOUND_LABEL_MENU_ITEM_TOGGLE[] = "MenuItemToggleDefault";
 
         // The "cancel the settings edit?" overlay this page raises when the player backs
         // out with unsaved changes.
-        const char KAC_OVERLAY_CANCEL_CONFIRM[] = "CNCnclCnfrm";
 
         // The audio label the clean back-out path plays.
-        const char KAC_SOUND_LABEL_GO_BACK[] = "GO_BACK";
 
         // ---- in-queue payload view ----------------------------------------------------
         // ARTIST controller event payload: pad id at +0x00, the button/action id at +0x04.
@@ -198,14 +194,14 @@ namespace BrnGui
             case KI_ACTION_MENU_MOVE_B:
             case KI_ACTION_MENU_PREVIOUS:
             case KI_ACTION_MENU_NEXT:
-                lpcLabel = KAC_SOUND_LABEL_MENU_TOGGLE;
+                lpcLabel = "MenuToggleDefault";
                 break;
 
             case KI_ACTION_ITEM_MOVE_A:
             case KI_ACTION_ITEM_MOVE_B:
             case KI_ACTION_ITEM_PREVIOUS:
             case KI_ACTION_ITEM_NEXT:
-                lpcLabel = KAC_SOUND_LABEL_MENU_ITEM_TOGGLE;
+                lpcLabel = "MenuItemToggleDefault";
                 break;
 
             default:
@@ -320,7 +316,7 @@ namespace BrnGui
                 if (mbSettingsChanged)
                 {
                     GuiOverlayRequestWire lWire;
-                    lWire.mRequest.Construct(KAC_OVERLAY_CANCEL_CONFIRM);
+                    lWire.mRequest.Construct("CNCnclCnfrm");
 
                     mpStateInterface->OutputGuiEvent(lWire.mRequest);
                 }
@@ -333,7 +329,7 @@ namespace BrnGui
                     const s32 liSFXVolume   = mpGuiCache->GetMenuOptionsData()->GetSFXVolume();
 
                     GuiAudioTriggerEvent lAudioPayload;
-                    lAudioPayload.Construct(KI_AUDIO_ACTION_MENU_CUE, "", KAC_SOUND_LABEL_GO_BACK, "");
+                    lAudioPayload.Construct(KI_AUDIO_ACTION_MENU_CUE, "", "GO_BACK", "");
                     mpStateInterface->OutputGuiEvent(lAudioPayload);
 
                     GuiEventAudioSettingsWire lAudioSettings(liMusicVolume, liSFXVolume);

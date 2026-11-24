@@ -90,7 +90,6 @@ namespace BrnGui
         const s32 KI_ARROW_STATE_ANIMATE   = 2;   // "animate"
 
         // The apt view whose state the two arrow animators are driven through.
-        const char KAC_APT_TRANSITION[] = "apt_Transition";
 
         // ---- in-queue payload view -----------------------------------------------------
         // The state in-queue hands handlers the HEADER-STRIPPED payload; this handler reads
@@ -167,16 +166,16 @@ namespace BrnGui
                     if (GetNumberOptions() <= 1)
                     {
                         mUpArrowAnimator.AddOutputAptViewState(
-                            KAC_APT_TRANSITION, KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_INVISIBLE], false);
+                            "apt_Transition", KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_INVISIBLE], false);
                         mDownArrowAnimator.AddOutputAptViewState(
-                            KAC_APT_TRANSITION, KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_INVISIBLE], false);
+                            "apt_Transition", KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_INVISIBLE], false);
                     }
                     else
                     {
                         mUpArrowAnimator.AddOutputAptViewState(
-                            KAC_APT_TRANSITION, KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_ANIMATE], false);
+                            "apt_Transition", KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_ANIMATE], false);
                         mDownArrowAnimator.AddOutputAptViewState(
-                            KAC_APT_TRANSITION, KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_VISIBLE], false);
+                            "apt_Transition", KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_VISIBLE], false);
                     }
 
                     TriggerSound(leAction);
@@ -238,16 +237,16 @@ namespace BrnGui
                     if (GetNumberOptions() <= 1)
                     {
                         mUpArrowAnimator.AddOutputAptViewState(
-                            KAC_APT_TRANSITION, KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_INVISIBLE], false);
+                            "apt_Transition", KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_INVISIBLE], false);
                         mDownArrowAnimator.AddOutputAptViewState(
-                            KAC_APT_TRANSITION, KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_INVISIBLE], false);
+                            "apt_Transition", KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_INVISIBLE], false);
                     }
                     else
                     {
                         mUpArrowAnimator.AddOutputAptViewState(
-                            KAC_APT_TRANSITION, KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_VISIBLE], false);
+                            "apt_Transition", KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_VISIBLE], false);
                         mDownArrowAnimator.AddOutputAptViewState(
-                            KAC_APT_TRANSITION, KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_ANIMATE], false);
+                            "apt_Transition", KPC_ARROW_ANIMATION_STATES[KI_ARROW_STATE_ANIMATE], false);
                     }
 
                     TriggerSound(leAction);
@@ -264,7 +263,7 @@ namespace BrnGui
                 // -1 highlight does match a -1 game-mode row.
                 const s32 liHighlightedRow = mCreateGameToggles.miHighlightedIndex;
                 const s32 liGameModeRow = mCreateGameToggles.GetIndexFromId(
-                    static_cast<u64>(static_cast<u32>(CreateMatchOption::E_OPTION_GAME_MODE)));
+                    static_cast<u64>(static_cast<u32>(CreateMatchOptions::E_OPTION_GAME_MODE)));
 
                 if (liHighlightedRow == liGameModeRow)
                 {
@@ -284,7 +283,7 @@ namespace BrnGui
             {
                 const s32 liHighlightedRow = mCreateGameToggles.miHighlightedIndex;
                 const s32 liGameModeRow = mCreateGameToggles.GetIndexFromId(
-                    static_cast<u64>(static_cast<u32>(CreateMatchOption::E_OPTION_GAME_MODE)));
+                    static_cast<u64>(static_cast<u32>(CreateMatchOptions::E_OPTION_GAME_MODE)));
 
                 if (liHighlightedRow == liGameModeRow)
                 {
@@ -409,9 +408,6 @@ namespace BrnGui
         const s32 KI_TICKER_STRING_TYPE = 2;
 
         // ---- the three ticker lines (rodata literals) ----------------------------------
-        const char KAC_RANKED_TICKER_TEXT[]   = "ONLINE_RANKED_TICKER_TEXT";
-        const char KAC_FREEBURN_TICKER_TEXT[] = "ONLINE_FREEBURN_TICKER_TEXT";
-        const char KAC_UNRANKED_TICKER_TEXT[] = "ONLINE_UNRANKED_TICKER_TEXT";
 
         // ---- in-queue payload view -----------------------------------------------------
         // The state in-queue hands handlers the HEADER-STRIPPED payload, so the incoming
@@ -544,15 +540,15 @@ namespace BrnGui
             const char* lpacTickerText;
             if (mpGuiCache->mbOnlineMatchRanked)             // GuiCache +0x4B51
             {
-                lpacTickerText = KAC_RANKED_TICKER_TEXT;
+                lpacTickerText = "ONLINE_RANKED_TICKER_TEXT";
             }
             else if (mpGuiCache->mbOnlineMatchUnranked)      // GuiCache +0x4B52
             {
-                lpacTickerText = KAC_FREEBURN_TICKER_TEXT;
+                lpacTickerText = "ONLINE_FREEBURN_TICKER_TEXT";
             }
             else
             {
-                lpacTickerText = KAC_UNRANKED_TICKER_TEXT;
+                lpacTickerText = "ONLINE_UNRANKED_TICKER_TEXT";
             }
 
             GuiTickerCustomMessageWire lTicker;

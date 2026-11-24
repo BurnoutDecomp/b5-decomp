@@ -82,11 +82,7 @@ namespace BrnGui
         const u32 KU_CAR_SELECT_ACTION_EXIT         = 4;
         const u32 KU_CAR_SELECT_TYPE_ONLINE         = 2;
 
-        const char KAC_APT_TRANSITION_NAME[] = "apt_Transition";
-        const char KAC_VISIBLE_STATE[]       = "visible";
 
-        const char KAC_ADVANCE_EVENT[]    = "ADVANCE";
-        const char KAC_DISCONNECT_EVENT[] = "DISCONNECT";
 
         // ---- in-queue payload views (the queue hands out the header-stripped payload) ----
         struct CountdownTimePayload : public CgsModule::Event
@@ -256,7 +252,7 @@ namespace BrnGui
 
         if (mpGuiCache->GetOnlineHostGameState() == KI_ONLINE_HOST_GAME_HOST_CHOOSES)
         {
-            mHostChoosingAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, KAC_VISIBLE_STATE,
+            mHostChoosingAnimator.AddOutputAptViewState("apt_Transition", "visible",
                                                         false);
         }
 
@@ -321,7 +317,7 @@ namespace BrnGui
                 {
                     *CgsDev::Log::gpDebugPrint << "RG :: CSE : SendStateEvent( \"DISCONNECT\" )\n";
                 }
-                SendStateEvent(KAC_DISCONNECT_EVENT);
+                SendStateEvent("DISCONNECT");
             }
             else if (liEventId == KI_EVENT_ADVANCE)
             {
@@ -329,7 +325,7 @@ namespace BrnGui
                 {
                     *CgsDev::Log::gpDebugPrint << "RG :: CSE : SendStateEvent( \"ADVANCE\" )\n";
                 }
-                SendStateEvent(KAC_ADVANCE_EVENT);
+                SendStateEvent("ADVANCE");
             }
         }
     }

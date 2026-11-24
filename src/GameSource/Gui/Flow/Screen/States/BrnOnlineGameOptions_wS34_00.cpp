@@ -64,7 +64,6 @@ namespace BrnGui
         const s32 KI_ARROW_VISIBLE   = 1;
         const s32 KI_ARROW_ANIMATE   = 2;
 
-        const char KAC_APT_TRANSITION[] = "apt_Transition";
 
         // Controller event payload: the action id rides in the second word.
         struct ControllerButtonPayload : public CgsModule::Event
@@ -139,21 +138,21 @@ namespace BrnGui
     // ================================================================================
     void OnlineGameOptions::BuildGameOptions()
     {
-        typedef CreateMatchOption O;
+        typedef CreateMatchOptions O;
 
         // The console clears the table and appends the two game-mode rows twice.
         for (s32 liPass = 0; liPass < 2; ++liPass)
         {
             maOptions.Clear();
-            const CreateMatchOption lMode     = { "$ONLINE_GAME_OPTION_MODE",      O::E_OPTION_GAME_MODE };
-            const CreateMatchOption lModeRace = { "$ONLINE_GAME_OPTION_MODE_RACE", O::E_OPTION_GAME_MODE_RACE };
+            const CreateMatchOptions lMode     = { "$ONLINE_GAME_OPTION_MODE",      O::E_OPTION_GAME_MODE };
+            const CreateMatchOptions lModeRace = { "$ONLINE_GAME_OPTION_MODE_RACE", O::E_OPTION_GAME_MODE_RACE };
             maOptions.Append(lMode);
             maOptions.Append(lModeRace);
         }
 
         if (BrnResource::g_DLCFeatureAvailability.IsFeatureEnabled(KI_DLC_FEATURE_ONLINE_STUNT_MODES))
         {
-            const CreateMatchOption laStuntModes[] =
+            const CreateMatchOptions laStuntModes[] =
             {
                 { "$ONLINE_GAME_OPTION_MODE_STUNT",              O::E_OPTION_GAME_MODE_STUNT },
                 { "$ONLINE_GAME_OPTION_MODE_STUNT_FREE_FOR_ALL", O::E_OPTION_GAME_MODE_STUNT_FREE_FOR_ALL },
@@ -163,7 +162,7 @@ namespace BrnGui
                 maOptions.Append(laStuntModes[luRow]);
         }
 
-        const CreateMatchOption laOptions[] =
+        const CreateMatchOptions laOptions[] =
         {
             { "", O::E_OPTION_TERMINATOR },
             { "$ONLINE_GAME_OPTION_VEHICLE_CHOICE",      O::E_OPTION_VEHICLE_CHOICE },
@@ -255,12 +254,12 @@ namespace BrnGui
     //
     //  The value the toggle row for leOption currently shows.
     // ================================================================================
-    CreateMatchOption::EOption OnlineGameOptions::GetHighlightedOption(CreateMatchOption::EOption leOption)
+    CreateMatchOptions::EOption OnlineGameOptions::GetHighlightedOption(CreateMatchOptions::EOption leOption)
     {
         const s32 liToggle = mCreateGameToggles.GetIndexFromId(static_cast<u64>(static_cast<s64>(leOption)));
         CGS_ASSERT(liToggle >= 0, "Required toggle not found!");
 
-        return static_cast<CreateMatchOption::EOption>(
+        return static_cast<CreateMatchOptions::EOption>(
             mCreateGameToggles.GetSelectable(liToggle)->GetHighlightedId());
     }
 
@@ -476,8 +475,8 @@ namespace BrnGui
                     lpacUpState   = KPC_ARROW_ANIMATION_STATES[KI_ARROW_INVISIBLE];
                     lpacDownState = KPC_ARROW_ANIMATION_STATES[KI_ARROW_INVISIBLE];
                 }
-                mUpArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION, lpacUpState, false);
-                mDownArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION, lpacDownState, false);
+                mUpArrowAnimator.AddOutputAptViewState("apt_Transition", lpacUpState, false);
+                mDownArrowAnimator.AddOutputAptViewState("apt_Transition", lpacDownState, false);
                 break;
             }
 
@@ -536,12 +535,12 @@ namespace BrnGui
                     ShowLoadOptions();
                     mMenuOptions.HighlightIndex(0);
                     mDownArrowAnimator.AddOutputAptViewState(
-                        KAC_APT_TRANSITION,
+                        "apt_Transition",
                         KPC_ARROW_ANIMATION_STATES[(lpProfile->GetNumReceivedOnlineGameOptions() <= 1)
                                                        ? KI_ARROW_INVISIBLE : KI_ARROW_VISIBLE],
                         false);
                     mUpArrowAnimator.AddOutputAptViewState(
-                        KAC_APT_TRANSITION, KPC_ARROW_ANIMATION_STATES[KI_ARROW_INVISIBLE], false);
+                        "apt_Transition", KPC_ARROW_ANIMATION_STATES[KI_ARROW_INVISIBLE], false);
                     mLoadHeaderText.SetText(KAC_RECENT_OPTIONS_STRING_ID);
                 }
                 else if (meOptionsToLoad == E_OPTIONS_TO_LOAD_RECENT &&
@@ -552,12 +551,12 @@ namespace BrnGui
                     ShowLoadOptions();
                     mMenuOptions.HighlightIndex(0);
                     mDownArrowAnimator.AddOutputAptViewState(
-                        KAC_APT_TRANSITION,
+                        "apt_Transition",
                         KPC_ARROW_ANIMATION_STATES[(lpProfile->GetNumCreatedOnlineGameOptions() <= 1)
                                                        ? KI_ARROW_INVISIBLE : KI_ARROW_VISIBLE],
                         false);
                     mUpArrowAnimator.AddOutputAptViewState(
-                        KAC_APT_TRANSITION, KPC_ARROW_ANIMATION_STATES[KI_ARROW_INVISIBLE], false);
+                        "apt_Transition", KPC_ARROW_ANIMATION_STATES[KI_ARROW_INVISIBLE], false);
                     mLoadHeaderText.SetText(KAC_CREATED_OPTIONS_STRING_ID);
                 }
                 break;

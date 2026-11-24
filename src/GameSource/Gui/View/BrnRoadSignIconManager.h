@@ -71,11 +71,9 @@ namespace BrnGui
         void SetColour(ESignColour leColour);
         void SetScale(Vector2 lv2Scale);
 
-        // Originally `Vector2 mv2WorldPos` (console +0x90): the sign's 2D world position
-        // {x, z} in lanes {0, 1}. FLAG: kept under the committed name and type the crash-nav
-        // renderer already reads (BrnCrashNavIconRenderer.cpp RenderRoadSign); the rename to
-        // the original spelling is a two-line change there.
-        Vector4     mv4WorldPosition;
+        // DWARF BrnRoadSignIconManager.h:148 (console +0x90): the sign's 2D world position {x, z}
+        // in lanes {0, 1}; Construct zeroes it with Vector2::SetZero (vspltisw, ARTIST 0x824F51F4).
+        Vector2     mv2WorldPos;
         EIconType   meIconType;             // console +0xA0
         CgsID       mRoadId;                // console +0xA8
         bool        mbShowPost;             // console +0xB0

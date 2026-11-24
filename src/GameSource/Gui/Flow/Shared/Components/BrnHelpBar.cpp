@@ -19,7 +19,6 @@ namespace BrnGui
     {
         // Construct's per-item name buffer and format ("<bar name><index>").
         const s32  KI_ITEM_NAME_LENGTH    = 64;
-        const char KAC_ITEM_NAME_FORMAT[] = "%s%d";
 
         // Construct's layout defaults (values read from the image).
         const f32 KF_DEFAULT_ANIMATION_TIME      = 0.4f;
@@ -43,7 +42,7 @@ namespace BrnGui
         for (s32 liItem = 0; liItem < miNumItems; ++liItem)
         {
             char lacItemName[KI_ITEM_NAME_LENGTH];
-            CgsCore::SPrintf(lacItemName, KI_ITEM_NAME_LENGTH, KAC_ITEM_NAME_FORMAT, lpacName, liItem);
+            CgsCore::SPrintf(lacItemName, KI_ITEM_NAME_LENGTH, "%s%d", lpacName, liItem);
             maItems[liItem].Construct(lacItemName, lpStateInterface, lpacParentName);
             maAnimators[liItem].Construct(&maItems[liItem]);
             mafItemWidths[liItem] = KF_ITEMWIDTH_INVALID;

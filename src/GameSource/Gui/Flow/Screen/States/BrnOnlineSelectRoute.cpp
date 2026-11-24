@@ -91,15 +91,6 @@ namespace
     const Vector2 K_MAP_LONG_DISPLAY_RECT(591.0f, 411.0f);
     const f32 KF_ROUTE_METRES_TO_SECONDS = 0.03f;      // 1 / average route speed
     const f32 KF_SECONDS_ROUND_VALUE = 5.0f;
-    const char KAC_APT_TRANSITION[] = "apt_Transition";
-    const char KAC_STATE_ADVANCE[] = "ADVANCE";
-    const char KAC_STATE_GO_BACK[] = "GO_BACK";
-    const char KAC_STATE_DISCONNECT[] = "DISCONNECT";
-    const char KAC_OVERLAY_ENTER_GAME[] = "CNOnlEntGame";
-    const char KAC_AUDIO_ACCEPT[] = "Accept";
-    const char KAC_AUDIO_MOVE_LABEL[] = "MenuToggleDefault";
-    const char KAC_AUDIO_PLACE_CHECKPOINT[] = "CodePlaceCheckpoint";
-    const char KAC_AUDIO_MAP_SCROLL_END[] = "CodeMapScrollEnd";
 
     // ARTIST dword_8205F30C, read from the original IDB (10 big-endian words). The first
     // six are observed and forwarded to MainMapComponent; 213 is the wrapped SatNav view
@@ -322,7 +313,7 @@ namespace
             case KI_EVENT_NETWORK_DISCONNECT:
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
                 mpGuiCache->SetDoDisconnectPopup(lpEvent);
-                SendStateEvent(KAC_STATE_DISCONNECT);
+                SendStateEvent("DISCONNECT");
                 break;
             case KI_EVENT_NETWORK_IN_GAME:
                 HandleInGameEvent(lpEvent);
@@ -504,16 +495,16 @@ namespace
                    "Invalid event sent to OnlineSelectRoute::HandleInGameEvent");
         CGS_ASSERT(lpEvent != 0, "lpInGameEvent");
 
-        GuiOverlayWaitFinishWire lRequest(KAC_OVERLAY_ENTER_GAME);
+        GuiOverlayWaitFinishWire lRequest("CNOnlEntGame");
         mpStateInterface->OutputGuiEvent(lRequest.mRequest);
-        SendStateEvent(KAC_STATE_ADVANCE);
+        SendStateEvent("ADVANCE");
     }
 
     void OnlineSelectRoute::HandleInGameFailedEvent(const CgsModule::Event* lpEvent)
     {
         CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineSelectRoute::HandleInGameEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineSelectRoute.cpp", 1384));
 
-        SendStateEvent(KAC_STATE_GO_BACK);
+        SendStateEvent("GO_BACK");
     }
 
     void OnlineSelectRoute::SetupNormalRoute()
@@ -581,12 +572,12 @@ namespace
         {
         case E_GAMEINPUTACTIONS_GUI_UP:
             if (mMenuOptions.HighlightPrevious())
-                PostAudio(mpStateInterface, KAC_AUDIO_MOVE_LABEL);
+                PostAudio(mpStateInterface, "MenuToggleDefault");
             break;
 
         case E_GAMEINPUTACTIONS_GUI_DOWN:
             if (mMenuOptions.HighlightNext())
-                PostAudio(mpStateInterface, KAC_AUDIO_MOVE_LABEL);
+                PostAudio(mpStateInterface, "MenuToggleDefault");
             break;
 
         case E_GAMEINPUTACTIONS_GUI_SELECT:
@@ -595,7 +586,7 @@ namespace
             if (luHighlightedId >= E_MAIN_MENU_OPTION_COUNT)
             {
                 CGS_ASSERT(false, "Unknown menu option\n");
-                PostAudio(mpStateInterface, KAC_AUDIO_ACCEPT);
+                PostAudio(mpStateInterface, "Accept");
                 break;
             }
 
@@ -616,7 +607,7 @@ namespace
                 else
                 {
                     SetupNormalRoute();
-                    SendStateEvent(KAC_STATE_ADVANCE);
+                    SendStateEvent("ADVANCE");
                 }
             }
             else if (leOption == E_MAIN_MENU_OPTION_EDIT)
@@ -628,7 +619,7 @@ namespace
                 ShowPresetEvents();
             }
 
-            PostAudio(mpStateInterface, KAC_AUDIO_ACCEPT);
+            PostAudio(mpStateInterface, "Accept");
             break;
         }
 
@@ -636,8 +627,8 @@ namespace
             if (mSelectRoutes.GetCurrentRound() > 0)
                 SelectRound(E_SELECT_ROUND_BACKWARDS);
             else
-                SendStateEvent(KAC_STATE_GO_BACK);
-            PostAudio(mpStateInterface, KAC_STATE_GO_BACK);
+                SendStateEvent("GO_BACK");
+            PostAudio(mpStateInterface, "GO_BACK");
             break;
 
         default:
@@ -703,7 +694,7 @@ namespace
                     mSelectRoutes.HighlightAddCheckpoint();
             }
 
-            PostAudio(mpStateInterface, KAC_AUDIO_PLACE_CHECKPOINT);
+            PostAudio(mpStateInterface, "CodePlaceCheckpoint");
             ShowSelectCheckpointMenu();
         }
         else if (lpInput->miButtonId == E_GAMEINPUTACTIONS_GUI_CANCEL)
@@ -724,7 +715,7 @@ namespace
                                                      muSavedCheckpointId);
             }
 
-            PostAudio(mpStateInterface, KAC_STATE_GO_BACK);
+            PostAudio(mpStateInterface, "GO_BACK");
             mpIconManager->SetUseEventIcons(GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT,
                                             mpStateInterface, KF_EVENT_ICON_FADE_TIME, 0, 0);
             ShowSelectCheckpointMenu();
@@ -757,7 +748,7 @@ namespace
             mpIconManager->SetUseEventIcons(GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT,
                                             mpStateInterface, KF_EVENT_ICON_FADE_TIME, 0, 0);
             mSelectRoutes.SetRouteFromPresetEvent(static_cast<s32>(muCurrentPresetEventID));
-            PostAudio(mpStateInterface, KAC_AUDIO_PLACE_CHECKPOINT);
+            PostAudio(mpStateInterface, "CodePlaceCheckpoint");
             ShowMainMenu();
         }
         else if (lpInput->miButtonId == E_GAMEINPUTACTIONS_GUI_CANCEL)
@@ -765,7 +756,7 @@ namespace
             mpIconManager->SetUseEventIcons(GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT,
                                             mpStateInterface, KF_EVENT_ICON_FADE_TIME, 0, 0);
             ShowMainMenu();
-            PostAudio(mpStateInterface, KAC_STATE_GO_BACK);
+            PostAudio(mpStateInterface, "GO_BACK");
         }
     }
 
@@ -823,17 +814,17 @@ namespace
         mSelectRoutes.Hide();
         mCursor.SetInactive();
         mCheckpointMenuAnimator.AddOutputAptViewState(
-            KAC_APT_TRANSITION, KAPC_ANIMATION_STATES[0], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[0], false);
         mCursorAnimator.AddOutputAptViewState(
-            KAC_APT_TRANSITION, KAPC_ANIMATION_STATES[1], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[1], false);
         mEventNameAnimator.AddOutputAptViewState(
-            KAC_APT_TRANSITION, KAPC_ANIMATION_STATES[1], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[1], false);
 
         const char* lpacInfoState = lbSpecialMode ? KAPC_ANIMATION_STATES[1]
                                                   : KAPC_ANIMATION_STATES[0];
-        mInfoBackgroundAnimator.AddOutputAptViewState(KAC_APT_TRANSITION, lpacInfoState, false);
-        mDistanceAnimator.AddOutputAptViewState(KAC_APT_TRANSITION, lpacInfoState, false);
-        mTimeAnimator.AddOutputAptViewState(KAC_APT_TRANSITION, lpacInfoState, false);
+        mInfoBackgroundAnimator.AddOutputAptViewState("apt_Transition", lpacInfoState, false);
+        mDistanceAnimator.AddOutputAptViewState("apt_Transition", lpacInfoState, false);
+        mTimeAnimator.AddOutputAptViewState("apt_Transition", lpacInfoState, false);
 
         mMainMapComponent.SetActive(false);
         mTitleText.SetText("$CN_TITLE_SELECT_ROUTE");
@@ -869,11 +860,11 @@ namespace
         mbEditingNewCheckpoint = false;
 
         mCheckpointMenuAnimator.AddOutputAptViewState(
-            KAC_APT_TRANSITION, KAPC_ANIMATION_STATES[0], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[0], false);
         mCursorAnimator.AddOutputAptViewState(
-            KAC_APT_TRANSITION, KAPC_ANIMATION_STATES[1], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[1], false);
         mEventNameAnimator.AddOutputAptViewState(
-            KAC_APT_TRANSITION, KAPC_ANIMATION_STATES[1], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[1], false);
 
         mMainMapComponent.SetActive(false);
         mTitleText.SetText("$CN_TITLE_EDIT_ROUTE");
@@ -917,11 +908,11 @@ namespace
         mCursor.SetActive();
         mbEditingNewCheckpoint = false;
         mCheckpointMenuAnimator.AddOutputAptViewState(
-            KAC_APT_TRANSITION, KAPC_ANIMATION_STATES[1], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[1], false);
         mCursorAnimator.AddOutputAptViewState(
-            KAC_APT_TRANSITION, KAPC_ANIMATION_STATES[0], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[0], false);
         mEventNameAnimator.AddOutputAptViewState(
-            KAC_APT_TRANSITION, KAPC_ANIMATION_STATES[0], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[0], false);
 
         const s32 liMode = mpGuiCache->GetOnlineGameMode();
         const bool lbSpecialMode =
@@ -929,7 +920,7 @@ namespace
             liMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_FUGITIVE ||
             liMode == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_MODE_END;
         mInfoBackgroundAnimator.AddOutputAptViewState(
-            KAC_APT_TRANSITION, KAPC_ANIMATION_STATES[lbSpecialMode ? 2 : 0], false);
+            "apt_Transition", KAPC_ANIMATION_STATES[lbSpecialMode ? 2 : 0], false);
         mMainMapComponent.SetActive(true);
         if (mpIconManager != 0)
             mpIconManager->mbIsActive = true;
@@ -1427,7 +1418,7 @@ namespace
                         mSelectRoutes.GetCurrentRound(),
                         static_cast<BrnGameState::LandmarkIndex>(luEventId));
                     SetActiveLandmarks();
-                    PostAudio(mpStateInterface, KAC_AUDIO_MAP_SCROLL_END);
+                    PostAudio(mpStateInterface, "CodeMapScrollEnd");
                 }
             }
             else
@@ -1440,7 +1431,7 @@ namespace
                     mSelectRoutes.SetStartLightTriggerID(mSelectRoutes.GetCurrentRound(),
                                                          lpEventStart->muLightTriggerId);
                     SetActiveLandmarks();
-                    PostAudio(mpStateInterface, KAC_AUDIO_MAP_SCROLL_END);
+                    PostAudio(mpStateInterface, "CodeMapScrollEnd");
                 }
             }
         }
@@ -1450,7 +1441,7 @@ namespace
             muCurrentPresetEventID = luEventId;
             DisplayEventName();
             SetActiveLandmarks();
-            PostAudio(mpStateInterface, KAC_AUDIO_MAP_SCROLL_END);
+            PostAudio(mpStateInterface, "CodeMapScrollEnd");
         }
     }
 

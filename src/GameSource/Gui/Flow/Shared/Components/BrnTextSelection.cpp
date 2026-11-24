@@ -29,7 +29,6 @@ namespace BrnGui
     namespace
     {
         // The pooled empty string @0x820046A7 -- SetupTextSelection's fallback row text.
-        const char KAC_EMPTY_TEXT[] = "";
     }
 
     // ---- TextSelection (ctor) @ 0x824F9A48 -----------------------------------------
@@ -94,7 +93,7 @@ namespace BrnGui
             lrItem.SetHighlightable(lbInUse);        // row slot 1
             lrItem.SetSelectable(lbInUse);           // row slot 2
 
-            const char* lpacText = KAC_EMPTY_TEXT;
+            const char* lpacText = "";
             if (lbInUse && lppacItemTexts != 0 && lppacItemTexts[liRow] != 0)
             {
                 lpacText = lppacItemTexts[liRow];
@@ -141,7 +140,7 @@ namespace BrnGui
         if (!IsDirty())
             return;
 
-        const char* lpacText = KAC_EMPTY_TEXT;
+        const char* lpacText = "";
 
         if (miHighlightedIndex > -1)
         {

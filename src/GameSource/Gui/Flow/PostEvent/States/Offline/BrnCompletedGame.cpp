@@ -120,7 +120,6 @@ namespace
     const s32 KI_MOVIE_LEVEL             = 3;
 
     // The apt component/parameter names the animators are driven through.
-    const char KAC_APT_TRANSITION[] = "apt_Transition";
 
     // The controller action sub-ids the photo booth answers (cpp:1122).
     const s32 KI_ACTION_SELECT = 49;
@@ -160,8 +159,6 @@ namespace
     // word. That is the console's own copy-paste; it is a diagnostic, so it is
     // reproduced rather than "corrected" -- correcting it would make our log disagree
     // with a real console log for the same frame.
-    const char KAC_INVALID_SUBSTATE_PREFIX[] = "Invalid burnout state in update (";
-    const char KAC_INVALID_SUBSTATE_SUFFIX[] = ") \n";
 }
 
 // cpp:32 / cpp:43 -- read out of the image at the RegisterForEvents call site.
@@ -431,7 +428,7 @@ void CompletedGame::UpdateBurnoutLicensePresentation()
         if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
             mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-            mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+            mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition",
                                                         "upgradeBurnout", false);
             mUpgradeTextfield.SetLocalisedText("COMPLETION_SEQUENCE_BURNOUT_NEXT_STEP",
                                                CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
@@ -451,7 +448,7 @@ void CompletedGame::UpdateBurnoutLicensePresentation()
             if (!mbStartedUpgradeTransOut && mfTimeRemaining <= KF_BACKGROUND_HEADSTART)
             {
                 mbStartedUpgradeTransOut = true;
-                mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+                mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition",
                                                             "upgradeBurnoutOut", false);
             }
         }
@@ -472,9 +469,9 @@ void CompletedGame::UpdateBurnoutLicensePresentation()
         break;
 
     default:
-        FireUnexpectedStateAssert(KAC_INVALID_SUBSTATE_PREFIX,
+        FireUnexpectedStateAssert("Invalid burnout state in update (",
                                   static_cast<s32>(meBurnoutSubstate),
-                                  KAC_INVALID_SUBSTATE_SUFFIX);               // cpp:467
+                                  ") \n");               // cpp:467
         break;
     }
 }
@@ -527,7 +524,7 @@ void CompletedGame::UpdateEliteLicensePresentation()
             mpStateInterface->OutputGuiEvent(lAudioEvent);
 
             mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-            mRewardCarsStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+            mRewardCarsStateAnimator.AddOutputAptViewState("apt_Transition",
                                                            "transIn", false);
             mRewardCarsTextfield.SetLocalisedText("COMPLETION_SEQUENCE_GOLD",
                                                   CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
@@ -542,7 +539,7 @@ void CompletedGame::UpdateEliteLicensePresentation()
         mLicense.Update();
         if (mfTimeRemaining <= 0.0f)
         {
-            mRewardCarsStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+            mRewardCarsStateAnimator.AddOutputAptViewState("apt_Transition",
                                                            "transOut", false);
             meEliteSubstate = E_ELITE_CAR_PRESENTATION_LEAVING;
         }
@@ -580,7 +577,7 @@ void CompletedGame::UpdateEliteLicensePresentation()
         if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
             mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-            mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+            mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition",
                                                         "upgradeElite", false);
             mUpgradeTextfield.SetLocalisedText("COMPLETION_SEQUENCE_ELITE_NEXT_STEP",
                                                CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
@@ -600,7 +597,7 @@ void CompletedGame::UpdateEliteLicensePresentation()
             if (!mbStartedUpgradeTransOut && mfTimeRemaining <= KF_BACKGROUND_HEADSTART)
             {
                 mbStartedUpgradeTransOut = true;
-                mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+                mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition",
                                                             "upgradeEliteOut", false);
             }
         }
@@ -630,9 +627,9 @@ void CompletedGame::UpdateEliteLicensePresentation()
     }
 
     default:
-        FireUnexpectedStateAssert(KAC_INVALID_SUBSTATE_PREFIX,
+        FireUnexpectedStateAssert("Invalid burnout state in update (",
                                   static_cast<s32>(meBurnoutSubstate),
-                                  KAC_INVALID_SUBSTATE_SUFFIX);               // cpp:666
+                                  ") \n");               // cpp:666
         break;
     }
 }
@@ -670,7 +667,7 @@ void CompletedGame::UpdateOneHundredPercentPartOnePresentation()
         if (mpGuiCache->AreAllAptComponentsInitialised(E_GUIFLOW_SCREEN))
         {
             mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-            mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+            mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition",
                                                         "Complete", false);
             mUpgradeTextfield.SetLocalisedText("COMPLETION_SEQUENCE_FINAL",
                                                CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
@@ -706,7 +703,7 @@ void CompletedGame::UpdateOneHundredPercentPartOnePresentation()
             }
 
             mLicense.HideLicense();
-            mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+            mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition",
                                                         "takePhoto", false);
             mPhotoBoothComponent.ShowComponent(false);
             meFirstFinishedSubstate = E_FINISHED_FIRST_TAKING_PHOTO;
@@ -725,7 +722,7 @@ void CompletedGame::UpdateOneHundredPercentPartOnePresentation()
 
     case E_FINISHED_FIRST_TAKING_PHOTO_CLEANUP:
         mLicense.ShowLicense(true);
-        mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION, "Complete", false);
+        mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition", "Complete", false);
         mUpgradeTextfield.SetLocalisedText("COMPLETION_SEQUENCE_FINAL",
                                            CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
         mfTimeRemaining         = KF_NEXT_STEP_DURATION;
@@ -752,7 +749,7 @@ void CompletedGame::UpdateOneHundredPercentPartOnePresentation()
             if (!mbStartedUpgradeTransOut && mfTimeRemaining <= KF_BACKGROUND_HEADSTART)
             {
                 mbStartedUpgradeTransOut = true;
-                mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+                mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition",
                                                             "CompleteOut", false);
             }
         }
@@ -776,9 +773,9 @@ void CompletedGame::UpdateOneHundredPercentPartOnePresentation()
         break;
 
     default:
-        FireUnexpectedStateAssert(KAC_INVALID_SUBSTATE_PREFIX,
+        FireUnexpectedStateAssert("Invalid burnout state in update (",
                                   static_cast<s32>(meBurnoutSubstate),
-                                  KAC_INVALID_SUBSTATE_SUFFIX);               // cpp:859
+                                  ") \n");               // cpp:859
         break;
     }
 }
@@ -830,7 +827,7 @@ void CompletedGame::UpdateOneHundredPercentPartTwoPresentation()
             mpStateInterface->OutputGuiEvent(lAudioEvent);
 
             mpGuiCache->ClearExpectedAptComponentList(E_GUIFLOW_SCREEN);
-            mRewardCarsStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+            mRewardCarsStateAnimator.AddOutputAptViewState("apt_Transition",
                                                            "transIn", false);
             mRewardCarsTextfield.SetLocalisedText("COMPLETION_SEQUENCE_PLATINUM",
                                                   CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
@@ -845,7 +842,7 @@ void CompletedGame::UpdateOneHundredPercentPartTwoPresentation()
         mLicense.Update();
         if (mfTimeRemaining <= 0.0f)
         {
-            mRewardCarsStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+            mRewardCarsStateAnimator.AddOutputAptViewState("apt_Transition",
                                                            "transOut", false);
             mLicense.HideLicense();
             meSecondFinishedSubstate = E_FINISHED_SECOND_PRESENTATION_LEAVING;
@@ -886,9 +883,9 @@ void CompletedGame::UpdateOneHundredPercentPartTwoPresentation()
         break;
 
     default:
-        FireUnexpectedStateAssert(KAC_INVALID_SUBSTATE_PREFIX,
+        FireUnexpectedStateAssert("Invalid burnout state in update (",
                                   static_cast<s32>(meBurnoutSubstate),
-                                  KAC_INVALID_SUBSTATE_SUFFIX);                   // cpp:984
+                                  ") \n");                   // cpp:984
         break;
     }
 }

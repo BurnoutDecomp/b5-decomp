@@ -22,7 +22,6 @@ namespace BrnGui
         // The apt movie the screen puts up once its resources are in, and the level it
         // goes to. The name is a pooled literal (off_82F27B74) shared with other screens,
         // not a class static of this one.
-        const char KAC_CONNECTING_MOVIE[]    = "ON_CONN";
         const s32  KI_CONNECTING_MOVIE_LEVEL = 3;
 
         // The GuiEventNetworkConnect payload word this screen produces. FLAG: the
@@ -51,7 +50,7 @@ namespace BrnGui
             if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad,
                                                      static_cast<u32>(miNumResourcesToLoad)))
             {
-                mpStateInterface->PlayAptMovie(KAC_CONNECTING_MOVIE, KI_CONNECTING_MOVIE_LEVEL);
+                mpStateInterface->PlayAptMovie("ON_CONN", KI_CONNECTING_MOVIE_LEVEL);
                 meSubState = E_SUBSTATE_LOADING_COMPONENTS;
             }
         }

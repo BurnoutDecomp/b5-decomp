@@ -36,7 +36,6 @@ namespace BrnGui
     {
         // The apt component whose arrival places the cursor (the console hashes the
         // literal inline, then compares it with the event's component hash).
-        const char KAC_CURSOR_COMPONENT[] = "cursor_mc";
 
         // The screen-space bound beyond which the initial cursor position is reported as
         // broken (console float constant, 10000.0f).
@@ -46,8 +45,6 @@ namespace BrnGui
         // StrStreamBase operator<<(Vector2) / operator<<(Vector4) bodies are exactly one
         // AppendFormat with these strings. Those two operators have no home in this tree
         // yet, so the lanes are pushed through AppendFormat with the same format here.
-        const char KAC_VECTOR2_FORMAT[] = "(%f, %f)";
-        const char KAC_VECTOR4_FORMAT[] = "(%f, %f, %f, %f)";
 
         // ---- in-queue payload view ----------------------------------------------------
         // FLAG: the event this virtual receives is typed only as CgsModule::Event; the one
@@ -84,8 +81,8 @@ namespace BrnGui
         CGS_ASSERT(lpEvent != 0, "Invalid event in OnlineGameRoomPlayerInfo::CheckForComponents");
 
         const u32 luCursorHash = CgsContainers::CgsHash::CalculateHash(
-            const_cast<char*>(KAC_CURSOR_COMPONENT),
-            static_cast<s32>(std::strlen(KAC_CURSOR_COMPONENT)));
+            const_cast<char*>("cursor_mc"),
+            static_cast<s32>(std::strlen("cursor_mc")));
 
         if (reinterpret_cast<const ComponentEventPayload*>(lpEvent)->muComponentHash != luCursorHash)
         {
@@ -134,7 +131,7 @@ namespace BrnGui
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {
                 *CgsDev::Log::gpDebugPrint << "MapTransform::Flatten( lv3InitialCursorPosWorldSpace ):";
-                CgsDev::Log::gpDebugPrint->AppendFormat(KAC_VECTOR2_FORMAT,
+                CgsDev::Log::gpDebugPrint->AppendFormat("(%f, %f)",
                                                         lv2InitialCursorPosMapSpace.mV.x,
                                                         lv2InitialCursorPosMapSpace.mV.y);
                 *CgsDev::Log::gpDebugPrint << "\n";
@@ -143,7 +140,7 @@ namespace BrnGui
             {
                 const Vector4 lv4WorldRect = mMainMapComponent.GetWorldRect();
                 *CgsDev::Log::gpDebugPrint << "mMainMapComponent.GetWorldRect():";
-                CgsDev::Log::gpDebugPrint->AppendFormat(KAC_VECTOR4_FORMAT,
+                CgsDev::Log::gpDebugPrint->AppendFormat("(%f, %f, %f, %f)",
                                                         lv4WorldRect.mV.x, lv4WorldRect.mV.y,
                                                         lv4WorldRect.mV.z, lv4WorldRect.mV.w);
                 *CgsDev::Log::gpDebugPrint << "\n";
@@ -152,7 +149,7 @@ namespace BrnGui
             {
                 const Vector4 lv4ViewRect = mMainMapComponent.GetViewRect();
                 *CgsDev::Log::gpDebugPrint << "mMainMapComponent.GetViewRect():";
-                CgsDev::Log::gpDebugPrint->AppendFormat(KAC_VECTOR4_FORMAT,
+                CgsDev::Log::gpDebugPrint->AppendFormat("(%f, %f, %f, %f)",
                                                         lv4ViewRect.mV.x, lv4ViewRect.mV.y,
                                                         lv4ViewRect.mV.z, lv4ViewRect.mV.w);
                 *CgsDev::Log::gpDebugPrint << "\n";
@@ -161,7 +158,7 @@ namespace BrnGui
             {
                 const Vector4 lv4DeviceRect = MapTransform::GetDeviceRect();
                 *CgsDev::Log::gpDebugPrint << "MapTransform::GetDeviceRect():";
-                CgsDev::Log::gpDebugPrint->AppendFormat(KAC_VECTOR4_FORMAT,
+                CgsDev::Log::gpDebugPrint->AppendFormat("(%f, %f, %f, %f)",
                                                         lv4DeviceRect.mV.x, lv4DeviceRect.mV.y,
                                                         lv4DeviceRect.mV.z, lv4DeviceRect.mV.w);
                 *CgsDev::Log::gpDebugPrint << "\n";
@@ -171,7 +168,7 @@ namespace BrnGui
                 const Vector4 lv4ScaledViewRect =
                     mMainMapComponent.GetViewRect() * MapTransform::GetDeviceRect();
                 *CgsDev::Log::gpDebugPrint << "mMainMapComponent.GetViewRect() * MapTransform::GetDeviceRect():";
-                CgsDev::Log::gpDebugPrint->AppendFormat(KAC_VECTOR4_FORMAT,
+                CgsDev::Log::gpDebugPrint->AppendFormat("(%f, %f, %f, %f)",
                                                         lv4ScaledViewRect.mV.x, lv4ScaledViewRect.mV.y,
                                                         lv4ScaledViewRect.mV.z, lv4ScaledViewRect.mV.w);
                 *CgsDev::Log::gpDebugPrint << "\n";
@@ -179,7 +176,7 @@ namespace BrnGui
             if ((CgsDev::Message::gxMessageFilterFlags & 1) != 0)
             {
                 *CgsDev::Log::gpDebugPrint << "lv2InitialCursorPosScreenSpace:";
-                CgsDev::Log::gpDebugPrint->AppendFormat(KAC_VECTOR2_FORMAT,
+                CgsDev::Log::gpDebugPrint->AppendFormat("(%f, %f)",
                                                         lv2InitialCursorPosScreenSpace.mV.x,
                                                         lv2InitialCursorPosScreenSpace.mV.y);
                 *CgsDev::Log::gpDebugPrint << "\n";

@@ -645,8 +645,7 @@ namespace
     // AddString key ("FRIEND_LIST_TITLE") and the pointer WITH it as the text to display,
     // which is why the two spellings differ by exactly one byte on X360
     // (`addi r28, r10, aFriendListTitl+1 - 0x82051D64`).
-    const char KAC_FRIEND_LIST_TITLE_TEXT[] = "$FRIEND_LIST_TITLE";
-    const char* const KPC_FRIEND_LIST_TITLE_ID = KAC_FRIEND_LIST_TITLE_TEXT + 1;   // console's `+1` past the '$'
+    const char* const KPC_FRIEND_LIST_TITLE_ID = "$FRIEND_LIST_TITLE" + 1;   // console's `+1` past the '$'
 
     // flt_8204C0A0 / flt_82051D60 -- the branch clip's row pitch and origin:
     // Y = row * 27.0f - 75.4f (rows 0..4 -> -75.4 / -48.4 / -21.4 / 5.6 / 32.6).
@@ -744,7 +743,7 @@ void FriendsListComponent::UpdateAptVariables()
             1,                                                   // r7 == one positional parameter
             lacText,
             CgsLanguage::LanguageManager::E_FORMAT_INTEGER);     // r9 == 11
-        lpcStringIDToUse = KAC_FRIEND_LIST_TITLE_TEXT;           // @0x824235F8
+        lpcStringIDToUse = "$FRIEND_LIST_TITLE";           // @0x824235F8
     }
     else
     {

@@ -109,7 +109,6 @@ namespace BrnGui
         // showtime. Spelled exactly as the image's literal at the CgsIDCompress call site
         // (off_820654E8); CgsIDCompress is case-folding, so it agrees with the "BrnFBFsm"
         // spelling BridgeGameToGui uses for the same id.
-        const char KAC_FREEBURN_FSM_ID[] = "BRNFBFSM";
 
         // The apt movie this screen plays. 217 is "Results" -- the same movie the OFFLINE
         // results screen plays, and also maResourcesToLoad[0]. Update's asm reads it as
@@ -153,22 +152,12 @@ namespace BrnGui
         const char KAC_SHOWTIME_DISTANCE_IN_METRES[]       = "KAC_SHOWTIME_DISTANCE_IN_METRES";
 
         // ---- apt icon states the count-up drives (X360 string literals) --------------------
-        const char KAC_ICON_STATE_SCORING[]        = "scoring";
-        const char KAC_ICON_STATE_SHOWTIME[]       = "showtime";
-        const char KAC_ICON_STATE_SHOWTIME_OUT[]   = "showtimeOut";
-        const char KAC_ICON_STATE_INVISIBLE[]      = "Invisible";
-        const char KAC_ICON_STATE_DIST_TO_DOLLARS[] = "DistToDollars";
-        const char KAC_ICON_STATE_BANK_DIST[]      = "BankDist";
-        const char KAC_ICON_STATE_BANK_ALL[]       = "BankAll";
-        const char KAC_ICON_STATE_PULSE_MULT[]     = "PulseMultiplier";
 
         // ---- audio triggers ----------------------------------------------------------------
         // Action 7 is the same action byte every GuiAudioTriggerEvent::Construct site in the
         // tree passes; the component name is the empty string (&unk_820046A7 -- the image byte
         // there is 0, read not assumed).
         const s32  KI_AUDIO_ACTION                 = 7;
-        const char KAC_SOUND_SHOWTIME_COUNT_START[] = "ShowtimeCountStart";
-        const char KAC_SOUND_SHOWTIME_COUNT_END[]   = "ShowtimeCountEnd";
 
         // ---- .rdata tuning constants (BrnShowtimeInstantResults.cpp:37..43) -----------------
         // Read with tools/re/x360rd.py at the exact addresses the asm loads from; the DWARF
@@ -298,7 +287,7 @@ namespace BrnGui
         if (!lbWasOnlineSession)
         {
             GuiEventRunFsm lRunFsm;
-            lRunFsm.mFsmId          = CgsIDCompress(KAC_FREEBURN_FSM_ID);
+            lRunFsm.mFsmId          = CgsIDCompress("BRNFBFSM");
             lRunFsm.mInitialStateId = static_cast<CgsID>(0);
             lRunFsm.meFsmToRun      = E_GUI_HUD_FREEBURN;
             lRunFsm.meFlowToUse     = E_GUIFLOW_HUD;
@@ -440,7 +429,7 @@ namespace BrnGui
                 "mResults.meFinishedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_OFFLINE_SHOWTIME || mResults.meFinishedGameModeType == BrnGameState::GameStateModuleIO::E_MODE_ONLINE_SHOWTIME",
                 __FILE__, 527 /* ARTIST 0x824B4B78 */));   // cpp:527
 
-        mResultsIcon.SetState(KAC_ICON_STATE_SCORING);
+        mResultsIcon.SetState("scoring");
         SetMultiplierText();
     }
 
@@ -566,14 +555,14 @@ namespace BrnGui
                 SetupSummary();
                 meSubStateState = E_SUBSTATE_SUMMARY;
                 ResetStateTimer();
-                mResultsIcon.SetState(KAC_ICON_STATE_SHOWTIME);
+                mResultsIcon.SetState("showtime");
             }
             break;
 
         case E_SUBSTATE_SUMMARY:
             if (TickSubstateAndEndIfDone())
             {
-                mResultsIcon.SetState(KAC_ICON_STATE_SHOWTIME_OUT);
+                mResultsIcon.SetState("showtimeOut");
                 meActiveSubState = GetNextSubstate();
                 meSubStateState  = E_SUBSTATE_LEAVING;
                 ResetStateTimer();
@@ -583,7 +572,7 @@ namespace BrnGui
         case E_SUBSTATE_LEAVING:
             if (TickSubstateAndEndIfDone())
             {
-                mResultsIcon.SetState(KAC_ICON_STATE_INVISIBLE);
+                mResultsIcon.SetState("Invisible");
                 meActiveSubState = GetNextSubstate();
                 meSubStateState  = E_SUBSTATE_SET_UP_COMPONENTS;
                 ResetStateTimer();
@@ -621,7 +610,7 @@ namespace BrnGui
             }
             else
             {
-                mResultsIcon.SetState(KAC_ICON_STATE_DIST_TO_DOLLARS);
+                mResultsIcon.SetState("DistToDollars");
                 meTotallingStage = E_TOTALLING_SUBSTATE_SHOWING_DISTANCE_DOLLARS;
             }
             break;
@@ -647,7 +636,7 @@ namespace BrnGui
                 {
                     miBankingDollarTotal    += miBankingDistanceDollars;
                     miBankingDistanceDollars = 0;
-                    mResultsIcon.SetState(KAC_ICON_STATE_BANK_DIST);
+                    mResultsIcon.SetState("BankDist");
                 }
                 CGS_ASSERT(miBankingDistanceDollars >= 0,
                            "miBankingDistanceDollars >= 0");            // cpp:812
@@ -655,7 +644,7 @@ namespace BrnGui
             else
             {
                 GuiAudioTriggerEvent lCountStart;
-                lCountStart.Construct(KI_AUDIO_ACTION, "", KAC_SOUND_SHOWTIME_COUNT_START);
+                lCountStart.Construct(KI_AUDIO_ACTION, "", "ShowtimeCountStart");
                 mpStateInterface->OutputGuiEvent(lCountStart);
                 meTotallingStage = E_TOTALLING_SUBSTATE_SHOWING_MULTIPLICATION;
             }
@@ -688,15 +677,15 @@ namespace BrnGui
                 {
                     miCurrentMultiplier = liMultiplier;
                     SetMultiplierText();
-                    mResultsIcon.SetState(KAC_ICON_STATE_PULSE_MULT);
+                    mResultsIcon.SetState("PulseMultiplier");
                 }
             }
             else
             {
-                mResultsIcon.SetState(KAC_ICON_STATE_BANK_ALL);
+                mResultsIcon.SetState("BankAll");
 
                 GuiAudioTriggerEvent lCountEnd;
-                lCountEnd.Construct(KI_AUDIO_ACTION, "", KAC_SOUND_SHOWTIME_COUNT_END);
+                lCountEnd.Construct(KI_AUDIO_ACTION, "", "ShowtimeCountEnd");
                 mpStateInterface->OutputGuiEvent(lCountEnd);
 
                 meTotallingStage = E_TOTALLING_SUBSTATE_BANKING_SCORE;

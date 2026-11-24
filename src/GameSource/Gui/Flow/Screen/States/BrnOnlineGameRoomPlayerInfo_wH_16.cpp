@@ -44,7 +44,6 @@ namespace BrnGui
     {
         // The empty movie name PlayAptMovie is handed when a screen's apt movie is
         // unmounted (X360 unk_820046A7, the zero-length rodata string).
-        const char KAC_EMPTY_MOVIE[] = "";
 
         // The apt movie level the screens mount/unmount on (X360 `li r11, 3`).
         const s32 KI_APT_MOVIE_LEVEL = 3;
@@ -88,7 +87,7 @@ namespace BrnGui
         GuiEventTickerClearMessages16 lClearTicker(0, 0);
         mpStateInterface->OutputGuiEvent(lClearTicker);   // X360 record size 16
 
-        mpStateInterface->PlayAptMovie(KAC_EMPTY_MOVIE, KI_APT_MOVIE_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
 
         // X360 BrnOnlineGameRoomPlayerInfo.cpp:4161.
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
@@ -106,7 +105,7 @@ namespace BrnGui
     // back to the cache.
     void OnlineGameRoomPlayerInfo::UnloadPauseResources()
     {
-        mpStateInterface->PlayAptMovie(KAC_EMPTY_MOVIE, KI_APT_MOVIE_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
 
         // X360 BrnOnlineGameRoomPlayerInfo.cpp:4203.
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
@@ -123,7 +122,7 @@ namespace BrnGui
     // tuples back to the cache.
     void OnlineGameRoomPlayerInfo::UnloadSettingsResources()
     {
-        mpStateInterface->PlayAptMovie(KAC_EMPTY_MOVIE, KI_APT_MOVIE_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
 
         // X360 BrnOnlineGameRoomPlayerInfo.cpp:4224.
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");

@@ -50,8 +50,6 @@ namespace BrnGui
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<GuiOverlayRequest>) == 304), "overlay request record is 304 bytes");
         CGS_STATIC_ASSERT((sizeof(CgsGui::GuiEventOut<CgsGui::GuiEventNetworkSuspension>) == 16), "suspension record is 16 bytes");
 
-        const char KAC_STATE_EVENT_GO_BACK[]      = "GO_BACK";
-        const char KAC_STATE_EVENT_GO_BACK_EASY[] = "GO_BACK_EASY";
 
         // The message-param slot this handler fills with the disconnect reason text
         // (the X360's `li r4, 1` at 0x824D89E0).
@@ -120,11 +118,11 @@ namespace BrnGui
                 mpStateInterface->OutputGuiEvent(lSuspension);
 
                 mpGuiCache->SetOnlineStartPending(false);
-                SendStateEvent(KAC_STATE_EVENT_GO_BACK_EASY);
+                SendStateEvent("GO_BACK_EASY");
             }
             else
             {
-                SendStateEvent(KAC_STATE_EVENT_GO_BACK);
+                SendStateEvent("GO_BACK");
             }
 
             // All three arms drop the cached record (the X360 repeats the same three
@@ -237,11 +235,11 @@ namespace BrnGui
             mpStateInterface->OutputGuiEvent(lSuspension);
 
             mpGuiCache->SetOnlineStartPending(false);
-            SendStateEvent(KAC_STATE_EVENT_GO_BACK_EASY);
+            SendStateEvent("GO_BACK_EASY");
         }
         else
         {
-            SendStateEvent(KAC_STATE_EVENT_GO_BACK);
+            SendStateEvent("GO_BACK");
         }
     }
 

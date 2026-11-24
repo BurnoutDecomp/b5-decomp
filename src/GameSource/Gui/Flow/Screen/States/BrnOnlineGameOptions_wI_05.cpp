@@ -39,7 +39,6 @@ namespace BrnGui
         // ---- the create-match apt movie ------------------------------------------------
         // PlayAptMovie(off_82F27BA0[0], 3) @0x824A77E4. (Shared with the OnEnter partfile --
         // keep only one copy on merge.)
-        const char KAC_APT_MOVIE_NAME[] = "ON_CREA";
         const s32  KI_APT_MOVIE_LEVEL   = 3;
     }
 
@@ -61,7 +60,7 @@ namespace BrnGui
                 if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad,
                                                          static_cast<u32>(miNumResourcesToLoad)))
                 {
-                    mpStateInterface->PlayAptMovie(KAC_APT_MOVIE_NAME, KI_APT_MOVIE_LEVEL);
+                    mpStateInterface->PlayAptMovie("ON_CREA", KI_APT_MOVIE_LEVEL);
                     meSubState = E_SUBSTATE_LOADING_COMPONENTS;
                 }
                 break;

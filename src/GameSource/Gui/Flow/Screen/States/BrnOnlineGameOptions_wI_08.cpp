@@ -54,14 +54,11 @@ namespace BrnGui
         const s32 KI_CHANNEL_GUI_INTERNAL = 42;   // internal/HUD-component channel
 
         // The apt view-state animation channel every screen component drives.
-        const char KAC_APT_TRANSITION[] = "apt_Transition";
 
         // The "%d" the slot-number parameter is printed through before the localisation
         // manager formats it into the slot label.
-        const char KAC_NUMBER_FORMAT[] = "%d";
 
         // The source text an EMPTY save slot is given: a single space, formatted raw.
-        const char KAC_EMPTY_SLOT_TEXT[] = " ";
 
         // Both SPrintf targets are 128-byte stack buffers on the X360 (`li r4, 0x80`).
         const u32 KU_SLOT_TEXT_BUFFER_SIZE = 128;
@@ -143,8 +140,8 @@ namespace BrnGui
                 ? KPC_LOAD_HEADER_ANIMATION_STATES[1]    // "withoutbuttons"
                 : KPC_LOAD_HEADER_ANIMATION_STATES[2];   // "withbuttons"
 
-        mLoadHeaderAnimator.AddOutputAptViewState(KAC_APT_TRANSITION, lpacLoadHeaderState, false);
-        mMapBorderAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+        mLoadHeaderAnimator.AddOutputAptViewState("apt_Transition", lpacLoadHeaderState, false);
+        mMapBorderAnimator.AddOutputAptViewState("apt_Transition",
                                                  KPC_MAP_BORDER_ANIMATION_STATES[1], false);   // "visible"
 
         miStartItem = 0;
@@ -161,8 +158,8 @@ namespace BrnGui
         // (X360 order: the DOWN animator first, then the UP one.)
         const char* lpacArrowState = (liNumRoutes <= 1) ? KPC_ARROW_ANIMATION_STATES[0]    // "invisible"
                                                         : KPC_ARROW_ANIMATION_STATES[1];   // "visible"
-        mDownArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION, lpacArrowState, false);
-        mUpArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION, lpacArrowState, false);
+        mDownArrowAnimator.AddOutputAptViewState("apt_Transition", lpacArrowState, false);
+        mUpArrowAnimator.AddOutputAptViewState("apt_Transition", lpacArrowState, false);
 
         // The view-state pair: the same record on the view-state channel and then on the
         // internal one, with the trailing flag set (the load page's form of the record).
@@ -211,7 +208,7 @@ namespace BrnGui
             // performs below.
             if (liRouteIndex < liNumRoutes)
             {
-                CgsCore::SPrintf(lacNumber, KU_SLOT_TEXT_BUFFER_SIZE, KAC_NUMBER_FORMAT,
+                CgsCore::SPrintf(lacNumber, KU_SLOT_TEXT_BUFFER_SIZE, "%d",
                                  liRouteIndex + 1);
 
                 mpStateInterface->GetLanguageManager()->FormatAndAddText(
@@ -222,7 +219,7 @@ namespace BrnGui
             else
             {
                 mpStateInterface->GetLanguageManager()->FormatAndAddText(
-                    lacSlotId + 1, KAC_EMPTY_SLOT_TEXT,
+                    lacSlotId + 1, " ",
                     CgsLanguage::LanguageManager::E_FORMAT_TEXT);
             }
 

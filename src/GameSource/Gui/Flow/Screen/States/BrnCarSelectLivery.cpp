@@ -51,7 +51,6 @@ namespace BrnGui
         const s32 KI_CHANNEL_GUI_OUT = 40;
         // PlayAptMovie's channel (the same one CgsGui::StateInterface::PlayAptMovie posts on).
         const s32 KI_CHANNEL_GUI_APT = 41;
-        const char KAC_EMPTY[] = "";
 
         // The state's inbound GUI queue, exactly as the sibling car-select states model it.
         typedef CgsModule::VariableEventQueue<18432, 16> StateInputQueue;
@@ -438,7 +437,7 @@ namespace BrnGui
     void CarSelectLivery::TriggerSound(s32 leAction)
     {
         GuiAudioTriggerEvent lAudio;
-        lAudio.Construct(leAction, KAC_EMPTY, "CodeLivery", KAC_EMPTY);
+        lAudio.Construct(leAction, "", "CodeLivery", "");
 
 
         mpStateInterface->OutputGuiEvent(lAudio);

@@ -440,10 +440,9 @@ namespace BrnGui
     // resolves. Un-silence the manager and advance to LEAVING.
     void BootProfile::HandleProfileTaskResult()
     {
-        if (mpProfileManager != 0)   // only the manager calls here, but keep the PC guard
-        {
-            mpProfileManager->SetSilentMode(false);
-        }
+        // No null test: ARTIST 0x82474468 calls through mpProfileManager directly (only the
+        // manager calls here).
+        mpProfileManager->SetSilentMode(false);
 
         meInternalState = E_INTERNALSTATE_LEAVING;
     }

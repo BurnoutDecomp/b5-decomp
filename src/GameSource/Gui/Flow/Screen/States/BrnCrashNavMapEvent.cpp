@@ -138,7 +138,6 @@ namespace BrnGui
 
         // ---- the FSM script event this screen sends ---------------------------------
         // The literal HandleSelect's E_CREATE_EVENT_NONE arm loads.
-        const char KAC_STATE_EVENT_GO_BACK[] = "GO_BACK";
 
         // Original UTF16 literals at ARTIST8206AB64,8206AB78,8206AB90.
         const CgsGui::CgsUtf16 KAC16_DEFAULT_EVENT_NAME[] =
@@ -161,7 +160,6 @@ namespace BrnGui
         // The overlay whose OK answer retires a custom event. Update compares the 189
         // record's id against this with a FULL 64-bit compare over the payload's leading
         // doubleword.
-        const char KAC_OVERLAY_DELETE_CUSTOM_EVENT[] = "CNDelCustEv";
 
         // Event 142 ("keyboard response") payload view: the queue hands the state the
         // HEADER-STRIPPED payload, and the console reads the keyboard pointer straight off
@@ -534,7 +532,7 @@ namespace BrnGui
         {
         case E_CREATE_EVENT_NONE:
             SetEventData();
-            SendStateEvent(KAC_STATE_EVENT_GO_BACK);   // CN_MAP_EVENT -> INGAME
+            SendStateEvent("GO_BACK");   // CN_MAP_EVENT -> INGAME
             break;
 
         case E_CREATE_EVENT_NEW_PANEL:
@@ -659,7 +657,7 @@ namespace BrnGui
                     static_cast<const GuiOverlayCompletePayload*>(lpEvent);
 
                 // Full 64-bit id compare (`cmpld`), then the OK gate.
-                if (lpCompleteEvent->mOverlayId == CgsIDCompress(KAC_OVERLAY_DELETE_CUSTOM_EVENT) &&
+                if (lpCompleteEvent->mOverlayId == CgsIDCompress("CNDelCustEv") &&
                     lpCompleteEvent->meLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK)
                 {
                     const PresetRace* lpPresetRace =                               // cpp:155

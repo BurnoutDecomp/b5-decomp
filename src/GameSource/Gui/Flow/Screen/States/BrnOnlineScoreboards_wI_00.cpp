@@ -23,11 +23,8 @@ namespace BrnGui
         // ---- apt view-state names (rodata literals) ------------------------------------
         // Every component transition on this screen is pushed down the one "apt_Transition"
         // channel (aAptTransition_1 -- the same string all three call sites load).
-        const char KAC_APT_TRANSITION[] = "apt_Transition";
 
         // TableEmpty_anim's two states.
-        const char KAC_VIEW_STATE_VISIBLE[]   = "visible";
-        const char KAC_VIEW_STATE_INVISIBLE[] = "invisible";
 
         // ButtonPrompts_anim's five states. "SingleX360" is the TABLE-focus prompt set: the
         // X360 picks it when mbUsingFilters is 0 (`lbz r11, 0xE00(r3)` / `bne` at
@@ -38,11 +35,6 @@ namespace BrnGui
         // are therefore the FILTER-row prompt set, and which one is picked says whether the
         // table below can still page up, page down, both, or neither. Consistent with the
         // DWARF, which sizes KAE_HELP_BAR_TABLE at 1 entry and KAE_HELP_BAR_FILTER at 4.
-        const char KAC_VIEW_STATE_SINGLE_X360[]   = "SingleX360";
-        const char KAC_VIEW_STATE_GENERAL[]       = "General";
-        const char KAC_VIEW_STATE_GENERAL_UP[]    = "GeneralUp";
-        const char KAC_VIEW_STATE_GENERAL_DOWN[]  = "GeneralDown";
-        const char KAC_VIEW_STATE_GENERAL_BOTH[]  = "GeneralBoth";
 
         // ---- controller action ids (the in-queue payload's second word) ----------------
         // FLAG: the producer-side enum name (EGameInputActions) is not in the recovered
@@ -66,8 +58,6 @@ namespace BrnGui
         const s32 KI_AUDIO_ACTION_MENU_CUE = 7;
 
         // The two audio labels the X360 selects between (rodata literals).
-        const char KAC_SOUND_LABEL_MENU_TOGGLE[]      = "MenuToggleDefault";
-        const char KAC_SOUND_LABEL_MENU_ITEM_TOGGLE[] = "MenuItemToggleDefault";
 
         // ---- out-queue wire record -----------------------------------------------------
         // The record the inlined OutputGuiEvent<BrnGui::GuiAudioTriggerEvent> builds:
@@ -103,8 +93,8 @@ namespace BrnGui
         mbTableEmptyShowing = lbShow;
 
         mTableEmptyAnimator.AddOutputAptViewState(
-            KAC_APT_TRANSITION,
-            lbShow ? KAC_VIEW_STATE_VISIBLE : KAC_VIEW_STATE_INVISIBLE,
+            "apt_Transition",
+            lbShow ? "visible" : "invisible",
             false);
     }
 
@@ -119,8 +109,8 @@ namespace BrnGui
     {
         if (!mbUsingFilters)
         {
-            mButtonAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
-                                                  KAC_VIEW_STATE_SINGLE_X360, false);
+            mButtonAnimator.AddOutputAptViewState("apt_Transition",
+                                                  "SingleX360", false);
             return;
         }
 
@@ -134,16 +124,16 @@ namespace BrnGui
 
         if (liRowsBefore == 0)
         {
-            lpcViewState = (liRowsAfter != 0) ? KAC_VIEW_STATE_GENERAL_DOWN
-                                              : KAC_VIEW_STATE_GENERAL;
+            lpcViewState = (liRowsAfter != 0) ? "GeneralDown"
+                                              : "General";
         }
         else
         {
-            lpcViewState = (liRowsAfter != 0) ? KAC_VIEW_STATE_GENERAL_BOTH
-                                              : KAC_VIEW_STATE_GENERAL_UP;
+            lpcViewState = (liRowsAfter != 0) ? "GeneralBoth"
+                                              : "GeneralUp";
         }
 
-        mButtonAnimator.AddOutputAptViewState(KAC_APT_TRANSITION, lpcViewState, false);
+        mButtonAnimator.AddOutputAptViewState("apt_Transition", lpcViewState, false);
     }
 
     // ---- TriggerSound @ 0x8249F710 -------------------------------------------------
@@ -159,14 +149,14 @@ namespace BrnGui
             case KI_ACTION_MENU_MOVE_B:
             case KI_ACTION_MENU_PREVIOUS:
             case KI_ACTION_MENU_NEXT:
-                lpcLabel = KAC_SOUND_LABEL_MENU_TOGGLE;
+                lpcLabel = "MenuToggleDefault";
                 break;
 
             case KI_ACTION_ITEM_MOVE_A:
             case KI_ACTION_ITEM_MOVE_B:
             case KI_ACTION_ITEM_PREVIOUS:
             case KI_ACTION_ITEM_NEXT:
-                lpcLabel = KAC_SOUND_LABEL_MENU_ITEM_TOGGLE;
+                lpcLabel = "MenuItemToggleDefault";
                 break;
 
             default:

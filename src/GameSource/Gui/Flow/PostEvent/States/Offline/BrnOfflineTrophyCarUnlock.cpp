@@ -67,7 +67,6 @@ namespace
     const f32 KF_NEWTEXT_DISPLAY_TIME = 2.0f;
 
     // The apt clip every animation below is driven through.
-    const char KAC_APT_TRANSITION[] = "apt_Transition";
 
     // The movie Update plays: gGuiResourceIdentifier[225] == "BrnTrophyCarUnlock", the same
     // id as maResourcesToLoad[0].
@@ -256,7 +255,7 @@ void OfflineTrophyCarUnlock::Update()
     case E_OFFLINETROPHYCARUNLOCKSTATE_RUNNING:
         if (mpGuiCache->GetTime() > mfScreenStartTime + KF_SCREEN_DISPLAY_TIME)
         {
-            mScreenAnim.AddOutputAptViewState(KAC_APT_TRANSITION, "fadeOutText", false);
+            mScreenAnim.AddOutputAptViewState("apt_Transition", "fadeOutText", false);
             meOfflineTrophyCarUnlockState = E_OFFLINETROPHYCARUNLOCKSTATE_WAITING_FOR_FADEOUT_TEXT;
         }
         break;
@@ -269,7 +268,7 @@ void OfflineTrophyCarUnlock::Update()
     case E_OFFLINETROPHYCARUNLOCKSTATE_SET_NEW_TEXT:
         mCongratTextDesc.SetLocalisedText("POSTRACE_NEW_CAR_INSTRUCTIONS",
                                           CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
-        mScreenAnim.AddOutputAptViewState(KAC_APT_TRANSITION, "fadeInText", false);
+        mScreenAnim.AddOutputAptViewState("apt_Transition", "fadeInText", false);
         meOfflineTrophyCarUnlockState = E_OFFLINETROPHYCARUNLOCKSTATE_SHOWING_NEW_TEXT;
         mfNewTextStartTime = mpGuiCache->GetTime();
         break;
@@ -277,7 +276,7 @@ void OfflineTrophyCarUnlock::Update()
     case E_OFFLINETROPHYCARUNLOCKSTATE_SHOWING_NEW_TEXT:
         if (mpGuiCache->GetTime() > mfNewTextStartTime + KF_NEWTEXT_DISPLAY_TIME)
         {
-            mScreenAnim.AddOutputAptViewState(KAC_APT_TRANSITION, "transout", false);
+            mScreenAnim.AddOutputAptViewState("apt_Transition", "transout", false);
             meOfflineTrophyCarUnlockState = E_OFFLINETROPHYCARUNLOCKSTATE_WAITING_FOR_TRANSOUT;
         }
         break;
@@ -400,7 +399,7 @@ void OfflineTrophyCarUnlock::SetupComponents()
     mCongratTextDesc.SetLocalisedText("POSTRACE_NEW_CAR_DESC1",
                                       CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
     mTrophyCarComponent.ShowCar();
-    mScreenAnim.AddOutputAptViewState(KAC_APT_TRANSITION, "transin", false);
+    mScreenAnim.AddOutputAptViewState("apt_Transition", "transin", false);
 }
 
 // ---- HandleAptTriggers --------------------------------------------------------------------

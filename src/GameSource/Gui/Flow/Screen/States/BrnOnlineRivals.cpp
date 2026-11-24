@@ -53,7 +53,6 @@ namespace BrnGui
         const s32 KI_APT_MOVIE_LEVEL       = 3;
         const char* const KPC_EMPTY_STRING = "";
 
-        const char KAC_GO_BACK_EVENT[] = "GO_BACK";
 
         // ---- in-queue payload views (the queue hands out the header-stripped payload) ----
         struct ControllerButtonPayload : public CgsModule::Event
@@ -115,7 +114,7 @@ namespace BrnGui
                 break;
 
             case KI_EVENT_NETWORK_DISCONNECTED:
-                SendStateEvent(KAC_GO_BACK_EVENT);
+                SendStateEvent("GO_BACK");
                 break;
 
             case KI_EVENT_GUI_CACHE:
@@ -195,7 +194,7 @@ namespace BrnGui
             static_cast<const ControllerButtonPayload*>(lpEvent);
         if (lpInput->miButtonId == E_GAMEINPUTACTIONS_GUI_CANCEL)
         {
-            SendStateEvent(KAC_GO_BACK_EVENT);
+            SendStateEvent("GO_BACK");
         }
     }
 

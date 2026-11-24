@@ -105,8 +105,6 @@ namespace BrnGui
         const s32 KI_AUDIO_ACTION_MENU_CUE = 7;
 
         // The overlay ids the screen raises / reacts to.
-        const char KAC_DELETE_OVERLAY[] = "LineUpDelete";
-        const char KAC_EXPORT_OVERLAY[] = "LineUpExport";
 
         // The district localisation ids the "where" text looks up (an image table of
         // EDistrict-indexed ids).
@@ -511,7 +509,7 @@ namespace BrnGui
                 lExport.mPlayerName = mSelectedPlayerName;
                 PostWrapped(mpStateInterface, lExport);
 
-                PostOverlayRequest(mpStateInterface, KAC_EXPORT_OVERLAY);
+                PostOverlayRequest(mpStateInterface, "LineUpExport");
             }
         }
     }
@@ -772,7 +770,7 @@ namespace BrnGui
         const OverlayCompletePayload* lpPayload =
             reinterpret_cast<const OverlayCompletePayload*>(lpOverlayCompleteEvent);
 
-        if (lpPayload->mOverlayId == CgsIDCompress(KAC_DELETE_OVERLAY))
+        if (lpPayload->mOverlayId == CgsIDCompress("LineUpDelete"))
         {
             if (lpPayload->meLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK)
             {
@@ -785,7 +783,7 @@ namespace BrnGui
                 miRequestsLeftPending = 0;
             }
         }
-        else if (lpPayload->mOverlayId == CgsIDCompress(KAC_EXPORT_OVERLAY))
+        else if (lpPayload->mOverlayId == CgsIDCompress("LineUpExport"))
         {
             miRequestsLeftPending = 0;
             CGS_ASSERT(mpGuiCache, "mpGuiCache");

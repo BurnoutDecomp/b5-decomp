@@ -403,7 +403,6 @@ namespace BrnGui
             "showing_unsel",   // 6 SHOWING_UNHIGHLIGHTED
         };
 
-        const char KAC_APT_STATE_NAME[] = "apt_state";   // 0x824E9A6C
     }
 
     // Header-inline on the console (Table::SetupTable's `stb 0x32BF(table) -> 0x301(row)`).
@@ -426,7 +425,7 @@ namespace BrnGui
             CGS_ASSERT(leState != E_TABLEROWSTATES_COUNT,
                        "Unable to find a relevant state for this TableRow");                // cpp:155
 
-            AddOutputAptViewState(KAC_APT_STATE_NAME, KAPC_ROW_STATE_APT_STATES[leState], false);
+            AddOutputAptViewState("apt_state", KAPC_ROW_STATE_APT_STATES[leState], false);
             mePreviousState = leState;
         }
 

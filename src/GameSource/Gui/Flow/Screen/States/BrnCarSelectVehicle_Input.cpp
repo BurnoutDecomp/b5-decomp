@@ -45,7 +45,6 @@ namespace BrnGui
     namespace
     {
         const s32 KI_CHANNEL_GUI_OUT = 40;
-        const char KAC_EMPTY[] = "";
 
         // ---- observed input event kinds (CgsGuiEventTypeDefs.h) ---------------------
         const s32 KI_EVENT_CONTROLLER_DOWN     = 5;
@@ -503,9 +502,9 @@ namespace BrnGui
     void CarSelectVehicle::TriggerSound(bool lbClappers)
     {
         GuiAudioTriggerEvent lAudio;
-        lAudio.Construct(KI_AUDIO_ACTION_CAROUSEL, KAC_EMPTY,
+        lAudio.Construct(KI_AUDIO_ACTION_CAROUSEL, "",
                          lbClappers ? "CodeCarChoiceCarouselClappers" : "CodeCarChoiceCarousel",
-                         KAC_EMPTY);
+                         "");
 
         // The X360 record is { 100, 457, 12, <the 100-byte audio record> }: same payload as
         // the committed GuiAudioTriggerEvent, different queued id (see

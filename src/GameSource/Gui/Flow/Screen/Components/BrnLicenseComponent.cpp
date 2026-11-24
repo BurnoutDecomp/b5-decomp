@@ -102,24 +102,12 @@ namespace BrnGui
     namespace
     {
         // ---- apt state identifiers (inline .rdata literals on the console) ---------
-        const char KAC_STATE_IDLE[]               = "idle";
-        const char KAC_STATE_TRANSIN[]            = "transIn";
-        const char KAC_STATE_TRANSOUT[]           = "transOut";
-        const char KAC_STATE_INVISIBLE[]          = "invisible";
-        const char KAC_STATE_ADDWIN[]             = "addWin";
-        const char KAC_STATE_UPGRADEPENDING[]     = "upgradePending";
-        const char KAC_STATE_UPGRADED_TRANSIN[]   = "upgradedTransIn";
-        const char KAC_STATE_UPGRADED_TRANSOUT[]  = "upgradedTransOut";
-        const char KAC_STATE_UPGRADED_IDLE[]      = "upgradedIdle";
-        const char KAC_STATE_UPGRADED_ADDWINS[]   = "upgradedAddWins";
 
         // The empty string the console passes as `&unk_820046A7` (unmounting a movie /
         // blanking a text field).
-        const char KAC_EMPTY_STRING[] = "";
 
         // @0x82053B70 -- pushed as LITERAL text (SetText, not SetLocalisedText): the field
         // resolves the leading '$' itself.
-        const char KAC_UPGRADE_PENDING_TEXT[] = "$LICENSE_UPGRADE_PENDING";
 
         // The apt level the licence's OWN movie is mounted at (OnLoad, Update case 9,
         // HandleAptTransitionTriggers case 6 and ReleaseResources all pass 4; the photo booth
@@ -312,7 +300,7 @@ namespace BrnGui
     {
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");   // cpp:202
 
-        mpStateInterface->PlayAptMovie(KAC_EMPTY_STRING, KI_LICENSE_APT_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_LICENSE_APT_LEVEL);
 
         if (!mbShowingProfilePicture)
             StopOutputtingGamerpic();
@@ -398,8 +386,8 @@ namespace BrnGui
             break;
 
         case E_LICENSE_SHOWING_UPGRADE_PENDING:
-            SetState(mbForceCentred ? KAC_STATE_UPGRADED_IDLE : KAC_STATE_UPGRADEPENDING);
-            mNextRankTextField.SetText(KAC_EMPTY_STRING);
+            SetState(mbForceCentred ? "upgradedIdle" : "upgradePending");
+            mNextRankTextField.SetText("");
             UpdateDirt();
             break;
 
@@ -410,7 +398,7 @@ namespace BrnGui
             break;
 
         case E_LICENSE_UPGRADING_OLD_LICENSE_LEAVING:
-            mpStateInterface->PlayAptMovie(KAC_EMPTY_STRING, KI_LICENSE_APT_LEVEL);
+            mpStateInterface->PlayAptMovie("", KI_LICENSE_APT_LEVEL);
             mpGuiCache->EnsureResourceIsUnloaded(maLicenseResourcesToLoad[0]);
             meCurrentLicenseState = E_LICENSE_FIRST_RESOURCE_UNLOADING;
             break;
@@ -418,13 +406,13 @@ namespace BrnGui
         case E_LICENSE_UPGRADING_NEW_LICENSE_ARRIVING:
             if (mbShowPoints)
             {
-                SetState(KAC_STATE_UPGRADED_ADDWINS);
+                SetState("upgradedAddWins");
                 meCurrentLicenseState = E_LICENSE_UPGRADING_ADDING_REQUIRED_WINS;
                 UpdateDirt();
             }
             else
             {
-                SetState(KAC_STATE_UPGRADED_IDLE);
+                SetState("upgradedIdle");
                 meCurrentLicenseState = E_LICENSE_UPGRADING_DONE;
             }
             break;
@@ -482,7 +470,7 @@ namespace BrnGui
             mfTimeToShowNextRank -= mpGuiCache->GetTimeStep();
             if (mfTimeToShowNextRank <= 0.0f)
             {
-                SetState(KAC_STATE_UPGRADED_TRANSIN);
+                SetState("upgradedTransIn");
                 UpdateDirt();
                 mbHiding              = false;
                 mbVisible             = true;
@@ -526,7 +514,7 @@ namespace BrnGui
                 }
                 else
                 {
-                    SetState(KAC_STATE_UPGRADED_IDLE);
+                    SetState("upgradedIdle");
                     mbHiding              = false;
                     meCurrentLicenseState = E_LICENSE_UPGRADING_DONE;
                 }
@@ -603,7 +591,7 @@ namespace BrnGui
             {
                 if (mbShowUpgradePending)
                 {
-                    mNextRankTextField.SetText(KAC_UPGRADE_PENDING_TEXT);
+                    mNextRankTextField.SetText("$LICENSE_UPGRADE_PENDING");
                 }
                 else
                 {
@@ -693,7 +681,7 @@ namespace BrnGui
                    "E_LICENSE_FIRST_RESOURCE_LOADED == meCurrentLicenseState");   // cpp:745
 
         mbForceCentred = lbForceCentred;
-        SetState(lbForceCentred ? KAC_STATE_UPGRADED_TRANSIN : KAC_STATE_TRANSIN);
+        SetState(lbForceCentred ? "upgradedTransIn" : "transIn");
 
         mPlayerNameTextField.SetText(mPlayerNameTextField.GetText());
         mNextRankTextField.SetText(mNextRankTextField.GetText());
@@ -730,7 +718,7 @@ namespace BrnGui
     {
         mbShowPoints = lbShowPoints;
 
-        mpStateInterface->PlayAptMovie(KAC_EMPTY_STRING, KI_LICENSE_APT_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_LICENSE_APT_LEVEL);
         mpGuiCache->EnsureResourceIsUnloaded(maLicenseResourcesToLoad[0]);
 
         mfTimeToShowNextRank = 0.0f;
@@ -763,11 +751,11 @@ namespace BrnGui
         if (meCurrentLicenseState > E_LICENSE_SHOWING_UPGRADE_PENDING)
         {
             if (meCurrentLicenseState <= E_LICENSE_UPGRADING_DONE)
-                SetState(KAC_STATE_UPGRADED_TRANSOUT);
+                SetState("upgradedTransOut");
         }
         else
         {
-            SetState(mbForceCentred ? KAC_STATE_UPGRADED_TRANSOUT : KAC_STATE_TRANSOUT);
+            SetState(mbForceCentred ? "upgradedTransOut" : "transOut");
             meCurrentLicenseState = E_LICENSE_SHOWING_TRANSOUT;
         }
 
@@ -812,7 +800,7 @@ namespace BrnGui
                 KE_FORMAT_ID_LOOKUP, 1, lapacParams, laeFormats);
         }
 
-        SetState(mbForceCentred ? KAC_STATE_UPGRADED_ADDWINS : KAC_STATE_ADDWIN);
+        SetState(mbForceCentred ? "upgradedAddWins" : "addWin");
         UpdateDirt();
         mbHiding = false;
     }
@@ -823,7 +811,7 @@ namespace BrnGui
     void LicenseComponent::ShowScore()
     {
         if (!mbShowPoints && mbVisible)
-            SetState(mbForceCentred ? KAC_STATE_UPGRADED_ADDWINS : KAC_STATE_ADDWIN);
+            SetState(mbForceCentred ? "upgradedAddWins" : "addWin");
 
         mbShowPoints = true;
     }
@@ -857,14 +845,14 @@ namespace BrnGui
 
         if (mbVisible)
         {
-            SetState(mbForceCentred ? KAC_STATE_UPGRADED_TRANSOUT : KAC_STATE_TRANSOUT);
+            SetState(mbForceCentred ? "upgradedTransOut" : "transOut");
             UpdateDirt();
             mbHiding              = false;
             meCurrentLicenseState = E_LICENSE_UPGRADING_OLD_LICENSE_LEAVING;
         }
         else
         {
-            mpStateInterface->PlayAptMovie(KAC_EMPTY_STRING, KI_LICENSE_APT_LEVEL);
+            mpStateInterface->PlayAptMovie("", KI_LICENSE_APT_LEVEL);
             meCurrentLicenseState = E_LICENSE_FIRST_RESOURCE_UNLOADING;
         }
 
@@ -903,7 +891,7 @@ namespace BrnGui
 
             if (mbFinishedGame || mbElite)
             {
-                SetState(KAC_STATE_IDLE);
+                SetState("idle");
                 mbHiding = false;
             }
             else
@@ -921,7 +909,7 @@ namespace BrnGui
         }
         else
         {
-            SetState(KAC_STATE_INVISIBLE);
+            SetState("invisible");
             const bool lbWasShowingProfilePicture = mbShowingProfilePicture;
             mbHiding = false;
             if (!lbWasShowingProfilePicture)
@@ -1095,7 +1083,7 @@ namespace BrnGui
             CgsDev::Assert::EndAssert();
         }
 
-        SetState(KAC_STATE_IDLE);
+        SetState("idle");
         miCurrentRank = liRank;
         mbHiding      = false;
     }

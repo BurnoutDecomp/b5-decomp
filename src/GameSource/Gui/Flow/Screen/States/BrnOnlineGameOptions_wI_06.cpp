@@ -55,7 +55,6 @@ namespace BrnGui
         const s32 KI_CHANNEL_GUI_INTERNAL = 42;   // OutputInternalState
 
         // The apt view-state key every animation component on this screen is driven with.
-        const char KPC_APT_TRANSITION[] = "apt_Transition";
 
         // ---- help-bar items: the class's own KA_HELPBAR_ITEMS table is the home ---------
         // MEASURED (headless IDA): KA_HELPBAR_ITEMS @0x8205F1B4 is four
@@ -217,9 +216,9 @@ namespace BrnGui
         mpStateInterface->OutputInternalState(lShowHideSatNav);
 
         // The load page's furniture goes away with the page (this+0x7BA8 / this+0x7C34).
-        mLoadHeaderAnimator.AddOutputAptViewState(KPC_APT_TRANSITION,
+        mLoadHeaderAnimator.AddOutputAptViewState("apt_Transition",
                                                   KPC_LOAD_HEADER_ANIMATION_STATES[0], false);
-        mMapBorderAnimator.AddOutputAptViewState(KPC_APT_TRANSITION,
+        mMapBorderAnimator.AddOutputAptViewState("apt_Transition",
                                                  KPC_MAP_BORDER_ANIMATION_STATES[0], false);
 
         // The scroll arrows only appear when there is more than one option group to scroll
@@ -227,16 +226,16 @@ namespace BrnGui
         // (this+0x7A90), and reloads the same state string for the second call.
         if (GetNumberOptions() > 1)
         {
-            mDownArrowAnimator.AddOutputAptViewState(KPC_APT_TRANSITION,
+            mDownArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                      KPC_ARROW_ANIMATION_STATES[1], false);
-            mUpArrowAnimator.AddOutputAptViewState(KPC_APT_TRANSITION,
+            mUpArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                    KPC_ARROW_ANIMATION_STATES[1], false);
         }
         else
         {
-            mDownArrowAnimator.AddOutputAptViewState(KPC_APT_TRANSITION,
+            mDownArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                      KPC_ARROW_ANIMATION_STATES[0], false);
-            mUpArrowAnimator.AddOutputAptViewState(KPC_APT_TRANSITION,
+            mUpArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                    KPC_ARROW_ANIMATION_STATES[0], false);
         }
     }

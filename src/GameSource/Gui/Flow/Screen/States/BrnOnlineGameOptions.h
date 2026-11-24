@@ -71,8 +71,8 @@ namespace BrnGui
         void CheckForCompletedLoads();                                          // @0x824A7758
         void SetupCommonCreateGameOptions();                                    // @0x82490598
         void SetupGameModeOptions();                                            // @0x82490630
-        void SetupOptions(s32 liToggleIndex, CreateMatchOption::EOption leOption); // @0x8248EB60
-        s32  GetOptionIndex(CreateMatchOption::EOption leOption);               // @0x8248ED50
+        void SetupOptions(s32 liToggleIndex, CreateMatchOptions::EOption leOption); // @0x8248EB60
+        s32  GetOptionIndex(CreateMatchOptions::EOption leOption);               // @0x8248ED50
         s32  GetSelectedGameMode() const;                                       // @0x82485A88
         s32  GetNumberOptions();                                                // @0x82485B08
         void HighlightCreateGameOptions();                                      // @0x82490740
@@ -90,7 +90,7 @@ namespace BrnGui
         void BuildGameOptions();                                                // @0x8248CA98
         void HandleControllerInputLoadOptions(const CgsModule::Event* lpEvent);  // @0x824A7E48
         void HandleCarInfoResponseEvent(const CgsModule::Event* lpEvent);
-        CreateMatchOption::EOption GetHighlightedOption(CreateMatchOption::EOption leOption); // @0x8248EC98
+        CreateMatchOptions::EOption GetHighlightedOption(CreateMatchOptions::EOption leOption); // @0x8248EC98
         void ResetGameOptions();                                                // @0x82485B98
         void RequestPresetEvents();                                             // @0x8249CBF8
 
@@ -119,12 +119,12 @@ namespace BrnGui
         static const char* const KPC_ARROW_ANIMATION_STATES[3];        // @0x82F2683C
         static const char* const KPC_LOAD_HEADER_ANIMATION_STATES[3];  // @0x82F26848
         static const char* const KPC_MAP_BORDER_ANIMATION_STATES[2];   // @0x82F26854
-        static const CreateMatchOption::EOption KAE_COMMON_OPTIONS[2];                // @0x8205F14C
-        static const CreateMatchOption::EOption KAE_RACE_MODE_OPTIONS[5];             // @0x8205F154
-        static const CreateMatchOption::EOption KAE_ROAD_RAGE_MODE_OPTIONS[6];        // @0x8205F168
-        static const CreateMatchOption::EOption KAE_BURNING_HOME_RUN_MODE_OPTIONS[8]; // @0x8205F180
-        static const CreateMatchOption::EOption KAE_DEFAULT_MODE_OPTIONS[5];          // @0x8205F1A0 (no DWARF name; modes 12/14/17)
-        static const CreateMatchOption::EOption* const KAP_GAME_MODE_OPTION_DATA[6];  // @0x82F26824
+        static const CreateMatchOptions::EOption KAE_COMMON_OPTIONS[2];                // @0x8205F14C
+        static const CreateMatchOptions::EOption KAE_RACE_MODE_OPTIONS[5];             // @0x8205F154
+        static const CreateMatchOptions::EOption KAE_ROAD_RAGE_MODE_OPTIONS[6];        // @0x8205F168
+        static const CreateMatchOptions::EOption KAE_BURNING_HOME_RUN_MODE_OPTIONS[8]; // @0x8205F180
+        static const CreateMatchOptions::EOption KAE_DEFAULT_MODE_OPTIONS[5];          // @0x8205F1A0 (no DWARF name; modes 12/14/17)
+        static const CreateMatchOptions::EOption* const KAP_GAME_MODE_OPTION_DATA[6];  // @0x82F26824
         static const HelpBarItem KA_HELPBAR_ITEMS[4];                                 // @0x8205F1B4
 
         // ---- data members (DWARF order; the X360 offsets are documentation) ---------
@@ -140,8 +140,8 @@ namespace BrnGui
         TextField                 mTitleText;            // +32232 "Title_text"
         GuiNetworkRouteInfo       mRouteInfoDisplay;     // +32528 "RouteInfo"
         GuiEventNetworkGameParams mGameOptions;          // +41152 (480 B, pointer-free)
-        CgsContainers::Array<CreateMatchOption, 75> maOptions;          // +41632 (count word @ +42232)
-        const CreateMatchOption::EOption* mpCommonOptions; // +42236
+        CgsContainers::Array<CreateMatchOptions, 75> maOptions;          // +41632 (count word @ +42232)
+        const CreateMatchOptions::EOption* mpCommonOptions; // +42236
         GuiCache*                 mpGuiCache;            // +42240
         EOptionsToLoad            meOptionsToLoad;       // +42244
         s32                       miCurrentRound;        // +42248

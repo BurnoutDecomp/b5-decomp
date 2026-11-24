@@ -6,7 +6,7 @@
 // ===================================================================================
 
 #include "GameSource/Gui/Flow/Screen/States/BrnOnlineGameOptions.h"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // CGS_ASSERT + MessageAt
 
 namespace BrnGui
 {
@@ -30,7 +30,7 @@ namespace BrnGui
 // X360-LITERAL AUDIT: the only console displacements this body touches are the two member
 // bases (this+42236 = mpCommonOptions via `addis r28,r29,1 ; addi r28,r28,-0x5B04`, and
 // this+42252 = miStartItem via `addi r27,r27,-0x5AF4`) and the option-list element stride 4
-// (`slwi r30, r31, 2`), which here is the host's own `sizeof(CreateMatchOption::EOption)`
+// (`slwi r30, r31, 2`), which here is the host's own `sizeof(CreateMatchOptions::EOption)`
 // array step. Both members are reached BY NAME, so no console number is reproduced as code.
 // No floating-point comparison occurs, so there is no NaN-polarity hazard.
     // ================================================================================
@@ -44,15 +44,15 @@ namespace BrnGui
         // first entry's test out of the loop; kept as written so an already-empty list
         // counts zero rather than walking off the front.
         s32 liNumCommonOptions = 0;
-        if (mpCommonOptions[0] != CreateMatchOption::E_OPTION_TERMINATOR)
+        if (mpCommonOptions[0] != CreateMatchOptions::E_OPTION_TERMINATOR)
         {
-            const CreateMatchOption::EOption* lpeCommonOption = mpCommonOptions;
+            const CreateMatchOptions::EOption* lpeCommonOption = mpCommonOptions;
             do
             {
                 ++lpeCommonOption;
                 ++liNumCommonOptions;
             }
-            while (*lpeCommonOption != CreateMatchOption::E_OPTION_TERMINATOR);
+            while (*lpeCommonOption != CreateMatchOptions::E_OPTION_TERMINATOR);
         }
 
         // Nothing of the common list is on screen once the window has scrolled past it.
@@ -62,7 +62,7 @@ namespace BrnGui
             // miStartItem from the object on every iteration (`lwz r11, 0(r27)`); it does
             // not change, so the subtraction is written directly.
             s32 liOptionIndex = miStartItem;
-            while (mpCommonOptions[liOptionIndex] != CreateMatchOption::E_OPTION_TERMINATOR)
+            while (mpCommonOptions[liOptionIndex] != CreateMatchOptions::E_OPTION_TERMINATOR)
             {
                 SetupOptions(liOptionIndex - miStartItem, mpCommonOptions[liOptionIndex]);
                 ++liOptionIndex;
@@ -109,7 +109,6 @@ namespace BrnGui
     {
         // unk_820046A7 -- the canonical empty string the blank-row SetupToggle passes as
         // its title text.
-        const char KAC_EMPTY_STRING[] = "";
     }
 
     // ================================================================================
@@ -125,8 +124,8 @@ namespace BrnGui
         // The mode list is displayed immediately after the common list, so where it starts
         // in the window depends on the common list's length.
         s32 liNumCommonOptions = 0;
-        for (const CreateMatchOption::EOption* lpeCommonOption = mpCommonOptions;
-             *lpeCommonOption != CreateMatchOption::E_OPTION_TERMINATOR;
+        for (const CreateMatchOptions::EOption* lpeCommonOption = mpCommonOptions;
+             *lpeCommonOption != CreateMatchOptions::E_OPTION_TERMINATOR;
              ++lpeCommonOption)
         {
             ++liNumCommonOptions;
@@ -148,11 +147,11 @@ namespace BrnGui
             liStartRow    = 0;
         }
 
-        const CreateMatchOption::EOption* lpeGameModeOptions =
+        const CreateMatchOptions::EOption* lpeGameModeOptions =
             KAP_GAME_MODE_OPTION_DATA[liGameMode];
 
         s32 liNumEmitted = 0;
-        if (lpeGameModeOptions[liOptionIndex] != CreateMatchOption::E_OPTION_TERMINATOR)
+        if (lpeGameModeOptions[liOptionIndex] != CreateMatchOptions::E_OPTION_TERMINATOR)
         {
             s32 liRow = liStartRow;
             do
@@ -170,7 +169,7 @@ namespace BrnGui
                 ++liNumEmitted;
                 ++liRow;
             }
-            while (lpeGameModeOptions[liOptionIndex] != CreateMatchOption::E_OPTION_TERMINATOR);
+            while (lpeGameModeOptions[liOptionIndex] != CreateMatchOptions::E_OPTION_TERMINATOR);
         }
 
         // Blank every row the two lists did not reach: an empty toggle with no options at
@@ -180,7 +179,7 @@ namespace BrnGui
              liEmptyRow < KI_MAX_CREATE_GAME_OPTIONS;
              ++liEmptyRow)
         {
-            mCreateGameToggles.SetupToggle(liEmptyRow, 0, true, KAC_EMPTY_STRING, 0, 0);
+            mCreateGameToggles.SetupToggle(liEmptyRow, 0, true, "", 0, 0);
         }
     }
 
@@ -230,7 +229,7 @@ namespace BrnGui
     // group's title row in maOptions is the entry whose meOption == leOption, and the rows
     // that follow it up to the next terminator are the group's selectable values.
     // ================================================================================
-    void OnlineGameOptions::SetupOptions(s32 liToggleIndex, CreateMatchOption::EOption leOption)
+    void OnlineGameOptions::SetupOptions(s32 liToggleIndex, CreateMatchOptions::EOption leOption)
     {
         const char* lapcOptionNames[KI_MAX_TOGGLE_OPTIONS];
         u64         lau64OptionIds[KI_MAX_TOGGLE_OPTIONS];
@@ -251,14 +250,14 @@ namespace BrnGui
         s32 liRowIndex   = liTitleIndex + 1;
         s32 liNumOptions = 0;
 
-        CreateMatchOption::EOption leRowOption =
+        CreateMatchOptions::EOption leRowOption =
             maOptions.GetItem(static_cast<u32>(liRowIndex)).meOption;
 
-        if (leRowOption != CreateMatchOption::E_OPTION_TERMINATOR)
+        if (leRowOption != CreateMatchOptions::E_OPTION_TERMINATOR)
         {
             do
             {
-                const CreateMatchOption& lrRow = maOptions.GetItem(static_cast<u32>(liRowIndex));
+                const CreateMatchOptions& lrRow = maOptions.GetItem(static_cast<u32>(liRowIndex));
 
                 lapcOptionNames[liNumOptions] = lrRow.mpcName;
                 // `extsw r11, r28 ; std r11, 0(r27)` -- the id is the row's option value,
@@ -269,13 +268,16 @@ namespace BrnGui
                 // The console tests AFTER the pair of stores, so the guard is one row late.
                 // It cannot be reached in practice -- maOptions holds at most 75 entries in
                 // total -- and it is kept where the console put it.
+                // The original line (BrnOnlineGameOptions.cpp:1387, ARTIST li r5,0x56B @0x8248EC20);
+                // this partfile cannot sit on it.
                 CGS_ASSERT(liNumOptions <= KI_MAX_TOGGLE_OPTIONS,
-                           "Too many options specified");   // cpp:1387
+                           CgsDev::Assert::MessageAt("Too many options specified", __FILE__,
+                                                     1387 /* ARTIST 0x8248EC20 */));
 
                 ++liRowIndex;
                 leRowOption = maOptions.GetItem(static_cast<u32>(liRowIndex)).meOption;
             }
-            while (leRowOption != CreateMatchOption::E_OPTION_TERMINATOR);
+            while (leRowOption != CreateMatchOptions::E_OPTION_TERMINATOR);
 
             if (liNumOptions > 0)
             {

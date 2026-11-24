@@ -118,21 +118,13 @@ namespace BrnGui
         const u32 KU_SLOT_TEXT_LENGTH = 128;
 
         // The "save over this slot?" overlay, and the "entering game" overlay.
-        const char KAC_OVERWRITE_QUESTION_OVERLAY_ID[] = "CNOnlOvGOQn";
-        const char KAC_ENTER_GAME_OVERLAY_ID[]         = "CNOnlEntGame";
 
         // The menu click cues.
         const s32  KI_AUDIO_ACTION_MENU_CUE   = 7;
-        const char KAC_AUDIO_MOVE_LABEL[]     = "MenuToggleDefault";
-        const char KAC_AUDIO_ACCEPT_LABEL[]   = "Accept";
 
         // The challenge-selected record's action word when a game is created mid-challenge.
         const s32 KI_CHALLENGE_SELECTOR_ACTION_CREATE = 1;
 
-        const char KAC_APT_TRANSITION_NAME[] = "apt_Transition";
-        const char KAC_ADVANCE_EVENT[]       = "ADVANCE";
-        const char KAC_DISCONNECT_EVENT[]    = "DISCONNECT";
-        const char KAC_GO_BACK_EVENT[]       = "GO_BACK";
 
         // ---- in-queue payload views (the queue hands out the header-stripped payload) ----
         struct ControllerButtonPayload : public CgsModule::Event
@@ -321,7 +313,7 @@ namespace BrnGui
             case KI_EVENT_NETWORK_DISCONNECTED:
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
                 mpGuiCache->SetDoDisconnectPopup(lpEvent);
-                SendStateEvent(KAC_DISCONNECT_EVENT);
+                SendStateEvent("DISCONNECT");
                 break;
 
             case KI_EVENT_IN_GAME:
@@ -464,9 +456,9 @@ namespace BrnGui
 
         ShowHideMainMap(mpStateInterface, true);
 
-        mDownArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mDownArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                  KPC_ARROW_ANIMATION_STATES[KI_ARROW_INVISIBLE], false);
-        mUpArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mUpArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                KPC_ARROW_ANIMATION_STATES[KI_ARROW_INVISIBLE], false);
     }
 
@@ -499,9 +491,9 @@ namespace BrnGui
 
             const s32 liArrowState = (lpProfile->GetNumCreatedOnlineGameOptions() == 0)
                                          ? KI_ARROW_INVISIBLE : KI_ARROW_VISIBLE;
-            mDownArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+            mDownArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                      KPC_ARROW_ANIMATION_STATES[liArrowState], false);
-            mUpArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+            mUpArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                    KPC_ARROW_ANIMATION_STATES[liArrowState], false);
         }
         else
@@ -513,9 +505,9 @@ namespace BrnGui
             lpProfile->GetCreatedOnlineGameOptions(0, mpGuiCache, &lSavedParams);
             mRouteInfoDisplay.SetInfo(miCurrentRound, &lSavedParams);
 
-            mDownArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+            mDownArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                      KPC_ARROW_ANIMATION_STATES[KI_ARROW_VISIBLE], false);
-            mUpArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+            mUpArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                    KPC_ARROW_ANIMATION_STATES[KI_ARROW_VISIBLE], false);
         }
 
@@ -598,7 +590,7 @@ namespace BrnGui
             mpStateInterface->OutputGuiEvent(lCreateGame);
 
             GuiOverlayRequestWire lEnterGameOverlay;
-            lEnterGameOverlay.mRequest.Construct(KAC_ENTER_GAME_OVERLAY_ID);
+            lEnterGameOverlay.mRequest.Construct("CNOnlEntGame");
             mpStateInterface->OutputGuiEvent(lEnterGameOverlay.mRequest);
         }
         else
@@ -644,8 +636,8 @@ namespace BrnGui
         CGS_ASSERT(lpInGameEvent != 0, "Invalid event sent to OnlineSelectRoute::HandleInGameEvent");
         CGS_ASSERT(lpInGameEvent != 0, "lpInGameEvent");
 
-        PostWire(mpStateInterface, GuiOverlayWaitFinishWire(KAC_ENTER_GAME_OVERLAY_ID).mRequest);
-        SendStateEvent(KAC_ADVANCE_EVENT);
+        PostWire(mpStateInterface, GuiOverlayWaitFinishWire("CNOnlEntGame").mRequest);
+        SendStateEvent("ADVANCE");
         PostWire(mpStateInterface, GuiCommandWire16<175>());
     }
 
@@ -700,7 +692,7 @@ namespace BrnGui
 
         const OverlayCompletePayload* lpOverlayComplete =
             static_cast<const OverlayCompletePayload*>(lpOverlayCompleteEvent);
-        if (lpOverlayComplete->mOverlayId == CgsIDCompress(KAC_OVERWRITE_QUESTION_OVERLAY_ID)
+        if (lpOverlayComplete->mOverlayId == CgsIDCompress("CNOnlOvGOQn")
             && lpOverlayComplete->meLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK
             && meSubState == E_SUBSTATE_SAVE_OPTIONS)
         {
@@ -747,14 +739,14 @@ namespace BrnGui
         case E_GAMEINPUTACTIONS_GUI_UP:
             if (mMenuOptions.HighlightPrevious())
             {
-                PostMenuAudio(mpStateInterface, KAC_AUDIO_MOVE_LABEL);
+                PostMenuAudio(mpStateInterface, "MenuToggleDefault");
             }
             break;
 
         case E_GAMEINPUTACTIONS_GUI_DOWN:
             if (mMenuOptions.HighlightNext())
             {
-                PostMenuAudio(mpStateInterface, KAC_AUDIO_MOVE_LABEL);
+                PostMenuAudio(mpStateInterface, "MenuToggleDefault");
             }
             break;
 
@@ -794,12 +786,12 @@ namespace BrnGui
             {
                 ShowSaveScreen();
             }
-            PostMenuAudio(mpStateInterface, KAC_AUDIO_ACCEPT_LABEL);
+            PostMenuAudio(mpStateInterface, "Accept");
             break;
 
         case E_GAMEINPUTACTIONS_GUI_CANCEL:
-            SendStateEvent(KAC_GO_BACK_EVENT);
-            PostMenuAudio(mpStateInterface, KAC_GO_BACK_EVENT);
+            SendStateEvent("GO_BACK");
+            PostMenuAudio(mpStateInterface, "GO_BACK");
             break;
 
         default:
@@ -827,7 +819,7 @@ namespace BrnGui
             if (liHighlightedSlot < lpProfile->GetNumCreatedOnlineGameOptions())
             {
                 GuiOverlayRequestWire lOverwriteQuestion;
-                lOverwriteQuestion.mRequest.Construct(KAC_OVERWRITE_QUESTION_OVERLAY_ID);
+                lOverwriteQuestion.mRequest.Construct("CNOnlOvGOQn");
                 mpStateInterface->OutputGuiEvent(lOverwriteQuestion.mRequest);
             }
             else
@@ -838,12 +830,12 @@ namespace BrnGui
                 PostWire(mpStateInterface, GuiAutosaveRequestWire());
                 ShowGameOptionsScreen();
             }
-            PostMenuAudio(mpStateInterface, KAC_AUDIO_ACCEPT_LABEL);
+            PostMenuAudio(mpStateInterface, "Accept");
             break;
 
         case E_GAMEINPUTACTIONS_GUI_CANCEL:
             ShowGameOptionsScreen();
-            PostMenuAudio(mpStateInterface, KAC_GO_BACK_EVENT);
+            PostMenuAudio(mpStateInterface, "GO_BACK");
             break;
 
         case E_GAMEINPUTACTIONS_GUI_UP:
@@ -863,7 +855,7 @@ namespace BrnGui
                 lpProfile->GetCreatedOnlineGameOptions(liSlot, mpGuiCache, &lSavedParams);
                 mRouteInfoDisplay.SetInfo(miCurrentRound, &lSavedParams);
 
-                PostMenuAudio(mpStateInterface, KAC_AUDIO_MOVE_LABEL);
+                PostMenuAudio(mpStateInterface, "MenuToggleDefault");
             }
             else if (miStartSaveItem > 0)
             {
@@ -889,16 +881,16 @@ namespace BrnGui
             {
                 if (liNumRows > 1)
                 {
-                    mUpArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+                    mUpArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                            KPC_ARROW_ANIMATION_STATES[KI_ARROW_ANIMATE], false);
-                    mDownArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+                    mDownArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                              KPC_ARROW_ANIMATION_STATES[KI_ARROW_VISIBLE], false);
                 }
                 else
                 {
-                    mUpArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+                    mUpArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                            KPC_ARROW_ANIMATION_STATES[KI_ARROW_INVISIBLE], false);
-                    mDownArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+                    mDownArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                              KPC_ARROW_ANIMATION_STATES[KI_ARROW_INVISIBLE], false);
                 }
             }
@@ -929,7 +921,7 @@ namespace BrnGui
                     mRouteInfoDisplay.SetInfo(miCurrentRound, &lSavedParams);
                 }
 
-                PostMenuAudio(mpStateInterface, KAC_AUDIO_MOVE_LABEL);
+                PostMenuAudio(mpStateInterface, "MenuToggleDefault");
             }
             else
             {
@@ -956,16 +948,16 @@ namespace BrnGui
             {
                 if (liNumRows > 1)
                 {
-                    mUpArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+                    mUpArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                            KPC_ARROW_ANIMATION_STATES[KI_ARROW_VISIBLE], false);
-                    mDownArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+                    mDownArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                              KPC_ARROW_ANIMATION_STATES[KI_ARROW_ANIMATE], false);
                 }
                 else
                 {
-                    mUpArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+                    mUpArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                            KPC_ARROW_ANIMATION_STATES[KI_ARROW_INVISIBLE], false);
-                    mDownArrowAnimator.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+                    mDownArrowAnimator.AddOutputAptViewState("apt_Transition",
                                                              KPC_ARROW_ANIMATION_STATES[KI_ARROW_INVISIBLE], false);
                 }
             }

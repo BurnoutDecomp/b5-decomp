@@ -88,9 +88,6 @@ namespace BrnGui
         const s32 KI_GAME_SECURITY_INVITE_ONLY  = 2;
 
         // ---- the leave-question overlay ids (X360 rodata literals) --------------------
-        const char KAC_HOST_LEAVE_OVERLAY[]           = "OnHostLvQn";
-        const char KAC_LEAVE_CHALLENGE_OVERLAY[]      = "CNOnlLvChaQn";
-        const char KAC_LEAVE_GAME_OVERLAY[]           = "CNOnlLvGmQn";
 
         // ---- out-queue wire records ---------------------------------------------------
         // 16-byte command record { 1, N, 12 } -- the payload-less GuiEvent<N> command the
@@ -296,7 +293,7 @@ namespace BrnGui
 
         if (mpGuiCache->mbIsOnlineHost)
         {
-            lpacOverlayId = KAC_HOST_LEAVE_OVERLAY;
+            lpacOverlayId = "OnHostLvQn";
         }
         else
         {
@@ -308,11 +305,11 @@ namespace BrnGui
             // the X360 shows inlined before each of these two uses.
             if (mpGuiCache->GetFreeburnChallengeManager()->IsRunning())
             {
-                lpacOverlayId = KAC_LEAVE_CHALLENGE_OVERLAY;
+                lpacOverlayId = "CNOnlLvChaQn";
             }
             else
             {
-                lpacOverlayId = KAC_LEAVE_GAME_OVERLAY;
+                lpacOverlayId = "CNOnlLvGmQn";
             }
         }
 

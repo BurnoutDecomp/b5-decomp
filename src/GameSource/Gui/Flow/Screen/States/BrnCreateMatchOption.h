@@ -1,12 +1,12 @@
 #pragma once
 
 // ===================================================================================
-// BrnGui::CreateMatchOption  -- owning header for the create-match option array element
+// BrnGui::CreateMatchOptions  -- owning header for the create-match option array element
 //   b5-decomp/src/GameSource/Gui/Flow/Screen/States/BrnCreateMatchOption.h
 //
 // BrnGui::OnlineGameOptions builds an array of up to 75 create-match option entries. The
 // container is the committed generic Array<T,N> (CgsArray.h) instantiated as
-// Array<CreateMatchOption, 75>:
+// Array<CreateMatchOptions, 75>:
 //   * the element stride is 8 bytes (X360 Append @0x82488B40 does `slwi r11, count, 3`
 //     then copies TWO words: `stw [+0]`, `stw [+4]`),
 //   * the live-element count word sits at this+0x258 == 8 * 75, i.e. immediately after the
@@ -27,10 +27,10 @@ namespace BrnGui
     // One create-match option entry: the display string and the option it selects.
     // DWARF BrnOnlineGameOptions.h:135/136 names the members mpcName/meOption, and
     // OnlineGameOptions::BuildGameOptions @0x8248CA98 appends {string-literal, enum} pairs.
-    struct CreateMatchOption
+    struct CreateMatchOptions
     {
-        // DWARF BrnOnlineGameOptions.h:55 (the DWARF spells the type name plural,
-        // CreateMatchOptions; this home keeps the committed singular). These are the ARTIST
+        // DWARF BrnOnlineGameOptions.h:55 (the struct is CreateMatchOptions, plural, in the DWARF and in
+        // ARTIST's own truncated names, e.g. 0x82488DC8 "BrnGui::CreateMatchOptions,75>::GetItem"). These are the ARTIST
         // build's values: the Dec-07 DWARF enum runs one lower from VEHICLE_CHOICE upward
         // (merge-window drift). Decoded from BuildGameOptions @0x8248CA98 together with the
         // KAE_* option lists; the unattested slots are deliberately left unnamed rather

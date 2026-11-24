@@ -54,9 +54,6 @@ namespace BrnGui
         // The audio cues: action 4 "B5MenuItem" on select, action 7 "GO_BACK" on back.
         const s32  KI_AUDIO_ACTION_MENU_ITEM = 4;
         const s32  KI_AUDIO_ACTION_MENU_CUE  = 7;
-        const char KAC_SOUND_MENU_ITEM[]     = "B5MenuItem";
-        const char KAC_SOUND_GO_BACK[]       = "GO_BACK";
-        const char KAC_EMPTY_STRING[]        = "";
 
         // The map pull-back the zoom-out press asks for (console float constant 9000.0f)
         // and the world centre it recentres on: the 16-byte global the console loads is
@@ -93,11 +90,6 @@ namespace BrnGui
         const u64 KU_TIPS_OPTION_OFF = 1;
 
         // ---- overlay names ----------------------------------------------------------
-        const char KAC_OVERLAY_LEAVE_GAME_QN[]    = "CNOnlLvGmQn";
-        const char KAC_OVERLAY_LEAVE_CHAL_QN[]    = "CNOnlLvChaQn";
-        const char KAC_OVERLAY_LEAVING_GAME[]     = "CNOnlLvgGame";
-        const char KAC_OVERLAY_HOST_LAUNCHING[]   = "CNOnlLchGmH";
-        const char KAC_OVERLAY_PEER_LAUNCHING[]   = "CNOnlLchGame";
 
         // The launch overlay's two message parameters: the launching player's name, then
         // the game mode's string id.
@@ -168,7 +160,7 @@ namespace BrnGui
                               const char* lpcLabel)
         {
             GuiAudioTriggerEvent lAudioTrigger;
-            lAudioTrigger.Construct(leAction, KAC_EMPTY_STRING, lpcLabel, KAC_EMPTY_STRING);
+            lAudioTrigger.Construct(leAction, "", lpcLabel, "");
 
             GuiAudioTriggerPayload457 lPayload;
             std::memcpy(&lPayload, lAudioTrigger.macComponent, sizeof(lPayload));
@@ -190,7 +182,7 @@ namespace BrnGui
     // The leave request failed: stop waiting on the "leaving game" overlay.
     void OnlineGameRoomPlayerInfo::HandleLeavingGameFailedEvent(const CgsModule::Event* lpEvent)
     {
-        PostOverlayWaitFinish(mpStateInterface, KAC_OVERLAY_LEAVING_GAME);
+        PostOverlayWaitFinish(mpStateInterface, "CNOnlLvgGame");
     }
 
     // ------------------------------------------------------------ HandleLaunchingEvent
@@ -205,16 +197,16 @@ namespace BrnGui
         const GuiEventNetworkLaunchingPayload* lpLaunchingEvent =
             reinterpret_cast<const GuiEventNetworkLaunchingPayload*>(lpEvent);
 
-        PostOverlayWaitFinish(mpStateInterface, KAC_OVERLAY_LEAVE_GAME_QN);
-        PostOverlayWaitFinish(mpStateInterface, KAC_OVERLAY_LEAVE_CHAL_QN);
-        PostOverlayWaitFinish(mpStateInterface, KAC_OVERLAY_LEAVING_GAME);
+        PostOverlayWaitFinish(mpStateInterface, "CNOnlLvGmQn");
+        PostOverlayWaitFinish(mpStateInterface, "CNOnlLvChaQn");
+        PostOverlayWaitFinish(mpStateInterface, "CNOnlLvgGame");
 
         CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
 
         GuiOverlayRequestWire lWire;
         if (mpGuiCache != 0 && mpGuiCache->IsLocalPlayerHost())
         {
-            lWire.mRequest.Construct(KAC_OVERLAY_HOST_LAUNCHING);
+            lWire.mRequest.Construct("CNOnlLchGmH");
         }
         else
         {
@@ -222,7 +214,7 @@ namespace BrnGui
                 mpGuiCache->GetOnlinePlayerInfoFromPlayerId(lpLaunchingEvent->mPlayerID);
             CGS_ASSERT(lpPlayerStatusData != 0, "lpPlayerStatusData");
 
-            lWire.mRequest.Construct(KAC_OVERLAY_PEER_LAUNCHING);
+            lWire.mRequest.Construct("CNOnlLchGame");
             lWire.mRequest.AddMessageParam(KU_LAUNCH_PARAM_PLAYER_NAME,
                                            lpPlayerStatusData->mPlayerName.GetPlayerName());
         }
@@ -286,11 +278,11 @@ namespace BrnGui
                     UnloadPauseResources();
                 }
                 PerformPauseOption(static_cast<s32>(mPauseComponent.GetHighlightedId()));
-                PostAudioTrigger(mpStateInterface, KI_AUDIO_ACTION_MENU_ITEM, KAC_SOUND_MENU_ITEM);
+                PostAudioTrigger(mpStateInterface, KI_AUDIO_ACTION_MENU_ITEM, "B5MenuItem");
                 break;
 
             case KI_ACTION_BACK:
-                PostAudioTrigger(mpStateInterface, KI_AUDIO_ACTION_MENU_CUE, KAC_SOUND_GO_BACK);
+                PostAudioTrigger(mpStateInterface, KI_AUDIO_ACTION_MENU_CUE, "GO_BACK");
                 UnloadPauseResources();
                 HideMenusAndReturnToHUD();
                 break;
@@ -326,7 +318,7 @@ namespace BrnGui
                 break;
 
             case KI_ACTION_BACK:
-                PostAudioTrigger(mpStateInterface, KI_AUDIO_ACTION_MENU_CUE, KAC_SOUND_GO_BACK);
+                PostAudioTrigger(mpStateInterface, KI_AUDIO_ACTION_MENU_CUE, "GO_BACK");
                 if (mbShownFromPause)
                 {
                     CrashNavMap::OnLeave();

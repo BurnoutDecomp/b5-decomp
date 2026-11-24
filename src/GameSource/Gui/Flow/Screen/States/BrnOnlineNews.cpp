@@ -95,8 +95,6 @@ namespace BrnGui
         // The telemetry record OnEnter posts for a visit to the news page.
         const s32 KI_TELEMETRY_TYPE_NEWS = 42;
 
-        const char KAC_GO_BACK_EVENT[]      = "GO_BACK";
-        const char KAC_GO_BACK_EASY_EVENT[] = "GO_BACK_EASY";
 
         // ---- in-queue payload views (the queue hands out the header-stripped payload) ----
         struct ControllerButtonPayload : public CgsModule::Event
@@ -238,11 +236,11 @@ namespace BrnGui
                     mpStateInterface->OutputGuiEvent(lNetworkSuspension);
 
                     mpGuiCache->SetOnlineStartPending(false);
-                    SendStateEvent(KAC_GO_BACK_EASY_EVENT);
+                    SendStateEvent("GO_BACK_EASY");
                 }
                 else
                 {
-                    SendStateEvent(KAC_GO_BACK_EVENT);
+                    SendStateEvent("GO_BACK");
                 }
                 break;
 
@@ -342,11 +340,11 @@ namespace BrnGui
             mpStateInterface->OutputGuiEvent(lNetworkSuspension);
 
             mpGuiCache->SetOnlineStartPending(false);
-            SendStateEvent(KAC_GO_BACK_EASY_EVENT);
+            SendStateEvent("GO_BACK_EASY");
             return;
         }
 
-        SendStateEvent(KAC_GO_BACK_EVENT);
+        SendStateEvent("GO_BACK");
     }
 
     // ================================================================================

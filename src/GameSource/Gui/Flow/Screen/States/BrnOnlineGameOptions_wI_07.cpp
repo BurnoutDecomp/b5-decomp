@@ -19,10 +19,10 @@ namespace BrnGui
         // enumerator). Their roles are fixed by StoreGameMode @0x82490C68, which maps
         // highlighted row 2 -> mode 11 and row 6 -> mode 13; HighlightCreateGameOptions is
         // that map read backwards. FLAG: role-derived names, not DWARF names.
-        const CreateMatchOption::EOption KE_OPTION_GAME_MODE_ROAD_RAGE =
-            static_cast<CreateMatchOption::EOption>(2);
-        const CreateMatchOption::EOption KE_OPTION_GAME_MODE_BURNING_HOME_RUN =
-            static_cast<CreateMatchOption::EOption>(6);
+        const CreateMatchOptions::EOption KE_OPTION_GAME_MODE_ROAD_RAGE =
+            static_cast<CreateMatchOptions::EOption>(2);
+        const CreateMatchOptions::EOption KE_OPTION_GAME_MODE_BURNING_HOME_RUN =
+            static_cast<CreateMatchOptions::EOption>(6);
     }
 
     // @0x82492BD8 -- fold the create-match toggle rows back into mGameOptions.
@@ -34,7 +34,7 @@ namespace BrnGui
     {
         StoreGameMode();
 
-        const CreateMatchOption::EOption* lpeGameModeOptions =
+        const CreateMatchOptions::EOption* lpeGameModeOptions =
             KAP_GAME_MODE_OPTION_DATA[GetSelectedGameMode()];
         CGS_ASSERT(lpeGameModeOptions != 0, "lpeGameModeOptions");            // cpp:1684
 
@@ -42,56 +42,56 @@ namespace BrnGui
         // set when the player picked ranked or unranked play.
         mGameOptions.mbRanked = mpGuiCache->mbOnlineMatchRanked;
 
-        while (*lpeGameModeOptions != CreateMatchOption::E_OPTION_TERMINATOR)
+        while (*lpeGameModeOptions != CreateMatchOptions::E_OPTION_TERMINATOR)
         {
-            const CreateMatchOption::EOption leOption = *lpeGameModeOptions;
+            const CreateMatchOptions::EOption leOption = *lpeGameModeOptions;
 
             // The console sign-extends the id word into the 64-bit id argument (`extsw`).
             if (mCreateGameToggles.GetIndexFromId(static_cast<u64>(leOption)) != -1)
             {
-                const CreateMatchOption::EOption leHighlighted = GetHighlightedOption(leOption);
+                const CreateMatchOptions::EOption leHighlighted = GetHighlightedOption(leOption);
 
                 switch (leOption)
                 {
-                    case CreateMatchOption::E_OPTION_VEHICLE_CHOICE:            // 8
+                    case CreateMatchOptions::E_OPTION_VEHICLE_CHOICE:            // 8
                         mGameOptions.meVehicleChoice = GetOptionIndex(leHighlighted);
                         break;
 
-                    case CreateMatchOption::E_OPTION_VEHICLE_CLASS:             // 11
+                    case CreateMatchOptions::E_OPTION_VEHICLE_CLASS:             // 11
                         mGameOptions.miVehicleClass = GetOptionIndex(leHighlighted);
                         break;
 
                     // One shared arm for both rounds lists -- see the banner: the even
                     // list stores its sequence index + 1, not the round count.
-                    case CreateMatchOption::E_OPTION_ROUNDS:                    // 22
-                    case CreateMatchOption::E_OPTION_ROUNDS_EVEN:               // 23
+                    case CreateMatchOptions::E_OPTION_ROUNDS:                    // 22
+                    case CreateMatchOptions::E_OPTION_ROUNDS_EVEN:               // 23
                         mGameOptions.miNumRounds = GetOptionIndex(leHighlighted) + 1;
                         break;
 
-                    case CreateMatchOption::E_OPTION_INFINITE_BOOST:            // 34
+                    case CreateMatchOptions::E_OPTION_INFINITE_BOOST:            // 34
                         mGameOptions.mbInfiniteBoost =
-                            (leHighlighted == CreateMatchOption::E_OPTION_INFINITE_BOOST_ON);
+                            (leHighlighted == CreateMatchOptions::E_OPTION_INFINITE_BOOST_ON);
                         break;
 
-                    case CreateMatchOption::E_OPTION_TRAFFIC:                   // 37
+                    case CreateMatchOptions::E_OPTION_TRAFFIC:                   // 37
                         mGameOptions.mbTrafficOn =
-                            (leHighlighted == CreateMatchOption::E_OPTION_TRAFFIC_ON);
+                            (leHighlighted == CreateMatchOptions::E_OPTION_TRAFFIC_ON);
                         break;
 
-                    case CreateMatchOption::E_OPTION_TRAFFIC_CHECKING:          // 40
+                    case CreateMatchOptions::E_OPTION_TRAFFIC_CHECKING:          // 40
                         mGameOptions.mbTrafficCheckingOn =
-                            (leHighlighted == CreateMatchOption::E_OPTION_TRAFFIC_CHECKING_ON);
+                            (leHighlighted == CreateMatchOptions::E_OPTION_TRAFFIC_CHECKING_ON);
                         break;
 
-                    case CreateMatchOption::E_OPTION_BOOST_TYPE:                // 43
+                    case CreateMatchOptions::E_OPTION_BOOST_TYPE:                // 43
                         mGameOptions.meBoostType = GetOptionIndex(leHighlighted);
                         break;
 
-                    case CreateMatchOption::E_OPTION_RUNNER_CRASH_LIMIT:        // 49
+                    case CreateMatchOptions::E_OPTION_RUNNER_CRASH_LIMIT:        // 49
                         mGameOptions.miNumRunnerCrashes = GetOptionIndex(leHighlighted) + 1;
                         break;
 
-                    case CreateMatchOption::E_OPTION_TIME_LIMIT:                // 56
+                    case CreateMatchOptions::E_OPTION_TIME_LIMIT:                // 56
                         mGameOptions.miTimeLimit = GetOptionIndex(leHighlighted);
                         break;
 
@@ -112,9 +112,9 @@ namespace BrnGui
     void OnlineGameOptions::HighlightCreateGameOptions()
     {
         const s32 liGameModeRow = mCreateGameToggles.GetIndexFromId(
-            static_cast<u64>(CreateMatchOption::E_OPTION_GAME_MODE));
+            static_cast<u64>(CreateMatchOptions::E_OPTION_GAME_MODE));
 
-        const CreateMatchOption::EOption* lpeGameModeOptions;
+        const CreateMatchOptions::EOption* lpeGameModeOptions;
 
         // Mode values are GsmIO::EGameModeType; left as literals with the enumerator name
         // in comment, matching the sibling wave-I partfiles (the recovered enum spells 17
@@ -127,7 +127,7 @@ namespace BrnGui
                 {
                     mCreateGameToggles.HighlightItem(
                         liGameModeRow,
-                        GetOptionIndex(CreateMatchOption::E_OPTION_GAME_MODE_RACE));
+                        GetOptionIndex(CreateMatchOptions::E_OPTION_GAME_MODE_RACE));
                 }
                 SetupGameModeOptions();
                 lpeGameModeOptions = KAE_RACE_MODE_OPTIONS;
@@ -148,7 +148,7 @@ namespace BrnGui
                 {
                     mCreateGameToggles.HighlightItem(
                         liGameModeRow,
-                        GetOptionIndex(CreateMatchOption::E_OPTION_GAME_MODE_STUNT));
+                        GetOptionIndex(CreateMatchOptions::E_OPTION_GAME_MODE_STUNT));
                 }
                 SetupGameModeOptions();
                 lpeGameModeOptions = KAE_DEFAULT_MODE_OPTIONS;
@@ -169,7 +169,7 @@ namespace BrnGui
                 {
                     mCreateGameToggles.HighlightItem(
                         liGameModeRow,
-                        GetOptionIndex(CreateMatchOption::E_OPTION_GAME_MODE_STUNT_FREE_FOR_ALL));
+                        GetOptionIndex(CreateMatchOptions::E_OPTION_GAME_MODE_STUNT_FREE_FOR_ALL));
                 }
                 SetupGameModeOptions();
                 lpeGameModeOptions = KAE_DEFAULT_MODE_OPTIONS;
@@ -180,7 +180,7 @@ namespace BrnGui
                 {
                     mCreateGameToggles.HighlightItem(
                         liGameModeRow,
-                        GetOptionIndex(CreateMatchOption::E_OPTION_GAME_MODE_RACE));
+                        GetOptionIndex(CreateMatchOptions::E_OPTION_GAME_MODE_RACE));
                 }
                 SetupGameModeOptions();
                 lpeGameModeOptions = KAE_RACE_MODE_OPTIONS;
@@ -191,7 +191,7 @@ namespace BrnGui
                 {
                     mCreateGameToggles.HighlightItem(
                         liGameModeRow,
-                        GetOptionIndex(CreateMatchOption::E_OPTION_GAME_MODE_STUNT_COOP));
+                        GetOptionIndex(CreateMatchOptions::E_OPTION_GAME_MODE_STUNT_COOP));
                 }
                 SetupGameModeOptions();
                 lpeGameModeOptions = KAE_DEFAULT_MODE_OPTIONS;
@@ -209,63 +209,63 @@ namespace BrnGui
         // Post-tested walk: the first entry is always processed (see the banner).
         do
         {
-            const CreateMatchOption::EOption leOption = *lpeGameModeOptions;
+            const CreateMatchOptions::EOption leOption = *lpeGameModeOptions;
             const s32 liRow = mCreateGameToggles.GetIndexFromId(static_cast<u64>(leOption));
 
             if (liRow != -1)
             {
                 switch (leOption)
                 {
-                    case CreateMatchOption::E_OPTION_VEHICLE_CHOICE:            // 8
+                    case CreateMatchOptions::E_OPTION_VEHICLE_CHOICE:            // 8
                         mCreateGameToggles.HighlightItem(liRow, mGameOptions.meVehicleChoice);
                         break;
 
-                    case CreateMatchOption::E_OPTION_VEHICLE_CLASS:             // 11
+                    case CreateMatchOptions::E_OPTION_VEHICLE_CLASS:             // 11
                         mCreateGameToggles.HighlightItem(liRow, mGameOptions.miVehicleClass);
                         break;
 
-                    case CreateMatchOption::E_OPTION_ROUNDS:                    // 22
+                    case CreateMatchOptions::E_OPTION_ROUNDS:                    // 22
                         mCreateGameToggles.HighlightItem(liRow, mGameOptions.miNumRounds - 1);
                         break;
 
-                    case CreateMatchOption::E_OPTION_ROUNDS_EVEN:               // 23
+                    case CreateMatchOptions::E_OPTION_ROUNDS_EVEN:               // 23
                         mCreateGameToggles.HighlightItem(liRow, mGameOptions.miNumRounds / 2 - 1);
                         break;
 
-                    case CreateMatchOption::E_OPTION_INFINITE_BOOST:            // 34
+                    case CreateMatchOptions::E_OPTION_INFINITE_BOOST:            // 34
                         mCreateGameToggles.HighlightItem(
                             liRow,
                             GetOptionIndex(mGameOptions.mbInfiniteBoost
-                                               ? CreateMatchOption::E_OPTION_INFINITE_BOOST_ON
-                                               : CreateMatchOption::E_OPTION_INFINITE_BOOST_OFF));
+                                               ? CreateMatchOptions::E_OPTION_INFINITE_BOOST_ON
+                                               : CreateMatchOptions::E_OPTION_INFINITE_BOOST_OFF));
                         break;
 
-                    case CreateMatchOption::E_OPTION_TRAFFIC:                   // 37
+                    case CreateMatchOptions::E_OPTION_TRAFFIC:                   // 37
                         mCreateGameToggles.HighlightItem(
                             liRow,
                             GetOptionIndex(mGameOptions.mbTrafficOn
-                                               ? CreateMatchOption::E_OPTION_TRAFFIC_ON
-                                               : CreateMatchOption::E_OPTION_TRAFFIC_OFF));
+                                               ? CreateMatchOptions::E_OPTION_TRAFFIC_ON
+                                               : CreateMatchOptions::E_OPTION_TRAFFIC_OFF));
                         break;
 
-                    case CreateMatchOption::E_OPTION_TRAFFIC_CHECKING:          // 40
+                    case CreateMatchOptions::E_OPTION_TRAFFIC_CHECKING:          // 40
                         mCreateGameToggles.HighlightItem(
                             liRow,
                             GetOptionIndex(mGameOptions.mbTrafficCheckingOn
-                                               ? CreateMatchOption::E_OPTION_TRAFFIC_CHECKING_ON
-                                               : CreateMatchOption::E_OPTION_TRAFFIC_CHECKING_OFF));
+                                               ? CreateMatchOptions::E_OPTION_TRAFFIC_CHECKING_ON
+                                               : CreateMatchOptions::E_OPTION_TRAFFIC_CHECKING_OFF));
                         break;
 
-                    case CreateMatchOption::E_OPTION_BOOST_TYPE:                // 43
+                    case CreateMatchOptions::E_OPTION_BOOST_TYPE:                // 43
                         mCreateGameToggles.HighlightItem(liRow, mGameOptions.meBoostType);
                         break;
 
-                    case CreateMatchOption::E_OPTION_RUNNER_CRASH_LIMIT:        // 49
+                    case CreateMatchOptions::E_OPTION_RUNNER_CRASH_LIMIT:        // 49
                         mCreateGameToggles.HighlightItem(liRow,
                                                          mGameOptions.miNumRunnerCrashes - 1);
                         break;
 
-                    case CreateMatchOption::E_OPTION_TIME_LIMIT:                // 56
+                    case CreateMatchOptions::E_OPTION_TIME_LIMIT:                // 56
                         mCreateGameToggles.HighlightItem(liRow, mGameOptions.miTimeLimit);
                         break;
 
@@ -277,6 +277,6 @@ namespace BrnGui
 
             ++lpeGameModeOptions;
         }
-        while (*lpeGameModeOptions != CreateMatchOption::E_OPTION_TERMINATOR);
+        while (*lpeGameModeOptions != CreateMatchOptions::E_OPTION_TERMINATOR);
     }
 }

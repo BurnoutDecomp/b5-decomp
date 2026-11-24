@@ -38,7 +38,6 @@ namespace BrnGui
         const s32 KI_CHANNEL_GUI_OUT = 40;
 
         // The pooled empty string @0x820046A7 the X360 passes for "no caption".
-        const char KAC_EMPTY[] = "";
 
         // The three car-type captions SetupStatsComponent builds its "%s" from (a local
         // const array in the source; the X360 stack-builds it at 0x824C148C..0x824C1494).
@@ -71,9 +70,9 @@ namespace BrnGui
 
         // Blank both help prompts (invisible glyphs) until UpdateComponents decides what
         // the continue prompt should say. Back first, exactly as the console does.
-        mHelpItemBack.SetItem(KAC_EMPTY, ButtonIconComponent::E_PADBUTTON_INVISIBLE,
+        mHelpItemBack.SetItem("", ButtonIconComponent::E_PADBUTTON_INVISIBLE,
                                           ButtonIconComponent::E_PADBUTTON_INVISIBLE);
-        mHelpItemContinue.SetItem(KAC_EMPTY, ButtonIconComponent::E_PADBUTTON_INVISIBLE,
+        mHelpItemContinue.SetItem("", ButtonIconComponent::E_PADBUTTON_INVISIBLE,
                                               ButtonIconComponent::E_PADBUTTON_INVISIBLE);
 
         SetupMenuComponents();
@@ -443,7 +442,7 @@ namespace BrnGui
         // The continue prompt disappears while a car change is still resolving.
         if (IsLoading())
         {
-            mHelpItemContinue.SetItem(KAC_EMPTY, ButtonIconComponent::E_PADBUTTON_INVISIBLE,
+            mHelpItemContinue.SetItem("", ButtonIconComponent::E_PADBUTTON_INVISIBLE,
                                                   ButtonIconComponent::E_PADBUTTON_INVISIBLE);
         }
         else

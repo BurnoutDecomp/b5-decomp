@@ -161,7 +161,6 @@ namespace BrnGui
         const char* const KPC_EMPTY_STRING   = "";
         const s32         KI_APT_MOVIE_LEVEL = 3;
 
-        const char KAC_ADVANCE_EVENT[] = "ADVANCE";
 
         // ShowConnectingMessage parks mfTimeInState below zero: the frame tick only
         // accumulates a non-negative time, so the message is shown once.
@@ -173,7 +172,6 @@ namespace BrnGui
 
         // The apt view every transition here is posted on, and the view-state indices
         // into KAPC_ANIMATION_STATES.
-        const char KAC_APT_TRANSITION_NAME[]            = "apt_Transition";
         const s32  KI_ANIMATION_STATE_VISIBLE           = 0;
         const s32  KI_ANIMATION_STATE_INVISIBLE         = 1;
         const s32  KI_ANIMATION_STATE_VISIBLE_NO_BACK   = 3;
@@ -346,7 +344,7 @@ namespace BrnGui
                     }
                     else
                     {
-                        SendStateEvent(KAC_ADVANCE_EVENT);
+                        SendStateEvent("ADVANCE");
                     }
                 }
                 break;
@@ -425,13 +423,13 @@ namespace BrnGui
     {
         const char* lpcInvisible = KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE];
 
-        mTOSDisplayAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
+        mTOSDisplayAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
         mTOSText.SetText(KPC_EMPTY_STRING);
-        mMessageButtonsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
-        mShareInfoTogglesAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
-        mMessageAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
-        mButtonPromptAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
-        mSignInBackgroundAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
+        mMessageButtonsAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
+        mShareInfoTogglesAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
+        mMessageAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
+        mButtonPromptAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
+        mSignInBackgroundAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
     }
 
     // The chat-restriction notice: the message panel with a single OK button, and a button
@@ -446,13 +444,13 @@ namespace BrnGui
         const char* lpcInvisible = KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE];
         const char* lpcVisible   = KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE];
 
-        mTOSDisplayAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
+        mTOSDisplayAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
         mTOSText.SetText(KPC_EMPTY_STRING);
-        mShareInfoTogglesAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
-        mSignInBackgroundAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
-        mMessageAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcVisible, false);
-        mMessageButtonsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcVisible, false);
-        mButtonPromptAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mShareInfoTogglesAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
+        mSignInBackgroundAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
+        mMessageAnimation.AddOutputAptViewState("apt_Transition", lpcVisible, false);
+        mMessageButtonsAnimation.AddOutputAptViewState("apt_Transition", lpcVisible, false);
+        mButtonPromptAnimation.AddOutputAptViewState("apt_Transition",
                                                      KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE_NO_BACK],
                                                      false);
     }
@@ -463,13 +461,13 @@ namespace BrnGui
     {
         const char* lpcInvisible = KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE];
 
-        mTOSDisplayAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
+        mTOSDisplayAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
         mTOSText.SetText(KPC_EMPTY_STRING);
-        mMessageButtonsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
-        mShareInfoTogglesAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
-        mButtonPromptAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
-        mSignInBackgroundAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
-        mMessageAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, lpcInvisible, false);
+        mMessageButtonsAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
+        mShareInfoTogglesAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
+        mButtonPromptAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
+        mSignInBackgroundAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
+        mMessageAnimation.AddOutputAptViewState("apt_Transition", lpcInvisible, false);
 
         GuiOverlayRequestWire lConnecting;
         lConnecting.mRequest.Construct(KAC_CONNECTING_STRING_ID);

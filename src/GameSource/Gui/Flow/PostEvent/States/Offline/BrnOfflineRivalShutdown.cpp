@@ -95,7 +95,6 @@ namespace
     const f32 KF_NEWTEXT_DISPLAY_TIME = 2.0f;   // flt_82065670 (Update case 6)
 
     // The apt clip every animation below is driven through.
-    const char KAC_APT_TRANSITION[] = "apt_Transition";
 
     // The movie Update plays: `lwz r4, (off_82F27C60 - off_82F278E0)(gGuiResourceIdentifier)`
     // == gGuiResourceIdentifier[224] == "BrnRivalShutdown", the same id as maResourcesToLoad[0].
@@ -273,7 +272,7 @@ void OfflineRivalShutdown::Update()
     case E_OFFLINERIVALSHUTDOWNSTATE_RUNNING:
         if (mpGuiCache->GetTime() > mfScreenStartTime + KF_SCREEN_DISPLAY_TIME)
         {
-            mScreenAnim.AddOutputAptViewState(KAC_APT_TRANSITION, "fadeOutText", false);
+            mScreenAnim.AddOutputAptViewState("apt_Transition", "fadeOutText", false);
             meOfflineRivalShutdownState = E_OFFLINERIVALSHUTDOWNSTATE_WAITING_FOR_FADEOUT_TEXT;
         }
         break;
@@ -286,7 +285,7 @@ void OfflineRivalShutdown::Update()
     case E_OFFLINERIVALSHUTDOWNSTATE_SET_NEW_TEXT:
         mCongratTextDesc.SetLocalisedText("POSTRACE_NEW_CAR_INSTRUCTIONS",
                                           CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
-        mScreenAnim.AddOutputAptViewState(KAC_APT_TRANSITION, "fadeInText", false);
+        mScreenAnim.AddOutputAptViewState("apt_Transition", "fadeInText", false);
         meOfflineRivalShutdownState = E_OFFLINERIVALSHUTDOWNSTATE_SHOWING_NEW_TEXT;
         mfNewTextStartTime = mpGuiCache->GetTime();
         break;
@@ -294,7 +293,7 @@ void OfflineRivalShutdown::Update()
     case E_OFFLINERIVALSHUTDOWNSTATE_SHOWING_NEW_TEXT:
         if (mpGuiCache->GetTime() > mfNewTextStartTime + KF_NEWTEXT_DISPLAY_TIME)
         {
-            mScreenAnim.AddOutputAptViewState(KAC_APT_TRANSITION, "transout", false);
+            mScreenAnim.AddOutputAptViewState("apt_Transition", "transout", false);
             meOfflineRivalShutdownState = E_OFFLINERIVALSHUTDOWNSTATE_WAITING_FOR_TRANSOUT;
         }
         break;
@@ -416,7 +415,7 @@ void OfflineRivalShutdown::SetupComponents()
     mCongratTextDesc.SetLocalisedText("RVLSHUTDOWN_NEW_CAR_DESC1",
                                       CgsLanguage::LanguageManager::E_FORMAT_ID_LOOKUP);
     mShutdownCarComponent.ShowCar();
-    mScreenAnim.AddOutputAptViewState(KAC_APT_TRANSITION, "transin", false);
+    mScreenAnim.AddOutputAptViewState("apt_Transition", "transin", false);
 
     CGS_ASSERT(mpGuiCache, "mpGuiCache");   // cpp:435
     const BrnResource::VehicleList* lpVehicleList =

@@ -103,11 +103,8 @@ namespace BrnGui
         const u32 KU_TELEMETRY_PARAM_LENGTH = 16;
 
         // The loading-icon state identifier the request ladder pushes (aLoading_0).
-        const char KAC_LOADING_ICON_STATE[] = "loading";
 
         // The two state-machine events the disconnect path raises on the owning flow.
-        const char KAC_STATE_EVENT_GO_BACK[]      = "GO_BACK";
-        const char KAC_STATE_EVENT_GO_BACK_EASY[] = "GO_BACK_EASY";
 
         // ---- out-queue wire records -----------------------------------------------------
         // The bare one-byte-payload command record { 1, N, 12, <payload byte> }, X360 record
@@ -195,7 +192,7 @@ namespace BrnGui
                 if (mbCurrentlyLoading != true)
                 {
                     mbCurrentlyLoading = true;
-                    mLoadingIcon.SetState(KAC_LOADING_ICON_STATE);
+                    mLoadingIcon.SetState("loading");
                 }
                 ShowTableEmpty(false);
             }
@@ -217,7 +214,7 @@ namespace BrnGui
                 if (mbCurrentlyLoading != true)
                 {
                     mbCurrentlyLoading = true;
-                    mLoadingIcon.SetState(KAC_LOADING_ICON_STATE);
+                    mLoadingIcon.SetState("loading");
                 }
                 ShowTableEmpty(false);
             }
@@ -237,7 +234,7 @@ namespace BrnGui
                 if (mbCurrentlyLoading != true)
                 {
                     mbCurrentlyLoading = true;
-                    mLoadingIcon.SetState(KAC_LOADING_ICON_STATE);
+                    mLoadingIcon.SetState("loading");
                 }
                 ShowTableEmpty(false);
             }
@@ -354,11 +351,11 @@ namespace BrnGui
                         mpStateInterface->OutputGuiEvent(lResumeNetwork);   // X360 record size 16
 
                         mpGuiCache->SetOnlineStartPending(false);
-                        SendStateEvent(KAC_STATE_EVENT_GO_BACK_EASY);
+                        SendStateEvent("GO_BACK_EASY");
                     }
                     else
                     {
-                        SendStateEvent(KAC_STATE_EVENT_GO_BACK);
+                        SendStateEvent("GO_BACK");
                     }
                     break;
 
@@ -383,7 +380,7 @@ namespace BrnGui
                     if (mbCurrentlyLoading != true)
                     {
                         mbCurrentlyLoading = true;
-                        mLoadingIcon.SetState(KAC_LOADING_ICON_STATE);
+                        mLoadingIcon.SetState("loading");
                     }
                     // The X360 inlines ShowTableEmpty's body here; the method is its home.
                     ShowTableEmpty(false);

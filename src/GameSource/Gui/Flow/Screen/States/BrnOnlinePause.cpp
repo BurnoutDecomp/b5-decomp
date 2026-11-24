@@ -89,9 +89,6 @@ namespace BrnGui
         const u64 KU_NO_APT_ID = 0xFFFFFFFFull;
 
         // Overlay ids.
-        const char KAC_LEAVE_GAME_QUESTION_OVERLAY[] = "GMOnlLvGmQn";
-        const char KAC_LOST_CONNECTION_OVERLAY[]     = "OnLostConn";
-        const char KAC_LEAVING_GAME_OVERLAY[]        = "CNOnlLvgGame";
 
         // ---- in-queue payload views (the queue hands out the header-stripped payload) ----
         struct GuiEventCache : public CgsModule::Event
@@ -219,7 +216,7 @@ namespace BrnGui
                 }
 
                 case KI_EVENT_NETWORK_DISCONNECTED:
-                    PostOverlayRequest(mpStateInterface, KAC_LOST_CONNECTION_OVERLAY);
+                    PostOverlayRequest(mpStateInterface, "OnLostConn");
                     break;
 
                 case KI_EVENT_CONTROLLER_INPUT:
@@ -231,7 +228,7 @@ namespace BrnGui
                     break;
 
                 case KI_EVENT_LEAVE_GAME:
-                    PostOverlayRequest(mpStateInterface, KAC_LEAVING_GAME_OVERLAY);
+                    PostOverlayRequest(mpStateInterface, "CNOnlLvgGame");
                     SendStateEvent("ADVANCE");
                     break;
 
@@ -332,7 +329,7 @@ namespace BrnGui
                         break;
 
                     case KI_OPTION_QUIT:
-                        PostOverlayRequest(mpStateInterface, KAC_LEAVE_GAME_QUESTION_OVERLAY);
+                        PostOverlayRequest(mpStateInterface, "GMOnlLvGmQn");
                         break;
 
                     case KI_OPTION_FINISH_ROUND:
@@ -359,7 +356,7 @@ namespace BrnGui
         const GuiOverlayCompletePayload* lpPayload =
             reinterpret_cast<const GuiOverlayCompletePayload*>(lpOverlayCompleteEvent);
 
-        if (lpPayload->mOverlayId == CgsIDCompress(KAC_LEAVE_GAME_QUESTION_OVERLAY) &&
+        if (lpPayload->mOverlayId == CgsIDCompress("GMOnlLvGmQn") &&
             lpPayload->meLeaveMethod == GuiOverlayCompleteEvent::E_LEAVEMETHOD_OK)
         {
             PostByteEvent<KI_GUI_EVENT_LEAVE_GAME>(mpStateInterface, 0);

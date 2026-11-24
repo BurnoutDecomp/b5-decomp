@@ -73,20 +73,8 @@ void MenuItem::Update()
     {
         ClearFlag(E_FLAG_DIRTY);
 
-        // The inlined FindState() cascade (active -> selectable -> highlighted).
-        MenuItemStates leState;
-        if (IsActive())
-        {
-            if (IsSelectable())
-                leState = IsHighlighted() ? E_MENUITEMSTATES_HIGHLIGHTED
-                                          : E_MENUITEMSTATES_UNHIGHLIGHTED;
-            else
-                leState = E_MENUITEMSTATES_DISABLED;
-        }
-        else
-        {
-            leState = E_MENUITEMSTATES_INVISIBLE;
-        }
+        // DWARF local (BrnMenuItem.cpp:144); FindState is inlined here in ARTIST 0x824E6490.
+        MenuItemStates leState = FindState();
 
         AddOutputAptViewState("apt_labeltxt", macItemText, false);
         AddOutputAptViewState("apt_state", KAC_STATE_NAMES[leState], false);
@@ -100,6 +88,29 @@ void MenuItem::Update()
         AddOutputAptViewState("apt_updatestate", "0", false);
         mbUpdateText = false;
     }
+}
+
+// DWARF BrnMenuItem.cpp:~170 (local leState cpp:172): the item's apt state from its flags.
+MenuItem::MenuItemStates MenuItem::FindState() const
+{
+    MenuItemStates leState;
+    if (!IsActive())
+    {
+        leState = E_MENUITEMSTATES_INVISIBLE;
+    }
+    else if (!IsSelectable())
+    {
+        leState = E_MENUITEMSTATES_DISABLED;
+    }
+    else if (IsHighlighted())
+    {
+        leState = E_MENUITEMSTATES_HIGHLIGHTED;
+    }
+    else
+    {
+        leState = E_MENUITEMSTATES_UNHIGHLIGHTED;
+    }
+    return leState;
 }
 
 }

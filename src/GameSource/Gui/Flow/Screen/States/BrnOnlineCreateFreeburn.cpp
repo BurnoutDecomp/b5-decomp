@@ -65,16 +65,11 @@ namespace BrnGui
         const s32 KI_EVENT_IN_GAME_FAILED        = 51;
         const s32 KI_EVENT_GUI_CACHE             = 64;
 
-        const char KAC_CREATE_MOVIE[]        = "ON_CREA";   // the pooled movie-name literal
         const s32  KI_APT_MOVIE_LEVEL        = 3;
         const char* const KPC_EMPTY_STRING   = "";
 
         // The "entering game" overlay the create request runs behind.
-        const char KAC_ENTER_GAME_OVERLAY_ID[] = "CNOnlEntGame";
 
-        const char KAC_ADVANCE_EVENT[]    = "ADVANCE";
-        const char KAC_DISCONNECT_EVENT[] = "DISCONNECT";
-        const char KAC_GO_BACK_EVENT[]    = "GO_BACK";
 
         // The create request's security word: the first option, open to all comers
         // (the network's E_GAMESECURITY_ALLCOMERS).
@@ -206,7 +201,7 @@ namespace BrnGui
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
                 // A null event still latches (0).
                 mpGuiCache->SetDoDisconnectPopup(lpEvent);
-                SendStateEvent(KAC_DISCONNECT_EVENT);
+                SendStateEvent("DISCONNECT");
                 break;
 
             case KI_EVENT_IN_GAME:
@@ -245,7 +240,7 @@ namespace BrnGui
             if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad,
                                                      static_cast<u32>(miNumResourcesToLoad)))
             {
-                mpStateInterface->PlayAptMovie(KAC_CREATE_MOVIE, KI_APT_MOVIE_LEVEL);
+                mpStateInterface->PlayAptMovie("ON_CREA", KI_APT_MOVIE_LEVEL);
                 meSubState = E_SUBSTATE_LOADING_COMPONENTS;
             }
         }
@@ -267,7 +262,7 @@ namespace BrnGui
                 mpStateInterface->OutputGuiEvent(lCreateGame);
 
                 GuiOverlayRequestWire lEnterGameOverlay;
-                lEnterGameOverlay.mRequest.Construct(KAC_ENTER_GAME_OVERLAY_ID);
+                lEnterGameOverlay.mRequest.Construct("CNOnlEntGame");
                 mpStateInterface->OutputGuiEvent(lEnterGameOverlay.mRequest);
 
                 meSubState = E_SUBSTATE_WAIT_IN_GAME;
@@ -321,7 +316,7 @@ namespace BrnGui
 
         if (!CheckPrivileges())
         {
-            SendStateEvent(KAC_GO_BACK_EVENT);
+            SendStateEvent("GO_BACK");
         }
     }
 
@@ -334,10 +329,10 @@ namespace BrnGui
         CGS_ASSERT(lpInGameEvent != 0, "Invalid event sent to OnlineCreateFreeburn::HandleInGameEvent");
         CGS_ASSERT(lpInGameEvent != 0, "lpInGameEvent");
 
-        GuiOverlayWaitFinishWire lWaitEnterGame(KAC_ENTER_GAME_OVERLAY_ID);
+        GuiOverlayWaitFinishWire lWaitEnterGame("CNOnlEntGame");
         mpStateInterface->OutputGuiEvent(lWaitEnterGame.mRequest);
 
-        SendStateEvent(KAC_ADVANCE_EVENT);
+        SendStateEvent("ADVANCE");
     }
 
     // ================================================================================
@@ -348,7 +343,7 @@ namespace BrnGui
         // The console's text names HandleInGameEvent (the same pooled string).
         CGS_ASSERT(lpEvent != 0, CgsDev::Assert::StreamMessageAt("Invalid event sent to OnlineCreateFreeburn::HandleInGameEvent", "..\\..\\..\\GameSource\\Gui/Flow/Screen/States/BrnOnlineCreateFreeburn.cpp", 361));
 
-        SendStateEvent(KAC_GO_BACK_EVENT);
+        SendStateEvent("GO_BACK");
     }
 
     // ================================================================================

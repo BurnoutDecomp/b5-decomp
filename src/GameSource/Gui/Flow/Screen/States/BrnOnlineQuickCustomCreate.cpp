@@ -82,15 +82,9 @@ namespace BrnGui
 
         const u64 KU64_NO_APT_ID = 0xFFFFFFFFull;   // the menu's "no apt id" (32-bit -1, zero-extended)
 
-        const char KAC_APT_TRANSITION_NAME[] = "apt_Transition";
-        const char KAC_INVISIBLE_STATE[]     = "Invisible";
 
-        const char KAC_GO_BACK_EVENT[] = "GO_BACK";
 
         // The ticker line, by the kind of online game being joined; ticker string type 2.
-        const char KAC_RANKED_TICKER_TEXT[]   = "ONLINE_RANKED_TICKER_TEXT";
-        const char KAC_FREEBURN_TICKER_TEXT[] = "ONLINE_FREEBURN_TICKER_TEXT";
-        const char KAC_UNRANKED_TICKER_TEXT[] = "ONLINE_UNRANKED_TICKER_TEXT";
         const s32  KI_TICKER_STRING_TYPE      = 2;
 
         // The guide: system notification areas, the sign-in states, the "UI closed" notice
@@ -295,14 +289,14 @@ namespace BrnGui
                 GuiEventTickerCustomMessage lTicker;
                 lTicker.Construct(true, false, true, false);
 
-                const char* lpacTickerText = KAC_UNRANKED_TICKER_TEXT;
+                const char* lpacTickerText = "ONLINE_UNRANKED_TICKER_TEXT";
                 if (mpGuiCache->GetDoJoinOnlineRankedGame())
                 {
-                    lpacTickerText = KAC_RANKED_TICKER_TEXT;
+                    lpacTickerText = "ONLINE_RANKED_TICKER_TEXT";
                 }
                 else if (mpGuiCache->GetDoJoinOnlineFreeburnGame())
                 {
-                    lpacTickerText = KAC_FREEBURN_TICKER_TEXT;
+                    lpacTickerText = "ONLINE_FREEBURN_TICKER_TEXT";
                 }
                 lTicker.AddString(lpacTickerText, KI_TICKER_STRING_TYPE);
 
@@ -353,7 +347,7 @@ namespace BrnGui
             mMainMenuComponent.SetText(liRow, KAPC_MAIN_MENU_TEXT[liRow]);
         }
 
-        mNewNewsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME, KAC_INVISIBLE_STATE, false);
+        mNewNewsAnimation.AddOutputAptViewState("apt_Transition", "Invisible", false);
         return true;
     }
 
@@ -394,7 +388,7 @@ namespace BrnGui
             {
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
                 mpGuiCache->SetDoDisconnectPopup(lpEvent);
-                SendStateEvent(KAC_GO_BACK_EVENT);
+                SendStateEvent("GO_BACK");
             }
             else if (liEventId == KI_EVENT_COLLISION_WORLD)
             {
@@ -431,7 +425,7 @@ namespace BrnGui
             break;
 
         case E_GAMEINPUTACTIONS_GUI_CANCEL:
-            SendStateEvent(KAC_GO_BACK_EVENT);
+            SendStateEvent("GO_BACK");
             break;
 
         case E_GAMEINPUTACTIONS_GUI_OPTION1:

@@ -69,7 +69,6 @@ namespace BrnGui
         const u32 KU_DEFAULT_TEXTURE_RESOURCE_ID = 236u;
 
         // The Flapt special-texture name the GUI mesh samples for this component.
-        const char KAC_SPECIAL_TEXTURE_NAME[] = "CustomComponentTexture.tif";
 
         // The renderer's component CgsID (GetID @0x82445CA8 returns this 64-bit constant).
         const CgsID KID_NETWORK_PLAYER_IMAGE = 0xA6864CCE2CE23B68ULL;
@@ -215,7 +214,7 @@ namespace BrnGui
                 // The render-output slot returns the component's Flapt movie; bind the live
                 // frame into its special-texture slot (X360 passes r3 straight to SetSpecialTexture).
                 BrnFlapt::FlaptFile::SetSpecialTexture(lpOutput,
-                                                       KAC_SPECIAL_TEXTURE_NAME);
+                                                       "CustomComponentTexture.tif");
             }
             miClearTexturesFrameCount = KI_CLEAR_TEXTURES_NOT_SET;     // -1
             mePrepareStage = E_PREPARESTAGE_LOAD_DEFAULT_TEXTURE;
@@ -444,7 +443,7 @@ namespace BrnGui
         s32 liShaderProgram = 0;
         renderengine::Texture* lpOutput = GetRenderOutput(0, &liShaderProgram, 0);
         BrnFlapt::FlaptFile::SetSpecialTexture(lpOutput,
-                                               KAC_SPECIAL_TEXTURE_NAME);
+                                               "CustomComponentTexture.tif");
 
         CGS_ASSERT(mpFlaptRenderer, "mpFlaptRenderer");
         mpFlaptRenderer->SetSpecialTextureShaderProgram(liShaderProgram);

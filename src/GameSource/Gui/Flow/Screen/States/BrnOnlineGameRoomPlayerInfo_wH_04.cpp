@@ -68,7 +68,6 @@ namespace BrnGui
         const s32 KI_CHANNEL_GUI_OUT = 40;   // GuiEventOut
 
         // The apt view-name every AddOutputAptViewState call on this screen targets.
-        const char KAC_APT_TRANSITION[] = "apt_Transition";
 
         // ---- out-queue wire record (HighlightNewPlayer) --------------------------------
         // The X360 stack-builds { 4, 247, 12, <lobby mPlayerID> } and AddEvent()s it with
@@ -363,7 +362,7 @@ namespace BrnGui
         GetPlayerOptions(lau64OptionIds, &liNumOptions);
 
         mPlayersButtonPromptsAnimation.AddOutputAptViewState(
-            KAC_APT_TRANSITION,
+            "apt_Transition",
             liNumOptions != 0 ? KAPC_PLAYERS_BUTTON_PROMPT_ANIMATION_STATES[0]    // "visible"
                               : KAPC_PLAYERS_BUTTON_PROMPT_ANIMATION_STATES[1],   // "invisible"
             false);

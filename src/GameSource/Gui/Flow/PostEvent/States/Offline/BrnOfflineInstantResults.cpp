@@ -205,12 +205,10 @@ namespace BrnGui
 
         // The apt clip HandleAptTriggers drives the licence-upgrade animation on (the X360's
         // aAptTransition_1, shared with HandleControllerInput's "takePhotoOut" post).
-        const char KAC_APT_TRANSITION[]                     = "apt_Transition";
         // The credits music stream WillShowCredits starts. ⭐ The X360 does NOT hold this as
         // an inline literal: it loads a `const char*` GLOBAL (`lwz r3, GunsAndRoses@l(r11)`)
         // whose value is the string at 0x820A9ADC, read out of the image here. It sits in the
         // shared sound-name pool, not this file's string block, which is why it is a pointer.
-        const char KAC_CREDITS_MUSIC_STREAM[]               = "Guns_And_Roses";
 
         // ---- durations (.rdata floats read at the addresses OnEnter/ResetStateTimer load
         //      them from; DWARF names from BrnOfflineInstantResults.cpp:41..57) -------------
@@ -241,7 +239,6 @@ namespace BrnGui
         // The FSM this screen hands the HUD flow back to. Spelled exactly as the image's
         // literal at the CgsIDCompress call site; BrnGameModule::BridgeGameToGui's stage-5
         // twin spells it "BrnFBFsm", and CgsIDCompress is case-folding, so the two agree.
-        const char KAC_FREEBURN_FSM_ID[]            = "BRNFBFSM";
 
         // ---- the two apt movies this screen swaps between --------------------------------
         // 217 is the "Results" apt (it is also maResourcesToLoad[0], and OnEnter seeds
@@ -1606,7 +1603,7 @@ namespace BrnGui
             return false;
 
         CgsGui::GuiEventPlayMusicOnMenuStream lMusicEvent;
-        lMusicEvent.muStreamNameHash = static_cast<u32>(CgsSound::Playback::Name::MakeHash(KAC_CREDITS_MUSIC_STREAM));
+        lMusicEvent.muStreamNameHash = static_cast<u32>(CgsSound::Playback::Name::MakeHash("Guns_And_Roses"));
         lMusicEvent.mbFlagA = true;
         lMusicEvent.mbFlagB = false;
         mpStateInterface->OutputGuiEvent(lMusicEvent);
@@ -1713,7 +1710,7 @@ namespace BrnGui
 
                     if (mResults.mbCompletedLastRank)
                     {
-                        mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+                        mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition",
                                                                     "upgradeElite", false);
                         mUpgradeText.SetLocalisedText(
                             "COMPLETION_SEQUENCE_ELITE",
@@ -1721,7 +1718,7 @@ namespace BrnGui
                     }
                     else if (liBurnoutLicenseRank == mResults.miPlayerNewRank)
                     {
-                        mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+                        mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition",
                                                                     "upgradeBurnout", false);
                         mUpgradeText.SetLocalisedText(
                             "COMPLETION_SEQUENCE_BURNOUT",
@@ -1729,7 +1726,7 @@ namespace BrnGui
                     }
                     else
                     {
-                        mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION,
+                        mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition",
                                                                     "upgrade", false);
                         mUpgradeText.SetLocalisedText(
                             "LICENSE_UPGRADE_PENDING",
@@ -2027,7 +2024,7 @@ namespace BrnGui
         lRunFsm.miOutEventType   = lRunFsm.mOutEvent.GetEventType();           // 0x90 == 144
         lRunFsm.miOutEventOffset = 16;                                         // 0x10
         lRunFsm.miAlignmentPad   = 0;
-        lRunFsm.mOutEvent.mFsmId          = CgsIDCompress(KAC_FREEBURN_FSM_ID);
+        lRunFsm.mOutEvent.mFsmId          = CgsIDCompress("BRNFBFSM");
         lRunFsm.mOutEvent.mInitialStateId = static_cast<CgsID>(0);
         lRunFsm.mOutEvent.meFsmToRun      = E_GUI_HUD_FREEBURN;
         lRunFsm.mOutEvent.meFlowToUse     = E_GUIFLOW_HUD;
@@ -2413,7 +2410,7 @@ namespace BrnGui
                     CGS_ASSERT(liBurnoutLicenseRank > 0, "liBurnoutLicenseRank > 0");
                     const char* lpacTransition = mResults.mbCompletedLastRank ? "upgradeEliteOut"
                         : liBurnoutLicenseRank == mResults.miPlayerNewRank ? "upgradeBurnoutOut" : "upgradeOut";
-                    mUpgradeStateAnimator.AddOutputAptViewState(KAC_APT_TRANSITION, lpacTransition, false);
+                    mUpgradeStateAnimator.AddOutputAptViewState("apt_Transition", lpacTransition, false);
                 }
                 mLicense.Update();
             }

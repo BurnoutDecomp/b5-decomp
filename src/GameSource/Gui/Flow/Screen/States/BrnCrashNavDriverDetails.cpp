@@ -147,7 +147,6 @@ namespace
     const char KAC_ACHIEVEMENTS_PROMPT_NAME[] = "AchievementPrompt_cpt";  // DWARF cpp:68
 
     // The screen's own apt movie and the level it plays on (@0x82F27B20 / `li 3`).
-    const char KPC_DRIVER_DETAILS_MOVIE[] = "BrnCrashNavDriverDetails";
     const s32  KI_APT_MOVIE_LEVEL         = 3;
 
     // ⛔⛔ BANNER CORRECTION (2026-08-29) -- THESE WERE NOT ZERO, AND THE OLD NOTE SAID SO
@@ -603,7 +602,7 @@ bool CrashNavDriverDetails::UpdateLoadResources()
     // ⭐ THE SCREEN DRAWS FROM HERE: { 8, 18, 12, "BrnCrashNavDriverDetails", 3 } on the
     // view-state channel, i.e. the record StateInterface::PlayAptMovie builds, which the
     // X360 stack-builds inline at this site.
-    mpStateInterface->PlayAptMovie(KPC_DRIVER_DETAILS_MOVIE, KI_APT_MOVIE_LEVEL);
+    mpStateInterface->PlayAptMovie("BrnCrashNavDriverDetails", KI_APT_MOVIE_LEVEL);
     return true;
 }
 

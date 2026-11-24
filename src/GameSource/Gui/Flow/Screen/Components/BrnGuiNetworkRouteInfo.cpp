@@ -71,7 +71,6 @@ namespace BrnGui
         const f32 KF_MAP_BASE_ASPECT_RATIO = 1.7777778f;
 
         // The owner name the icon set is parented under.
-        const char KAC_ICON_PARENT_NAME[] = "RouteInfo";
 
         // The rounds text's formatter scratch.
         const s32 KI_FORMAT_BUFFER_COUNT  = 3;
@@ -549,7 +548,7 @@ namespace BrnGui
 
         mIconManagerOwnerId = mpIconManager->SetOwnerParameters(
             mpStateInterface, macSatNavIconBaseName, KAC_ONLINEROUTEMAP_NUMICONS, mIconManagerOwnerId,
-            false, false, false, GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT, KAC_ICON_PARENT_NAME);
+            false, false, false, GuiEventDrawEventIcons::E_ICON_DISPLAY_TYPE_COUNT, "RouteInfo");
 
         mpIconManager->mbRotateSatNav       = false;
         mpIconManager->meIconSizeMode       = MapIconManager::E_ICONSIZE_LARGE;

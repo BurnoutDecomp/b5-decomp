@@ -33,7 +33,6 @@ namespace BrnGui
         // The name OnLeave passes to clear the level-3 apt movie. FLAG: the X360 loads the
         // pooled rodata literal @0x820046A7, which the committed twins (BrnCarSelectMain,
         // BrnCarSelectUnlock, BrnBootLegal) all reconstruct as the empty string.
-        const char KAC_NO_APT_MOVIE[] = "";
 
         // ---- out-queue wire record -----------------------------------------------------
         // Id 148 == BrnGui::GuiEventShowHideHud (payload size 1). Its only home is
@@ -165,7 +164,7 @@ namespace BrnGui
         // The X360 inlines StateInterface::PlayAptMovie here: the GuiEventPlayAptMovie
         // record { 8, 18, 12, name, level } pushed on the view-state channel 41, size 20.
         // An empty name at level 3 is "clear level 3".
-        mpStateInterface->PlayAptMovie(KAC_NO_APT_MOVIE, KI_APT_MOVIE_LEVEL);
+        mpStateInterface->PlayAptMovie("", KI_APT_MOVIE_LEVEL);
 
         // X360 `(*(*(this + 0xE08) + 0x18))(this + 0xE08)` -- component vtable slot 6 on the
         // toggle group, which is SelectableGroup::Clear.

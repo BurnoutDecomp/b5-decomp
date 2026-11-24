@@ -73,15 +73,6 @@ namespace BrnGui
         const s32 KI_CHANNEL_GUI_OUT = 40;   // OutputGuiEvent
 
         // ---- overlay ids these bodies name (X360 rodata literals) --------------------
-        const char KAC_OVERLAY_LAUNCH_QUESTION[]  = "CNLobbyLchQn";  // "start the match?"
-        const char KAC_OVERLAY_CANCEL_CONFIRM[]   = "CNCnclCnfrm";   // "discard the settings edit?"
-        const char KAC_OVERLAY_LEAVE_GAME_QN[]    = "CNOnlLvGmQn";   // "leave the game?"
-        const char KAC_OVERLAY_LEAVE_CHALLENGE_QN[] = "CNOnlLvChaQn"; // "leave the challenge?"
-        const char KAC_OVERLAY_HOST_LEAVE_QN[]    = "OnHostLvQn";    // "leave, as the host?"
-        const char KAC_OVERLAY_LEAVING_GAME[]     = "CNOnlLvgGame";  // the "leaving..." splash
-        const char KAC_OVERLAY_INVITE_SAME_GAME[] = "CNInvSmGame";   // invite target already here
-        const char KAC_OVERLAY_INVITE_SAME_MACHINE[] = "CNInvSmMach";// invite target on this box
-        const char KAC_OVERLAY_INVITE_HOST[]      = "CNInvHost";     // invite refused by the host
 
         // The overlay-complete leave method this screen acts on. FLAG: the producer-side
         // enum (GuiOverlayCompleteEvent::LeaveMethod, named by the DWARF but without
@@ -91,7 +82,6 @@ namespace BrnGui
 
         // The audio label + action the settings cancel plays on its way out.
         const s32  KI_AUDIO_ACTION_MENU_CUE = 7;   // X360 `li r4, 7`
-        const char KAC_SOUND_LABEL_GO_BACK[] = "GO_BACK";
 
         // The invite-failure reasons. FLAG: the producer-side enum name is not in the
         // recovered DWARF slice; the roles come from the overlay each reason raises.
@@ -204,7 +194,7 @@ namespace BrnGui
         // record (the inlined OutputGuiEvent<GuiOverlayRequest> copy); constructed in
         // place here.
         GuiOverlayRequestWire lWire;
-        lWire.mRequest.Construct(KAC_OVERLAY_LAUNCH_QUESTION);
+        lWire.mRequest.Construct("CNLobbyLchQn");
 
         mpStateInterface->OutputGuiEvent(lWire.mRequest);
     }
@@ -227,15 +217,15 @@ namespace BrnGui
 
         if (liReason == KI_INVITE_FAILED_SAME_GAME)
         {
-            lpcOverlayId = KAC_OVERLAY_INVITE_SAME_GAME;
+            lpcOverlayId = "CNInvSmGame";
         }
         else if (liReason == KI_INVITE_FAILED_SAME_MACHINE)
         {
-            lpcOverlayId = KAC_OVERLAY_INVITE_SAME_MACHINE;
+            lpcOverlayId = "CNInvSmMach";
         }
         else if (liReason == KI_INVITE_FAILED_HOST)
         {
-            lpcOverlayId = KAC_OVERLAY_INVITE_HOST;
+            lpcOverlayId = "CNInvHost";
         }
         else
         {
@@ -266,7 +256,7 @@ namespace BrnGui
         const OverlayCompleteData* lpOverlayCompleteEvent =
             reinterpret_cast<const OverlayCompleteData*>(lpEvent);
 
-        if (lpOverlayCompleteEvent->mOverlayId == CgsIDCompress(KAC_OVERLAY_CANCEL_CONFIRM))
+        if (lpOverlayCompleteEvent->mOverlayId == CgsIDCompress("CNCnclCnfrm"))
         {
             if (lpOverlayCompleteEvent->miLeaveMethod == KI_LEAVE_METHOD_CONFIRMED)
             {
@@ -277,7 +267,7 @@ namespace BrnGui
                 const s32 liSFXVolume   = mpGuiCache->GetMenuOptionsData()->GetSFXVolume();
 
                 GuiAudioTriggerEvent lAudioPayload;
-                lAudioPayload.Construct(KI_AUDIO_ACTION_MENU_CUE, "", KAC_SOUND_LABEL_GO_BACK, "");
+                lAudioPayload.Construct(KI_AUDIO_ACTION_MENU_CUE, "", "GO_BACK", "");
                 mpStateInterface->OutputGuiEvent(lAudioPayload);
 
                 GuiEventAudioSettingsWire lAudioSettings(liMusicVolume, liSFXVolume);
@@ -303,18 +293,18 @@ namespace BrnGui
                 }
             }
         }
-        else if (lpOverlayCompleteEvent->mOverlayId == CgsIDCompress(KAC_OVERLAY_LAUNCH_QUESTION))
+        else if (lpOverlayCompleteEvent->mOverlayId == CgsIDCompress("CNLobbyLchQn"))
         {
             HandleLaunchQuestion(lpOverlayCompleteEvent->miLeaveMethod);
         }
-        else if (lpOverlayCompleteEvent->mOverlayId == CgsIDCompress(KAC_OVERLAY_LEAVE_GAME_QN) ||
-                 lpOverlayCompleteEvent->mOverlayId == CgsIDCompress(KAC_OVERLAY_LEAVE_CHALLENGE_QN) ||
-                 lpOverlayCompleteEvent->mOverlayId == CgsIDCompress(KAC_OVERLAY_HOST_LEAVE_QN))
+        else if (lpOverlayCompleteEvent->mOverlayId == CgsIDCompress("CNOnlLvGmQn") ||
+                 lpOverlayCompleteEvent->mOverlayId == CgsIDCompress("CNOnlLvChaQn") ||
+                 lpOverlayCompleteEvent->mOverlayId == CgsIDCompress("OnHostLvQn"))
         {
             if (lpOverlayCompleteEvent->miLeaveMethod == KI_LEAVE_METHOD_CONFIRMED)
             {
                 GuiOverlayRequestWire lWire;
-                lWire.mRequest.Construct(KAC_OVERLAY_LEAVING_GAME);
+                lWire.mRequest.Construct("CNOnlLvgGame");
                 mpStateInterface->OutputGuiEvent(lWire.mRequest);
 
                 GuiEventLeaveOnlineGameWire lLeaveGame;

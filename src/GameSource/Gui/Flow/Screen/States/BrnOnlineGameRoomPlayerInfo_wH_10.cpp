@@ -73,8 +73,6 @@ namespace BrnGui
         // (X360 `li r4, 7`, aGoBack "GO_BACK", and the empty rodata string unk_820046A7
         // passed for BOTH the component and the movie name).
         const s32  KI_AUDIO_ACTION_BACK   = 7;
-        const char KAC_SOUND_GO_BACK[]    = "GO_BACK";
-        const char KAC_EMPTY_STRING[]     = "";
 
         // The record OutputGuiEvent<GuiAudioTriggerEvent> builds: { 100, 457, 12, the
         // 100-byte payload } on channel 40, 112 bytes. The committed GuiAudioTriggerEvent
@@ -88,7 +86,6 @@ namespace BrnGui
 
         // The apt clip the pause button prompts transition through (X360 aAptTransition_1,
         // the AddOutputAptViewState first argument at 0x8248C2D4 / 0x8248C4A4).
-        const char KAC_APT_TRANSITION[]   = "apt_Transition";
 
         // ---- in-queue payload view (the queue delivers the HEADER-STRIPPED payload, so
         //      the DWARF's typed event pointer would mislead every field by 12 --
@@ -239,7 +236,7 @@ namespace BrnGui
 
         mPauseComponent.SetIds(lau64OptionIds);
         mPauseButtonPromptsAnimation.AddOutputAptViewState(
-            KAC_APT_TRANSITION, KAPC_PAUSE_BUTTON_PROMPT_ANIMATION_STATES[0], false);
+            "apt_Transition", KAPC_PAUSE_BUTTON_PROMPT_ANIMATION_STATES[0], false);
     }
 
     // --------------------------------------------------- ShowSecurityOptions @0x8248C2F8
@@ -296,7 +293,7 @@ namespace BrnGui
         mPauseComponent.SetIds(lau64OptionIds);
         meSubState = E_SUBSTATE_SECURITY_OPTIONS;
         mPauseButtonPromptsAnimation.AddOutputAptViewState(
-            KAC_APT_TRANSITION, KAPC_PAUSE_BUTTON_PROMPT_ANIMATION_STATES[1], false);
+            "apt_Transition", KAPC_PAUSE_BUTTON_PROMPT_ANIMATION_STATES[1], false);
     }
 
     // ------------------------- HandleControllerInputSecurityOptionsSubState @0x824AD120
@@ -327,8 +324,8 @@ namespace BrnGui
         case KI_ACTION_BACK:
         {
             GuiAudioTriggerEvent lAudioEventPayload;
-            lAudioEventPayload.Construct(KI_AUDIO_ACTION_BACK, KAC_EMPTY_STRING,
-                                  KAC_SOUND_GO_BACK, KAC_EMPTY_STRING);
+            lAudioEventPayload.Construct(KI_AUDIO_ACTION_BACK, "",
+                                  "GO_BACK", "");
             mpStateInterface->OutputGuiEvent(lAudioEventPayload);
             ShowPauseScreen();
             break;

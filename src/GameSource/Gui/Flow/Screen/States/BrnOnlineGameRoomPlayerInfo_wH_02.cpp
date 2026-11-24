@@ -32,19 +32,12 @@ namespace BrnGui
     {
         // The apt clip the options page transitions through (X360 aAptTransition_1, the
         // AddOutputAptViewState first argument at 0x824A4124).
-        const char KAC_APT_TRANSITION[] = "apt_Transition";
 
         // The empty player-stats name the ladder pushes when it resets the panel
         // (X360 unk_820046A7, the zero-length rodata string).
-        const char KAC_EMPTY_STRING[] = "";
 
         // The apt movie names PlayAptMovie is handed per rung (X360 off_82F27B7C /
         // off_82F27B84 / off_82F27BCC / off_82F27B14 / off_82F27BD0).
-        const char KAC_LOBBY_MOVIE[]      = "ON_GR_PI";
-        const char KAC_PAUSE_MOVIE[]      = "ON_PAUSE";
-        const char KAC_CHALLENGE_MOVIE[]  = "ON_CHAL";
-        const char KAC_SETTINGS_MOVIE[]   = "BrnCrashNavOptions";
-        const char KAC_VIEW_EVENT_MOVIE[] = "ON_VWOPT";
 
         // The apt level PlayAptMovie is called with on every rung (li r5, 3).
         const s32 KI_APT_MOVIE_LEVEL = 3;
@@ -66,7 +59,7 @@ namespace BrnGui
                                                      static_cast<u32>(miNumLobbyResourcesToLoad)))
             {
                 SetExpectedLobbyComponents();
-                mpStateInterface->PlayAptMovie(KAC_LOBBY_MOVIE, KI_APT_MOVIE_LEVEL);
+                mpStateInterface->PlayAptMovie("ON_GR_PI", KI_APT_MOVIE_LEVEL);
                 meSubState = E_SUBSTATE_LOADING_COMPONENTS;
             }
             break;
@@ -76,7 +69,7 @@ namespace BrnGui
                                                      static_cast<u32>(miNumPauseResourcesToLoad)))
             {
                 SetExpectedPauseComponents();
-                mpStateInterface->PlayAptMovie(KAC_PAUSE_MOVIE, KI_APT_MOVIE_LEVEL);
+                mpStateInterface->PlayAptMovie("ON_PAUSE", KI_APT_MOVIE_LEVEL);
                 meSubState = E_SUBSTATE_LOADING_PAUSE_COMPONENTS;
             }
             break;
@@ -95,7 +88,7 @@ namespace BrnGui
                                                      static_cast<u32>(miNumChallengeResourcesToLoad)))
             {
                 SetExpectedChallengesComponents();
-                mpStateInterface->PlayAptMovie(KAC_CHALLENGE_MOVIE, KI_APT_MOVIE_LEVEL);
+                mpStateInterface->PlayAptMovie("ON_CHAL", KI_APT_MOVIE_LEVEL);
                 meSubState = E_SUBSTATE_LOADING_CHALLENGES_COMPONENTS;
             }
             break;
@@ -114,7 +107,7 @@ namespace BrnGui
                                                      static_cast<u32>(miNumSettingsResourcesToLoad)))
             {
                 SetExpectedSettingsComponents();
-                mpStateInterface->PlayAptMovie(KAC_SETTINGS_MOVIE, KI_APT_MOVIE_LEVEL);
+                mpStateInterface->PlayAptMovie("BrnCrashNavOptions", KI_APT_MOVIE_LEVEL);
                 meSubState = E_SUBSTATE_LOADING_SETTINGS_COMPONENTS;
             }
             break;
@@ -135,7 +128,7 @@ namespace BrnGui
                                                      static_cast<u32>(miNumViewEventResourcesToLoad)))
             {
                 SetExpectedViewEventComponents();
-                mpStateInterface->PlayAptMovie(KAC_VIEW_EVENT_MOVIE, KI_APT_MOVIE_LEVEL);
+                mpStateInterface->PlayAptMovie("ON_VWOPT", KI_APT_MOVIE_LEVEL);
                 meSubState = E_SUBSTATE_LOADING_VIEW_EVENT_COMPONENTS;
             }
             break;
@@ -177,7 +170,7 @@ namespace BrnGui
                 meSubState = E_SUBSTATE_MAIN;
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");                          // cpp:1011
 
-                mOptionsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION,
+                mOptionsAnimation.AddOutputAptViewState("apt_Transition",
                                                         KAPC_ANIMATION_STATES[1], false);
                 mSelectedPlayerID = -1;
 
@@ -197,7 +190,7 @@ namespace BrnGui
                 mPlayerStatsDisplay.SetComponentLoaded();
                 mPlayerStatsDisplay.SetState(GuiNetworkPlayerStats::E_STATE_VISIBLE);
                 mRouteInfoDisplay.SetState(GuiNetworkRouteInfo::E_STATE_INVISIBLE);
-                mPlayerStatsDisplay.SetInfo(KAC_EMPTY_STRING, 0, 0, 0, false, mpGuiCache);
+                mPlayerStatsDisplay.SetInfo("", 0, 0, 0, false, mpGuiCache);
                 mbHighlightedNewPlayer = false;
             }
             break;

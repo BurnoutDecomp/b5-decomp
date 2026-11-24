@@ -101,19 +101,12 @@ namespace BrnGui
         // zero-extended).
         const u64 KU64_NO_APT_ID = 0xFFFFFFFFull;
 
-        const char KAC_QUICK_MATCH_MOVIE[]   = "ON_QWKM";   // the pooled movie-name literal
         const s32  KI_APT_MOVIE_LEVEL        = 3;
         const char* const KPC_EMPTY_STRING   = "";
 
-        const char KAC_APT_TRANSITION_NAME[] = "apt_Transition";
         const s32  KI_ANIMATION_STATE_VISIBLE   = 0;
         const s32  KI_ANIMATION_STATE_INVISIBLE = 1;
 
-        const char KAC_ADVANCE_EVENT[]      = "ADVANCE";
-        const char KAC_DISCONNECT_EVENT[]   = "DISCONNECT";
-        const char KAC_GO_BACK_EVENT[]      = "GO_BACK";
-        const char KAC_GO_BACK_EASY_EVENT[] = "GO_BACK_EASY";
-        const char KAC_TO_GAME_OPT_EVENT[]  = "TO_GAME_OPT";
 
         // ---- in-queue payload views (the queue hands out the header-stripped payload) ----
         struct ControllerButtonPayload : public CgsModule::Event
@@ -263,7 +256,7 @@ namespace BrnGui
                 GuiEvent533Wire lHandBack;
                 mpStateInterface->OutputGuiEvent(lHandBack);
 
-                SendStateEvent(KAC_ADVANCE_EVENT);
+                SendStateEvent("ADVANCE");
                 break;
             }
 
@@ -276,7 +269,7 @@ namespace BrnGui
                 CGS_ASSERT(mpGuiCache != 0, "mpGuiCache");
                 // A null event still latches (0).
                 mpGuiCache->SetDoDisconnectPopup(lpEvent);
-                SendStateEvent(KAC_DISCONNECT_EVENT);
+                SendStateEvent("DISCONNECT");
                 break;
 
             default:
@@ -311,7 +304,7 @@ namespace BrnGui
             if (mpGuiCache->EnsureResourcesAreLoaded(maResourceTuplesToLoad,
                                                      static_cast<u32>(miNumResourcesToLoad)))
             {
-                mpStateInterface->PlayAptMovie(KAC_QUICK_MATCH_MOVIE, KI_APT_MOVIE_LEVEL);
+                mpStateInterface->PlayAptMovie("ON_QWKM", KI_APT_MOVIE_LEVEL);
                 meSubState = E_SUBSTATE_LOADING_COMPONENTS;
             }
         }
@@ -377,11 +370,11 @@ namespace BrnGui
                 mpStateInterface->OutputGuiEvent(lNetworkSuspension);
 
                 mpGuiCache->SetOnlineStartPending(false);
-                SendStateEvent(KAC_GO_BACK_EASY_EVENT);
+                SendStateEvent("GO_BACK_EASY");
             }
             else
             {
-                SendStateEvent(KAC_GO_BACK_EVENT);
+                SendStateEvent("GO_BACK");
             }
             return;
         }
@@ -456,7 +449,7 @@ namespace BrnGui
         case KI_ACTION_GUI_SELECT:
             if (mMessageButtons.GetHighlightedIndex() == KI_MESSAGE_BUTTON_AFFIRMATIVE)
             {
-                SendStateEvent(KAC_TO_GAME_OPT_EVENT);
+                SendStateEvent("TO_GAME_OPT");
                 break;
             }
             // NO leaves the way cancel does (the console branches into the cancel arm).
@@ -470,11 +463,11 @@ namespace BrnGui
                 mpStateInterface->OutputGuiEvent(lNetworkSuspension);
 
                 mpGuiCache->SetOnlineStartPending(false);
-                SendStateEvent(KAC_GO_BACK_EASY_EVENT);
+                SendStateEvent("GO_BACK_EASY");
             }
             else
             {
-                SendStateEvent(KAC_GO_BACK_EVENT);
+                SendStateEvent("GO_BACK");
             }
             break;
 
@@ -519,11 +512,11 @@ namespace BrnGui
                 mpStateInterface->OutputGuiEvent(lNetworkSuspension);
 
                 mpGuiCache->SetOnlineStartPending(false);
-                SendStateEvent(KAC_GO_BACK_EASY_EVENT);
+                SendStateEvent("GO_BACK_EASY");
             }
             else
             {
-                SendStateEvent(KAC_GO_BACK_EVENT);
+                SendStateEvent("GO_BACK");
             }
             break;
 
@@ -537,9 +530,9 @@ namespace BrnGui
     // ================================================================================
     void OnlineQuickMatch::ShowMessage(const char* lpacMessage)
     {
-        mMessageButtonsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageButtonsAnimation.AddOutputAptViewState("apt_Transition",
                                                        KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_INVISIBLE], false);
-        mMessageAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageAnimation.AddOutputAptViewState("apt_Transition",
                                                 KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE], false);
         mMessageText.SetText(lpacMessage);
     }
@@ -549,9 +542,9 @@ namespace BrnGui
     // ================================================================================
     void OnlineQuickMatch::ShowNoGamesFound()
     {
-        mMessageAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageAnimation.AddOutputAptViewState("apt_Transition",
                                                 KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE], false);
-        mMessageButtonsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageButtonsAnimation.AddOutputAptViewState("apt_Transition",
                                                        KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE], false);
         mMessageText.SetText(KAC_NO_GAMES_FOUND_STRING_ID);
 
@@ -569,9 +562,9 @@ namespace BrnGui
     // ================================================================================
     void OnlineQuickMatch::ShowNoGamesFoundInGame()
     {
-        mMessageAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageAnimation.AddOutputAptViewState("apt_Transition",
                                                 KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE], false);
-        mMessageButtonsAnimation.AddOutputAptViewState(KAC_APT_TRANSITION_NAME,
+        mMessageButtonsAnimation.AddOutputAptViewState("apt_Transition",
                                                        KAPC_ANIMATION_STATES[KI_ANIMATION_STATE_VISIBLE], false);
         mMessageText.SetText(KAC_NO_GAMES_FOUND_STRING_ID);
 

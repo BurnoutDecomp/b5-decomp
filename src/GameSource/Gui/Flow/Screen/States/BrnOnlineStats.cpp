@@ -70,7 +70,6 @@ namespace BrnGui
         const s32 KI_APT_MOVIE_LEVEL       = 3;
         const char* const KPC_EMPTY_STRING = "";
 
-        const char KAC_GO_BACK_EVENT[] = "GO_BACK";
 
         // The totals the screen hands itself in answer to its own request.
         const s32 KI_CANNED_TOTAL_GAMES     = 37;
@@ -309,7 +308,7 @@ namespace BrnGui
         {
             if (liEventId == KI_EVENT_NETWORK_DISCONNECTED)
             {
-                SendStateEvent(KAC_GO_BACK_EVENT);
+                SendStateEvent("GO_BACK");
             }
         }
     }
@@ -344,7 +343,7 @@ namespace BrnGui
             static_cast<const ControllerButtonPayload*>(lpEvent);
         if (lpInput->miButtonId == E_GAMEINPUTACTIONS_GUI_CANCEL)
         {
-            SendStateEvent(KAC_GO_BACK_EVENT);
+            SendStateEvent("GO_BACK");
         }
     }
 

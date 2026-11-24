@@ -23,9 +23,6 @@ const char OnlinePreEventMessages::KAC_STRING_TEXTFIELD_TEMPLATE[12] = "string%d
 
 namespace
 {
-    const char KAC_APT_TRANSITION[]   = "apt_transition";
-    const char KAC_TRANSITION_IN[]    = "transin";
-    const char KAC_TRANSITION_OUT[]   = "transout";
     const char* const KPC_EMPTY_TEXT  = "";
 
     // The text-field name buffer Construct formats into (the console hands SPrintf one byte
@@ -105,7 +102,7 @@ void OnlinePreEventMessages::Show(const PreEventInfo* lpInfo)
 
     mbIsShowing = true;
     SelectScreenKeyFrameForGameMode();
-    AddOutputAptViewState(KAC_APT_TRANSITION, KAC_TRANSITION_IN, false);
+    AddOutputAptViewState("apt_transition", "transin", false);
 
     s32 liIndex = 0;
     for (; liIndex < lpInfo->miNumMsgIDs; ++liIndex)
@@ -145,7 +142,7 @@ void OnlinePreEventMessages::Hide()
 
     mbIsShowing = false;
     SelectScreenKeyFrameForGameMode();
-    AddOutputAptViewState(KAC_APT_TRANSITION, KAC_TRANSITION_OUT, false);
+    AddOutputAptViewState("apt_transition", "transout", false);
 }
 
 // A component under this one finished loading: re-push the matching string's text.
