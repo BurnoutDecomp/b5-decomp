@@ -987,13 +987,10 @@ bool GinsuSlot::DoPlay(const Slot& arSlot, PlayerVoice& arVoice,
     void* lpRamData = arContent.GetData(E_CONTENT_STATE_LOADED);
     rw::audio::core::PlugIn* lpPlugin =
         lrVoice.GetPlugin(arSlot.GetPluginOffset());
-    RwacCommandPluginEvent lEvent(
-        reinterpret_cast<uintptr_t>(lpPlugin), 0u, 1u);
+    RwacCommandPluginEvent lEvent(lpPlugin, 0u, RwacCommandPluginEvent::E_HAS_PARAMETERS);
     RwacCommandGinsuAttachDataParameters lParameters(lpRamData);
 
-    GenericRwacFactory& lrFactory = lrVoice.GetRwacFactory();
-    lrFactory.GetCommandQueue().Post(lEvent);
-    lrFactory.GetCommandQueue().Post(lParameters);
+    lrVoice.GetRwacFactory().GetCommandQueue() << lEvent << lParameters;
     return true;
 }
 
@@ -1005,9 +1002,8 @@ bool GinsuSlot::DoStop(const Slot& arSlot, PlayerVoice& arVoice,
         static_cast<GenericRwacPlayerVoice&>(arVoice);
     rw::audio::core::PlugIn* lpPlugin =
         lrVoice.GetPlugin(arSlot.GetPluginOffset());
-    RwacCommandPluginEvent lEvent(
-        reinterpret_cast<uintptr_t>(lpPlugin), 1u, 0u);
-    lrVoice.GetRwacFactory().GetCommandQueue().Post(lEvent);
+    RwacCommandPluginEvent lEvent(lpPlugin, 1u, RwacCommandPluginEvent::E_NO_PARAMETERS);
+    lrVoice.GetRwacFactory().GetCommandQueue() << lEvent;
     return true;
 }
 

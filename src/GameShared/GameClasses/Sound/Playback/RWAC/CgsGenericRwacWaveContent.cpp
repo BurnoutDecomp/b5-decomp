@@ -104,14 +104,11 @@ bool GenericRwacContentSlot::DoPlay(const Slot& arSlot, PlayerVoice& arVoice,
 
     rw::audio::core::PlugIn* lpPlugin =
         lrVoice.GetPlugin(arSlot.GetPluginOffset());
-    RwacCommandPluginEvent lEvent(
-        reinterpret_cast<uintptr_t>(lpPlugin), 0u, 1u);
+    RwacCommandPluginEvent lEvent(lpPlugin, 0u, RwacCommandPluginEvent::E_HAS_PARAMETERS);
     RwacCommandPlayerPlayParameters lParams(
         &lrContent, &lrDone.requestHandle);
 
-    GenericRwacFactory& lrFactory = lrVoice.GetRwacFactory();
-    lrFactory.GetCommandQueue().Post(lEvent);
-    lrFactory.GetCommandQueue().Post(lParams);
+    lrVoice.GetRwacFactory().GetCommandQueue() << lEvent << lParams;
     return true;
 }
 
@@ -123,9 +120,8 @@ bool GenericRwacContentSlot::DoStop(const Slot& arSlot, PlayerVoice& arVoice,
         static_cast<GenericRwacPlayerVoice&>(arVoice);
     rw::audio::core::PlugIn* lpPlugin =
         lrVoice.GetPlugin(arSlot.GetPluginOffset());
-    RwacCommandPluginEvent lEvent(
-        reinterpret_cast<uintptr_t>(lpPlugin), 1u, 0u);
-    lrVoice.GetRwacFactory().GetCommandQueue().Post(lEvent);
+    RwacCommandPluginEvent lEvent(lpPlugin, 1u, RwacCommandPluginEvent::E_NO_PARAMETERS);
+    lrVoice.GetRwacFactory().GetCommandQueue() << lEvent;
     return true;
 }
 
@@ -135,22 +131,17 @@ bool GenericRwacContentSlot::DoUpdatePlaying(
     System* /*apSystem*/, const Slot& arSlot, PlayerVoice& arVoice,
     Content& /*arContent*/, f32 /*af32Dt*/)
 {
-    GenericRwacPlayerVoice& lrVoice =
-        static_cast<GenericRwacPlayerVoice&>(arVoice);
-    rw::audio::core::SndPlayer1::IsRequestDoneParams& lrDone =
-        lrVoice.GetDoneParams();
-    if (lrDone.isRequestDone == 1.0f)
+    // DWARF cpp:132 lRwacVoice, cpp:140 lCommand, cpp:145 lParameters.
+    GenericRwacPlayerVoice& lRwacVoice = static_cast<GenericRwacPlayerVoice&>(arVoice);
+    if (lRwacVoice.GetDoneParams().isRequestDone == 1.0f)
+    {
         return false;
+    }
 
-    rw::audio::core::PlugIn* lpPlugin =
-        lrVoice.GetPlugin(arSlot.GetPluginOffset());
-    RwacCommandPluginEvent lEvent(
-        reinterpret_cast<uintptr_t>(lpPlugin), 2u, 1u);
-    RwacCommandPlayerIsRequestDoneParameters lParams(&lrDone);
-
-    GenericRwacFactory& lrFactory = lrVoice.GetRwacFactory();
-    lrFactory.GetCommandQueue().Post(lEvent);
-    lrFactory.GetCommandQueue().Post(lParams);
+    RwacCommandPluginEvent lCommand(lRwacVoice.GetPlugin(arSlot.GetPluginOffset()), 2u,
+                                    RwacCommandPluginEvent::E_HAS_PARAMETERS);
+    RwacCommandPlayerIsRequestDoneParameters lParameters(&lRwacVoice.GetDoneParams());
+    lRwacVoice.GetRwacFactory().GetCommandQueue() << lCommand << lParameters;
     return true;
 }
 

@@ -26,8 +26,11 @@ namespace Playback
         // @0x826D7A28 (this TU, DWARF cpp:46) -- clear the singleton slot.
         virtual ~MasterVoice();
 
-        // DWARF h:91/h:98/h:106 -- declaration-only (their own ledger functions).
-        static bool IsAvailable();
+        // DWARF h:91. Header-inline (no ARTIST copy): ~GenericRwacVoice reads the
+        // singleton slot directly (0x826C1DD0 lwz dword_82FFB9E0; cmplwi).
+        static bool IsAvailable() { return spMasterVoice != 0; }
+
+        // DWARF h:98/h:106 -- declaration-only (their own ledger functions).
         static MasterVoice& GetMasterVoice();
         bool IsCompatible(EVoiceType leVoiceType);
 

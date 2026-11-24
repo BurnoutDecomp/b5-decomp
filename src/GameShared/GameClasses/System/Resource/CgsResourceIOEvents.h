@@ -33,9 +33,29 @@ namespace Events
         char macFileName[128];
         s32  miPoolId;
 
+        // DWARF CgsResourceIOEvents.h:65 -- fill every field (ARTIST inlines it at each build site,
+        // e.g. BundleLoaderModule::PostLoadFinishedEvent 0x828EC3C8: user and id stored before the
+        // out-of-line SetFileName call, the pool id and the flag after it).
+        void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId, const char* lpcFileName,
+                       s32 liPoolId, bool lbLiveUpdateReplace)
+        {
+            SetUser(lpUser);
+            SetEventId(liEventId);
+            SetFileName(lpcFileName);
+            SetPoolId(liPoolId);
+            SetLiveUpdateReplace(lbLiveUpdateReplace);
+        }
+        CgsModule::BaseEventReceiverQueue* GetUser() const { return mpUser; }   // h:68
+        s32  GetEventId() const { return miEventId; }                            // h:71
+
         // DWARF CgsResourceIOEvents.h:74; inlined by its callers (BundleLoaderModule's streamed
         // asserts read the name at +9 in place, e.g. addi r4,r31,0x4E1 @0x82904358).
         const char* GetFileName() const { return macFileName; }
+        s32  GetPoolId() const { return miPoolId; }                              // h:77
+        void SetUser(CgsModule::BaseEventReceiverQueue* lpUser) { mpUser = lpUser; }   // h:84
+        void SetEventId(s32 liEventId) { miEventId = liEventId; }                // h:87
+        void SetPoolId(s32 liPoolId) { miPoolId = liPoolId; }                    // h:95
+        void SetLiveUpdateReplace(bool lbLiveUpdateReplace) { mbLiveUpdateReplace = lbLiveUpdateReplace; }   // h:98
 
         // Copies a NUL-terminated path into macFileName, asserting the source fits
         // (length < 128, the macFileName buffer size); a null source clears the
@@ -69,6 +89,13 @@ namespace Events
             E_RESULT_SUCCESS       = 0,
             E_RESULT_OUT_OF_MEMORY = 1
         };
+        // DWARF CgsResourceIOEvents.h:173.
+        void Construct(CgsModule::BaseEventReceiverQueue* lpUser, s32 liEventId, const char* lpcFileName,
+                       s32 liPoolId, EResult leResult)
+        {
+            BundleLoaderEvent::Construct(lpUser, liEventId, lpcFileName, liPoolId, false);
+            meResult = leResult;
+        }
         EResult meResult;
     };
 

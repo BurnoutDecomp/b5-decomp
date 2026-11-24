@@ -5,6 +5,16 @@
 
 #include "types.hpp" // std::uintptr_t
 
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"
+
+namespace rw { namespace audio { namespace core { class PlugIn; class Voice; } } }
+
+// ARTIST's file string for the asserts of this header's inline bodies (0x820AAE38):
+// the original declared these records in CgsGenericRwacFactory.h.
+#define CGS_RWAC_FACTORY_H_ASSERT_FILE \
+    "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Rwac/CgsGenericRwacFactory.h"
+
 // ============================================================================
 // GameShared/GameClasses/Sound/Playback/Rwac/CgsGenericRwacCommands.h
 //
@@ -48,6 +58,8 @@ namespace Playback
 {
 
 struct GenericRwacWaveContent;
+class Voice;
+struct GenericRwacVoiceConfig;
 
 // CgsGenericRwacFactory.h (DWARF). The generic-RWAC command tags. The values
 // exercised by the command ctors in this home are confirmed against the X360 asm
@@ -78,9 +90,21 @@ enum ERwacCommandType
 // CgsCommand shape (GetCommandType reads the leading word, X360 lwz 0(this)).
 struct RwacCommand
 {
+    // CgsGenericRwacFactory.h:125 (DWARF). Every record names its type through this base
+    // constructor (ARTIST schedules the tag store with the other members, e.g. before
+    // the GetPlugin call in GenericRwacContentSlot::DoStop 0x826C1FF8).
+    RwacCommand(ERwacCommandType leCommandType) : muCommandType(leCommandType) {}
+
     ERwacCommandType GetCommandType() const { return static_cast<ERwacCommandType>(muCommandType); }
 
+    // CgsGenericRwacFactory.h:131 (DWARF). The record as the word run the queue posts.
+    const uintptr_t* AsCommand() const { return &muCommandType; }
+
     uintptr_t muCommandType; // word 0 -- ERwacCommandType tag
+
+protected:
+    // CgsGenericRwacFactory.h:134 (DWARF). The copy forms take the type word as read.
+    RwacCommand(uint32_t luCommandType) : muCommandType(luCommandType) {}
 };
 
 // Player-play parameters: 3 words (tag + 2 operands). Tag == 6.
@@ -104,7 +128,14 @@ struct RwacCommandPlayerPlayParameters : public RwacCommand
 // X360 ctor @0x82681570: copies words 0,1 (no refcount step).
 struct RwacCommandPlayerIsRequestDoneParameters : public RwacCommand
 {
-    explicit RwacCommandPlayerIsRequestDoneParameters(void* apParams);
+    // CgsGenericRwacFactory.h:489 (DWARF). Header-inline, no ARTIST copy:
+    // GenericRwacPlayerVoice::DoUpdate inlines it (0x826D9AEC..0x826D9AFC: tag 7, then
+    // the address of the voice's IsRequestDoneParams).
+    explicit RwacCommandPlayerIsRequestDoneParameters(void* apParams)
+        : RwacCommand(E_RWAC_COMMAND_PLAYER_IS_REQUEST_DONE_PARAMETERS)
+    {
+        mpParams = apParams;
+    }
     // @ 0x82681570. Copy-construct from a source record of luCommandCount words.
     RwacCommandPlayerIsRequestDoneParameters(u32 luCommandCount,
                                              const RwacCommandPlayerIsRequestDoneParameters& arSource);
@@ -148,17 +179,19 @@ struct RwacCommandGinsuAttachDataParameters : public RwacCommand
 // assert. Like RwacCommandPluginEvent this carries no luCommandCount/tag self-check.
 struct RwacCommandVoiceCreateInstance : public RwacCommand
 {
-    // @ 0x82681170. Build from a playback voice, a voice pointer-slot, a plugin
-    // pointer-slot, a config pointer and one trailing operand.
-    RwacCommandVoiceCreateInstance(uintptr_t apPlaybackVoice, uintptr_t appVoice,
-                                   uintptr_t apppPlugin, uintptr_t apConfig,
-                                   uintptr_t auOperand);
+    // @ 0x82681170 (DWARF CgsGenericRwacFactory.h:165). Build from the playback voice,
+    // the slots the factory fills (voice, plug-in array), the config and the optional
+    // submix output slot.
+    RwacCommandVoiceCreateInstance(Voice* lpPlaybackVoice, rw::audio::core::Voice** lppVoice,
+                                   rw::audio::core::PlugIn*** lpppPlugin,
+                                   GenericRwacVoiceConfig* lpConfig,
+                                   rw::audio::core::PlugIn** lppSubmix);
 
-    uintptr_t mpPlaybackVoice; // word 1 -- asserted non-null ("mpPlaybackVoice")
-    uintptr_t mppVoice;        // word 2 -- asserted non-null ("mppVoice")
-    uintptr_t mpppPlugin;      // word 3 -- asserted non-null ("mpppPlugin")
-    uintptr_t mpConfig;        // word 4 -- asserted non-null ("mpConfig")
-    uintptr_t maOperand;       // word 5 -- carried verbatim through the queue
+    Voice*                     mpPlaybackVoice; // word 1 -- DWARF h:225, asserted non-null
+    rw::audio::core::Voice**   mppVoice;        // word 2 -- h:226, asserted non-null
+    rw::audio::core::PlugIn*** mpppPlugin;      // word 3 -- h:227, asserted non-null
+    GenericRwacVoiceConfig*    mpConfig;        // word 4 -- h:228, asserted non-null
+    rw::audio::core::PlugIn**  mppSubmix;       // word 5 -- h:229, may be null
 };
 
 // Voice-release command: 2 words (tag + 1 operand). Tag == 2.
@@ -169,10 +202,21 @@ struct RwacCommandVoiceCreateInstance : public RwacCommand
 //     CgsGenericRwacFactory.h:253; X360 cmpwi r11,2 against the just-stored 0(this)).
 struct RwacCommandVoiceRelease : public RwacCommand
 {
+    // CgsGenericRwacFactory.h:239 (DWARF). Header-inline, no ARTIST copy: the
+    // GenericRwacVoice destructor inlines it (0x826C1E04..0x826C1E38: tag 2, the voice,
+    // then the "mpVoice" assert on line 243).
+    RwacCommandVoiceRelease(rw::audio::core::Voice* lpVoice)
+        : RwacCommand(E_RWAC_COMMAND_VOICE_RELEASE)
+    {
+        mpVoice = lpVoice;
+        CGS_ASSERT(mpVoice, CgsDev::Assert::MessageAt("mpVoice",
+            CGS_RWAC_FACTORY_H_ASSERT_FILE, 243));
+    }
+
     // @ 0x82681320. Copy-construct from a source record of luCommandCount words.
     RwacCommandVoiceRelease(u32 luCommandCount, const RwacCommandVoiceRelease& arSource);
 
-    uintptr_t maOperand; // word 1 -- carried verbatim through the queue
+    rw::audio::core::Voice* mpVoice; // word 1 -- DWARF h:263
 };
 
 // Send-connect-parameters command: 2 words (tag + 1 operand). Tag == 8.
@@ -199,12 +243,32 @@ struct RwacCommandSendConnectParameters : public RwacCommand
 // guard), matching the X360 asm (cmplwi cr6,r4,0 -- the plugin pointer, not a count).
 struct RwacCommandPluginEvent : public RwacCommand
 {
-    // @ 0x826813B8. Build from a (non-null) plugin pointer and two operands.
-    RwacCommandPluginEvent(uintptr_t apPlugin, uintptr_t auOperand1, uintptr_t auOperand2);
+    // CgsGenericRwacFactory.h:274 (DWARF): whether a parameter record follows the event.
+    enum EParameters
+    {
+        E_NO_PARAMETERS  = 0,
+        E_HAS_PARAMETERS = 1
+    };
 
-    uintptr_t mpPlugin;   // word 1 -- the target plugin (asserted non-null)
-    uintptr_t maOperand1; // word 2 -- carried verbatim through the queue
-    uintptr_t maOperand2; // word 3 -- carried verbatim through the queue
+    // CgsGenericRwacFactory.h:283 (DWARF), header-inline: ARTIST inlines it into the
+    // content slots (GenericRwacContentSlot::DoStop 0x826C1FF8..0x826C204C: tag 3, the
+    // plug-in, the event, the parameter flag, then the "mpPlugin" assert on line 289)
+    // and keeps an out-of-line copy at 0x826813B8 (called by
+    // GenericRwacPlayerVoice::DoUpdate 0x826D9AE8).
+    RwacCommandPluginEvent(rw::audio::core::PlugIn* lpPlugin, uintptr_t luEvent,
+                           EParameters leParameters)
+        : RwacCommand(E_RWAC_COMMAND_PLUGIN_EVENT)
+    {
+        mpPlugin = lpPlugin;
+        muEvent = luEvent;
+        muParameters = leParameters;
+        CGS_ASSERT(mpPlugin, CgsDev::Assert::MessageAt("mpPlugin",
+            CGS_RWAC_FACTORY_H_ASSERT_FILE, 289));
+    }
+
+    rw::audio::core::PlugIn* mpPlugin;     // word 1 -- DWARF h:324
+    uintptr_t                muEvent;      // word 2 -- h:325
+    uintptr_t                muParameters; // word 3 -- h:326 (an EParameters value)
 };
 
 // Plugin-get-attribute command: 4 words (tag + 3 operands). Tag == 5.
@@ -215,13 +279,27 @@ struct RwacCommandPluginEvent : public RwacCommand
 //     CgsGenericRwacFactory.h:409; X360 cmpwi r11,5 against the just-stored 0(this)).
 struct RwacCommandPluginGetAttribute : public RwacCommand
 {
+    // CgsGenericRwacFactory.h:392 (DWARF). Build the request: header-inline, no ARTIST
+    // copy; GenericRwacVoice::Update<T> inlines it (0x826D8214..0x826D8248: tag 5, the
+    // attribute, the address, the plug-in, then the "lpPlugin" assert on line 397).
+    RwacCommandPluginGetAttribute(rw::audio::core::PlugIn* lpPlugin, uintptr_t luAttribute,
+                                  float* lpfAddress)
+        : RwacCommand(E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE)
+    {
+        mpPlugin = lpPlugin;
+        muAttribute = luAttribute;
+        mpfAddress = lpfAddress;
+        CGS_ASSERT(lpPlugin, CgsDev::Assert::MessageAt("lpPlugin",
+            CGS_RWAC_FACTORY_H_ASSERT_FILE, 397));
+    }
+
     // @ 0x826814C8. Copy-construct from a source record of luCommandCount words.
     RwacCommandPluginGetAttribute(u32 luCommandCount,
                                   const RwacCommandPluginGetAttribute& arSource);
 
-    uintptr_t maOperand1; // word 1 -- carried verbatim through the queue
-    uintptr_t maOperand2; // word 2 -- carried verbatim through the queue
-    uintptr_t maOperand3; // word 3 -- carried verbatim through the queue
+    rw::audio::core::PlugIn* mpPlugin;    // word 1 -- CgsGenericRwacFactory.h:431
+    uintptr_t                muAttribute; // word 2 -- :432
+    float*                   mpfAddress;  // word 3 -- :433
 };
 
 // CgsGenericRwacFactory.h:737 (DWARF region). The RWAC-side command ring: a
@@ -246,22 +324,42 @@ struct RwacCommandQueue
 
     bool IsEmpty() const { return mu32Read == mu32Write; }
 
-    // Producer-side mirror of GetCommand. Commands are copied into the ring as
-    // pointer-width words, preserving host pointers while retaining the X360
-    // command framing (one leading count word followed by the record words).
-    void PostCommand(uintptr_t auWord);
-
-    template <typename T>
-    void Post(const T& arCommand)
+    // CgsGenericRwacFactory.h:640 (DWARF). Post a record: its word count, then its words.
+    // Header-inline: ARTIST keeps a copy at 0x82693F50 (assert "lpuFirstCommand", line
+    // 690) and inlines it into GenericRwacVoice::Update<T> (0x826D8270..0x826D82A4).
+    void PostCommand(uint32_t luCommandCount, const uintptr_t* lpuFirstCommand)
     {
-        CGS_STATIC_ASSERT(((sizeof(T) % sizeof(uintptr_t)) == 0),
-                      "RWAC commands are pointer-width word records");
-        const u32 luWordCount = static_cast<u32>(sizeof(T) / sizeof(uintptr_t));
-        PostCommand(luWordCount);
-        const uintptr_t* lpWords = reinterpret_cast<const uintptr_t*>(&arCommand);
-        for (u32 luWord = 0; luWord < luWordCount; ++luWord)
-            PostCommand(lpWords[luWord]);
+        CGS_ASSERT(lpuFirstCommand, CgsDev::Assert::MessageAt("lpuFirstCommand",
+            CGS_RWAC_FACTORY_H_ASSERT_FILE, 690));
+        PostCommand(luCommandCount);
+        for (uint32_t i = 0; i < luCommandCount; ++i)
+        {
+            PostCommand(lpuFirstCommand[i]);
+        }
     }
+
+    // CgsGenericRwacFactory.h:672 (DWARF `operator<< <T>(const T& lCommand)`, one
+    // instance per command record). Always inlined on ARTIST.
+    template <class T>
+    RwacCommandQueue& operator<<(const T& lCommand)
+    {
+        PostCommand(sizeof(T) / sizeof(uintptr_t), lCommand.AsCommand());
+        return *this;
+    }
+
+private:
+    // CgsGenericRwacFactory.h:653 (DWARF). Store the word, advance the
+    // write cursor with wrap, then assert the ring did not fill (streamed message, line
+    // 730). ARTIST keeps it out of line (0x826817D0, unnamed) and every poster calls it.
+    void PostCommand(uintptr_t luCommand)
+    {
+        mauCommandQueue[mu32Write] = luCommand;
+        mu32Write = (mu32Write + 1) & (E_QUEUE_LENGTH - 1);
+        CGS_ASSERT(mu32Write != mu32Read, CgsDev::Assert::StreamMessageAt(
+            "Out of command buffer. SKU32_COMMAND_COUNT", CGS_RWAC_FACTORY_H_ASSERT_FILE, 730));
+    }
+
+
 };
 
 } // namespace Playback

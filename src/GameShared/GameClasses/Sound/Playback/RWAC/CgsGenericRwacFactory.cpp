@@ -593,10 +593,9 @@ void GenericRwacFactory::HandlePluginEvent(
                "Plugin-event command word count");
     const RwacCommandPluginEvent& lrEvent =
         *reinterpret_cast<const RwacCommandPluginEvent*>(apuCommandWords);
-    rw::audio::core::PlugIn* lpPlugin =
-        reinterpret_cast<rw::audio::core::PlugIn*>(lrEvent.mpPlugin);
-    const int liEvent = static_cast<int>(lrEvent.maOperand1);
-    if (lrEvent.maOperand2 == 0u)
+    rw::audio::core::PlugIn* lpPlugin = lrEvent.mpPlugin;
+    const int liEvent = static_cast<int>(lrEvent.muEvent);
+    if (lrEvent.muParameters == 0u)
     {
         rw::audio::core::PlugIn::Event(lpPlugin, liEvent, 0);
         return;
@@ -696,13 +695,13 @@ void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
             RwacCommandVoiceCreateInstance* lpCommand =
                 reinterpret_cast<RwacCommandVoiceCreateInstance*>(lauWords);
             Voice* lpPlaybackVoice =
-                reinterpret_cast<Voice*>(lpCommand->mpPlaybackVoice);
+                lpCommand->mpPlaybackVoice;
             rw::audio::core::Voice** lppRwacVoice =
-                reinterpret_cast<rw::audio::core::Voice**>(lpCommand->mppVoice);
+                lpCommand->mppVoice;
             rw::audio::core::PlugIn*** lpppPlugin =
-                reinterpret_cast<rw::audio::core::PlugIn***>(lpCommand->mpppPlugin);
+                lpCommand->mpppPlugin;
             GenericRwacVoiceConfig* lpConfig =
-                reinterpret_cast<GenericRwacVoiceConfig*>(lpCommand->mpConfig);
+                lpCommand->mpConfig;
 
             *lppRwacVoice = rw::audio::core::Voice::CreateInstance(
                 static_cast<u8>(lpConfig->GetProcessingStage()),
@@ -712,7 +711,7 @@ void GenericRwacFactory::DoUpdate(f32 /*af32DeltaTime*/)
             lpPlaybackVoice->AcknowledgePlaybackStateChange();
 
             rw::audio::core::PlugIn** lppSubmix =
-                reinterpret_cast<rw::audio::core::PlugIn**>(lpCommand->maOperand);
+                lpCommand->mppSubmix;
             if (lppSubmix != 0 && *lpppPlugin != 0)
                 *lppSubmix = (*lpppPlugin)[0];
 

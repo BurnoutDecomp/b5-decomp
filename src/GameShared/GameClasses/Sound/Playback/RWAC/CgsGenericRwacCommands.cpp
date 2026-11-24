@@ -58,17 +58,6 @@ namespace Playback
 //   [tag]; stw r5,8(this) [op1]; stw r6,0xC(this) [op2]; the plugin non-null guard
 //   (cmplwi cr6,r4,0; bne skip) fires the "mpPlugin" assert when arg r4 is zero.
 // ---------------------------------------------------------------------------
-RwacCommandPluginEvent::RwacCommandPluginEvent(
-        uintptr_t apPlugin, uintptr_t auOperand1, uintptr_t auOperand2)
-{
-    mpPlugin      = apPlugin;                       // stw r4,4(this)
-    muCommandType = E_RWAC_COMMAND_PLUGIN_EVENT;    // li r11,3; stw r11,0(this)
-    maOperand1    = auOperand1;                      // stw r5,8(this)
-    maOperand2    = auOperand2;                      // stw r6,0xC(this)
-
-    CGS_ASSERT(mpPlugin != 0,
-        CgsDev::Assert::MessageAt("mpPlugin", KAC_ARTIST_ASSERT_FILE, 289 /* ARTIST 0x826813F0 */));
-}
 
 // ---------------------------------------------------------------------------
 // RwacCommandPluginGetAttribute::ctor  @ 0x826814C8
@@ -80,11 +69,11 @@ RwacCommandPluginEvent::RwacCommandPluginEvent(
 // ---------------------------------------------------------------------------
 RwacCommandPluginGetAttribute::RwacCommandPluginGetAttribute(
         u32 luCommandCount, const RwacCommandPluginGetAttribute& arSource)
+    : RwacCommand(arSource.muCommandType)
 {
-    muCommandType = arSource.muCommandType; // lwz r11,0(r5); stw r11,0(r31)
-    maOperand1    = arSource.maOperand1;    // lwz r11,4(r5); stw r11,4(r31)
-    maOperand2    = arSource.maOperand2;    // lwz r11,8(r5); stw r11,8(r31)
-    maOperand3    = arSource.maOperand3;    // lwz r11,0xC(r5); stw r11,0xC(r31)
+    mpPlugin      = arSource.mpPlugin;      // lwz r11,4(r5); stw r11,4(r31)
+    muAttribute   = arSource.muAttribute;   // lwz r11,8(r5); stw r11,8(r31)
+    mpfAddress    = arSource.mpfAddress;    // lwz r11,0xC(r5); stw r11,0xC(r31)
 
     CGS_ASSERT(luCommandCount == 4u,
         CgsDev::Assert::MessageAt(
@@ -120,17 +109,6 @@ RwacCommandQueue* RwacCommandQueue::GetCommand(uintptr_t* apOutWord)
     return this;
 }
 
-void RwacCommandQueue::PostCommand(uintptr_t auWord)
-{
-    const u32 luNext = (mu32Write + 1u) & (E_QUEUE_LENGTH - 1u);
-    CGS_ASSERT(luNext != mu32Read, "Writing when there's no room to Write.");
-    if (luNext == mu32Read)
-        return;
-
-    mauCommandQueue[mu32Write] = auWord;
-    mu32Write = luNext;
-}
-
 // ---------------------------------------------------------------------------
 // RwacCommandPlayerPlayParameters::ctor  @ 0x826AD578
 //   copy 3 words (tag + 2 operands) from arSource; if operand 0 (the play-request
@@ -138,8 +116,8 @@ void RwacCommandQueue::PostCommand(uintptr_t auWord)
 // ---------------------------------------------------------------------------
 RwacCommandPlayerPlayParameters::RwacCommandPlayerPlayParameters(
         GenericRwacWaveContent* apWaveContent, f32* apRequestHandle)
+    : RwacCommand(E_RWAC_COMMAND_PLAYER_PLAY_PARAMETERS)
 {
-    muCommandType = E_RWAC_COMMAND_PLAYER_PLAY_PARAMETERS;
     mpWaveContent = apWaveContent;
     mpRequestHandle = apRequestHandle;
     if (mpWaveContent)
@@ -148,8 +126,8 @@ RwacCommandPlayerPlayParameters::RwacCommandPlayerPlayParameters(
 
 RwacCommandPlayerPlayParameters::RwacCommandPlayerPlayParameters(
         u32 luCommandCount, const RwacCommandPlayerPlayParameters& arSource)
+    : RwacCommand(arSource.muCommandType)
 {
-    muCommandType = arSource.muCommandType;  // lwz r11,0(r5); stw r11,0(r31)
     mpWaveContent = arSource.mpWaveContent;  // lwz r11,4(r5); stw r11,4(r31)
     if (mpWaveContent != 0)
         mpWaveContent->Acquire();            // ++Object::mu32RefCount
@@ -176,16 +154,9 @@ RwacCommandPlayerPlayParameters::~RwacCommandPlayerPlayParameters()
 //   copy 2 words (tag + 1 operand) from arSource; assert count == 2, tag == 7.
 // ---------------------------------------------------------------------------
 RwacCommandPlayerIsRequestDoneParameters::RwacCommandPlayerIsRequestDoneParameters(
-        void* apParams)
-{
-    muCommandType = E_RWAC_COMMAND_PLAYER_IS_REQUEST_DONE_PARAMETERS;
-    mpParams = apParams;
-}
-
-RwacCommandPlayerIsRequestDoneParameters::RwacCommandPlayerIsRequestDoneParameters(
         u32 luCommandCount, const RwacCommandPlayerIsRequestDoneParameters& arSource)
+    : RwacCommand(arSource.muCommandType)
 {
-    muCommandType = arSource.muCommandType; // stw r11,0(this)
     mpParams      = arSource.mpParams;      // stw r11,4(this)
 
     CGS_ASSERT(luCommandCount == 2u,
@@ -204,8 +175,8 @@ RwacCommandPlayerIsRequestDoneParameters::RwacCommandPlayerIsRequestDoneParamete
 // ---------------------------------------------------------------------------
 RwacCommandApplyReverbIRFile::RwacCommandApplyReverbIRFile(
         u32 luCommandCount, const RwacCommandApplyReverbIRFile& arSource)
+    : RwacCommand(arSource.muCommandType)
 {
-    muCommandType = arSource.muCommandType; // stw r11,0(this)
     maOperand     = arSource.maOperand;     // stw r11,4(this)
 
     CGS_ASSERT(luCommandCount == 2u,
@@ -224,16 +195,16 @@ RwacCommandApplyReverbIRFile::RwacCommandApplyReverbIRFile(
 // ---------------------------------------------------------------------------
 RwacCommandGinsuAttachDataParameters::RwacCommandGinsuAttachDataParameters(
         void* apRamData)
+    : RwacCommand(E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS)
 {
-    muCommandType = E_RWAC_COMMAND_GINSU_ATTACH_DATA_PARAMETERS;
     maOperand = reinterpret_cast<uintptr_t>(apRamData);
     CGS_ASSERT(maOperand != 0, "mpvRamData");
 }
 
 RwacCommandGinsuAttachDataParameters::RwacCommandGinsuAttachDataParameters(
         u32 luCommandCount, const RwacCommandGinsuAttachDataParameters& arSource)
+    : RwacCommand(arSource.muCommandType)
 {
-    muCommandType = arSource.muCommandType; // stw r11,0(this)
     maOperand     = arSource.maOperand;     // stw r11,4(this)
 
     CGS_ASSERT(luCommandCount == 2u,
@@ -259,15 +230,16 @@ RwacCommandGinsuAttachDataParameters::RwacCommandGinsuAttachDataParameters(
 //   / "mppVoice" / "mpppPlugin" / "mpConfig" asserts. The 6th word carries no check.
 // ---------------------------------------------------------------------------
 RwacCommandVoiceCreateInstance::RwacCommandVoiceCreateInstance(
-        uintptr_t apPlaybackVoice, uintptr_t appVoice, uintptr_t apppPlugin,
-        uintptr_t apConfig, uintptr_t auOperand)
+        Voice* lpPlaybackVoice, rw::audio::core::Voice** lppVoice,
+        rw::audio::core::PlugIn*** lpppPlugin, GenericRwacVoiceConfig* lpConfig,
+        rw::audio::core::PlugIn** lppSubmix)
+    : RwacCommand(E_RWAC_COMMAND_VOICE_CREATE_INSTANCE)    // li r11,1; stw r11,0(this)
 {
-    mpPlaybackVoice = apPlaybackVoice;                  // stw r4,4(this)
-    muCommandType   = E_RWAC_COMMAND_VOICE_CREATE_INSTANCE; // li r11,1; stw r11,0(this)
-    mppVoice        = appVoice;                          // stw r5,8(this)
-    mpppPlugin      = apppPlugin;                        // stw r6,0xC(this)
-    mpConfig        = apConfig;                          // stw r7,0x10(this)
-    maOperand       = auOperand;                         // stw r8,0x14(this)
+    mpPlaybackVoice = lpPlaybackVoice;                  // stw r4,4(this)
+    mppVoice        = lppVoice;                          // stw r5,8(this)
+    mpppPlugin      = lpppPlugin;                        // stw r6,0xC(this)
+    mpConfig        = lpConfig;                          // stw r7,0x10(this)
+    mppSubmix       = lppSubmix;                         // stw r8,0x14(this)
 
     CGS_ASSERT(mpPlaybackVoice != 0,
         CgsDev::Assert::MessageAt("mpPlaybackVoice", KAC_ARTIST_ASSERT_FILE, 173 /* ARTIST 0x826811BC */));
@@ -285,9 +257,9 @@ RwacCommandVoiceCreateInstance::RwacCommandVoiceCreateInstance(
 // ---------------------------------------------------------------------------
 RwacCommandVoiceRelease::RwacCommandVoiceRelease(
         u32 luCommandCount, const RwacCommandVoiceRelease& arSource)
+    : RwacCommand(arSource.muCommandType)
 {
-    muCommandType = arSource.muCommandType; // lwz r11,0(r5); stw r11,0(this)
-    maOperand     = arSource.maOperand;     // lwz r11,4(r5); stw r11,4(this)
+    mpVoice       = arSource.mpVoice;       // lwz r11,4(r5); stw r11,4(this)
 
     CGS_ASSERT(luCommandCount == 2u,
         CgsDev::Assert::MessageAt(
@@ -305,8 +277,8 @@ RwacCommandVoiceRelease::RwacCommandVoiceRelease(
 // ---------------------------------------------------------------------------
 RwacCommandSendConnectParameters::RwacCommandSendConnectParameters(
         u32 luCommandCount, const RwacCommandSendConnectParameters& arSource)
+    : RwacCommand(arSource.muCommandType)
 {
-    muCommandType = arSource.muCommandType; // lwz r11,0(r5); stw r11,0(this)
     maOperand     = arSource.maOperand;     // lwz r11,4(r5); stw r11,4(this)
 
     CGS_ASSERT(luCommandCount == 2u,

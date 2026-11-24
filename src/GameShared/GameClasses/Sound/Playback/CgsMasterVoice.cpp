@@ -27,11 +27,6 @@ MasterVoice::MasterVoice(size_t auClientSize, Factory& arFactory,
     spMasterVoice = this;
 }
 
-bool MasterVoice::IsAvailable()
-{
-    return spMasterVoice != NULL;
-}
-
 MasterVoice& MasterVoice::GetMasterVoice()
 {
     CGS_ASSERT(spMasterVoice != NULL, "spMasterVoice");

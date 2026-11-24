@@ -5,6 +5,7 @@
 #include "GameShared/GameClasses/Sound/Playback/RWAC/CgsGenericRwacVoiceConfig.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsVoice.h"
 #include "GameShared/GameClasses/Sound/Playback/CgsSubmixVoice.h"
+#include "GameShared/GameClasses/Sound/Playback/CgsMasterVoice.h"
 #include "rw/audio/core/PlugIn.h"
 #include "rw/audio/core/Voice.h"
 #include "rw/audio/core/Send.h"
@@ -24,17 +25,20 @@ GenericRwacVoice::GenericRwacVoice()
 {
 }
 
-// @0x826C1DC0. Release of the vendor voice is marshalled through the owning
-// GenericRwacFactory so it runs under the same lock as voice creation.
+// ARTIST's file string for this file's asserts (0x820B2E60).
+#define CGS_GENERIC_RWAC_VOICE_CPP_ASSERT_FILE \
+    "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/RWAC/CgsGenericRwacVoice.cpp"
+
+// @0x826C1DC0 (DWARF cpp:53, local lCommand cpp:59). Release of the vendor voice is
+// marshalled through the owning GenericRwacFactory's command queue, unconditionally:
+// ARTIST asserts the master voice still exists (cpp:57), builds the release record
+// (whose constructor asserts the voice) and posts it.
 GenericRwacVoice::~GenericRwacVoice()
 {
-    if (mpVoice != 0 && mpFactory != 0)
-    {
-        RwacCommandQueue& lrQueue = mpFactory->GetCommandQueue();
-        lrQueue.PostCommand(2u);
-        lrQueue.PostCommand(E_RWAC_COMMAND_VOICE_RELEASE);
-        lrQueue.PostCommand(reinterpret_cast<uintptr_t>(mpVoice));
-    }
+    CGS_ASSERT(MasterVoice::IsAvailable(), CgsDev::Assert::MessageAt(
+        "MasterVoice::IsAvailable()", CGS_GENERIC_RWAC_VOICE_CPP_ASSERT_FILE, 57));
+    RwacCommandVoiceRelease lCommand(mpVoice);
+    GetRwacFactory().GetCommandQueue() << lCommand;
 
     mpVoice = 0;
     mppPlugin = 0;
@@ -42,55 +46,33 @@ GenericRwacVoice::~GenericRwacVoice()
     mu16PluginCount = 0;
 }
 
+// @0x826D9B40 (DWARF cpp:74, locals lpVoiceConfig cpp:80 and lCommand cpp:94). ARTIST
+// uses the config unchecked, sets the flags to 1 before the player-slot lookup and
+// clears them when the voice has no player slot (0x826D9BBC..0x826D9BE8).
 bool GenericRwacVoice::CreateVoiceInstance(
-    const VoiceSpec& akrSpec, Voice& arBaseVoice,
-    GenericRwacFactory& arFactory, rw::audio::core::PlugIn** appSubmix)
+    const VoiceSpec& lVoiceSpec, Voice& lVoiceBase,
+    GenericRwacFactory& lFactory, rw::audio::core::PlugIn** mppSubmix)
 {
-    mpFactory = &arFactory;
-    GenericRwacVoiceConfig* lpConfig =
-        arFactory.SetupConfig(akrSpec, arBaseVoice, *this);
-    CGS_ASSERT(lpConfig != 0, "lpVoiceConfig");
-    if (lpConfig == 0)
-        return false;
+    mpFactory = &lFactory;
+    GenericRwacVoiceConfig* lpVoiceConfig = lFactory.SetupConfig(lVoiceSpec, lVoiceBase, *this);
 
-    mu16PluginCount = static_cast<u16>(lpConfig->GetPluginCount());
-    mu16FirstSendPlugin = static_cast<u16>(lpConfig->GetFirstSendPlugin());
-    CGS_ASSERT(akrSpec.mu8VoiceType == E_MASTER_VOICE || mu16FirstSendPlugin > 0,
-               "(E_MASTER_VOICE == lVoiceSpec.GetVoiceType()) || (mu16FirstSendPlugin > 0)");
-
-    mu8Flags = arBaseVoice.FindNamedSlot(PlayerVoice::SK_PLAYER_SLOT_NAME) != 0 ? 1u : 0u;
-
-    RwacCommandVoiceCreateInstance lCommand(
-        reinterpret_cast<uintptr_t>(&arBaseVoice),
-        reinterpret_cast<uintptr_t>(&mpVoice),
-        reinterpret_cast<uintptr_t>(&mppPlugin),
-        reinterpret_cast<uintptr_t>(lpConfig),
-        reinterpret_cast<uintptr_t>(appSubmix));
-    arFactory.GetCommandQueue().Post(lCommand);
-    return true;
-}
-
-rw::audio::core::PlugIn* GenericRwacVoice::GetPlugin(u32 au32I)
-{
-    CGS_ASSERT(au32I < mu16PluginCount, "lu32I < mu16PluginCount");
-    CGS_ASSERT(mppPlugin != 0 && mppPlugin[au32I] != 0, "mppPlugin[lu32I]");
-    return mppPlugin[au32I];
-}
-
-rw::audio::core::PlugIn* GenericRwacVoice::GetSendPlugin(u32 au32I)
-{
-    CGS_ASSERT(mu16FirstSendPlugin > 0, "mu16FirstSendPlugin > 0");
-    const u32 lu32I = static_cast<u32>(mu16FirstSendPlugin) + au32I;
-    return GetPlugin(lu32I);
-}
-
-GenericRwacFactory& GenericRwacVoice::GetRwacFactory()
-{
-    CGS_ASSERT(mpFactory != 0,
+    mu16PluginCount = static_cast<uint16_t>(lpVoiceConfig->GetPluginCount());
+    mu16FirstSendPlugin = static_cast<uint16_t>(lpVoiceConfig->GetFirstSendPlugin());
+    CGS_ASSERT((E_MASTER_VOICE == lVoiceSpec.mu8VoiceType) || (mu16FirstSendPlugin > 0),
         CgsDev::Assert::MessageAt(
-            "mpFactory",
-            "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Rwac/CgsGenericRwacVoice.h", 598 /* ARTIST 0x82682868 */));
-    return *mpFactory;
+            "(E_MASTER_VOICE == lVoiceSpec.GetVoiceType()) || (mu16FirstSendPlugin > 0)",
+            CGS_GENERIC_RWAC_VOICE_CPP_ASSERT_FILE, 84));
+
+    mu8Flags = 1;
+    if (!lVoiceBase.FindNamedSlot(PlayerVoice::SK_PLAYER_SLOT_NAME))
+    {
+        mu8Flags = 0;
+    }
+
+    RwacCommandVoiceCreateInstance lCommand(&lVoiceBase, &mpVoice, &mppPlugin, lpVoiceConfig,
+                                            mppSubmix);
+    GetRwacFactory().GetCommandQueue() << lCommand;
+    return true;
 }
 
 f32 GenericRwacVoice::GetCpuTicks() const
@@ -144,12 +126,9 @@ void GenericRwacVoice::Update(rw::audio::core::System* apSystem, Voice& arVoice)
         {
             OutputParameter& lrOutput =
                 arVoice.GetOutputParameter(lrMap.mu8ParameterIndex);
-            RwacCommandQueue& lrQueue = GetRwacFactory().GetCommandQueue();
-            lrQueue.PostCommand(4u);
-            lrQueue.PostCommand(E_RWAC_COMMAND_PLUGIN_GET_ATTRIBUTE);
-            lrQueue.PostCommand(reinterpret_cast<uintptr_t>(lpPlugin));
-            lrQueue.PostCommand(lrMap.mu8Attribute);
-            lrQueue.PostCommand(reinterpret_cast<uintptr_t>(lrOutput.GetAddress()));
+            RwacCommandPluginGetAttribute lCommand(lpPlugin, lrMap.mu8Attribute,
+                                                   lrOutput.GetAddress());
+            GetRwacFactory().GetCommandQueue() << lCommand;
         }
         else
         {

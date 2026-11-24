@@ -85,12 +85,12 @@ public:
     bool StreamHeaderFunc();
     bool StreamDebugDataFunc();
     bool StreamEntryListFunc(void* lpOutputBuffer);
-    bool StreamDataFunc();
+    bool StreamDataFunc(BundleLoaderIO::OutputBuffer* lpOutput);
     bool StreamDoneFunc(void* lpOutputBuffer);
     bool StreamClose(void* lpOutputBuffer);
     bool StreamCompressedDataAsJobFunc(void* lpOutputBuffer);
     bool StreamIdleFunc(void* lpOutputBuffer);
-    void UpdateStream(void* lpOutputBuffer);
+    void UpdateStream(BundleLoaderIO::OutputBuffer* lpOutput);
 
 private:
     static void AssertNativeLayout();

@@ -681,9 +681,62 @@ void BundleLoaderModule::ProcessBundleEntryList(void* lpOutputBuffer) // 828FAF5
     mbOnLastStreamJob = false;
     miNextFixUpRequestIndex = 0;
 }
-void BundleLoaderModule::UpdateStream(void* lpOutputBuffer) // 82906B30
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+void BundleLoaderModule::PostLoadFinishedEvent(BundleLoaderIO::OutputBuffer* lpOutput,
+    const Events::LoadBundleRequest* lpLoadRequest, Events::LoadBundleResponse::EResult leResult) // 828EC3C8
 {
-    BundleLoaderIO::OutputBuffer* lpOutput = static_cast<BundleLoaderIO::OutputBuffer*>(lpOutputBuffer);
+    CGS_ASSERT(lpOutput, "lpOutput");
+
+    Events::LoadBundleResponse lResponse;   // DWARF cpp:705 (ARTIST +25)
+    lResponse.Construct(lpLoadRequest->GetUser(), lpLoadRequest->GetEventId(), lpLoadRequest->GetFileName(),
+                        lpLoadRequest->GetPoolId(), leResult);
+    lpOutput->GetLoadBundleResponseQueue()->AddEvent(lResponse);
+}
+void BundleLoaderModule::UpdateStream(BundleLoaderIO::OutputBuffer* lpOutput) // 82906B30
+{
+
+    if (_miStreamUpdate > -1)
+        CgsDev::PerfMonCpu::StartMonitor(_miStreamUpdate);
     switch (meStreamStage) {
     case STREAMSTAGE_IDLE: {
         meStreamStage = STREAMSTAGE_IDLE;
@@ -714,62 +767,9 @@ void BundleLoaderModule::UpdateStream(void* lpOutputBuffer) // 82906B30
         break;
     case STREAMSTAGE_STREAMDATA: {
         meStreamStage = STREAMSTAGE_STREAMDATA;
-        bool lbFinished;
-        if (mCurrentBundle.IsCompressed()) {
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+        if (!mCurrentBundle.IsCompressed()) {
+            if (!StreamDataFunc(lpOutput)) break;
+        } else {
 
 
 
@@ -855,11 +855,11 @@ void BundleLoaderModule::UpdateStream(void* lpOutputBuffer) // 82906B30
 
 
             CGS_ASSERT_STREAM(mCurrentBundle.IsMainMemOptimised() && mCurrentBundle.IsGraphicsMemOptimised(), "Compressed data must be main and graphics mem optmised to use with decompression job\n");
-            lbFinished = StreamCompressedDataAsJobFunc(lpOutput);
-        } else {
-            lbFinished = StreamDataFunc();
+            if (!StreamCompressedDataAsJobFunc(lpOutput)) break;
         }
-        if (!lbFinished) break;
+
+
+
     }
         // fall through
     case STREAMSTAGE_CLOSESTREAM:
@@ -870,11 +870,12 @@ void BundleLoaderModule::UpdateStream(void* lpOutputBuffer) // 82906B30
     case STREAMSTAGE_STREAMDONE:
         meStreamStage = STREAMSTAGE_STREAMDONE;
         if (mQueuedLoads.GetLength() == 0) CheckForLoads(lpOutput);
-        if (mAllocationResponse.miPoolId < 0) {
+        if (mAllocationResponse.miPoolId >= 0) {
+            if (!StreamDoneFunc(lpOutput)) break;
+        } else {
             meStreamStage = STREAMSTAGE_LOADDONE;
             break;
         }
-        if (!StreamDoneFunc(lpOutput)) break;
         // fall through
     case STREAMSTAGE_FIXUP:
         meStreamStage = STREAMSTAGE_FIXUP;
@@ -882,7 +883,7 @@ void BundleLoaderModule::UpdateStream(void* lpOutputBuffer) // 82906B30
         break;
     case STREAMSTAGE_LOADDONE:
         if (mLoadRequest.mbLiveUpdateReplace)
-            mLoadRequest.miPoolId = mAllocationResponse.miPoolId;
+            mLoadRequest.SetPoolId(mAllocationResponse.miPoolId);   // DWARF: BundleLoaderEvent::SetPoolId
         PostLoadFinishedEvent(lpOutput, &mLoadRequest, mAllocationResponse.mbFailed
             ? Events::LoadBundleResponse::E_RESULT_OUT_OF_MEMORY : Events::LoadBundleResponse::E_RESULT_SUCCESS);
         meStreamStage = STREAMSTAGE_IDLE;
@@ -945,17 +946,16 @@ void BundleLoaderModule::UpdateStream(void* lpOutputBuffer) // 82906B30
 
 
 
-
         CGS_ASSERT(false, "Should never happen.");
         break;
     default:
         break;
     }
+    if (_miStreamUpdate > -1)
+        CgsDev::PerfMonCpu::StopMonitor(_miStreamUpdate);
 }
 bool BundleLoaderModule::StreamIdleFunc(void* lpOutputBuffer)
 {
-
-
 
 
 
@@ -2011,21 +2011,21 @@ void BundleLoaderModule::ProcessBundleLoadRequests(
 }
 
 
-void BundleLoaderModule::PostLoadFinishedEvent(BundleLoaderIO::OutputBuffer* lpOutput,
-    const Events::LoadBundleRequest* lpRequest, Events::LoadBundleResponse::EResult leResult)
-{
-    // ARTIST828EC3C8-450: preserve destination/event/name/pool; clear the
-    // request-only live-update flag, and publish the supplied result.
-    CGS_ASSERT(lpOutput, "lpOutput");
-    Events::LoadBundleResponse lResponse = Events::LoadBundleResponse();
-    lResponse.mpUser = lpRequest->mpUser;
-    lResponse.miEventId = lpRequest->miEventId;
-    lResponse.SetFileName(lpRequest->macFileName);
-    lResponse.miPoolId = lpRequest->miPoolId;
-    lResponse.mbLiveUpdateReplace = false;
-    lResponse.meResult = leResult;
-    lpOutput->GetLoadBundleResponseQueue()->AddEvent(lResponse);
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 bool BundleLoaderModule::CheckForLoads(BundleLoaderIO::OutputBuffer* lpOutput) // 828FB758
@@ -2136,7 +2136,7 @@ bool BundleLoaderModule::MoveToNextResource() // 828D7CE0
 }
 
 
-bool BundleLoaderModule::StreamDataFunc() // 82904648
+bool BundleLoaderModule::StreamDataFunc(BundleLoaderIO::OutputBuffer* /*lpOutput*/) // 82904648
 {
     CgsFileSystem::ReadStream& lrStream = maStreams[miCurrentStream];
     while (lrStream.GetAmountOfDataInBuffer() > 0) {

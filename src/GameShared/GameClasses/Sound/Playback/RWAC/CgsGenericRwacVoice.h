@@ -4,6 +4,11 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"
+
+// ARTIST's file string for this header's inline asserts (0x820AB8D8).
+#define CGS_GENERIC_RWAC_VOICE_H_ASSERT_FILE \
+    "..\\..\\..\\GameShared\\GameClasses\\Sound/Playback/Rwac/CgsGenericRwacVoice.h"
 
 namespace rw { namespace audio { namespace core {
 class System;
@@ -41,12 +46,14 @@ struct GenericRwacVoice
                              GenericRwacFactory& arFactory,
                              rw::audio::core::PlugIn** appSubmix);
 
-    rw::audio::core::PlugIn* GetPlugin(u32 au32I);
-    rw::audio::core::PlugIn* GetSendPlugin(u32 au32I);
+    // CgsGenericRwacVoice.h:357/360/374 (DWARF), bodied inline below.
+    rw::audio::core::PlugIn* GetPlugin(uint32_t lu32I);
+    rw::audio::core::PlugIn* GetSendPlugin(uint32_t lu32Index);
     GenericRwacFactory& GetRwacFactory();
 
     f32 GetCpuTicks() const;
     void Update(rw::audio::core::System* apSystem, Voice& arVoice);
+
     bool ConnectSend(u32 au32Index, SubmixVoice* apSubmix);
 
     void AddParameterMap(u8 au8ParameterIndex, u8 au8PluginOffset,
@@ -67,6 +74,38 @@ private:
     u32                       mu32ParameterMapCount; // +0x50
     u8                        mu8Flags;              // +0x54
 };
+
+// CgsGenericRwacVoice.h:467 (DWARF h:357). ARTIST copy 0x82682700, asserts 469/470.
+inline rw::audio::core::PlugIn* GenericRwacVoice::GetPlugin(uint32_t lu32I)
+{
+    CGS_ASSERT(lu32I < mu16PluginCount, CgsDev::Assert::MessageAt(
+        "lu32I < mu16PluginCount", CGS_GENERIC_RWAC_VOICE_H_ASSERT_FILE, 469));
+    CGS_ASSERT(mppPlugin[lu32I], CgsDev::Assert::MessageAt(
+        "mppPlugin[lu32I]", CGS_GENERIC_RWAC_VOICE_H_ASSERT_FILE, 470));
+    return mppPlugin[lu32I];
+}
+
+// CgsGenericRwacVoice.h:477 (DWARF h:360). ARTIST copy 0x82682788: its own index
+// asserts (479, then 483/484 -- not a GetPlugin call; PS3 inlines the same lines).
+inline rw::audio::core::PlugIn* GenericRwacVoice::GetSendPlugin(uint32_t lu32Index)
+{
+    CGS_ASSERT(mu16FirstSendPlugin > 0, CgsDev::Assert::MessageAt(
+        "mu16FirstSendPlugin > 0", CGS_GENERIC_RWAC_VOICE_H_ASSERT_FILE, 479));
+    uint32_t lu32I = mu16FirstSendPlugin + lu32Index;
+    CGS_ASSERT(lu32I < mu16PluginCount, CgsDev::Assert::MessageAt(
+        "lu32I < mu16PluginCount", CGS_GENERIC_RWAC_VOICE_H_ASSERT_FILE, 483));
+    CGS_ASSERT(mppPlugin[lu32I], CgsDev::Assert::MessageAt(
+        "mppPlugin[lu32I]", CGS_GENERIC_RWAC_VOICE_H_ASSERT_FILE, 484));
+    return mppPlugin[lu32I];
+}
+
+// CgsGenericRwacVoice.h:596 (DWARF h:374). ARTIST copy 0x82682840, assert 598.
+inline GenericRwacFactory& GenericRwacVoice::GetRwacFactory()
+{
+    CGS_ASSERT(mpFactory, CgsDev::Assert::MessageAt(
+        "mpFactory", CGS_GENERIC_RWAC_VOICE_H_ASSERT_FILE, 598));
+    return *mpFactory;
+}
 
 } // namespace Playback
 } // namespace CgsSound
