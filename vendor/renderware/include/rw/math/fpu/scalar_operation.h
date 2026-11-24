@@ -101,6 +101,21 @@ namespace fpu
     // "RwMathFPU::IsValid(...)" tripwires): finite-value check -- the console emits it
     // as the fcmpu f0,f0 NaN self-compare, reproduced exactly.
     inline bool IsValid(float lfValue) { return lfValue == lfValue; }
+
+    // rwmath 1.02.00 include/rw/math/fpu/scalar.h:375, verbatim. AIDriver::StartDrift calls it
+    // (DWARF BrnAIDriver.cpp:1450 lists rw::math::fpu::SgnNonZero<float>); the console folds it
+    // to `fsel f1, a, 1.0, -1.0` (0x8277C8B4).
+    template <class T> inline T SgnNonZero(T a)
+    {
+        if( a >= 0.0f )
+        {
+            return 1.0f;
+        }
+        else
+        {
+            return -1.0f;
+        }
+    }
 }
 }
 }

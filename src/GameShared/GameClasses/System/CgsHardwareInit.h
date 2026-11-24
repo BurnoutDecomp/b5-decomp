@@ -66,4 +66,13 @@ namespace CgsSystem
         static bool DetermineIsPartyEditionVersion();
 
     };
+
+    // CgsHardwareInit.h:135. Header-inline in the original: ARTIST has no out-of-line copy
+    // and every caller loads the scheduler's address directly (e.g. BrnPostFx::BeginTintBlend
+    // 0x823F8468 `lis r11,-0x7cf1; addi r3,r11,-0x59b0` == &HardwareInit::mJobManager
+    // 0x830EA650).
+    inline EA::Jobs::JobScheduler* JobManager()
+    {
+        return &HardwareInit::mJobManager;
+    }
 }

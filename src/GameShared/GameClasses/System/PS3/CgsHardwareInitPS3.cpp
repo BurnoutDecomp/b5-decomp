@@ -33,12 +33,6 @@ volatile bool CgsSystem::HardwareInit::mbHardwareRequestsShutdown;
 bool CgsSystem::HardwareInit::mbIsGuideOnScreen;
 bool CgsSystem::HardwareInit::mbHasDetectedAutomaticTestingFile; // ARTIST83085F80
 
-EA::Jobs::JobScheduler* CgsSystem::JobManager()
-{
-    // CgsHardwareInit.h135 (DecFIGS); inlined address830EA650 in ARTIST callers.
-    return &HardwareInit::mJobManager;
-}
-
 char* CgsSystem::HardwareInit::GetFOPENDirectory()
 {
     return "d:\\";
