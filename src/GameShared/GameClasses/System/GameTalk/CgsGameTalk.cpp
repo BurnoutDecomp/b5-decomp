@@ -40,8 +40,8 @@ namespace CgsGameTalk
         // the "Core/GameTalk" menu path with the "Log" caption (off_82F32FBC / off_82F32FB8).
         CgsDev::DebugUI::LogWindow sLogWindow;
 
-        const char* const KAC_LOG_WINDOW_PATH    = "Core/GameTalk"; // off_82F32FBC
-        const char* const KAC_LOG_WINDOW_CAPTION = "Log";           // off_82F32FB8
+        const char* KAC_LOG_WINDOW_PATH    = "Core/GameTalk"; // off_82F32FBC
+        const char* KAC_LOG_WINDOW_CAPTION = "Log";           // off_82F32FB8
         const s32         KI_LOG_WINDOW_LINES     = 20;             // li r4, 0x14
 
         // The GameTalk manager is created with a small fixed channel count and no flags
@@ -50,13 +50,15 @@ namespace CgsGameTalk
 
         // The channel name the AttribSys GameTalk handler is registered on
         // (off_82F32FB4 "AttribSys.xenon").
-        const char* const KAC_ATTRIBSYS_CHANNEL = "AttribSys.xenon";
+        const char* KAC_ATTRIBSYS_CHANNEL = "AttribSys.xenon";
 
+        // The string pointers below are writable .data slots in ARTIST (each accessor lwz-loads its
+        // slot), so they are plain const char* variables, not const pointers the compiler folds.
         // GameTalkDebugComponent's name/path, returned verbatim by GetName/GetPath. These are the
-        // rodata const char* pointers the two accessors lwz through (off_82F30E90 -> "GameTalk",
+        // .data const char* pointers the two accessors lwz through (off_82F30E90 -> "GameTalk",
         // off_82F30E94 -> "Core"); distinct from the KAC_LOG_WINDOW_* pair Prepare uses.
-        const char* const KAC_DEBUG_COMPONENT_NAME = "GameTalk"; // off_82F30E90
-        const char* const KAC_DEBUG_COMPONENT_PATH = "Core";     // off_82F30E94
+        const char* KAC_DEBUG_COMPONENT_NAME = "GameTalk"; // off_82F30E90
+        const char* KAC_DEBUG_COMPONENT_PATH = "Core";     // off_82F30E94
 
         // The size OnActivate passes to Window::SetSize (flt_820DEDB8 / flt_820DEDBC).
         const f32 KF_DEBUG_WINDOW_WIDTH  = 250.0f; // flt_820DEDB8
@@ -71,6 +73,7 @@ namespace CgsGameTalk
 
         // Bring up the transport on the GameTalk listen port (asm passes 0x2694 in r5).
         mProtocol.Construct(lbInitialiseNetwork, KI_DEFAULT_GAMETALK_PORT);
+        mDebugComponent.Construct();   // ARTIST bl 0x8284CB38 @0x82837674 (the folded empty base Construct)
 
         // Bring up the "Core/GameTalk" log window.
         sLogWindow.Construct(KI_LOG_WINDOW_LINES);

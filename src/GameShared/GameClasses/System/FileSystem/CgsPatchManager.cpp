@@ -131,7 +131,7 @@ namespace CgsFileSystem
                 CgsCore::SPrintf(lacChild, sizeof(lacChild), "%s\\%s", lpcSubFolder, lFindData.cFileName);
                 SearchFolder(lpcPatchFolder, lacChild);
             }
-            else if ((lFindData.dwFileAttributes & FILE_ATTRIBUTE_ARCHIVE) != 0)
+            else if ((lFindData.dwFileAttributes & FILE_ATTRIBUTE_NORMAL) != 0)   // rlwinm ..,0,24,24 (0x80) @0x828F0B30
             {
                 // A regular file: record it under the current patch. The asm passes the path with
                 // its leading '\' stripped (var_46F = &buf+1) so the recorded key matches lookups.
@@ -139,7 +139,7 @@ namespace CgsFileSystem
                 AddFileToCurrentPatch(lacChild + 1);
             }
         }
-        while (FindNextFileA(lFindHandle, &lFindData));
+        while (FindNextFileA(lFindHandle, &lFindData) == TRUE);   // cmpwi r3,1 @0x828F0B6C
 
         FindClose(lFindHandle);
     }

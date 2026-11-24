@@ -1,240 +1,1200 @@
 #pragma once
 
-#include "types.hpp"
-#include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
-
-// CgsContainers::IndexedLinkedList<T, Index> - an intrusive doubly-linked list that
-// stores its links as INDICES into a caller-supplied, relocatable node array (mpBase)
-// instead of pointers, so the whole node block can be relocated/relinked in place (the
-// resource Heap relies on this during defrag). Indices are 0-based offsets from mpBase;
-// KI_LIST_INVALID (0xFFFF for a u16 index) is the null sentinel; an empty list has
-// miFirst == miLast == KI_LIST_INVALID and miCount == 0.
+// CgsContainers::IndexedLinkedList<DataType, IndexType> -- an intrusive doubly-linked list that stores
+// its links as INDICES into a caller-supplied, relocatable node array (mpBase), so the node block
+// can be relocated in place (the resource Heap relies on this during defrag). KI_LIST_INVALID
+// (0xFFFF for a u16 index) is the null link.
 //
-// DECOMPILED from the X360 build (the template is inlined everywhere; no out-of-line
-// copy exists): the layout and the exact index math were recovered from the inlined code
-// in CgsResource::Heap::Reprepare (Init / InternalAddFirstNode / InternalAddTail) and
-// ::GetLargestFreeBlock (the GetHead/GetNext walk). The baked asserts confirm two call
-// contracts -- Init requires a base pointer (CgsIndexedLinkList.h:423) and InternalAddTail
-// must not run on an empty list (CgsIndexedLinkList.h:1109). The remaining list surgery
-// (AddHead/AddBefore/Remove*) follows the same confirmed 0-based / KI_LIST_INVALID rules.
+// The original file: the class shapes, member names and the line of every declarator are the
+// DecFIGS DWARF's (CgsIndexedLinkList.h: IndexedLinkedListNode h:63, data h:101-103; IndexedLinkedList
+// h:117, KI_LIST_* h:120/121, data h:203-206, Init h:412 .. InternalRemoveTail h:1184); the bodies
+// are the LegacySrc copy of this header (BrnEntityModuleUnity), which ARTIST's inlined copies follow
+// (Heap::Reprepare @0x828FD6A8 inlines Init's u16 chaining loop and AddTail ->
+// InternalAddFirstNode / InternalAddTail; Heap::GetLargestFreeBlock @0x828ECAE8 inlines GetHead as
+// `miCount > 0 ? &mpBase[miFirst] : 0`; IndexedHashTable::Insert @0x828C37D0 inlines AddBefore ->
+// InternalAddHead). Every template member is inline: ARTIST has no out-of-line copy.
+//
+// The asserts sit on the lines ARTIST bakes and stream their message through the assert buffer as
+// ARTIST does (file string @0x820E7738): Init 423 @0x828FD75C, InternalAddHead 1081 @0x828C3928,
+// InternalAddTail 1109 @0x828FD8B4, InternalRemoveLastNode 1137 @0x828F51AC. The asserts of
+// InternalAddFirstNode / InternalRemoveHead / InternalRemoveTail are on their lines too; their
+// callers' own tests make them constant, so ARTIST keeps no site of them.
+
+#include "types.hpp"
+#include "GameShared/GameClasses/Core/CgsAssert.h"               // CGS_ASSERT_STREAM
+#include "GameShared/GameClasses/Development/CgsStrStream.h"   // the streamed assert messages
 
 namespace CgsContainers
 {
-    template <class T, class Index>
-    class IndexedLinkedListNode
-    {
-    public:
-        T*       GetData()                { return &mData; }
-        const T* GetData() const          { return &mData; }
-        void     SetData(T* lpData)       { mData = *lpData; }
 
-        Index GetNextIndex() const        { return miNextIndex; }
-        Index GetPrevIndex() const        { return miPrevIndex; }
-        void  SetNextIndex(Index liIndex) { miNextIndex = liIndex; }
-        void  SetPrevIndex(Index liIndex) { miPrevIndex = liIndex; }
+template<class DataType, class IndexType> class IndexedLinkedList;
 
-        T*       operator->()             { return &mData; }
-        const T* operator->() const       { return &mData; }
-        T&       operator*()              { return mData; }
-        const T& operator*() const        { return mData; }
 
-    private:
-        T     mData;
-        Index miNextIndex;
-        Index miPrevIndex;
-    };
 
-    template <class T, class Index>
-    class IndexedLinkedList
-    {
-    public:
-        typedef IndexedLinkedListNode<T, Index> Node;
 
-        static const Index KI_LIST_ZERO    = 0;
-        static const Index KI_LIST_INVALID = static_cast<Index>(-1);   // 0xFFFF for a u16 index
 
-        // :412 - bind to the node array and, if liCount > 0, chain every node 0 -> 1 ->
-        // ... -> liCount-1 (head prev / tail next = INVALID); otherwise start empty.
-        void Init(Node* lpBase, Index liCount)
-        {
-            mpBase  = lpBase;
-            miCount = liCount;
-            if (liCount > 0)
-            {
-                CGS_ASSERT(lpBase != 0, "Indexed list must be initialized with a base pointer\n");  // :423
-                miFirst = 0;
-                miLast  = static_cast<Index>(liCount - 1);
-                mpBase[0].SetPrevIndex(KI_LIST_INVALID);
-                mpBase[miLast].SetNextIndex(KI_LIST_INVALID);
-                for (s32 i = 1; i < static_cast<s32>(liCount); ++i)
-                {
-                    mpBase[i - 1].SetNextIndex(static_cast<Index>(i));
-                    mpBase[i].SetPrevIndex(static_cast<Index>(i - 1));
-                }
-            }
-            else
-            {
-                miFirst = KI_LIST_INVALID;
-                miLast  = KI_LIST_INVALID;
-            }
-        }
 
-        Node*       GetHead()              { return miFirst == KI_LIST_INVALID ? 0 : &mpBase[miFirst]; }
-        const Node* GetHead() const        { return miFirst == KI_LIST_INVALID ? 0 : &mpBase[miFirst]; }
-        Node*       GetTail()              { return miLast  == KI_LIST_INVALID ? 0 : &mpBase[miLast]; }
-        const Node* GetTail() const        { return miLast  == KI_LIST_INVALID ? 0 : &mpBase[miLast]; }
-        Index       GetHeadIndex() const   { return miFirst; }
 
-        Node* GetNext(const Node* lpNode)
-        {
-            Index liNext = lpNode->GetNextIndex();
-            return liNext == KI_LIST_INVALID ? 0 : &mpBase[liNext];
-        }
-        const Node* GetNext(const Node* lpNode) const
-        {
-            Index liNext = lpNode->GetNextIndex();
-            return liNext == KI_LIST_INVALID ? 0 : &mpBase[liNext];
-        }
-        Node* GetPrev(const Node* lpNode)
-        {
-            Index liPrev = lpNode->GetPrevIndex();
-            return liPrev == KI_LIST_INVALID ? 0 : &mpBase[liPrev];
-        }
-        const Node* GetPrev(const Node* lpNode) const
-        {
-            Index liPrev = lpNode->GetPrevIndex();
-            return liPrev == KI_LIST_INVALID ? 0 : &mpBase[liPrev];
-        }
 
-        void AddHead(Node* lpNode) { if (miCount == 0) InternalAddFirstNode(lpNode); else InternalAddHead(lpNode); }
-        void AddTail(Node* lpNode) { if (miCount == 0) InternalAddFirstNode(lpNode); else InternalAddTail(lpNode); }
 
-        void AddAfter(Node* lpExisting, Node* lpNode)
-        {
-            Index liExisting = GetNodeOffset(lpExisting);
-            Index liNode     = GetNodeOffset(lpNode);
-            Index liNext     = lpExisting->GetNextIndex();
-            lpNode->SetPrevIndex(liExisting);
-            lpNode->SetNextIndex(liNext);
-            lpExisting->SetNextIndex(liNode);
-            if (liNext == KI_LIST_INVALID) miLast = liNode;
-            else                           mpBase[liNext].SetPrevIndex(liNode);
-            ++miCount;
-        }
 
-        void AddBefore(Node* lpExisting, Node* lpNode)
-        {
-            Index liExisting = GetNodeOffset(lpExisting);
-            Index liNode     = GetNodeOffset(lpNode);
-            Index liPrev     = lpExisting->GetPrevIndex();
-            lpNode->SetNextIndex(liExisting);
-            lpNode->SetPrevIndex(liPrev);
-            lpExisting->SetPrevIndex(liNode);
-            if (liPrev == KI_LIST_INVALID) miFirst = liNode;
-            else                           mpBase[liPrev].SetNextIndex(liNode);
-            ++miCount;
-        }
 
-        Node* RemoveHead()
-        {
-            if (miCount == 0) return 0;
-            if (miCount == 1) return InternalRemoveLastNode();
-            return InternalRemoveHead();
-        }
-        Node* RemoveTail()
-        {
-            if (miCount == 0) return 0;
-            if (miCount == 1) return InternalRemoveLastNode();
-            return InternalRemoveTail();
-        }
 
-        // Unlink an arbitrary node, fixing up its neighbours (or the head/tail).
-        void RemoveNode(Node* lpNode)
-        {
-            Index liPrev = lpNode->GetPrevIndex();
-            Index liNext = lpNode->GetNextIndex();
-            if (liPrev == KI_LIST_INVALID) miFirst = liNext;
-            else                           mpBase[liPrev].SetNextIndex(liNext);
-            if (liNext == KI_LIST_INVALID) miLast = liPrev;
-            else                           mpBase[liNext].SetPrevIndex(liPrev);
-            --miCount;
-        }
 
-        s32  GetNodeIndex(Node* lpNode) const { return static_cast<s32>(lpNode - mpBase); }
-        bool IsEmpty() const                  { return miCount == 0; }
-        s32  GetCount() const                 { return miCount; }
 
-        // CountElements walks the chain (vs the cached miCount) -- the generator/validators
-        // use it to verify the live length.
-        s32 CountElements() const
-        {
-            s32 liCount = 0;
-            for (const Node* lpNode = GetHead(); lpNode != 0; lpNode = GetNext(lpNode))
-                ++liCount;
-            return liCount;
-        }
 
-        Index GetNodeOffset(Node* lpNode) const { return static_cast<Index>(lpNode - mpBase); }
 
-    private:
-        void InternalAddFirstNode(Node* lpNode)
-        {
-            Index liNode = GetNodeOffset(lpNode);
-            lpNode->SetNextIndex(KI_LIST_INVALID);
-            lpNode->SetPrevIndex(KI_LIST_INVALID);
-            miFirst = liNode;
-            miLast  = liNode;
-            ++miCount;
-        }
-        void InternalAddHead(Node* lpNode)
-        {
-            Index liNode = GetNodeOffset(lpNode);
-            lpNode->SetPrevIndex(KI_LIST_INVALID);
-            lpNode->SetNextIndex(miFirst);
-            mpBase[miFirst].SetPrevIndex(liNode);
-            miFirst = liNode;
-            ++miCount;
-        }
-        void InternalAddTail(Node* lpNode)
-        {
-            CGS_ASSERT(miCount > 0, "To add node to a zero length list call InternalAddFirstNode\n");  // :1109
-            Index liNode = GetNodeOffset(lpNode);
-            lpNode->SetNextIndex(KI_LIST_INVALID);
-            lpNode->SetPrevIndex(miLast);
-            mpBase[miLast].SetNextIndex(liNode);
-            miLast = liNode;
-            ++miCount;
-        }
-        Node* InternalRemoveLastNode()
-        {
-            Node* lpNode = &mpBase[miFirst];
-            miFirst = KI_LIST_INVALID;
-            miLast  = KI_LIST_INVALID;
-            --miCount;
-            return lpNode;
-        }
-        Node* InternalRemoveHead()
-        {
-            Node* lpNode = &mpBase[miFirst];
-            Index liNext = lpNode->GetNextIndex();
-            mpBase[liNext].SetPrevIndex(KI_LIST_INVALID);
-            miFirst = liNext;
-            --miCount;
-            return lpNode;
-        }
-        Node* InternalRemoveTail()
-        {
-            Node* lpNode = &mpBase[miLast];
-            Index liPrev = lpNode->GetPrevIndex();
-            mpBase[liPrev].SetNextIndex(KI_LIST_INVALID);
-            miLast = liPrev;
-            --miCount;
-            return lpNode;
-        }
 
-        s32   miCount;   // cached live element count
-        Node* mpBase;    // caller-owned node array (links are indices into this)
-        Index miFirst;   // head index, or KI_LIST_INVALID
-        Index miLast;    // tail index, or KI_LIST_INVALID
-    };
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+class IndexedLinkedListNode
+{
+public:
+
+    inline DataType*
+    GetData();
+
+    inline const DataType*
+    GetData() const;
+
+    inline IndexType
+    GetNextIndex( ) const;
+
+    inline IndexType
+    GetPrevIndex( ) const;
+
+    inline void
+    SetNextIndex( IndexType liNextIndex );
+
+    inline void
+    SetPrevIndex( IndexType liPrevIndex );
+
+    inline void
+    SetData( DataType* lpData );
+
+    inline DataType* operator->();
+    inline const DataType* operator->() const;
+    inline DataType& operator*();
+    inline const DataType& operator*() const;
+
+private:
+
+
+
+
+
+
+
+    DataType mData;
+    IndexType miNextIndex;
+    IndexType miPrevIndex;
+};
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+class IndexedLinkedList
+{
+public:
+    static const IndexType KI_LIST_ZERO = 0;
+    static const IndexType KI_LIST_INVALID = static_cast<IndexType>(~KI_LIST_ZERO);
+
+    inline void
+    Init( IndexedLinkedListNode<DataType,IndexType>* lpNodeBase, IndexType liNodeCount = 0 );
+
+    inline IndexedLinkedListNode<DataType,IndexType>*
+    GetHead();
+
+    inline IndexedLinkedListNode<DataType,IndexType>*
+    GetTail();
+
+    inline IndexedLinkedListNode<DataType,IndexType>*
+    GetNext( const IndexedLinkedListNode<DataType,IndexType>* lpNodeInList );
+
+    inline IndexedLinkedListNode<DataType,IndexType>*
+    GetPrev( const IndexedLinkedListNode<DataType,IndexType>* lpNodeInList );
+
+    inline const IndexedLinkedListNode<DataType,IndexType>*
+    GetHead() const;
+
+    inline const IndexedLinkedListNode<DataType,IndexType>*
+    GetTail() const;
+
+    inline const IndexedLinkedListNode<DataType,IndexType>*
+    GetNext( const IndexedLinkedListNode<DataType,IndexType>* lpNodeInList ) const;
+
+    inline const IndexedLinkedListNode<DataType,IndexType>*
+    GetPrev( const IndexedLinkedListNode<DataType,IndexType>* lpNodeInList ) const;
+
+    inline IndexType
+    GetHeadIndex() const;
+
+    inline void
+    AddHead( IndexedLinkedListNode<DataType,IndexType>* lpNewNode );
+
+    inline void
+    AddTail( IndexedLinkedListNode<DataType,IndexType>* lpNewNode );
+
+    inline void
+    AddAfter( IndexedLinkedListNode<DataType,IndexType>* lpNodeInList,
+              IndexedLinkedListNode<DataType,IndexType>* lpNewNode );
+
+    inline void
+    AddBefore( IndexedLinkedListNode<DataType,IndexType>* lpNodeInList,
+               IndexedLinkedListNode<DataType,IndexType>* lpNewNode );
+
+    inline IndexedLinkedListNode<DataType,IndexType>*
+    RemoveHead();
+
+    inline IndexedLinkedListNode<DataType,IndexType>*
+    RemoveTail();
+
+    inline void
+    RemoveNode( IndexedLinkedListNode<DataType,IndexType>* lpNode );
+
+    inline int32_t
+    GetNodeIndex( IndexedLinkedListNode<DataType,IndexType>* lpNode ) const;
+
+    inline int32_t
+    CountElements() const;
+
+    inline bool
+    IsEmpty() const;
+
+    inline IndexType
+    GetNodeOffset( IndexedLinkedListNode<DataType,IndexType>* lpNode ) const;
+
+private:
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    int32_t miCount;
+    IndexedLinkedListNode<DataType,IndexType>* mpBase;
+    IndexType miFirst;
+    IndexType miLast;
+
+    inline void
+    InternalAddFirstNode( IndexedLinkedListNode<DataType,IndexType>* lpNewNode );
+
+    inline void
+    InternalAddHead( IndexedLinkedListNode<DataType,IndexType>* lpNewNode );
+
+    inline void
+    InternalAddTail( IndexedLinkedListNode<DataType,IndexType>* lpNewNode );
+
+    inline IndexedLinkedListNode<DataType,IndexType>*
+    InternalRemoveLastNode( );
+
+    inline IndexedLinkedListNode<DataType,IndexType>*
+    InternalRemoveHead( );
+
+    inline IndexedLinkedListNode<DataType,IndexType>*
+    InternalRemoveTail( );
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline DataType*
+IndexedLinkedListNode<DataType,IndexType>::GetData()
+{
+    return &mData;
 }
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline const DataType*
+IndexedLinkedListNode<DataType,IndexType>::GetData() const
+{
+    return &mData;
+}
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline IndexType
+IndexedLinkedListNode<DataType,IndexType>::GetNextIndex( ) const
+{
+    return miNextIndex;
+}
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline IndexType
+IndexedLinkedListNode<DataType,IndexType>::GetPrevIndex( ) const
+{
+    return miPrevIndex;
+}
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline void
+IndexedLinkedListNode<DataType,IndexType>::SetNextIndex( IndexType liNextIndex )
+{
+    miNextIndex = liNextIndex;
+}
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline void
+IndexedLinkedListNode<DataType,IndexType>::SetPrevIndex( IndexType liPrevIndex )
+{
+    miPrevIndex = liPrevIndex;
+}
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline void
+IndexedLinkedListNode<DataType,IndexType>::SetData( DataType* lpData )
+{
+    mData = *lpData;
+}
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline DataType*
+IndexedLinkedListNode<DataType,IndexType>::operator->()
+{
+    return &mData;
+}
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline const DataType*
+IndexedLinkedListNode<DataType,IndexType>::operator->() const
+{
+    return &mData;
+}
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline DataType&
+IndexedLinkedListNode<DataType,IndexType>::operator*()
+{
+    return mData;
+}
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline const DataType&
+IndexedLinkedListNode<DataType,IndexType>::operator*() const
+{
+    return mData;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline void
+IndexedLinkedList<DataType,IndexType>::Init( IndexedLinkedListNode<DataType,IndexType>* lpNodeBase, IndexType liNodeCount )
+{
+    mpBase = lpNodeBase;
+
+    if(liNodeCount == 0)
+    {
+        miCount = 0;
+        miFirst = miLast = KI_LIST_INVALID;
+    }
+    else
+    {
+        CGS_ASSERT_STREAM(lpNodeBase, "Indexed list must be initialized with a base pointer\n");
+
+        miCount = liNodeCount;
+        miFirst = 0;
+        miLast = liNodeCount - 1;
+
+        mpBase[miFirst].SetPrevIndex( KI_LIST_INVALID );
+        mpBase[miLast].SetNextIndex( KI_LIST_INVALID );
+
+        IndexType liIndex;
+        for(liIndex = 1; liIndex < liNodeCount; liIndex++)
+        {
+            mpBase[liIndex-1].SetNextIndex( liIndex );
+            mpBase[liIndex].SetPrevIndex( liIndex-1 );
+        }
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline IndexedLinkedListNode<DataType,IndexType>*
+IndexedLinkedList<DataType,IndexType>::GetHead()
+{
+    if(miCount > 0)
+    {
+        return &mpBase[miFirst];
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline IndexedLinkedListNode<DataType,IndexType>*
+IndexedLinkedList<DataType,IndexType>::GetTail()
+{
+    if(miCount > 0)
+    {
+        return &mpBase[miLast];
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline IndexedLinkedListNode<DataType,IndexType>*
+IndexedLinkedList<DataType,IndexType>::GetNext( const IndexedLinkedListNode<DataType,IndexType>* lpNodeInList )
+{
+    if(lpNodeInList->GetNextIndex() != KI_LIST_INVALID)
+    {
+        return &mpBase[lpNodeInList->GetNextIndex()];
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline IndexedLinkedListNode<DataType,IndexType>*
+IndexedLinkedList<DataType,IndexType>::GetPrev( const IndexedLinkedListNode<DataType,IndexType>* lpNodeInList )
+{
+    if(lpNodeInList->GetPrevIndex() != KI_LIST_INVALID)
+    {
+        return &mpBase[lpNodeInList->GetPrevIndex()];
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline const IndexedLinkedListNode<DataType,IndexType>*
+IndexedLinkedList<DataType,IndexType>::GetHead() const
+{
+    if(miCount > 0)
+    {
+        return &mpBase[miFirst];
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline IndexType
+IndexedLinkedList<DataType,IndexType>::GetHeadIndex() const
+{
+    return miFirst;
+}
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline const IndexedLinkedListNode<DataType,IndexType>*
+IndexedLinkedList<DataType,IndexType>::GetTail() const
+{
+    if(miCount > 0)
+    {
+        return &mpBase[miLast];
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline const IndexedLinkedListNode<DataType,IndexType>*
+IndexedLinkedList<DataType,IndexType>::GetNext( const IndexedLinkedListNode<DataType,IndexType>* lpNodeInList ) const
+{
+    if(lpNodeInList->GetNextIndex() != KI_LIST_INVALID)
+    {
+        return &mpBase[lpNodeInList->GetNextIndex()];
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline const IndexedLinkedListNode<DataType,IndexType>*
+IndexedLinkedList<DataType,IndexType>::GetPrev( const IndexedLinkedListNode<DataType,IndexType>* lpNodeInList ) const
+{
+    if(lpNodeInList->GetPrevIndex() != KI_LIST_INVALID)
+    {
+        return &mpBase[lpNodeInList->GetPrevIndex()];
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline void
+IndexedLinkedList<DataType,IndexType>::AddHead( IndexedLinkedListNode<DataType,IndexType>* lpNewNode )
+{
+    if(miCount == 0)
+    {
+        InternalAddFirstNode( lpNewNode );
+    }
+    else
+    {
+        InternalAddHead( lpNewNode );
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline void
+IndexedLinkedList<DataType,IndexType>::AddTail( IndexedLinkedListNode<DataType,IndexType>* lpNewNode )
+{
+    if(miCount == 0)
+    {
+        InternalAddFirstNode( lpNewNode );
+    }
+    else
+    {
+        InternalAddTail( lpNewNode );
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline void
+IndexedLinkedList<DataType,IndexType>::AddAfter( IndexedLinkedListNode<DataType,IndexType>* lpNodeInList,
+    IndexedLinkedListNode<DataType,IndexType>* lpNewNode )
+{
+    if(miCount == 0)
+    {
+        InternalAddFirstNode( lpNewNode );
+    }
+    else if(lpNodeInList == &mpBase[miLast])
+    {
+        InternalAddTail( lpNewNode );
+    }
+    else
+    {
+        IndexType liNodeInListIndex;
+        IndexType liNewNodeIndex;
+
+        liNodeInListIndex = GetNodeOffset( lpNodeInList );
+        liNewNodeIndex = GetNodeOffset( lpNewNode );
+
+        lpNewNode->SetNextIndex( lpNodeInList->GetNextIndex() );
+        lpNewNode->SetPrevIndex( liNodeInListIndex );
+
+        mpBase[lpNewNode->GetNextIndex()].SetPrevIndex( liNewNodeIndex );
+        mpBase[lpNewNode->GetPrevIndex()].SetNextIndex( liNewNodeIndex );
+
+        miCount++;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline void
+IndexedLinkedList<DataType,IndexType>::AddBefore( IndexedLinkedListNode<DataType,IndexType>* lpNodeInList,
+    IndexedLinkedListNode<DataType,IndexType>* lpNewNode )
+{
+    if(miCount == 0)
+    {
+        InternalAddFirstNode( lpNewNode );
+    }
+    else if(lpNodeInList == &mpBase[miFirst])
+    {
+        InternalAddHead( lpNewNode );
+    }
+    else
+    {
+        IndexType liNodeInListIndex;
+        IndexType liNewNodeIndex;
+
+        liNodeInListIndex = GetNodeOffset( lpNodeInList );
+        liNewNodeIndex = GetNodeOffset( lpNewNode );
+
+        lpNewNode->SetPrevIndex( lpNodeInList->GetPrevIndex() );
+        lpNewNode->SetNextIndex( liNodeInListIndex );
+
+        mpBase[lpNewNode->GetNextIndex()].SetPrevIndex( liNewNodeIndex );
+        mpBase[lpNewNode->GetPrevIndex()].SetNextIndex( liNewNodeIndex );
+
+        miCount++;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline IndexedLinkedListNode<DataType,IndexType>*
+IndexedLinkedList<DataType,IndexType>::RemoveHead()
+{
+    if(miCount > 1)
+    {
+        return InternalRemoveHead();
+    }
+    else if(miCount == 1)
+    {
+        return InternalRemoveLastNode();
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline IndexedLinkedListNode<DataType,IndexType>*
+IndexedLinkedList<DataType,IndexType>::RemoveTail()
+{
+    if(miCount > 1)
+    {
+        return InternalRemoveTail();
+    }
+    else if(miCount == 1)
+    {
+        return InternalRemoveLastNode();
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline void
+IndexedLinkedList<DataType,IndexType>::RemoveNode( IndexedLinkedListNode<DataType,IndexType>* lpNode )
+{
+    IndexType liIndex = GetNodeOffset( lpNode );
+
+    if(miCount > 1 )
+    {
+        if(liIndex == miFirst)
+        {
+            InternalRemoveHead();
+        }
+        else if(liIndex == miLast)
+        {
+            InternalRemoveTail();
+        }
+        else
+        {
+            mpBase[lpNode->GetPrevIndex()].SetNextIndex( lpNode->GetNextIndex() );
+            mpBase[lpNode->GetNextIndex()].SetPrevIndex( lpNode->GetPrevIndex() );
+            miCount--;
+        }
+    }
+    else
+    {
+        InternalRemoveLastNode();
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline int32_t
+IndexedLinkedList<DataType,IndexType>::GetNodeIndex( IndexedLinkedListNode<DataType,IndexType>* lpNode ) const
+{
+    return -1;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline int32_t
+IndexedLinkedList<DataType,IndexType>::CountElements() const
+{
+    return miCount;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline bool
+IndexedLinkedList<DataType,IndexType>::IsEmpty() const
+{
+    return (miCount == 0);
+}
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline IndexType
+IndexedLinkedList<DataType,IndexType>::GetNodeOffset( IndexedLinkedListNode<DataType,IndexType>* lpNode ) const
+{
+    return static_cast<IndexType>( lpNode - mpBase );
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline void
+IndexedLinkedList<DataType,IndexType>::InternalAddFirstNode( IndexedLinkedListNode<DataType,IndexType>* lpNewNode )
+{
+    CGS_ASSERT_STREAM(miCount == 0, "This should only be called to add a node to list when it is zero length\n");
+
+    IndexType liIndex = GetNodeOffset( lpNewNode );
+
+    lpNewNode->SetNextIndex( KI_LIST_INVALID );
+    lpNewNode->SetPrevIndex( KI_LIST_INVALID );
+    miFirst = liIndex;
+    miLast = liIndex;
+
+    miCount++;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline void
+IndexedLinkedList<DataType,IndexType>::InternalAddHead( IndexedLinkedListNode<DataType,IndexType>* lpNewNode )
+{
+    CGS_ASSERT_STREAM(miCount > 0, "To add node to a zero length list call InternalAddFirstNode\n");
+
+    IndexType liIndex = GetNodeOffset( lpNewNode );
+
+    lpNewNode->SetNextIndex( miFirst );
+    lpNewNode->SetPrevIndex( KI_LIST_INVALID );
+    mpBase[miFirst].SetPrevIndex( liIndex );
+    miFirst = liIndex;
+
+    miCount++;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline void
+IndexedLinkedList<DataType,IndexType>::InternalAddTail( IndexedLinkedListNode<DataType,IndexType>* lpNewNode )
+{
+    CGS_ASSERT_STREAM(miCount > 0, "To add node to a zero length list call InternalAddFirstNode\n");
+
+    IndexType liIndex = GetNodeOffset( lpNewNode );
+
+    lpNewNode->SetNextIndex( KI_LIST_INVALID );
+    lpNewNode->SetPrevIndex( miLast );
+    mpBase[miLast].SetNextIndex( liIndex );
+    miLast = liIndex;
+
+    miCount++;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline IndexedLinkedListNode<DataType,IndexType>*
+IndexedLinkedList<DataType,IndexType>::InternalRemoveLastNode( )
+{
+    CGS_ASSERT_STREAM(miCount == 1, "This should only be called to add a node to list when it is zero length\n");
+
+    IndexedLinkedListNode<DataType,IndexType>* lpNode = &mpBase[miFirst];
+
+    miCount = 0;
+    miFirst = KI_LIST_INVALID;
+    miLast = KI_LIST_INVALID;
+
+    return lpNode;
+}
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline IndexedLinkedListNode<DataType,IndexType>*
+IndexedLinkedList<DataType,IndexType>::InternalRemoveHead( )
+{
+    CGS_ASSERT_STREAM(miCount > 1, "This should only be called if there is more than 1 node in the list\n");
+
+    IndexedLinkedListNode<DataType,IndexType>* lpNode = &mpBase[miFirst];
+
+    miFirst = mpBase[miFirst].GetNextIndex();
+    mpBase[miFirst].SetPrevIndex( KI_LIST_INVALID );
+
+    miCount--;
+
+    return lpNode;
+}
+
+
+
+
+
+
+
+
+
+
+template<class DataType, class IndexType>
+inline IndexedLinkedListNode<DataType,IndexType>*
+IndexedLinkedList<DataType,IndexType>::InternalRemoveTail( )
+{
+    CGS_ASSERT_STREAM(miCount > 1, "This should only be called if there is more than 1 node in the list\n");
+
+    IndexedLinkedListNode<DataType,IndexType>* lpNode = &mpBase[miLast];
+
+    miLast = mpBase[miLast].GetPrevIndex();
+    mpBase[miLast].SetNextIndex( KI_LIST_INVALID );
+
+    miCount--;
+
+    return lpNode;
+}
+
+
+
+} // namespace CgsContainers

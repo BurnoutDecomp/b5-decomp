@@ -197,4 +197,23 @@ namespace CgsResource
         bool           mbTracingEnabled;
         bool           mbUpdated;
     };
+
+    // DWARF CgsResourceHeap.h:404 / h:408, with no CgsResourceHeap.cpp definition: the bytes a batch
+    // needs, each request rounded up to the heap alignment. ARTIST inlines it into
+    // ExecuteBatchAllocation (@0x828F54D0..0x828F5504) and ExecuteBatchAddressedAllocation.
+    inline u32 Heap::CalculateRequiredSizeForAllocList(const AllocRequest* lpRequests, u32 luNumRequests) const
+    {
+        u32 luSizeNeeded = 0;
+        for (u32 luRequest = 0; luRequest < luNumRequests; luRequest++)
+            luSizeNeeded += (lpRequests[luRequest].muSize + muHeapAlignment - 1) & ~(muHeapAlignment - 1);
+        return luSizeNeeded;
+    }
+
+    inline u32 Heap::CalculateRequiredSizeForAllocList(const AllocRequestAddressed* lpRequests, u32 luNumRequests) const
+    {
+        u32 luSizeNeeded = 0;
+        for (u32 luRequest = 0; luRequest < luNumRequests; luRequest++)
+            luSizeNeeded += (lpRequests[luRequest].muSize + muHeapAlignment - 1) & ~(muHeapAlignment - 1);
+        return luSizeNeeded;
+    }
 }

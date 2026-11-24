@@ -316,4 +316,863 @@ namespace CgsResource
         bool                  mbDefragHitEndResource;   // :608
         s32                   miNumResourcesInPurgatory; // :610
     };
+
+    // ---- header-inline members ----------------------------------------------------
+    // The DecFIGS DWARF declares these in the class (CgsResourcePool.h:402..543) and its
+    // CgsResourcePool.cpp defines none of them; ARTIST inlines the accessors at every caller and
+    // keeps out-of-line copies only of the three with an assert, whose lines it bakes from this
+    // header (file string @0x820F7B00): GetDependency 1009 (@0x828D6464), GenerateLinearHeap 1086
+    // (@0x828F38B8), ExecuteBatchAddressedAllocation 1103 (@0x828FAE68). The LegacySrc copy of
+    // this header defines them here too, in this order (GetName, GetId, GetBankId,
+    // GetHeapAlignment, IsDefragmenting, ..., GenerateLinearHeap, ExecuteBatchAddressedAllocation,
+    // then the entry-array accessors).
+    inline const char*
+    Pool::GetName( ) const
+    {
+        return macName;
+    }
+
+    inline int32_t
+    Pool::GetId( ) const
+    {
+        return miId;
+    }
+
+    inline int32_t
+    Pool::GetBankId( )
+    {
+        return miBankId;
+    }
+
+    inline uint32_t
+    Pool::GetHeapAlignment( int32_t liMemType ) const
+    {
+        return maHeaps[liMemType].GetHeapAlignment();
+    }
+
+    inline int32_t
+    Pool::GetNumDependencies( ) const
+    {
+        return miNumDependencies;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    inline Pool*
+    Pool::GetDependency( int32_t liIndex ) const
+    {
+        CGS_ASSERT_STREAM((liIndex >= 0) && (liIndex < miNumDependencies), "Dependency out of range\n");
+        return mapDependencies[liIndex];
+    }
+
+    inline bool
+    Pool::IsDefragmenting( ) const
+    {
+        return miDefragFrame != -1;
+    }
+
+    inline bool
+    Pool::IsValid( ) const
+    {
+        return mbIsValid;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    inline uint16_t
+    Pool::GenerateLinearHeap( int32_t liMemType, LinearHeapNode* lpLinearHeap, uint16_t luMaxLength )
+    {
+        CGS_ASSERT_STREAM((liMemType >= 0) && (liMemType < E_MEMTYPE_NUMTYPES), "Mem type out of range\n");
+        return maHeaps[liMemType].GenerateLinearHeap( lpLinearHeap, luMaxLength );
+    }
+
+
+
+
+
+
+
+
+
+
+
+    inline EBatchAllocResult
+    Pool::ExecuteBatchAddressedAllocation( int32_t liMemType, AllocRequestAddressed* lpRequests, AllocResult* lpResults, uint32_t luNumRequests, bool lbFreeOnFailure )
+    {
+        CGS_ASSERT_STREAM((liMemType >= 0) && (liMemType < E_MEMTYPE_NUMTYPES), "Mem type out of range\n");
+        return maHeaps[liMemType].ExecuteBatchAddressedAllocation( lpRequests, lpResults, luNumRequests, lbFreeOnFailure );
+    }
+
+    inline int16_t
+    Pool::GetEntryRefCount( int32_t liResourceIndex ) const
+    {
+        return mpiResourceRefCounts[liResourceIndex];
+    }
+
+    inline void
+    Pool::SetEntryRefCount( int32_t liResourceIndex, int16_t liNewRefCount )
+    {
+        mpiResourceRefCounts[liResourceIndex] = liNewRefCount;
+    }
+
+    inline void
+    Pool::IncEntryRefCount( int32_t liResourceIndex )
+    {
+        mpiResourceRefCounts[liResourceIndex]++;
+    }
+
+    inline void
+    Pool::DecEntryRefCount( int32_t liResourceIndex )
+    {
+        mpiResourceRefCounts[liResourceIndex]--;
+    }
+
+    inline uint8_t
+    Pool::GetEntryStatus( int32_t liResourceIndex ) const
+    {
+        return mpx8ResourceStatuses[liResourceIndex];
+    }
+
+    inline void
+    Pool::SetEntryStatus( int32_t liResourceIndex, uint8_t luNewStatus )
+    {
+        mpx8ResourceStatuses[liResourceIndex] = luNewStatus;
+    }
+
+    inline int32_t
+    Pool::GetEntryImportCount( int32_t liResourceIndex ) const
+    {
+        return mpiResourceImportCounts[liResourceIndex];
+    }
+
+    inline void
+    Pool::SetEntryImportCount( int32_t liResourceIndex, int32_t liImportCount )
+    {
+        mpiResourceImportCounts[liResourceIndex] = liImportCount;
+    }
+
+    inline int32_t
+    Pool::GetNumEntriesInPurgatory() const
+    {
+        return miNumResourcesInPurgatory;
+    }
+
+    inline int32_t
+    Pool::GetRefCountThreshold()
+    {
+        return miRefCountThreshold;
+    }
+
+    inline bool
+    Pool::GetAllowDefragmentation() const
+    {
+        return mbAllowDefragmentation;
+    }
+
+    inline void
+    Pool::SetAllowDefragmentation( bool lbAllowDefragmetation )
+    {
+        mbAllowDefragmentation = lbAllowDefragmetation;
+    }
 }

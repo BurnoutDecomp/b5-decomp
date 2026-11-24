@@ -12,6 +12,73 @@
 
 namespace CgsResource
 {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // Reset to an unprepared, empty state (the X360 Construct Init's both index-lists).
+    void Heap::Construct()
+    {
+        mUnusedNodes.Init(0, 0);
+        mUsedNodes.Init(0, 0);
+        mbPrepared = false;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // 0x82901AB0 - one-time setup: validate alignment + node count, allocate the node-struct
     // array from the overhead allocator, record the managed region, then Reprepare() (which
     // builds the free-node chain and the initial whole-heap free block).
@@ -22,24 +89,38 @@ namespace CgsResource
             return true;
 
         mbPrepared = true;
-        CGS_ASSERT((luHeapMemorySize % luHeapAlignment) == 0, "(luHeapMemorySize % luHeapAlignment) == 0");                         // :94
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpHeapMemory) % luHeapAlignment) == 0, "(reinterpret_cast<int>(lpHeapMemory) % luHeapAlignment) == 0");   // :95
-        CGS_ASSERT(luMaxNodes < 0xFFFF, "luMaxNodes < 0xFFFF");                                                                       // :96
+
+
+        CGS_ASSERT((luHeapMemorySize % luHeapAlignment) == 0, "(luHeapMemorySize % luHeapAlignment) == 0");
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpHeapMemory) % luHeapAlignment) == 0, "(reinterpret_cast<int>(lpHeapMemory) % luHeapAlignment) == 0");
+        CGS_ASSERT(luMaxNodes < 0xFFFF, "luMaxNodes < 0xFFFF");
 
         // X360 hardcodes 16 bytes/node; the x64 HeapEntryNode is wider, so size by sizeof.
         mpNodes            = static_cast<HeapEntryNode*>(lpOverheadAllocator->Malloc(sizeof(HeapEntryNode) * luMaxNodes));
         miNumNodes         = static_cast<s32>(luMaxNodes);
         mpcDebugName       = lpcDebugName;
         muTotalSize        = luHeapMemorySize;
-        mbUpdated          = true;
+        mbTracingEnabled   = true;    // stb 1,0x3E @0x82901B9C (PS3 0xCCA510 agrees)
         miAllocationNumber = 0;
-        mbTracingEnabled   = false;
+        mbUpdated          = false;   // stb 0,0x3F @0x82901BA4
         muHeapAlignment    = luHeapAlignment;
         mpcAddress         = static_cast<char*>(lpHeapMemory);
 
         Reprepare();
         return true;
     }
+
+
+
+
+
+
+
+
+
+
+
+
 
     // 0x828FD6A8 - (re)build the lists: mUnusedNodes becomes the whole node array as a free
     // chain; mUsedNodes starts holding a single free block that spans the entire heap.
@@ -60,6 +141,24 @@ namespace CgsResource
         return true;
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // Assert. Undo Prepare: once prepared, every allocation must have been returned (the
     // used list is back to the single whole-heap free block); both lists are emptied over the
     // node array, which stays owned by the overhead allocator.
@@ -68,19 +167,48 @@ namespace CgsResource
         if (mbPrepared)
         {
             mbPrepared = false;
-            CGS_ASSERT(mUsedNodes.GetCount() == 1, "mUsedNodes.CountElements() == 1");
+
+
+
+
+            CGS_ASSERT(mUsedNodes.CountElements() == 1, "mUsedNodes.CountElements() == 1");
             mUsedNodes.Init(mpNodes, 0);
             mUnusedNodes.Init(mpNodes, 0);
         }
         return true;
     }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     // 0x828F4568 - recycle a node struct from the free-node pool (mUnusedNodes) and fill its
     // HeapEntry. The X360 inlines the list pull + a debug-name-length assert; here the pull is
     // the decompiled IndexedLinkedList::RemoveHead and the (debug-only) name assert is omitted.
     Heap::HeapEntryNode* Heap::GetNewNode(void* lpAddress, s32 liSize, bool lbAllocated, const char* lpcDebugName, void* lpOwner)
     {
-        CGS_ASSERT(!mUnusedNodes.IsEmpty(), "!mUnusedNodes.IsEmpty()");   // :211
+
+
+        CGS_ASSERT(!mUnusedNodes.IsEmpty(), "!mUnusedNodes.IsEmpty()");
         (void)lpcDebugName;
 
         HeapEntryNode* lpNode  = mUnusedNodes.RemoveHead();
@@ -92,43 +220,19 @@ namespace CgsResource
         return lpNode;
     }
 
-    // ---- HeapEntry: muSize packs the allocation status in bits 28-30 (mask 0x70000000) and
-    // the block size in the rest (mask 0x8FFFFFFF == KU_MAX_SIZE). ---------------------------
 
-    bool HeapEntry::Contains(char* lpcAddress) const
-    {
-        return lpcAddress >= mpAddress && lpcAddress < mpAddress + GetSize();
-    }
 
-    bool HeapEntry::IsFree() const      { return (muSize & 0x70000000u) == 0; }
-    bool HeapEntry::IsAllocated() const { return (muSize & 0x70000000u) != 0; }
 
-    // Top-allocated blocks start at mpAddress; bottom-allocated blocks place their luSize-byte
-    // payload at the end of the block (matching Heap::Malloc's address computation).
-    char* HeapEntry::GetAddress(bool lbAllocatedFromTop, u32 luSize) const
-    {
-        return lbAllocatedFromTop ? mpAddress : (mpAddress + GetSize() - luSize);
-    }
 
-    void* HeapEntry::GetOwner() const { return mpOwner; }
-    u32   HeapEntry::GetSize() const  { return muSize & KU_MAX_SIZE; }
 
-    void HeapEntry::SetAllocated(bool lbAllocated)
-    {
-        if (lbAllocated) muSize |= 0x70000000u;
-        else             muSize &= KU_MAX_SIZE;   // clear the status bits, keep the size
-    }
 
-    void HeapEntry::SetAddress(char* lpcAddress) { mpAddress = lpcAddress; }
-    void HeapEntry::SetOwner(void* lpOwner)      { mpOwner = lpOwner; }
 
-    void HeapEntry::SetSize(u32 luSize)
-    {
-        CGS_ASSERT(luSize <= KU_MAX_SIZE, CgsDev::Assert::StreamMessageAt("Size can not be larger than 0x8FFFFFFF - last bit is used as flag!\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceHeap.h", 621));   // CgsResourceHeap.h:621
-        muSize = (muSize & 0x70000000u) | luSize;   // preserve status, replace size
-    }
 
-    char* HeapEntry::GetAddress() const { return mpAddress; }
+
+
+
+
+
 
     // ---- node recycling & the free-list search ------------------------------------
 
@@ -139,72 +243,20 @@ namespace CgsResource
         mUnusedNodes.AddTail(lpNode);
     }
 
-    // 0x828EB548 - first free block (>= luSize) walking forward (ascending address) from
-    // lpStartNode, wrapping once through the head.
-    Heap::HeapEntryNode* Heap::FindFreeNodeFromTop(HeapEntryNode* lpStartNode, u32 luSize)
-    {
-        for (HeapEntryNode* lpNode = lpStartNode; lpNode != 0; lpNode = mUsedNodes.GetNext(lpNode))
-            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize)
-                return lpNode;
-        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != 0 && lpNode != lpStartNode; lpNode = mUsedNodes.GetNext(lpNode))
-            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize)
-                return lpNode;
-        return 0;
-    }
 
-    // 0x828EB618 - first free block (>= luSize) walking backward (descending address) from
-    // lpStartNode, wrapping once through the tail.
-    Heap::HeapEntryNode* Heap::FindFreeNodeFromBottom(HeapEntryNode* lpStartNode, u32 luSize)
-    {
-        for (HeapEntryNode* lpNode = lpStartNode; lpNode != 0; lpNode = mUsedNodes.GetPrev(lpNode))
-            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize)
-                return lpNode;
-        for (HeapEntryNode* lpNode = mUsedNodes.GetTail(); lpNode != 0 && lpNode != lpStartNode; lpNode = mUsedNodes.GetPrev(lpNode))
-            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize)
-                return lpNode;
-        return 0;
-    }
 
-    // 0x828EB430 - the free block (>= luSize) with the least leftover, scanning the whole
-    // list circularly from lpStartNode.
-    Heap::HeapEntryNode* Heap::FindFreeNodeBestFit(HeapEntryNode* lpStartNode, u32 luSize)
-    {
-        HeapEntryNode* lpBest = 0;
-        for (HeapEntryNode* lpNode = lpStartNode; lpNode != 0; lpNode = mUsedNodes.GetNext(lpNode))
-        {
-            HeapEntry* lpEntry = lpNode->GetData();
-            if (lpEntry->IsFree() && lpEntry->GetSize() >= luSize &&
-                (lpBest == 0 || (lpBest->GetData()->GetSize() - luSize) > (lpEntry->GetSize() - luSize)))
-                lpBest = lpNode;
-        }
-        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != 0 && lpNode != lpStartNode; lpNode = mUsedNodes.GetNext(lpNode))
-        {
-            HeapEntry* lpEntry = lpNode->GetData();
-            if (lpEntry->IsFree() && lpEntry->GetSize() >= luSize &&
-                (lpBest == 0 || (lpBest->GetData()->GetSize() - luSize) > (lpEntry->GetSize() - luSize)))
-                lpBest = lpNode;
-        }
-        return lpBest;
-    }
 
-    // The free block (>= luSize) that CONTAINS lpAddress, walking forward from lpStartNode and
-    // wrapping once through the head -- the FindFreeNodeFromTop walk with an extra containment
-    // test. This is the policy an addressed allocation uses: the caller has already decided which
-    // byte offset the block must land at.
-    Heap::HeapEntryNode* Heap::FindFreeNodeContainingAddress(HeapEntryNode* lpStartNode, u32 luSize, void* lpAddress)
-    {
-        char* lpcAddress = static_cast<char*>(lpAddress);
 
-        for (HeapEntryNode* lpNode = lpStartNode; lpNode != 0; lpNode = mUsedNodes.GetNext(lpNode))
-            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize
-                && lpNode->GetData()->Contains(lpcAddress))
-                return lpNode;
-        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != 0 && lpNode != lpStartNode; lpNode = mUsedNodes.GetNext(lpNode))
-            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize
-                && lpNode->GetData()->Contains(lpcAddress))
-                return lpNode;
-        return 0;
-    }
+
+
+
+
+
+
+
+
+
+
 
     // ---- allocate / free ----------------------------------------------------------
 
@@ -215,7 +267,11 @@ namespace CgsResource
     void* Heap::Malloc(u32 luSize, const char* lpcDebugName, void* lpOwner, u16 luStartIndex,
                        u16* lpuFoundIndex, bool lbBestFit, bool lbAllocateFromTop, void* lpAddress)
     {
-        CGS_ASSERT(reinterpret_cast<uintptr_t>(lpOwner) != 0xFFFFFFFFu, "reinterpret_cast<uintptr_t>(lpOwner) != 0xFFFFFFFF");   // :274
+
+
+
+
+        CGS_ASSERT(reinterpret_cast<uintptr_t>(lpOwner) != 0xFFFFFFFFu, "reinterpret_cast<uintptr_t>(lpOwner) != 0xFFFFFFFF");
 
         if (luSize == 0)
             luSize = 1;
@@ -276,93 +332,888 @@ namespace CgsResource
 
         ++miAllocationNumber;
         mbUpdated = true;
-        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpcAllocAddr) % muHeapAlignment) == 0, "((int)lpcAddress % muHeapAlignment) == 0");   // :471
+        CGS_ASSERT((reinterpret_cast<uintptr_t>(lpcAllocAddr) % muHeapAlignment) == 0, "((int)lpcAddress % muHeapAlignment) == 0");
         return lpcAllocAddr;
     }
 
-    // 0x828F4F80 - free the block at node luNodeIndex, coalescing with a free lower-address
-    // neighbour (extend backward) and/or a free higher-address neighbour (extend forward).
-    void Heap::Free(u16 luNodeIndex)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST828ECAE8. Only a dirty cache walks the used-node list; empty
+    // heaps still clear the dirty bit and cache a largest-free size of zero.
+    int Heap::GetLargestFreeBlock()
     {
-        HeapEntryNode* lpNode  = &mpNodes[luNodeIndex];
-        HeapEntry*     lpEntry = lpNode->GetData();
-        CGS_ASSERT(lpEntry->IsAllocated(), "lpNode->GetData()->IsAllocated()");                                       // :531
-        CGS_ASSERT(reinterpret_cast<uintptr_t>(lpEntry->GetOwner()) != 0xFFFFFFFFu, "reinterpret_cast<uintptr_t>(lpNode->GetData()->GetOwner()) != 0xFFFFFFFF");   // :532
-
-        const u32 luFreedSize = lpEntry->GetSize();
-        lpEntry->SetAllocated(false);
-
-        HeapEntryNode* lpPrev = mUsedNodes.GetPrev(lpNode);
-        if (lpPrev != 0 && lpPrev->GetData()->IsFree())
+        if (mbNeedToRecalcLargestFree)
         {
-            lpEntry->SetAddress(lpEntry->GetAddress() - lpPrev->GetData()->GetSize());
-            lpEntry->SetSize(lpPrev->GetData()->GetSize() + lpEntry->GetSize());
-            mUsedNodes.RemoveNode(lpPrev);
-            RemoveNode(lpPrev);
-        }
-
-        HeapEntryNode* lpNext = mUsedNodes.GetNext(lpNode);
-        if (lpNext != 0 && lpNext->GetData()->IsFree())
-        {
-            lpEntry->SetSize(lpNext->GetData()->GetSize() + lpEntry->GetSize());
-            mUsedNodes.RemoveNode(lpNext);
-            RemoveNode(lpNext);
-        }
-
-        muAmountFree += luFreedSize;
-        if (lpEntry->GetSize() > muLargestFree)
-            muLargestFree = lpEntry->GetSize();
-    }
-
-    // ARTIST 828FD918 (export hole): resolve the exact block address and free its node.
-    // Used by partial-allocation cleanup and by the live-update replacement path.
-    void Heap::Free(void* lpPtr)
-    {
-        mbUpdated = true;
-        CGS_ASSERT(reinterpret_cast<uintptr_t>(lpPtr) % muHeapAlignment == 0,
-                   "((int)lpcAddress % muHeapAlignment) == 0");
-        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode; lpNode = mUsedNodes.GetNext(lpNode))
-        {
-            if (lpNode->GetData()->GetAddress() == lpPtr)
+            int32_t liLargestFree = 0;   // DWARF cpp:645; GetSize() is u32, so the compare is unsigned (cmplw)
+            for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != 0; lpNode = mUsedNodes.GetNext(lpNode))
             {
-                Free(static_cast<u16>(lpNode - mpNodes));
-                break;
+                if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() > liLargestFree)
+                    liLargestFree = lpNode->GetData()->GetSize();
             }
+            muLargestFree = liLargestFree;
+            mbNeedToRecalcLargestFree = false;
         }
+        return static_cast<int>(muLargestFree);
     }
 
-    s32 Heap::GetMaxNodes() const { return miNumNodes; }
 
-    // 828ECF90: include both allocated and free blocks in the used-node count.
-    void Heap::GetNodeUsageStatistics(s32* lpUsedNodes, s32* lpUnusedNodes,
-        s32* lpAllocatedNodes, s32* lpFreeNodes, s32* lpAllocatedBytes,
-        s32* lpFreeBytes, s32* lpLargestFree)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // ARTIST828ECB78. This is free-node count / allocated-node count,
+    // with no division when there are at most one free nodes. The original
+    // permits an infinite result when multiple free nodes have no allocated node.
+    float Heap::GetFragmentationLevel()
     {
-        *lpUsedNodes = *lpAllocatedNodes = *lpFreeNodes = 0;
-        *lpAllocatedBytes = *lpFreeBytes = *lpLargestFree = 0;
-        *lpUnusedNodes = mUnusedNodes.GetCount();
-        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode; lpNode = mUsedNodes.GetNext(lpNode))
+        u32 luFreeNodes = 0;
+        u32 luAllocatedNodes = 0;
+        HeapEntryNode* lpNode = mUsedNodes.GetHead();
+        while (lpNode)
         {
-            ++*lpUsedNodes;
-            const HeapEntry* lpEntry = lpNode->GetData();
-            const s32 liSize = static_cast<s32>(lpEntry->GetSize());
-            if (lpEntry->IsAllocated())
+            if (lpNode->GetData()->IsAllocated())
+                ++luAllocatedNodes;
+            else
+                ++luFreeNodes;
+            lpNode = mUsedNodes.GetNext(lpNode);
+        }
+        if (luFreeNodes <= 1u)
+            return 0.0f;
+        return static_cast<f32>(luFreeNodes) / static_cast<f32>(luAllocatedNodes);
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // Carve one block per request in order. Top- and bottom-allocated requests keep
+    // SEPARATE running start-node indices, so each policy resumes its search where it left off
+    // instead of walking the list from the head every time. The first failed Malloc stops the
+    // batch; on failure the already-carved blocks are handed back when lbFreeOnFailure, and the
+    // return distinguishes "the bytes exist but are fragmented" (the defragmenter's cue) from
+    // "the heap is simply too small".
+    EBatchAllocResult Heap::ExecuteBatchAllocation(AllocRequest* lpRequests, AllocResult* lpResults,
+                                                   u32 luNumRequests, bool lbFreeOnFailure)
+    {
+        // DWARF locals: luRequest (cpp:979), luBottomIndex / luTopIndex (980/981), each the start
+        // index of its side's search and the found index Malloc writes back (ARTIST passes r25 and
+        // &0x60(r1) for the top side, r26 and &0x62(r1) for the bottom, @0x828F5418/0x828F5444).
+        u32 luRequest;
+        u16 luBottomIndex = HeapEntryList::KI_LIST_INVALID;
+        u16 luTopIndex    = HeapEntryList::KI_LIST_INVALID;
+
+        for (luRequest = 0; luRequest < luNumRequests; luRequest++)
+        {
+            if (lpRequests[luRequest].mbAllocateTop)
             {
-                ++*lpAllocatedNodes;
-                *lpAllocatedBytes += liSize;
+                lpResults[luRequest].mpData = Malloc(lpRequests[luRequest].muSize, "", lpRequests[luRequest].mpOwner,
+                                                     luTopIndex, &luTopIndex, false, true, 0);
+                if (lpResults[luRequest].mpData == 0)
+                    break;
+                lpResults[luRequest].muIndex = luTopIndex;
             }
             else
             {
-                ++*lpFreeNodes;
-                *lpFreeBytes += liSize;
-                if (*lpLargestFree <= liSize) *lpLargestFree = liSize;
+                lpResults[luRequest].mpData = Malloc(lpRequests[luRequest].muSize, "", lpRequests[luRequest].mpOwner,
+                                                     luBottomIndex, &luBottomIndex, false, false, 0);
+                if (lpResults[luRequest].mpData == 0)
+                    break;
+                lpResults[luRequest].muIndex = luBottomIndex;
             }
         }
+
+        if (luRequest == luNumRequests)
+            return E_BATCHALLOCRESULT_SUCCESS;
+
+        if (lbFreeOnFailure)
+        {
+            for (u16 luFreeIndex = 0; luFreeIndex < luRequest; luFreeIndex++)   // DWARF cpp:1072
+                Free(lpResults[luFreeIndex].muIndex);
+        }
+
+        // Would the whole batch have fitted in the free bytes? If so the heap is fragmented.
+        u32 luSizeNeeded = CalculateRequiredSizeForAllocList(lpRequests, luNumRequests);   // DWARF cpp:1080
+        return (muAmountFree >= luSizeNeeded) ? E_BATCHALLOCRESULT_FAIL_NEED_DEFRAG
+                                              : E_BATCHALLOCRESULT_FAIL_NO_ROOM;
     }
 
-    u32 Heap::GetHeapAlignment() const { return muHeapAlignment; }
 
-    char* Heap::GetBaseAddress() const { return mpcAddress; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // The addressed sibling: every request names the byte offset it must land at, so
+    // each Malloc is handed a fixed address (and no running start index -- the search always
+    // begins at the list head). Same failure accounting as the free-placement batch above.
+    EBatchAllocResult Heap::ExecuteBatchAddressedAllocation(AllocRequestAddressed* lpRequests, AllocResult* lpResults,
+                                                            u32 luNumRequests, bool lbFreeOnFailure)
+    {
+        // DWARF locals: luRequest (cpp:1104), luBottomIndex / luTopIndex (1105/1106). Every request
+        // allocates from the top at its own address; the top index is the next search's start and
+        // the found index Malloc writes back (ARTIST li r7,-1 / &0x60(r1) @0x828F5538, lhz r7 after).
+        u32 luRequest;
+        u16 luBottomIndex = HeapEntryList::KI_LIST_INVALID;
+        u16 luTopIndex    = HeapEntryList::KI_LIST_INVALID;
+
+        for (luRequest = 0; luRequest < luNumRequests; luRequest++)
+        {
+            lpResults[luRequest].mpData = Malloc(lpRequests[luRequest].muSize, "", lpRequests[luRequest].mpOwner,
+                                                 luTopIndex, &luTopIndex, false, true,
+                                                 mpcAddress + lpRequests[luRequest].muOffset);
+            if (lpResults[luRequest].mpData == 0)
+                break;
+            lpResults[luRequest].muIndex = luTopIndex;
+        }
+
+        if (luRequest == luNumRequests)
+            return E_BATCHALLOCRESULT_SUCCESS;
+
+        if (lbFreeOnFailure)
+        {
+            for (u16 luFreeIndex = 0; luFreeIndex < luRequest; luFreeIndex++)   // DWARF cpp:1166
+                Free(lpResults[luFreeIndex].muIndex);
+        }
+
+        u32 luSizeNeeded = CalculateRequiredSizeForAllocList(lpRequests, luNumRequests);   // DWARF cpp:1174
+        return (muAmountFree >= luSizeNeeded) ? E_BATCHALLOCRESULT_FAIL_NEED_DEFRAG
+                                              : E_BATCHALLOCRESULT_FAIL_NO_ROOM;
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // Flatten the live address-ordered node list into the caller's array: one
     // (offset, size, status, node index, owner) record per node in mUsedNodes, in list order.
@@ -370,10 +1221,10 @@ namespace CgsResource
     // muMaxLinearHeapNodes -- so the parameter is unused here too.
     u16 Heap::GenerateLinearHeap(LinearHeapNode* lpInputLinearHeap, u16 /*luMaxLength*/)
     {
-        CGS_ASSERT(lpInputLinearHeap != 0, "No linear heap passed in\n");
+        CGS_ASSERT_STREAM(lpInputLinearHeap != 0, "No linear heap passed in\n");
 
-        const s32      liNumNodes = mUsedNodes.GetCount();
-        HeapEntryNode* lpNode     = (liNumNodes > 0) ? mUsedNodes.GetHead() : 0;
+        const s32      liNumNodes = mUsedNodes.CountElements();
+        HeapEntryNode* lpNode     = mUsedNodes.GetHead();
 
         LinearHeapNode* lpOut = lpInputLinearHeap;
         for (s32 liNode = 0; liNode < liNumNodes; ++liNode, ++lpOut)
@@ -391,101 +1242,97 @@ namespace CgsResource
         return static_cast<u16>(liNumNodes);
     }
 
-    // Carve one block per request in order. Top- and bottom-allocated requests keep
-    // SEPARATE running start-node indices, so each policy resumes its search where it left off
-    // instead of walking the list from the head every time. The first failed Malloc stops the
-    // batch; on failure the already-carved blocks are handed back when lbFreeOnFailure, and the
-    // return distinguishes "the bytes exist but are fragmented" (the defragmenter's cue) from
-    // "the heap is simply too small".
-    EBatchAllocResult Heap::ExecuteBatchAllocation(AllocRequest* lpRequests, AllocResult* lpResults,
-                                                   u32 luNumRequests, bool lbFreeOnFailure)
-    {
-        u16 luTopStartIndex    = 0xFFFF;
-        u16 luBottomStartIndex = 0xFFFF;
-        u16 luTopFoundIndex    = 0xFFFF;
-        u16 luBottomFoundIndex = 0xFFFF;
 
-        u32 luDone = 0;
-        for (; luDone < luNumRequests; ++luDone)
-        {
-            const AllocRequest& lRequest = lpRequests[luDone];
-            AllocResult&        lResult  = lpResults[luDone];
 
-            if (lRequest.mbAllocateTop)
-            {
-                lResult.mpData = Malloc(lRequest.muSize, "", lRequest.mpOwner,
-                                        luTopStartIndex, &luTopFoundIndex, false, true, 0);
-                if (lResult.mpData == 0)
-                    break;
-                luTopStartIndex = luTopFoundIndex;
-                lResult.muIndex = luTopFoundIndex;
-            }
-            else
-            {
-                lResult.mpData = Malloc(lRequest.muSize, "", lRequest.mpOwner,
-                                        luBottomStartIndex, &luBottomFoundIndex, false, false, 0);
-                if (lResult.mpData == 0)
-                    break;
-                luBottomStartIndex = luBottomFoundIndex;
-                lResult.muIndex    = luBottomFoundIndex;
-            }
-        }
 
-        if (luDone == luNumRequests)
-            return E_BATCHALLOCRESULT_SUCCESS;
 
-        if (lbFreeOnFailure && luDone != 0)
-        {
-            for (u16 luFreed = 0; luFreed < luDone; ++luFreed)
-                Free(lpResults[luFreed].muIndex);
-        }
 
-        // Would the whole batch have fitted in the free bytes? If so the heap is fragmented.
-        u32 luRequired = 0;
-        for (u32 luRequest = 0; luRequest < luNumRequests; ++luRequest)
-            luRequired += (muHeapAlignment + lpRequests[luRequest].muSize - 1) & ~(muHeapAlignment - 1);
 
-        return (muAmountFree >= luRequired) ? E_BATCHALLOCRESULT_FAIL_NEED_DEFRAG
-                                            : E_BATCHALLOCRESULT_FAIL_NO_ROOM;
-    }
 
-    // The addressed sibling: every request names the byte offset it must land at, so
-    // each Malloc is handed a fixed address (and no running start index -- the search always
-    // begins at the list head). Same failure accounting as the free-placement batch above.
-    EBatchAllocResult Heap::ExecuteBatchAddressedAllocation(AllocRequestAddressed* lpRequests, AllocResult* lpResults,
-                                                            u32 luNumRequests, bool lbFreeOnFailure)
-    {
-        u16 luFoundIndex = 0xFFFF;
 
-        u32 luDone = 0;
-        for (; luDone < luNumRequests; ++luDone)
-        {
-            const AllocRequestAddressed& lRequest = lpRequests[luDone];
-            AllocResult&                 lResult  = lpResults[luDone];
 
-            lResult.mpData = Malloc(lRequest.muSize, "", lRequest.mpOwner,
-                                    0xFFFF, &luFoundIndex, false, true, mpcAddress + lRequest.muOffset);
-            if (lResult.mpData == 0)
-                break;
-            lResult.muIndex = luFoundIndex;
-        }
 
-        if (luDone == luNumRequests)
-            return E_BATCHALLOCRESULT_SUCCESS;
 
-        if (lbFreeOnFailure && luDone != 0)
-        {
-            for (u16 luFreed = 0; luFreed < luDone; ++luFreed)
-                Free(lpResults[luFreed].muIndex);
-        }
 
-        u32 luRequired = 0;
-        for (u32 luRequest = 0; luRequest < luNumRequests; ++luRequest)
-            luRequired += (muHeapAlignment + lpRequests[luRequest].muSize - 1) & ~(muHeapAlignment - 1);
 
-        return (muAmountFree >= luRequired) ? E_BATCHALLOCRESULT_FAIL_NEED_DEFRAG
-                                            : E_BATCHALLOCRESULT_FAIL_NO_ROOM;
-    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // Re-seat every relocated block in the heap's own bookkeeping. The bytes are NOT copied here
     // -- the pool's ScratchPool / Relocator pass moves those; this only rewires nodes, and it does
@@ -531,53 +1378,254 @@ namespace CgsResource
         }
     }
 
-    // Reset to an unprepared, empty state (the X360 Construct Init's both index-lists).
-    void Heap::Construct()
-    {
-        mUnusedNodes.Init(0, 0);
-        mUsedNodes.Init(0, 0);
-        mbPrepared = false;
-    }
 
-    // ARTIST828ECAE8. Only a dirty cache walks the used-node list; empty
-    // heaps still clear the dirty bit and cache a largest-free size of zero.
-    int Heap::GetLargestFreeBlock()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    // 828ECF90: include both allocated and free blocks in the used-node count.
+    void Heap::GetNodeUsageStatistics(s32* lpUsedNodes, s32* lpUnusedNodes,
+        s32* lpAllocatedNodes, s32* lpFreeNodes, s32* lpAllocatedBytes,
+        s32* lpFreeBytes, s32* lpLargestFree)
     {
-        if (mbNeedToRecalcLargestFree)
+        *lpUsedNodes = *lpAllocatedNodes = *lpFreeNodes = 0;
+        *lpAllocatedBytes = *lpFreeBytes = *lpLargestFree = 0;
+        *lpUnusedNodes = mUnusedNodes.CountElements();
+        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode; lpNode = mUsedNodes.GetNext(lpNode))
         {
-            u32 luLargestFree = 0;
-            HeapEntryNode* lpNode = mUsedNodes.GetCount() > 0 ? mUsedNodes.GetHead() : 0;
-            while (lpNode)
+            ++*lpUsedNodes;
+            const HeapEntry* lpEntry = lpNode->GetData();
+            const s32 liSize = static_cast<s32>(lpEntry->GetSize());
+            if (lpEntry->IsAllocated())
             {
-                const HeapEntry* lpEntry = lpNode->GetData();
-                if (lpEntry->IsFree() && lpEntry->GetSize() > luLargestFree)
-                    luLargestFree = lpEntry->GetSize();
-                lpNode = mUsedNodes.GetNext(lpNode);
+                ++*lpAllocatedNodes;
+                *lpAllocatedBytes += liSize;
             }
-            muLargestFree = luLargestFree;
-            mbNeedToRecalcLargestFree = false;
+            else
+            {
+                ++*lpFreeNodes;
+                *lpFreeBytes += liSize;
+                if (*lpLargestFree <= liSize) *lpLargestFree = liSize;
+            }
         }
-        return static_cast<int>(muLargestFree);
     }
 
-    // ARTIST828ECB78. This is free-node count / allocated-node count,
-    // with no division when there are at most one free nodes. The original
-    // permits an infinite result when multiple free nodes have no allocated node.
-    float Heap::GetFragmentationLevel()
+
+    // ---- HeapEntry: muSize packs the allocation status in bits 28-30 (mask 0x70000000) and
+    // the block size in the rest (mask 0x8FFFFFFF == KU_MAX_SIZE). ---------------------------
+
+    bool HeapEntry::Contains(char* lpcAddress) const
     {
-        u32 luFreeNodes = 0;
-        u32 luAllocatedNodes = 0;
-        HeapEntryNode* lpNode = mUsedNodes.GetCount() > 0 ? mUsedNodes.GetHead() : 0;
-        while (lpNode)
-        {
-            if (lpNode->GetData()->IsAllocated())
-                ++luAllocatedNodes;
-            else
-                ++luFreeNodes;
-            lpNode = mUsedNodes.GetNext(lpNode);
-        }
-        if (luFreeNodes <= 1u)
-            return 0.0f;
-        return static_cast<f32>(luFreeNodes) / static_cast<f32>(luAllocatedNodes);
+        return lpcAddress >= mpAddress && lpcAddress < mpAddress + GetSize();
     }
+
+
+    bool HeapEntry::IsFree() const      { return (muSize & 0x70000000u) == 0; }
+
+    bool HeapEntry::IsAllocated() const { return (muSize & 0x70000000u) != 0; }
+
+
+    // Top-allocated blocks start at mpAddress; bottom-allocated blocks place their luSize-byte
+    // payload at the end of the block (matching Heap::Malloc's address computation).
+    char* HeapEntry::GetAddress(bool lbAllocatedFromTop, u32 luSize) const
+    {
+        return lbAllocatedFromTop ? mpAddress : (mpAddress + GetSize() - luSize);
+    }
+
+
+    void* HeapEntry::GetOwner() const { return mpOwner; }
+
+    u32   HeapEntry::GetSize() const  { return muSize & KU_MAX_SIZE; }
+
+
+    void HeapEntry::SetAllocated(bool lbAllocated)
+    {
+        if (lbAllocated) muSize |= 0x70000000u;
+        else             muSize &= KU_MAX_SIZE;   // clear the status bits, keep the size
+    }
+
+
+    void HeapEntry::SetAddress(char* lpcAddress) { mpAddress = lpcAddress; }
+
+    void HeapEntry::SetOwner(void* lpOwner)      { mpOwner = lpOwner; }
+
+
+    void HeapEntry::SetSize(u32 luSize)
+    {
+        CGS_ASSERT(luSize <= KU_MAX_SIZE, CgsDev::Assert::StreamMessageAt("Size can not be larger than 0x8FFFFFFF - last bit is used as flag!\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\system\\resource\\CgsResourceHeap.h", 621));   // CgsResourceHeap.h:621
+        muSize = (muSize & 0x70000000u) | luSize;   // preserve status, replace size
+    }
+
+
+    char* HeapEntry::GetAddress() const { return mpAddress; }
+
+
+    // 0x828EB548 - first free block (>= luSize) walking forward (ascending address) from
+    // lpStartNode, wrapping once through the head.
+    Heap::HeapEntryNode* Heap::FindFreeNodeFromTop(HeapEntryNode* lpStartNode, u32 luSize)
+    {
+        for (HeapEntryNode* lpNode = lpStartNode; lpNode != 0; lpNode = mUsedNodes.GetNext(lpNode))
+            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize)
+                return lpNode;
+        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != 0 && lpNode != lpStartNode; lpNode = mUsedNodes.GetNext(lpNode))
+            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize)
+                return lpNode;
+        return 0;
+    }
+
+
+    // 0x828EB618 - first free block (>= luSize) walking backward (descending address) from
+    // lpStartNode, wrapping once through the tail.
+    Heap::HeapEntryNode* Heap::FindFreeNodeFromBottom(HeapEntryNode* lpStartNode, u32 luSize)
+    {
+        for (HeapEntryNode* lpNode = lpStartNode; lpNode != 0; lpNode = mUsedNodes.GetPrev(lpNode))
+            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize)
+                return lpNode;
+        for (HeapEntryNode* lpNode = mUsedNodes.GetTail(); lpNode != 0 && lpNode != lpStartNode; lpNode = mUsedNodes.GetPrev(lpNode))
+            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize)
+                return lpNode;
+        return 0;
+    }
+
+
+    // 0x828EB430 - the free block (>= luSize) with the least leftover, scanning the whole
+    // list circularly from lpStartNode.
+    Heap::HeapEntryNode* Heap::FindFreeNodeBestFit(HeapEntryNode* lpStartNode, u32 luSize)
+    {
+        HeapEntryNode* lpBest = 0;
+        for (HeapEntryNode* lpNode = lpStartNode; lpNode != 0; lpNode = mUsedNodes.GetNext(lpNode))
+        {
+            HeapEntry* lpEntry = lpNode->GetData();
+            if (lpEntry->IsFree() && lpEntry->GetSize() >= luSize &&
+                (lpBest == 0 || (lpBest->GetData()->GetSize() - luSize) > (lpEntry->GetSize() - luSize)))
+                lpBest = lpNode;
+        }
+        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != 0 && lpNode != lpStartNode; lpNode = mUsedNodes.GetNext(lpNode))
+        {
+            HeapEntry* lpEntry = lpNode->GetData();
+            if (lpEntry->IsFree() && lpEntry->GetSize() >= luSize &&
+                (lpBest == 0 || (lpBest->GetData()->GetSize() - luSize) > (lpEntry->GetSize() - luSize)))
+                lpBest = lpNode;
+        }
+        return lpBest;
+    }
+
+
+    // The free block (>= luSize) that CONTAINS lpAddress, walking forward from lpStartNode and
+    // wrapping once through the head -- the FindFreeNodeFromTop walk with an extra containment
+    // test. This is the policy an addressed allocation uses: the caller has already decided which
+    // byte offset the block must land at.
+    Heap::HeapEntryNode* Heap::FindFreeNodeContainingAddress(HeapEntryNode* lpStartNode, u32 luSize, void* lpAddress)
+    {
+        char* lpcAddress = static_cast<char*>(lpAddress);
+
+        for (HeapEntryNode* lpNode = lpStartNode; lpNode != 0; lpNode = mUsedNodes.GetNext(lpNode))
+            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize
+                && lpNode->GetData()->Contains(lpcAddress))
+                return lpNode;
+        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode != 0 && lpNode != lpStartNode; lpNode = mUsedNodes.GetNext(lpNode))
+            if (lpNode->GetData()->IsFree() && lpNode->GetData()->GetSize() >= luSize
+                && lpNode->GetData()->Contains(lpcAddress))
+                return lpNode;
+        return 0;
+    }
+
+
+    // 0x828F4F80 - free the block at node luNodeIndex, coalescing with a free lower-address
+    // neighbour (extend backward) and/or a free higher-address neighbour (extend forward).
+    void Heap::Free(u16 luNodeIndex)
+    {
+        HeapEntryNode* lpNode  = &mpNodes[luNodeIndex];
+        HeapEntry*     lpEntry = lpNode->GetData();
+        CGS_ASSERT(lpEntry->IsAllocated(), "lpNode->GetData()->IsAllocated()");                                       // :531
+        CGS_ASSERT(reinterpret_cast<uintptr_t>(lpEntry->GetOwner()) != 0xFFFFFFFFu, "reinterpret_cast<uintptr_t>(lpNode->GetData()->GetOwner()) != 0xFFFFFFFF");   // :532
+
+        const u32 luFreedSize = lpEntry->GetSize();
+        lpEntry->SetAllocated(false);
+
+        HeapEntryNode* lpPrev = mUsedNodes.GetPrev(lpNode);
+        if (lpPrev != 0 && lpPrev->GetData()->IsFree())
+        {
+            lpEntry->SetAddress(lpEntry->GetAddress() - lpPrev->GetData()->GetSize());
+            lpEntry->SetSize(lpPrev->GetData()->GetSize() + lpEntry->GetSize());
+            mUsedNodes.RemoveNode(lpPrev);
+            RemoveNode(lpPrev);
+        }
+
+        HeapEntryNode* lpNext = mUsedNodes.GetNext(lpNode);
+        if (lpNext != 0 && lpNext->GetData()->IsFree())
+        {
+            lpEntry->SetSize(lpNext->GetData()->GetSize() + lpEntry->GetSize());
+            mUsedNodes.RemoveNode(lpNext);
+            RemoveNode(lpNext);
+        }
+
+        muAmountFree += luFreedSize;
+        if (lpEntry->GetSize() > muLargestFree)
+            muLargestFree = lpEntry->GetSize();
+    }
+
+
+    // ARTIST 828FD918 (export hole): resolve the exact block address and free its node.
+    // Used by partial-allocation cleanup and by the live-update replacement path.
+    void Heap::Free(void* lpPtr)
+    {
+        mbUpdated = true;
+        CGS_ASSERT(reinterpret_cast<uintptr_t>(lpPtr) % muHeapAlignment == 0,
+                   "((int)lpcAddress % muHeapAlignment) == 0");
+        for (HeapEntryNode* lpNode = mUsedNodes.GetHead(); lpNode; lpNode = mUsedNodes.GetNext(lpNode))
+        {
+            if (lpNode->GetData()->GetAddress() == lpPtr)
+            {
+                Free(static_cast<u16>(lpNode - mpNodes));
+                break;
+            }
+        }
+    }
+
+
+    s32 Heap::GetMaxNodes() const { return miNumNodes; }
+
+
+    u32 Heap::GetHeapAlignment() const { return muHeapAlignment; }
+
+
+    char* Heap::GetBaseAddress() const { return mpcAddress; }
 }
+

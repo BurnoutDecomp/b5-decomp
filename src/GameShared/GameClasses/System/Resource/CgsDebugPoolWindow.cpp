@@ -234,8 +234,7 @@ namespace CgsResource
             u32 luFirstSegment = lpInfo->muScroll / luBytesPerSegment;
             if (luFirstSegment >= luTotalSegments - 1u)
                 luFirstSegment = luTotalSegments - 1u;
-            Heap::HeapEntryNode* lpNode = lpHeap->mUsedNodes.GetCount() > 0
-                ? lpHeap->mUsedNodes.GetHead() : 0;
+            Heap::HeapEntryNode* lpNode = lpHeap->mUsedNodes.GetHead();
             u32 luBackgroundColumns = luTotalSegments - luFirstSegment;
             if (luBackgroundColumns > luColumns)
                 luBackgroundColumns = luColumns;

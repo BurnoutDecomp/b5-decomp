@@ -312,9 +312,6 @@ namespace CgsResource
         return true;
     }
 
-    const char* Pool::GetName() const             { return macName; }
-    s32  Pool::GetId() const                       { return miId; }
-    s32  Pool::GetBankId()                         { return miBankId; }
 
     // Return the pool to its unbuilt state: no entries, no id or name, not valid, and every heap
     // released.
@@ -364,25 +361,11 @@ namespace CgsResource
         mbIsValid = true;
         return true;
     }
-    bool Pool::IsValid() const                     { return mbIsValid; }
-    s32  Pool::GetNumDependencies() const          { return miNumDependencies; }
-    Pool* Pool::GetDependency(s32 liIndex) const   { return mapDependencies[liIndex]; }
-    s32  Pool::GetRefCountThreshold()              { return miRefCountThreshold; }
-    s32  Pool::GetNumEntriesInPurgatory() const    { return miNumResourcesInPurgatory; }
-    u32  Pool::GetHeapAlignment(s32 liMemType) const { return maHeaps[liMemType].GetHeapAlignment(); }
-    bool Pool::GetAllowDefragmentation() const     { return mbAllowDefragmentation; }
-    void Pool::SetAllowDefragmentation(bool lbAllow) { mbAllowDefragmentation = lbAllow; }
+    // GetName .. SetAllowDefragmentation, GetDependency, GenerateLinearHeap and
+    // ExecuteBatchAddressedAllocation are header-inline (CgsResourcePool.h): the DecFIGS DWARF has
+    // no CgsResourcePool.cpp definition of any of them.
     s32  Pool::GetDefragMemType() const            { return miDefragMemType; }
-    bool Pool::IsDefragmenting() const           { return miDefragFrame != -1; }
 
-    s16  Pool::GetEntryRefCount(s32 liIndex) const       { return mpiResourceRefCounts[liIndex]; }
-    void Pool::SetEntryRefCount(s32 liIndex, s16 liRefCount) { mpiResourceRefCounts[liIndex] = liRefCount; }
-    void Pool::IncEntryRefCount(s32 liIndex)             { ++mpiResourceRefCounts[liIndex]; }
-    void Pool::DecEntryRefCount(s32 liIndex)             { --mpiResourceRefCounts[liIndex]; }
-    u8   Pool::GetEntryStatus(s32 liIndex) const         { return mpx8ResourceStatuses[liIndex]; }
-    void Pool::SetEntryStatus(s32 liIndex, u8 luStatus)  { mpx8ResourceStatuses[liIndex] = luStatus; }
-    s32  Pool::GetEntryImportCount(s32 liIndex) const    { return mpiResourceImportCounts[liIndex]; }
-    void Pool::SetEntryImportCount(s32 liIndex, s32 liCount) { mpiResourceImportCounts[liIndex] = liCount; }
 
     // ---- create / allocate --------------------------------------------------------
 
@@ -1103,11 +1086,6 @@ namespace CgsResource
     // first (the pool must be valid / the memory type must be one of the three) and then indexes
     // maHeaps.
 
-    u16 Pool::GenerateLinearHeap(s32 liMemType, LinearHeapNode* lpOut, u16 luMaxLength)
-    {
-        CGS_ASSERT(static_cast<u32>(liMemType) < BasePool::KI_NUM_TYPES, "Mem type out of range\n");
-        return maHeaps[liMemType].GenerateLinearHeap(lpOut, luMaxLength);
-    }
 
     // The per-memory-type slice of the caller's AllocListSet (its request array, its
     // result array and its request count) goes straight to the heap, always freeing on failure.
@@ -1120,14 +1098,6 @@ namespace CgsResource
                                                         true);
     }
 
-    EBatchAllocResult Pool::ExecuteBatchAddressedAllocation(s32 liMemType, AllocRequestAddressed* lpRequests,
-                                                            AllocResult* lpResults, u32 luNumRequests,
-                                                            bool lbFreeOnFailure)
-    {
-        CGS_ASSERT(static_cast<u32>(liMemType) < BasePool::KI_NUM_TYPES, "Mem type out of range\n");
-        return maHeaps[liMemType].ExecuteBatchAddressedAllocation(lpRequests, lpResults, luNumRequests,
-                                                                  lbFreeOnFailure);
-    }
 
     // Arm the relocating defragmentation pass the pool module's IntelliFrag strategy planned: latch
     // the staging pool and the plan (the relocate requests and their sources), reset the per-pass

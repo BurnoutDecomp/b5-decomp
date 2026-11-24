@@ -233,7 +233,9 @@ namespace CgsResource
 
     void DebugComponent::Update()
     {
-        // ARTIST828FF00C calls the positively empty ICF body8284CB38.
+        // The base class update first (PS3 DecFIGS DebugComponent::Update @0xCE3A84 -> sub_CB0BAC ->
+        // CgsDev::DebugComponent::Update); ARTIST @0x828FF00C calls its empty body, ICF-folded at 0x8284CB38.
+        CgsDev::DebugComponent::Update();
         UpdatePoolMenuItems();
         UpdateWindows();
         if (mbTriggerStatsDump)
