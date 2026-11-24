@@ -1653,21 +1653,21 @@ void ChallengeManager::RemoteEndChallenge(TGameActionQueue* lpActionQueue, EChal
 
         // X360 ld +0xC0 (mpCurrentChallenge->GetChallengeID()); bl GetChallengeIndex.
         const s32 liChallengeIndex = GetChallengeIndex(mpCurrentChallenge->GetChallengeID());
-        if (liChallengeIndex >= 0)   // X360 cmpwi r4,0; bge
+        if (liChallengeIndex < 0)   // ARTIST 0x8234713C branches over the assertion for a valid index.
         {
-            SetRemotePlayersChallengeCompleted(liChallengeIndex);   // X360 bl SetRemotePlayersChallengeCompleted
+            CGS_ASSERT(liChallengeIndex >= 0, CGS_ASSERT_MESSAGE_AT("liChallengeIndex >= 0", CGS_ARTIST_FILE, 2511));   // X360 @2511
         }
         else
         {
-            CGS_ASSERT(liChallengeIndex >= 0, CGS_ASSERT_MESSAGE_AT("liChallengeIndex >= 0", CGS_ARTIST_FILE, 2511));   // X360 @2511
+            SetRemotePlayersChallengeCompleted(liChallengeIndex);
         }
     }
 
     // Empty end-not-active action (no payload): X360 posts &stack byte, size 1, id 154.
-    GameStateModuleIO::GameAction<GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE_END_NOT_ACTIVE>
-        lEndNotActiveAction;
+    GameStateModuleIO::FburnChallengeEndNotActiveAction lEndNotActiveAction;
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lEndNotActiveAction),
-                            GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE_END_NOT_ACTIVE, 1);  // X360 li r5,0x9A; li r6,1
+                            GameStateModuleIO::E_ACTION_FREEBURN_CHALLENGE_END_NOT_ACTIVE,
+                            sizeof(lEndNotActiveAction));  // X360 li r5,0x9A; li r6,1
 
     ClearPlayerSuccessData();   // X360 bl ClearPlayerSuccessData
 }
@@ -3720,11 +3720,12 @@ void ChallengeManager::UpdateResults(f32 lfTimeStep, TGameActionQueue* lpActionQ
     // RAW X360-drift event value (see the file header note): NOT the PS3 enumerator names.
     lAction.meEventType                   = 6;
     lAction.meChallengeStatus             = meLocalChallengeStatus;                 // lwz +0xE30
+    // ARTIST 0x8234601C..0x82346024 writes these zero fields in this order.
+    lAction.mbIsHost                      = false;
     lAction.miActionIndex                 = 0;
+    lAction.mbAbortingToStartNewChallenge = false;
     lAction.miNumChallengesComplete       = -1;
     lAction.miTotalNumChallenges          = -1;
-    lAction.mbIsHost                      = false;
-    lAction.mbAbortingToStartNewChallenge = false;
 
     CGS_ASSERT(lpActionQueue, CGS_ASSERT_MESSAGE_AT("lpActionQueue", CGS_ARTIST_FILE, 884));   // :884
     lpActionQueue->AddEvent(reinterpret_cast<const CgsModule::Event*>(&lAction),
@@ -4356,9 +4357,10 @@ void ChallengeManager::NetworkPlayerFinalised(BrnNetwork::NetworkPlayerID lPlaye
 
     if (lbIsOnline)
     {
-        // X360 materialises (status == 2 || status == 3) into a byte, then branches on it.
-        if (meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING ||   // X360 cmpwi 2
-            meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RESULTS)     // X360 cmpwi 3
+        // ARTIST 0x82347F78..0x82347F8C materializes and tests the running status.
+        const bool lbChallengeRunning = meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RUNNING ||
+                                        meChallengeManagerStatus == E_CHALLENGE_MANAGER_STATUS_RESULTS;
+        if (lbChallengeRunning)
         {
             CGS_ASSERT(mpCurrentChallenge != 0, CGS_ASSERT_MESSAGE_AT("mpCurrentChallenge", CGS_ARTIST_FILE, 4974));   // X360 :4974
 

@@ -118,12 +118,18 @@ const char* BoostBurnout3::GetName() const
 // ---------------------------------------------------------------------------
 bool BoostBurnout3::AreWeAllowedToBoost()
 {
-    if (mbBoosting)
+    if (mbBoosting == true)  // 0x822A6B94 compares the flag to 1.
     {
-        return mfBoostAmount > 0.0f;
+        if (mfBoostAmount > 0.0f)
+        {
+            return true;
+        }
     }
-
-    return mfBoostAmount > mfMinBoostAllowedAmount;
+    else if (mfBoostAmount > mfMinBoostAllowedAmount)
+    {
+        return true;
+    }
+    return false;
 }
 
 }   // namespace BrnWorld

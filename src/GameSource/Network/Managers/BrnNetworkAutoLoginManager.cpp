@@ -65,6 +65,7 @@ namespace BrnNetwork
             CGS_ARTIST_FILE, 62 /* ARTIST 0x8255E1B4 */));
 
         mTimer.SetFloatVal(0.0f);
+        mProcessesComplete.Construct();  // ARTIST 0x8255E1CC/1D0 clears the bit array twice.
         mProcessesComplete.UnSetAll();
         meState = E_AUTO_LOGIN_STATE_IDLE;
     }
@@ -74,6 +75,7 @@ namespace BrnNetwork
     {
         meState = E_AUTO_LOGIN_STATE_IDLE;
         mProcessesComplete.UnSetAll();
+        mProcessesComplete.Destruct();  // ARTIST 0x8255E220/228 clears it again before resetting the timer.
         mTimer.SetFloatVal(0.0f);
         mfTimeConnected = 0.0f;
         mpServerInterface = 0;

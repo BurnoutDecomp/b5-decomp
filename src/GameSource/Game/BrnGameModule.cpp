@@ -3111,9 +3111,9 @@ namespace BrnGame
         }
         else if (miInputModuleState == 5)
         {
-            lpPostWorldInputBuffer->LockForWrite();
+            CgsModule::LockBuffersForIO(lpPostWorldInputBuffer);
             lpPostWorldInputBuffer->PostUnbindRequest(0);
-            lpPostWorldInputBuffer->UnlockForWrite();
+            CgsModule::UnlockBuffersForIO(lpPostWorldInputBuffer);
             miInputModuleState = E_INPUTBINDSTATE_UNBIND_REQUESTED;
         }
 

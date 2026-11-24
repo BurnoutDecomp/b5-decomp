@@ -117,7 +117,7 @@ struct CrashModeScoring
     // null if absent). The X360 body (0x8232BEF8) walks maRecentCrashes via the bounds-
     // checked Array<>::operator[] (the explicit instantiation in Array_RecentCrash_64.cpp).
     // Called by DealWithHitTrafficCar / DealWithScoreForVehicleClass.
-    RecentCrash* GetRecentCrash(u16 luTrafficCarIndex);   // BrnCrashModeScoring.h (X360 0x8232BEF8)
+    const RecentCrash* GetRecentCrash(u16 luTrafficCarIndex) const;   // DWARF BrnCrashModeScoring.h:226
 
     // --- slice grown for this type's own TU (BrnCrashModeScoring.cpp), batch of 13 ---
     // The crash-event handlers + per-frame Update that mutate the live-scoring members named

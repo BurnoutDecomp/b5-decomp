@@ -98,21 +98,19 @@ namespace BrnGameState
     // Linear search of the live recent-hit-cars set (maRecentCrashes, reached in the X360
     // at this+0x7C; its count word at +0x200 within the Array). Walk indices 0..count-1,
     // comparing each element's muTrafficCarIndex (u16 @ element+0) against the requested
-    // index; return a mutable pointer to the first match, or null if none (the X360 returns
-    // 0 both when the set is empty/count<=0 and when the scan falls off the end).
-    //
-    // The X360 body indexes through Array<>::operator[] (the bounds-checked accessor); the
-    // 16-bit compare (`clrlwi r29,r29,16` then `lhz` of the element) is the u16 vs u16 match.
+    // index. DWARF BrnCrashModeScoring.h:226 declares a const method and result.
+    // ARTIST 0x8232BF20 checks the array length once, and 0x8232BF84 repeats
+    // the const GetItem call to return the matched element.
     // ------------------------------------------------------------------------
-    CrashModeScoring::RecentCrash* CrashModeScoring::GetRecentCrash(u16 luTrafficCarIndex)
+    const CrashModeScoring::RecentCrash* CrashModeScoring::GetRecentCrash(u16 luTrafficCarIndex) const
     {
-        const s32 liCount = maRecentCrashes.GetCount();   // *(&set + 0x200)
-        for (s32 liIndex = 0; liIndex < liCount; ++liIndex)
+        s32 liCrashSetIndex;
+        const s32 liSetLength = maRecentCrashes.GetLength();
+        for (liCrashSetIndex = 0; liCrashSetIndex < liSetLength; ++liCrashSetIndex)
         {
-            RecentCrash& lrCrash = maRecentCrashes[static_cast<u32>(liIndex)];
-            if (lrCrash.muTrafficCarIndex == luTrafficCarIndex)
+            if (maRecentCrashes[liCrashSetIndex].muTrafficCarIndex == luTrafficCarIndex)
             {
-                return &lrCrash;
+                return &maRecentCrashes[liCrashSetIndex];
             }
         }
         return 0;
@@ -756,8 +754,8 @@ namespace BrnGameState
         {
             // Traffic-vs-traffic: chain the new victim off whichever participant is an
             // already-active recorded crash; the OTHER participant becomes the new victim.
-            RecentCrash* lpCrashA = GetRecentCrash(static_cast<u16>(luIndexA));
-            RecentCrash* lpCrashB = GetRecentCrash(static_cast<u16>(luIndexB));
+            const RecentCrash* lpCrashA = GetRecentCrash(static_cast<u16>(luIndexA));
+            const RecentCrash* lpCrashB = GetRecentCrash(static_cast<u16>(luIndexB));
             if (lpCrashA != 0)
             {
                 if (lpCrashB != 0 || !IsActiveCrash(lpCrashA))

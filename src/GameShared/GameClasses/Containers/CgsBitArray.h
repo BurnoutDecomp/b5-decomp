@@ -161,6 +161,18 @@ public:
         }
     }
 
+    // DecFIGS CgsBitArray.h:342 and :360. Both lifecycle operations clear the
+    // storage, as in the BitArray<3> bodies at PS3 0x2CE570 and 0x2CE57C.
+    void Construct()
+    {
+        UnSetAll();
+    }
+
+    void Destruct()
+    {
+        UnSetAll();
+    }
+
     // ADDITIVE GROW (StreetData wave-C keystone; DWARF CgsBitArray.h:55 attests SetAll on the
     // reference template). Set every bit -- whole-word ~0 stores, exactly the X360 single
     // `std -1` of the one-field BitArray<2> in StreetData::FixUp/FixDown's par-score loop.

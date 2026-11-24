@@ -1077,7 +1077,8 @@ void GameStateImageManagerBase::Construct(BrnProgression::ProgressionManager* lp
     miMugshotToSaveIndex = 0;                    // this+0xAC
     maImageLoadRequests.Clear();                 // this+0x80 count word -> 0
     mbLoadInProgress    = false;                 // this+0xBC
-    mImagesToRenderBitArray.UnSetAll();          // this+0xB0 (std 0)
+    mImagesToRenderBitArray.Construct();
+    mImagesToRenderBitArray.UnSetAll();          // ARTIST 0x8236D784/88. DecFIGS calls both at 0x245204.
 
     // this+0x84: maLoadedImagesToSlotMapping[i] = 0; this+0x90: maiImagesLockedForSave[i] = -1.
     for (s32 liIndex = 0; liIndex < KI_IMAGE_GALLERY_NUM_PICTURES; ++liIndex)
@@ -1109,6 +1110,7 @@ void GameStateImageManagerBase::Destruct()
 
     miMugshotToSaveIndex = 0;
     mImagesToRenderBitArray.UnSetAll();
+    mImagesToRenderBitArray.Destruct();          // ARTIST 0x8236D83C/40. DecFIGS calls both at 0x245308.
     mbLoadInProgress     = false;
     maImageLoadRequests.Clear();
     mpProgression        = 0;

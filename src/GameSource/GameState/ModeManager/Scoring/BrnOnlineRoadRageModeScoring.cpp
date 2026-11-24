@@ -154,14 +154,10 @@ void OnlineRoadRageModeScoring::CalculateRedTeamEliminations(const ScoringSystem
 
 // X360 @ 0x82321B60. Classify the finish of each blue-team (runner) car listed in the sort rows
 // into maeBlueTeamFinishTypes[raceCarIndex]:
-//   * eliminator index != -1  -> the car was eliminated:
-//       disconnected -> ESCAPED (the X360 +0x68/+0x69 reads: GetDisconnected selects ESCAPED==2,
-//                       otherwise ELIMINATED==... ); see the asm: *(result+104) (mbTimedOut@+0x68)
-//                       picks SURVIVED(1) vs ELIMINATED(2).
-//   * eliminator index == -1  -> the runner was never eliminated -> ELIMINATED(0).
-// NOTE: the X360 reads CarScoreData +0x60 (eliminator) for the "was eliminated" test, and +0x68
-// (mbTimedOut) to split the eliminated case; the literals stored are 1 then 2 (else 0), matching
-// the EBlueTeamFinishType enumerators SURVIVED(1)/ESCAPED(2)/ELIMINATED(0).
+// An assigned eliminator selects ELIMINATED at 0x82321BF4.
+// The branch at 0x82321BE8 skips that store for the invalid index.
+// In that case the timeout flag at CarScoreData+0x68 selects SURVIVED,
+// and the remaining cars are marked ESCAPED.
 void OnlineRoadRageModeScoring::CalculateBlueTeamFinishTypes(const ScoringSystem* lpScoringSystem,
                                                              BlueTeamSortData* lpaBlueRows,
                                                              s32 liNumBlue)
@@ -172,14 +168,14 @@ void OnlineRoadRageModeScoring::CalculateBlueTeamFinishTypes(const ScoringSystem
 
         CGS_ASSERT((leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID) &&
                        (leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT),
-                   "( leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )"
-                   " && ( leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )");
+                   CGS_ASSERT_MESSAGE_AT("( leRaceCarIndex > E_ACTIVE_RACE_CAR_INDEX_INVALID )"
+                       " && ( leRaceCarIndex < E_ACTIVE_RACE_CAR_INDEX_COUNT )", CGS_ARTIST_FILE, 626));
 
         const CarData* lpCarData = lpScoringSystem->GetCarData(leRaceCarIndex);
         if (lpCarData != NULL)
         {
             const GameStateModuleIO::CarScoreData* lpScore = lpCarData->GetScoreData();
-            if (lpScore->GetEliminatorRaceCarIndex() == E_ACTIVE_RACE_CAR_INDEX_INVALID)
+            if (lpScore->GetEliminatorRaceCarIndex() != E_ACTIVE_RACE_CAR_INDEX_INVALID)
             {
                 maeBlueTeamFinishTypes[leRaceCarIndex] = GameStateModuleIO::E_BLUE_TEAM_FINISH_TYPE_ELIMINATED;
             }

@@ -76,8 +76,8 @@ NetworkAdapterBase::ENetworkStatus NetworkAdapterBase::Prepare(NetworkAdapterPre
 
     meServerType      = static_cast<EServerType>(lpPrepareParams->meServerType);
     mpNetworkManager  = lpPrepareParams->mpNetworkManager;
-    mbDuplicateLogin  = false;
     mpServerInterface = lpPrepareParams->mpServerInterface;
+    mbDuplicateLogin  = false;
     mpHeapMalloc      = static_cast<CgsMemory::HeapMalloc*>(lpPrepareParams->mpHeapMalloc);
     CGS_ASSERT(mpHeapMalloc, CGS_ASSERT_MESSAGE_AT(
         "mpHeapMalloc",

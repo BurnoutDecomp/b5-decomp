@@ -8,8 +8,8 @@ template void CgsContainers::Array<BrnGameState::CrashModeScoring::RecentCrash, 
     const BrnGameState::CrashModeScoring::RecentCrash&);
 template void CgsContainers::Array<BrnGameState::CrashModeScoring::RecentCrash, 64>::Erase(u32);
 template bool CgsContainers::Array<BrnGameState::CrashModeScoring::RecentCrash, 64>::IsFull() const;
-// X360 0x8231AEB8 (class:BrnGameState catch-all TU) = the bounds-checked indexed accessor of this
-// same instantiation (the truncated ledger name "BrnGameState::Cras..."). The X360 CrashModeScoring::
-// GetRecentCra() walks the live set comparing GetRecentCra's u16 traffic-car index against each
-// element via this operator[] (stride 8) -- the non-const overload (it returns a mutable element).
+// The const lookup at ARTIST 0x8231AEB8 uses GetItem's assertions at CgsArray.h
+// lines 538 and 539. GetRecentCrash calls it at 0x8232BF54 and 0x8232BF84.
+template const BrnGameState::CrashModeScoring::RecentCrash&
+CgsContainers::Array<BrnGameState::CrashModeScoring::RecentCrash, 64>::GetItem(u32) const;
 template BrnGameState::CrashModeScoring::RecentCrash& CgsContainers::Array<BrnGameState::CrashModeScoring::RecentCrash, 64>::operator[](u32);

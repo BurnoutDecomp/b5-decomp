@@ -5419,6 +5419,12 @@ namespace
 // ----------------------------------------------------------------------------
 void TrafficPhysicsInfo::Construct( s32 liOwningVehicleIndex )
 {
+    mfStuckTimeFront      = 0.0f;
+    mfStuckTimeBack       = 0.0f;
+    mfStuckTimerDebounce  = 0.0f;
+    mfSteeringDirection   = 0.0f;
+    mfDrivingDirection    = 0.0f;
+
     // `stb r11, 0(r3)` @0x82751EB0 -- the detached-part record COUNT. RESOLVED 2026-09-02
     // (traffic-deformation wave): the xref walk the old gate asked for found the readers and
     // the writer. ProcessDeformationData @0x8271DEB0 uses this byte as the slot index
@@ -5428,17 +5434,12 @@ void TrafficPhysicsInfo::Construct( s32 liOwningVehicleIndex )
     // EventQueue pointer -- ARTIST's record is the compact struct the header now declares.
     mDetachedPartQueue.muNumParts = 0;
 
-    mfStuckTimeFront      = 0.0f;
-    mfStuckTimeBack       = 0.0f;
-    mfStuckTimerDebounce  = 0.0f;
     mfTimeNotDriving      = 0.0f;
-    mfSteeringDirection   = 0.0f;
-    mfDrivingDirection    = 0.0f;
-
-    miNumLightLocators    = 0;
     mbIsDeforming         = false;
     mbIsFatallyCrashing   = false;
+    miNumLightLocators    = 0;
     mu8RenderDamageFlags  = 0;
+    muContactSideFlags    = 0;
 
     // The `mtctr 8` loop @0x82751ED0 stores integer zero with `stw`; same bit pattern as the
     // float zero this member array takes.
@@ -5446,8 +5447,6 @@ void TrafficPhysicsInfo::Construct( s32 liOwningVehicleIndex )
     {
         mafGlassPaneFractureAmounts[luGlassPane] = 0.0f;
     }
-
-    muContactSideFlags    = 0;
 
     // `sth r4, 0x100A(r3)` @0x82751EDC narrows the s32 argument to the u16 member; spelled as
     // an explicit cast rather than a truncating store. Reader: HandleExternalResponses
