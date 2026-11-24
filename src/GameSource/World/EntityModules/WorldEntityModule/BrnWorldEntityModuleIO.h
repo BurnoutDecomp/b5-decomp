@@ -277,6 +277,7 @@ namespace WorldEntityIO
             mSoundWorldLoadInterface.Construct();
             miPlayerZoneNumber = -1;
         }
+        void Destruct();   // DecFIGS BrnWorldEntityModuleIO.cpp:68, out of line (ARTIST 0x822D8B60; DestroyIOBuffer 0x827B6840 calls it)
 
         // X360 0x827A2938 (read-lock) / 0x822BA378 (write-lock); X360 this+208.
         const SceneInputInterface* GetSceneInputInterface() const;

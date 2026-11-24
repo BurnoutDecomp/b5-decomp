@@ -149,5 +149,14 @@ namespace WorldEntityIO
         CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
         miPlayerZoneNumber = liPlayerZoneNumber;
     }
+
+    // DecFIGS BrnWorldEntityModuleIO.cpp:68: the base teardown, then the sound world-load queue's
+    // Destruct (BaseEventQueue<SoundWorldLoadEvent>::Destruct, inline: ARTIST 0x822D8B60 stores 0 to
+    // this+0xC8538, the queue's miLength).
+    void OutputBuffer_PreScene::Destruct()
+    {
+        CgsModule::IOBuffer::Destruct();
+        mSoundWorldLoadInterface.Destruct();
+    }
 }
 }
