@@ -397,5 +397,37 @@ namespace PhysicsSimulationIO
         mSetDriveSpyQueue.Clear();                    // +203832
         mUpdateExternalBodyQueue.Clear();             // +203864
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // Destruct @0x828A5E30 (DWARF CgsPhysicsSimulationModuleIO.cpp:84) -- Clear(), then every queue's
+    // BaseEventQueue::Destruct in member order (miLength = 0 at queueOffset+8: the console's stores
+    // at +0x18 .. +0x31C58), then the base IOBuffer::Destruct call.
+    // ---------------------------------------------------------------------------------------------
+    void InputBuffer::Destruct()
+    {
+        Clear();
+
+        mAddRigidBodyQueue.Destruct();
+        mUpdateRigidBodyQueue.Destruct();
+        mApplyForceQueue.Destruct();
+        mChangeRigidBodyInertiaQueue.Destruct();
+        mSetRigidBodySpyQueue.Destruct();
+        mRemoveRigidBodyQueue.Destruct();
+        mRemoveAllRigidBodiesQueue.Destruct();
+        mAddContactQueue.Destruct();
+        mAddJointQueue.Destruct();
+        mRemoveJointQueue.Destruct();
+        mUpdateJointFramesQueue.Destruct();
+        mUpdateJointLimitsQueue.Destruct();
+        mSetJointSpyQueue.Destruct();
+        mAddDriveQueue.Destruct();
+        mRemoveDriveQueue.Destruct();
+        mUpdateDriveFramesQueue.Destruct();
+        mUpdateDriveDynamicsQueue.Destruct();
+        mSetDriveSpyQueue.Destruct();
+        mUpdateExternalBodyQueue.Destruct();
+
+        IOBuffer::Destruct();
+    }
 }
 }

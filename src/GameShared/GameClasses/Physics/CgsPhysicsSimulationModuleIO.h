@@ -137,8 +137,8 @@ namespace PhysicsSimulationIO
         // Constructs in the console's order at exactly the member offsets pinned below, both
         // scalars zeroed, then the Clear() tail call. Body in ..._InputBuffer.cpp.
         void Construct();   // hides CgsModule::IOBuffer::Construct -- deliberate, console shape
-        // X360 0x828A1A88: mfTimeStep = 0 and every queue's miLength = 0 (each store lands at
-        // queueOffset+8 == BaseEventQueue::miLength; muMaxIterations is NOT touched -- console).
+        void Destruct();    // DWARF h:449; X360 0x828A5E30 (body in ..._InputBuffer.cpp)
+        // X360 0x828A1A88: mfTimeStep = 0 and every queue's miLength = 0 (store at queue+8); muMaxIterations untouched.
         void Clear();
 
         f32  GetTimeStep();
