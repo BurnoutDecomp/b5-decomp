@@ -24,6 +24,7 @@
 // baked into CgsEntityId.h (lines 160 / 167) and reproduced as house CGS_ASSERTs.
 #include "BrnCommonTypes.h"                               // EntityId { u32 muValue }
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h" // CgsDev::Assert::MessageAt
 #include "GameShared/GameClasses/SceneManager/CgsVolumeInstanceId.h" // VolumeInstanceId { u64 muId }
 #include "GameShared/GameClasses/SceneManager/CgsVolumeId.h"         // VolumeId { u64 mId } (PropVolumeID home)
 // BrnWorld::EEntityTypeID (E_ENTITYTYPE_PROP == 3) -- the committed home.
@@ -60,9 +61,14 @@ namespace BrnWorld
         // against the call-site asm (the const-qualified getters read the owner byte
         // then return the masked field; the setters read-modify-write muValue).
         PropEntityID() {}                       // trivial (X360-inlined)
+        // The accessors below are header-inline in the original (bodies after the class):
+        // ARTIST bakes this header's line 278 into AssertIsProp's tripwire at 68 sites and
+        // inlines it, with the field read, into callers such as PropZoneManager::GetZone
+        // 0x822C5FF0; the out-of-line copies (0x822B7888.. 0x822B7BC8) are the few calls
+        // the inliner declined. DWARF h:68 types GetEntityIndex as uint16_t.
         explicit PropEntityID(u32 luEntityId);  // 0x822B7888 — store word + AssertIsProp
 
-        u32 GetEntityIndex() const;             // 0x822B7B08
+        u16 GetEntityIndex() const;             // 0x822B7B08
         u32 GetPartIndex() const;               // 0x822B7B68
         u32 GetValue() const;                   // 0x822B7BC8
 
@@ -101,6 +107,46 @@ namespace BrnWorld
 
         EntityId mEntityId;
     };
+
+    // ---- PropEntityID header-inline bodies (original BrnPropEntityID.h:~270..300) ----------
+    // The owner tripwire reads the top byte of the packed word (ARTIST `lbz r11,0(this)` /
+    // `srwi r11,word,24`; cmplwi 3) and fires at this header's line 278.
+#define BRN_PROPENTITYID_H_ASSERT_FILE "..\\..\\..\\SharedClasses\\Physics/Props/BrnPropEntityID.h"
+
+    inline void PropEntityID::AssertIsProp() const
+    {
+        CGS_ASSERT(static_cast<u8>(mEntityId.muValue >> KU_OWNER_BASE) == E_ENTITYTYPE_PROP,
+                   CgsDev::Assert::MessageAt("mEntityId.GetOwner() == E_ENTITYTYPE_PROP",
+                                             BRN_PROPENTITYID_H_ASSERT_FILE, 278));
+    }
+
+    // 0x822B7888: store the word, then the tripwire (the store precedes the check).
+    inline PropEntityID::PropEntityID(u32 luEntityId)
+    {
+        mEntityId.muValue = luEntityId;
+        AssertIsProp();
+    }
+
+    // 0x822B7B08: tripwire, then the 14-bit entity index (`rlwinm r3,r11,22,18,31`).
+    inline u16 PropEntityID::GetEntityIndex() const
+    {
+        AssertIsProp();
+        return static_cast<u16>((mEntityId.muValue & KU_ENTITY_INDEX_MASK) >> KU_ENTITY_INDEX_BASE);
+    }
+
+    // 0x822B7B68: tripwire, then the 10-bit part index (`clrlwi r3,r11,22`).
+    inline u32 PropEntityID::GetPartIndex() const
+    {
+        AssertIsProp();
+        return (mEntityId.muValue & KU_PART_INDEX_MASK) >> KU_PART_INDEX_BASE;
+    }
+
+    // 0x822B7BC8: tripwire, then the raw packed word.
+    inline u32 PropEntityID::GetValue() const
+    {
+        AssertIsProp();
+        return mEntityId.muValue;
+    }
 
     // ---------------------------------------------------------------------------
     // FLAGGED ADDITIVE GROW (PropVolumeInstanceID group): the DecFIGS DWARF places

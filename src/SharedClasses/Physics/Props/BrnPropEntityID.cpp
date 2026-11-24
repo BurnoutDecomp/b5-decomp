@@ -14,44 +14,10 @@
 
 namespace BrnWorld
 {
-    // Owner tripwire: baked "mEntityId.GetOwner() == E_ENTITYTYPE_PROP"
-    // (..\\..\\..\\SharedClasses\\Physics/Props/BrnPropEntityID.h:278).
-    void PropEntityID::AssertIsProp() const
-    {
-        CGS_ASSERT((mEntityId.muValue >> KU_OWNER_BASE) == E_ENTITYTYPE_PROP,
-                   "mEntityId.GetOwner() == E_ENTITYTYPE_PROP");
-    }
 
-    // 0x822B7888: store the supplied word, THEN assert the owner byte == 3 (the store
-    // precedes the check in the asm — `stw r4,0(r31)` at 0x822B78A4, assert after).
-    PropEntityID::PropEntityID(u32 luEntityId)
-    {
-        mEntityId.muValue = luEntityId;
-        AssertIsProp();
-    }
 
-    // 0x822B7B08: AssertIsProp, then extract the 14-bit entity index at bit 10
-    // (`extrwi r3,r11,14,8` -> (muValue >> 10) & 0x3FFF).
-    u32 PropEntityID::GetEntityIndex() const
-    {
-        AssertIsProp();
-        return (mEntityId.muValue & KU_ENTITY_INDEX_MASK) >> KU_ENTITY_INDEX_BASE;
-    }
 
-    // 0x822B7B68: AssertIsProp, then extract the low 10-bit part index
-    // (`clrlwi r3,r11,22` -> muValue & 0x3FF).
-    u32 PropEntityID::GetPartIndex() const
-    {
-        AssertIsProp();
-        return (mEntityId.muValue & KU_PART_INDEX_MASK) >> KU_PART_INDEX_BASE;
-    }
 
-    // 0x822B7BC8: AssertIsProp, then return the raw packed word.
-    u32 PropEntityID::GetValue() const
-    {
-        AssertIsProp();
-        return mEntityId.muValue;
-    }
 
     // 0x822B79D0: AssertIsProp; then assert the (16-bit-truncated) index < 1<<14
     // (baked CgsEntityId.h:160 "luEntityIndex < (1U << KU_NUM_BITS_FOR_ENTITY_NUM)");
