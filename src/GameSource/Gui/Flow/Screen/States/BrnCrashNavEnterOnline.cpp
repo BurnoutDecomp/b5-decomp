@@ -98,13 +98,13 @@ namespace BrnGui
     {
         "$GENERAL_OPTION_SUBMIT", "$GENERAL_OPTION_CANCEL"
     };
-    const char* const CrashNavEnterOnlineBase::KAPC_OK_BUTTON_STRING_ID[1] =            // @0x82F26E60
+    const char* CrashNavEnterOnlineBase::KAPC_OK_BUTTON_STRING_ID[1] =                  // @0x82F26E60
     {
         "$GENERAL_OPTION_OK"
     };
 
     // ---- the apt view states the six animation carriers are driven with ---------------
-    const char* const CrashNavEnterOnlineBase::KAPC_ANIMATION_STATES[4] =               // @0x82F26E64
+    const char* CrashNavEnterOnlineBase::KAPC_ANIMATION_STATES[4] =                        // @0x82F26E64
     {
         "Visible", "Invisible", "Visible_tos", "Visible_no_back"
     };

@@ -137,9 +137,9 @@ namespace BrnGui
         static const char* const KAPC_YES_NO_BUTTON_STRING_ID[2];   // @0x82F26E48
         static const char* const KAPC_RETRY_CANCEL_BUTTON_STRING_ID[2];  // @0x82F26E50
         static const char* const KAPC_SUBMIT_CANCEL_BUTTON_STRING_ID[2]; // @0x82F26E58
-        static const char* const KAPC_OK_BUTTON_STRING_ID[1];       // @0x82F26E60
+        static const char* KAPC_OK_BUTTON_STRING_ID[1];             // @0x82F26E60
     protected:
-        static const char* const KAPC_ANIMATION_STATES[4];          // @0x82F26E64 {"Visible","Invisible","Visible_tos","Visible_no_back"}
+        static const char* KAPC_ANIMATION_STATES[4];                   // @0x82F26E64 {"Visible","Invisible","Visible_tos","Visible_no_back"}
 
         // ---- data members (DWARF order; the X360 offsets are documentation) ---------
     private:
