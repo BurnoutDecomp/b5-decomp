@@ -335,7 +335,10 @@ void GeneralAllocator::SetNewTopChunk(Chunk* pChunk, bool bChunkIsNew) // 82B4D9
     pChunk->mpNextChunk = pChunk;
     mpTopChunk->mpPrevChunk = mpTopChunk->mpNextChunk;
     if (pOldTop != GetInitialTopChunk() && bChunkIsNew)
-        LinkChunk(pOldTop, GetUnsortedBin(), GetUnsortedBin()->mpNextChunk);
+    {
+        Chunk* pUnsortedBin = GetUnsortedBin();
+        LinkChunk(pOldTop, pUnsortedBin, pUnsortedBin->mpNextChunk);
+    }
     if (!mbHighFenceInternallyDisabled)
         AdjustHighFence();
 }
@@ -404,7 +407,10 @@ bool GeneralAllocator::AddCore(void* pCore, size_t nSize, bool bShouldFree, bool
 
 void* GeneralAllocator::MMapAllocInternal(size_t nSize, size_t* pSize) // 82B4DE98
 {
-    void* pCore = VirtualAlloc(0, nSize, mbMMapTopDown ? 0x103000 : 0x3000, PAGE_READWRITE);
+    DWORD nAllocationType = MEM_RESERVE | MEM_COMMIT;
+    if (mbMMapTopDown)
+        nAllocationType |= MEM_TOP_DOWN;
+    void* pCore = VirtualAlloc(0, nSize, nAllocationType, PAGE_READWRITE);
     if (pCore && pSize) *pSize = nSize;
     return pCore;
 }
@@ -1260,7 +1266,7 @@ size_t GeneralAllocator::GetLargestFreeBlock(bool bClearCache) // 82B4FE28
     {
         if (bClearCache) ClearFastBins();
         nLargest = GetChunkSize(mpTopChunk);
-        for (int i = 254; i >= 2; i -= 2)
+        for (unsigned int i = 254; i >= 2; i -= 2)
         {
             Chunk* pChunk = mpBinArray[i];
             if (pChunk->mpNextChunk != pChunk)
@@ -1274,11 +1280,15 @@ size_t GeneralAllocator::GetLargestFreeBlock(bool bClearCache) // 82B4FE28
             if (GetChunkSize(pChunk) > nLargest) nLargest = GetChunkSize(pChunk);
         if (!bClearCache && nLargest < mnMaxFastBinChunkSize)
             for (int i = 9; i >= 0; --i)
-                if (mpFastBinArray[i])
+            {
+                const Chunk* pFastChunk = mpFastBinArray[i];
+                if (pFastChunk)
                 {
-                    if (GetChunkSize(mpFastBinArray[i]) > nLargest) nLargest = GetChunkSize(mpFastBinArray[i]);
+                    const unsigned int nFastSize = GetChunkSize(pFastChunk);
+                    if (nFastSize > nLargest) nLargest = nFastSize;
                     break;
                 }
+            }
     }
     return nLargest;
 }
