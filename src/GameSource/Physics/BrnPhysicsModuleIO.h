@@ -427,21 +427,12 @@ namespace PhysicsModuleIO
         // no layout moves. Their ONLY caller in ARTIST is
         // WorldModule::BridgeScenePotentialContactsToPhysics @0x827ABD80, which write-locks this
         // buffer and read-locks the scene output -- i.e. the const overloads are unusable to it.
-        // Bodied INLINE here (rather than in BrnPhysicsModuleIO_InputBuffer_Accessors.cpp beside
-        // the const twins) because that TU is another owner's this wave; inline emits no new
-        // out-of-line symbol, so mounting order and LNK2005 are both unaffected.
+        // Bodies in BrnPhysicsModuleIO_InputBuffer_Accessors.cpp beside the const twins: ARTIST
+        // calls these out-of-line copies (no caller inlines them).
         CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>*
-        GetPotentialContactQueue()                                                          // 0x8279EFD8 :290
-        {
-            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-            return &mPotentialContactQueue;
-        }
+        GetPotentialContactQueue();                                                         // 0x8279EFD8 :290
         CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>*
-        GetOverlapPairsQueue()                                                              // 0x8279F080 :293
-        {
-            CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing");
-            return &mOverlapPairsQueue;
-        }
+        GetOverlapPairsQueue();                                                             // 0x8279F080 :293
 
         // ---- setters (write-lock: status bit 3) ----
         void SetCameraInput(const CameraStorage* lpCamera);                                 // 0x827A9D30 :273

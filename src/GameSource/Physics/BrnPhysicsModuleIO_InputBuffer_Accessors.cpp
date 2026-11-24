@@ -1,6 +1,7 @@
 #include "GameSource/Physics/BrnPhysicsModuleIO.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 // BrnPhysics::PhysicsModuleIO::InputBuffer accessors owned by the bare PhysicsModuleIO group,
 // reconstructed from BURNOUT_X360_ARTIST.XEX. This TU bodies the four deep-member accessors:
@@ -21,7 +22,7 @@ namespace PhysicsModuleIO
     // X360 0x8259F948 (DWARF :278): read-lock; return &mVehicleDriverInterface (this+142544).
     const InputBuffer::VehicleDriverInputInterfaceStorage* InputBuffer::GetVehicleDriverInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 278));
         return &mVehicleDriverInterface;
     }
 
@@ -33,28 +34,28 @@ namespace PhysicsModuleIO
     // FireAssert line 0x117 == 279, then `addis r3,r28,2 / addi r3,r3,0x2CD0` == this+142544.
     InputBuffer::VehicleDriverInputInterfaceStorage* InputBuffer::GetVehicleDriverInterface()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 279));
         return &mVehicleDriverInterface;
     }
 
     // X360 0x8259F9F0 (DWARF :281): read-lock; return &mVehicleEffectsInputInterface (this+147840).
     const InputBuffer::VehicleEffectsInputInterfaceStorage* InputBuffer::GetVehicleEffectsInputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 281));
         return &mVehicleEffectsInputInterface;
     }
 
     // X360 0x8259FE88 (DWARF :304): read-lock; return &mGameActionQueue (this+338496).
     const InputBuffer::GameActionQueueStorage* InputBuffer::GetGameActionQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 304));
         return &mGameActionQueue;
     }
 
     // X360 0x8279F3A0 (DWARF :305): write-lock; return &mGameActionQueue (this+338496).
     InputBuffer::GameActionQueueStorage* InputBuffer::GetGameActionQueue()
     {
-        CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 305));
         return &mGameActionQueue;
     }
 
@@ -67,9 +68,10 @@ namespace PhysicsModuleIO
     // Its only console caller is PhysicsModule::PostSceneUpdate @0x825ABC10, which calls it
     // three times (the player-index read, the re-read inside the active arm, and the
     // entity-id fetch) -- each one a separate lock check on the console, reproduced as such.
+    // ARTIST 0x8259FA98: assert h:284 (the FireAssert at 0x8259FB28).
     const InputBuffer::RCEntityOutputInterfaceStorage* InputBuffer::GetRCEntityOutputInterface() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 284));
         return &mRCEntityOutputInterface;
     }
 }
@@ -88,7 +90,7 @@ namespace PhysicsModuleIO
     const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>*
     InputBuffer::GetPotentialContactQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 289));
         return &mPotentialContactQueue;
     }
 
@@ -97,7 +99,25 @@ namespace PhysicsModuleIO
     const CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>*
     InputBuffer::GetOverlapPairsQueue() const
     {
-        CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+        CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "d:\\p4\\b5_main\\burnout\\main\\code\\gamesource\\physics\\BrnPhysicsModuleIO.h", 292));
+        return &mOverlapPairsQueue;
+    }
+
+    // X360 0x8279EFD8 (DWARF :290): write-lock (h:290 relative path, li r5,0x122); return
+    // &mPotentialContactQueue (this+160208, the const twin's seat).
+    CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::PotentialContact, 2048>*
+    InputBuffer::GetPotentialContactQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 290));
+        return &mPotentialContactQueue;
+    }
+
+    // X360 0x8279F080 (DWARF :293): write-lock (h:293 relative path, li r5,0x125); return
+    // &mOverlapPairsQueue (this+324064).
+    CgsModule::EventQueue<CgsSceneManager::SceneManagerIO::OutOverlapPair, 128>*
+    InputBuffer::GetOverlapPairsQueue()
+    {
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Physics/BrnPhysicsModuleIO.h", 293));
         return &mOverlapPairsQueue;
     }
 }

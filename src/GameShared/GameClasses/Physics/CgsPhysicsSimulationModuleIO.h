@@ -3,8 +3,7 @@
 #include "types.hpp"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"        // CGS_ASSERT (InputBuffer::AppendXxxQueue<N> template bodies)
-#include "GameShared/GameClasses/Core/CgsAssertMessageAt.h"   // ARTIST assert locations
-#include "GameShared/GameClasses/Development/CgsStrStream.h"  // the streamed write-lock assert
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // ARTIST assert locations, streamed lock asserts
 #include "GameShared/GameClasses/Module/CgsIOBuffer.h"   // CgsModule::IOBuffer (1-byte FlagSet status base)
 #include "GameShared/GameClasses/Module/CgsEventQueue.h"                  // CgsModule::EventQueue<T,N>
 #include "GameShared/GameClasses/Physics/CgsPhysicsSimulationIO_Events.h" // In/Out event payloads
@@ -30,7 +29,7 @@
 // OutputBuffer (derives CgsModule::IOBuffer):
 //   +0x0000  CgsModule::IOBuffer status (1-byte FlagSet; +0x1..+0x3 pad)
 //   +0x0004  mfTimeStepUsed       f32  (GetTimeStepUsed @0x825BD0A8 lfs 4; SetTimeStepUsed @0x8289EFD8 stfs 4)
-//   +0x0008  muMaxIterationsUsed  s32  (SetMaxIterationsUsed @0x8289F088 stw 8)
+//   +0x0008  muMaxIterationsUsed  u32  (SetMaxIterationsUsed @0x8289F088 stw 8)
 namespace CgsPhysics
 {
 namespace PhysicsSimulationIO
@@ -118,7 +117,8 @@ namespace PhysicsSimulationIO
         typedef CgsModule::EventQueue<InUpdateExternalBody, 200>     InUpdateExternalBodyQueue;     // DWARF :456 (16 + 200*112 = 22416)
 
         // X360 0x8289E338: read-lock (bit 4) guarded; asserts muMaxIterations > 0, returns it.
-        int  GetMaxIterations() const;
+        // DWARF uint32_t (its caller PhysicsSimulationModule::Update tests it unsigned, cmplwi at 0x828A755C).
+        u32  GetMaxIterations() const;
         // X360 0x8259ECD8: write-lock (bit 3) guarded (NOTE: a Get that tests the WRITE bit --
         // faithful to the asm, intentionally NOT "fixed"); asserts mfTimeStep > 0, returns it.
         // ⚠️ 2026-08-05: NON-const now. The console carries TWO GetTimeStep bodies with opposite
@@ -146,7 +146,7 @@ namespace PhysicsSimulationIO
         // twin; asserts mfTimeStep > 0 ("mfTimeStep > 0.0f", IO.h:834), returns it.
         f32  GetTimeStep() const;
         // X360 0x8259EDB0: write-lock (bit 3) guarded; asserts the arg > 0, stores muMaxIterations.
-        void SetMaxIterations(int luMaxIterations);
+        void SetMaxIterations(u32 luMaxIterations);   // DWARF uint32_t (cmplwi at 0x8259EE50)
         // X360 0x8259EBF8: write-lock (bit 3) guarded; asserts the arg > 0, stores mfTimeStep.
         void SetTimeStep(f32 lfTimeStep);
 
@@ -305,34 +305,29 @@ namespace PhysicsSimulationIO
         InUpdateExternalBodyQueue     mUpdateExternalBodyQueue;      // +0x31C50 ( 203856)  last; ends at 226272
     };
 
-    // -------- InputBuffer::AppendXxxQueue<N> (generic bodies; per-N instances in the .cpp) --------
-    // DWARF: every instance is `void AppendXxxQueue<N>(const EventQueue<T,N>*)` (ARTIST's decorated
-    // names agree: ...QAAXPBV?$EventQueue@V...). The write-lock assert streams its message into the
-    // shared assert buffer (ARTIST 0x825A86AC..0x825A8700: StrStream over gpcMessageBuffer, the
-    // literal at 0x82006294) and names this header's line (li r5).
+    // ARTIST bakes this header's path into every out-of-line copy of its inline accessors, spelled
+    // the way the unity file that compiled the copy included it: most copies carry the absolute
+    // depot path (e.g. SetTimeStep 0x8259EBF8, the Append templates); the ones the game-side physics
+    // unity compiled carry the relative include path (e.g. GetUpdateRigidBodyQueue 0x825BCCB8).
+    // Every "Not locked for ..." lock assert streams its message into the shared assert buffer
+    // (StrStream over gpcMessageBuffer, the literal at 0x82006294 / 0x820062AC) and names the
+    // accessor's own header line (li r5).
 #define KAC_PHYSICS_SIMULATION_IO_FILE \
     "d:\\p4\\b5_main\\burnout\\main\\code\\gameshared\\gameclasses\\physics\\CgsPhysicsSimulationModuleIO.h"
-#define KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(liLine) \
-    do \
-    { \
-        if (!IsBufferLockedForWriting()) \
-        { \
-            CgsDev::Assert::BeginAssert(); \
-            CgsDev::StrStream lStrStream(CgsDev::Assert::gpcMessageBuffer, \
-                                         CgsDev::Assert::giMessageBufferSize); \
-            lStrStream << "Not locked for writing\n"; \
-            CgsDev::Assert::FireAssert(CgsDev::Assert::gpcMessageBuffer, \
-                                       KAC_PHYSICS_SIMULATION_IO_FILE, (liLine)); \
-            CgsDev::Assert::EndAssert(); \
-        } \
-    } while (0)
+#define KAC_PHYSICS_SIMULATION_IO_RELATIVE_FILE \
+    "..\\..\\..\\GameShared\\GameClasses\\Physics/CgsPhysicsSimulationModuleIO.h"
+
+    // -------- InputBuffer::AppendXxxQueue<N> (generic bodies; per-N instances in the .cpp) --------
+    // DWARF: every instance is `void AppendXxxQueue<N>(const EventQueue<T,N>*)` (ARTIST's decorated
+    // names agree: ...QAAXPBV?$EventQueue@V...).
     // Every instance shares this shape (X360 asm): assert write-locked, assert the source queue is
     // non-null (a non-gating tripwire -- the append runs regardless, matching the binary), then
     // forward to the fixed destination member's BaseEventQueue<Elem>::Append (bulk memcpy-merge).
     template <s32 N>
     void InputBuffer::AppendAddRigidBodyQueue(const CgsModule::EventQueue<InAddRigidBody, N>* lpSourceQueue)
     {
-        KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(1113);   // ARTIST: h:1113
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1113));
         CGS_ASSERT(lpSourceQueue != 0,
             CgsDev::Assert::MessageAt("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1114));
         mAddRigidBodyQueue.Append(*lpSourceQueue);
@@ -341,7 +336,8 @@ namespace PhysicsSimulationIO
     template <s32 N>
     void InputBuffer::AppendAddJointQueue(const CgsModule::EventQueue<InAddJoint, N>* lpSourceQueue)
     {
-        KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(1184);   // ARTIST: h:1184
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1184));
         CGS_ASSERT(lpSourceQueue != 0,
             CgsDev::Assert::MessageAt("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1185));
         mAddJointQueue.Append(*lpSourceQueue);
@@ -350,7 +346,8 @@ namespace PhysicsSimulationIO
     template <s32 N>
     void InputBuffer::AppendChangeRigidBodyInertiaQueue(const CgsModule::EventQueue<InChangeRigidBodyInertia, N>* lpSourceQueue)
     {
-        KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(1143);   // ARTIST: h:1143
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1143));
         CGS_ASSERT(lpSourceQueue != 0,
             CgsDev::Assert::MessageAt("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1144));
         mChangeRigidBodyInertiaQueue.Append(*lpSourceQueue);
@@ -365,7 +362,8 @@ namespace PhysicsSimulationIO
     template <s32 N>
     void InputBuffer::AppendRemoveJointQueue(const CgsModule::EventQueue<InRemoveJoint, N>* lpSourceQueue)
     {
-        KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(1194);   // ARTIST: h:1194
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1194));
         CGS_ASSERT(lpSourceQueue != 0,
             CgsDev::Assert::MessageAt("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1195));
         mRemoveJointQueue.Append(*lpSourceQueue);
@@ -374,7 +372,8 @@ namespace PhysicsSimulationIO
     template <s32 N>
     void InputBuffer::AppendRemoveRigidBodyQueue(const CgsModule::EventQueue<InRemoveRigidBody, N>* lpSourceQueue)
     {
-        KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(1163);   // ARTIST: h:1163
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1163));
         CGS_ASSERT(lpSourceQueue != 0,
             CgsDev::Assert::MessageAt("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1164));
         mRemoveRigidBodyQueue.Append(*lpSourceQueue);
@@ -383,7 +382,8 @@ namespace PhysicsSimulationIO
     template <s32 N>
     void InputBuffer::AppendUpdateExternalBodyQueue(const CgsModule::EventQueue<InUpdateExternalBody, N>* lpSourceQueue)
     {
-        KAC_PHYSICS_SIMULATION_IO_ASSERT_WRITE_LOCK(1284);   // ARTIST: h:1284
+        CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt(
+                       "Not locked for writing\n", KAC_PHYSICS_SIMULATION_IO_FILE, 1284));
         CGS_ASSERT(lpSourceQueue != 0,
             CgsDev::Assert::MessageAt("lpSourceQueue != NULL", KAC_PHYSICS_SIMULATION_IO_FILE, 1285));
         mUpdateExternalBodyQueue.Append(*lpSourceQueue);
@@ -428,7 +428,7 @@ namespace PhysicsSimulationIO
         // X360 0x825BD0A8: read-lock (bit 4) guarded; returns the post-step time-step-used scalar.
         f32  GetTimeStepUsed() const;
         // X360 0x8289F088: write-lock (bit 3) guarded; stores muMaxIterationsUsed.
-        void SetMaxIterationsUsed(s32 luMaxIterationsUsed);
+        void SetMaxIterationsUsed(u32 luMaxIterationsUsed);   // DWARF uint32_t
         // X360 0x8289EFD8: write-lock (bit 3) guarded; stores mfTimeStepUsed.
         void SetTimeStepUsed(f32 fTimeStepUsed);
 
@@ -484,7 +484,7 @@ namespace PhysicsSimulationIO
     private:
         u8  maStatusPad[3];        // +0x0001..+0x0003 (force mfTimeStepUsed to +0x0004 like the X360)
         f32 mfTimeStepUsed;        // +0x0004
-        s32 muMaxIterationsUsed;   // +0x0008  (pads to +0x0010 before the queues)
+        u32 muMaxIterationsUsed;   // +0x0008  (DWARF uint32_t; pads to +0x0010 before the queues)
         OutUpdateRigidBodyQueue mUpdateRigidBodyQueue;  // console +0x00010 (host: wider -- RigidBody payload)
         OutContactSpyQueue      mContactSpyQueue;       // console +0x09620
         OutJointSpyQueue        mJointSpyQueue;         // console +0x1F430  DWARF :745

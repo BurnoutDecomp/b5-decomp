@@ -1254,7 +1254,7 @@ namespace BrnPhysics
         (void)lpSimModuleInputBuffer->GetTimeStep();              // @0x8259ECD8
 
         lpSimModuleInputBuffer->SetMaxIterations(
-            static_cast<int>(*lpInputBuffer->GetSolverMaxIterations()) );   // @0x8259EDB0 / @0x8259FD38
+            *lpInputBuffer->GetSolverMaxIterations() );   // @0x8259EDB0 / @0x8259FD38
 
         mVehicleManager.GetUpdatedVehicleBodies(&lUpdatedBodyQueue);        // @0x82619340
 

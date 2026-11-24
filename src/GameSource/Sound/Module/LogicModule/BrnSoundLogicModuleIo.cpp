@@ -1,6 +1,7 @@
 #include "GameSource/Sound/Module/LogicModule/BrnSoundLogicModuleIo.h"
 
 #include "GameShared/GameClasses/Core/CgsAssert.h"   // CGS_ASSERT (lock-state guards)
+#include "GameShared/GameClasses/Core/CgsAssertStreamMessageAt.h"   // the header-baked lock asserts
 
 // =============================================================================
 // BrnSound::Module::Io::LogicOutputBuffer accessors (this group's two wave-7 TU
@@ -30,7 +31,7 @@ namespace Io
 //   addi r3, this, 4 -> return &mAttribSysRequestInterface
 const RootOutputBuffer::AttribSysRequestInterface* LogicOutputBuffer::GetAttribSysRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Sound/Module/LogicModule/BrnSoundLogicModuleIo.h", 120));
     return reinterpret_cast<const RootOutputBuffer::AttribSysRequestInterface*>(&mAttribSysRequestInterfaceStorage);
 }
 
@@ -40,7 +41,7 @@ const RootOutputBuffer::AttribSysRequestInterface* LogicOutputBuffer::GetAttribS
 //   addi r3, this, 4 -> return &mAttribSysRequestInterface
 RootOutputBuffer::AttribSysRequestInterface* LogicOutputBuffer::GetAttribSysRequestInterface()
 {
-    CGS_ASSERT(IsBufferLockedForWriting(), "Not locked for writing\n");
+    CGS_ASSERT(IsBufferLockedForWriting(), CgsDev::Assert::StreamMessageAt("Not locked for writing\n", "..\\..\\..\\GameSource\\Sound/Module/LogicModule/BrnSoundLogicModuleIo.h", 135));
     return reinterpret_cast<RootOutputBuffer::AttribSysRequestInterface*>(&mAttribSysRequestInterfaceStorage);
 }
 
@@ -50,7 +51,7 @@ RootOutputBuffer::AttribSysRequestInterface* LogicOutputBuffer::GetAttribSysRequ
 // sibling lock discipline. Bodied 2026-08-25, faithful-audio-engine phase C1.
 const RootOutputBuffer::SoundResourceRequestInterface* LogicOutputBuffer::GetResourceRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Sound/Module/LogicModule/BrnSoundLogicModuleIo.h", 113));
     return reinterpret_cast<const RootOutputBuffer::SoundResourceRequestInterface*>(&mResourceRequestInterfaceStorage);
 }
 RootOutputBuffer::SoundResourceRequestInterface* LogicOutputBuffer::GetResourceRequestInterface()
@@ -64,7 +65,7 @@ RootOutputBuffer::SoundResourceRequestInterface* LogicOutputBuffer::GetResourceR
 // the identified 11-slot BrnReplays::ReplayIO::RequestInterface).
 const RootOutputBuffer::ReplayRequestInterface* LogicOutputBuffer::GetReplayRequestInterface() const
 {
-    CGS_ASSERT(IsBufferLockedForReading(), "Not locked for reading\n");
+    CGS_ASSERT(IsBufferLockedForReading(), CgsDev::Assert::StreamMessageAt("Not locked for reading\n", "..\\..\\..\\GameSource\\Sound/Module/LogicModule/BrnSoundLogicModuleIo.h", 79));
     return &mReplayRequestInterface;
 }
 RootOutputBuffer::ReplayRequestInterface* LogicOutputBuffer::GetReplayRequestInterface()

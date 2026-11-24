@@ -3099,7 +3099,7 @@ namespace CgsPhysics
         const f32 lfNewStep = lpInput->GetTimeStep();          // `bl sub_8289E260` -- the READ-lock const overload
         CGS_ASSERT(lfNewStep > 0.0f, "lfNewStep > 0.0f");                              // .cpp:794
         CGS_ASSERT(lpInput->GetMaxIterations() > 0, "lpInput->GetMaxIterations() > 0");   // .cpp:867
-        mpSimulation->SetMaxIteration(static_cast<u32>(lpInput->GetMaxIterations()));  // `stw 0xAC(sim)`
+        mpSimulation->SetMaxIteration(lpInput->GetMaxIterations());  // `stw 0xAC(sim)`
 
         lpInput->UnlockForRead();
         lpOutput->LockForWrite();
@@ -3131,7 +3131,7 @@ namespace CgsPhysics
         CgsDev::PerfMonCpu::StartMonitor(miTimeInSim4);        // "Sim output"
 
         lpOutput->SetTimeStepUsed(mpSimulation->GetTimeStep());                       // `lfs 0xA0(sim)`
-        lpOutput->SetMaxIterationsUsed(static_cast<s32>(mpSimulation->GetMaxIteration()));   // `lwz 0xAC(sim)`
+        lpOutput->SetMaxIterationsUsed(mpSimulation->GetMaxIteration());   // `lwz 0xAC(sim)`
         AddActiveBodiesToOutputQueue(lpOutput);
 
         lpInput->LockForRead();                                // re-locked JUST for the spy join
